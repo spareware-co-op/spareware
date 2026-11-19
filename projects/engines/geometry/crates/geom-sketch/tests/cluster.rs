@@ -39,8 +39,10 @@ use geom_sketch::flow::Network;
 use geom_sketch::model::SketchError;
 use geom_sketch::place::{Placement, Rigid, kabsch, place};
 
+/// A budget far above what any plan here needs, so a search that runs away stops with an error
+/// instead of hanging.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(20_000_000))
 }
 
 /// `n` points in the plane, keys 100 upwards, two freedoms each.
@@ -502,6 +504,15 @@ fn a_component_past_the_size_limit_is_named_and_left_alone() {
     // The lowest key of the skipped component: its nodes are 3..8, keys 197 down to 193.
     assert_eq!(plan.too_large, [193]);
     assert_eq!(plan.top.len(), 1 + 5);
+    // At a limit of 5 the ring is not past it: it is searched, and is one body.
+    let at_limit = planned_within(&p, 5);
+    assert_eq!(at_limit.too_large, []);
+    assert_eq!(at_limit.top.len(), 2, "{at_limit:?}");
+}
+
+/// The plan of `p` with components past `limit` nodes left alone.
+fn planned_within(p: &Problem, limit: usize) -> Plan {
+    plan(p, limit, &mut meter()).unwrap()
 }
 
 #[test]
@@ -834,4 +845,90 @@ fn a_flow_between_nodes_that_are_not_two_of_the_networks_is_refused_before_any_w
     assert_eq!(n.add_arc(0, 5, 1), Err(SketchError::Internal));
     assert_eq!(n.add_arc(5, 0, 1), Err(SketchError::Internal));
     assert_eq!(n.max_flow(0, 1, &mut bounded()), Ok(5));
+}
+
+#[test]
+fn a_plan_charges_each_links_members_each_seed_and_each_incidence_it_reads() {
+    // One bar: its two members (2), the one seed (1), the pair's freedoms read to find it and again
+    // to contract it, each reading the bar's list at both its ends (2 + 2), and the one link the
+    // contraction touches (1). Eight in all, and not one more.
+    let p = planar(points(2), vec![bar(1, 0, 1)]);
+    assert!(plan(&p, SIZE_LIMIT, &mut WorkMeter::new(Budget::of_work(8))).is_ok());
+    assert_eq!(
+        plan(&p, SIZE_LIMIT, &mut WorkMeter::new(Budget::of_work(7))),
+        Err(SketchError::Stopped)
+    );
+}
+
+#[test]
+fn a_link_of_three_nodes_is_counted_once() {
+    // Three points and one constraint of three equations among them all: 6 - 3 = 3, exactly rigid,
+    // and no two of them have a constraint of their own.
+    let p = planar(
+        points(3),
+        vec![Link {
+            key: 1,
+            members: vec![0, 1, 2],
+            weight: 3,
+        }],
+    );
+    let plan = run(&p);
+    assert_eq!(plan.clusters.len(), 1, "{plan:?}");
+    assert_eq!(
+        plan.clusters[0].children,
+        [Child::Node(100), Child::Node(101), Child::Node(102)]
+    );
+    assert_eq!(plan.clusters[0].links, [1]);
+    assert_eq!(plan.clusters[0].redundant, 0);
+    assert_eq!(plan.top, [Child::Cluster(0)]);
+}
+
+#[test]
+fn the_first_cluster_of_a_braced_square_is_its_first_bar() {
+    // Four points and all six bars between them: 8 - 6 = 2, one bar more than rigid. The first bar
+    // is a rigid pair by itself, so it is the first cluster, and the whole is one body with one
+    // redundant equation.
+    let edges = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
+    let p = planar(points(4), bars(&edges));
+    let plan = run(&p);
+    assert_eq!(
+        plan.clusters[0].children,
+        [Child::Node(100), Child::Node(101)],
+        "{plan:?}"
+    );
+    assert_eq!(plan.clusters[0].links, [1]);
+    assert_eq!(plan.top.len(), 1, "{plan:?}");
+    assert_eq!(
+        keys_under(&plan, plan.top[0]),
+        BTreeSet::from([100, 101, 102, 103])
+    );
+    assert_eq!(plan.clusters.iter().map(|c| c.redundant).sum::<u64>(), 1);
+}
+
+#[test]
+fn a_dense_set_found_around_a_seed_is_cut_down_to_a_minimal_one() {
+    // A constraint over three points (or four) with a bar between the first two: the set around
+    // the first constraint is dense, but the bar's pair alone is dense too, and that pair is the
+    // cluster made.
+    for (n, weight) in [(3, 3), (4, 5)] {
+        let p = planar(
+            points(n),
+            vec![
+                Link {
+                    key: 1,
+                    members: (0..n).collect(),
+                    weight,
+                },
+                bar(2, 0, 1),
+            ],
+        );
+        let plan = run(&p);
+        assert_eq!(
+            plan.clusters[0].children,
+            [Child::Node(100), Child::Node(101)],
+            "{n}: {plan:?}"
+        );
+        assert_eq!(plan.clusters[0].links, [2], "{n}: {plan:?}");
+        assert_eq!(plan.clusters[0].redundant, 0, "{n}: {plan:?}");
+    }
 }

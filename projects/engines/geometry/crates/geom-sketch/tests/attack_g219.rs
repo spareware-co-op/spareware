@@ -30,7 +30,7 @@ use geom_sketch::equation::{
     Assembly, EllipseLength, FromEllipse, OnEllipse, Residual, Shape, TangentAtPoint,
     TangentEllipse, measure,
 };
-use geom_sketch::model::{ItemId, Sketch, SketchError};
+use geom_sketch::model::{ItemId, Sketch, SketchError, power_of_two};
 use geom_sketch::solve::TOLERANCE;
 use geom_sketch::text::{parse, write};
 
@@ -552,4 +552,242 @@ fn an_elliptical_arcs_length_is_its_quadrature() {
         with(&["elliptical-arc-length 5.0 12"]),
         Err(SketchError::WrongKind(_))
     ));
+}
+
+/// The value of `owner`'s variable `slot` in `x`.
+fn value_in(a: &Assembly, x: &[f64], owner: ItemId, slot: u8) -> f64 {
+    let place = a
+        .variables()
+        .iter()
+        .position(|v| v.owner == owner && v.slot == slot)
+        .unwrap();
+    x[place]
+}
+
+/// Whether `read` is the scale a row takes for the size `size`: its power of two (either one, for
+/// a size within a billionth of where they change), and 1 for a size that is not positive.
+fn scale_is(read: f64, size: f64) -> bool {
+    let fits = |p: f64| (read / p - 1.0).abs() < 1e-9;
+    if !(size > 0.0 && size.is_finite()) {
+        return fits(1.0);
+    }
+    fits(power_of_two(size * (1.0 - 1e-9))) || fits(power_of_two(size * (1.0 + 1e-9)))
+}
+
+/// A curve of the scene, as tangent-at-point reads it.
+#[derive(Clone, Copy)]
+enum Curve {
+    /// A line from one point to another.
+    Line(ItemId, ItemId),
+    /// A circle about a point.
+    Round(ItemId),
+    /// An ellipse about a point, and the ellipse.
+    Oval(ItemId, ItemId),
+}
+
+/// The curve's normal at `p` (unscaled, as the row takes it), its curvature there, and its size.
+fn curve_at(a: &Assembly, x: &[f64], curve: Curve, p: [f64; 2]) -> ([f64; 2], f64, f64) {
+    let point = |id: ItemId| [value_in(a, x, id, 0), value_in(a, x, id, 1)];
+    let span = |u: [f64; 2]| u[0].abs().max(u[1].abs());
+    match curve {
+        Curve::Line(s, e) => {
+            let (s, e) = (point(s), point(e));
+            let u = [e[0] - s[0], e[1] - s[1]];
+            ([-u[1], u[0]], 0.0, span(u))
+        }
+        Curve::Round(c) => {
+            let c = point(c);
+            let d = [p[0] - c[0], p[1] - c[1]];
+            let r = (d[0] * d[0] + d[1] * d[1]).sqrt();
+            (d, 1.0 / r, span(d))
+        }
+        Curve::Oval(c, e) => {
+            let c = point(c);
+            let (ax, ay, b) = (
+                value_in(a, x, e, 0),
+                value_in(a, x, e, 1),
+                value_in(a, x, e, 2),
+            );
+            let d = [p[0] - c[0], p[1] - c[1]];
+            let a2 = ax * ax + ay * ay;
+            let along = (d[0] * ax + d[1] * ay) * b * b;
+            let across = (d[0] * ay - d[1] * ax) * a2;
+            let normal = [along * ax + across * ay, along * ay - across * ax];
+            // The curvature 1 / (A^2 b^2 (u^2 / A^4 + v^2 / b^4)^(3/2)) at the point's coordinates
+            // along the axes.
+            let big = a2.sqrt();
+            let (u, v) = ((d[0] * ax + d[1] * ay) / big, (d[0] * ay - d[1] * ax) / big);
+            let inner = u * u / (a2 * a2) + v * v / (b * b * b * b);
+            (
+                normal,
+                1.0 / (a2 * b * b * inner * inner.sqrt()),
+                span([ax, ay]),
+            )
+        }
+    }
+}
+
+/// Rescales the one rule of `s` at `x` and reads its scale back off the row, the normals' cross
+/// product over its scale, and asserts it is |na| |nb| (ka + kb) for curves that bend, and |na|
+/// |nb| over the larger size's power of two for two straight ones. `None` where the row is too
+/// near zero to read, or the rule refuses `x`.
+fn tangency_scale_holds(s: &Sketch, x: &[f64], curves: [Curve; 2], point: ItemId) -> Option<()> {
+    let mut a = Assembly::new(s).unwrap();
+    let p = [value_in(&a, x, point, 0), value_in(&a, x, point, 1)];
+    let (na, ka, sa) = curve_at(&a, x, curves[0], p);
+    let (nb, kb, sb) = curve_at(&a, x, curves[1], p);
+    let cross = na[0] * nb[1] - na[1] * nb[0];
+    let length = |n: [f64; 2]| (n[0] * n[0] + n[1] * n[1]).sqrt();
+    let product = length(na) * length(nb);
+    let bend = ka + kb;
+    let size = if bend > 0.0 {
+        product * bend
+    } else {
+        let most = sa.max(sb);
+        product / if most > 0.0 { power_of_two(most) } else { 1.0 }
+    };
+    a.rescale(x).unwrap();
+    a.evaluate_at(x).ok()?;
+    let row = *a.residuals().last().unwrap();
+    if cross.abs() < 1e-6 * product || row == 0.0 {
+        return None;
+    }
+    let read = cross / row;
+    assert!(scale_is(read, size), "{read} for {size} at {x:?}");
+    Some(())
+}
+
+#[test]
+fn a_tangency_is_scaled_by_its_normals_and_its_curvature_wherever_its_point_is() {
+    // The ellipse about (0, 0), axis (10, 0) and minor radius 5, the circle of radius 3 about (0,
+    // 8) and the line from (-20, 5) to (20, 5), each pair tangent at the point 1.2, read with the
+    // point anywhere on a grid around them: the scale's power of two changes across the grid, so
+    // a wrong curvature or size shows somewhere.
+    let (ellipse, circle, line) = (
+        Curve::Oval(id(1, 0), id(5, 0)),
+        Curve::Round(id(1, 10)),
+        Curve::Line(id(1, 3), id(1, 4)),
+    );
+    for (rule, curves) in [
+        ("tangent-at-point 5.0 3.0 1.2", [ellipse, circle]),
+        ("tangent-at-point 2.0 5.0 1.2", [line, ellipse]),
+        ("tangent-at-point 2.0 3.0 1.2", [line, circle]),
+    ] {
+        let s = with(&[rule]).unwrap();
+        let a = Assembly::new(&s).unwrap();
+        let mut read = 0;
+        for i in 0..30 {
+            for j in 0..30 {
+                let (dx, dy) = (-14.3 + 0.97 * f64::from(i), -11.7 + 0.83 * f64::from(j));
+                let x = moved(&a, &[(id(1, 2), 0, dx), (id(1, 2), 1, dy)]);
+                if tangency_scale_holds(&s, &x, curves, id(1, 2)).is_some() {
+                    read += 1;
+                }
+            }
+        }
+        assert!(read > 800, "{rule}: {read}");
+    }
+    // Two straight lines tangent at the point: |na| |nb| over the larger line's power of two, for
+    // the second line's end anywhere on a grid.
+    let text = format!(
+        "{}entity 2.1 line 1.5 1.6 segment\nconstraint 20.0 driving 0 tangent-at-point 2.0 2.1 1.2\n",
+        bare()
+    );
+    let s = parse(&text).unwrap();
+    let a = Assembly::new(&s).unwrap();
+    let lines = [
+        Curve::Line(id(1, 3), id(1, 4)),
+        Curve::Line(id(1, 5), id(1, 6)),
+    ];
+    let mut read = 0;
+    for i in 0..30 {
+        for j in 0..30 {
+            let (dx, dy) = (-90.0 + 6.1 * f64::from(i), -70.0 + 4.9 * f64::from(j));
+            let x = moved(&a, &[(id(1, 6), 0, dx), (id(1, 6), 1, dy)]);
+            if tangency_scale_holds(&s, &x, lines, id(1, 2)).is_some() {
+                read += 1;
+            }
+        }
+    }
+    assert!(read > 800, "{read}");
+}
+
+#[test]
+fn a_row_scaled_where_its_size_is_nothing_takes_the_scale_one() {
+    // Rescaled where the line has no length, a tangency's size is 0 and its scale 1: read later,
+    // the row is the plain cross product of the normals.
+    let s = with(&["tangent-at-point 2.0 3.0 1.2"]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    let flat = moved(&a, &[(id(1, 4), 0, -40.0)]);
+    a.rescale(&flat).unwrap();
+    let x = moved(&a, &[(id(1, 2), 0, 1.0)]);
+    a.evaluate_at(&x).unwrap();
+    let p = [value_in(&a, &x, id(1, 2), 0), value_in(&a, &x, id(1, 2), 1)];
+    let (na, _, _) = curve_at(&a, &x, Curve::Line(id(1, 3), id(1, 4)), p);
+    let (nb, _, _) = curve_at(&a, &x, Curve::Round(id(1, 10)), p);
+    assert_eq!(
+        *a.residuals().last().unwrap(),
+        na[0] * nb[1] - na[1] * nb[0]
+    );
+    // So with a point on an ellipse of no minor radius: 2 A^3.5 b^1.5 is 0, and the scale is 1.
+    let s = with(&["on-ellipse 1.1 5.0"]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    a.rescale(&moved(&a, &[(id(5, 0), 2, -5.0)])).unwrap();
+    let x = moved(&a, &[(id(1, 1), 0, 1.0)]);
+    a.evaluate_at(&x).unwrap();
+    // (7, 4) and the ellipse of axis (10, 0) and minor radius 5: 70^2 25 + 40^2 100 - 10^4 25.
+    assert_eq!(
+        *a.residuals().last().unwrap(),
+        122_500.0 + 160_000.0 - 250_000.0
+    );
+}
+
+#[test]
+fn a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radius() {
+    // The row is (d.a)^2 b^2 + (d x a)^2 |a|^2 - |a|^4 b^2 over the power of two of 2 A^3.5 b^1.5,
+    // A the axis's larger part: read with the axis and the minor radius each across a range.
+    let s = with(&["on-ellipse 1.1 5.0"]).unwrap();
+    let start = Assembly::new(&s).unwrap();
+    let mut read = 0;
+    for i in 0..25 {
+        for j in 0..25 {
+            let (grow, thin) = (-6.0 + 0.61 * f64::from(i), -4.0 + 0.53 * f64::from(j));
+            let x = moved(&start, &[(id(5, 0), 0, grow), (id(5, 0), 2, thin)]);
+            let mut a = Assembly::new(&s).unwrap();
+            a.rescale(&x).unwrap();
+            if a.evaluate_at(&x).is_err() {
+                continue;
+            }
+            let (ax, ay, b) = (
+                value_in(&a, &x, id(5, 0), 0),
+                value_in(&a, &x, id(5, 0), 1),
+                value_in(&a, &x, id(5, 0), 2),
+            );
+            let d = [6.0, 4.0];
+            let a2 = ax * ax + ay * ay;
+            let row = (d[0] * ax + d[1] * ay).powi(2) * b * b
+                + (d[0] * ay - d[1] * ax).powi(2) * a2
+                - a2 * a2 * b * b;
+            let got = *a.residuals().last().unwrap();
+            if row.abs() < 1e-6 || got == 0.0 {
+                continue;
+            }
+            let big = ax.abs().max(ay.abs());
+            let size = 2.0 * big * big * big * (big * b).sqrt() * b;
+            assert!(scale_is(row / got, size), "{} for {size}", row / got);
+            read += 1;
+        }
+    }
+    assert!(read > 500, "{read}");
+}
+
+#[test]
+fn an_ellipse_whose_axis_is_its_minor_radius_has_no_axis_direction() {
+    // Axis (3, 0) or (0, 3) and minor radius 3: a circle, whose axis no direction names.
+    for axis in [[3.0, 0.0], [0.0, 3.0]] {
+        assert_eq!(
+            OnEllipse.singular(&[6.0, 4.0, 0.0, 0.0, axis[0], axis[1], 3.0, 1.0], 0.0),
+            Some(EqualRadii)
+        );
+    }
 }

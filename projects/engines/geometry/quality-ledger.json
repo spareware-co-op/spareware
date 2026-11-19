@@ -9039,6 +9039,30 @@
       "reason": "They differ only when the enclosure of the branch quantity ends at exactly 0. Senses are read only at solved points (continue_to and at_risk, after a block has converged), where a heading's quantity is ±|ab| and a turn's ±|u||v|: 0 only for a line of no length, which is singular and refused before any sense is read. A point enclosure of a value that far from 0 never touches it."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/cluster.rs",
+      "mutant": "replace != with == in components",
+      "line_text": "while get(&parent, a)? != a {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant walks up only from a node that is its own parent, and from such a node the step up is the node itself, so the walk from the first link's first node, which every node is before any union, never ends; it charges nothing to the meter, so no budget stops it. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/cluster.rs",
+      "mutant": "replace != with == in components",
+      "line_text": "while get(&parent, b)? != b {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant walks up only from a node that is its own parent, and from such a node the step up is the node itself, so the walk from the first link's first member, which every node is before any union, never ends; it charges nothing to the meter, so no budget stops it. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/cluster.rs",
+      "mutant": "replace != with == in components",
+      "line_text": "while get(&parent, r)? != r {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant walks up only from a node that is its own parent and steps to that parent, itself, so the walk from any root, and every component has one, never ends; it charges nothing to the meter, so no budget stops it. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
       "mutant": "replace > with >= in Stage::iterate",
       "line_text": "if lambda > MOST_DAMPING {",
