@@ -571,44 +571,53 @@ fn a_profile_s_corners_are_exact_fractions_of_steps() {
     assert!(matches!(m.extrude(&off, up), Err(Error::Invalid { .. })));
 }
 
-/// The extrusion decides a profile on a plane square to no axis exactly: the triangle (1, 0, 0),
-/// (0, 1, 0), (0, 0, 1) m, whose Newell normal is (1, 1, 1) m^2, swept by 1 m up or 2 m down is a
-/// prism of volume 0.5 or 1 m^3 (half the normal dotted with the vector); with a fourth corner a
-/// third of a step off its plane it is refused. (A sweep along a vector square to no axis comes
-/// back with a spline edge, which the conversion refuses by name, so the vectors are vertical.)
+/// The extrusion decides each component of a profile's normal exactly, on a plane square to each
+/// axis in turn and off the origin: the triangle of corners (0, 0), (1, 1) and (-1, 1) m in the
+/// two other axes' coordinates (in turn), on the plane 1 m along the third, swept 1 m along the
+/// third axis or 1 m against it, is a prism of volume 1 m^3 and 5 faces; the square (0, 0),
+/// (1, 1), (0, 2), (-1, 1) with its third corner a third of a step off the plane, and three
+/// corners on one line (no area), are refused.
 #[test]
-fn a_tilted_profile_is_decided_exactly() {
+fn a_triangle_on_each_axis_plane_is_decided_exactly() {
     let mut m = Modeller::new(STEP);
-    let s = |x: &str| steps(x, STEP);
-    let p = |x: &str, y: &str, z: &str| Corner::from(P3::new(s(x), s(y), s(z)).expect("a point"));
-    let triangle = Profile {
-        outer: vec![p("1", "0", "0"), p("0", "1", "0"), p("0", "0", "1")],
-        holes: Vec::new(),
-    };
-    for (by, volume) in [(["0", "0", "1"], 0.5), (["0", "0", "-2"], 1.0)] {
-        let r = m.extrude(&triangle, by.map(s)).expect("the prism");
-        assert_eq!(m.face_count(&r), 5);
-        let v = m.volume(&r).expect("the volume");
-        let expected = volume / metres(STEP).powi(3);
-        assert!(
-            (v - expected).abs() / expected <= tolerance("volume_relerr_flat"),
-            "{v} for {by:?}"
-        );
+    let one = i128::from(steps("1", STEP));
+    let flat = tolerance("volume_relerr_flat");
+    let cubic = 1.0 / metres(STEP).powi(3);
+    for axis in 0..3 {
+        // The corner (u, v) m on the plane `w` thirds of a step past 1 m along `axis`.
+        let at = |u: i128, v: i128, w: i128| {
+            let mut num = [0; 3];
+            num[axis] = 3 * one + w;
+            num[(axis + 1) % 3] = 3 * u * one;
+            num[(axis + 2) % 3] = 3 * v * one;
+            Corner::new(num, 3).expect("a corner")
+        };
+        let triangle = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(-1, 1, 0)],
+            holes: Vec::new(),
+        };
+        for sign in [1, -1] {
+            let mut by = [0; 3];
+            by[axis] = sign * steps("1", STEP);
+            let r = m.extrude(&triangle, by).expect("the prism");
+            assert_eq!(m.face_count(&r), 5, "axis {axis}, {by:?}");
+            let v = m.volume(&r).expect("the volume");
+            assert!((v - cubic).abs() / cubic <= flat, "{v} for {by:?}");
+        }
+        let mut up = [0; 3];
+        up[axis] = steps("1", STEP);
+        let invalid = |r: Result<Solid, Error>| matches!(r, Err(Error::Invalid { .. }));
+        let off = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(0, 2, 1), at(-1, 1, 0)],
+            holes: Vec::new(),
+        };
+        assert!(invalid(m.extrude(&off, up)), "axis {axis}");
+        let line = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(2, 2, 0)],
+            holes: Vec::new(),
+        };
+        assert!(invalid(m.extrude(&line, up)), "axis {axis}");
     }
-    let z = i128::from(s("1"));
-    let off = Profile {
-        outer: vec![
-            p("1", "0", "0"),
-            p("0", "1", "0"),
-            p("0", "0", "1"),
-            Corner::new([3 * z, 0, 1], 3).expect("a corner"),
-        ],
-        holes: Vec::new(),
-    };
-    assert!(matches!(
-        m.extrude(&off, [0, 0, s("1")]),
-        Err(Error::Invalid { .. })
-    ));
 }
 
 /// The named list, `tests/named-faults.json`.

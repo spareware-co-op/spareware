@@ -250,7 +250,7 @@ fn diff(a: &[BigRational; 3], b: &[BigRational; 3]) -> [BigRational; 3] {
 
 /// `a . b`, exactly.
 fn dot(a: &[BigRational; 3], b: &[BigRational; 3]) -> BigRational {
-    &a[0] * &b[0] + &a[1] * &b[1] + &a[2] * &b[2]
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
 /// Twice the vector area of the polygon `ps` of at least one corner (its Newell normal), in
@@ -515,8 +515,7 @@ impl Modeller {
         if n.iter().all(Zero::is_zero) {
             return Err(invalid("an outer polygon with no area"));
         }
-        let along = dot(&n, &by_q);
-        if along.is_zero() {
+        if dot(&n, &by_q).is_zero() {
             return Err(invalid("a vector in the profile's plane"));
         }
         let o = outer[0].exact();
@@ -579,12 +578,10 @@ impl Modeller {
         };
         let (p0, p1) = (self.corner(outer[0]), self.corner(outer[1]));
         let xa = unit([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]);
-        // Only the normal's direction is used, which the f64 keeps to rounding; a component is
-        // at most about 2^83 squared steps, so it is finite.
-        let nu = {
-            let s = if along.is_positive() { 1.0 } else { -1.0 };
-            unit(n.map(|c| s * c.to_f64().unwrap_or(f64::NAN)))
-        };
+        // The normal on `by`'s side is the Newell normal of the outer polygon as solidcore is
+        // handed it, turning positively about `by`. Only its direction is used, which the f64
+        // keeps to rounding; a component is at most about 2^83 squared steps, so it is finite.
+        let nu = unit(newell(&outer).map(|c| c.to_f64().unwrap_or(f64::NAN)));
         let ya = Vec3::new(
             xa.y * nu.z - xa.z * nu.y,
             xa.z * nu.x - xa.x * nu.z,
