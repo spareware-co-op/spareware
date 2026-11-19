@@ -422,7 +422,7 @@ fn units(out: &OpOutput<Made>, level: Level) -> u128 {
 /// What decision 32.48 costs a shipped build, in the checker's own work units, the same on every
 /// machine: the full set in place of the cheap groups on a result that is less than exact. The
 /// record cites these numbers, as they stand with G134's check of flat faces (its note "With
-/// G134"); the ones it measured before that are in its table.
+/// G134") and group 1's fans (decision 32.84); the ones it measured before G134 are in its table.
 #[test]
 fn the_full_set_on_a_result_less_than_exact_costs_what_the_record_says() {
     let c = ctx();
@@ -452,18 +452,18 @@ fn the_full_set_on_a_result_less_than_exact_costs_what_the_record_says() {
     }
     // Thirty bodies: twelve round primitives moved and all eighteen primitives scaled by 3/2.
     let expected: BTreeMap<String, (u128, u128)> = [
-        ("box", (227, 522)),
-        ("cone", (27, 46)),
-        ("cylinder", (48, 80)),
-        ("prism", (227, 522)),
+        ("box", (251, 546)),
+        ("cone", (29, 48)),
+        ("cylinder", (52, 84)),
+        ("prism", (251, 546)),
         ("sphere", (6, 12)),
-        ("torus", (40, 54)),
+        ("torus", (44, 58)),
     ]
     .into_iter()
     .map(|(kind, units)| (kind.to_owned(), units))
     .collect();
     assert_eq!(by_kind, expected);
-    assert_eq!((bodies, cheap, full), (30, 2088, 4275));
+    assert_eq!((bodies, cheap, full), (30, 2292, 4479));
 }
 
 #[test]

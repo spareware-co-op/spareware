@@ -425,7 +425,7 @@ pub fn publish(
 
 /// [`publish`], in the order of `names` if it has any, each vertex rounded as `rounded` gives it
 /// if it gives any: an open merge is a sheet, and a closed one a solid unless some edge has more
-/// than two fins.
+/// than two fins or some vertex more than one fan.
 ///
 /// # Errors
 ///
@@ -455,9 +455,11 @@ pub fn publish_with(
     })
 }
 
-/// Whether some vertex's fins in one shell go round it in more than one fan: the shell's surface
-/// pinches there. Each edge has two fins. A fan is walked from a fin leaving the vertex to the fin
-/// leaving it after the one before it in its ring, across their edge, until it comes back.
+/// Whether some vertex's fins go round it in more than one fan: the body is non-manifold there,
+/// two shells touching at the vertex or one shell's surface pinching (8.1; decision 32.84). A fan
+/// keeps to one shell, so a vertex two shells share has two fans. Each edge has two fins. A fan is
+/// walked from a fin leaving the vertex to the fin leaving it after the one before it in its ring,
+/// across their edge, until it comes back.
 ///
 /// Cost: one step per fin.
 fn pinched(merged: &Merged) -> bool {
@@ -489,8 +491,7 @@ fn pinched(merged: &Merged) -> bool {
                 .and_then(|f| before.get(f).copied().flatten())
                 .and_then(across);
         }
-        let shell = merged.faces.get(fin.face).map(|face| face.shell);
-        if !walked.insert((shell, fin.from)) {
+        if !walked.insert(fin.from) {
             return true;
         }
     }
