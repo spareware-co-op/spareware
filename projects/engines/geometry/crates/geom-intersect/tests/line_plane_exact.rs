@@ -17,6 +17,7 @@
 use geom_curve::{CurveKind, Line};
 use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::result::{Coincidence, Intersection, Item, PointContact};
+use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
 
@@ -222,4 +223,92 @@ fn every_product_of_a_general_plane_counts() {
             other => panic!("{other:?}"),
         }
     }
+}
+
+/// An enclosure of `(p − q) · (a × b)` from the stored doubles, as the closed form takes it.
+fn enclosure(p: [f64; 3], q: [f64; 3], a: [f64; 3], b: [f64; 3]) -> Interval {
+    let lift = |v: [f64; 3]| v.map(|x| Interval::point(x).unwrap());
+    let ([p0, p1, p2], [q0, q1, q2]) = (lift(p), lift(q));
+    let w = [
+        p0.sub(q0).unwrap(),
+        p1.sub(q1).unwrap(),
+        p2.sub(q2).unwrap(),
+    ];
+    let ([a0, a1, a2], [b0, b1, b2]) = (lift(a), lift(b));
+    let n = [
+        a1.mul(b2).unwrap().sub(a2.mul(b1).unwrap()).unwrap(),
+        a2.mul(b0).unwrap().sub(a0.mul(b2).unwrap()).unwrap(),
+        a0.mul(b1).unwrap().sub(a1.mul(b0).unwrap()).unwrap(),
+    ];
+    let dot = |x: [Interval; 3]| {
+        let t = x[0]
+            .mul(n[0])
+            .unwrap()
+            .add(x[1].mul(n[1]).unwrap())
+            .unwrap();
+        t.add(x[2].mul(n[2]).unwrap()).unwrap()
+    };
+    dot(w)
+}
+
+#[test]
+fn a_line_across_a_plane_off_the_grid_is_told_by_its_enclosure_alone() {
+    // The step's enclosure excludes zero, so the line crosses the plane: one point, from the
+    // closed form's division, at its cost (4 units) and not the engine's.
+    let p = plane(C, A, B);
+    let (high, low) = (
+        step(ON, 1.0, [0.0, 0.0, 1.0]),
+        step(ON, -1.0, [0.0, 0.0, 1.0]),
+    );
+    let along = enclosure(step(high, -1.0, low), [0.0; 3], A, B);
+    assert!(!along.contains(0.0), "{along:?}");
+    let (found, work) = meet(&segment(high, low), &p);
+    assert!(
+        matches!(found.items(), [Item::Point { .. }]),
+        "{:?}",
+        found.items()
+    );
+    assert!(work <= 4, "{work}");
+}
+
+#[test]
+fn a_pair_whose_enclosures_hold_zero_is_told_by_the_exact_signs() {
+    // Lying in the plane: the step's and the offset's true values are zero, and their enclosures
+    // straddle it. Only the exact signs say parallel and in it.
+    for (line, plane) in lying() {
+        let (CurveKind::Line(l), SurfaceKind::Plane(s)) = (&line, &plane) else {
+            panic!("a segment and a plane");
+        };
+        let (c, a, b) = s.vectors();
+        let along = enclosure(l.direction(), [0.0; 3], a, b);
+        let side = enclosure(c, l.origin(), a, b);
+        assert!(
+            along.contains(0.0) && side.contains(0.0),
+            "{along:?} {side:?}"
+        );
+        let (found, work) = meet(&line, &plane);
+        assert!(is_the_whole_overlap(&found), "{:?}", found.items());
+        assert!(work <= 1, "{work}");
+    }
+    // Parallel to the general plane and off it by one unit in the last place of a coordinate of
+    // the origin: the offset is 3 · 2^-51 off zero, and its enclosure straddles zero. The exact
+    // sum says off it: nothing, proven, where an enclosure alone would leave it to the engine.
+    let p = plane(C, A, B);
+    let [x, y, z] = ON;
+    let from = [x, y, z.next_up()];
+    let to = step(from, 1.0, ALONG);
+    assert_eq!(
+        step(to, -1.0, from),
+        ALONG,
+        "the direction is stored exactly"
+    );
+    let along = enclosure(ALONG, [0.0; 3], A, B);
+    let side = enclosure(C, from, A, B);
+    assert!(
+        along.contains(0.0) && side.contains(0.0),
+        "{along:?} {side:?}"
+    );
+    let (found, work) = meet(&segment(from, to), &p);
+    assert!(found.items().is_empty(), "{:?}", found.items());
+    assert!(work <= 1, "{work}");
 }

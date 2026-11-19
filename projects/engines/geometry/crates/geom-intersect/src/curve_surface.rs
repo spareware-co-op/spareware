@@ -69,14 +69,15 @@
 //! cost 782,639 units before decision 32.74: the engine's boxes under that gap in three
 //! variables. A segment lying in a plane whose vectors hold a half ran the engine past 2^20 units,
 //! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
-//! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit. A plane's
-//! edge through a cone's apex, or tangent to a cylinder off the grid, cost the engine 483,244 to
-//! 4,147,759 units before decision 32.87; now 4, and where the enclosure of the discriminant
-//! reaches zero, one exact sum of at most 432 products of six or eight doubles, each at most 128
-//! doubles on the stack. A plane's edge beside a cone of start radius 100 off the grid cost the
-//! engine 3,824,869 units, and a segment touching a start circle 387,503 to 597,337, before
-//! decision 32.88; now at most 4, and where the enclosure reaches zero 50 products of 768-bit
-//! integers and three of 1,536-bit ones, on the stack. Recursion: none.
+//! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
+//! where an enclosure of the same value holds zero. A plane's edge through a cone's apex, or
+//! tangent to a cylinder off the grid, cost the engine 483,244 to 4,147,759 units before decision
+//! 32.87; now 4, and where the enclosure of the discriminant reaches zero, one exact sum of at
+//! most 432 products of six or eight doubles, each at most 128 doubles on the stack. A plane's
+//! edge beside a cone of start radius 100 off the grid cost the engine 3,824,869 units, and a
+//! segment touching a start circle 387,503 to 597,337, before decision 32.88; now at most 4, and
+//! where the enclosure reaches zero 50 products of 768-bit integers and three of 1,536-bit ones,
+//! on the stack. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -228,22 +229,19 @@ fn line_plane(
     plane: &Plane,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    let (c, a, b) = plane.vectors();
-    let (o, d) = (line.origin(), line.direction());
-    let exact = plane_signs(line, plane)?;
-    let normal = cross(lift(a)?, lift(b)?)?;
-    let step = dot(normal, lift(d)?)?;
-    let offset = dot(normal, minus(lift(c)?, lift(o)?)?)?;
+    let (step, offset) = plane_enclosures(line, plane)?;
     let domain = ParamSurface::domain(plane);
-    // Parallel, and lying in it, only from the exact signs: every operation rounds outward, so an
-    // enclosure of the step or the offset is never the one point zero.
-    if let Some((Sign::Zero, side)) = exact {
-        if side != Sign::Zero {
-            return proven(Vec::new(), meter).map(Some);
+    // A step proven apart from zero is a line across the plane: its enclosure's sign is the true
+    // one, so the exact signs are asked only where the enclosure holds zero.
+    if apart(step).is_none() {
+        // Parallel, and lying in it, only from the exact signs: every operation rounds outward,
+        // so an enclosure of the step or the offset is never the one point zero.
+        if let Some((Sign::Zero, side)) = plane_signs(line, plane, step, offset)? {
+            if side != Sign::Zero {
+                return proven(Vec::new(), meter).map(Some);
+            }
+            return in_plane(line, plane, meter).map(Some);
         }
-        return in_plane(line, plane, meter).map(Some);
-    }
-    if step.contains(0.0) {
         return Ok(None);
     }
     let t = offset.div(step)?;
@@ -289,14 +287,41 @@ fn plane_parameters(
     ))
 }
 
+/// Enclosures of a line's step against a plane, n·d with n = a × b, and of the plane's offset from
+/// the line's origin, n·(c − o), from the stored doubles.
+fn plane_enclosures(line: &Line<3>, plane: &Plane) -> Result<(Interval, Interval), IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let (o, d) = (line.origin(), line.direction());
+    let normal = cross(lift(a)?, lift(b)?)?;
+    let step = dot(normal, lift(d)?)?;
+    let offset = dot(normal, minus(lift(c)?, lift(o)?)?)?;
+    Ok((step, offset))
+}
+
+/// The sign of the value `x` encloses, where `x` excludes zero: every real in it has the sign, the
+/// true value among them. `None` where `x` holds zero, and only an exact sign can tell.
+fn apart(x: Interval) -> Option<Sign> {
+    if x.contains(0.0) {
+        None
+    } else {
+        x.certain_sign()
+    }
+}
+
 /// A line's direction against a plane and which side its origin lies on, exactly: on whole-number
 /// data by `orient3d` on the stored points, and otherwise by the signs of the stored doubles
-/// (decision 32.85). `None` where a product of three of the doubles would not be exact.
-fn plane_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, IntersectError> {
+/// (decision 32.85), where `step` and `offset`, their enclosures, cannot tell. `None` where a
+/// product of three of the doubles would not be exact.
+fn plane_signs(
+    line: &Line<3>,
+    plane: &Plane,
+    step: Interval,
+    offset: Interval,
+) -> Result<Option<(Sign, Sign)>, IntersectError> {
     if let Some(signs) = grid_signs(line, plane)? {
         return Ok(Some(signs));
     }
-    Ok(stored_signs(line, plane))
+    Ok(stored_signs(line, plane, step, offset))
 }
 
 /// The six products of three whose sum is `w · (a × b)`, each a triple of stored doubles.
@@ -312,13 +337,19 @@ fn triple_terms(w: [f64; 3], a: [f64; 3], b: [f64; 3]) -> [[f64; 3]; 6] {
     ]
 }
 
-/// The sign of Σ aᵢ·bᵢ·cᵢ, exactly: a·b is a double and its error, each times c a double and its
-/// error, and the sum of the four is exact. `None` where a factor is far enough toward either end
-/// of the doubles' range that a product of three would not be exact.
-fn sign_of_triples(terms: &[[f64; 3]]) -> Option<Sign> {
+/// The sign of Σ aᵢ·bᵢ·cᵢ, which `enclosure` holds: the enclosure's where it excludes zero, and
+/// otherwise the exact one. `None` where a factor is far enough toward either end of the doubles'
+/// range that a product of three would not be exact.
+fn sign_of_triples(terms: &[[f64; 3]], enclosure: Interval) -> Option<Sign> {
     if !terms.iter().flatten().all(|x| tame(*x)) {
         return None;
     }
+    Some(apart(enclosure).unwrap_or_else(|| exact_sign_of_triples(terms)))
+}
+
+/// The sign of Σ aᵢ·bᵢ·cᵢ, exactly, for tame factors: a·b is a double and its error, each times c
+/// a double and its error, and the sum of the four is exact.
+fn exact_sign_of_triples(terms: &[[f64; 3]]) -> Sign {
     let mut sum = ExactSum::new();
     for &[a, b, c] in terms {
         let (p, e) = two_prod(a, b);
@@ -327,31 +358,42 @@ fn sign_of_triples(terms: &[[f64; 3]]) -> Option<Sign> {
         sum.add_slice(&[pp, pe, ep, ee]);
     }
     let v = sum.round_ieee();
-    Some(if v > 0.0 {
+    if v > 0.0 {
         Sign::Positive
     } else if v < 0.0 {
         Sign::Negative
     } else {
         Sign::Zero
-    })
+    }
 }
 
 /// A line's direction against a plane, n·d with n = a × b, and the side its origin lies on,
 /// n·(c − o), each the sign of a sum of products of three stored doubles. The plane is
 /// c + u·a + v·b and the line o + t·d, so these doubles are the two kinds exactly, whether or
-/// not they are whole numbers.
-fn stored_signs(line: &Line<3>, plane: &Plane) -> Option<(Sign, Sign)> {
+/// not they are whole numbers. Where `step` or `offset`, the enclosures of the two, excludes zero,
+/// its sign is the true one and no exact sum is formed.
+fn stored_signs(
+    line: &Line<3>,
+    plane: &Plane,
+    step: Interval,
+    offset: Interval,
+) -> Option<(Sign, Sign)> {
     let (c, a, b) = plane.vectors();
     let (o, d) = (line.origin(), line.direction());
-    let along = sign_of_triples(&triple_terms(d, a, b))?;
+    let along = sign_of_triples(&triple_terms(d, a, b), step)?;
+    let side = sign_of_triples(&side_terms(c, o, a, b), offset)?;
+    Some((along, side))
+}
+
+/// The twelve products of three whose sum is `(c − o) · (a × b)`: `c`'s six and `−o`'s.
+fn side_terms(c: [f64; 3], o: [f64; 3], a: [f64; 3], b: [f64; 3]) -> [[f64; 3]; 12] {
     let [o0, o1, o2] = o;
     let [ahead, behind] = [triple_terms(c, a, b), triple_terms([-o0, -o1, -o2], a, b)];
     let mut terms = [[0.0; 3]; 12];
     for (slot, term) in terms.iter_mut().zip(ahead.iter().chain(&behind)) {
         *slot = *term;
     }
-    let side = sign_of_triples(&terms)?;
-    Some((along, side))
+    terms
 }
 
 /// A line's direction against a plane and which side its origin lies on, on whole-number data.
@@ -637,14 +679,11 @@ fn add_product(sum: &mut ExactSum, factors: &[f64]) -> Option<()> {
     let mut count: usize = 1;
     for &f in rest {
         let mut next = [0.0; MOST_PARTS];
-        for (pair, &part) in next
-            .as_chunks_mut::<2>()
-            .0
-            .iter_mut()
-            .zip(parts.iter().take(count))
-        {
+        for (i, &part) in parts.iter().take(count).enumerate() {
             let (p, e) = two_prod(part, f);
-            *pair = [p, e];
+            let at = i.checked_mul(2)?;
+            *next.get_mut(at)? = p;
+            *next.get_mut(at.checked_add(1)?)? = e;
         }
         parts = next;
         count = count.checked_mul(2)?;
@@ -2714,6 +2753,92 @@ mod tests {
         ))
         .unwrap();
         assert!(right.lo() > 0.24 && right.hi() < 0.26, "{right:?}");
+    }
+
+    /// A double off the whole numbers as often as on them: a binary fraction, or a rounded decimal.
+    fn double(rng: &mut geom_test::SplitMix64) -> f64 {
+        let m = f64::from(i32::try_from(rng.range_i64(-4096, 4096).unwrap()).unwrap());
+        match rng.range_i64(0, 3).unwrap() {
+            0 => m,
+            1 => m / 64.0,
+            2 => m * 0.1,
+            _ => m / 3.0,
+        }
+    }
+
+    fn vector(rng: &mut geom_test::SplitMix64) -> [f64; 3] {
+        [double(rng), double(rng), double(rng)]
+    }
+
+    /// `p + s·q + r·w`, rounded.
+    fn along(p: [f64; 3], s: f64, q: [f64; 3], r: f64, w: [f64; 3]) -> [f64; 3] {
+        let mut out = p;
+        for ((x, e), f) in out.iter_mut().zip(q).zip(w) {
+            *x += s * e + r * f;
+        }
+        out
+    }
+
+    #[test]
+    fn the_enclosures_signs_are_the_exact_signs_wherever_they_exclude_zero() {
+        // Random planes and lines, a third of the lines parallel to the plane by construction
+        // (a direction that is a vector of it times a power of two) and a third of the origins
+        // rounded from points of it, so that both enclosures straddle zero on many pairs.
+        let mut rng = geom_test::SplitMix64::new(geom_test::seed::fixed(
+            "line_plane filter",
+            geom_test::Seed::DEFAULT,
+        ));
+        let count: u32 = if cfg!(miri) { 200 } else { 20_000 };
+        let (mut decided, mut straddled) = ([0_u32; 2], [0_u32; 2]);
+        for _ in 0..count {
+            let (c, a, b) = (vector(&mut rng), vector(&mut rng), vector(&mut rng));
+            let Ok(plane) = Plane::new(c, a, b, ((-1e3, 1e3), (-1e3, 1e3))) else {
+                continue;
+            };
+            let d = match rng.range_i64(0, 2).unwrap() {
+                0 => vector(&mut rng),
+                1 => along([0.0; 3], 0.25, a, 0.0, b),
+                _ => along([0.0; 3], 1.0, a, double(&mut rng), b),
+            };
+            let o = if rng.coin() {
+                vector(&mut rng)
+            } else {
+                along(c, double(&mut rng), a, double(&mut rng), b)
+            };
+            let Ok(line) = Line::new(o, d, (0.0, 1.0)) else {
+                continue;
+            };
+            let (step, offset) = plane_enclosures(&line, &plane).unwrap();
+            let terms: [&[[f64; 3]]; 2] = [&triple_terms(d, a, b), &side_terms(c, o, a, b)];
+            for (k, (terms, enclosure)) in terms.into_iter().zip([step, offset]).enumerate() {
+                let exact = exact_sign_of_triples(terms);
+                match apart(enclosure) {
+                    Some(sign) => {
+                        assert_eq!(sign, exact, "{k}: {o:?} {d:?} {c:?} {a:?} {b:?}");
+                        decided[k] += 1;
+                    }
+                    None => straddled[k] += 1,
+                }
+                assert_eq!(sign_of_triples(terms, enclosure), Some(exact));
+            }
+            let signs = stored_signs(&line, &plane, step, offset).unwrap();
+            assert_eq!(
+                signs,
+                (
+                    exact_sign_of_triples(terms[0]),
+                    exact_sign_of_triples(terms[1])
+                )
+            );
+        }
+        // Both ways taken often for both signs (natively about a third and two thirds of the step's,
+        // and half each of the offset's).
+        for k in 0..2 {
+            let often = |n: u32| n > count / 10;
+            assert!(
+                often(decided[k]) && often(straddled[k]),
+                "{decided:?} {straddled:?}"
+            );
+        }
     }
 
     #[test]
