@@ -51,3 +51,9 @@ serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }
 # Reads that text as an exact decimal (MIT OR Apache-2.0), so that a case's length is a whole
 # number of grid steps exactly or the case is refused, never rounded through an f64.
 bigdecimal = "=0.4.8"
+# The kernel's own primitives and their operation context (Apache-2.0, this repository): SC-5's
+# cylinder stays the kernel's (decision 32.76), and a test makes it the kernel's way beside
+# solidcore's. geom-op adds sha2 and unicode-normalization (each MIT OR Apache-2.0), already in
+# the kernel's tree.
+geom-make = { path = "../crates/geom-make" }
+geom-op = { path = "../crates/geom-op" }

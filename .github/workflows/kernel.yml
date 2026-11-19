@@ -951,6 +951,12 @@ jobs:
             os: macos-latest
           - name: macOS x86-64
             os: macos-15-intel
+        # The parts of macOS x86-64 built on macOS arm64 instead and run there from the archive
+        # (`suite-cross-build` and `suite-cross`, decision 32.82): the same entries as their matrix,
+        # in the same order. geom-test's tests/queue_wiring.rs holds the two lists to each other.
+        exclude:
+          - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+            target: { name: macOS x86-64, os: macos-15-intel }
         # The one plain debug run, on Linux x86-64.
         include:
           - part: { mode: debug, k: 1, n: 8 }
@@ -1039,6 +1045,143 @@ jobs:
       - name: Doctests in debug
         if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
+
+  # A trial (decision 32.82): a part of macOS x86-64's release suite compiled on macOS arm64 for
+  # x86_64-apple-darwin, packed with `cargo nextest archive` and handed to `suite-cross`, which runs
+  # every test of it on the Intel runner. On that runner the compile was 85 to 97% of each part and
+  # its speed swung about 2.1 times between runs (part 21 took 10.8 to 20.4 minutes on main's
+  # pushes); the arm64 runner compiles two to three times faster. The same crates, targets, release
+  # profile and flags as `suite`'s part: RUSTFLAGS reach only the target's code once `--target` is
+  # given, so the build overrides (build scripts, proc macros) get their overflow checks from the
+  # profile, as RUSTFLAGS gave them natively. The parts here are `suite`'s exclusions, entry for
+  # entry; none has doctests (`doc`), which an archive does not hold.
+  suite-cross-build:
+    name: Test suite build (macOS x86-64 on macOS arm64, release, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
+    needs: [changes, lint, scope]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        part:
+          - { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.146"
+      # As `suite`: debug assertions on in the release legs too.
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: suite-cross-release
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+          MODE: ${{ matrix.part.mode }}
+          SHARE: ${{ matrix.part.mode == 'release' && (matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)]) || '' }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) ;; *) continue ;; esac
+            if [ "$MODE" = release ]; then
+              case " $SHARE " in *" $c "*) ;; *) continue ;; esac
+            fi
+            list="$list -p $c"
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none in this part}"
+      - name: Build the suite's tests for macOS x86-64 in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }})
+        if: ${{ env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OVERFLOW_CHECKS: "true"
+        run: cargo nextest archive $KERNEL_CRATES --target x86_64-apple-darwin --release --locked ${{ matrix.part.targets }} --archive-file "$RUNNER_TEMP/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst"
+      # Kept for a day: the part of this run downloads it within minutes.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ env.KERNEL_CRATES != '' }}
+        with:
+          name: suite-macos-x86-64-${{ matrix.part.k }}
+          path: ${{ runner.temp }}/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst
+          retention-days: 1
+          # nextest's archive is zstd already.
+          compression-level: 0
+          if-no-files-found: error
+
+  suite-cross:
+    name: Test suite (macOS x86-64, release, part ${{ matrix.part.k }} of ${{ matrix.part.n }}, built on macOS arm64)
+    needs: [changes, lint, scope, suite-cross-build]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        part:
+          - { mode: release, k: 21, n: 25, crate: geom-bench, targets: "--test '[b-z]*'" }
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.146"
+      # A part the selection leaves without a test passes (nextest's `--no-tests`).
+      NEXTEST_NO_TESTS: pass
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The checkout is the archive's workspace (`--workspace-remap`), at the same path as on the
+      # arm64 runner.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      # The same list as the build's: with none, the build archived nothing and the part passes.
+      - name: List the kernel's crates the change can reach
+        env:
+          SELECTED: ${{ needs.scope.outputs.crates }}
+          MODE: ${{ matrix.part.mode }}
+          SHARE: ${{ matrix.part.mode == 'release' && (matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)]) || '' }}
+        run: |
+          list=""
+          for d in projects/engines/geometry/crates/*/; do
+            c="$(basename "$d")"
+            case " $SELECTED " in *" $c "*) ;; *) continue ;; esac
+            if [ "$MODE" = release ]; then
+              case " $SHARE " in *" $c "*) ;; *) continue ;; esac
+            fi
+            list="$list -p $c"
+          done
+          echo "KERNEL_CRATES=$list" >> "$GITHUB_ENV"
+          echo "Testing:${list:- no crate, as the change reaches none in this part}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ env.KERNEL_CRATES != '' }}
+        with:
+          name: suite-macos-x86-64-${{ matrix.part.k }}
+          path: ${{ runner.temp }}
+      # Every test of the archive, none filtered: the tests `suite`'s part runs natively.
+      - name: Test suite in release, with overflow checks on (part ${{ matrix.part.k }} of ${{ matrix.part.n }}, from the archive)
+        if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
+        run: cargo nextest run --archive-file "$RUNNER_TEMP/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst" --workspace-remap . --no-fail-fast
 
   big-endian:
     # The file format must not depend on byte order (chapter 28.13): geom-format's own tests and
@@ -1167,7 +1310,7 @@ jobs:
             echo "::error::The tests that fail are not exactly the named faults of tests/named-faults.json."
             exit 1
           fi
-          test "$ran" -ge 112
+          test "$ran" -ge 115
 
   solidcore-wasm:
     # The same tests of geom-solidcore as the job `solidcore`, built for wasm32-wasip1 and run under
@@ -1258,7 +1401,7 @@ jobs:
             echo "::error::The tests that fail under wasmtime are not exactly the named faults of tests/named-faults.json."
             exit 1
           fi
-          test "$ran" -ge 112
+          test "$ran" -ge 115
 
   # The goldens on wasm32 and the proof of the guard through them, eight parts to a runtime, a
   # build each (the owner's rule of 15 minutes a job). On main's run 43953631233 the leg under
@@ -1790,7 +1933,7 @@ jobs:
   # the merge queue it leaves the mark that lets the push to main skip the same tree.
   done:
     name: Kernel checks pass
-    needs: [changes, lint, scope, linux, guard, solidcore, solidcore-wasm, golden-runner, test, suite, wasm, wasm-build, wasm-suite, big-endian, large-models]
+    needs: [changes, lint, scope, linux, guard, solidcore, solidcore-wasm, golden-runner, test, suite, suite-cross-build, suite-cross, wasm, wasm-build, wasm-suite, big-endian, large-models]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1817,8 +1960,8 @@ jobs:
             # lists to each job's condition). A run by hand must run what a push runs.
             case "$EVENT" in
               pull_request) must="lint scope linux guard solidcore solidcore-wasm" ;;
-              merge_group) must="lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
-              *) must="lint scope linux guard solidcore solidcore-wasm golden-runner test suite wasm wasm-build wasm-suite big-endian large-models" ;;
+              merge_group) must="lint scope golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models" ;;
+              *) must="lint scope linux guard solidcore solidcore-wasm golden-runner test suite suite-cross-build suite-cross wasm wasm-build wasm-suite big-endian large-models" ;;
             esac
             for job in $must; do
               result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")

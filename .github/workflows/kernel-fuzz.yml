@@ -149,7 +149,7 @@ on:
         default: ""
         type: string
       kani:
-        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter"
+        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter_answer"
         required: false
         default: ""
         type: string
@@ -284,8 +284,11 @@ jobs:
     # proved in parts, one job each: orient2d_proof_predicate_part_<k> for the draws of class k of
     # the six coordinates' signs, and orient2d_proof_predicate_cover, which proves that every draw
     # is in one of the 64 classes; a part took 4 to 9 minutes on a runner. geom-fuzz's
-    # tests/attack_g14.rs holds the parts and the cover to this list. 30 minutes is about twice the
-    # longest harness's on a runner.
+    # tests/attack_g14.rs holds the parts and the cover to this list. The filter's claim is proved
+    # one step of its check at a time after the one reference (decision 32.83): its exact path's
+    # stand-in, its predicate's stand-in and the filter's answer, one job each; as one harness it
+    # took 570 to 943 seconds on a runner, most of it in holding the reference's copies equal.
+    # 30 minutes is about twice the longest harness's on a runner.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -358,7 +361,9 @@ jobs:
           - orient2d_proof_predicate_part_62
           - orient2d_proof_predicate_part_63
           - orient2d_proof_exact_path
-          - orient2d_proof_filter
+          - orient2d_proof_filter_exact_stand_in
+          - orient2d_proof_filter_predicate_stand_in
+          - orient2d_proof_filter_answer
     defaults:
       run:
         shell: bash
