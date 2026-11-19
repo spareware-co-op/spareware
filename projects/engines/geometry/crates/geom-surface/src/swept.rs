@@ -429,11 +429,15 @@ impl Swept {
         self.place.apply(&x, order == (0, 0))
     }
 
-    /// The pieces of a box: eighths of a turn in a revolution's u, else whole.
-    fn pieces(&self, region: ParamBox) -> Result<Vec<ParamBox>, CurveError> {
+    /// The pieces of a box: eighths of a turn in a revolution's u, else whole. Read in turn from
+    /// the cuts of u, with no heap block.
+    fn pieces(&self, region: ParamBox) -> Result<impl Iterator<Item = ParamBox>, CurveError> {
         let (u, v) = region;
         let revolution = matches!(self.shape, Shape::Revolution { .. });
-        Ok(cuts(u, revolution)?.into_iter().map(|s| (s, v)).collect())
+        Ok(cuts(u, revolution)?
+            .into_iter()
+            .flatten()
+            .map(move |s| (s, v)))
     }
 
     fn hull(

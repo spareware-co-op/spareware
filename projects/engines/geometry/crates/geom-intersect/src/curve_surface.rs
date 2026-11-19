@@ -910,17 +910,19 @@ fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
     }
 }
 
+/// A stretch of a surface's domain: its range in u and its range in v.
+type Stretch = ((f64, f64), (f64, f64));
+
 impl Contact<'_> {
-    /// Every stretch of the surface's domain that `u` × `v` covers.
-    fn regions(&self, u: Interval, v: Interval) -> Vec<((f64, f64), (f64, f64))> {
+    /// Every stretch of the surface's domain that `u` × `v` covers, `u`'s stretches outer: at
+    /// most two in each parameter, so at most four, held in a fixed array with no heap block (the
+    /// engine asks for them on every box it bounds). A slot is `None` where a parameter has one
+    /// stretch only.
+    fn regions(&self, u: Interval, v: Interval) -> [Option<Stretch>; 4] {
         let [_, seam_u, seam_v] = self.seams;
-        let mut out = Vec::new();
-        for p in seam_u.spans(u).into_iter().flatten() {
-            for q in seam_v.spans(v).into_iter().flatten() {
-                out.push((p, q));
-            }
-        }
-        out
+        let [p0, p1] = seam_u.spans(u);
+        let [q0, q1] = seam_v.spans(v);
+        [p0.zip(q0), p0.zip(q1), p1.zip(q0), p1.zip(q1)]
     }
 
     /// A box around the surface over `u` × `v`, across its joins.
@@ -931,7 +933,7 @@ impl Contact<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Bounds<3>, IntersectError> {
         let mut out: Option<Bounds<3>> = None;
-        for region in self.regions(u, v) {
+        for region in self.regions(u, v).into_iter().flatten() {
             let b = self.surface.bound(region, meter)?;
             out = Some(match out {
                 Some(a) => a.union(&b).map_err(CurveError::from)?,
@@ -950,7 +952,7 @@ impl Contact<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<Bounds<3>>, IntersectError> {
         let mut out: Option<Bounds<3>> = None;
-        for region in self.regions(u, v) {
+        for region in self.regions(u, v).into_iter().flatten() {
             let DerivativeBound::Bounded(b) = self.surface.derivative_bound(region, dir, meter)?
             else {
                 return Ok(None);
