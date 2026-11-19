@@ -312,3 +312,30 @@ fn a_pair_whose_enclosures_hold_zero_is_told_by_the_exact_signs() {
     assert!(found.items().is_empty(), "{:?}", found.items());
     assert!(work <= 1, "{work}");
 }
+
+#[test]
+fn a_parallel_line_an_ulp_below_a_plane_whose_enclosures_hold_zero_meets_nothing() {
+    // The other side of the one above: the origin's z one unit in the last place lower, so the
+    // offset is −3 · 2^-51, a negative exact sum, and both enclosures still straddle zero. Every
+    // other negative sign in these tests is far enough off zero for its enclosure to tell it, so
+    // only this pair asks the exact sum for a negative sign. Read as zero, it would put the line
+    // in the plane: the whole overlap, where the answer is nothing.
+    let p = plane(C, A, B);
+    let [x, y, z] = ON;
+    let from = [x, y, z.next_down()];
+    let to = step(from, 1.0, ALONG);
+    assert_eq!(
+        step(to, -1.0, from),
+        ALONG,
+        "the direction is stored exactly"
+    );
+    let along = enclosure(ALONG, [0.0; 3], A, B);
+    let side = enclosure(C, from, A, B);
+    assert!(
+        along.contains(0.0) && side.contains(0.0),
+        "{along:?} {side:?}"
+    );
+    let (found, work) = meet(&segment(from, to), &p);
+    assert!(found.items().is_empty(), "{:?}", found.items());
+    assert!(work <= 1, "{work}");
+}
