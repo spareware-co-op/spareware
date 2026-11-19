@@ -328,9 +328,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; another ref restores main's.
+          # Only main saves the cache; another ref restores main's. It is the one cache of
+          # geom-test's release test build on Linux x86-64: kernel.yml's large-models builds the
+          # same dependencies and restores it (decision 32.90).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: ember-pairs
+          shared-key: geom-test-release-tests-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       - name: The test, in release
         run: |
           set -euo pipefail

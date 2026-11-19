@@ -180,6 +180,8 @@ jobs:
           # elsewhere. In main's run 44175516389, Linux arm64 found none and took 4.2 minutes,
           # Linux x86-64 restored its own and took 2.8, and every system took under 10.
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.os == 'macos-15-intel' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: The development-dependency rule, and CI's reruns of it
         run: cargo test --locked -p geom-test --test dependency_rule
       - name: The predicates fuzz target, in bolero's test mode and the seeded leg
@@ -240,6 +242,8 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
         run: |
           cd "$RUNNER_TEMP"
