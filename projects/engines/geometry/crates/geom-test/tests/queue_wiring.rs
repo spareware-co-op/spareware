@@ -1443,8 +1443,8 @@ fn cross_part_problems(w: &Yaml) -> Vec<String> {
         }
         excluded.push(part);
     }
-    // An archive holds no doctest: the moved parts with doctests run them in one job of their own
-    // on the Intel runner, as `suite`'s parts run them.
+    // An archive holds no doctest: the moved parts with doctests run them in jobs of their own on
+    // the Intel runner, as `suite`'s parts run them.
     let with_doc: Vec<&Yaml> = excluded
         .iter()
         .copied()
@@ -1570,28 +1570,73 @@ fn cross_part_problems(w: &Yaml) -> Vec<String> {
 }
 
 /// The crates `suite-cross-doc` must take, from the moved parts with doctests (`with_doc`), in
-/// their order: a crate set apart by its name, a share by the job `scope`'s share of its number.
+/// their order, each kept only by the job whose `parts` names its number: a crate set apart by its
+/// name, a share by the job `scope`'s share of its number.
 fn cross_doc_share(with_doc: &[&Yaml]) -> String {
     with_doc
         .iter()
         .map(|p| {
-            if p["crate"].is_badvalue() {
-                format!(
-                    "${{{{ fromJSON(needs.scope.outputs.parts)['{}'] }}}}",
-                    p["k"].as_i64().unwrap_or(0)
-                )
+            let k = p["k"].as_i64().unwrap_or(0);
+            let crates = if p["crate"].is_badvalue() {
+                format!("fromJSON(needs.scope.outputs.parts)['{k}']")
             } else {
-                text(&p["crate"])
-            }
+                format!("'{}'", text(&p["crate"]))
+            };
+            format!("${{{{ contains(matrix.doc.parts, ' {k} ') && {crates} || '' }}}}")
         })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
-/// What is wrong with `suite-cross-doc`, the one job that runs the doctests of every moved part
-/// that has them (`with_doc`): its crates not exactly those parts' ([`cross_doc_share`]) or not
-/// narrowed as `suite` narrows them; not on macOS x86-64's runner (`intel`); without `suite`'s debug
-/// assertions; or its doctests not `suite`'s release doctest step with its flags.
+/// What is wrong with how `suite-cross-doc`'s jobs share out the moved parts with doctests
+/// (`with_doc`): a part in no job or in two, a part that is none of them, or the jobs not numbered
+/// 1 to n of n. A job's `parts` is the parts' numbers with a space on each side, as SHARE reads it.
+fn cross_doc_jobs_problems(j: &Yaml, with_doc: &[&Yaml]) -> Vec<String> {
+    let job = "suite-cross-doc";
+    let mut found = Vec::new();
+    let jobs = j["strategy"]["matrix"]["doc"]
+        .as_vec()
+        .cloned()
+        .unwrap_or_default();
+    let n = i64::try_from(jobs.len()).unwrap_or(0);
+    let mut taken = Vec::new();
+    for (i, d) in (1_i64..).zip(&jobs) {
+        if d["k"].as_i64() != Some(i) || d["n"].as_i64() != Some(n) {
+            found.push(format!("{job}'s jobs are not numbered 1 to {n} of {n}"));
+        }
+        let parts = text(&d["parts"]);
+        if !parts.starts_with(' ') || !parts.ends_with(' ') {
+            found.push(format!(
+                "{job}'s job {i} names its parts without a space each side"
+            ));
+        }
+        taken.extend(
+            parts
+                .split_whitespace()
+                .map(|s| s.parse::<i64>().unwrap_or(0)),
+        );
+    }
+    let mut got = taken.clone();
+    got.sort_unstable();
+    let mut wanted: Vec<i64> = with_doc
+        .iter()
+        .map(|p| p["k"].as_i64().unwrap_or(0))
+        .collect();
+    wanted.sort_unstable();
+    if got != wanted {
+        found.push(format!(
+            "{job}'s jobs take the parts {taken:?}, not each moved part with doctests once \
+             {wanted:?}"
+        ));
+    }
+    found
+}
+
+/// What is wrong with `suite-cross-doc`, the jobs that run the doctests of every moved part that
+/// has them (`with_doc`): the parts not shared out one to a job ([`cross_doc_jobs_problems`]); its
+/// crates not exactly those parts' ([`cross_doc_share`]) or not narrowed as `suite` narrows them;
+/// not on macOS x86-64's runner (`intel`); without `suite`'s debug assertions; or its doctests not
+/// `suite`'s release doctest step with its flags.
 fn cross_doc_problems(w: &Yaml, with_doc: &[&Yaml], intel: &Yaml) -> Vec<String> {
     let mut found = Vec::new();
     let job = "suite-cross-doc";
@@ -1602,6 +1647,7 @@ fn cross_doc_problems(w: &Yaml, with_doc: &[&Yaml], intel: &Yaml) -> Vec<String>
         }
         return found;
     }
+    found.extend(cross_doc_jobs_problems(j, with_doc));
     let wanted = cross_doc_share(with_doc);
     match (listing_of(w, job), listing_of(w, "suite")) {
         (Some(ours), Some(theirs)) => {
@@ -2323,20 +2369,55 @@ fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
             ),
             "suite-cross does not run every test of its archive",
         ),
-        // A crate set apart dropped from the doctest job: its doctests would run nowhere.
-        (
-            planted_after(&kernel, "  suite-cross-doc:\n", "            geom-test\n", ""),
-            "suite-cross-doc's crates are",
-        ),
-        // A share dropped from the doctest job.
+        // A crate set apart dropped from the doctest jobs: its doctests would run nowhere.
         (
             planted_after(
                 &kernel,
                 "  suite-cross-doc:\n",
-                "            ${{ fromJSON(needs.scope.outputs.parts)['3'] }}\n",
+                "            ${{ contains(matrix.doc.parts, ' 14 ') && 'geom-test' || '' }}\n",
                 "",
             ),
             "suite-cross-doc's crates are",
+        ),
+        // A share dropped from the doctest jobs.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "            ${{ contains(matrix.doc.parts, ' 3 ') && fromJSON(needs.scope.outputs.parts)['3'] || '' }}\n",
+                "",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // A crate kept by no job: the gate names a part no job takes.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "contains(matrix.doc.parts, ' 22 ')",
+                "contains(matrix.doc.parts, ' 23 ')",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // A part in no doctest job: its doctests would run nowhere.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", " 24 \" }", " \" }"),
+            "suite-cross-doc's jobs take the parts",
+        ),
+        // A part in two doctest jobs.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "parts: \" 1 ", "parts: \" 24 1 "),
+            "suite-cross-doc's jobs take the parts",
+        ),
+        // A part's number without its spaces: SHARE would not find it.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "parts: \" 1 ", "parts: \"1 "),
+            "names its parts without a space each side",
+        ),
+        // The doctest jobs misnumbered.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "- { k: 1, n: ", "- { k: 2, n: "),
+            "suite-cross-doc's jobs are not numbered",
         ),
         // The doctest job's crates narrowed otherwise.
         (

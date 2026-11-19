@@ -1094,7 +1094,7 @@ jobs:
         if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 
-  # Decisions 32.82 and 32.NN: each part of macOS x86-64's release suite compiled on macOS arm64 for
+  # Decisions 32.82 and 32.89: each part of macOS x86-64's release suite compiled on macOS arm64 for
   # x86_64-apple-darwin, packed with `cargo nextest archive` and handed to `suite-cross`, which runs
   # every test of it on the Intel runner. On that runner the compile was 85 to 97% of each part and
   # its speed swung about 2.1 times between runs (part 21 took 10.8 to 20.4 minutes on main's
@@ -1286,17 +1286,28 @@ jobs:
         if: ${{ !cancelled() && env.KERNEL_CRATES != '' }}
         run: cargo nextest run --archive-file "$RUNNER_TEMP/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst" --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast
 
-  # The doctests of every moved part that has them (`doc`), which an archive does not hold: one job
-  # on the Intel runner, `suite`'s own release doctest step with its flags, over the crates of all
-  # those parts at once, so the libraries they share compile once (decision 32.NN). SHARE is each
-  # such part's crates, in the parts' order: a share's from the job `scope`, a crate set apart by
-  # its name; geom-test's tests/queue_wiring.rs holds it to the cross jobs' parts.
+  # The doctests of every moved part that has them (`doc`), which an archive does not hold: on the
+  # Intel runner, `suite`'s own release doctest step with its flags, in jobs of whole parts, so the
+  # libraries a job's parts share compile once (decision 32.89). The jobs are cut for a run with no
+  # cache, as on main whenever GitHub throws the cache out: one job over all 13 parts took 15.9
+  # minutes with none, and geom-fuzz's alone needs about 13.6, so parts 20 and 24 (geom-bench and
+  # geom-fuzz) are one job and the rest the other. SHARE is every such part's crates in order,
+  # each kept only by the job whose `parts` names it: a share's from the job `scope`, a crate set
+  # apart by its name. geom-test's tests/queue_wiring.rs holds SHARE to the cross jobs' parts and
+  # each of those parts to exactly one job.
   suite-cross-doc:
-    name: Doctests (macOS x86-64, release, the parts built on macOS arm64)
+    name: Doctests (macOS x86-64, release, the parts built on macOS arm64, ${{ matrix.doc.k }} of ${{ matrix.doc.n }})
     needs: [changes, lint, scope]
     if: github.event_name != 'pull_request' && needs.changes.outputs.kernel == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: macos-15-intel
     timeout-minutes: 45
+    strategy:
+      # Every job reports, so one failure does not hide another.
+      fail-fast: false
+      matrix:
+        doc:
+          - { k: 1, n: 2, parts: " 1 2 3 4 5 6 7 8 9 14 22 " }
+          - { k: 2, n: 2, parts: " 20 24 " }
     env:
       # As `suite`: debug assertions on in the release legs too.
       CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
@@ -1315,25 +1326,25 @@ jobs:
           # Only a push to main saves the cache; a pull request restores main's, so on main it
           # compiles the workspace crates alone.
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          key: suite-cross-doc
+          key: suite-cross-doc-${{ matrix.doc.k }}
       - name: List the kernel's crates the change can reach
         env:
           SELECTED: ${{ needs.scope.outputs.crates }}
           MODE: release
           SHARE: >-
-            ${{ fromJSON(needs.scope.outputs.parts)['1'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['2'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['3'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['4'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['5'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['6'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['7'] }}
-            ${{ fromJSON(needs.scope.outputs.parts)['8'] }}
-            geom-num
-            geom-test
-            geom-bench
-            geom-format
-            geom-fuzz
+            ${{ contains(matrix.doc.parts, ' 1 ') && fromJSON(needs.scope.outputs.parts)['1'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 2 ') && fromJSON(needs.scope.outputs.parts)['2'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 3 ') && fromJSON(needs.scope.outputs.parts)['3'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 4 ') && fromJSON(needs.scope.outputs.parts)['4'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 5 ') && fromJSON(needs.scope.outputs.parts)['5'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 6 ') && fromJSON(needs.scope.outputs.parts)['6'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 7 ') && fromJSON(needs.scope.outputs.parts)['7'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 8 ') && fromJSON(needs.scope.outputs.parts)['8'] || '' }}
+            ${{ contains(matrix.doc.parts, ' 9 ') && 'geom-num' || '' }}
+            ${{ contains(matrix.doc.parts, ' 14 ') && 'geom-test' || '' }}
+            ${{ contains(matrix.doc.parts, ' 20 ') && 'geom-bench' || '' }}
+            ${{ contains(matrix.doc.parts, ' 22 ') && 'geom-format' || '' }}
+            ${{ contains(matrix.doc.parts, ' 24 ') && 'geom-fuzz' || '' }}
         run: |
           list=""
           for d in projects/engines/geometry/crates/*/; do
