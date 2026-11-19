@@ -2,7 +2,8 @@
 //! two faces cross except along shared edges.
 //!
 //! What it does: [`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane,
-//! cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.
+//! cylinder, cone, sphere or ring torus and every edge is a line, a circle or an ellipse on its
+//! faces.
 //!
 //! - **A face's surface is embedded by its kind.** Planes, cylinders, spheres and ring tori never
 //!   cross themselves; a cone crosses itself only at its apex, and group 2 has certified every
@@ -14,7 +15,8 @@
 //!   no vertex meet only if they are coplanar (`orient3d` is zero) and their projections meet in
 //!   each of the three coordinate planes (some projection is one to one on their plane, and none
 //!   misses a meeting point). A segment and a circle, and two circles, are separated by certified
-//!   closed forms (`crate::curved`); a pair none of these separates is reported unchecked.
+//!   closed forms (`crate::curved`); a pair none of these separates, and every pair with an
+//!   ellipse, is reported unchecked.
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
 //!   tested. Two faces exactly on integer planes, or on planes their grid corners fix, are tested
 //!   exactly by `crate::planar`, whatever their shape. Two integer planes are compared exactly, in
@@ -297,7 +299,8 @@ enum Shape<'c> {
     Circle(&'c Circle<3>, Option<Ix<Vertex>>),
 }
 
-/// Edge `e` as a shape: `None` for a line edge without two grid vertices at distinct points.
+/// Edge `e` as a shape: `None` for a line edge without two grid vertices at distinct points, and
+/// for an ellipse.
 fn shape(a: &Arenas, e: Ix<Edge>) -> Option<Shape<'_>> {
     let start = a.edges.start.get(e).copied().flatten();
     let end = a.edges.end.get(e).copied().flatten();
@@ -312,6 +315,8 @@ fn shape(a: &Arenas, e: Ix<Edge>) -> Option<Shape<'_>> {
             (s.at != t.at).then_some(Shape::Segment(s, t))
         }
         Ends::Circle(circle) => Some(Shape::Circle(circle, start)),
+        // No test of group 3 separates an ellipse from another edge yet: its pairs are unchecked.
+        Ends::Ellipse(_) => None,
     }
 }
 
