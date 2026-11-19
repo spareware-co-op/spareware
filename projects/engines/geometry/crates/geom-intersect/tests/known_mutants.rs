@@ -1,9 +1,10 @@
 //! Known curves through every branch of the tube's proof (G174, chapter 12.11): a tangent curve
 //! running along a surface's second parameter, either way; one slanting across both parameters;
-//! tangent tubes carried by a cone's and a sphere's equations; a crossing curve run backwards; a
-//! crossing curve that stops short of the surfaces' edges; and vertex enclosures that touch, which
-//! do not run strictly one way. Each pair pins what the search leaves and the work it charges, so
-//! a cell built wider or narrower than its proof, or along the wrong parameter, shows.
+//! tangent tubes carried by a cone's, a sphere's and a torus's equations; a crossing curve run
+//! backwards, one that stops short of the surfaces' edges, and a crossing stretch whose ends touch;
+//! and vertex enclosures that touch, which do not run strictly one way. Each pair pins what the
+//! search leaves and the work it charges, so a cell built wider or narrower than its proof, or
+//! along the wrong parameter, shows.
 
 #![allow(
     clippy::unwrap_used,
@@ -18,7 +19,7 @@ use geom_intersect::known::{Known, KnownContact, subdivide_known};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 
 const FLOOR: f64 = 1.0 / 128.0;
 
@@ -150,7 +151,12 @@ fn a_tangent_curve_along_the_second_parameter_is_proven_either_way() {
     // by the ground, the same four pairs are flagged either way.
     assert_eq!(
         [up, down, flat, flat_down],
-        [(0, 0, 15393), (0, 0, 15393), (0, 4, 21849), (0, 4, 21849)]
+        [
+            (0, 0, 15_393),
+            (0, 0, 15_393),
+            (0, 4, 21_849),
+            (0, 4, 21_849)
+        ]
     );
 }
 
@@ -163,7 +169,7 @@ fn enclosures_that_touch_do_not_run_one_way() {
     let line = sheet_line(-4..=4, 1.0 / 8.0);
     let up = run(&sheet, &wall, line.clone(), KnownContact::Tangent);
     let down = run(&sheet, &wall, reversed(&line), KnownContact::Tangent);
-    assert_eq!([up, down], [(0, 1522, 1726789), (0, 1522, 1726789)]);
+    assert_eq!([up, down], [(0, 1522, 1_726_789), (0, 1522, 1_726_789)]);
 }
 
 #[test]
@@ -179,8 +185,31 @@ fn a_crossing_curve_is_proven_whichever_way_it_runs() {
     let inner_down = run(&sheet, &wall, reversed(&short), KnownContact::Crossing);
     assert_eq!(
         [up, down, inner, inner_down],
-        [(9, 0, 58814), (9, 0, 58796), (17, 0, 74282), (17, 0, 74192)]
+        [
+            (9, 0, 58_814),
+            (9, 0, 58_796),
+            (17, 0, 74_282),
+            (17, 0, 74_192)
+        ]
     );
+}
+
+#[test]
+fn a_crossing_stretch_whose_ends_touch_gets_no_cell() {
+    // Two vertices, u in [−1/8, 1/8] and in [1/8, 3/8]: their enclosures meet at u = 1/8, so
+    // nothing lies strictly between them and no slab is proven; the search settles the line as
+    // it would with no known curve.
+    let (sheet, wall) = (crossing_sheet(), ground());
+    let touching: Vec<[Interval; 4]> = [(-0.125, 0.125), (0.125, 0.375)]
+        .iter()
+        .map(|&(lo, hi)| {
+            let u = Interval::new(lo, hi).unwrap();
+            [u, point(0.0), u, point(0.0)]
+        })
+        .collect();
+    let found = run(&wall, &sheet, touching, KnownContact::Crossing);
+    let plain = run(&wall, &sheet, Vec::new(), KnownContact::Crossing);
+    assert_eq!([found, plain], [(10, 4, 80_685), (10, 4, 80_454)]);
 }
 
 #[test]
@@ -207,11 +236,11 @@ fn a_slanting_tangent_curve_is_built_along_its_longer_run() {
         .collect();
     let along_v = run(&steep, &cylinder, line, KnownContact::Tangent);
     // Each pinned whole: what it leaves flagged and the work it charges.
-    assert_eq!([level, along_v], [(0, 7, 51994), (0, 155, 123845)]);
+    assert_eq!([level, along_v], [(0, 7, 51_994), (0, 155, 123_845)]);
 }
 
 #[test]
-fn a_cone_and_a_sphere_carry_a_tangent_tube_by_their_own_equations() {
+fn a_cone_a_sphere_and_a_torus_carry_a_tangent_tube_by_their_own_equations() {
     // A cone about the x axis, radius 1/2 + x/4, u = 0 up, lying along its lowest ruling on the
     // sheet z = −1/2 − x/4, which has no implicit form: only the cone can carry the tube.
     let cone = SurfaceKind::Cone(
@@ -255,7 +284,19 @@ fn a_cone_and_a_sphere_carry_a_tangent_tube_by_their_own_equations() {
             [point(u), point(0.0), point(u), point(0.0)]
         })
         .collect();
-    let in_cylinder = run(&tube, &ball, equator, KnownContact::Tangent);
+    let in_cylinder = run(&tube, &ball, equator.clone(), KnownContact::Tangent);
+    // A torus of radii 1/2 and 1/4 inside a cylinder of radius 3/4, touching it along its outer
+    // equator, read through the torus's equation the same way.
+    let wide = SurfaceKind::Cylinder(
+        Cylinder::new([0.0; 3], 0.75, frame(), ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
+    );
+    let ring = SurfaceKind::Torus(
+        Torus::new([0.0; 3], 0.5, 0.25, frame(), ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
+    );
+    let in_wide = run(&wide, &ring, equator, KnownContact::Tangent);
     // Both tubes are proven whole: nothing is left to search.
-    assert_eq!([on_cone, in_cylinder], [(0, 0, 24144), (0, 0, 135759)]);
+    assert_eq!(
+        [on_cone, in_cylinder, in_wide],
+        [(0, 0, 24_144), (0, 0, 135_759), (0, 0, 356_672)]
+    );
 }
