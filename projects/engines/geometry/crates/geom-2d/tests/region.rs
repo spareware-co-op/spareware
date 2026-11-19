@@ -397,6 +397,46 @@ fn a_point_is_located_only_against_the_arrangement_the_regions_were_found_in() {
 }
 
 #[test]
+fn gaps_are_found_and_bridged_only_in_the_arrangement_the_regions_were_found_in() {
+    // Three stubs whose near ends are 25, 49 and 144 apart squared.
+    let stubs: &[&[(i64, i64)]] = &[
+        &[(0, 0), (0, 100)],
+        &[(5, 0), (5, -100)],
+        &[(-7, 0), (-7, -100)],
+    ];
+    let (arr, r) = built(stubs);
+    let gaps = r.gaps(&arr).unwrap();
+    let bridges = r.bridges(&arr, 100).unwrap();
+    assert_eq!(gaps.len(), 15);
+    assert_eq!(bridges.len(), 1);
+    // The same linework arranged again is the same arrangement, with the same answers.
+    let (again, _) = built(stubs);
+    assert_eq!(r.gaps(&again), Ok(gaps));
+    assert_eq!(r.bridges(&again, 100), Ok(bridges));
+    // Three other stubs have as many free ends, but not the ones the regions name: refused.
+    let (other, _) = built(&[
+        &[(0, 0), (0, 10)],
+        &[(50, 0), (50, 10)],
+        &[(100, 0), (100, 10)],
+    ]);
+    assert_eq!(other.vertices().len(), arr.vertices().len());
+    assert_eq!(r.gaps(&other), Err(RegionError::Foreign));
+    assert_eq!(r.bridges(&other, 100), Err(RegionError::Foreign));
+    // The same segments in another order: the same vertices and lines, but each edge names other
+    // input places, so it is another arrangement and is refused too.
+    let (reordered, _) = built(&[stubs[2], stubs[0], stubs[1]]);
+    assert_eq!(reordered.vertices().len(), arr.vertices().len());
+    assert_eq!(r.gaps(&reordered), Err(RegionError::Foreign));
+    assert_eq!(r.bridges(&reordered, 100), Err(RegionError::Foreign));
+    // One far end moved along its own stub's line: the same edges from the same inputs on the
+    // same lines, and one vertex elsewhere. Refused.
+    let (moved, _) = built(&[stubs[0], &[(5, 0), (5, -120)], stubs[2]]);
+    assert_eq!(moved.edges(), arr.edges());
+    assert_eq!(r.gaps(&moved), Err(RegionError::Foreign));
+    assert_eq!(r.bridges(&moved, 100), Err(RegionError::Foreign));
+}
+
+#[test]
 fn a_region_error_reads_as_what_went_wrong() {
     assert_eq!(
         RegionError::Malformed.to_string(),
