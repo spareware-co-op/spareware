@@ -651,7 +651,10 @@ pub(crate) fn circles_apart(first: &Circle<3>, second: &Circle<3>, shared: bool)
             let (r, s) = (at(first.radius())?, at(second.radius())?);
             let d = length(gap)?;
             let outside = minus(d, plus(r, s)?)?.lo();
-            let inside = minus(at(tight::magnitude(minus(r, s)?))?, d)?.lo();
+            // One inside the other: (r − s)² > d², on the lower end of (r − s)² and the upper of
+            // d², exact on exact data. An upper end of |r − s| can stand a rounding above it and
+            // read two circles that touch or cross as one inside the other.
+            let inside = minus(square(minus(r, s)?)?, dot(gap, gap)?)?.lo();
             return Some(tight::larger(outside, inside) > 0.0);
         }
         Some(shared && away(dot(gap, line)?))
