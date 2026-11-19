@@ -559,6 +559,26 @@ fn segments_and_circles_of_one_face_are_separated_where_certified() {
     assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
 }
 
+#[test]
+fn a_segment_in_a_circles_plane_is_apart_only_on_the_lower_end_of_its_reach() {
+    // A triangle of corners (0, 5), (5, 0) and (5, 5) round a circle at the origin, on one plane:
+    // the side from (0, 5) to (5, 0) lies 5/√2 from the centre, which no double holds. The double
+    // nearest it, 3.5355339059327378, lies above it, so a circle of that radius crosses the side
+    // by less than a rounding: refused, as the side's reach from the centre is read on its lower
+    // end. A radius of 3.5 is certainly short of every side.
+    let disc = |radius: f64| {
+        let mut r = sheet(&[[0, 5, 0], [5, 0, 0], [5, 5, 0]], &[&[0, 1, 2]]);
+        let rim = r.edge(None);
+        r.curves[rim as usize] = parallel(0.0, radius);
+        add_loop(&mut r, 0, rim);
+        r.surfaces[0] = level(0.0);
+        r
+    };
+    let faults = at(&disc(3.535_533_905_932_737_8), BodyKind::Sheet, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert_eq!(at(&disc(3.5), BodyKind::Sheet, 1), []);
+}
+
 /// Adds closed edge `e` as a loop of its own to face `f`, after its other loops.
 fn add_loop(r: &mut Rows, f: u32, e: u32) {
     let l = r.loops.len() as u32;
@@ -605,6 +625,37 @@ fn circles_of_one_face_are_separated_where_certified() {
     // The hole moved across the rim.
     let faults = at(&ring([4.0, 0.0, 0.0]), BodyKind::Sheet, 1);
     assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+}
+
+#[test]
+fn a_circle_crossing_another_by_less_than_a_rounding_is_not_passed_as_inside() {
+    // A rim of radius 4 and a hole of radius 1 + 2^-52 whose centre lies 3 from the rim's, on one
+    // plane: 4 − (1 + 2^-52) = 3 − 2^-52 is not a double, so its enclosure reaches the step above
+    // 3, yet the hole reaches 2^-52 past the rim and the two circles cross (issue #1033). Read on
+    // that upper end of |r − s|, the hole was certified inside. Each loop listed first in turn.
+    let hole = 1.0 + f64::EPSILON;
+    let ring = |centre: [f64; 3], rim_first: bool| {
+        let mut r = Rows::empty();
+        let (rim, inner) = (r.edge(None), r.edge(None));
+        let s = r.shell(0);
+        let (outer, hollow): (&[_], &[_]) = (&[(rim, Sense::Forward)], &[(inner, Sense::Reversed)]);
+        if rim_first {
+            r.face(s, &[outer, hollow]);
+        } else {
+            r.face(s, &[hollow, outer]);
+        }
+        r.curves[rim as usize] = parallel(0.0, 4.0);
+        r.curves[inner as usize] = round(centre, hole, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+        r.surfaces[0] = level(0.0);
+        r
+    };
+    for rim_first in [true, false] {
+        let faults = at(&ring([3.0, 0.0, 0.0], rim_first), BodyKind::Sheet, 1);
+        assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+        // The same hole at the rim's centre lies certainly inside it, though 4 − s is not a
+        // double either.
+        assert_eq!(at(&ring([0.0; 3], rim_first), BodyKind::Sheet, 1), []);
+    }
 }
 
 #[test]
