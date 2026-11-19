@@ -145,9 +145,19 @@ toml = "=0.9.6"
 # dependency only (kernel AGENTS.md section 4); pinned exactly. Its own dependencies are i_float,
 # i_key_sort, i_shape and i_tree (MIT) and libm.
 i_overlay = "=9.1.0"
+# The counting allocator of tests/golden_heap.rs, which holds the gate's teardown to no heap:
+# cap 0.1.2 with its `stats` counters, MIT OR Apache-2.0, the version geom-check's capped test pins.
+cap = { version = "=0.1.2", features = ["stats"] }
+# That test's harness, so it runs on the process's only thread (tests/golden_heap.rs says why).
+# libtest-mimic 0.8.2, MIT OR Apache-2.0.
+libtest-mimic = "=0.8.2"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 gungraun = "=0.20.0"
+
+[[test]]
+name = "golden_heap"
+harness = false
 
 [[bench]]
 name = "instructions"
