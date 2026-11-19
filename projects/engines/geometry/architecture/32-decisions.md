@@ -1701,3 +1701,21 @@ The other caches are different builds: the wasm32 parts build four profiles (the
 **Mutants.** Every changed line of `src/` against geom-check's integration tests (cargo-mutants in diff mode with the repository's settings, release build): 13 mutants, 12 caught, 0 missed, 0 timed out, and 1 unviable, the `Default::default()` replacement of `pair`, whose type has no default.
 
 **Changes:** this record; chapter 8.3's as-built text (`08-topology.md`); geom-check's `src/curved.rs` (`spheres_apart`, `pair`, `Pair::Apart`), `src/self_intersection.rs` (`back_to_back`, the module documentation, `other_faces_meet`'s), `tests/attack_g85_group3.rs`; geom-solidcore's `tests/named-faults.json` (bool-26); MAP.json.
+
+## 32.102 A correction to the count gate's own harness re-records the heap baseline, as a toolchain bump does
+
+**Decided by the main session, 20 Nov 2026** (its rulings on the lanes `bench-locate` and `bench-gate`), under the owner's standing word that main decides and records such choices.
+
+**The case.** The 5% count gate measures each benchmark in its own valgrind process, and DHAT's "At t-gmax" is the benchmark function's bytes live at the moment the whole process peaks. `geom-bench`'s `golden::check`, run in each benchmark's teardown, parsed all of `golden.txt` into a `Vec` and a `BTreeSet`, so in many benchmarks the process peaked in that teardown, after the benchmark's own blocks were freed, and t-gmax read small or 0. When the file passed 1,024 entries the parse's heap doubled and the peak moved, so readings changed with no kernel change. The fix (this pull request) makes `check` read the benchmark's own line in place and allocate nothing; a test (`golden_heap`) holds it there.
+
+**Evidence.** On a development machine (toolchain 1.99.0, gungraun 0.20.0, valgrind 3.22.0, CI's flags), main's tree as it is against the same tree with only `golden.rs` changed reproduces the Phase 6 train's reds byte for byte (for example cbor::check 0 -> 192, format::memo_get 0 -> 87152, bvh::tree_build_query 672 -> 19632); in all 569 benchmarks with DHAT readings, instructions, total bytes, total blocks, bytes at the end, reads and writes are unchanged; only t-gmax moves, and in every moved one the base's t-gmax equals its t-end (a teardown peak).
+
+**What it decides.**
+1. A change to the gate's own harness (its setup or teardown code, not a benchmark's measured function) that moves only readings the harness itself causes goes in a pull request of its own, as 23.13's toolchain bumps do, with no kernel change beside it.
+2. That pull request's gate is red on the moved readings by construction: the base side is measured with the base's own harness. It merges on this record, with the evidence above, once every other check is green; nothing is loosened: no limit, metric or benchmark changes, and from the next base on both sides share one harness, so every t-gmax change is a kernel's and is gated at 5% again.
+3. A t-gmax reading is like for like only when both sides run the same teardown; a later harness change is held to this record.
+
+**Started from:** none. A fault of the project's own benchmark harness.
+
+**Changes:** this record; `geom-bench`'s `src/golden.rs` (`check`, `lookup`) and its new `tests/golden_heap.rs` (with cap 0.1.2 and libtest-mimic 0.8.2, MIT OR Apache-2.0, already in the lockfile); MAP.json.
+
