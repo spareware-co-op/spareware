@@ -18,7 +18,7 @@ use geom_num::{GridStep, P3, Steps};
 use geom_op::{OpContext, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_solidcore::convert::metres;
-use geom_solidcore::{Error, Hole, Modeller, Piece, Profile, Solid};
+use geom_solidcore::{Corner, Error, Hole, Modeller, Piece, Profile, Solid};
 use serde_json::Value;
 
 /// The case table.
@@ -200,8 +200,9 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             length(&v["height"]),
         ),
         "extrusion" => {
-            let corners = |v: &Value| -> Vec<P3> {
-                v.as_array().expect("corners").iter().map(grid).collect()
+            let corners = |v: &Value| -> Vec<Corner> {
+                let cs = v.as_array().expect("corners").iter();
+                cs.map(|p| Corner::from(grid(p))).collect()
             };
             let holes = v["holes"]
                 .as_array()
@@ -223,19 +224,11 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             m.extrude(&profile, [0, 1, 2].map(|i| steps(&text(&by[i]), g)))
         }
         "mitred_wall" => {
-            let on_grid = |(num, den): ([i128; 3], i128)| {
-                let k = num.map(|x| {
-                    (x % den == 0)
-                        .then(|| i64::try_from(x / den).ok())
-                        .flatten()
-                });
-                match k {
-                    [Some(x), Some(y), Some(z)] => P3::new(x, y, z).expect("a point of the grid"),
-                    _ => panic!("the corner {num:?} / {den} steps is not a point of {g:?}"),
-                }
+            let exact = |(num, den): ([i128; 3], i128)| {
+                Corner::new(num, den).expect("a corner within the grid's range")
             };
             let profile = Profile {
-                outer: mitred_wall(v, g).into_iter().map(on_grid).collect(),
+                outer: mitred_wall(v, g).into_iter().map(exact).collect(),
                 holes: Vec::new(),
             };
             m.extrude(&profile, [0, 0, steps(&text(&v["height"]), g)])
@@ -473,7 +466,10 @@ fn extrude_takes_its_loops_either_way_round() {
     let mut m = Modeller::new(STEP);
     let s = |x: &str| steps(x, STEP);
     let p = |x: &str, y: &str, z: &str| P3::new(s(x), s(y), s(z)).expect("a grid point");
-    let square = |a: &str, b: &str, z: &str| vec![p(a, a, z), p(b, a, z), p(b, b, z), p(a, b, z)];
+    let square = |a: &str, b: &str, z: &str| {
+        let ps = [p(a, a, z), p(b, a, z), p(b, b, z), p(a, b, z)];
+        ps.map(Corner::from).to_vec()
+    };
     let up = [0, 0, s("3")];
     let given = Profile {
         outer: square("-1", "1", "0"),
@@ -508,6 +504,111 @@ fn extrude_takes_its_loops_either_way_round() {
         holes: vec![Hole::Polygon(square("-0.5", "0.5", "1"))],
     };
     assert!(invalid(m.extrude(&off, up)));
+}
+
+/// A profile's corner is an exact fraction of steps within the grid's range (decision 32.96): a
+/// denominator that is not positive, or a coordinate past 2^40 - 1 steps, is no corner, and a
+/// grid point is the corner of denominator 1. The extrusion takes the fraction as it is: the
+/// square with a square hole given in quarter-steps is the solid it is in steps, and a triangle
+/// whose corner lies a third of a step off the grid has the volume of that corner, not of a grid
+/// point; a hole's corner a third of a step off the profile's plane is refused.
+#[test]
+fn a_profile_s_corners_are_exact_fractions_of_steps() {
+    let max = i128::from(geom_num::grid::COORD_MAX);
+    assert_eq!(Corner::new([0; 3], 0), None);
+    assert_eq!(Corner::new([0; 3], -1), None);
+    assert_eq!(Corner::new([2 * max + 1, 0, 0], 2), None);
+    assert_eq!(Corner::new([0, -2 * max - 1, 0], 2), None);
+    assert!(Corner::new([2 * max, -2 * max, 0], 2).is_some());
+    let p = P3::new(1, -2, 3).expect("a grid point");
+    assert_eq!(Corner::new([1, -2, 3], 1), Some(Corner::from(p)));
+    let mut m = Modeller::new(STEP);
+    let s = |x: &str| i128::from(steps(x, STEP));
+    let quarter = |x: &str, y: &str, z: &str| {
+        Corner::new([4 * s(x), 4 * s(y), 4 * s(z)], 4).expect("a corner")
+    };
+    let square = |a: &str, b: &str, z: &str| {
+        vec![
+            quarter(a, a, z),
+            quarter(b, a, z),
+            quarter(b, b, z),
+            quarter(a, b, z),
+        ]
+    };
+    let up = [0, 0, steps("3", STEP)];
+    let given = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(square("-0.5", "0.5", "0"))],
+    };
+    let r = m.extrude(&given, up).expect("the extrusion");
+    assert_eq!(m.face_count(&r), 10);
+    let flat = tolerance("volume_relerr_flat");
+    let nine = 9.0 / metres(STEP).powi(3);
+    let v = m.volume(&r).expect("the volume");
+    assert!((v - nine).abs() / nine <= flat, "{v}");
+    let third = |x: &str| Corner::new([3 * s(x) + 1, 0, 0], 3).expect("a corner");
+    let at = |x: &str, y: &str| {
+        Corner::from(P3::new(steps(x, STEP), steps(y, STEP), 0).expect("a point"))
+    };
+    let triangle = Profile {
+        outer: vec![at("0", "0"), third("1"), at("0", "1")],
+        holes: Vec::new(),
+    };
+    let r = m.extrude(&triangle, up).expect("the extrusion");
+    let one = 1.0 / metres(STEP);
+    let expected = 0.5 * (one + 1.0 / 3.0) * one * (3.0 * one);
+    let v = m.volume(&r).expect("the volume");
+    assert!((v - expected).abs() / expected <= flat, "{v}, {expected}");
+    let off = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(vec![
+            quarter("-0.5", "-0.5", "0"),
+            quarter("0.5", "-0.5", "0"),
+            Corner::new([2 * s("0.5"), 2 * s("0.5"), 1], 2).expect("a corner"),
+            quarter("-0.5", "0.5", "0"),
+        ])],
+    };
+    assert!(matches!(m.extrude(&off, up), Err(Error::Invalid { .. })));
+}
+
+/// The extrusion decides a profile on a plane square to no axis exactly: the triangle (1, 0, 0),
+/// (0, 1, 0), (0, 0, 1) m, whose Newell normal is (1, 1, 1) m^2, swept by 1 m up or 2 m down is a
+/// prism of volume 0.5 or 1 m^3 (half the normal dotted with the vector); with a fourth corner a
+/// third of a step off its plane it is refused. (A sweep along a vector square to no axis comes
+/// back with a spline edge, which the conversion refuses by name, so the vectors are vertical.)
+#[test]
+fn a_tilted_profile_is_decided_exactly() {
+    let mut m = Modeller::new(STEP);
+    let s = |x: &str| steps(x, STEP);
+    let p = |x: &str, y: &str, z: &str| Corner::from(P3::new(s(x), s(y), s(z)).expect("a point"));
+    let triangle = Profile {
+        outer: vec![p("1", "0", "0"), p("0", "1", "0"), p("0", "0", "1")],
+        holes: Vec::new(),
+    };
+    for (by, volume) in [(["0", "0", "1"], 0.5), (["0", "0", "-2"], 1.0)] {
+        let r = m.extrude(&triangle, by.map(s)).expect("the prism");
+        assert_eq!(m.face_count(&r), 5);
+        let v = m.volume(&r).expect("the volume");
+        let expected = volume / metres(STEP).powi(3);
+        assert!(
+            (v - expected).abs() / expected <= tolerance("volume_relerr_flat"),
+            "{v} for {by:?}"
+        );
+    }
+    let z = i128::from(s("1"));
+    let off = Profile {
+        outer: vec![
+            p("1", "0", "0"),
+            p("0", "1", "0"),
+            p("0", "0", "1"),
+            Corner::new([3 * z, 0, 1], 3).expect("a corner"),
+        ],
+        holes: Vec::new(),
+    };
+    assert!(matches!(
+        m.extrude(&off, [0, 0, s("1")]),
+        Err(Error::Invalid { .. })
+    ));
 }
 
 /// The named list, `tests/named-faults.json`.
