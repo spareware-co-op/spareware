@@ -352,7 +352,7 @@ dependencies = [
 [[package]]
 name = "solidcore"
 version = "1.0.1"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "serde",
  "thiserror",
@@ -361,7 +361,7 @@ dependencies = [
 [[package]]
 name = "solidcore-convert"
 version = "0.1.0"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "solidcore",
  "solidcore-record",
@@ -370,7 +370,7 @@ dependencies = [
 [[package]]
 name = "solidcore-record"
 version = "0.1.0"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "serde",
  "serde_json",

@@ -467,13 +467,14 @@ fn named() -> Value {
     serde_json::from_str(include_str!("named-faults.json")).expect("named-faults.json")
 }
 
-/// SC-5 stays the kernel's own (decision 32.76): the cylinder of radius 0.5 and height 1 on the
-/// origin, made by the kernel's own primitive (geom-make's `cylinder`), passes the kernel's checker
-/// at its full level, while the modeller's, made by solidcore, is refused at its top cap; and every
-/// SC-5 entry of the named list is marked as staying ours, naming this test and the measured reason
-/// (a cap written on the exactly square plane changes 89 of solidcore's own stored answers).
+/// The cylinder of radius 0.5 and height 1 on the origin passes as solidcore makes it: the
+/// modeller's (solidcore's, its caps exact at the pin) and the kernel's own (geom-make's
+/// `cylinder`) both pass the kernel's checker at its full level, each three faces. What is left of
+/// SC-5 is a cap on a circle at another height, which the circle's rational evaluation puts a unit
+/// in the last place off it: every SC-5 entry of the named list names that cause (`crv_eval`), and
+/// none is marked as staying the kernel's.
 #[test]
-fn the_kernel_makes_its_own_cylinder() {
+fn a_cylinder_passes_as_solidcore_makes_it() {
     let o = P3::new(0, 0, 0).expect("the origin");
     let r = Steps(steps("0.5", STEP) as u64);
     let h = Steps(steps("1", STEP) as u64);
@@ -490,22 +491,16 @@ fn the_kernel_makes_its_own_cylinder() {
         .expect("the checker's report");
     assert!(report.passed(), "{:?}", report.faults());
     assert_eq!(made.result.body.arenas().faces.len(), 3);
-    let theirs = Modeller::new(STEP).cylinder(o, r, h);
-    assert!(
-        matches!(&theirs, Err(Error::CheckFailed { report, .. })
-            if report.ends_with("no certified test of this pair exists yet (face 1)")),
-        "{theirs:?}"
-    );
+    let theirs = Modeller::new(STEP)
+        .cylinder(o, r, h)
+        .expect("solidcore's cylinder, checked");
+    assert_eq!(theirs.body().arenas().faces.len(), 3);
     for f in named()["faults"].as_array().expect("faults") {
-        let sc5 = f["fault"].as_str().is_some_and(|s| s.starts_with("SC-5,"));
-        let stays = f.get("stays_ours").and_then(Value::as_str);
-        assert_eq!(
-            stays.is_some_and(|s| s.contains("the_kernel_makes_its_own_cylinder")
-                && s.contains("89 of solidcore's own stored answers")),
-            sc5,
-            "{}: {stays:?}",
-            f["test"]
-        );
+        assert!(f.get("stays_ours").is_none(), "{}", f["test"]);
+        let fault = f["fault"].as_str().expect("a fault");
+        if fault.starts_with("SC-5,") {
+            assert!(fault.contains("crv_eval"), "{}: {fault}", f["test"]);
+        }
     }
 }
 
