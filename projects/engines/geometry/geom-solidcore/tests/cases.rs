@@ -133,17 +133,16 @@ fn mitred_wall(v: &Value, step: GridStep) -> Vec<([i128; 3], i128)> {
 }
 
 /// The grid of the case `c` (the grid is the modeller's parameter): [`STEP`], if every length of
-/// the case, its operands' and its plane's point, is a whole number of its steps on its range;
-/// otherwise the coarsest grid on which every one is. bool-19, a metre from 1e5 m, is past the
-/// range of [`STEP`] and runs on Q0. A case with no such grid is run on the finest, where `steps`
-/// refuses by name the length that is not whole: nothing is rounded. Those are isect-15 to
-/// isect-20, whose plane holds no point of any grid (`diagonal_planes_hold_no_point_of_any_grid`),
-/// and bldg-10, whose wall the table puts at 0.20000010000000001 m.
+/// the case, its operands' and its plane's (its point, or the point it is measured from and its
+/// distance), is a whole number of its steps on its range; otherwise the coarsest grid on which
+/// every one is. bool-19, a metre from 1e5 m, is past the range of [`STEP`] and runs on Q0. A case
+/// with no such grid is run on the finest, where `steps` refuses by name the length that is not
+/// whole: nothing is rounded. That is bldg-10, whose wall the table puts at 0.20000010000000001 m.
 fn grid_of(c: &Value) -> GridStep {
     let mut all = Vec::new();
     lengths(&c["operands"], &mut all);
-    if let Some(at) = c.get("plane").map(|p| &p["at"]) {
-        lengths(at, &mut all);
+    if let Some(plane) = c.get("plane") {
+        lengths(plane, &mut all);
     }
     let fits = |g: GridStep| all.iter().all(|x| whole(x, g).is_some());
     if fits(STEP) {
@@ -263,6 +262,9 @@ fn norm(a: [f64; 3]) -> f64 {
 fn residual(s: &Value, q: [f64; 3]) -> f64 {
     if let Some(p) = s.get("plane") {
         let n = p3(&p["normal"]);
+        if let Some(d) = p.get("distance") {
+            return (dot(sub(q, p3(&p["from"])), n) / norm(n) - num(d)).abs();
+        }
         return (dot(sub(q, p3(&p["at"])), n) / norm(n)).abs();
     }
     if let Some(p) = s.get("sphere") {
@@ -331,13 +333,15 @@ fn run_intersection(c: &Value) {
         .iter()
         .map(|o| solid(&mut m, o).expect("operand"))
         .collect();
+    let plane = &c["plane"];
     let pieces = match c["operation"].as_str() {
+        Some("plane_section") if plane.get("distance").is_some() => panic!(
+            "{}: the plane {} m from {} along {} is given by its distance, and the modeller takes \
+             a plane only by a grid point on it and a normal",
+            c["name"], plane["distance"], plane["from"], plane["normal"]
+        ),
         Some("plane_section") => m
-            .plane_section(
-                &operands[0],
-                grid(&c["plane"]["at"], step),
-                p3(&c["plane"]["normal"]),
-            )
+            .plane_section(&operands[0], grid(&plane["at"], step), p3(&plane["normal"]))
             .expect("plane_section"),
         Some("meet") => {
             m.meet(
@@ -726,31 +730,45 @@ fn what_needs_upstream_files_is_named_and_counted() {
     }
 }
 
-/// Why isect-15 to isect-20 run on no grid, by exact arithmetic on the table's decimals: each
-/// plane is `x + y + z = 3a`, with `a` the decimal the table writes for every coordinate of its
-/// point (the plane's distance `d` along the diagonal, `d / sqrt(3)`, cut at 16 or 17 digits).
-/// The plane passes through `(a, a, a)`, but a point of any grid is a point of Q2's (each step a
-/// whole number of quarter-nanometres), whose coordinates' sum is `k / 4e9` m for a whole `k`, so
-/// the plane holds a point of a grid only if `3a * 4e9` is whole, and it is not. Neither the point
-/// the table gives nor any other point of its plane is on a grid, and these cases are WR-1 of
-/// tests/named-faults.json.
+/// isect-15 to isect-20 are stated by what they mean (decision 32.99): the plane at the distance
+/// `d` of the case's name from the sphere's centre, the grid point (0, 0, 0), along the
+/// whole-number normal (1, 1, 1), every length a whole number of steps of [`STEP`]. Such a plane
+/// holds no point of any grid, by exact arithmetic: it is `x + y + z = d sqrt(3)`, and a point of
+/// any grid has coordinates whose sum is rational, while `d sqrt(3)` is not, `d` being a positive
+/// decimal and 3 not the square of a whole number. (The table wrote these planes, before, by the
+/// point `(a, a, a)` with `a` the decimal printed for `d / sqrt(3)` as computed in binary64.)
 #[test]
 fn diagonal_planes_hold_no_point_of_any_grid() {
-    for id in [
-        "isect-15", "isect-16", "isect-17", "isect-18", "isect-19", "isect-20",
-    ] {
+    let named = [
+        ("isect-15", "0.3"),
+        ("isect-16", "0.6"),
+        ("isect-17", "0.9"),
+        ("isect-18", "0.999"),
+        ("isect-19", "1"),
+        ("isect-20", "1.2"),
+    ];
+    for (id, d) in named {
         let c = case(id);
-        let at = &c["plane"]["at"];
-        assert_eq!(p3(&c["plane"]["normal"]), [1.0; 3], "{id}");
-        let a = text(&at[0]);
-        assert!(text(&at[1]) == a && text(&at[2]) == a, "{id}");
-        let sum =
-            BigDecimal::from_str(&a).expect("a decimal") * BigDecimal::from(12_000_000_000_u64);
-        assert!(
-            sum.is_positive() && !sum.is_integer(),
-            "{id}: 3a * 4e9 = {sum}"
+        let plane = &c["plane"];
+        assert_eq!(c["name"], format!("plane-sphere n=diag d={d}"), "{id}");
+        assert_eq!(&c["surfaces"][0]["plane"], plane, "{id}");
+        assert_eq!(
+            grid(&plane["from"], STEP),
+            grid(&c["operands"][0]["centre"], STEP)
         );
-        assert!(GRIDS.iter().all(|&g| whole(&a, g).is_none()), "{id}");
+        let normal: Vec<i64> = (0..3)
+            .map(|i| plane["normal"][i].as_i64().expect("a whole number"))
+            .collect();
+        assert_eq!(normal, [1, 1, 1], "{id}");
+        let n2: i64 = normal.iter().map(|c| c * c).sum();
+        assert!((0..n2).all(|k| k * k != n2), "{id}: {n2} is a square");
+        let distance = text(&plane["distance"]);
+        assert_eq!(
+            BigDecimal::from_str(&distance).expect("a decimal"),
+            BigDecimal::from_str(d).expect("a decimal"),
+            "{id}"
+        );
+        assert!(steps(&distance, STEP).is_positive(), "{id}");
     }
 }
 
