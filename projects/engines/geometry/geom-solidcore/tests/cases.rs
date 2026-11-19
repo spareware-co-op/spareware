@@ -576,7 +576,8 @@ fn a_profile_s_corners_are_exact_fractions_of_steps() {
 /// two other axes' coordinates (in turn), on the plane 1 m along the third, swept 1 m along the
 /// third axis or 1 m against it, is a prism of volume 1 m^3 and 5 faces; the square (0, 0),
 /// (1, 1), (0, 2), (-1, 1) with its third corner a third of a step off the plane, and three
-/// corners on one line (no area), are refused.
+/// corners on one line (no area), are refused. Each prism's first three vertices turn positively
+/// about its vector: solidcore was handed the triangle counter-clockwise about it.
 #[test]
 fn a_triangle_on_each_axis_plane_is_decided_exactly() {
     let mut m = Modeller::new(STEP);
@@ -603,6 +604,7 @@ fn a_triangle_on_each_axis_plane_is_decided_exactly() {
             assert_eq!(m.face_count(&r), 5, "axis {axis}, {by:?}");
             let v = m.volume(&r).expect("the volume");
             assert!((v - cubic).abs() / cubic <= flat, "{v} for {by:?}");
+            assert!(handed_turn(&r, 3, by) > 0, "axis {axis}, {by:?}");
         }
         let mut up = [0; 3];
         up[axis] = steps("1", STEP);
@@ -617,6 +619,54 @@ fn a_triangle_on_each_axis_plane_is_decided_exactly() {
             holes: Vec::new(),
         };
         assert!(invalid(m.extrude(&line, up)), "axis {axis}");
+    }
+}
+
+/// Twice the vector area of the first `k` vertices of `s`'s body, in the body's order, dotted
+/// with `by`, in whole steps: positive when they turn positively about `by`. solidcore writes the
+/// cap at the sweep's end first, its corners in the order it was handed the outer polygon, so this
+/// is the turn of the polygon the modeller handed it.
+fn handed_turn(s: &Solid, k: u32, by: [i64; 3]) -> i128 {
+    let at = |i: u32| {
+        let v = geom_topo::ix::Ix::new(i).expect("a vertex row");
+        let q = geom_topo::query::point(s.body(), v).expect("a grid vertex");
+        [q.x, q.y, q.z].map(|c| i128::from(c.get()))
+    };
+    let ps: Vec<[i128; 3]> = (0..k).map(at).collect();
+    let mut n = [0_i128; 3];
+    for i in 0..ps.len() {
+        let (a, b) = (ps[i], ps[(i + 1) % ps.len()]);
+        n[0] += a[1] * b[2] - a[2] * b[1];
+        n[1] += a[2] * b[0] - a[0] * b[2];
+        n[2] += a[0] * b[1] - a[1] * b[0];
+    }
+    (0..3).map(|i| n[i] * i128::from(by[i])).sum()
+}
+
+/// The extrusion of a profile with a round hole meets SC-8 and nothing before it: the circle is
+/// written on the exact frame whose x axis runs along the outer polygon's first edge as handed and
+/// whose y axis turns it negatively about the vector, so bldg-47's square with a round hole, and
+/// the same profile 1 m higher, reach the kernel's checker and are refused there with SC-8's first
+/// fault, as `tests/named-faults.json` names it (16 faults in all at z = 0, 15 at 1 m). When SC-8
+/// is fixed this test changes with its entry.
+#[test]
+fn a_round_hole_meets_sc_8_and_nothing_before_it() {
+    let mut m = Modeller::new(STEP);
+    let s = |x: &str| steps(x, STEP);
+    for (z, faults) in [("0", 16), ("1", 15)] {
+        let p = |x: &str, y: &str| Corner::from(P3::new(s(x), s(y), s(z)).expect("a point"));
+        let profile = Profile {
+            outer: vec![p("-1", "-1"), p("1", "-1"), p("1", "1"), p("-1", "1")],
+            holes: vec![Hole::Circle {
+                centre: P3::new(0, 0, s(z)).expect("a point"),
+                radius: Steps(s("0.5").unsigned_abs()),
+            }],
+        };
+        let found = m.extrude(&profile, [0, 0, s("3")]);
+        assert!(
+            matches!(&found, Err(Error::CheckFailed { report, .. }) if *report == format!("geom-check found {faults} faults, the first: group 3, edge 5: no certified test of this pair exists yet (edge 4)")),
+            "at z {z}: {found:?}"
+        );
     }
 }
 
