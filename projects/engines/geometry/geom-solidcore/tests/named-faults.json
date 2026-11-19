@@ -200,33 +200,6 @@
       "blocks": "solids with arcs of circles meeting at vertices, until group 3 certifies such pairs"
     },
     {
-      "case": "bldg-04",
-      "test": "bldg_04_mitred_corner_at_30_degrees",
-      "ours": true,
-      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 30 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
-      "solidcore_gives": "not reached: the test stops at \"-0.7464101615137756 m is not a whole number of steps of Q2\"",
-      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
-      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
-    },
-    {
-      "case": "bldg-05",
-      "test": "bldg_05_mitred_corner_at_45_degrees",
-      "ours": true,
-      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 45 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
-      "solidcore_gives": "not reached: the test stops at \"-0.482842712474619 m is not a whole number of steps of Q2\"",
-      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
-      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
-    },
-    {
-      "case": "bldg-06",
-      "test": "bldg_06_mitred_corner_at_60_degrees",
-      "ours": true,
-      "fault": "WR-4 (ours: the case table, not solidcore), a mitre's corners on no grid: the walls meet at 60 degrees, so the mitre's outer corner (-t cot(phi/2), -t) and the second wall's far corners (at angle phi) are irrational, and the table writes them as the building program's binary64 values, which are whole numbers of steps of no grid; the modeller takes a profile's corners as grid points, so the case is refused before solidcore is reached. The mitre at 90 degrees (bldg-07), whose corners are grid points, passes",
-      "solidcore_gives": "not reached: the test stops at \"-0.3464101615137755 m is not a whole number of steps of Q2\"",
-      "expected": "one solid of volume h (2 t L + t^2 cot(phi/2)), as the closed form gives",
-      "blocks": "nothing of solidcore's: whether the case is restated at an angle whose corners are grid points (a slope of whole numbers, such as 3 in 4), or the modeller takes a corner another exact way, is the main session's to rule"
-    },
-    {
       "case": "bldg-33",
       "test": "bldg_33_sloped_slab_with_a_vertical_round_opening",
       "ours": true,
