@@ -21,7 +21,10 @@
 //!   and no edge cuts a stretch between cuts, or a curve with none, so each is decided by its middle:
 //!   kept only where that middle is proven inside both domains, its box inside each range or
 //!   reaching only a join, and nothing where that box is off one; where the box reaches an edge of
-//!   a domain, the pair is `None`, the engine's (decision 32.94).
+//!   a domain, the pair is `None`, the engine's (decision 32.94). A circle along a cylinder's end
+//!   circle that exact signs place on the other surface (a column standing on a slab) is kept as
+//!   that end circle, exactly, decided on its turn and the other domain; one a rounding off it
+//!   stays the engine's.
 //! - **A turn far from zero loses nothing.** A loop's parameter, or a round surface's, may start any
 //!   number of turns out. A loop is cut and kept on its domain moved by whole turns, exactly, to
 //!   within two turns of zero, and a surface's turn is read on its own domain the same way, so no
@@ -75,7 +78,7 @@ use crate::closed::{self, Natural, Position};
 use crate::curve::{
     enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
 };
-use crate::curve_surface::{cross, curve_surface, dot, lift, minus, sides};
+use crate::curve_surface::{circle_lies_on, cross, curve_surface, dot, lift, minus, sides};
 use crate::error::IntersectError;
 use crate::reduced;
 use crate::result::{
@@ -1466,21 +1469,48 @@ fn standing(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectErro
     };
     let (du, dv) = ParamSurface::domain(surface);
     let [ru, rv] = rims(surface);
-    let mut out = Standing::Inside;
-    for (x, (lo, hi), [at_lo, at_hi]) in [(u, du, ru), (v, dv, rv)] {
-        if x.hi() < lo || x.lo() > hi {
-            return Ok(Standing::Off);
-        }
-        if (at_lo && x.lo() <= lo) || (at_hi && x.hi() >= hi) {
-            out = Standing::Reaching;
-        }
-    }
+    let out = both(placed(u, du, ru), placed(v, dv, rv));
     if out == Standing::Reaching
         && let SurfaceKind::Plane(p) = surface
     {
         return on_plane(p, at);
     }
     Ok(out)
+}
+
+/// Where one parameter's box `x` stands on its range, whose ends `rim` names edges or not
+/// ([`rims`]).
+fn placed(x: Interval, (lo, hi): (f64, f64), [at_lo, at_hi]: [bool; 2]) -> Standing {
+    if x.hi() < lo || x.lo() > hi {
+        Standing::Off
+    } else if (at_lo && x.lo() <= lo) || (at_hi && x.hi() >= hi) {
+        Standing::Reaching
+    } else {
+        Standing::Inside
+    }
+}
+
+/// Two standings together: off if either is, inside if both are, else reaching an edge.
+fn both(p: Standing, q: Standing) -> Standing {
+    if p == Standing::Off || q == Standing::Off {
+        Standing::Off
+    } else if p == Standing::Reaching || q == Standing::Reaching {
+        Standing::Reaching
+    } else {
+        Standing::Inside
+    }
+}
+
+/// Where the point in `at`, a point of an end circle of a cylinder's height ([`along_edge`]),
+/// stands on the cylinder's domain: its height is that end's exactly, on the domain's edge and so
+/// on the domain, and only its turn is read, as [`standing`] reads it.
+fn on_turn(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectError> {
+    let Some([u, _]) = parameters(surface, at)? else {
+        return Ok(Standing::Off);
+    };
+    let (du, _) = ParamSurface::domain(surface);
+    let [ru, _] = rims(surface);
+    Ok(placed(u, du, ru))
 }
 
 /// The edges of a surface's domain that are not joins.
@@ -1730,23 +1760,108 @@ fn at_parameter(
 }
 
 /// Where the point at `t` stands on both domains ([`standing`]): off them if off either, inside
-/// them if inside both, else reaching an edge.
+/// them if inside both, else reaching an edge. On a curve that is an end circle of one of them
+/// (`along`), that one reads only the turn ([`on_turn`]).
 fn on_both(
     curve: &CurveKind<3>,
     t: f64,
-    a: &SurfaceKind,
-    b: &SurfaceKind,
+    (a, b): (&SurfaceKind, &SurfaceKind),
+    along: Option<Along>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Standing, IntersectError> {
     let at = at_parameter(curve, t, meter)?;
-    let (p, q) = (standing(a, at)?, standing(b, at)?);
-    Ok(if p == Standing::Off || q == Standing::Off {
-        Standing::Off
-    } else if p == Standing::Reaching || q == Standing::Reaching {
-        Standing::Reaching
-    } else {
-        Standing::Inside
-    })
+    let place = |surface: &SurfaceKind, second: bool| match along {
+        Some(Along { second: edge }) if edge == second => on_turn(surface, at),
+        _ => standing(surface, at),
+    };
+    Ok(both(place(a, false)?, place(b, true)?))
+}
+
+/// That a curve is an end circle of a cylinder's domain ([`along_edge`]): of the pair's second
+/// surface if `second`, else of its first.
+#[derive(Clone, Copy)]
+struct Along {
+    second: bool,
+}
+
+/// The end circle of a cylinder's height that the circle `curve` lies along, where that end circle
+/// lies exactly on the other surface: the end circle itself, on `curve`'s frame and domain, and
+/// whose it is (decision 32.94). `None` for any other piece, which stays the engine's.
+///
+/// Theorem. The end circle at v of a cylinder of radius ρ is the circle of radius ρ about the point
+/// at v on its axis, across the axis ([`end_centre`]). Where a double holds that point, the end
+/// circle is the circle of radius ρ about it across the stored axis, which [`circle_lies_on`]
+/// places on the other surface, or not, by exact signs. A circle on `curve`'s frame, whose normal
+/// is exactly parallel to the axis, about the same centre with the same radius, is that circle
+/// point for point. Where it lies on the other surface it lies on both whole surfaces, so it is a
+/// curve of their meeting, and the closed form's circles are that meeting, each within its reach
+/// of its own: `curve`, whose centre stands within its reach of the end circle's, is that end
+/// circle's. Each of its points is on the cylinder's domain at its height exactly, so only the
+/// turn is left to read there, and the other domain is read as before. An end circle whose point
+/// no double holds, or that misses the other surface by any rounding, is left alone: the piece
+/// stays the engine's.
+fn along_edge(
+    curve: &CurveKind<3>,
+    reach: f64,
+    (a, b): (&SurfaceKind, &SurfaceKind),
+) -> Result<Option<(CurveKind<3>, Along)>, IntersectError> {
+    let CurveKind::Circle(found) = curve else {
+        return Ok(None);
+    };
+    for (second, surface, other) in [(false, a, b), (true, b, a)] {
+        let SurfaceKind::Cylinder(c) = surface else {
+            continue;
+        };
+        let (n, rho) = (c.frame().normal(), c.radius());
+        if !parallel(found.frame().normal(), n) {
+            continue;
+        }
+        let (_, (v0, v1)) = ParamSurface::domain(c);
+        for v in [v0, v1] {
+            let Some(centre) = end_centre(c, v) else {
+                continue;
+            };
+            let mut near = true;
+            for (e, f) in centre.into_iter().zip(found.center()) {
+                near = near && within(e, f, reach)?;
+            }
+            if near && circle_lies_on(centre, rho, n, other) {
+                let edge = Circle::new(centre, rho, found.frame(), found.domain())?;
+                return Ok(Some((CurveKind::Circle(edge), Along { second })));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// The centre of a cylinder's end circle at `v`, where a double holds it exactly. The point at v
+/// on the axis stands s·v along the unit vector of the stored axis from the centre (s the axial
+/// factor, [`parameters`]); on an axis along a coordinate axis that unit vector is the axis,
+/// signed, so the point is the centre with one coordinate moved by ±s·v, a product and a sum of
+/// doubles, each exact where its rounding error is zero. `None` on any other axis, whose unit
+/// vector is no vector of doubles, or where the product or the sum rounds.
+fn end_centre(c: &Cylinder, v: f64) -> Option<[f64; 3]> {
+    let n = c.frame().normal();
+    if n.iter().filter(|x| **x != 0.0).count() != 1 {
+        return None;
+    }
+    let (rise, error) = geom_num::eft::two_prod(c.axial_sign(), v);
+    let mut exact = error == 0.0;
+    let mut centre = c.center();
+    for (p, d) in centre.iter_mut().zip(n) {
+        if d != 0.0 {
+            let step = if d.is_sign_positive() { rise } else { -rise };
+            let (sum, error) = geom_num::eft::two_sum(*p, step);
+            exact = exact && error == 0.0;
+            *p = sum;
+        }
+    }
+    exact.then_some(centre)
+}
+
+/// Whether `x` stands within `reach` of `y`, enclosed outward.
+fn within(x: f64, y: f64, reach: f64) -> Result<bool, IntersectError> {
+    Ok(point(y)?.add(Interval::new(-reach, reach)?)?.contains(x))
 }
 
 /// Where `curve` passes through `at`, a point of an edge: its parameter there, or `None` if `at`
@@ -1860,11 +1975,13 @@ enum Part {
 /// The stretches of `curve` on both domains, and how each ends; a run of them on both too short to
 /// be a stretch, a point. `None` where the box of the middle of the curve, if no edge cuts it, or
 /// of a stretch between cuts reaches an edge of a domain, off neither (decision 32.94): one box
-/// cannot say whether that piece lies on both, and the pair is the engine's.
+/// cannot say whether that piece lies on both, and the pair is the engine's. A curve that is an end
+/// circle of one domain (`along`) reads only its turn on that one ([`on_both`]).
 fn trimmed(
     curve: &CurveKind<3>,
     (a, b): (&SurfaceKind, &SurfaceKind),
     marks: &[Vector],
+    along: Option<Along>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Part>>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
@@ -1876,7 +1993,7 @@ fn trimmed(
         let Some(kept) = stretch(curve, lo, hi)? else {
             return Ok(Some(Vec::new()));
         };
-        match on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)? {
+        match on_both(curve, lo * 0.5 + hi * 0.5, (a, b), along, meter)? {
             Standing::Off => return Ok(Some(Vec::new())),
             Standing::Reaching => return Ok(None),
             Standing::Inside => {}
@@ -1928,7 +2045,7 @@ fn trimmed(
             middle_of
         };
         let on = part.is_some()
-            && match on_both(curve, on_loop, a, b, meter)? {
+            && match on_both(curve, on_loop, (a, b), along, meter)? {
                 Standing::Inside => true,
                 Standing::Off => false,
                 Standing::Reaching => return Ok(None),
@@ -2114,8 +2231,19 @@ fn items_of(
                     Some(list) => list,
                     None => marks(a, b, meter)?,
                 };
-                let Some(parts) = trimmed(&nearer(*curve)?, (a, b), &marks, meter)? else {
-                    return Ok(None);
+                let curve = nearer(*curve)?;
+                // A piece no box decides may lie along an end circle that exact signs place on
+                // the other surface: then it is that circle, decided on its turn (32.94).
+                let parts = if let Some(parts) = trimmed(&curve, (a, b), &marks, None, meter)? {
+                    parts
+                } else {
+                    let Some((edge, along)) = along_edge(&curve, reach, (a, b))? else {
+                        return Ok(None);
+                    };
+                    let Some(parts) = trimmed(&edge, (a, b), &marks, Some(along), meter)? else {
+                        return Ok(None);
+                    };
+                    parts
                 };
                 found_marks = Some(marks);
                 for kept in parts {

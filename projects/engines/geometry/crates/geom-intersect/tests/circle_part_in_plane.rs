@@ -395,13 +395,15 @@ fn a_frame_off_the_planes_axes_is_placed_away_from_the_join_and_the_engines_on_i
 
 /// The domains of the curves `natural` finds where the cylinder of radius 5 about the y axis
 /// through `(x, 300, z)`, from y = 0 to y = 600, meets the plane y = 0 over 300 each way in z
-/// and in x; `None` where the pair is the engine's.
-fn end_circle_domains(x: f64, z: f64) -> Option<Vec<(f64, f64)>> {
+/// and in x.
+fn end_circle_domains(x: f64, z: f64) -> Vec<(f64, f64)> {
     let frame = Frame::new(Z, Y).unwrap();
     let tube = Cylinder::new([x, 300.0, z], 5.0, frame, (ROUND, SIDE)).unwrap();
     let flat = plane(ORIGIN, Z, X, SIDE, SIDE);
     let mut meter = WorkMeter::new(Budget::of_work(1 << 22));
-    let found = natural(&SurfaceKind::Cylinder(tube), &flat, &mut meter).unwrap()?;
+    let found = natural(&SurfaceKind::Cylinder(tube), &flat, &mut meter)
+        .unwrap()
+        .unwrap();
     let mut out = Vec::new();
     for item in found.items() {
         let Item::Curve { curve, .. } = item else {
@@ -409,7 +411,7 @@ fn end_circle_domains(x: f64, z: f64) -> Option<Vec<(f64, f64)>> {
         };
         out.push(curve.domain());
     }
-    Some(out)
+    out
 }
 
 #[test]
@@ -420,10 +422,8 @@ fn a_centre_on_a_side_of_the_domain_gives_the_half_circle_between_exact_quarter_
     let t = one(&end, &plane(ORIGIN, Z, X, SIDE, SIDE));
     assert_eq!(t.0, 0.0);
     assert!(t.1 >= 1.0 && t.1 - 1.0 <= CLOSE, "{t:?}");
-    // The curve of the two surfaces is the cylinder's end circle, an edge of its domain: the box
-    // of the middle of each stretch the plane's edge cuts reaches that edge, so the pair is the
-    // engine's (issue 1039, decision 32.94). Before, the half circle (1.5, 2.5) was kept on it.
-    assert_eq!(end_circle_domains(-300.0, 0.0), None);
+    // The curve of the two surfaces is cut where the plane's edge cuts it, exactly.
+    assert_eq!(end_circle_domains(-300.0, 0.0), [(1.5, 2.5)]);
 }
 
 #[test]
@@ -433,8 +433,7 @@ fn a_centre_on_a_corner_of_the_domain_gives_the_quarter_circle_between_exact_qua
     let t = one(&end, &plane(ORIGIN, Z, X, SIDE, SIDE));
     assert_eq!(t.0, 0.0);
     assert!(t.1 >= 0.5 && t.1 - 0.5 <= CLOSE, "{t:?}");
-    // The engine's, as on a side (issue 1039); before, the quarter (1.5, 2.0) was kept.
-    assert_eq!(end_circle_domains(-300.0, -300.0), None);
+    assert_eq!(end_circle_domains(-300.0, -300.0), [(1.5, 2.0)]);
 }
 
 #[test]
