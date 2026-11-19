@@ -34,11 +34,15 @@
 //!   (`crate::planar::rests_on_flat`); and from a plain face whose plane it reaches only along one
 //!   edge or at one vertex the two share, its corners decided exactly and its circles certainly
 //!   on one side (`crate::planar::keeps_off`): so a wall's face round a round opening and the
-//!   sides that cross its plane. Any other pair is reported unchecked.
+//!   sides that cross its plane. Faces on two spheres cannot meet when the spheres, widened by
+//!   what the faces may stray, are certainly apart, one outside the other or inside its hollow (a
+//!   hollow ball), compared squared and exact on exact data; spheres that touch or cross, one
+//!   sphere twice and a gap within the stray are not apart. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
 //! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
 //!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
-//!   (11.7), and do not cross. No other pair of coincident faces has that excuse.
+//!   (11.7), and do not cross. No other pair of coincident faces has that excuse, nor two faces
+//!   with no edge at all, which share no edge to be a wall along.
 //!
 //! Guarantees:
 //!
@@ -218,10 +222,14 @@ fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
     out
 }
 
-/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way.
+/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way,
+/// and at least one of them. Two faces with no edge (two whole spheres) have no edge to be one
+/// wall along, so they are tested as any other pair: two such balls in a general body were once
+/// passed as one wall, crossing or not.
 fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
+    let own = runs(a, f);
     let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
-    runs(a, f) == turned
+    !own.is_empty() && own == turned
 }
 
 /// How face `bare`, which is not an outline, meets plain face `plain` (given with the plane its
@@ -259,10 +267,11 @@ fn bare_meets_plain(
 /// neither face can stray, whatever the answer.
 ///
 /// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
-/// parallel planes read it, and planes that clear the most clear what the faces do stray, which
-/// is no more; every other answer but unknown does not depend on it. So the faces are asked
-/// whether they hold to their surfaces, a certified test of each of their edges, only where the
-/// most leaves the pair unknown, and the answer is the one their own stray gives.
+/// parallel planes, a cylinder and a plane along its axis, and two spheres read it, and carriers
+/// that clear the most clear what the faces do stray, which is no more; every other answer but
+/// unknown does not depend on it. So the faces are asked whether they hold to their surfaces, a
+/// certified test of each of their edges, only where the most leaves the pair unknown, and the
+/// answer is the one their own stray gives.
 fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
     let stray = |on: &Surface, face| {
         if on.holds_face(a, face) { 0.0 } else { reach }

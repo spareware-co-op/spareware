@@ -486,9 +486,9 @@ impl Torus {
 /// How two faces' carriers lie, as far as group 3 can certify.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Pair {
-    /// Two parallel planes, certainly farther apart than their faces can stray from them, or a
-    /// cylinder and a plane along its axis certainly farther from it than the radius and that
-    /// stray: the faces cannot meet.
+    /// Two parallel planes, or two spheres, certainly farther apart than their faces can stray
+    /// from them, or a cylinder and a plane along its axis certainly farther from it than the
+    /// radius and that stray: the faces cannot meet.
     Apart,
     /// Two planes that certainly cross along a line.
     Crossing,
@@ -509,6 +509,10 @@ pub(crate) enum Pair {
 /// two parallel planes that are not one keep them apart. A cylinder and a plane exactly along its
 /// axis keep their faces apart in the same way, when the plane is more than the radius and `stray`
 /// from the axis ([`Cone::beside`]).
+///
+/// Two spheres keep their faces apart when the shells within `stray` of them are apart
+/// ([`spheres_apart`]): a face lies on its sphere but where its boundary strays, and no farther
+/// from it than its boundary, which group 2 has held within the body's bound.
 ///
 /// Two planes that cross are left unknown, as `Pair::Crossing` is not given here: the one caller,
 /// group 3's test of two faces, settles only on apart or a shared circle, and treats crossing and
@@ -547,8 +551,52 @@ pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
         }
         (Carrier::Flat { .. }, Carrier::Ball { .. })
         | (Carrier::Ball { .. }, Carrier::Flat { .. }) => Pair::Circle,
+        (
+            Carrier::Ball { center, radius },
+            Carrier::Ball {
+                center: far,
+                radius: size,
+            },
+        ) => {
+            if spheres_apart((*center, *radius), (*far, *size), stray) {
+                Pair::Apart
+            } else {
+                Pair::Unknown
+            }
+        }
         _ => Pair::Unknown,
     }
+}
+
+/// Whether faces on the spheres `first` and `second` (centre, radius), which between them may lie
+/// `stray` steps off their spheres, certainly cannot meet. Every point of a face then lies in the
+/// shell about its centre from r − s to r + s, s its own stray, and two such shells are apart when
+/// one lies wholly outside the other or wholly inside its hollow. With d the distance between the
+/// centres, r and r' the radii:
+///
+/// - each outside the other when d > r + r' + stray, compared as d² > (r + r' + stray)²;
+/// - the second inside the first when r − r' − stray > d, compared as r − r' − stray > 0 and
+///   (r − r' − stray)² > d², and the first inside the second with r and r' exchanged.
+///
+/// Squared, every comparison is exact on exact data, as [`clear`] compares two planes: spheres
+/// that touch, from outside or inside, are not apart, nor one sphere twice, nor any two whose gap
+/// is within `stray`. A value that cannot be enclosed certifies nothing.
+fn spheres_apart(first: (V3, f64), second: (V3, f64), stray: f64) -> bool {
+    let apart = || {
+        let gap = sub3(second.0, first.0)?;
+        let reach = dot(gap, gap)?;
+        let (one, other, slack) = (at(first.1)?, at(second.1)?, at(stray)?);
+        let outside = minus(reach, square(plus(plus(one, other)?, slack)?)?)?.lo();
+        let inside = |big: Interval, small: Interval| {
+            let room = minus(minus(big, small)?, slack)?;
+            Some(tight::smaller(room.lo(), minus(square(room)?, reach)?.lo()))
+        };
+        let most = [outside, inside(one, other)?, inside(other, one)?]
+            .into_iter()
+            .fold(f64::NEG_INFINITY, tight::larger);
+        Some(most > 0.0)
+    };
+    apart().unwrap_or(false)
 }
 
 /// Whether the segment from grid point `from` to `to` certainly meets `circle` nowhere, or, when

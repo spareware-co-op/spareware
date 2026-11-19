@@ -1,8 +1,9 @@
 //! Attacks on piece G85's claims for group 3 (self-intersection): edges of a face that cross or
 //! touch, run back along each other or join the same two vertices are caught; faces that cross
 //! or touch away from shared edges and vertices are caught; faces whose planes cross but which do
-//! not meet pass; every pair no exact or certified test separates is reported, never passed; and
-//! group 3 runs only on a body groups 1 and 2 passed.
+//! not meet pass; two faces on spheres pass where the spheres are certainly apart, nested or each
+//! outside the other; every pair no exact or certified test separates is reported, never passed;
+//! and group 3 runs only on a body groups 1 and 2 passed.
 
 #![allow(
     clippy::unwrap_used,
@@ -1120,5 +1121,209 @@ fn a_cylinder_and_a_plane_along_its_axis_are_apart_only_beyond_its_radius() {
         );
         r.surfaces[1] = plane_off_grid([x as f64, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
         assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
+    }
+}
+
+
+/// The whole sphere about `center` of `radius`.
+fn globe(center: [f64; 3], radius: f64) -> SurfaceKind {
+    SurfaceKind::Sphere(
+        Sphere::new(
+            center,
+            radius,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-0.5, 0.5)),
+        )
+        .unwrap(),
+    )
+}
+
+/// The box of the sphere about `center` of `radius`, rounded out to the grid.
+fn globe_box(center: [f64; 3], radius: f64) -> Box3 {
+    let corner = |by: f64, out: fn(f64) -> f64| {
+        let [x, y, z] = center.map(|c| out(c + by) as i64);
+        P3::new(x, y, z).unwrap()
+    };
+    Box3::new(corner(-radius, f64::floor), corner(radius, f64::ceil)).unwrap()
+}
+
+/// A solid of whole spheres as the kernel writes a ball, one face with no loops: a shell for each
+/// (centre, radius, sense), its face run the way the sense says (a cavity's reversed).
+fn globes(each: &[([f64; 3], f64, Sense)]) -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    for &(center, radius, sense) in each {
+        let s = r.shell(solid);
+        let f = r.face_with(s, &[], globe(center, radius), globe_box(center, radius));
+        r.faces[f as usize].sense = sense;
+    }
+    r
+}
+
+/// A ball about `outer`'s centre of its radius with a cavity, the sphere `inner`, the cavity's
+/// shell listed first when `cavity_first`.
+fn hollow(outer: ([f64; 3], f64), inner: ([f64; 3], f64), cavity_first: bool) -> Rows {
+    let (out, cavity) = (
+        (outer.0, outer.1, Sense::Forward),
+        (inner.0, inner.1, Sense::Reversed),
+    );
+    if cavity_first {
+        globes(&[cavity, out])
+    } else {
+        globes(&[out, cavity])
+    }
+}
+
+#[test]
+fn a_hollow_ball_passes() {
+    // bool-26 on its grid (radii 1 and 0.5 of 1.6e8 steps, about one centre) at the converted
+    // body's bound, and small ones, a step thick, at bounds of 0 and 1.
+    for (outer, inner, bound) in [
+        (160_000_000.0, 80_000_000.0, 3202),
+        (10.0, 5.0, 1),
+        (10.0, 9.0, 0),
+        (10.0, 9.0, 1),
+    ] {
+        for cavity_first in [false, true] {
+            let r = hollow(([0.0; 3], outer), ([0.0; 3], inner), cavity_first);
+            assert_eq!(
+                at(&r, BodyKind::Solid, bound),
+                [],
+                "{outer} {inner} {bound}"
+            );
+        }
+    }
+    // Off the centre, nearer the wall than the radii's difference: by 5 (3, 4, 0) inside a wall
+    // 6 thick, and by √0.3125 off the grid inside one 1 thick.
+    for inner in [([3.0, 4.0, 0.0], 4.0), ([0.5, 0.25, 0.0], 9.0)] {
+        for cavity_first in [false, true] {
+            let r = hollow(([0.0; 3], 10.0), inner, cavity_first);
+            assert_eq!(at(&r, BodyKind::Solid, 1), [], "{inner:?}");
+        }
+    }
+}
+
+#[test]
+fn two_balls_each_outside_the_other_pass() {
+    // A step apart along an axis, and a step apart along (3, 4, 0).
+    for (center, radius) in [([11.0, 0.0, 0.0], 5.0), ([6.0, 8.0, 0.0], 4.0)] {
+        let r = globes(&[
+            ([0.0; 3], 5.0, Sense::Forward),
+            (center, radius, Sense::Forward),
+        ]);
+        assert_eq!(at(&r, BodyKind::Solid, 1), [], "{center:?}");
+    }
+}
+
+#[test]
+fn two_spheres_that_touch_cross_or_coincide_stay_unchecked() {
+    let unchecked = |r: &Rows, what: &str| {
+        let faults = at(r, BodyKind::General, 1);
+        assert_eq!(
+            faults,
+            [fault(
+                FaultKind::PairUnchecked,
+                Entity::Face(ix(0)),
+                Entity::Face(ix(1))
+            )],
+            "{what}"
+        );
+    };
+    let pair = |first: ([f64; 3], f64), second: ([f64; 3], f64)| {
+        globes(&[
+            (first.0, first.1, Sense::Forward),
+            (second.0, second.1, Sense::Forward),
+        ])
+    };
+    // Touching from outside, along an axis and along (3, 4, 0): the distance is the radii's sum.
+    unchecked(&pair(([0.0; 3], 5.0), ([10.0, 0.0, 0.0], 5.0)), "touching");
+    unchecked(
+        &pair(([0.0; 3], 5.0), ([6.0, 8.0, 0.0], 5.0)),
+        "touching, slant",
+    );
+    // Touching from inside: the distance is the radii's difference.
+    unchecked(&pair(([0.0; 3], 10.0), ([5.0, 0.0, 0.0], 5.0)), "inside");
+    unchecked(
+        &pair(([0.0; 3], 10.0), ([3.0, 4.0, 0.0], 5.0)),
+        "inside, slant",
+    );
+    // Crossing, from outside and from inside.
+    unchecked(&pair(([0.0; 3], 5.0), ([6.0, 0.0, 0.0], 5.0)), "crossing");
+    unchecked(
+        &pair(([0.0; 3], 10.0), ([6.0, 0.0, 0.0], 5.0)),
+        "crossing inside",
+    );
+    // One sphere twice, about the origin and about a point off it.
+    unchecked(&pair(([0.0; 3], 5.0), ([0.0; 3], 5.0)), "equal");
+    unchecked(
+        &pair(([1.0, 2.0, 3.0], 7.0), ([1.0, 2.0, 3.0], 7.0)),
+        "equal, off",
+    );
+}
+
+/// A cap of the sphere of radius 10 about the origin, above a circle at z = 6 of radius `rim` (8
+/// is on the sphere, 8.5 lies about 0.4 off it), and the whole sphere `other`: two sheets of a
+/// general body.
+fn cap_and_globe(rim: f64, other: ([f64; 3], f64)) -> Rows {
+    let mut r = Rows::empty();
+    let edge = r.edge(None);
+    r.curves[edge as usize] = parallel(6.0, rim);
+    let s = r.shell(0);
+    let top = Box3::new(P3::new(-10, -10, 6).unwrap(), P3::new(10, 10, 10).unwrap()).unwrap();
+    r.face_with(s, &[&[(edge, Sense::Forward)]], globe([0.0; 3], 10.0), top);
+    let t = r.shell(0);
+    r.face_with(t, &[], globe(other.0, other.1), globe_box(other.0, other.1));
+    r
+}
+
+#[test]
+fn spheres_are_apart_only_beyond_what_their_faces_may_stray() {
+    let unchecked = |r: &Rows, what: &str| {
+        let faults = at(r, BodyKind::General, 1);
+        assert_eq!(
+            faults,
+            [fault(
+                FaultKind::PairUnchecked,
+                Entity::Face(ix(0)),
+                Entity::Face(ix(1))
+            )],
+            "{what}"
+        );
+    };
+    // The cap's rim on its sphere: it strays by nothing, so a sphere half a step inside, or a step
+    // outside, is apart.
+    assert_eq!(
+        at(&cap_and_globe(8.0, ([0.0; 3], 9.5)), BodyKind::General, 1),
+        []
+    );
+    assert_eq!(
+        at(
+            &cap_and_globe(8.0, ([21.0, 0.0, 0.0], 10.0)),
+            BodyKind::General,
+            1
+        ),
+        []
+    );
+    unchecked(&cap_and_globe(8.0, ([20.0, 0.0, 0.0], 10.0)), "touching");
+    // The rim 0.4 off it, within the bound of 1: the cap may lie a step off its sphere, so a
+    // sphere within a step of it, inside or outside, is not apart.
+    unchecked(&cap_and_globe(8.5, ([0.0; 3], 9.5)), "half a step inside");
+    unchecked(&cap_and_globe(8.5, ([0.0; 3], 9.0)), "a step inside");
+    unchecked(
+        &cap_and_globe(8.5, ([21.0, 0.0, 0.0], 10.0)),
+        "a step outside",
+    );
+    // Beyond the step, inside and outside, and beyond two steps.
+    for other in [
+        ([0.0; 3], 8.75),
+        ([0.0; 3], 7.5),
+        ([21.5, 0.0, 0.0], 10.0),
+        ([23.0, 0.0, 0.0], 10.0),
+    ] {
+        assert_eq!(
+            at(&cap_and_globe(8.5, other), BodyKind::General, 1),
+            [],
+            "{other:?}"
+        );
     }
 }

@@ -262,15 +262,6 @@
       "blocks": "plane sections by a plane that holds no grid point, until the modeller takes a plane some other exact way"
     },
     {
-      "case": "bool-26",
-      "test": "bool_26_sphere_minus_concentric_sphere",
-      "ours": true,
-      "fault": "CK-1 (ours: geom-check, not solidcore), two spherical faces: group 3 of the kernel's checker has no certified test of a pair of faces on two spheres, so the hollow ball (spheres of radius 1 and 0.5 about one centre, 0.5 apart everywhere) is reported unchecked, as the kernel's own body of the same shape would be",
-      "solidcore_gives": "the hollow ball as two shells, the outer sphere and the cavity's used reversed, refused by the kernel's checker: 1 fault, \"group 3, face 0: no certified test of this pair exists yet (face 1)\"",
-      "expected": "one solid of volume 4/3 pi (1 - 0.125), passed by the checker",
-      "blocks": "solids with two spherical faces, in every operation, until group 3 has a certified test of two spheres"
-    },
-    {
       "case": "bool-25",
       "test": "bool_25_sphere_intersect_box_octant",
       "ours": true,
