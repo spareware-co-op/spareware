@@ -10,6 +10,10 @@
 // bounds the error by B * S at every scale (the method note).
 // FPTaylor bounds each error term on its own (opt-approx); HOL Light checks each term's
 // bound, and the job compares their sum with K below.
+// HOL Light checks the 60 terms in 40 jobs (hol-light-shards below), all of one
+// certificate FPTaylor writes once: shard k proves the terms its hol-light-shard line
+// names and assumes the others, and each term is in one shard, so together they
+// prove every term.
 // A rounded input's exact value e_v is at most its maximum times 1 + 2^-53 (a value
 // beyond m + ulp(m)/2 rounds above the f64 m), and its copy v = rnd64(e_v).
 // A sum whose operand's scale is not the sum's takes the operand's normalised value
@@ -26,6 +30,48 @@
 // ratio8 = w^2·m^4·r^2 / max{w^2·m^4·r^2, a^2·m^2·r^2, y·a·w·m^2·r^2, y^2·w^2·m^2·r^2, x·a·w·m^2·r^2, x·y·w^2·m^2·r^2, x^2·w^2·m^2·r^2}
 // hol-light-bound: &51339849309243392584189304897383 * &2 ipow (-- &149)
 // fptaylor-optimisation: approx
+// hol-light-shards: 40
+// hol-light-terms: 60
+// hol-light-shard 1: 1 45 49 50
+// hol-light-shard 2: 2 46
+// hol-light-shard 3: 3 5 6 7 8 9 10 48
+// hol-light-shard 4: 4 23 24 32
+// hol-light-shard 5: 11
+// hol-light-shard 6: 12
+// hol-light-shard 7: 13 33
+// hol-light-shard 8: 14 34
+// hol-light-shard 9: 15 16
+// hol-light-shard 10: 17 18
+// hol-light-shard 11: 19
+// hol-light-shard 12: 20
+// hol-light-shard 13: 21
+// hol-light-shard 14: 22
+// hol-light-shard 15: 25 26
+// hol-light-shard 16: 27
+// hol-light-shard 17: 28
+// hol-light-shard 18: 29
+// hol-light-shard 19: 30
+// hol-light-shard 20: 31
+// hol-light-shard 21: 35 36
+// hol-light-shard 22: 37
+// hol-light-shard 23: 38
+// hol-light-shard 24: 39
+// hol-light-shard 25: 40
+// hol-light-shard 26: 41
+// hol-light-shard 27: 42
+// hol-light-shard 28: 43
+// hol-light-shard 29: 44
+// hol-light-shard 30: 47
+// hol-light-shard 31: 51
+// hol-light-shard 32: 52
+// hol-light-shard 33: 53
+// hol-light-shard 34: 54
+// hol-light-shard 35: 55
+// hol-light-shard 36: 56
+// hol-light-shard 37: 57
+// hol-light-shard 38: 58
+// hol-light-shard 39: 59
+// hol-light-shard 40: 60
 
 Variables
   real e_x in [-9007199254740993/9007199254740992, 9007199254740993/9007199254740992];

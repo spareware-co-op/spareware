@@ -1417,10 +1417,19 @@ const LINE_CONE_TENTHS: [u32; 70] = [
     88, 125, 59, 555, 57, 271, 12, 271, 15, 192, 11, 595, 103, 56, 59, 17, 20, 17, 14, 9, 11, 90,
     529, 134, 864, 134, 807, 40, 1379,
 ];
+/// The slower of runs 43564407246 and 44504522597, each of which checked the whole problem in one
+/// job until it stopped; 0 also for terms 58 to 60, which neither run finished (each a shard
+/// alone, which no plan of several parts weighs).
+const ELLIPSE_SIDE_TENTHS: [u32; 60] = [
+    2, 2, 1, 2, 1, 1, 2, 2, 2, 2, 36, 36, 3, 3, 27, 27, 27, 27, 38, 39, 36, 37, 3, 4, 27, 27, 96,
+    97, 135, 75, 85, 47, 53, 53, 26, 26, 96, 97, 137, 73, 86, 43, 116, 118, 54, 54, 44, 45, 0, 0,
+    174, 105, 224, 99, 33, 34, 33, 0, 0, 0,
+];
 /// The measured terms of each sharded problem.
-const MEASURED: [(&str, &[u32]); 2] = [
+const MEASURED: [(&str, &[u32]); 3] = [
     ("lpi_side", &LPI_SIDE_TENTHS),
     ("line_cone", &LINE_CONE_TENTHS),
+    ("ellipse_side", &ELLIPSE_SIDE_TENTHS),
 ];
 
 /// Whether no shard of `shards` that could be cut is planned over the limit, by its terms'
@@ -1447,7 +1456,8 @@ fn no_shard_to_cut(shards: &Shards, tenths: &[u32]) -> Result<(), String> {
 
 /// No committed shard of several parts is planned over 15 minutes, from the minutes each term
 /// and piece took on the hosted runners; and the grouping before this one is refused: three
-/// pieces a shard, two, and one of the ten shards of whole terms (it took 190 minutes).
+/// pieces a shard, two, and one of the ten shards of whole terms (it took 190 minutes); and
+/// `ellipse_side`'s one job of all its terms, which ran out of time, and two of its shards as one.
 #[test]
 fn no_shard_that_can_be_under_fifteen_minutes_is_planned_over_it() {
     use Part::{Piece as P, Term as T};
@@ -1481,6 +1491,27 @@ fn no_shard_that_can_be_under_fifteen_minutes_is_planned_over_it() {
             Err(why.to_owned())
         );
     }
+    // `ellipse_side` before it was sharded: all 60 terms in one job, which ran out of time.
+    let whole: &'static [Part] = (1..=60).map(T).collect::<Vec<_>>().leak();
+    let before = Shards {
+        terms: 60,
+        cuts: &[],
+        shards: vec![whole].leak(),
+    };
+    assert_eq!(
+        no_shard_to_cut(&before, &ELLIPSE_SIDE_TENTHS),
+        Err("shard 1 is planned at 2846 tenths of a minute and can be cut".to_owned())
+    );
+    // And its first two shards as one: 13.0 planned minutes each, 18.6 together.
+    let two = Shards {
+        terms: 60,
+        cuts: &[],
+        shards: &[&[T(1), T(2), T(45), T(46), T(49), T(50)]],
+    };
+    assert_eq!(
+        no_shard_to_cut(&two, &ELLIPSE_SIDE_TENTHS),
+        Err("shard 1 is planned at 186 tenths of a minute and can be cut".to_owned())
+    );
 }
 
 /// The committed shards with any one left out, or any one twice, are refused, naming the part
