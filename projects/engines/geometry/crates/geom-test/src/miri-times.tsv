@@ -20,6 +20,7 @@
 # GitHub measuring run 44436033427 (miri_measure=new on fix/line-plane-exact at 99f67aeba).
 # GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
 # GitHub measuring run 44486343425 (miri_measure=new on fix/trimmed-proven at 27115e329).
+# GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
 # GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -1551,6 +1552,11 @@ native-only over 601	geom-intersect::selfcross_seams	a_tube_closed_on_itself_is_
 2	geom-intersect::shared_carrier	nothing_is_claimed_where_two_patches_reach_the_same_pole_apart
 2	geom-intersect::shared_carrier	patches_of_one_carrier_share_the_common_parameters
 510	geom-intersect::side_at_the_bottom	a_side_a_step_above_the_lowest_point_is_the_engines
+60	geom-intersect::silhouette_rulings	a_ruling_inside_the_domain_stays_with_the_search
+8	geom-intersect::silhouette_rulings	every_eighth_of_a_turn_is_decided_exactly
+4	geom-intersect::silhouette_rulings	every_ruling_is_an_end_ruling_plus_whole_half_turns
+4	geom-intersect::silhouette_rulings	the_level_targets_silhouette_along_its_domain_end_is_one_ruling
+589	geom-intersect::silhouette_rulings	what_the_closed_form_cannot_decide_stays_with_the_search
 native-only over 601	geom-intersect::singular_on_a_seam	two_cylinders_meet_at_two_singular_points_of_four_half_branches
 2	geom-intersect::strictly_inside	an_image_clear_of_all_four_ends_is_inside
 2	geom-intersect::strictly_inside	an_image_on_any_one_end_is_within_but_not_inside
