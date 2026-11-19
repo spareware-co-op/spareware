@@ -12,6 +12,7 @@
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
 # GitHub measuring run 44491768122 (miri_measure=new on test/miri-twelve at 0db6136b8).
+# GitHub measuring run 44526379196 (miri_measure=new on land/ci-6 at c2a5aeb9e).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -330,10 +331,24 @@ native-only over 601	geom-check::attack_g134	the_planes_through_the_grid_points_
 12	geom-check::attack_g85	a_vertex_off_a_cylinder_sphere_or_torus_is_caught_exactly_at_the_bound
 146	geom-check::attack_g85	a_vertex_off_its_plane_and_its_line_ends_is_caught_exactly_at_the_bound
 31	geom-check::attack_g85	an_edge_off_its_face_is_caught
+40	geom-check::attack_g85	an_edge_on_a_curve_of_a_kind_without_a_check_is_unchecked_never_passed
+24	geom-check::attack_g85	an_ellipse_a_step_off_its_surface_is_refused_with_its_group_and_fault
+20	geom-check::attack_g85	an_ellipse_on_a_plane_and_on_a_cylinder_passes_group_2
+11	geom-check::attack_g85	an_ellipse_on_a_surface_without_its_check_is_unchecked_never_off_it
+14	geom-check::attack_g85	an_ellipse_whose_ends_miss_its_vertices_is_refused
 27	geom-check::attack_g85	carriers_without_a_certified_check_are_reported_never_passed
 3	geom-check::attack_g85	group_2_runs_only_on_a_body_group_1_passed
 41	geom-check::attack_g85	groups_2_and_3_charge_one_unit_per_row_and_pair_visited
+14	geom-check::attack_g85_group3	a_circle_crossing_another_by_less_than_a_rounding_is_not_passed_as_inside
 5	geom-check::attack_g85_group3	a_cone_listed_side_first_passes
+43	geom-check::attack_g85_group3	a_cylinder_and_a_plane_along_its_axis_are_apart_only_beyond_its_radius
+41	geom-check::attack_g85_group3	a_flat_face_holding_a_circle_is_apart_from_a_face_that_keeps_off_its_plane
+25	geom-check::attack_g85_group3	a_flat_face_holding_a_circle_keeps_off_a_plane_only_where_certified
+7	geom-check::attack_g85_group3	a_flat_face_holding_an_ellipse_rests_on_its_plane_only_where_group_2_holds_it_there
+5	geom-check::attack_g85_group3	a_hollow_ball_passes
+3	geom-check::attack_g85_group3	a_seam_from_a_rim_vertex_off_the_rims_plane_is_not_passed
+10	geom-check::attack_g85_group3	a_segment_in_a_circles_plane_is_apart_only_on_the_lower_end_of_its_reach
+165	geom-check::attack_g85_group3	a_wall_with_a_round_opening_passes
 8	geom-check::attack_g85_group3	circles_of_one_face_are_separated_where_certified
 9	geom-check::attack_g85_group3	edges_of_a_face_that_cross_touch_or_run_back_are_caught
 41	geom-check::attack_g85_group3	faces_that_cross_or_touch_are_caught
@@ -344,7 +359,10 @@ native-only over 601	geom-check::attack_g134	the_planes_through_the_grid_points_
 14	geom-check::attack_g85_group3	planes_off_the_grid_are_certified_apart_or_crossing
 12	geom-check::attack_g85_group3	segments_and_circles_of_one_face_are_separated_where_certified
 6	geom-check::attack_g85_group3	simple_polygons_pass_in_planes_of_every_slope
+14	geom-check::attack_g85_group3	spheres_are_apart_only_beyond_what_their_faces_may_stray
+4	geom-check::attack_g85_group3	two_balls_each_outside_the_other_pass
 17	geom-check::attack_g85_group3	two_faces_on_one_plane_are_decided
+6	geom-check::attack_g85_group3	two_spheres_that_touch_cross_or_coincide_stay_unchecked
 5	geom-check::faults	a_child_listed_twice
 6	geom-check::faults	a_child_naming_the_wrong_parent
 6	geom-check::faults	a_child_no_parent_lists
