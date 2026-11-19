@@ -19,6 +19,299 @@
 # GitHub measuring run 44409922854 (miri_measure=new on fix/line-plane-exact at 549e13a42).
 # GitHub measuring run 44436033427 (miri_measure=new on fix/line-plane-exact at 99f67aeba).
 # GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
+# GitHub measuring run 44588260301 (miri_measure=new on train/phase6-1 at f720c650d).
+4	geom-2d	arrange::piece::tests::one_curve_has_no_quartic
+4	geom-2d	arrange::piece::tests::x_falls_rises_or_stays
+4	geom-2d	arrange::tests::a_sort_keeps_the_first_refusal_and_goes_on
+4	geom-2d	arrange::tests::a_topology_refusal_is_a_body_error
+2	geom-2d	arrange::tests::an_arithmetic_refusal_is_out_of_range
+3	geom-2d	ideal::tests::a_foot_on_a_circle_has_its_curvature
+3	geom-2d	ideal::tests::a_foot_on_a_line_is_one_step_and_the_normal_is_unit
+4	geom-2d	ideal::tests::three_lines_settle_on_their_incircle
+5	geom-2d	ideal::tests::two_lines_settle_with_the_circle_past_them_by_the_depth
+166	geom-2d	tangent::tests::a_disc_exactly_tangent_to_an_ellipse_meets_it_at_one_root
+3	geom-2d	tangent::tests::an_angle_is_at_least_the_one_its_sine_and_cosine_say
+3	geom-2d	tangent::tests::the_nearest_two_angles_are_by_distance_then_by_order
+4	geom-2d	update::tests::a_piece_is_as_small_as_a_segment_needs
+4	geom-2d	update::tests::a_sort_whose_order_fails_fails
+4	geom-2d	update::tests::floors_of_doubles_are_at_or_below
+native-only over 601	geom-2d	update::tests::from_noded_chunks_hold_buffers_of_their_own_size
+3	geom-2d	update::tests::owning_a_chunk_that_is_not_there_is_refused
+4	geom-2d	update::tests::removing_a_key_that_is_not_there_changes_nothing
+11	geom-2d::attack_g192	a_commit_that_would_flip_a_decision_keeps_the_point
+18	geom-2d::attack_g192	a_coordinate_that_rounds_outside_the_frame_is_refused
+74	geom-2d::attack_g192	a_crossing_of_every_kind_of_pair_lies_on_both_its_carriers
+10	geom-2d::attack_g192	a_grid_point_commits_as_itself_and_keeps_its_exactness
+4	geom-2d::attack_g192	a_point_is_not_on_a_carrier_it_misses
+35	geom-2d::attack_g192	a_point_on_the_grid_commits_and_one_off_it_stays_implicit
+native-only over 601	geom-2d::attack_g192	a_root_of_a_quartic_is_on_what_passes_through_it
+2	geom-2d::attack_g192	an_acceptance_admits_its_class_and_what_is_better
+2	geom-2d::attack_g192	an_operation_reports_each_failure_by_its_meaning
+2	geom-2d::attack_g192	errors_say_what_they_are
+native-only over 601	geom-2d::attack_g192	every_committed_point_is_exactly_on_its_carriers
+27	geom-2d::attack_g192	explicit_output_is_refused_below_what_was_accepted
+23	geom-2d::attack_g192	pairs_that_make_another_class_or_nothing_are_refused
+native-only over 601	geom-2d::attack_g192	rounding_is_to_the_nearest_step_and_ties_go_even
+1	geom-2d::attack_g192	the_table_names_what_it_holds
+7	geom-2d::attack_g193	a_centre_at_the_frames_edge
+26	geom-2d::attack_g193	a_circle_about_another_touches_it_at_its_far_side
+native-only over 601	geom-2d::attack_g193	a_circle_touching_an_ellipse_at_each_end_of_its_axes
+26	geom-2d::attack_g193	a_circle_touching_three_curves
+51	geom-2d::attack_g193	a_common_tangent_says_how_far_its_wider_join_may_be
+38	geom-2d::attack_g193	a_fillet_of_a_line_and_a_circle_each_way_round
+native-only over 601	geom-2d::attack_g193	a_fillet_of_a_line_and_an_ellipse_joins_at_a_root
+287	geom-2d::attack_g193	a_fillet_of_other_lines_goes_a_hair_past_them_and_keeps_its_radius
+5	geom-2d::attack_g193	a_fillet_of_rational_normals_is_exactly_tangent
+20	geom-2d::attack_g193	a_fillet_of_two_circles
+1	geom-2d::attack_g193	a_fillet_refuses_what_is_no_fillet
+16	geom-2d::attack_g193	a_huge_fillet_aims_by_its_chord
+148	geom-2d::attack_g193	a_line_to_a_circle_ends_on_it_past_the_touch
+2	geom-2d::attack_g193	a_point_on_a_circle_has_the_exact_tangent
+11	geom-2d::attack_g193	a_refused_result_says_what_it_would_reach_and_adds_nothing
+19	geom-2d::attack_g193	a_semicircle_joins_parallels_exactly_every_way
+2	geom-2d::attack_g193	a_semicircle_refuses_what_is_not_one
+10	geom-2d::attack_g193	a_small_circle_far_away_takes_a_fine_line
+native-only over 601	geom-2d::attack_g193	a_small_fillet_at_an_ellipse_is_made_down_to_its_budget
+native-only over 601	geom-2d::attack_g193	caps_on_opposite_sides_of_the_circle_are_clear
+11	geom-2d::attack_g193	caps_too_near_to_tell_apart_are_refused
+578	geom-2d::attack_g193	common_tangents_of_every_kind_at_every_scale
+native-only over 601	geom-2d::attack_g193	every_construction_makes_what_it_made
+native-only over 601	geom-2d::attack_g193	every_corner_of_a_hundred_thousand
+21	geom-2d::attack_g193	every_rational_corner_is_exact_in_every_turn
+2	geom-2d::attack_g193	exact_centres_and_lines_are_in_lowest_terms
+7	geom-2d::attack_g193	fillet_all_adds_nothing_when_a_corner_fails
+17	geom-2d::attack_g193	fillet_all_starts_each_arc_where_it_turns_from
+2	geom-2d::attack_g193	fillet_all_stops_at_its_budget
+10	geom-2d::attack_g193	neither_cap_is_on_the_arc
+2	geom-2d::attack_g193	one_circle_inside_another_has_no_common_tangent
+2	geom-2d::attack_g194	a_degenerate_transform_has_no_image_for_any_shape
+2	geom-2d::attack_g194	a_fraction_is_negative_only_below_zero
+2	geom-2d::attack_g194	a_hatch_does_not_store_its_lines_and_a_block_keeps_its_own_entities
+2	geom-2d::attack_g194	a_line_is_a_segment_a_ray_or_infinite_by_its_ends
+2	geom-2d::attack_g194	a_polyline_has_one_bulge_for_each_segment
+2	geom-2d::attack_g194	a_region_is_a_sheet_and_nothing_else
+2	geom-2d::attack_g194	a_spline_keeps_its_creation_intent
+2	geom-2d::attack_g194	a_spline_must_fit_its_knots_to_its_control_points
+2	geom-2d::attack_g194	a_straight_polyline_stays_a_polyline_under_a_non_uniform_scale
+2	geom-2d::attack_g194	an_elliptic_arc_ends_are_parameters_not_angles
+2	geom-2d::attack_g194	every_entity_of_the_table_is_made_and_tagged_as_it_should
+2	geom-2d::attack_g194	fractions_are_reduced_and_signed_on_the_numerator
+2	geom-2d::attack_g194	fractions_have_a_bound_and_no_zero_denominator
+2	geom-2d::attack_g194	fractions_order_by_exact_products
+2	geom-2d::attack_g194	hatches_dimensions_leaders_arrays_and_viewports_refuse_the_empty
+2	geom-2d::attack_g194	no_other_number_is_a_tag
+2	geom-2d::attack_g194	only_a_non_uniform_transform_changes_a_kind
+2	geom-2d::attack_g194	real_transforms_classify_into_the_kind_changes
+2	geom-2d::attack_g194	spline_weights_are_one_positive_fraction_for_each_control_point
+2	geom-2d::attack_g194	text_needs_a_height_and_a_direction
+2	geom-2d::attack_g194	the_attribute_key_survives_every_shape_under_every_transform
+1	geom-2d::attack_g194	the_tag_numbers_are_the_written_ones_and_round_trip
+3	geom-2d::attack_g195	a_circle_tangent_to_a_line_touches_it_and_a_spline_ending_on_it_is_undecided
+15	geom-2d::attack_g195	a_contact_of_fourth_order_is_never_a_crossing
+6	geom-2d::attack_g195	a_spiral_crossed_by_a_line_is_one_crossing
+5	geom-2d::attack_g195	a_spline_crossing_a_line_is_one_crossing_that_cuts
+15	geom-2d::attack_g195	a_spline_tangent_to_a_line_is_never_a_crossing
+2	geom-2d::attack_g195	an_undecided_contact_never_cuts_or_closes
+2	geom-2d::attack_g195	curves_that_never_meet_have_no_contact
+9	geom-2d::attack_g195	two_splines_crossing_twice_give_two_crossings
+13	geom-2d::attack_g196	a_body_s_fins_loops_faces_and_shell_keep_every_link
+5	geom-2d::attack_g196	a_component_above_another_s_top_is_a_hole_of_the_face_round_both
+3	geom-2d::attack_g196	a_crossing_off_the_grid_is_exact
+3	geom-2d::attack_g196	a_crossing_off_the_grid_is_refused_naming_the_first_such_vertex
+2	geom-2d::attack_g196	a_crossing_whole_in_x_only_is_off_the_grid
+3	geom-2d::attack_g196	a_dangling_edge_inside_a_face_makes_no_face
+5	geom-2d::attack_g196	a_line_edge_lies_on_the_smallest_carrier_of_its_line_whatever_the_segments
+3	geom-2d::attack_g196	a_square_has_one_bounded_face
+4	geom-2d::attack_g196	a_square_is_a_general_body_with_one_face_and_one_loop
+5	geom-2d::attack_g196	a_square_with_diagonals_has_four_faces_and_a_fin_for_each_side_with_a_face
+4	geom-2d::attack_g196	a_square_with_diagonals_has_four_triangles
+2	geom-2d::attack_g196	a_t_junction_splits_the_segment_it_ends_on
+2	geom-2d::attack_g196	a_zero_length_segment_is_ignored_and_a_stopped_meter_stops
+3	geom-2d::attack_g196	collinear_overlaps_share_the_common_stretch
+3	geom-2d::attack_g196	drawings_without_faces_are_bodies_without_fins
+2	geom-2d::attack_g196	each_refusal_says_what_it_is
+4	geom-2d::attack_g196	nested_squares_give_the_ring_a_second_loop
+4	geom-2d::attack_g196	nested_squares_place_the_inner_component_as_a_hole
+native-only over 601	geom-2d::attack_g196	random_drawings_match_the_vertex_oracle_and_euler_s_formula
+251	geom-2d::attack_g196	the_arrangement_does_not_depend_on_the_input_order
+3	geom-2d::attack_g196	the_edges_around_a_vertex_run_counter_clockwise
+3	geom-2d::attack_g196	two_crossing_segments_make_a_vertex_at_the_crossing
+3	geom-2d::attack_g196	vertical_segments_cross_and_touch
+12	geom-2d::attack_g196_arcs	a_chord_and_its_arc_bound_a_face
+17	geom-2d::attack_g196_arcs	a_circle_about_a_rational_centre_is_cut_at_two_one_root_points
+8	geom-2d::attack_g196_arcs	a_circle_is_two_edges_between_its_leftmost_and_rightmost_points
+32	geom-2d::attack_g196_arcs	a_line_across_a_circle_splits_both_and_shares_its_two_crossings
+19	geom-2d::attack_g196_arcs	a_line_touching_a_circle_is_one_touching_vertex
+36	geom-2d::attack_g196_arcs	a_segment_of_no_length_is_ignored
+351	geom-2d::attack_g196_arcs	arcs_at_the_frame_s_edge_about_the_heaviest_centres_stay_exact
+5	geom-2d::attack_g196_arcs	arcs_of_one_circle_share_their_common_stretch
+59	geom-2d::attack_g196_arcs	circles_crossing_beside_the_line_of_their_centres_are_ordered_exactly
+19	geom-2d::attack_g196_arcs	circles_touching_inside_are_ordered_round_the_touch_by_curvature
+8	geom-2d::attack_g196_arcs	circles_touching_outside_meet_at_one_vertex
+41	geom-2d::attack_g196_arcs	concentric_circles_make_a_ring_with_a_hole
+native-only over 601	geom-2d::attack_g196_arcs	random_drawings_match_the_pairwise_oracle_and_keep_every_law
+native-only over 601	geom-2d::attack_g196_arcs	the_arrangement_of_arcs_does_not_depend_on_the_input_order
+50	geom-2d::attack_g196_arcs	two_crossing_circles_make_a_lens_and_two_crescents
+44	geom-2d::attack_g196b_ellipses	a_chord_through_both_extremes_halves_the_inside
+63	geom-2d::attack_g196b_ellipses	a_line_across_an_ellipse_splits_both_and_shares_its_two_crossings
+41	geom-2d::attack_g196b_ellipses	a_line_touching_an_ellipse_is_one_touching_vertex
+45	geom-2d::attack_g196b_ellipses	a_vertical_line_at_an_extreme_touches_it_there
+native-only over 601	geom-2d::attack_g196b_ellipses	an_arc_whose_circle_meets_the_ellipse_only_elsewhere_is_arranged
+38	geom-2d::attack_g196b_ellipses	an_axis_aligned_ellipse_has_its_extremes_on_its_axis
+486	geom-2d::attack_g196b_ellipses	an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays_exact
+80	geom-2d::attack_g196b_ellipses	an_ellipse_beside_a_circle_it_does_not_meet_is_arranged
+native-only over 601	geom-2d::attack_g196b_ellipses	an_ellipse_crossing_a_circle_or_another_ellipse_is_refused
+25	geom-2d::attack_g196b_ellipses	an_ellipse_is_two_edges_between_its_leftmost_and_rightmost_points
+47	geom-2d::attack_g196b_ellipses	an_ellipse_of_ratio_one_is_its_circle
+66	geom-2d::attack_g196b_ellipses	an_elliptic_arc_is_cut_only_where_its_extremes_lie_inside_it
+145	geom-2d::attack_g196b_ellipses	an_elliptic_arc_s_ends_are_the_points_of_its_parameters
+138	geom-2d::attack_g196b_ellipses	nested_ellipses_make_a_ring_with_a_hole
+90	geom-2d::attack_g196b_ellipses	one_ellipse_written_two_ways_is_listed_once_and_shares_its_edges
+native-only over 601	geom-2d::attack_g196b_ellipses	random_drawings_of_segments_and_ellipses_match_the_pairwise_oracle_and_keep_every_law
+native-only over 601	geom-2d::attack_g196b_ellipses	random_drawings_of_segments_and_elliptic_arcs_match_the_oracle_and_keep_every_law
+native-only over 601	geom-2d::attack_g196b_ellipses	the_arrangement_of_ellipses_does_not_depend_on_the_input_order
+21	geom-2d::attack_g199a	a_chord_and_its_arc_are_two_edges_and_the_lens_between_them_is_one_face
+272	geom-2d::attack_g199a	a_ray_down_through_a_one_root_vertex_finds_the_face_above_it
+native-only over 601	geom-2d::attack_g199a	a_small_arc_of_a_large_circle_opens_only_what_it_meets
+5	geom-2d::attack_g199a	a_stopped_meter_stops_an_arc_insert
+native-only over 601	geom-2d::attack_g199a	an_arc_away_from_its_circles_lowest_point_opens_only_what_its_ends_span
+native-only over 601	geom-2d::attack_g199a	an_ellipse_of_ratio_one_is_its_circle_and_any_other_is_refused
+native-only over 601	geom-2d::attack_g199a	an_overlay_of_arcs_is_the_sweep_of_the_union
+native-only over 601	geom-2d::attack_g199a	arcs_inserted_in_any_order_give_the_sweeps_pieces
+native-only over 601	geom-2d::attack_g199a	every_arc_piece_runs_from_its_lower_end_to_its_higher_on_its_half
+native-only over 601	geom-2d::attack_g199a	every_face_walk_comes_back_round_its_cycle
+native-only over 601	geom-2d::attack_g199a	location_with_arcs_agrees_with_point_in_polygon_over_the_sweeps_cycles
+175	geom-2d::attack_g199a	shapes_with_arcs_are_the_sweeps
+5	geom-2d::attack_g199a	the_two_halves_of_a_circle_between_the_same_points_are_not_the_same_drawing
+2	geom-2d::attack_g206	a_half_turn_by_a_negative_scale_is_its_own_inverse
+2	geom-2d::attack_g206	a_kind_not_placed_is_refused_by_its_tag
+2	geom-2d::attack_g206	a_level_segment_is_placed_with_its_carrier
+2	geom-2d::attack_g206	a_placed_polyline_has_a_length_that_meets_the_original
+2	geom-2d::attack_g206	a_placed_polyline_has_the_vertices_placed_and_scaled_widths
+2	geom-2d::attack_g206	a_polar_array_is_exact_for_one_two_and_four_copies_only
+2	geom-2d::attack_g206	a_quarter_turn_count_is_taken_modulo_four
+2	geom-2d::attack_g206	a_quarter_turn_takes_each_point_where_the_definition_says
+2	geom-2d::attack_g206	a_rectangular_array_is_row_major_with_the_original_first
+1	geom-2d::attack_g206	a_result_past_the_range_is_refused_not_wrapped
+1	geom-2d::attack_g206	a_segment_is_placed_with_its_carrier
+1	geom-2d::attack_g206	a_unit_map_is_undone_by_its_inverse_and_a_scale_is_not
+1	geom-2d::attack_g206	a_whole_scale_fixes_its_centre_and_stretches_distances
+2	geom-2d::attack_g206	align_finds_the_quarter_turn_and_whole_scale_or_refuses
+2	geom-2d::attack_g206	align_takes_the_turn_with_a_positive_scale
+2	geom-2d::attack_g206	arcs_keep_their_sweep_under_turns_scales_and_shifts_and_flip_under_a_mirror
+2	geom-2d::attack_g206	composition_is_doing_one_then_the_other
+2	geom-2d::attack_g206	dividing_gives_exact_equal_parts
+3	geom-2d::attack_g206	every_composition_of_unit_maps_is_one_then_the_other
+2	geom-2d::attack_g206	every_edit_error_says_what_went_wrong
+5	geom-2d::attack_g206	every_unit_map_at_every_unit_scale_is_undone_to_the_identity
+1	geom-2d::attack_g206	halving_a_segment_gives_its_midpoint
+1	geom-2d::attack_g206	lengthening_moves_one_end_along_the_carrier_by_primitive_steps
+31	geom-2d::attack_g206	maps_are_equal_exactly_when_they_move_three_points_alike
+1	geom-2d::attack_g206	measuring_steps_off_primitive_lengths_not_past_the_end
+2	geom-2d::attack_g206	mirrors_fix_their_line_and_swap_the_sides
+2	geom-2d::attack_g206	placing_is_deterministic
+2	geom-2d::attack_g206	stretch_moves_only_the_vertices_in_the_window_and_keeps_the_bulges
+3	geom-2d::attack_g206	the_length_interval_holds_a_semicircle
+2	geom-2d::attack_g206	the_length_interval_holds_the_exact_length_of_straight_runs
+2	geom-2d::attack_g206	turns_and_mirrors_undo_each_other_in_composition
+2	geom-2d::attack_g206	two_constructions_of_one_map_compare_equal
+3	geom-2d::attack_g213	a_biarc_is_exact_at_the_ends_and_small_at_the_joint
+2	geom-2d::attack_g213	a_biarc_turns_the_way_its_tangent_does
+38	geom-2d::attack_g213	a_cover_is_the_halving_its_definition_gives_with_the_worst_sample_it_measured
+7	geom-2d::attack_g213	a_curve_inside_its_biarcs_circles_is_not_taken_for_one_on_them
+4	geom-2d::attack_g213	a_fit_is_deterministic_and_carries_its_intent
+2	geom-2d::attack_g213	a_fit_reaches_the_edge_of_the_grid
+2	geom-2d::attack_g213	a_meter_that_stops_stops_the_fit
+4	geom-2d::attack_g213	a_quarter_circle_spline_is_covered_by_biarcs_within_the_tolerance
+4	geom-2d::attack_g213	a_tolerance_below_the_bound_is_refused
+3	geom-2d::attack_g213	a_tolerance_equal_to_the_bound_is_met
+2	geom-2d::attack_g213	fewer_points_than_the_degree_needs_and_coincident_points_are_refused
+2	geom-2d::attack_g213	no_biarc_where_the_tangents_are_parallel_or_zero
+4	geom-2d::attack_g213	the_curve_passes_every_fit_point_within_the_reported_bound
+3	geom-2d::attack_g213	the_knots_are_clamped_increasing_fractions
+2	geom-2d::index	a_boxes_hold_what_a_snap_can_be
+2	geom-2d::index	a_circle_about_a_rational_centre_is_boxed_about_the_nearest_grid_point
+3	geom-2d::index	a_circles_quadrants_and_a_polylines_vertices_and_middles_are_snapped
+2	geom-2d::index	a_crossing_end_is_boxed_by_its_enclosure_rounded_outward
+3	geom-2d::index	a_crossing_of_two_entities_near_the_cursor_is_found
+2	geom-2d::index	a_crossing_past_the_frame_is_clamped_to_its_edge
+2	geom-2d::index	a_line_without_ends_and_a_ray_get_the_whole_frame
+2	geom-2d::index	a_rational_end_is_boxed_by_its_floor_and_ceiling
+2	geom-2d::index	a_snap_whose_enclosure_starts_at_the_apertures_edge_is_inside
+2	geom-2d::index	a_splines_box_is_its_control_points_box
+11	geom-2d::index	an_end_where_an_ellipse_meets_a_circle_gets_the_whole_frame
+2	geom-2d::index	an_index_error_reads_as_its_cause
+2	geom-2d::index	carriers_dropped_past_a_mark_are_gone_and_those_before_it_stay
+8	geom-2d::index	curves_whose_boxes_only_touch_are_still_crossed
+2	geom-2d::index	enclosures_that_only_touch_are_a_tie_and_go_to_the_lower_name
+2	geom-2d::index	of_two_quadrants_at_one_distance_the_first_is_kept
+native-only over 601	geom-2d::index	on_random_drawings_the_tree_gives_the_scans_answer
+3	geom-2d::index	the_closest_snap_wins_and_a_tie_goes_to_the_lower_name
+12	geom-2d::index	the_first_crossing_of_a_segment_and_a_circle_is_the_west_one
+2	geom-2d::index	the_tree_finds_the_entities_whose_boxes_meet_the_aperture
+3	geom-2d::region	a_gap_of_exactly_the_bridging_size_is_bridged_and_each_free_end_only_once
+5	geom-2d::region	a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell
+5	geom-2d::region	a_point_is_located_in_open_or_on_the_linework
+8	geom-2d::region	a_point_is_located_only_against_the_arrangement_the_regions_were_found_in
+1	geom-2d::region	a_region_error_reads_as_what_went_wrong
+4	geom-2d::region	a_ring_through_crossings_has_a_certified_area
+3	geom-2d::region	a_shell_is_found_when_the_faces_cycle_starts_on_the_cut_edge_to_its_hole
+19	geom-2d::region	a_shell_is_found_wherever_the_cut_edge_to_its_hole_is_tied
+7	geom-2d::region	an_open_room_shows_its_gaps_and_a_bridge_closes_it
+8	geom-2d::region	dangles_and_cut_edges_bound_no_region
+8	geom-2d::region	gaps_are_found_and_bridged_only_in_the_arrangement_the_regions_were_found_in
+6	geom-2d::region	island_rules_keep_or_skip_the_nested_regions
+13	geom-2d::region	polygonizer_cases
+5	geom-2d::region	rooms_come_from_a_wall_plan
+23	geom-2d::snap	a_circle_whose_radius_is_not_whole_has_quadrants_that_are_one_root_points
+2	geom-2d::snap	a_level_or_upright_segment_refuses_a_crossing_past_its_end
+2	geom-2d::snap	a_midpoint_on_the_grid_is_a_grid_point
+5	geom-2d::snap	a_ray_holds_the_crossings_ahead_of_its_start_and_at_it
+2	geom-2d::snap	a_reference_that_does_not_resolve_is_refused_with_its_resolution
+2	geom-2d::snap	a_reference_to_a_carrier_snaps_to_the_carriers_centre
+1	geom-2d::snap	a_snap_error_reads_as_what_went_wrong
+5	geom-2d::snap	an_arcs_extent_is_decided_exactly
+23	geom-2d::snap	an_ellipse_meets_a_circle_at_a_root_of_its_quartic_either_way_round
+4	geom-2d::snap	an_extension_beyond_a_segments_end_is_exact
+3	geom-2d::snap	an_insert_snaps_at_its_insertion_point
+3	geom-2d::snap	an_open_loop_has_no_centroid
+5	geom-2d::snap	ends_mid_and_node_of_a_segment_and_a_point
+14	geom-2d::snap	intersections_are_exact_and_off_extent_ones_are_refused
+10	geom-2d::snap	polylines_text_and_elliptic_arcs_give_their_own_points
+22	geom-2d::snap	tangent_points_lie_on_the_polar_line_of_the_chosen_point
+3	geom-2d::snap	the_cached_point_is_never_read
+10	geom-2d::snap	the_centre_and_quadrants_of_a_circle_and_of_an_ellipse
+2	geom-2d::snap	the_centroid_of_a_closed_loop_is_rational
+1	geom-2d::snap	the_codes_of_the_thirteen_kinds_round_trip
+3	geom-2d::snap	the_ends_of_an_arc_and_of_a_spline
+18	geom-2d::snap	the_foot_of_a_perpendicular_is_rational_on_a_line_and_one_root_on_a_circle
+12	geom-2d::snap	the_middle_of_a_whole_circle_arc_is_opposite_its_start
+22	geom-2d::snap	the_middle_of_an_arc_is_a_one_root_point_on_the_bisector
+5	geom-2d::snap	the_middles_of_a_closed_polylines_segments_include_the_closing_one
+9	geom-2d::snap	the_nearest_point_is_at_the_stored_parameter_or_radial
+3	geom-2d::snap	the_nearest_point_of_a_segment_takes_both_ends_and_nothing_past_them
+47	geom-2d::snap	the_nearest_point_of_an_arc_is_refused_off_its_extent_for_every_kind_of_turn
+17	geom-2d::snap	the_quadrants_of_a_circle_about_a_rational_centre_point_each_its_own_way
+5	geom-2d::snap	tracking_lines_cross_entities_each_other_and_stand_at_parameters
+292	geom-2d::update	a_chunk_is_halved_past_twice_its_size_and_not_before
+3	geom-2d::update	a_crossing_makes_four_pieces_and_a_vertex
+4	geom-2d::update	a_face_cycle_runs_round_the_boundary
+3	geom-2d::update	a_face_cycle_turns_back_at_a_loose_end_and_passes_its_start_vertex_again
+2	geom-2d::update	a_meter_that_stops_stops_an_insert_and_a_location
+3	geom-2d::update	a_probe_on_an_edge_or_a_vertex_is_named_so
+3	geom-2d::update	a_segment_of_no_length_and_a_repeated_label_change_nothing
+13	geom-2d::update	a_t_a_vertical_and_an_overlap_are_the_sweeps
+3	geom-2d::update	a_walk_round_a_drawing_that_was_not_noded_stops_at_its_limit
+2	geom-2d::update	an_empty_drawing_is_empty_and_a_drawn_one_is_not
+native-only over 601	geom-2d::update	an_insert_costs_exactly_what_its_zone_needs
+native-only over 601	geom-2d::update	an_insert_leaves_the_old_version_and_shares_its_chunks
+native-only over 601	geom-2d::update	an_overlay_is_the_arrangement_of_the_union
+native-only over 601	geom-2d::update	every_piece_runs_from_its_lower_end_to_its_higher_however_it_was_made
+3	geom-2d::update	from_noded_takes_segments_either_way_round_and_skips_those_of_no_length
+native-only over 601	geom-2d::update	incremental_equals_batch_for_any_order
+native-only over 601	geom-2d::update	location_agrees_with_point_in_polygon_over_the_sweeps_cycles
+518	geom-2d::update	location_and_face_walks_cross_chunks
+3	geom-2d::update	same_as_tells_every_difference
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1582,6 +1875,38 @@ native-only over 601	geom-linalg::dense_determinism	dense_golden_hash_is_the_sam
 2	geom-linalg::interface	solves_refuse_each_wrong_length_on_its_own
 1	geom-linalg::interface	tridiagonal_interchanges_with_a_non_zero_multiplier
 1	geom-linalg::interface	work_counts_down_and_refuses_without_charging
+3	geom-linalg::recursion	a_staircase_clones_compares_and_prints_at_its_bound
+2	geom-linalg::sparse	a_bad_triplet_is_refused
+4	geom-linalg::sparse	a_column_lost_to_rounding_in_the_second_factorisation_is_singular
+3	geom-linalg::sparse	a_dead_column_is_measured_against_the_largest
+2	geom-linalg::sparse	a_matrix_is_the_same_whatever_order_its_triplets_came_in
+native-only over 601	geom-linalg::sparse	a_row_is_dense_only_past_ten_times_the_root
+2	geom-linalg::sparse	a_solve_charges_what_it_reads
+7	geom-linalg::sparse	a_symmetric_order_puts_the_hub_last
+109	geom-linalg::sparse	a_symmetric_order_reads_only_above_the_diagonal
+2	geom-linalg::sparse	a_tie_goes_to_the_lowest_variable
+73	geom-linalg::sparse	an_analysis_serves_every_matrix_of_its_pattern
+2	geom-linalg::sparse	an_analysis_serves_its_own_row_count_only
+2	geom-linalg::sparse	an_entry_adds_up_and_clearing_keeps_the_pattern
+2	geom-linalg::sparse	an_entry_is_found_and_set_in_place
+21	geom-linalg::sparse	cholesky_equals_the_dense_path
+2	geom-linalg::sparse	dead_columns_are_the_combinations_of_earlier_columns
+4	geom-linalg::sparse	empty_and_dense_columns_go_last_in_their_own_order
+13	geom-linalg::sparse	every_factorisation_charges_before_it_starts
+native-only over 601	geom-linalg::sparse	full_rank_systems_equal_the_dense_path
+2	geom-linalg::sparse	it_multiplies_transposes_and_goes_to_and_from_dense
+13	geom-linalg::sparse	ldlt_solves_a_quasi_definite_system
+2	geom-linalg::sparse	overflow_is_reported_not_returned
+native-only over 601	geom-linalg::sparse	rank_deficient_systems_stay_least_norm
+2	geom-linalg::sparse	repeats_add_in_the_order_given_and_a_zero_stays_stored
+269	geom-linalg::sparse	the_determinant_sign_is_the_exact_one
+native-only over 601	geom-linalg::sparse	the_order_is_a_permutation_that_reads_only_the_pattern
+48	geom-linalg::sparse	the_order_keeps_an_arrow_from_filling
+4	geom-linalg::sparse	the_smallest_pivot_is_the_least_diagonal_and_zero_for_a_dead_column
+native-only over 601	geom-linalg::sparse	under_determined_systems_take_the_least_norm
+3	geom-linalg::sparse	what_a_factorisation_cannot_take_is_refused
+4	geom-linalg::sparse	zero_columns_and_rows_are_dead_at_once
+native-only over 601	geom-linalg::sparse_determinism	sparse_golden_hash_is_the_same_on_every_target
 2	geom-linalg::spectral	a_pair_whose_magnitudes_sum_past_the_largest_double_is_not_deflated
 2	geom-linalg::spectral	a_singular_value_beyond_the_largest_double_is_refused
 2	geom-linalg::spectral	a_subnormal_column_beside_a_normal_one_is_a_unit_vector
@@ -2102,6 +2427,7 @@ native-only over 601	geom-name::prune	every_held_reference_resolves_as_it_did
 native-only over 601	geom-name::prune	pruning_again_prunes_only_what_is_new
 2	geom-name::prune	the_charge_schedule_is_one_line
 541	geom-name::prune_determinism	prune_golden_hash_is_the_same_on_every_target
+13	geom-num	conic::tests::the_greatest_common_divisor_stops_where_a_remainder_does_not_fit
 9	geom-num	crossing::tests::a_crossing_of_points_outside_the_frame_reports_every_step_that_does_not_fit
 10	geom-num	crossing::tests::a_crossing_without_weight_goes_to_the_total_commit_and_is_reported
 223	geom-num	crossing::tests::side_is_exact_in_both_widths_at_the_extremes_of_i128
@@ -2191,6 +2517,8 @@ native-only over 601	geom-num	math::sincospi::tests::table_errors
 14	geom-num	math::tests::the_public_functions_are_the_ports
 14	geom-num	math::unproven::tests::other_angles_are_close
 9	geom-num	math::unproven::tests::quarter_turns_are_exact
+13	geom-num	one_root::tests::a_coordinate_past_y_is_refused
+13	geom-num	one_root::tests::the_enclosure_holds_the_point
 314	geom-num	pencil::tests::a_member_is_full_only_if_of_full_rank_and_of_one_sign
 12	geom-num	pencil::tests::a_minor_that_is_a_constant_beside_g_does_not_vanish
 15	geom-num	pencil::tests::a_quadratic_s_two_roots_read_apart
@@ -2234,6 +2562,11 @@ native-only over 601	geom-num	predicate::tests::orient2d_unfiltered_gives_the_ex
 native-only over 601	geom-num	predicate::tests::the_bound_rules_are_sound
 native-only over 601	geom-num	predicate::tests::total_path_is_exact_for_any_i64_coordinates
 native-only over 601	geom-num	predicate::tests::total_path_is_exact_where_its_intermediates_peak_at_the_limits_of_i64
+13	geom-num	quartic::tests::a_quotient_that_is_not_whole_is_refused
+14	geom-num	quartic::tests::a_shift_past_the_width_is_refused
+16	geom-num	quartic::tests::at_a_root_the_signs_beside_it_are_the_derivative_s
+17	geom-num	quartic::tests::narrowing_past_the_depth_of_comparisons_is_refused
+17	geom-num	quartic::tests::the_zero_polynomial_is_no_divisor_and_its_own_primitive_part
 7	geom-num	real::tests::equality_agrees_with_the_order
 13	geom-num	real::tests::rejects_non_finite_and_orders_zeros
 10	geom-num	real::tests::zero_to_plus_changes_only_negative_zero
@@ -2258,6 +2591,7 @@ native-only over 601	geom-num	wide32::tests::products_of_different_widths_agree_
 13	geom-num	wide::tests::resize_widens_and_narrows
 native-only over 601	geom-num	wide::tests::width_aware_products_agree_with_the_general_product
 10	geom-num	wide::tests::width_aware_products_at_the_edges
+262	geom-num::arc_determinism	arc_golden_hash_is_the_same_on_every_target
 2	geom-num::attack2_eft	direct_path_lower_limit_is_one_exponent_loose
 53	geom-num::attack2_eft	fast_two_sum_equals_two_sum_bit_for_bit
 native-only over 601	geom-num::attack2_eft	fast_two_sum_proof_steps
@@ -2521,6 +2855,126 @@ native-only over 601	geom-num::attack_g166	two_double_roots_of_rank_two_on_irrat
 417	geom-num::attack_g166	two_spheres
 32	geom-num::attack_g166	whole_numbers_divide_down
 2	geom-num::attack_g167	villarceau_s_angle_is_read_exactly
+93	geom-num::attack_g187	a_carrier_through_grid_points_agrees_with_orient2d
+2	geom-num::attack_g187	a_meeting_at_the_budget_stays_inside_it
+70	geom-num::attack_g187	a_meeting_lies_exactly_on_both_carriers
+2	geom-num::attack_g187	a_point_keeps_its_place_at_any_weight_and_a_line_at_any_scale
+2	geom-num::attack_g187	a_t_junction_on_a_sloping_wall_stays_on_its_one_carrier
+7	geom-num::attack_g187	cmp_filter_boundary_crossed_both_ways
+324	geom-num::attack_g187	one_step_along_a_carrier_is_decided_by_the_exact_path
+35	geom-num::attack_g187	one_step_from_a_carrier_is_decided_by_the_exact_path
+82	geom-num::attack_g187	order_and_turn_change_sign_as_they_should
+5	geom-num::attack_g187	order_filter_boundary_crossed_both_ways
+11	geom-num::attack_g187	orient_filter_boundary_crossed_both_ways
+586	geom-num::attack_g187	random_inputs_at_every_scale_match_the_oracle
+7	geom-num::attack_g187	side_filter_boundary_crossed_both_ways
+2	geom-num::attack_g187	the_budget_and_the_degenerate_inputs_are_refused
+84	geom-num::attack_g187	the_extreme_values_reach_every_width_and_every_step_fits
+446	geom-num::attack_g187	the_filters_never_contradict_the_exact_paths_and_both_outcomes_occur
+2	geom-num::attack_g187	the_largest_value_each_expression_can_take_is_inside_its_width
+149	geom-num::attack_g188	a_chord_of_any_kind_puts_both_ends_on_the_circle
+2	geom-num::attack_g188	a_chord_puts_the_centre_on_the_side_its_sweep_says
+2	geom-num::attack_g188	a_pair_of_circles_is_what_their_radii_say
+5	geom-num::attack_g188	circle_filters_cross_their_boundary_both_ways
+29	geom-num::attack_g188	circles_keep_their_answers_under_a_move_and_any_weight
+3	geom-num::attack_g188	one_step_from_a_circle_is_decided_by_the_exact_path
+native-only over 601	geom-num::attack_g188	order_along_an_arc_agrees_with_walking_it
+native-only over 601	geom-num::attack_g188	random_inputs_at_every_scale_match_the_oracle
+20	geom-num::attack_g188	round_filters_cross_their_boundary_both_ways
+2	geom-num::attack_g188	tangency_is_exactly_zero_and_one_step_is_not
+1	geom-num::attack_g188	the_budget_and_the_degenerate_inputs_are_refused
+66	geom-num::attack_g188	the_extreme_values_reach_every_width_and_every_step_fits
+507	geom-num::attack_g189	a_crossing_lies_exactly_on_its_carrier_and_its_circle
+24	geom-num::attack_g189	a_rational_centre_gives_crossings_on_its_circle
+6	geom-num::attack_g189	a_rational_point_compares_with_a_crossing
+9	geom-num::attack_g189	a_tangency_is_one_point_and_k_is_exactly_zero
+native-only over 601	geom-num::attack_g189	comparison_side_and_order_keep_their_laws
+13	geom-num::attack_g189	crossings_keep_their_order_along_an_arc
+65	geom-num::attack_g189	filters_cross_their_boundary_both_ways
+13	geom-num::attack_g189	one_place_reached_two_ways_is_one_place
+23	geom-num::attack_g189	one_step_from_a_crossing_is_decided_by_the_exact_path
+143	geom-num::attack_g189	random_carriers_are_refused_or_exact
+native-only over 601	geom-num::attack_g189	random_crossings_match_the_oracle
+native-only over 601	geom-num::attack_g189	random_rounds_orders_and_roots_match_the_oracle
+12	geom-num::attack_g189	signs_of_small_roots_are_the_right_ones
+148	geom-num::attack_g189	the_extreme_values_reach_every_width_and_every_step_fits
+native-only over 601	geom-num::attack_g189	the_filter_never_contradicts_the_exact_path
+native-only over 601	geom-num::attack_g189	two_circles_meet_on_both_and_their_order_is_the_one_stated
+native-only over 601	geom-num::attack_g189	two_roots_match_the_oracle_at_every_scale
+12	geom-num::attack_g190	a_crossing_at_the_far_end_is_not_lost
+native-only over 601	geom-num::attack_g190	a_double_root_beside_a_simple_one_is_parted_from_it
+native-only over 601	geom-num::attack_g190	a_dyadic_root_beside_another_factor_s_root_is_parted_from_it
+209	geom-num::attack_g190	a_line_and_a_circle_take_their_places_along_an_ellipse
+80	geom-num::attack_g190	a_line_ending_on_an_ellipse_closes_its_boundary
+100	geom-num::attack_g190	a_point_inside_a_stretch_of_another_root_is_not_that_root
+102	geom-num::attack_g190	a_root_narrowed_onto_a_dyadic_point_stays_that_point
+9	geom-num::attack_g190	an_ellipse_and_a_line_tell_tangent_from_crossing
+35	geom-num::attack_g190	an_inscribed_ellipse_touches_at_both_ends
+native-only over 601	geom-num::attack_g190	complex_roots_are_no_roots
+native-only over 601	geom-num::attack_g190	each_root_stands_between_the_signs_of_the_other_curve
+5	geom-num::attack_g190	ellipse_filters_cross_their_boundary_both_ways
+native-only over 601	geom-num::attack_g190	ellipses_keep_their_laws
+native-only over 601	geom-num::attack_g190	every_multiplicity_is_found
+14	geom-num::attack_g190	every_stretch_of_the_line_and_every_cut_is_found
+20	geom-num::attack_g190	four_crossings_come_in_order_along_each_curve
+27	geom-num::attack_g190	one_curve_twice_is_the_same
+225	geom-num::attack_g190	one_step_from_an_ellipse_is_decided_by_the_exact_path
+native-only over 601	geom-num::attack_g190	random_inputs_at_every_scale_match_the_oracle
+native-only over 601	geom-num::attack_g190	random_quartics_give_back_their_roots
+154	geom-num::attack_g190	random_tangent_circles_are_double_roots
+native-only over 601	geom-num::attack_g190	roots_a_hair_apart_stay_apart
+native-only over 601	geom-num::attack_g190	roots_of_two_quartics_compare_exactly
+77	geom-num::attack_g190	tangent_circles_touch_at_one_double_root
+137	geom-num::attack_g190	the_circle_of_curvature_has_contact_of_order_four_or_three
+native-only over 601	geom-num::attack_g190	the_extreme_values_reach_every_width_and_every_step_fits
+64	geom-num::attack_g190	the_zero_polynomial_is_refused_and_a_budget_is_never_an_answer
+native-only over 601	geom-num::attack_g193	a_crossing_of_a_disc_is_on_both
+18	geom-num::attack_g193	a_crossing_of_a_disc_is_the_crossing_of_its_round
+native-only over 601	geom-num::attack_g193	a_crossing_s_disc_and_fine_line_keep_their_laws
+122	geom-num::attack_g193	a_disc_answers_as_the_oracle_does_at_random
+4	geom-num::attack_g193	a_disc_answers_as_the_oracle_does_at_the_extremes
+2	geom-num::attack_g193	a_disc_is_made_only_within_its_budget
+13	geom-num::attack_g193	a_disc_meets_an_ellipse_at_the_angles_of_its_roots
+3	geom-num::attack_g193	a_disc_on_the_circle_exactly_is_zero_and_one_step_off_is_not
+66	geom-num::attack_g193	a_disc_s_side_keeps_its_laws
+5	geom-num::attack_g193	a_discs_equation_is_the_disc
+7	geom-num::attack_g193	a_fine_line_has_its_side
+1	geom-num::attack_g193	a_fine_line_is_refused_past_its_budget
+6	geom-num::attack_g193	a_fine_line_meets_an_ellipse_on_both
+2	geom-num::attack_g193	a_fine_line_s_side_is_exact_at_the_extremes
+23	geom-num::attack_g193	a_fine_line_s_side_keeps_its_laws
+7	geom-num::attack_g193	a_gap_between_circles_is_their_angle
+6	geom-num::attack_g193	a_gap_is_exactly_zero_at_a_tangency_and_a_bound_otherwise
+102	geom-num::attack_g193	a_narrowed_root_is_as_deep_as_asked
+native-only over 601	geom-num::attack_g193	a_narrowing_past_the_depth_of_comparisons_is_refused
+261	geom-num::attack_g193	a_root_already_a_point_is_kept
+5	geom-num::attack_g193	a_root_at_one_or_minus_one_is_a_quarter_turn_exactly
+164	geom-num::attack_g193	a_round_and_a_grid_circle_are_the_discs_they_say
+2	geom-num::attack_g193	a_small_gap_is_the_angle_within_its_small_angle_factor
+4	geom-num::attack_g193	against_a_disc_says_which_side
+291	geom-num::attack_g193	an_equation_about_another_point_is_the_same_curve
+2	geom-num::attack_g193	an_integer_is_enclosed
+15	geom-num::attack_g193	crossings_at_the_extremes_read_discs_and_fine_lines_exactly
+native-only over 601	geom-num::attack_g193	crossings_read_discs_and_fine_lines_as_their_rounds_and_carriers
+native-only over 601	geom-num::attack_g193	every_narrowed_root_holds_its_crossing_in_every_quarter
+6	geom-num::attack_g193	lines_past_a_carriers_budget_meet
+native-only over 601	geom-num::attack_g193	one_step_from_a_disc_or_a_fine_line_is_decided_by_the_exact_path
+12	geom-num::attack_g196	a_circle_written_as_an_ellipse_has_the_circle_s_ends
+9	geom-num::attack_g196	a_whole_circle_about_a_grid_point_ends_at_grid_points
+589	geom-num::attack_g196	an_ellipse_s_ends_are_on_it_either_side_of_its_centre_and_beyond_every_crossing
+native-only over 601	geom-num::attack_g196	each_end_is_on_the_circle_level_with_the_centre_and_beyond_every_crossing
+8	geom-num::attack_g196	the_widest_circle_in_the_budget_still_has_both_ends_exactly
+48	geom-num::attack_g196	the_widest_ellipse_in_the_budget_still_has_both_ends_exactly
+native-only over 601	geom-num::attack_g196b	a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others
+native-only over 601	geom-num::attack_g196b	a_conic_root_s_coordinates_compare_exactly_with_rational_points
+native-only over 601	geom-num::attack_g196b	a_half_turn_keeps_every_root_and_orders_them_as_minus_one_over_t
+native-only over 601	geom-num::attack_g196b	a_shared_root_is_zero_at_every_multiplicity_and_a_near_one_is_not
+native-only over 601	geom-num::attack_g196b	conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures
+native-only over 601	geom-num::attack_g196b	points_of_a_rotated_ellipse_agree_with_their_enclosures_and_each_other
+native-only over 601	geom-num::attack_g196b	points_of_one_ellipse_compare_along_its_halves_and_across_its_chords
+64	geom-num::attack_g196b	the_exact_roots_and_infinity_are_read_exactly
+native-only over 601	geom-num::attack_g196b	the_second_instance_reaches_roots_past_the_first_s_budget_exactly
+native-only over 601	geom-num::attack_g196b	the_sign_at_every_root_is_the_oracle_s
 2	geom-num::attack_g22	a_length_in_steps_is_exact_in_quarter_nanometres
 native-only over 601	geom-num::attack_g22	attack_coarsening_is_nearest_and_reported
 14	geom-num::attack_g22	attack_commit_rounding_ties_to_even
@@ -2602,10 +3056,12 @@ native-only over 601	geom-num::attack_g32	philox_block_follows_the_documented_la
 2	geom-num::attack_g32	the_oracle_gives_all_six_published_answers
 3	geom-num::attack_g42	a_quadric_size_past_its_range_is_refused_by_every_variant
 3	geom-num::attack_g42	a_rounded_input_past_its_range_is_refused_by_every_variant
+native-only over 601	geom-num::attack_g42	carrier_predicates_agree_on_random_inputs
 native-only over 601	geom-num::attack_g42	explicit_point_predicates_agree_at_every_extreme
 native-only over 601	geom-num::attack_g42	explicit_point_predicates_agree_on_random_inputs
 native-only over 601	geom-num::attack_g42	plane_predicates_agree_on_random_inputs
 native-only over 601	geom-num::attack_g42	quadric_predicates_agree_on_random_inputs
+native-only over 601	geom-num::attack_g42	round_and_circle_predicates_agree_on_random_inputs
 2	geom-num::attack_g42	wide32_extremes_order_and_debug_by_hand
 native-only over 601	geom-num::attack_g42	wide32_matches_i128
 266	geom-num::attack_g47	a_smaller_box_gives_a_result_inside
@@ -2815,6 +3271,8 @@ native-only over 601	geom-num::attack_wide_tests	w7::unary_matches_oracle
 2	geom-num::brent	minimum_finds_smooth_minima_inside_the_interval
 2	geom-num::brent	zero_converges_fast_on_a_simple_root
 23	geom-num::brent	zero_keeps_a_bracket_of_the_computed_function
+266	geom-num::carrier_determinism	carrier_golden_hash_is_the_same_on_every_target
+native-only over 601	geom-num::conic_determinism	conic_golden_hash_is_the_same_on_every_target
 2	geom-num::coverage_core	a_2d_point_outside_the_frame_is_refused_naming_the_first_bad_coordinate
 2	geom-num::coverage_core	dd_constructors_refuse_a_non_finite_operand_in_either_place
 2	geom-num::coverage_core	dd_from_a_real_is_the_real_exactly
@@ -2907,6 +3365,8 @@ native-only over 601	geom-num::exact_sum	random_sums_are_correctly_rounded
 20	geom-num::exact_sum	special_values
 native-only over 601	geom-num::exact_sum	streams_around_the_switch_to_the_large_accumulator
 native-only over 601	geom-num::exact_sum	ties_to_even_and_far_sticky_bits
+native-only over 601	geom-num::filter_bands	circle_gap_answers_only_past_t_squared
+native-only over 601	geom-num::filter_bands	each_term_of_each_scale_counts
 2	geom-num::gate1_core	a_product_far_below_the_subnormals_rounds_to_zero
 2	geom-num::gate1_core	a_trailing_part_is_dropped_only_below_two_to_the_minus_400
 2	geom-num::gate1_core	distinct_values_hash_apart
@@ -2986,6 +3446,8 @@ native-only over 601	geom-num::math_sinpi_cospi	sinpi_worst_cases_scaled_near_ze
 2	geom-num::mutants_core	reals_hash_their_bits
 2	geom-num::mutants_core	saturated_coordinates_are_qualified_in_the_message
 2	geom-num::mutants_core	the_smallest_coordinate_is_minus_coord_max
+native-only over 601	geom-num::one_root_determinism	one_root_golden_hash_is_the_same_on_every_target
+native-only over 601	geom-num::one_root_hit_rate	the_filter_decides_most_of_a_tangency_heavy_corpus_and_is_never_wrong
 native-only over 601	geom-num::order_free	order_free_contracts_give_one_answer_in_every_order
 2	geom-num::order_free	round_returns_a_real_whose_bits_the_encoding_writes
 2	geom-num::plane	a_plane_from_coefficients_is_checked_as_a_plane_through_points_is
@@ -4009,6 +4471,362 @@ native-only over 601	geom-run::properties	map_each_follows_the_batch_rule
 native-only over 601	geom-run::properties	scan_exclusive_is_a_prefix_sum
 native-only over 601	geom-run::properties	sort_stable_is_a_stable_sort
 native-only over 601	geom-run::properties	try_map_follows_the_phase_rule
+4	geom-sketch	certify::tests::the_cost_is_the_count
+4	geom-sketch	check::tests::a_whole_number_is_held_tightly_where_a_double_holds_it
+4	geom-sketch	check::tests::the_cost_is_the_count
+10	geom-sketch	equation::tests::a_jet_in_few_lanes_is_the_jet_in_full_width_lanes
+4	geom-sketch	flow::tests::a_node_past_the_last_is_an_error
+4	geom-sketch	flow::tests::no_path_is_no_flow_and_infinite_arcs_are_never_cut
+4	geom-sketch	flow::tests::the_source_side_is_the_smallest_minimum_cut
+5	geom-sketch	flow::tests::the_textbook_network_carries_23
+5	geom-sketch	place::tests::a_mirror_image_is_fitted_by_a_rotation_not_a_reflection
+5	geom-sketch	place::tests::a_rotation_and_a_shift_in_the_plane_are_recovered
+5	geom-sketch	place::tests::the_ground_is_never_moved_and_bad_input_places_nothing
+4	geom-sketch	place::tests::three_dimensions_work_the_same_way
+5	geom-sketch::attack_g219	a_point_inside_or_outside_an_ellipse_reads_with_the_sign_of_the_side
+538	geom-sketch::attack_g219	a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radius
+6	geom-sketch::attack_g219	a_row_scaled_where_its_size_is_nothing_takes_the_scale_one
+native-only over 601	geom-sketch::attack_g219	a_tangency_is_scaled_by_its_normals_and_its_curvature_wherever_its_point_is
+3	geom-sketch::attack_g219	an_ellipse_of_no_minor_radius_adds_no_curvature_to_a_tangencys_scale
+2	geom-sketch::attack_g219	an_ellipse_whose_axis_is_its_minor_radius_has_no_axis_direction
+8	geom-sketch::attack_g219	an_elliptical_arc_keeps_each_end_at_its_parameter
+472	geom-sketch::attack_g219	an_elliptical_arcs_length_is_its_quadrature
+26	geom-sketch::attack_g219	curves_tangent_at_a_point_read_how_far_their_normals_turn
+27	geom-sketch::attack_g219	each_kind_reads_what_it_should_off_its_solution
+13	geom-sketch::attack_g219	each_row_acts_as_a_length_at_its_solution
+199	geom-sketch::attack_g219	every_jacobian_entry_is_the_derivative_of_its_residual
+10	geom-sketch::attack_g219	every_kind_is_zero_where_it_holds_and_reads_back
+9	geom-sketch::attack_g219	every_name_is_checked_for_its_kind
+11	geom-sketch::attack_g219	every_singular_set_is_refused_naming_the_constraint
+2	geom-sketch::attack_g219	every_singular_set_widens_by_within_and_no_further
+6	geom-sketch::attack_g219	the_radii_are_dimensions_and_measure
+73	geom-sketch::attack_singular_answer	a_path_to_the_scaled_length_keeps_the_branch
+14	geom-sketch::attack_singular_answer	an_answer_folded_onto_a_singular_set_is_refused
+6	geom-sketch::attack_singular_answer	the_same_sketch_at_its_built_length_solves_with_every_line_long
+10	geom-sketch::catalogue	a_dimension_with_no_direction_is_degenerate
+7	geom-sketch::catalogue	a_half_circle_has_a_smooth_length
+42	geom-sketch::catalogue	a_positive_value_must_be_positive_and_a_signed_one_finite
+10	geom-sketch::catalogue	a_reference_is_a_constant_and_never_a_column
+17	geom-sketch::catalogue	a_row_acts_as_a_length_at_its_solution
+3	geom-sketch::catalogue	a_rule_on_lines_of_no_length_is_scaled_by_one
+9	geom-sketch::catalogue	a_scale_past_the_doubles_is_refused
+582	geom-sketch::catalogue	a_variable_twice_in_a_rule_adds_up
+7	geom-sketch::catalogue	an_arc_whose_ends_meet_sweeps_nothing
+8	geom-sketch::catalogue	an_offset_chain_ties_each_piece_to_its_copy
+71	geom-sketch::catalogue	catalogue_golden_hash_is_the_same_on_every_target
+4	geom-sketch::catalogue	circles_read_their_root_choices_off_the_drawing
+58	geom-sketch::catalogue	each_kind_has_its_commit_class
+141	geom-sketch::catalogue	each_kind_reads_what_it_should_off_its_solution
+39	geom-sketch::catalogue	every_dimension_measures
+476	geom-sketch::catalogue	every_jacobian_entry_is_the_derivative_of_its_residual
+15	geom-sketch::catalogue	every_kind_is_zero_where_it_holds
+302	geom-sketch::catalogue	every_name_in_every_kind_is_checked
+52	geom-sketch::catalogue	every_singular_set_is_refused_naming_the_constraint
+11	geom-sketch::catalogue	fixing_a_whole_entity_fixes_its_points
+13	geom-sketch::catalogue	lengths_of_nothing_scale_by_one
+220	geom-sketch::catalogue	only_a_dimension_can_be_a_reference
+9	geom-sketch::catalogue	rescale_reads_the_lengths_at_the_values_it_is_given
+29	geom-sketch::catalogue	structure_reads_the_catalogue
+32	geom-sketch::catalogue	text_refuses_what_is_not_an_amount_a_side_or_a_tangency
+19	geom-sketch::catalogue	the_scene_is_canonical_and_every_rule_reads_back
+native-only over 601	geom-sketch::certify	a_block_of_exactly_the_limit_is_attempted
+30	geom-sketch::certify	a_block_past_the_limit_is_not_attempted_and_is_charged_only_for_reading_it
+5	geom-sketch::certify	a_box_that_leaves_the_committed_point_behind_is_still_judged_over_the_segment_to_it
+5	geom-sketch::certify	a_box_that_leaves_the_committed_point_behind_on_its_upper_side_is_judged_over_the_segment_too
+6	geom-sketch::certify	a_commit_the_proof_cannot_reach_is_left_unproven_with_no_box
+7	geom-sketch::certify	a_duplicated_equation_is_set_aside_and_the_block_is_still_certified
+352	geom-sketch::certify	a_family_of_rectangles_is_certified_in_every_block_and_the_certificate_repeats
+6	geom-sketch::certify	a_point_at_two_distances_is_certified_and_its_box_holds_the_exact_solution
+4	geom-sketch::certify	a_point_no_solution_is_near_is_not_certified
+4	geom-sketch::certify	a_proof_that_reaches_huge_steps_from_the_commit_is_refused
+6	geom-sketch::certify	a_proven_radius_reaches_past_the_solution_and_is_pinned
+5	geom-sketch::certify	a_rules_derivatives_are_kept_apart_by_residual_and_match_its_differences
+10	geom-sketch::certify	a_second_point_is_certified_on_the_first_ones_proven_box
+3	geom-sketch::certify	an_equation_whose_scaled_gradient_is_exactly_the_independence_pivot_is_set_aside
+2	geom-sketch::certify	strictly_inside_refuses_a_touching_end
+2	geom-sketch::certify	the_assembly_counts_its_rules
+3	geom-sketch::certify	two_circles_that_touch_are_not_certified_and_the_reason_is_given
+2	geom-sketch::check	a_bound_equal_to_the_ceiling_is_accepted
+2	geom-sketch::check	a_bounded_dimension_gets_a_bound_that_contains_its_exact_residual
+2	geom-sketch::check	a_check_is_charged_eight_units_of_work_for_each_constraint
+2	geom-sketch::check	a_length_that_holds_exactly_after_rounding_has_a_bound_of_nearly_zero
+2	geom-sketch::check	a_point_rounding_onto_a_circle_is_a_commit_flip
+2	geom-sketch::check	a_radius_is_bounded_on_the_committed_circle_not_the_solved_one
+2	geom-sketch::check	a_residual_past_the_ceiling_is_refused_with_its_bound
+3	geom-sketch::check	a_stored_side_between_lines_is_decided_again
+3	geom-sketch::check	a_stored_side_of_a_tangent_circle_is_decided_again
+2	geom-sketch::check	a_stored_side_that_rounding_carries_onto_the_line_is_a_commit_flip
+2	geom-sketch::check	a_stored_side_that_survives_rounding_passes
+2	geom-sketch::check	a_whole_radius_enters_the_bound_as_the_point_itself
+2	geom-sketch::check	an_arcs_radius_is_bounded_on_the_committed_arc
+2	geom-sketch::check	checking_changes_nothing_and_a_small_budget_refuses
+2	geom-sketch::check	circles_rounding_onto_the_threshold_flip_from_outside_too
+2	geom-sketch::check	circles_through_defining_points_are_told_by_their_exact_radii
+3	geom-sketch::check	circles_well_apart_or_well_nested_keep_their_stored_tangency
+2	geom-sketch::check	two_circles_rounding_into_a_tangency_it_was_not_are_a_commit_flip
+2	geom-sketch::check	what_the_commit_holds_exactly_checks_as_exact
+4	geom-sketch::cluster	a_body_fixed_to_the_ground_beside_a_too_large_component_is_grounded
+2	geom-sketch::cluster	a_budget_too_small_refuses_and_bad_input_is_an_error
+2	geom-sketch::cluster	a_cluster_is_minimal_when_it_is_made
+2	geom-sketch::cluster	a_cluster_without_the_ground_keeps_its_freedoms
+2	geom-sketch::cluster	a_component_past_the_size_limit_is_named_and_left_alone
+3	geom-sketch::cluster	a_dense_set_found_around_a_seed_is_cut_down_to_a_minimal_one
+203	geom-sketch::cluster	a_family_of_rigid_bodies_gives_one_body_each_and_a_floppy_chain_joins_none
+2	geom-sketch::cluster	a_flow_between_nodes_that_are_not_two_of_the_networks_is_refused_before_any_work
+2	geom-sketch::cluster	a_flow_charges_each_arc_it_looks_at_each_step_and_its_arcs
+3	geom-sketch::cluster	a_flow_that_must_be_taken_back_along_an_arc_is_taken_back
+6	geom-sketch::cluster	a_four_bar_linkage_is_floppy
+native-only over 601	geom-sketch::cluster	a_laman_graph_is_one_rigid_cluster_and_without_a_bar_it_is_not
+3	geom-sketch::cluster	a_link_of_three_nodes_is_counted_once
+3	geom-sketch::cluster	a_mirror_image_is_fitted_by_the_rotation_nearest_it_never_by_a_reflection
+2	geom-sketch::cluster	a_plan_charges_each_links_members_each_seed_and_each_incidence_it_reads
+2	geom-sketch::cluster	a_redundant_bar_is_counted
+2	geom-sketch::cluster	a_rigid_motion_turns_a_point_and_then_moves_it
+3	geom-sketch::cluster	a_triangle_of_bars_is_one_rigid_cluster
+3	geom-sketch::cluster	kabsch_centres_both_sets_before_it_correlates_them
+5	geom-sketch::cluster	kabsch_recovers_every_rotation_and_shift_in_the_plane_and_in_space
+3	geom-sketch::cluster	no_search_grows_through_the_ground_into_a_too_large_component
+5	geom-sketch::cluster	six_motions_count_assembly_mates
+3	geom-sketch::cluster	the_first_cluster_of_a_braced_square_is_its_first_bar
+3	geom-sketch::cluster	the_fixed_nodes_are_the_ground_cluster_and_it_absorbs_what_it_pins
+2	geom-sketch::cluster	the_ground_is_never_moved_and_bad_input_places_nothing
+2	geom-sketch::cluster	the_ground_of_an_assembly_pins_a_part_with_two_hinges
+2	geom-sketch::cluster	the_largest_flow_and_the_smallest_source_side_of_a_cheapest_cut
+native-only over 601	geom-sketch::cluster	the_plan_is_the_same_for_every_order_of_the_input
+2	geom-sketch::cluster	two_bars_and_a_point_are_not
+5	geom-sketch::cluster	two_triangles_on_a_vertex_are_a_cluster_and_two_loose_points
+3	geom-sketch::cluster	two_triangles_on_an_edge_join_into_one_body
+2	geom-sketch::commit	a_carrier_through_two_grid_points_is_stored_in_lowest_terms
+2	geom-sketch::commit	a_carrier_through_two_stored_points_is_the_line_between_them
+2	geom-sketch::commit	a_chain_of_distances_rounds_its_first_point_once_and_places_the_rest_from_it
+2	geom-sketch::commit	a_circle_has_a_grid_centre_and_a_whole_radius_and_an_arc_lies_on_its_own_circle
+2	geom-sketch::commit	a_class_whose_first_line_rounds_to_one_point_takes_its_normal_from_the_solved_direction
+2	geom-sketch::commit	a_commit_charges_its_entities_four_times_its_constraints_each_points_lines_and_each_check
+2	geom-sketch::commit	a_degenerate_line_and_a_small_budget_are_errors
+2	geom-sketch::commit	a_dimension_that_is_not_exact_is_bounded_without_being_broken
+2	geom-sketch::commit	a_distance_too_large_to_be_a_whole_figure_gives_way_instead_of_failing
+2	geom-sketch::commit	a_first_line_whose_solved_ends_are_too_far_apart_to_measure_is_not_finite
+2	geom-sketch::commit	a_level_or_plumb_line_in_a_class_sets_the_normal_of_every_line_square_to_it
+3	geom-sketch::commit	a_line_ending_at_a_circles_centre_or_an_arcs_end_passes_through_that_point
+2	geom-sketch::commit	a_line_in_a_class_passes_through_its_end_that_another_line_shares
+2	geom-sketch::commit	a_line_tangent_at_an_arcs_end_meets_it_at_a_right_angle
+3	geom-sketch::commit	a_mirrored_point_whose_coordinate_another_line_shares_keeps_it_and_the_mirror_gives_way
+2	geom-sketch::commit	a_point_coincident_with_a_circles_centre_is_stored_as_that_centre
+2	geom-sketch::commit	a_point_mirrored_about_a_level_or_plumb_line_is_mirrored_not_rounded_again
+2	geom-sketch::commit	a_point_on_a_circle_is_exact_at_its_defining_point_and_bounded_elsewhere
+2	geom-sketch::commit	a_point_sliding_on_a_steep_line_keeps_its_rounded_row
+2	geom-sketch::commit	a_radius_of_the_largest_grid_coordinate_commits_and_one_past_the_grid_is_refused
+2	geom-sketch::commit	a_rectangle_commits_to_grid_points_and_axis_carriers
+2	geom-sketch::commit	a_relation_the_stored_geometry_cannot_hold_is_bounded_and_reported
+4	geom-sketch::commit	a_relation_whose_line_has_a_fixed_end_off_its_carrier_gives_way
+3	geom-sketch::commit	a_sloping_wall_cut_in_two_keeps_one_carrier_and_a_point_on_both_pieces
+3	geom-sketch::commit	a_t_junction_on_a_sloping_wall_is_on_the_wall_and_leaves_no_sliver
+3	geom-sketch::commit	an_arc_centre_is_on_the_bisector_at_the_solved_centres_row_and_a_point_is_on_its_own_arc
+2	geom-sketch::commit	an_arcs_centre_is_on_its_tangent_lines_normal_and_a_line_that_is_not_tangent_gives_way
+2	geom-sketch::commit	circles_keep_their_shared_centres_their_whole_radii_and_their_defining_points
+2	geom-sketch::commit	coincident_points_are_one_stored_point
+3	geom-sketch::commit	lines_made_parallel_and_perpendicular_share_one_normal_turned_by_each_ones_quarter_turns
+3	geom-sketch::commit	perpendicular_lines_commit_to_perpendicular_carriers
+3	geom-sketch::commit	points_mirrored_about_a_level_or_plumb_line_are_mirrored_exactly
+2	geom-sketch::commit	points_symmetric_about_a_sloping_line_are_rounded_each_on_its_own
+3	geom-sketch::commit	the_corners_of_a_parallelogram_lie_on_both_their_lines
+3	geom-sketch::commit	the_same_sketch_commits_to_the_same_values
+2	geom-sketch::commit	whole_quarter_turns_and_headings_commit_to_square_and_level_carriers
+2	geom-sketch::diagnose	a_budget_too_small_stops_the_diagnosis
+1	geom-sketch::diagnose	a_cancelled_downdate_is_recomputed
+2	geom-sketch::diagnose	a_column_at_right_angles_to_those_chosen_is_confirmed_on_its_own
+2	geom-sketch::diagnose	a_column_is_preferred_within_a_factor_of_two_and_by_priority_then_order
+2	geom-sketch::diagnose	a_column_nearly_along_the_first_axis_is_reflected_without_cancelling
+native-only over 601	geom-sketch::diagnose	a_conflict_comes_with_what_each_dimension_would_measure_without_the_other
+3	geom-sketch::diagnose	a_dependence_is_conflicting_when_the_residuals_do_not_agree
+5	geom-sketch::diagnose	a_dependence_that_only_this_configuration_has_is_special_not_redundant
+3	geom-sketch::diagnose	a_dimension_restates_its_value_and_nothing_else_does
+6	geom-sketch::diagnose	a_fully_constrained_triangle_has_no_freedom_and_nothing_repeats
+3	geom-sketch::diagnose	a_group_is_partly_one_constraint_only_when_another_of_its_equations_was_chosen
+2	geom-sketch::diagnose	a_group_leans_by_back_substitution_through_the_diagonal
+2	geom-sketch::diagnose	a_motion_keeps_the_entries_above_the_cutoff_in_model_units
+3	geom-sketch::diagnose	a_near_singular_pivot_after_a_dependent_one_is_confirmed_too
+2	geom-sketch::diagnose	a_norm_at_the_factor_of_two_is_decided_on_the_norm_computed_afresh
+2	geom-sketch::diagnose	a_norm_bound_starts_from_the_square_and_grows_by_the_derived_terms
+2	geom-sketch::diagnose	a_norm_bound_widens_the_roots_of_its_least_and_greatest_squares
+2	geom-sketch::diagnose	a_norm_is_carried_only_inside_its_window_and_above_the_drift_test
+2	geom-sketch::diagnose	a_pivot_between_the_thresholds_is_near_singular_and_never_rounded
+2	geom-sketch::diagnose	a_pivot_called_dependent_whose_group_is_not_is_confirmed_near_singular
+2	geom-sketch::diagnose	a_pivot_is_confirmed_within_a_factor_of_sixteen_of_either_threshold
+2	geom-sketch::diagnose	a_pivot_just_above_sigma_dep_is_confirmed_dependent_by_its_pair
+5	geom-sketch::diagnose	a_plain_solve_does_not_diagnose
+native-only over 601	geom-sketch::diagnose	a_remedy_gives_the_range_of_values_that_fit_by_continuation
+3	geom-sketch::diagnose	a_remedy_in_words_names_the_ends_it_has
+6	geom-sketch::diagnose	a_repeated_distance_is_redundant_and_a_contradicting_one_is_a_conflict
+2	geom-sketch::diagnose	a_sketch_with_no_constraints_has_every_variable_free
+5	geom-sketch::diagnose	a_solved_sketch_comes_back_with_its_report
+2	geom-sketch::diagnose	a_subnormal_column_is_measured_exactly
+2	geom-sketch::diagnose	among_constraints_ranked_alike_the_greater_id_is_suggested
+2	geom-sketch::diagnose	an_equation_with_no_gradient_is_a_group_of_its_own
+3	geom-sketch::diagnose	choices_the_carried_bounds_cannot_settle_are_made_on_norms_computed_afresh
+2	geom-sketch::diagnose	columns_too_large_or_too_small_to_square_are_measured_by_scaling
+native-only over 601	geom-sketch::diagnose	every_choice_is_the_one_norms_computed_afresh_make
+2	geom-sketch::diagnose	free_motions_are_in_echelon_form_over_the_variables
+2	geom-sketch::diagnose	inconsistent_inputs_are_refused
+native-only over 601	geom-sketch::diagnose	lengths_that_cannot_close_a_triangle_are_not_converged_and_the_remedy_search_finds_values
+2	geom-sketch::diagnose	lists_of_other_lengths_are_refused
+67	geom-sketch::diagnose	remedies_skip_what_is_not_a_driving_dimension
+2	geom-sketch::diagnose	the_pivot_prefers_the_lower_priority_number_among_near_equals
+3	geom-sketch::diagnose	the_priorities_come_from_each_constraints_own_line
+2	geom-sketch::diagnose	the_range_resolution_is_two_to_minus_the_halvings
+3	geom-sketch::diagnose	the_removal_suggested_is_in_the_most_conflicting_groups_among_equal_priorities
+2	geom-sketch::diagnose	the_thresholds_follow_the_block_size_and_the_rounding_bound
+3	geom-sketch::diagnose	the_witness_moves_each_variable_up_by_its_own_small_amount
+native-only over 601	geom-sketch::diagnose	two_dimensions_that_pin_one_value_have_a_range_of_that_value_alone
+6	geom-sketch::diagnose	unrelated_items_do_not_change_the_verdict_or_the_text
+278	geom-sketch::diagnose_determinism	diagnose_golden_hash_is_the_same_on_every_target
+9	geom-sketch::drag	a_cursor_past_a_stated_length_is_at_limit_and_names_the_length
+14	geom-sketch::drag	a_cursor_that_breaks_two_constraints_names_both
+57	geom-sketch::drag	a_drag_script_replays_to_the_same_bits_as_it_ran_and_twice_over
+4	geom-sketch::drag	a_dragged_corner_takes_the_cursor_and_its_neighbours_follow
+5	geom-sketch::drag	a_frame_with_no_budget_shows_the_previous_frame
+234	geom-sketch::drag	a_log_keeps_at_most_256_targets_and_the_last
+4	geom-sketch::drag	a_point_that_is_not_one_cannot_be_dragged
+42	geom-sketch::drag	a_release_commits_the_replay_and_reports_no_drift_for_an_ordinary_drag
+native-only over 601	geom-sketch::drag	a_release_reports_a_point_that_trails_differently_on_a_thinned_replay
+11	geom-sketch::drag	a_residual_of_exactly_the_tolerance_is_not_a_broken_constraint
+28	geom-sketch::drag	a_turn_to_the_other_branch_is_drag_limit_and_the_frame_is_the_last_good_one
+17	geom-sketch::drag	each_frame_starts_from_the_last
+106	geom-sketch::drag	exactly_256_targets_are_all_kept_and_one_more_halves_them
+10	geom-sketch::motions	a_budget_too_small_stops_it
+3	geom-sketch::motions	a_fully_constrained_sketch_has_no_motion
+2	geom-sketch::motions	a_motion_is_in_model_units_not_the_solvers
+3	geom-sketch::motions	it_equals_the_dense_form_on_a_distance_chain
+36	geom-sketch::motions	it_equals_the_dense_form_when_only_y_is_free_along_a_chain
+2	geom-sketch::motions	it_equals_the_dense_form_with_no_constraints
+5	geom-sketch::motions	one_entity_gets_only_its_own_motions
+2	geom-sketch::plane	a_placed_point_states_its_class
+2	geom-sketch::plane	a_roof_measures_its_true_length
+2	geom-sketch::plane	a_rotated_frame_is_orthonormal_or_refused
+2	geom-sketch::plane	a_rotated_frame_measures_its_height_off_the_plane
+18	geom-sketch::plane	a_rotated_frame_places_within_a_step
+2	geom-sketch::plane	an_axis_aligned_plane_is_the_grid_itself
+2	geom-sketch::plane	errors_say_what_went_wrong
+native-only over 601	geom-sketch::plane	every_grid_point_of_the_plane_is_a_lattice_point
+269	geom-sketch::plane	every_small_pitch_round_trips_exactly
+2	geom-sketch::plane	one_plane_has_one_frame
+2	geom-sketch::plane	ties_between_the_shortest_vectors_fall_one_way
+2	geom-sketch::plane	what_is_not_a_frame_is_refused
+2	geom-sketch::sketch	a_distance_residual_has_a_gradient_of_length_one_at_its_solution
+2	geom-sketch::sketch	a_reference_dimension_is_measured_and_never_assembled
+2	geom-sketch::sketch	a_singular_start_names_its_constraint
+2	geom-sketch::sketch	errors_say_what_went_wrong
+9	geom-sketch::sketch	every_jacobian_entry_is_the_derivative_of_its_residual
+2	geom-sketch::sketch	items_sort_by_their_ids_whatever_order_they_came_in
+3	geom-sketch::sketch	malformed_text_is_refused_with_its_line
+3	geom-sketch::sketch	priorities_change_nothing_in_the_equations
+2	geom-sketch::sketch	references_must_resolve_and_values_be_sound
+2	geom-sketch::sketch	the_side_comes_from_the_exact_predicate
+8	geom-sketch::sketch	the_text_form_round_trips_every_kind_bit_for_bit
+2	geom-sketch::sketch	variables_are_laid_out_in_order_on_exact_scales
+native-only over 601	geom-sketch::sketch_determinism	sketch_golden_hash_is_the_same_on_every_target
+10	geom-sketch::solve	a_block_that_starts_nearly_singular_is_not_watched
+9	geom-sketch::solve	a_block_that_starts_singular_is_not_watched
+19	geom-sketch::solve	a_budget_stops_it_with_no_answer
+19	geom-sketch::solve	a_heading_keeps_its_sense_along_a_path_in_an_open_stage
+37	geom-sketch::solve	a_long_jump_keeps_its_branch
+87	geom-sketch::solve	a_nudge_goes_either_way_by_its_id
+13	geom-sketch::solve	a_path_ends_exactly_on_the_new_value
+83	geom-sketch::solve	a_path_into_a_near_fold_is_lost_before_it
+144	geom-sketch::solve	a_path_past_the_end_of_its_solutions_is_lost_where_they_end
+9	geom-sketch::solve	a_path_runs_only_between_one_sketch_and_its_values
+9	geom-sketch::solve	a_path_that_changes_nothing_takes_one_step_and_no_iterations
+7	geom-sketch::solve	a_point_drawn_on_its_reference_is_nudged_off_it_whatever_holds_it
+3	geom-sketch::solve	a_radius_cannot_end_below_zero
+14	geom-sketch::solve	a_reference_can_move_along_a_path
+3	geom-sketch::solve	a_rule_missed_by_the_tolerance_itself_is_met
+3	geom-sketch::solve	a_rule_on_fixed_points_alone_is_held_to_at_the_end
+2	geom-sketch::solve	a_rule_said_twice_is_met_twice
+3	geom-sketch::solve	a_rule_that_chose_a_root_is_another_sketch_when_it_chooses_the_other
+2	geom-sketch::solve	a_rule_that_is_met_moves_nothing
+2	geom-sketch::solve	a_rule_that_stays_singular_is_degenerate
+12	geom-sketch::solve	a_singular_start_is_nudged_by_its_id
+native-only over 601	geom-sketch::solve	a_solve_costs_the_same_work_every_time
+79	geom-sketch::solve	a_step_halved_at_a_failure_is_doubled_back_after_a_success
+5	geom-sketch::solve	a_triangle_from_its_three_sides_keeps_the_side_it_was_drawn_on
+30	geom-sketch::solve	a_turn_keeps_its_sense_along_a_path_in_an_open_stage
+14	geom-sketch::solve	a_variables_scale_changes_nothing_but_its_rounding
+native-only over 601	geom-sketch::solve	every_ezpz_problem_runs
+native-only over 601	geom-sketch::solve	ezpz_problems_reach_the_answers_worked_by_hand
+2	geom-sketch::solve	merged_variables_take_the_older_value
+4	geom-sketch::solve	of_two_rules_missed_alike_the_first_is_named
+native-only over 601	geom-sketch::solve	solved_values_are_the_same_on_every_target
+13	geom-sketch::solve	what_cannot_be_met_is_refused_naming_a_rule
+16	geom-sketch::solve	what_cannot_be_met_is_refused_once_no_step_lowers_it
+4	geom-sketch::solve	what_is_free_moves_as_little_as_it_can
+2	geom-sketch::solve	with_values_fills_every_kind_of_variable
+2	geom-sketch::solve	with_values_needs_a_value_for_each_variable
+19	geom-sketch::solved_splines	a_dragged_fit_point_is_reinterpolated_until_it_settles
+13	geom-sketch::solved_splines	a_fit_point_spline_at_rest_settles_at_once
+7	geom-sketch::solved_splines	a_join_and_its_reverse_are_told_apart_by_the_sense
+15	geom-sketch::solved_splines	a_join_to_a_circle_and_a_line_measures_smooth_when_solved
+8	geom-sketch::solved_splines	a_line_at_any_slope_is_taken_against_the_spline_whichever_way_it_runs
+11	geom-sketch::solved_splines	a_line_at_the_other_end_and_any_slope_is_taken_against_the_spline
+17	geom-sketch::solved_splines	a_path_keeps_the_continuation_and_never_ends_in_the_cusp
+31	geom-sketch::solved_splines	a_settled_sketch_reads_back_whatever_its_ids
+47	geom-sketch::solved_splines	a_solved_join_measures_smooth_to_every_order
+3	geom-sketch::solved_splines	entities_written_after_the_ones_they_name_whatever_their_ids
+24	geom-sketch::solved_splines	every_kind_of_spline_join_has_a_sense
+5	geom-sketch::solved_splines	the_measure_reads_a_tangent_line_and_both_ends_of_an_arc
+9	geom-sketch::solved_splines	the_plain_layout_rules_have_a_sense_too
+native-only over 601	geom-sketch::solved_splines_determinism	solved_splines_golden_hash_is_the_same_on_every_target
+13	geom-sketch::spline	a_cubic_cut_in_two_joins_with_every_order
+10	geom-sketch::spline	a_rule_reads_the_value_worked_by_hand_when_a_control_point_moves
+54	geom-sketch::spline	a_spline_end_with_no_tangent_or_a_line_with_no_direction_is_degenerate
+4	geom-sketch::spline	a_spline_leaves_along_its_line
+2	geom-sketch::spline	curvature_and_its_rate_are_those_of_the_curve
+317	geom-sketch::spline	every_jacobian_entry_is_the_derivative_of_its_residual
+21	geom-sketch::spline	every_spline_rule_is_enclosed_around_the_residual_it_stores
+7	geom-sketch::spline	only_a_spline_a_constraint_can_read_is_accepted
+4	geom-sketch::spline	the_ends_derivatives_are_those_of_the_curve
+5	geom-sketch::spline	the_text_form_reads_back_exactly
+548	geom-sketch::spline_determinism	spline_golden_hash_is_the_same_on_every_target
+14	geom-sketch::spline_more	a_cubic_leaves_a_line_with_the_curvature_of_a_line_and_not_its_rate
+10	geom-sketch::spline_more	a_fit_point_spline_passes_through_its_fit_points
+396	geom-sketch::spline_more	a_length_rule_reads_the_error_of_the_stated_length
+282	geom-sketch::spline_more	a_loop_needs_more_panels_and_still_has_its_length_within_the_bound
+199	geom-sketch::spline_more	a_named_length_is_solved_for_as_well_as_driven
+5	geom-sketch::spline_more	a_point_pinned_to_a_spline_reads_the_miss
+4	geom-sketch::spline_more	a_rational_quarter_circle_has_the_curvature_of_its_circle
+9	geom-sketch::spline_more	a_rational_spline_joins_a_plain_one
+6	geom-sketch::spline_more	a_rational_spline_leaves_along_the_line_it_is_tangent_to
+180	geom-sketch::spline_more	a_rational_spline_whose_weights_are_all_not_one_is_still_its_curve
+59	geom-sketch::spline_more	a_spline_end_with_no_tangent_is_degenerate_in_every_new_rule
+32	geom-sketch::spline_more	a_spline_with_a_stopped_point_has_no_provable_length
+6	geom-sketch::spline_more	an_arc_laid_over_its_spline_is_tangent_but_not_a_continuation
+native-only over 601	geom-sketch::spline_more	every_jacobian_entry_is_the_derivative_of_its_residual
+native-only over 601	geom-sketch::spline_more	every_spline_rule_has_the_slopes_and_jets_of_its_jacobian
+438	geom-sketch::spline_more	every_spline_rule_is_enclosed_around_the_residual_it_stores
+2	geom-sketch::spline_more	fit_data_the_interpolation_refuses_is_refused
+4	geom-sketch::spline_more	moving_a_fit_point_moves_the_reinterpolation
+279	geom-sketch::spline_more	panels_off_zero_cover_their_span_too
+6	geom-sketch::spline_more	rational_splines_that_bend_differently_do_not_join_at_g2
+20	geom-sketch::spline_more	the_length_of_a_parabola_and_of_a_straight_cubic_are_their_closed_forms
+147	geom-sketch::spline_more	the_length_of_a_quarter_circle_is_a_quarter_of_its_circumference
+5	geom-sketch::spline_more	the_new_rules_and_helpers_refuse_what_is_not_a_spline_or_not_a_curve
+4	geom-sketch::spline_more	the_new_rules_round_trip_in_text
+32	geom-sketch::spline_more	two_rational_quarters_join_with_every_order_and_match_their_arc
+native-only over 601	geom-sketch::spline_more_determinism	spline_more_golden_hash_is_the_same_on_every_target
+21	geom-sketch::structure	a_budget_is_charged_for_what_it_reads
+2	geom-sketch::structure	a_budget_too_small_stops_it
+1	geom-sketch::structure	a_coupled_pair_is_one_block
+1	geom-sketch::structure	a_graph_keeps_each_row_sorted_and_without_repeats
+native-only over 601	geom-sketch::structure	a_long_chain_is_walked_without_recursion
+2	geom-sketch::structure	a_rectangle_merges_to_four_variables_in_order
+2	geom-sketch::structure	a_reference_dimension_adds_no_equation_and_a_coincidence_merges_all_of_it
+117	geom-sketch::structure	a_sketch_authored_in_any_order_has_one_plan
+2	geom-sketch::structure	a_triangular_system_is_a_chain_of_blocks_in_solve_order
+2	geom-sketch::structure	all_three_parts_at_once
+2	geom-sketch::structure	blocks_ready_together_go_lowest_equation_first
+2	geom-sketch::structure	extra_equations_are_over_determined
+2	geom-sketch::structure	extra_variables_are_under_determined
+2	geom-sketch::structure	parts_that_do_not_connect_are_components
+native-only over 601	geom-sketch::structure	the_laws_hold_on_random_graphs
 4	geom-surface::analytic	a_cone_keeps_its_normals_up_to_its_apex
 2	geom-surface::analytic	a_cones_equation_vanishes_on_it
 3	geom-surface::analytic	a_falling_cone_keeps_its_normals_up_to_its_apex
