@@ -826,3 +826,79 @@ fn a_circle_in_the_apex_plane_is_the_engines() {
     let (spots, work) = points_of(&circle([3.0, 0.0, 0.0], 0.5, X, Z), &funnel);
     assert!(spots.is_empty() && work > FEW, "{spots:?}, {work} units");
 }
+
+/// A cylinder of radius 5 about the axis off the coordinate axes, over `v`.
+fn leaning_tube(v: (f64, f64)) -> SurfaceKind {
+    let frame = Frame::new(Z, LEAN).unwrap();
+    SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 5.0, frame, (ROUND, v)).unwrap())
+}
+
+#[test]
+fn circles_apart_at_an_end_of_the_domain_meet_nothing() {
+    // Each circle's plane is an end of the domain: on a coordinate axis an exact sign says it is on
+    // the end, not past it, and off them its enclosure reaches the end. The surface's points in that
+    // plane are the cut circle's, on the end or past it, so two circles apart there meet nothing
+    // wherever the end lies (issue 995, group R). Inside the cut circle, round it, and beside it with
+    // their boxes meeting, at each end.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    for z in [300.0, -300.0] {
+        for (center, radius) in [([1.0, 0.0], 1.0), ([1.0, 0.0], 20.0), ([7.0, 7.0], 4.5)] {
+            misses(&circle([center[0], center[1], z], radius, X, Z), &tube);
+        }
+    }
+    // The cone's cut at z = 310, v = 300, has radius 226, and past the apex at z = -290, v = -300,
+    // radius 224: circles about 8 from the axis inside and round it, as in the stored input, and
+    // one beside it.
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    for z in [310.0, -290.0] {
+        for (center, radius) in [
+            ([8.0, 0.0], 100.0),
+            ([0.0, 8.0], 400.0),
+            ([200.0, 200.0], 50.0),
+        ] {
+            misses(&circle([center[0], center[1], z], radius, X, Z), &funnel);
+        }
+    }
+    // Off the coordinate axes, about 4·(0.6, 0.8, 0), on a domain that ends there either way: by
+    // enclosures alone.
+    for ends in [(-300.0, 4.0), (4.0, 300.0)] {
+        let leaning = leaning_tube(ends);
+        misses(&circle([2.4, 3.2, 1.0], 1.0, Z, LEAN), &leaning);
+        misses(&circle([2.4, 3.2, 1.0], 20.0, Z, LEAN), &leaning);
+        misses(&circle([-3.2, 7.4, 7.0], 4.5, Z, LEAN), &leaning);
+        // The cone of radius 0.5 + 0.75·v about that axis, of radius 3.5 at v = 4.
+        let frame = Frame::new(Z, LEAN).unwrap();
+        let funnel = Cone::new([0.0; 3], 0.5, 0.75, frame, (ROUND, ends)).unwrap();
+        misses(
+            &circle([2.4, 3.2, 0.5], 1.0, Z, LEAN),
+            &SurfaceKind::Cone(funnel),
+        );
+    }
+}
+
+/// The pair is the engine's: what it finds at the end of the domain it flags at its floor, where a
+/// closed form would have proven points.
+fn the_engines(curve: &CurveKind<3>, surface: &SurfaceKind) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let items = found.items();
+    assert!(
+        items.iter().any(|i| matches!(i, Item::Flagged { .. }))
+            && items.iter().all(|i| !matches!(i, Item::Overlap { .. })),
+        "{items:?}"
+    );
+}
+
+#[test]
+fn circles_crossing_or_touching_at_an_end_of_the_domain_are_the_engines() {
+    // At an end the closed form places no points (decision 32.86): crossing the cut circle and
+    // touching it, at each end of a cylinder about z, and crossing it off the coordinate axes.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    for z in [300.0, -300.0] {
+        the_engines(&circle([5.0, 0.0, z], 5.0, X, Z), &tube);
+        the_engines(&circle([0.0, 8.0, z], 3.0, X, Z), &tube);
+    }
+    for ends in [(-300.0, 4.0), (4.0, 300.0)] {
+        the_engines(&circle([2.4, 3.2, 5.0], 5.0, Z, LEAN), &leaning_tube(ends));
+    }
+}

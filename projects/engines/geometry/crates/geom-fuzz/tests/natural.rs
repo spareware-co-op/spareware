@@ -32,6 +32,7 @@ use geom_fuzz::natural::{
 use geom_fuzz::seeded;
 use geom_intersect::Item;
 use geom_test::Seed;
+use geom_test::golden::{hex, sha256};
 
 /// Random byte strings per `cargo test` run of the bolero leg.
 const ITERATIONS: usize = 300;
@@ -246,6 +247,48 @@ fn an_end_circle_across_a_parallel_cone_costs_a_closed_form() {
         assert!(
             items.len() == curves && items.iter().all(|i| matches!(i, Item::Curve { .. })),
             "{items:?} on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
+
+/// Issue 995's group R, stored in the target's `crashes` folder: two cones of slope 2 on parallel
+/// axes along (0.6, 0.8, 0), of start radius 224 and 0, whose centres differ by 8 square to the
+/// axis, so each end circle lies in the plane of an end of the other's domain. The other cone cuts
+/// that plane in a circle of radius 600, 8 from the end circle of radius 376 or 824: one inside the
+/// other, apart by 216. 32.86 left a plane whose enclosure reaches an end to the engine, which ran
+/// round each of the four circles for nothing: 460,442 to 942,607 units a circle, 2,756,742 a call.
+/// Two circles apart for every height the plane's enclosure holds now meet nothing at an end too:
+/// 1,377 units a call.
+///
+/// With it, the SHA-256 of the Debug text of the answer's items, coverage and diagnostics, every
+/// field but its work, taken on the engine's answer before that change: the answer is the same.
+const ENDS_IN_THE_PLANE_OF_AN_END: [(&[u8], u128, &str); 1] = [(
+    &[
+        0x73, 0xff, 0xff, 0xff, 0xdf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfd, 0xdf, 0x3f, 0xce,
+    ],
+    1_377,
+    "677f58ccfc1d3e64b339aba50ee9418553d9c0c7a233bd8d78ae9dab7e5b0ea6",
+)];
+
+#[test]
+fn an_end_circle_in_the_plane_of_the_others_end_costs_a_closed_form() {
+    for (data, most, digest) in ENDS_IN_THE_PLANE_OF_AN_END {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let text = format!(
+            "{:?} {:?} {:?}",
+            answer.items(),
+            answer.coverage(),
+            answer.diagnostics()
+        );
+        let said = hex(sha256(text.as_bytes()));
+        assert!(
+            work <= most && said == digest,
+            "{work} units (at most {most}), answer {said}, on {data:02x?}"
         );
         holds(harness(data));
     }

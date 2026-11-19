@@ -44,8 +44,10 @@
 //! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
 //!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
 //!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
-//!   touch off the coordinate axes, a plane at an end of the domain or through a cone's apex, and
-//!   a domain short of a whole turn are the engine's (decision 32.86).
+//!   plane whose enclosure reaches an end of the domain meets nothing where the two circles are
+//!   proven apart for every height it holds, and is the engine's where they are not. A touch off
+//!   the coordinate axes, a plane through a cone's apex, and a domain short of a whole turn are
+//!   the engine's (decision 32.86).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -1915,7 +1917,7 @@ fn ring_overlap(
     let v = match height_across(at, (center, frame, factor), dv)? {
         Across::Past => return proven(Vec::new(), meter).map(Some),
         Across::Within(v) | Across::Reaching(v) => v,
-        Across::Unplaced => return Ok(None),
+        Across::Unplaced(_) => return Ok(None),
     };
     lying(curve, Interval::new(du.0, du.1)?, held(v, dv)?, meter).map(Some)
 }
@@ -1929,8 +1931,9 @@ enum Across {
     /// The plane's v, an enclosure that reaches an end, held to the domain: an exact sign says
     /// it is not past that end.
     Reaching(Interval),
-    /// An enclosure reaches an end, and no exact sign places it.
-    Unplaced,
+    /// The plane's v, an enclosure that reaches an end, held to the domain: no exact sign places
+    /// it, so the plane may be past that end, on it or inside it.
+    Unplaced(Interval),
 }
 
 /// Where the plane across the axis of the round kind `(center, frame, factor)` through `at`
@@ -1962,7 +1965,7 @@ fn height_across(
             continue;
         }
         let Some((_, [p, q])) = exact else {
-            return Ok(Across::Unplaced);
+            return Ok(Across::Unplaced(held(v, dv)?));
         };
         let side = sign_of(&[p, q, (-factor, end)]);
         // `factor` is the kind's axial sign, 1 or -1.
@@ -2107,9 +2110,9 @@ enum Meet {
 /// A circle across the axis of a cylinder or cone, its normal parallel to that axis (decision
 /// 32.86): nothing where its plane is past the domain, and otherwise the points where it meets
 /// the circle the surface cuts in its plane. `None`, the engine's, where either domain is short of
-/// a whole turn, the plane's place against an end of the domain is not clear of it, the plane
-/// holds a cone's apex, or neither the enclosures nor exact signs tell how the two circles stand,
-/// or their two crossings apart.
+/// a whole turn, the plane holds a cone's apex, neither the enclosures nor exact signs tell how the
+/// two circles stand, the plane's enclosure reaches an end of the domain and the circles are not
+/// apart, or their two crossings are not apart.
 ///
 /// Theorem. A plane square to the axis of a right circular cylinder or cone cuts it in the circle
 /// about the axis of the radius at that height, |r₀ + k·v|, or at a cone's apex in that point. A
@@ -2133,10 +2136,13 @@ fn circle_across(
         return Ok(None);
     }
     let q = circle.center();
-    let v = match height_across(q, (round.center, round.frame, round.factor), dv)? {
+    // A plane whose enclosure reaches an end may be on it, inside or past it. Every point of the
+    // surface in the plane is on the cut circle wherever the end lies, so two circles apart for
+    // every v of the enclosure held to the domain meet nothing; points there are the engine's.
+    let (v, inside) = match height_across(q, (round.center, round.frame, round.factor), dv)? {
         Across::Past => return proven(Vec::new(), meter).map(Some),
-        Across::Within(v) => v,
-        Across::Reaching(_) | Across::Unplaced => return Ok(None),
+        Across::Within(v) => (v, true),
+        Across::Reaching(v) | Across::Unplaced(v) => (v, false),
     };
     // The cut's radius, signed: past a cone's apex it is negative, and the point at u is half a
     // turn round.
@@ -2168,6 +2174,9 @@ fn circle_across(
     };
     if meet == Meet::Apart {
         return proven(Vec::new(), meter).map(Some);
+    }
+    if !inside {
+        return Ok(None);
     }
     let tangent = meet == Meet::Touch;
     // Measured from the axis, across the line to the circle's centre.
