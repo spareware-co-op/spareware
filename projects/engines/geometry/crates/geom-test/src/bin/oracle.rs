@@ -402,9 +402,13 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
     } else if cases != meshes::SEEDED {
         return Err(format!("{oracle} has only seeded jobs, not {cases}"));
     } else if sketch(oracle) {
-        judged(&jobs, &answers, |job: &sketches::Job, answer: &sketches::Answer| {
-            Ok((job.id, sketches::judge(oracle, job, answer)?))
-        })?
+        judged(
+            &jobs,
+            &answers,
+            |job: &sketches::Job, answer: &sketches::Answer| {
+                Ok((job.id, sketches::judge(oracle, job, answer)?))
+            },
+        )?
     } else {
         // geomdl and SMLib's NLib write the same job and answer lines, each judged for its oracle.
         judged(&jobs, &answers, |job: &geomdl::Job, answer| {

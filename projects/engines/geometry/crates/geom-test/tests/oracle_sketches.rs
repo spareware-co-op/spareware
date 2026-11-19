@@ -119,6 +119,7 @@ fn an_answer_off_the_truth_or_missing_is_the_oracles() {
             (signature.kind, signature.family)
         }
         Compared::Agree => ("agree".to_owned(), String::new()),
+        Compared::Outside { why } => panic!("a sketch job is outside its solver's input: {why}"),
     };
     let oracle = |family: &str| ("oracle".to_owned(), family.to_owned());
     // Two grid steps off on one point is off, and misses its rules; a hundredth of one is on.
@@ -196,6 +197,7 @@ fn another_root_of_the_rules_is_told_from_an_answer_that_misses_them() {
     {
         Compared::Differ { signature, .. } => (signature.kind, signature.family),
         Compared::Agree => ("agree".to_owned(), String::new()),
+        Compared::Outside { why } => panic!("a sketch job is outside its solver's input: {why}"),
     };
     assert_eq!(family([[0.0, 0.0], [10.0, 0.0], [4.0, 3.0]]).0, "agree");
     assert_eq!(

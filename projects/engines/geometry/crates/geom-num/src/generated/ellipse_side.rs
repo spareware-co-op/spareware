@@ -17,7 +17,8 @@
 //! tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-ellipse-side.fpt`,
 //! in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about
 //! `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter
-//! yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night.
+//! yet (issue #292); `kernel-certificates.yml` runs the check on every change to a problem or a
+//! pinned tool.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
@@ -134,20 +135,23 @@
 //! The filter computes the scale S at run time at least (1 − u)^7 times its exact value: 7
 //! rounding(s), each product counting its own and both its operands', each `larger` the larger of
 //! its operands'. It computes the bound as the constant times S, one more rounding: k = 7 + 1. The
-//! constant is E · (1 + 2u)^k, rounded up to an `f64`.
+//! constant is E · (1 + 2u)^k, rounded up to an `f64`. The scale at run time leaves out
+//! y·a·w·m^2·r^2, x·a·w·m^2·r^2, x·y·w^2·m^2·r^2, never the largest alone: a monomial left out is
+//! the average of other monomials of S, and the largest of the rest is S for every input (the proof
+//! in [`super`]).
 //!
 //! | Quantity | Value |
 //! | --- | --- |
 //! | Result | `s` |
 //! | Unit error E | 648u + 7020u^2 + 28600u^3 + 62728u^4 + 85624u^5 + 79096u^6 + 52816u^7 + 27072u^8 + 11064u^9 + 3548u^10 + 824u^11 + 120u^12 + 8u^13 |
 //! | Scale S | max{w^2·m^4·r^2, a^2·m^2·r^2, y·a·w·m^2·r^2, y^2·w^2·m^2·r^2, x·a·w·m^2·r^2, x·y·w^2·m^2·r^2, x^2·w^2·m^2·r^2} |
-//! | Scale at run time | `m_m * m_m * m_r * m_r * larger(larger(larger(larger(larger(larger(m_w * m_w * m_m * m_m, m_a * m_a), m_y * m_a * m_w), m_y * m_y * m_w * m_w), m_x * m_a * m_w), m_x * m_y * m_w * m_w), m_x * m_x * m_w * m_w)` |
+//! | Scale at run time | `m_m * m_m * m_r * m_r * larger(larger(larger(m_w * m_w * m_m * m_m, m_a * m_a), m_y * m_y * m_w * m_w), m_x * m_x * m_w * m_w)` |
 //! | Roundings k | 8 |
 //! | Constant, exactly | 648u + 17388u^2 + 213496u^3 + 1596872u^4 + 8163192u^5 + 30311032u^6 + 84783440u^7 + 182840384u^8 + 308707640u^9 + 412392028u^10 + 439312248u^11 + 375811640u^12 + 260148744u^13 + 147028352u^14 + 68404864u^15 + 26232576u^16 + 8166144u^17 + 1981440u^18 + 348160u^19 + 38912u^20 + 2048u^21 |
 //! | Constant as an `f64` | `0x3d34400000000011` = 5699868278390801 · 2^-96 ≈ 7.194245199571036e-14 |
 //!
 //! Cost: the filter is 22 `f64` operations, after 7 rounded input(s) converted to `f64`, then 9
-//! magnitudes and their maxima and the bound's 22 multiplication(s); the exact path, run only when
+//! magnitudes and their maxima and the bound's 15 multiplication(s); the exact path, run only when
 //! the filter cannot decide, is 22 checked integer operations.
 
 use crate::grid::P2;
@@ -222,10 +226,7 @@ pub fn filter(
     let m_m = largest_magnitude([mx, my]);
     let m_r = largest_magnitude([p, q]);
     let scale = larger(m_w * m_w * m_m * m_m, m_a * m_a);
-    let scale = larger(scale, m_y * m_a * m_w);
     let scale = larger(scale, m_y * m_y * m_w * m_w);
-    let scale = larger(scale, m_x * m_a * m_w);
-    let scale = larger(scale, m_x * m_y * m_w * m_w);
     let scale = larger(scale, m_x * m_x * m_w * m_w);
     let scale = m_m * m_m * m_r * m_r * scale;
     decide(s, ERROR, scale)

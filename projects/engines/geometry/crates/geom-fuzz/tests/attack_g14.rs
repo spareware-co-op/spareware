@@ -42,7 +42,13 @@ use geom_fuzz::orient2d::{
     Case, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference,
 };
 use geom_fuzz::{
-    Harness, arenas, arrange, arrange_curves, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract, crossings, curve_offsets, curves, edit, encoder, entity, euler, exact, general, intersect, level, linalg, make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing, planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence, sketch_corpus, sketch_motions, sketch_splines, sketch_text, snap, solids, surface_offsets, surfaces, transforms, variants, wide, zone,
+    Harness, arenas, arrange, arrange_curves, attributes, batch, bodies, booleans, boxtree, cache,
+    cbor, cdt, contract, crossings, curve_offsets, curves, edit, encoder, entity, euler, exact,
+    general, intersect, level, linalg, make, maths, names, naming, natural, nurbs, open,
+    operations, orient2d, p21, pencils, piercing, planes, predicates, project, prune, quadric,
+    records, reductions, references, roots, sequence, sketch_corpus, sketch_motions,
+    sketch_splines, sketch_text, snap, solids, surface_offsets, surfaces, transforms, variants,
+    wide, zone,
 };
 
 use geom_num::Sign;

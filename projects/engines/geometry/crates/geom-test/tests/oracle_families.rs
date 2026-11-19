@@ -104,6 +104,7 @@ fn an_oracle_that_reports_other_counts_differs_and_the_family_says_which() {
     let signature = |case: &Case, d: Diagnosis| match judge("planegcs", case, &d).unwrap() {
         Compared::Differ { signature, .. } => signature,
         Compared::Agree => panic!("case {} agreed", case.job.id),
+        Compared::Outside { why } => panic!("case {} was outside: {why}", case.job.id),
     };
     for case in &night {
         let mut wrong = report(case);

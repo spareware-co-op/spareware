@@ -308,8 +308,8 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
-pub mod arc_reference;
 pub mod agree;
+pub mod arc_reference;
 pub mod canonical;
 pub mod completeness;
 pub mod contract;

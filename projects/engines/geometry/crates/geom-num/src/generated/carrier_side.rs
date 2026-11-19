@@ -18,7 +18,7 @@
 //! input (`gappa-carrier-side-d-w.g`, `gappa-carrier-side-n-p.g`, in
 //! `projects/engines/geometry/crates/geom-gen/generated`), and Rocq checks each proof; `FPTaylor`
 //! bounds it independently, and HOL Light checks its certificate (`fptaylor-carrier-side.fpt`);
-//! `kernel-certificates.yml` runs them on every change and every night.
+//! `kernel-certificates.yml` runs them on every change to a problem or a pinned tool.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
