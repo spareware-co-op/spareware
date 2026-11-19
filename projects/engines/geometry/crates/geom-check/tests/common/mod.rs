@@ -534,6 +534,12 @@ pub fn annulus_sheet() -> Rows {
 /// one loop on each.
 pub fn cylinder() -> Rows {
     let mut r = Rows::empty();
+    cylinder_into(&mut r);
+    r
+}
+
+/// Adds [`cylinder`]'s rows to `r`: a solid region of its own, holding the cylinder's one shell.
+pub fn cylinder_into(r: &mut Rows) {
     let solid = r.region(RegionKind::Solid);
     let (top, bottom) = (r.edge(None), r.edge(None));
     let s = r.shell(solid);
@@ -543,7 +549,6 @@ pub fn cylinder() -> Rows {
         s,
         &[&[(top, Sense::Reversed)], &[(bottom, Sense::Reversed)]],
     );
-    r
 }
 
 /// A solid torus of genus one, as one face whose one loop runs round its two seams: two closed

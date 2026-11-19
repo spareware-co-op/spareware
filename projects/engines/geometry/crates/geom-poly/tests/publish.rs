@@ -745,6 +745,19 @@ fn solids_that_share_only_an_edge_make_a_general_body() {
 }
 
 #[test]
+fn solids_that_share_only_a_corner_make_a_general_body() {
+    // Every edge has two fins, but the vertex (2, 2, 2) is on both shells: the solids touch there,
+    // so the body is non-manifold (8.1, 16) and a general one, as decision 32.84's checker holds.
+    let m = merged(
+        &[([0, 0, 0], [2, 2, 2]), ([2, 2, 2], [4, 4, 4])],
+        &WindingTest::unite(),
+    );
+    assert_eq!((m.shells.len(), m.vertices.len()), (2, 15));
+    assert!(m.edges.iter().all(|e| e.fins.len() == 2));
+    assert_eq!(body(&m, Sense::Forward).kind(), BodyKind::General);
+}
+
+#[test]
 fn a_union_whose_shell_pinches_at_a_corner_is_a_general_body() {
     // Each pair of boxes shares part of a face, and around (-1, 4, 0) the empty space is two
     // opposite octants: every edge has two fins, but the one shell goes round that vertex in two

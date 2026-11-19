@@ -1370,6 +1370,10 @@ fn a_ray_along_a_seam_counts_one_of_its_two_faces() {
 
 #[test]
 fn two_lumps_sharing_a_meeting_are_judged_by_their_other_corners() {
+    // Two tetrahedra, each a solid region's shell, touching only at their apex, a meeting of
+    // planes: each face of one meets each of the other's at the apex alone, and is judged by its
+    // other corners. The apex has corners in both shells, so the body is general (chapter 8.1),
+    // which the check passes, never a solid.
     let mut r = Rows::empty();
     let x = r.plane_through([[0, 0, 0], [0, 1, 0], [0, 0, 1]]);
     let y = r.plane_through([[0, 0, 0], [0, 0, 1], [1, 0, 0]]);
@@ -1391,7 +1395,12 @@ fn two_lumps_sharing_a_meeting_are_judged_by_their_other_corners() {
     let (s, t) = (r.shell(up), r.shell(down));
     faces_into(&mut r, s, &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]]);
     faces_into(&mut r, t, &[&[0, 4, 5], &[0, 6, 4], &[0, 5, 6], &[4, 6, 5]]);
-    assert_eq!(faults(&r), []);
+    assert_eq!(
+        faults(&r),
+        [Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(0))).with(Entity::Fin(ix(14)))]
+    );
+    let general = full(&r.body(BodyKind::General), Exactness::Exact);
+    assert_eq!(general.faults(), []);
 }
 
 #[test]
@@ -1565,7 +1574,9 @@ fn a_shell_of_meetings_with_every_corner_on_another_fails_closed() {
     let y = r.plane_through([[0, 6, 0], [0, 6, 1], [1, 6, 0]]);
     let z = r.plane_through([[0, 0, 2], [1, 0, 2], [0, 1, 2]]);
     r.meets.push((8, [x, y, z]));
-    assert_eq!(kinds(&faults(&r)), [FaultKind::PairUnchecked]);
+    // Each corner of the cavity is a vertex of both shells, where they touch: group 1 refuses the
+    // solid at each (chapter 8.1), so group 3 is never asked where the cavity lies.
+    assert_eq!(kinds(&faults(&r)), [FaultKind::VertexShells; 4]);
 }
 
 /// The largest grid coordinate.
@@ -2013,7 +2024,7 @@ fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
         cost(&polyhedron(&ELL_POINTS, &ell).body(BodyKind::Solid)),
         cost(&tilted(ELL, &still).body(BodyKind::Solid)),
     ];
-    assert_eq!(got, [(546, 0), (675, 23_184), (863, 0), (1_068, 34_656)]);
+    assert_eq!(got, [(570, 0), (699, 23_184), (899, 0), (1_104, 34_656)]);
 }
 
 #[test]
@@ -2050,7 +2061,7 @@ fn a_body_of_many_faces_reserves_their_reads() {
     let mut faces: Vec<&[u32]> = vec![&bottom, &top];
     faces.extend(walls.iter().map(Vec::as_slice));
     let prism = polyhedron(&points, &faces);
-    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_772, 18 * 80));
+    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_868, 18 * 80));
 }
 
 #[test]

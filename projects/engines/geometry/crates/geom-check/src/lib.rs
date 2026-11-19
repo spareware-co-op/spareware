@@ -62,8 +62,17 @@
 #![forbid(unsafe_code)]
 
 extern crate alloc;
+// The integration tests' bodies, built through geom-topo's public builder, name this crate as they
+// do from outside it.
+#[cfg(test)]
+extern crate self as geom_check;
 
 mod combinatorial;
+/// The integration tests' bodies, shared with the unit tests that ask a check directly about a
+/// body the checks before it refuse: the fail-closed answers no body that reaches them can give.
+#[cfg(test)]
+#[path = "../tests/common/mod.rs"]
+mod common;
 mod curved;
 mod exactness;
 mod flat;
