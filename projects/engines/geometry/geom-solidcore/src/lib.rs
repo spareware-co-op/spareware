@@ -10,7 +10,8 @@
 //!
 //! - No solidcore type appears in this crate's public interface: a [`Solid`] holds solidcore's
 //!   body privately and gives the kernel's own, a `geom_topo::Body`; operations take grid points
-//!   and lengths of the frame (`geom_num::P3`, `geom_num::Steps`) on the [`Modeller`]'s step.
+//!   and lengths of the frame (`geom_num::P3`, `geom_num::Steps`) on the [`Modeller`]'s step, and
+//!   a profile's corners as exact fractions of its steps ([`Corner`]), a grid point among them.
 //! - Operands are never consumed or changed: solidcore's operations take their operands by value
 //!   and modify them, so each operation is handed copies made by solidcore's own `brep_copy`.
 //! - Every body that comes back is converted into `geom-topo`'s rows and checked by `geom-check`
@@ -31,7 +32,9 @@
 //! [`Modeller::difference`], [`Modeller::intersection`]), a solid cut by a plane
 //! ([`Modeller::plane_section`]) and two solids met ([`Modeller::meet`]), and reads a solid's
 //! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
-//! of whole steps becomes the f64 nearest its decimal value ([`convert::to_metres`]).
+//! of whole steps becomes the f64 nearest its decimal value ([`convert::to_metres`]), and a
+//! profile's corner the f64 nearest its exact fraction, a corner on no grid included (decision
+//! 32.97): nothing is rounded before that one rounding at solidcore's door.
 //!
 //! Not yet the kernel's: the meeting curves and plane sections are solidcore's curves, read by
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
@@ -53,6 +56,9 @@ use std::fmt;
 
 use geom_num::{GridStep, P3, Steps};
 use geom_topo::Body;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::{Signed, ToPrimitive, Zero};
 use solidcore::boolean::api_brep::{boolean_difference, boolean_intersection, boolean_union};
 use solidcore::curve::curve::Curve;
 use solidcore::geom::axis2_placement::Axis2Placement;
@@ -175,11 +181,49 @@ fn spheres_apart((a, ra): (P3, Steps), (b, rb): (P3, Steps)) -> bool {
     apart().unwrap_or(false)
 }
 
+/// A corner of a [`Profile`]: a point given exactly as a fraction of grid steps of the modeller's
+/// step, `num[i] / den` steps along each axis, within the grid's range. A grid point is the
+/// corner with denominator 1 ([`From<P3>`]). A corner the caller derives, such as where two of a
+/// profile's sides meet, is given as the fraction it is, never rounded to the grid or to an f64
+/// first (decision 32.97).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Corner {
+    num: [i128; 3],
+    den: i128,
+}
+
+impl Corner {
+    /// The corner `num / den` steps, or `None` for a denominator that is not positive or a
+    /// coordinate past the grid's range (more than 2^40 - 1 steps from zero).
+    #[must_use]
+    pub fn new(num: [i128; 3], den: i128) -> Option<Corner> {
+        let max = i128::from(geom_num::grid::COORD_MAX).checked_mul(den)?;
+        (den > 0 && num.iter().all(|c| c.unsigned_abs() <= max.unsigned_abs()))
+            .then_some(Corner { num, den })
+    }
+
+    /// The corner as exact fractions of steps.
+    fn exact(self) -> [BigRational; 3] {
+        self.num
+            .map(|c| BigRational::new(BigInt::from(c), BigInt::from(self.den)))
+    }
+}
+
+impl From<P3> for Corner {
+    fn from(p: P3) -> Corner {
+        let c = |x: geom_num::Coord| i128::from(x.get());
+        Corner {
+            num: [c(p.x), c(p.y), c(p.z)],
+            den: 1,
+        }
+    }
+}
+
 /// One hole of a [`Profile`], in the profile's plane.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Hole {
-    /// A polygon of grid points, in order either way round.
-    Polygon(Vec<P3>),
+    /// A polygon, in order either way round.
+    Polygon(Vec<Corner>),
     /// The circle of `radius` about the grid point `centre`.
     Circle {
         /// The circle's centre.
@@ -189,49 +233,42 @@ pub enum Hole {
     },
 }
 
-/// A plane region: an outer polygon of grid points, in order either way round, and the holes
-/// inside it, every one in the outer polygon's plane.
+/// A plane region: an outer polygon, in order either way round, and the holes inside it, every
+/// one in the outer polygon's plane.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Profile {
     /// The outer polygon's corners.
-    pub outer: Vec<P3>,
+    pub outer: Vec<Corner>,
     /// The holes.
     pub holes: Vec<Hole>,
 }
 
-/// `a - b` for grid points, as whole steps in i128 (each coordinate is an i64).
-fn diff(a: P3, b: P3) -> [i128; 3] {
-    let d = |p: geom_num::Coord, q: geom_num::Coord| i128::from(p.get()) - i128::from(q.get());
-    [d(a.x, b.x), d(a.y, b.y), d(a.z, b.z)]
+/// `a - b`, exactly.
+fn diff(a: &[BigRational; 3], b: &[BigRational; 3]) -> [BigRational; 3] {
+    [&a[0] - &b[0], &a[1] - &b[1], &a[2] - &b[2]]
 }
 
-/// `a . b`, or `None` past i128.
-fn dot_i(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
-    a[0].checked_mul(b[0])?
-        .checked_add(a[1].checked_mul(b[1])?)?
-        .checked_add(a[2].checked_mul(b[2])?)
+/// `a . b`, exactly.
+fn dot(a: &[BigRational; 3], b: &[BigRational; 3]) -> BigRational {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
-/// Twice the vector area of the polygon `ps` (its Newell normal), in whole squared steps, taken
-/// about its first corner; `None` past i128.
-fn newell(ps: &[P3]) -> Option<[i128; 3]> {
-    let o = *ps.first()?;
-    let mut n = [0_i128; 3];
+/// Twice the vector area of the polygon `ps` of at least one corner (its Newell normal), in
+/// squared steps, exactly, taken about its first corner.
+fn newell(ps: &[Corner]) -> [BigRational; 3] {
+    let o = ps[0].exact();
+    let mut n = [
+        BigRational::zero(),
+        BigRational::zero(),
+        BigRational::zero(),
+    ];
     for w in ps.windows(2).skip(1) {
-        let (a, b) = (diff(w[0], o), diff(w[1], o));
-        let c = [
-            a[1].checked_mul(b[2])?
-                .checked_sub(a[2].checked_mul(b[1])?)?,
-            a[2].checked_mul(b[0])?
-                .checked_sub(a[0].checked_mul(b[2])?)?,
-            a[0].checked_mul(b[1])?
-                .checked_sub(a[1].checked_mul(b[0])?)?,
-        ];
-        for (s, x) in n.iter_mut().zip(c) {
-            *s = s.checked_add(x)?;
-        }
+        let (a, b) = (diff(&w[0].exact(), &o), diff(&w[1].exact(), &o));
+        n[0] += &a[1] * &b[2] - &a[2] * &b[1];
+        n[1] += &a[2] * &b[0] - &a[0] * &b[2];
+        n[2] += &a[0] * &b[1] - &a[1] * &b[0];
     }
-    Some(n)
+    n
 }
 
 /// One piece of a meeting curve, held privately, read by its parameter.
@@ -309,6 +346,21 @@ impl Modeller {
     fn point(&self, p: P3) -> Point3 {
         let m = |c: geom_num::Coord| to_metres(c.get(), self.step);
         Point3::new(m(p.x), m(p.y), m(p.z))
+    }
+
+    /// The corner `c` in metres, each coordinate the f64 nearest its exact value (num-rational's
+    /// conversion rounds once, correctly), as a grid point's is: a corner of denominator 1 gives
+    /// what [`Modeller::point`] gives, bit for bit.
+    fn corner(&self, c: Corner) -> Point3 {
+        let per = BigInt::from(c.den) * 4_000_000_000_u64;
+        let m = |x: i128| {
+            // `None` is num-rational's answer for 0 / 0 alone, which a positive denominator
+            // never is.
+            BigRational::new(BigInt::from(x) * self.step.quarter_nm(), per.clone())
+                .to_f64()
+                .unwrap_or(f64::NAN)
+        };
+        Point3::new(m(c.num[0]), m(c.num[1]), m(c.num[2]))
     }
 
     #[allow(
@@ -435,68 +487,99 @@ impl Modeller {
         self.checked("cone", b)
     }
 
+    /// What solidcore is handed for the round holes `circles` (each a grid point centre and a
+    /// radius) of a profile whose outer polygon solidcore is handed as `outer`, turning
+    /// positively about the extrusion's vector: for each circle, in metres, the origin and the x
+    /// and y axes of the frame it is written on, and its radius. The origin is the centre and the
+    /// x axis runs along the outer polygon's first edge; the y axis is the x axis crossed with the
+    /// outer polygon's Newell normal, so that both lie in the profile's plane and the circle
+    /// turns negatively about the vector.
+    fn handed_circles(
+        &self,
+        outer: &[Corner],
+        circles: &[(P3, Steps)],
+    ) -> Vec<(Point3, Vec3, Vec3, f64)> {
+        let unit = |v: [f64; 3]| {
+            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            Vec3::new(v[0] / l, v[1] / l, v[2] / l)
+        };
+        let (p0, p1) = (self.corner(outer[0]), self.corner(outer[1]));
+        let xa = unit([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]);
+        // The normal on the vector's side is the Newell normal of the outer polygon as solidcore
+        // is handed it, turning positively about the vector. Only its direction is used, which
+        // the f64 keeps to rounding; a component is at most about 2^83 squared steps, so it is
+        // finite.
+        let nu = unit(newell(outer).map(|c| c.to_f64().unwrap_or(f64::NAN)));
+        let ya = Vec3::new(
+            xa.y * nu.z - xa.z * nu.y,
+            xa.z * nu.x - xa.x * nu.z,
+            xa.x * nu.y - xa.y * nu.x,
+        );
+        circles
+            .iter()
+            .map(|&(centre, radius)| (self.point(centre), xa, ya, self.length(radius)))
+            .collect()
+    }
+
     /// The solid swept by the region `profile` along the vector `by` (whole steps along x, y and
     /// z), capped at both ends: chapter 13.4's Extrude with distance ends and no taper, made by
     /// solidcore's linear sweep. The loops' order of corners does not matter: the outer polygon is
     /// handed to solidcore counter-clockwise about `by` and each hole clockwise, decided exactly
-    /// from the corners' whole steps.
+    /// from the corners' exact fractions of steps. solidcore is handed each corner as the f64
+    /// nearest it in metres, as it is every grid point (decision 32.97).
     ///
     /// # Errors
     ///
     /// [`Error::Invalid`] for an outer polygon or hole of fewer than three corners, a loop with
-    /// no area, a corner or circle centre off the outer polygon's plane, a vector in that plane,
-    /// or a profile too large to decide that in i128; [`Error::Refused`] if solidcore refuses;
-    /// [`Error::CheckFailed`] and [`Error::Unconverted`] as every result.
+    /// no area, a corner or circle centre off the outer polygon's plane, or a vector in that
+    /// plane; [`Error::Refused`] if solidcore refuses; [`Error::CheckFailed`] and
+    /// [`Error::Unconverted`] as every result.
     pub fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Solid, Error> {
         const OP: &str = "extrude";
         let invalid = |what: &str| Error::Invalid {
             operation: OP,
             what: what.to_owned(),
         };
-        let too_large = || invalid("a profile too large to decide exactly");
         let outer = &profile.outer;
         if outer.len() < 3 {
             return Err(invalid("an outer polygon of fewer than three corners"));
         }
-        let by_i = by.map(i128::from);
-        let n = newell(outer).ok_or_else(too_large)?;
-        if n == [0; 3] {
+        let by_q = by.map(|c| BigRational::from_integer(BigInt::from(c)));
+        let n = newell(outer);
+        if n.iter().all(Zero::is_zero) {
             return Err(invalid("an outer polygon with no area"));
         }
-        let along = dot_i(n, by_i).ok_or_else(too_large)?;
-        if along == 0 {
+        if dot(&n, &by_q).is_zero() {
             return Err(invalid("a vector in the profile's plane"));
         }
-        let o = outer[0];
-        let off = |p: P3| dot_i(n, diff(p, o)).map(|d| d != 0).ok_or_else(too_large);
-        for &p in outer {
-            if off(p)? {
-                return Err(invalid("an outer corner off the polygon's plane"));
-            }
+        let o = outer[0].exact();
+        let off = |p: Corner| !dot(&n, &diff(&p.exact(), &o)).is_zero();
+        if outer.iter().any(|&p| off(p)) {
+            return Err(invalid("an outer corner off the polygon's plane"));
         }
         // The loops as solidcore takes them: the outer one turning positively about `by`, each
         // hole negatively.
-        let ccw = |ps: &[P3], positive: bool| -> Result<Vec<P3>, Error> {
+        let ccw = |ps: &[Corner], positive: bool| -> Result<Vec<Corner>, Error> {
             let few = || invalid("a hole of fewer than three corners or with no area");
             if ps.len() < 3 {
                 return Err(few());
             }
-            let turn = dot_i(newell(ps).ok_or_else(too_large)?, by_i).ok_or_else(too_large)?;
-            if turn == 0 {
+            let turn = dot(&newell(ps), &by_q);
+            if turn.is_zero() {
                 return Err(few());
             }
             let mut q = ps.to_vec();
-            if (turn > 0) != positive {
+            if turn.is_positive() != positive {
                 q.reverse();
             }
             Ok(q)
         };
         let mut curves: Vec<Curve> = Vec::new();
-        let mut polygon = |m: &Modeller, ps: &[P3]| -> Result<(), Error> {
+        let mut polygon = |m: &Modeller, ps: &[Corner]| -> Result<(), Error> {
             for (i, &a) in ps.iter().enumerate() {
                 let b = ps[(i + 1) % ps.len()];
                 let line =
-                    create_line_segment(m.point(a), m.point(b)).map_err(|e| refused(OP, &e))?;
+                    create_line_segment(m.corner(a), m.corner(b)).map_err(|e| refused(OP, &e))?;
                 curves.push(Curve::from(line));
             }
             Ok(())
@@ -507,49 +590,26 @@ impl Modeller {
         for hole in &profile.holes {
             match hole {
                 Hole::Polygon(ps) => {
-                    for &p in ps {
-                        if off(p)? {
-                            return Err(invalid("a hole's corner off the profile's plane"));
-                        }
+                    if ps.iter().any(|&p| off(p)) {
+                        return Err(invalid("a hole's corner off the profile's plane"));
                     }
                     let q = ccw(ps, false)?;
                     polygon(self, &q)?;
                 }
                 Hole::Circle { centre, radius } => {
-                    if off(*centre)? {
+                    if off(Corner::from(*centre)) {
                         return Err(invalid("a circle's centre off the profile's plane"));
                     }
                     circles.push((*centre, *radius));
                 }
             }
         }
-        // A circle's frame: its x axis along the outer polygon's first edge, its y axis so that
-        // the circle turns negatively about `by`, both in the profile's plane.
-        let unit = |v: [f64; 3]| {
-            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-            Vec3::new(v[0] / l, v[1] / l, v[2] / l)
-        };
-        let (p0, p1) = (self.point(outer[0]), self.point(outer[1]));
-        let xa = unit([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]);
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "only the normal's direction is used, which the f64 keeps to rounding"
-        )]
-        let nu = {
-            let s = if along > 0 { 1.0 } else { -1.0 };
-            unit(n.map(|c| s * c as f64))
-        };
-        let ya = Vec3::new(
-            xa.y * nu.z - xa.z * nu.y,
-            xa.z * nu.x - xa.x * nu.z,
-            xa.x * nu.y - xa.y * nu.x,
-        );
-        for (centre, radius) in circles {
-            let frame = Axis2Placement::new(self.point(centre), xa, ya);
+        for (origin, x_axis, y_axis, radius) in self.handed_circles(&outer, &circles) {
+            let frame = Axis2Placement::new(origin, x_axis, y_axis);
             let arc = BSplineCurve::create_circle_segment(
                 3,
                 &frame,
-                self.length(radius),
+                radius,
                 0.0,
                 360.0,
                 NurbCircleParam::Quadratic,
@@ -675,5 +735,165 @@ impl Modeller {
                 .map(|p| self.in_steps(p))
                 .collect(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The grid step of the stored cases, 6.25 nm.
+    const STEP: GridStep = GridStep::Q1;
+
+    /// `h` half-metres in steps of [`STEP`].
+    fn halves(h: i32) -> i64 {
+        let per = STEP
+            .steps_per(2_000_000_000)
+            .expect("a whole number of steps");
+        i64::from(h) * i64::try_from(per).expect("a small number")
+    }
+
+    /// The grid point `h` half-metres along x, y and z.
+    fn at(h: [i32; 3]) -> P3 {
+        let [x, y, z] = h.map(halves);
+        P3::new(x, y, z).expect("a grid point")
+    }
+
+    /// The radius of `h` half-metres.
+    fn radius(h: i32) -> Steps {
+        Steps(halves(h).unsigned_abs())
+    }
+
+    fn xyz(v: Vec3) -> [f64; 3] {
+        [v.x, v.y, v.z]
+    }
+
+    fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    }
+
+    /// What solidcore is handed for a round hole is the circle the profile means, with nothing
+    /// refused before solidcore: bldg-47's square of side 2 m with a round hole of radius 0.5 m at
+    /// its centre, at z = 0 and 1 m, swept 3 m up, is neither refused as an input nor refused by
+    /// solidcore. And for each outer polygon below, given as solidcore is handed it (turning
+    /// positively about the vector), each circle's frame has its origin exactly at the circle's
+    /// centre and the radius exactly its radius, in metres; its x axis is exactly the unit vector
+    /// along the polygon's first edge, and its y axis exactly the one that makes x cross y the
+    /// opposite of the polygon's unit Newell normal, so the circle lies in the profile's plane and
+    /// turns negatively about the vector. The polygons are bldg-47's square at both heights and
+    /// squares of side 3 m off the origin, on a plane square to each axis in turn, with their first
+    /// edge along each axis in turn and once against one.
+    #[test]
+    fn a_round_hole_is_handed_to_solidcore_on_its_frame() {
+        let mut m = Modeller::new(STEP);
+        for z in [0, 2] {
+            let p = |x, y| Corner::from(at([x, y, z]));
+            let profile = Profile {
+                outer: vec![p(-2, -2), p(2, -2), p(2, 2), p(-2, 2)],
+                holes: vec![Hole::Circle {
+                    centre: at([0, 0, z]),
+                    radius: radius(1),
+                }],
+            };
+            let found = m.extrude(&profile, [0, 0, halves(6)]);
+            assert!(
+                !matches!(found, Err(Error::Invalid { .. } | Error::Refused { .. })),
+                "at z {z}: {found:?}"
+            );
+        }
+        // Each row: the outer polygon's corners, its circles (centre and radius), the expected x
+        // and y axes and the polygon's unit Newell normal, all in half-metres but the axes.
+        type Row = (
+            [[i32; 3]; 4],
+            Vec<([i32; 3], i32)>,
+            [f64; 3],
+            [f64; 3],
+            [f64; 3],
+        );
+        let rows: [Row; 8] = [
+            // bldg-47's square at z = 0 and at 1 m.
+            (
+                [[-2, -2, 0], [2, -2, 0], [2, 2, 0], [-2, 2, 0]],
+                vec![([0, 0, 0], 1)],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ),
+            (
+                [[-2, -2, 2], [2, -2, 2], [2, 2, 2], [-2, 2, 2]],
+                vec![([0, 0, 2], 1)],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ),
+            // On z = 0, turning positively about z: first edge along x, then along y.
+            (
+                [[-2, -2, 0], [4, -2, 0], [4, 4, 0], [-2, 4, 0]],
+                vec![([1, 1, 0], 2), ([2, 2, 0], 1)],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ),
+            (
+                [[4, -2, 0], [4, 4, 0], [-2, 4, 0], [-2, -2, 0]],
+                vec![([1, 1, 0], 2)],
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ),
+            // On z = 0, turning positively about -z (swept down): first edge along x.
+            (
+                [[-2, 4, 0], [4, 4, 0], [4, -2, 0], [-2, -2, 0]],
+                vec![([1, 1, 0], 2)],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, -1.0],
+            ),
+            // On y = 1 m, turning positively about -y: first edge along z.
+            (
+                [[0, 2, 0], [0, 2, 6], [-6, 2, 6], [-6, 2, 0]],
+                vec![([-3, 2, 3], 2)],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+            ),
+            // On x = 1 m, turning positively about x: first edge along y.
+            (
+                [[2, 0, 0], [2, 6, 0], [2, 6, 6], [2, 0, 6]],
+                vec![([2, 3, 3], 2)],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, -1.0],
+                [1.0, 0.0, 0.0],
+            ),
+            // On x = 1 m, turning positively about -x: first edge against z.
+            (
+                [[2, 6, 6], [2, 6, 0], [2, 0, 0], [2, 0, 6]],
+                vec![([2, 3, 3], 2)],
+                [0.0, 0.0, -1.0],
+                [0.0, 1.0, 0.0],
+                [-1.0, 0.0, 0.0],
+            ),
+        ];
+        for (corners, circles, x, y, normal) in rows {
+            let outer = corners.map(|h| Corner::from(at(h)));
+            let given: Vec<(P3, Steps)> =
+                circles.iter().map(|&(c, r)| (at(c), radius(r))).collect();
+            let handed = m.handed_circles(&outer, &given);
+            assert_eq!(handed.len(), circles.len(), "{corners:?}");
+            for ((origin, xa, ya, r), (centre, half)) in handed.into_iter().zip(&circles) {
+                assert_eq!(
+                    xyz(origin),
+                    centre.map(|h| f64::from(h) / 2.0),
+                    "{corners:?}"
+                );
+                assert_eq!(r, f64::from(*half) / 2.0, "{corners:?}");
+                assert_eq!((xyz(xa), xyz(ya)), (x, y), "{corners:?}");
+                assert_eq!(cross(xyz(xa), xyz(ya)), normal.map(|c| -c), "{corners:?}");
+            }
+        }
     }
 }

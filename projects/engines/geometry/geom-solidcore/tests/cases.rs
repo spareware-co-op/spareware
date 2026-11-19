@@ -18,7 +18,7 @@ use geom_num::{GridStep, P3, Steps};
 use geom_op::{OpContext, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_solidcore::convert::metres;
-use geom_solidcore::{Error, Hole, Modeller, Piece, Profile, Solid};
+use geom_solidcore::{Corner, Error, Hole, Modeller, Piece, Profile, Solid};
 use serde_json::Value;
 
 /// The case table.
@@ -89,16 +89,46 @@ fn text(v: &Value) -> String {
     }
 }
 
-/// Every length of `v`: each number under it, but a plane's normal, which is a direction.
+/// Every length of `v`: each number under it, but a plane's normal and a wall's turn, which are
+/// directions, and a mitred wall's index.
 fn lengths(v: &Value, out: &mut Vec<String>) {
     match v {
         Value::Number(_) => out.push(text(v)),
         Value::Array(xs) => xs.iter().for_each(|x| lengths(x, out)),
         Value::Object(o) => o
             .iter()
-            .filter(|(k, _)| k.as_str() != "normal")
+            .filter(|(k, _)| !["normal", "turn", "wall"].contains(&k.as_str()))
             .for_each(|(_, x)| lengths(x, out)),
         _ => {}
+    }
+}
+
+/// The profile of one wall of a mitred corner, by what the building program means (decision
+/// 32.97), each corner the exact fraction of steps of `step` it is, `(numerators, denominator)`,
+/// nothing rounded: two walls of `length` and `thickness` from the shared inner corner at the
+/// origin, wall 0 along x with its thickness below it, wall 1 turned by the rational turn whose
+/// half-angle has the tangent `n / m` (`turn.tan_half`), its thickness on its outer side, both
+/// mitred on the bisector. So with `h = m^2 + n^2`, `c = (m^2 - n^2) / h` and `s = 2 m n / h` the
+/// turn's cosine and sine, the mitre's outer corner is `(-t m / n, -t)` and wall 1's far corners
+/// are `L (c, s) + t (-s, c)` and `L (c, s)`, each a fraction of whole numbers.
+fn mitred_wall(v: &Value, step: GridStep) -> Vec<([i128; 3], i128)> {
+    let len = |k: &str| i128::from(steps(&text(&v[k]), step));
+    let (l, t) = (len("length"), len("thickness"));
+    let tan = &v["turn"]["tan_half"];
+    let whole = |x: &Value| i128::from(x.as_i64().expect("a whole number"));
+    let (n, m) = (whole(&tan[0]), whole(&tan[1]));
+    let (h, c, s) = (m * m + n * n, m * m - n * n, 2 * m * n);
+    let inner = ([0, 0, 0], 1);
+    let mitre = ([-t * m, -t * n, 0], n);
+    match v["wall"].as_i64() {
+        Some(0) => vec![inner, mitre, ([l, -t, 0], 1), ([l, 0, 0], 1)],
+        Some(1) => vec![
+            inner,
+            mitre,
+            ([l * c - t * s, l * s + t * c, 0], h),
+            ([l * c, l * s, 0], h),
+        ],
+        w => panic!("no mitred wall {w:?}"),
     }
 }
 
@@ -170,8 +200,9 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
             length(&v["height"]),
         ),
         "extrusion" => {
-            let corners = |v: &Value| -> Vec<P3> {
-                v.as_array().expect("corners").iter().map(grid).collect()
+            let corners = |v: &Value| -> Vec<Corner> {
+                let cs = v.as_array().expect("corners").iter();
+                cs.map(|p| Corner::from(grid(p))).collect()
             };
             let holes = v["holes"]
                 .as_array()
@@ -191,6 +222,16 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
                 holes,
             };
             m.extrude(&profile, [0, 1, 2].map(|i| steps(&text(&by[i]), g)))
+        }
+        "mitred_wall" => {
+            let exact = |(num, den): ([i128; 3], i128)| {
+                Corner::new(num, den).expect("a corner within the grid's range")
+            };
+            let profile = Profile {
+                outer: mitred_wall(v, g).into_iter().map(exact).collect(),
+                holes: Vec::new(),
+            };
+            m.extrude(&profile, [0, 0, steps(&text(&v["height"]), g)])
         }
         s => panic!("unknown shape {s}"),
     }
@@ -425,7 +466,10 @@ fn extrude_takes_its_loops_either_way_round() {
     let mut m = Modeller::new(STEP);
     let s = |x: &str| steps(x, STEP);
     let p = |x: &str, y: &str, z: &str| P3::new(s(x), s(y), s(z)).expect("a grid point");
-    let square = |a: &str, b: &str, z: &str| vec![p(a, a, z), p(b, a, z), p(b, b, z), p(a, b, z)];
+    let square = |a: &str, b: &str, z: &str| {
+        let ps = [p(a, a, z), p(b, a, z), p(b, b, z), p(a, b, z)];
+        ps.map(Corner::from).to_vec()
+    };
     let up = [0, 0, s("3")];
     let given = Profile {
         outer: square("-1", "1", "0"),
@@ -460,6 +504,143 @@ fn extrude_takes_its_loops_either_way_round() {
         holes: vec![Hole::Polygon(square("-0.5", "0.5", "1"))],
     };
     assert!(invalid(m.extrude(&off, up)));
+}
+
+/// A profile's corner is an exact fraction of steps within the grid's range (decision 32.97): a
+/// denominator that is not positive, or a coordinate past 2^40 - 1 steps, is no corner, and a
+/// grid point is the corner of denominator 1. The extrusion takes the fraction as it is: the
+/// square with a square hole given in quarter-steps is the solid it is in steps, and a triangle
+/// whose corner lies a third of a step off the grid has the volume of that corner, not of a grid
+/// point; a hole's corner a third of a step off the profile's plane is refused.
+#[test]
+fn a_profile_s_corners_are_exact_fractions_of_steps() {
+    let max = i128::from(geom_num::grid::COORD_MAX);
+    assert_eq!(Corner::new([0; 3], 0), None);
+    assert_eq!(Corner::new([0; 3], -1), None);
+    assert_eq!(Corner::new([2 * max + 1, 0, 0], 2), None);
+    assert_eq!(Corner::new([0, -2 * max - 1, 0], 2), None);
+    assert!(Corner::new([2 * max, -2 * max, 0], 2).is_some());
+    let p = P3::new(1, -2, 3).expect("a grid point");
+    assert_eq!(Corner::new([1, -2, 3], 1), Some(Corner::from(p)));
+    let mut m = Modeller::new(STEP);
+    let s = |x: &str| i128::from(steps(x, STEP));
+    let quarter = |x: &str, y: &str, z: &str| {
+        Corner::new([4 * s(x), 4 * s(y), 4 * s(z)], 4).expect("a corner")
+    };
+    let square = |a: &str, b: &str, z: &str| {
+        vec![
+            quarter(a, a, z),
+            quarter(b, a, z),
+            quarter(b, b, z),
+            quarter(a, b, z),
+        ]
+    };
+    let up = [0, 0, steps("3", STEP)];
+    let given = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(square("-0.5", "0.5", "0"))],
+    };
+    let r = m.extrude(&given, up).expect("the extrusion");
+    assert_eq!(m.face_count(&r), 10);
+    let flat = tolerance("volume_relerr_flat");
+    let nine = 9.0 / metres(STEP).powi(3);
+    let v = m.volume(&r).expect("the volume");
+    assert!((v - nine).abs() / nine <= flat, "{v}");
+    let third = |x: &str| Corner::new([3 * s(x) + 1, 0, 0], 3).expect("a corner");
+    let at = |x: &str, y: &str| {
+        Corner::from(P3::new(steps(x, STEP), steps(y, STEP), 0).expect("a point"))
+    };
+    let triangle = Profile {
+        outer: vec![at("0", "0"), third("1"), at("0", "1")],
+        holes: Vec::new(),
+    };
+    let r = m.extrude(&triangle, up).expect("the extrusion");
+    let one = 1.0 / metres(STEP);
+    let expected = 0.5 * (one + 1.0 / 3.0) * one * (3.0 * one);
+    let v = m.volume(&r).expect("the volume");
+    assert!((v - expected).abs() / expected <= flat, "{v}, {expected}");
+    let off = Profile {
+        outer: square("-1", "1", "0"),
+        holes: vec![Hole::Polygon(vec![
+            quarter("-0.5", "-0.5", "0"),
+            quarter("0.5", "-0.5", "0"),
+            Corner::new([2 * s("0.5"), 2 * s("0.5"), 1], 2).expect("a corner"),
+            quarter("-0.5", "0.5", "0"),
+        ])],
+    };
+    assert!(matches!(m.extrude(&off, up), Err(Error::Invalid { .. })));
+}
+
+/// The extrusion decides each component of a profile's normal exactly, on a plane square to each
+/// axis in turn and off the origin: the triangle of corners (0, 0), (1, 1) and (-1, 1) m in the
+/// two other axes' coordinates (in turn), on the plane 1 m along the third, swept 1 m along the
+/// third axis or 1 m against it, is a prism of volume 1 m^3 and 5 faces; the square (0, 0),
+/// (1, 1), (0, 2), (-1, 1) with its third corner a third of a step off the plane, and three
+/// corners on one line (no area), are refused. Each prism's first three vertices turn positively
+/// about its vector: solidcore was handed the triangle counter-clockwise about it.
+#[test]
+fn a_triangle_on_each_axis_plane_is_decided_exactly() {
+    let mut m = Modeller::new(STEP);
+    let one = i128::from(steps("1", STEP));
+    let flat = tolerance("volume_relerr_flat");
+    let cubic = 1.0 / metres(STEP).powi(3);
+    for axis in 0..3 {
+        // The corner (u, v) m on the plane `w` thirds of a step past 1 m along `axis`.
+        let at = |u: i128, v: i128, w: i128| {
+            let mut num = [0; 3];
+            num[axis] = 3 * one + w;
+            num[(axis + 1) % 3] = 3 * u * one;
+            num[(axis + 2) % 3] = 3 * v * one;
+            Corner::new(num, 3).expect("a corner")
+        };
+        let triangle = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(-1, 1, 0)],
+            holes: Vec::new(),
+        };
+        for sign in [1, -1] {
+            let mut by = [0; 3];
+            by[axis] = sign * steps("1", STEP);
+            let r = m.extrude(&triangle, by).expect("the prism");
+            assert_eq!(m.face_count(&r), 5, "axis {axis}, {by:?}");
+            let v = m.volume(&r).expect("the volume");
+            assert!((v - cubic).abs() / cubic <= flat, "{v} for {by:?}");
+            assert!(handed_turn(&r, 3, by) > 0, "axis {axis}, {by:?}");
+        }
+        let mut up = [0; 3];
+        up[axis] = steps("1", STEP);
+        let invalid = |r: Result<Solid, Error>| matches!(r, Err(Error::Invalid { .. }));
+        let off = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(0, 2, 1), at(-1, 1, 0)],
+            holes: Vec::new(),
+        };
+        assert!(invalid(m.extrude(&off, up)), "axis {axis}");
+        let line = Profile {
+            outer: vec![at(0, 0, 0), at(1, 1, 0), at(2, 2, 0)],
+            holes: Vec::new(),
+        };
+        assert!(invalid(m.extrude(&line, up)), "axis {axis}");
+    }
+}
+
+/// Twice the vector area of the first `k` vertices of `s`'s body, in the body's order, dotted
+/// with `by`, in whole steps: positive when they turn positively about `by`. solidcore writes the
+/// cap at the sweep's end first, its corners in the order it was handed the outer polygon, so this
+/// is the turn of the polygon the modeller handed it.
+fn handed_turn(s: &Solid, k: u32, by: [i64; 3]) -> i128 {
+    let at = |i: u32| {
+        let v = geom_topo::ix::Ix::new(i).expect("a vertex row");
+        let q = geom_topo::query::point(s.body(), v).expect("a grid vertex");
+        [q.x, q.y, q.z].map(|c| i128::from(c.get()))
+    };
+    let ps: Vec<[i128; 3]> = (0..k).map(at).collect();
+    let mut n = [0_i128; 3];
+    for i in 0..ps.len() {
+        let (a, b) = (ps[i], ps[(i + 1) % ps.len()]);
+        n[0] += a[1] * b[2] - a[2] * b[1];
+        n[1] += a[2] * b[0] - a[0] * b[2];
+        n[2] += a[0] * b[1] - a[1] * b[0];
+    }
+    (0..3).map(|i| n[i] * i128::from(by[i])).sum()
 }
 
 /// The named list, `tests/named-faults.json`.
@@ -571,6 +752,49 @@ fn diagonal_planes_hold_no_point_of_any_grid() {
         );
         assert!(GRIDS.iter().all(|&g| whole(&a, g).is_none()), "{id}");
     }
+}
+
+/// The turn each mitred wall is given is within its stated angle of the angle it names, by exact
+/// arithmetic on the table's whole numbers and decimals (decision 32.97). `tan(phi / 2)` is the one
+/// root in (0, 1) of the quadratic `a x^2 + b x + c` the table gives (`2 - sqrt 3`, `sqrt 2 - 1` and
+/// `1 / sqrt 3` for 30, 45 and 60 degrees: the quadratic has opposite signs at 0 and 1), and the
+/// quadratic has opposite signs at `n / m - w / 2` and `n / m + w / 2`, both in (0, 1): so the
+/// turn's half-angle tangent `n / m` is within `w / 2` of `tan(phi / 2)` and, atan being
+/// 1-Lipschitz, the turn within `w` radians of `phi`. That the root is the tangent of the angle
+/// named is tied in f64 alone. Both walls of a case have the one turn.
+#[test]
+fn mitre_turns_are_within_their_angle() {
+    let dec = |v: &Value| BigDecimal::from_str(&text(v)).expect("a decimal");
+    let mut walls = 0;
+    for c in table()["cases"].as_array().expect("cases") {
+        let ops = c["operands"].as_array().expect("operands");
+        if ops[0]["shape"] != "mitred_wall" {
+            continue;
+        }
+        let turn = &ops[0]["turn"];
+        let id = &c["id"];
+        let [n, m] = [0, 1].map(|i| dec(&turn["tan_half"][i]));
+        let [a, b, k] = [0, 1, 2].map(|i| dec(&turn["tan_half_root_of"][i]));
+        let w = dec(&turn["radians_within"]);
+        // m^2 times the quadratic at x / m.
+        let at = |x: &BigDecimal| &a * x * x + &b * x * &m + &k * &m * &m;
+        let half = &w * &m / BigDecimal::from(2);
+        let (lo, hi) = (&n - &half, &n + &half);
+        assert!(lo.is_positive() && hi < m, "{id}");
+        assert!((at(&lo) * at(&hi)).is_negative(), "{id}");
+        assert!((&k * (&a + &b + &k)).is_negative(), "{id}");
+        let degrees = turn["degrees"].as_f64().expect("degrees");
+        let ratio = n.to_f64().expect("n") / m.to_f64().expect("m");
+        assert!(
+            (ratio - (degrees.to_radians() / 2.0).tan()).abs() < 1e-15,
+            "{id}"
+        );
+        for op in ops {
+            assert_eq!(&op["turn"], turn, "{id}");
+            walls += 1;
+        }
+    }
+    assert_eq!(walls, 6);
 }
 
 /// Every case of the table has its test below, under its own name, and no test names a case the
