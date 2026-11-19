@@ -64,13 +64,152 @@ fn messages(file: &str) -> Vec<(Vec<u8>, Vec<u8>)> {
 }
 
 /// Every file is the one NIST published, so a vector cannot be edited to pass.
-#[test]
-fn the_vector_files_are_as_published() {
-    for (file, want) in FILES {
-        assert_eq!(hex(&sha256(file.as_bytes())), want);
+///
+/// In parts (decision 32.78: whole, it was too long for one Miri gate part). The short and Monte
+/// Carlo files are checked whole against NIST's digests. The long file is cut at record starts
+/// into [`LONG_PARTS`](the_vector_files_are_as_published::LONG_PARTS), each part's SHA-256 and
+/// record count pinned: every part hashes and reads only its own bytes, so together the parts hash
+/// and read every byte of the file once, as the whole did, and the join test holds the pins to the
+/// whole file and to NIST's digest of it.
+mod the_vector_files_are_as_published {
+    use super::{FILES, LONG, MONTE, SHORT, hex, messages, sha256};
+
+    /// The long file's parts: the byte where each starts, its SHA-256 and the records it holds.
+    /// Each part ends where the next starts, and the last at the file's end.
+    pub const LONG_PARTS: [(usize, &str, usize); 8] = [
+        (
+            0,
+            "fd2f6c7d1c077f1329777fb9a4d4dfe83068f6cd776383f55a69d35de81819ca",
+            22,
+        ),
+        (
+            55_139,
+            "36c73461df633a4da30cd05a393a4a1169a65b1a02d2a3445ab7bcd2848029fc",
+            9,
+        ),
+        (
+            105_251,
+            "079db3d0a1c6b3d74f7175719983a3a11e8349fab41d20002d4e02b7b11c01bb",
+            8,
+        ),
+        (
+            163_259,
+            "44dbad1b116b6db1ccfde4183b8421040812cf250ed9c0292321bac38c3233d6",
+            6,
+        ),
+        (
+            215_081,
+            "a44852a84f0d1fa36ad571fb8074890e2d1a203e210d51427fc7a6143594ffc9",
+            5,
+        ),
+        (
+            263_711,
+            "4442b2b80698dc06a683a9d03c0d6949b44ee1c48cf99eb9ab750067c739aa4e",
+            5,
+        ),
+        (
+            317_291,
+            "0ab550447497a1e146f17a5475eb493c4da14cff31472370695bb622ec6f8295",
+            5,
+        ),
+        (
+            375_821,
+            "88dac0bbf3768243291fdc62646dd62b0276ed91ffe9c9d8df1dd0056c5df005",
+            4,
+        ),
+    ];
+
+    /// Part `k` of the long file, its bytes.
+    fn long_part(k: usize) -> &'static str {
+        let end = LONG_PARTS.get(k + 1).map_or(LONG.len(), |next| next.0);
+        &LONG[LONG_PARTS[k].0..end]
     }
-    assert_eq!(messages(SHORT).len(), 65);
-    assert_eq!(messages(LONG).len(), 64);
+
+    /// Part `k` of the long file hashes to its pin and holds its pinned records.
+    fn check_long_part(k: usize) {
+        let (_, digest, records) = LONG_PARTS[k];
+        let part = long_part(k);
+        assert_eq!(hex(&sha256(part.as_bytes())), digest, "part {}", k + 1);
+        assert_eq!(messages(part).len(), records, "part {}", k + 1);
+    }
+
+    #[test]
+    fn the_short_and_monte_carlo_files() {
+        for (file, want) in [FILES[0], FILES[2]] {
+            assert_eq!(hex(&sha256(file.as_bytes())), want);
+        }
+        assert_eq!((FILES[0].0, FILES[2].0), (SHORT, MONTE));
+        assert_eq!(messages(SHORT).len(), 65);
+    }
+
+    #[test]
+    fn the_long_file_part_1() {
+        check_long_part(0);
+    }
+
+    #[test]
+    fn the_long_file_part_2() {
+        check_long_part(1);
+    }
+
+    #[test]
+    fn the_long_file_part_3() {
+        check_long_part(2);
+    }
+
+    #[test]
+    fn the_long_file_part_4() {
+        check_long_part(3);
+    }
+
+    #[test]
+    fn the_long_file_part_5() {
+        check_long_part(4);
+    }
+
+    #[test]
+    fn the_long_file_part_6() {
+        check_long_part(5);
+    }
+
+    #[test]
+    fn the_long_file_part_7() {
+        check_long_part(6);
+    }
+
+    #[test]
+    fn the_long_file_part_8() {
+        check_long_part(7);
+    }
+
+    /// The parts join to the long file as NIST published it: the first starts at its start, each
+    /// other at the start of a record, in order, and the last ends at its end; its SHA-256 is
+    /// NIST's; and the parts' records, in order, are its 64.
+    #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "the whole long file, too long for one Miri gate part; Miri checks it in its parts"
+    )]
+    fn the_parts_join_to_the_published_file() {
+        assert_eq!(LONG_PARTS[0].0, 0);
+        for pair in LONG_PARTS.windows(2) {
+            assert!(pair[0].0 < pair[1].0, "parts in order");
+            assert!(
+                LONG[..pair[1].0].ends_with('\n') && LONG[pair[1].0..].starts_with("Len = "),
+                "part at {} starts a record",
+                pair[1].0
+            );
+        }
+        assert_eq!(FILES[1].0, LONG);
+        assert_eq!(hex(&sha256(LONG.as_bytes())), FILES[1].1);
+        let whole = messages(LONG);
+        assert_eq!(whole.len(), 64);
+        let parts: Vec<_> = (0..LONG_PARTS.len())
+            .flat_map(|k| messages(long_part(k)))
+            .collect();
+        assert_eq!(parts, whole);
+        assert_eq!(LONG_PARTS.iter().fold(0, |all, p| all + p.2), 64);
+    }
 }
 
 /// Every short and long message, whole and written in pieces of every length up to 70 bytes

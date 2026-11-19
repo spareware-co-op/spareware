@@ -87,18 +87,36 @@ fn check(m: &Maximum, want: f64, tight: f64, at: f64, near: f64) {
 /// h(y) = 1 + y − y² in Bernstein form of degree 2: 1, 3/2, 1.
 const H: [f64; 3] = [1.0, 1.5, 1.0];
 
-#[test]
-fn a_g1_join_s_curvature_jump_peaks_mid_edge() {
-    // z = x²·h(y): Bezier coefficients x² → (0, 0, 1) in degree 2.
-    let b = graph(&[0.0, 0.0, 1.0], &H);
-    let m = measure(&strip(0.0), &b, Measure::Curvature, 1e-6);
-    check(&m, 2.5, 1e-6, 0.5, 1e-2);
-    for g in [Measure::Gap, Measure::NormalAngle] {
+/// A G1 join's curvature jump peaks mid-edge, and its gap and normal angle are nil: one test a
+/// measure (decision 32.78: the three together were too long for one Miri gate part).
+mod a_g1_join_s_curvature_jump_peaks_mid_edge {
+    use super::*;
+
+    #[test]
+    fn its_curvature() {
+        // z = x²·h(y): Bezier coefficients x² → (0, 0, 1) in degree 2.
+        let b = graph(&[0.0, 0.0, 1.0], &H);
+        let m = measure(&strip(0.0), &b, Measure::Curvature, 1e-6);
+        check(&m, 2.5, 1e-6, 0.5, 1e-2);
+    }
+
+    fn nil(g: Measure) {
+        let b = graph(&[0.0, 0.0, 1.0], &H);
         let m = measure(&strip(0.0), &b, g, 1e-7);
         assert!(
             m.lower() == 0.0 && upper(&m) <= 1e-7 && m.as_asked,
             "{g:?}: {m:?}"
         );
+    }
+
+    #[test]
+    fn its_gap() {
+        nil(Measure::Gap);
+    }
+
+    #[test]
+    fn its_normal_angle() {
+        nil(Measure::NormalAngle);
     }
 }
 

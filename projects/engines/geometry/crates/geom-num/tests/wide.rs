@@ -69,6 +69,177 @@ fn run(result: TestResult) {
     }
 }
 
+/// The slices a long property's cases, and a list of split exponents, are cut into (`sliced!`,
+/// `parts!`), so that each slice ends within a Miri gate part (decision 32.78: a row of at most
+/// 486 yardstick seconds). Quarters were not enough: measuring run 44412249410 stopped many
+/// quarters at its 600 s stop.
+const SLICES: u32 = 32;
+
+/// The slices the corner patterns of `extreme_corners` are cut into: quarters, each well within a
+/// Miri gate part.
+const CORNER_SLICES: u32 = 4;
+
+/// The share of the `CASES` cases slice `k` of [`SLICES`] runs.
+fn slice(k: u32) -> std::ops::Range<u32> {
+    let each = CASES / SLICES;
+    each * k..each * (k + 1)
+}
+
+/// Runs slice `k` of a property. The file's `Config` draws from a random seed, so a property draws
+/// new cases on every run, natively and under Miri alike, and its cases are not a fixed set (the
+/// main session's ruling of 19 Nov 2026): each slice is a runner of the same strategy and `Config`,
+/// seed still random, that draws and checks its own share of the cases, never fewer.
+fn run_slice<S>(strategy: S, k: u32, check: impl Fn(S::Value) -> TestResult)
+where
+    S: proptest::strategy::Strategy,
+{
+    let cases = slice(k);
+    let share = cases.end - cases.start;
+    let mut runner = proptest::test_runner::TestRunner::new(Config {
+        cases: share,
+        ..config()
+    });
+    if let Err(e) = runner.run(&strategy, check) {
+        panic!("slice {} of {SLICES}, {share} cases: {e}", k + 1);
+    }
+}
+
+/// The split exponents `k` of `checks::threshold_splits` at `l` limbs, 0 to 64l − 1, cut into
+/// [`SLICES`] ranges: slice `part` of them.
+fn split_exponents(l: usize, part: u32) -> std::ops::Range<usize> {
+    let all = oracle::top(l) + 1;
+    let at = |k: u32| all * usize::try_from(k).unwrap() / usize::try_from(SLICES).unwrap();
+    at(part)..at(part + 1)
+}
+
+/// The corner patterns of `extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner`,
+/// 0 to 2^8 − 1, cut into [`CORNER_SLICES`] ranges: slice `part` of them.
+fn corner_patterns(part: u32) -> std::ops::Range<u32> {
+    let each = (1 << 8) / CORNER_SLICES;
+    each * part..each * (part + 1)
+}
+
+/// [`SLICES`] tests, `part_01` to `part_32`, each running `body` with its slice `k` (from 0):
+/// `parts!(|k| body)`.
+macro_rules! parts {
+    (|$k:ident| $body:expr) => {
+        parts!(@each |$k| $body;
+            part_01 0,
+            part_02 1,
+            part_03 2,
+            part_04 3,
+            part_05 4,
+            part_06 5,
+            part_07 6,
+            part_08 7,
+            part_09 8,
+            part_10 9,
+            part_11 10,
+            part_12 11,
+            part_13 12,
+            part_14 13,
+            part_15 14,
+            part_16 15,
+            part_17 16,
+            part_18 17,
+            part_19 18,
+            part_20 19,
+            part_21 20,
+            part_22 21,
+            part_23 22,
+            part_24 23,
+            part_25 24,
+            part_26 25,
+            part_27 26,
+            part_28 27,
+            part_29 28,
+            part_30 29,
+            part_31 30,
+            part_32 31
+        );
+    };
+    (@each |$k:ident| $body:expr; $($test:ident $n:literal),*) => {
+        $(
+            #[test]
+            fn $test() {
+                let $k: u32 = $n;
+                $body;
+            }
+        )*
+    };
+}
+
+/// A long property as [`SLICES`] tests, each its share of the cases (`part_01` to `part_32`).
+macro_rules! sliced {
+    ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
+        mod $name {
+            use super::*;
+
+            parts!(|k| crate::run_slice($strategy, k, |$value| $check));
+        }
+    };
+}
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    assert_eq!(
+        CASES % SLICES,
+        0,
+        "every slice holds the same number of cases"
+    );
+    let mut next = 0;
+    for k in 0..SLICES {
+        let cases = slice(k);
+        assert_eq!(
+            cases.start,
+            next,
+            "slice {} starts where the one before ends",
+            k + 1
+        );
+        assert!(cases.end > cases.start, "slice {} holds cases", k + 1);
+        next = cases.end;
+    }
+    assert_eq!(next, CASES, "the slices end at the last case");
+    // The split exponents of every width, 0 to 64L − 1, each once.
+    for l in oracle::WIDTHS {
+        let mut next = 0;
+        for part in 0..SLICES {
+            let ks = split_exponents(l, part);
+            assert_eq!(
+                ks.start,
+                next,
+                "{l} limbs: part {} starts where the one before ends",
+                part + 1
+            );
+            assert!(
+                ks.end > ks.start,
+                "{l} limbs: part {} holds exponents",
+                part + 1
+            );
+            next = ks.end;
+        }
+        assert_eq!(next, oracle::top(l) + 1, "{l} limbs: every split exponent");
+    }
+    // The corner patterns, 0 to 2^8 − 1, each once.
+    let mut next = 0;
+    for part in 0..CORNER_SLICES {
+        let bits = corner_patterns(part);
+        assert_eq!(
+            bits.start,
+            next,
+            "corner part {} starts where the one before ends",
+            part + 1
+        );
+        next = bits.end;
+    }
+    assert_eq!(next, 1 << 8, "every corner pattern");
+}
+
 /// The exact model: limbs read as integers, integers written as limbs, the range of each width.
 /// None of it calls the arithmetic under test.
 mod oracle {
@@ -714,11 +885,12 @@ mod checks {
         Ok(())
     }
 
-    /// Every split 2^k × 2^(64L−1−k) of the threshold, each factor moved by −1, 0 or +1, with every
-    /// sign: the products land on, just below and just above the range limits.
-    pub fn threshold_splits<const L: usize>() -> TestResult {
+    /// Every split 2^k × 2^(64L−1−k) of the threshold for the split exponents `k` of slice `part`
+    /// (`crate::split_exponents`), each factor moved by −1, 0 or +1, with every sign: the products
+    /// land on, just below and just above the range limits.
+    pub fn threshold_splits<const L: usize>(part: u32) -> TestResult {
         let p = top(L);
-        for k in 0..=p {
+        for k in crate::split_exponents(L, part) {
             for da in -1i32..=1 {
                 for db in -1i32..=1 {
                     let (ma, mb) = (pow2(k) + da, pow2(p - k) + db);
@@ -947,18 +1119,8 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn add_matches_oracle(a in s::value(L), b in s::value(L)) {
-                    checks::add::<L>(&a, &b)?;
-                }
-
-                #[test]
                 fn add_at_the_limits((a, b) in s::sum_at_limit(L)) {
                     checks::add::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn sub_matches_oracle(a in s::value(L), b in s::value(L)) {
-                    checks::sub::<L>(&a, &b)?;
                 }
 
                 #[test]
@@ -987,11 +1149,6 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn ring_laws(a in s::law_operand(L), b in s::law_operand(L), c in s::law_operand(L)) {
-                    checks::ring_laws::<L>(&a, &b, &c)?;
-                }
-
-                #[test]
                 fn signs_match_oracle(a in s::value(L)) {
                     checks::signs::<L>(&a)?;
                 }
@@ -1012,11 +1169,6 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn order_is_transitive(a in s::value(L), b in s::value(L), c in s::value(L)) {
-                    checks::order_transitive::<L>(&a, &b, &c)?;
-                }
-
-                #[test]
                 fn to_i128_matches_oracle(a in s::near_i128_limits(L)) {
                     checks::to_i128::<L>(&a)?;
                 }
@@ -1024,20 +1176,6 @@ macro_rules! width_suite {
                 #[test]
                 fn resize_to_every_width(a in s::near_every_width_limit(L)) {
                     checks::resize_all::<L>(&a)?;
-                }
-
-                #[test]
-                fn products_of_extreme_coordinates(factors in vec(coordinate(), 1..=16)) {
-                    kernel_use::coordinate_product::<L>(&factors)?;
-                }
-
-                #[test]
-                fn orient3d_at_extreme_coordinates(
-                    p in prop::array::uniform4(prop::array::uniform3(coordinate()))
-                ) {
-                    let det = kernel_use::orient3d::<L>(&p);
-                    prop_assert!(oracle::top(L) >= ORIENT3D_BITS);
-                    prop_assert!(det.is_some(), "orient3d fits Wide<{}> at {:?}", L, p);
                 }
 
                 #[test]
@@ -1051,6 +1189,45 @@ macro_rules! width_suite {
                 }
             }
 
+            // The longest properties under Miri, each cut into slices of its one stream of
+            // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(add_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
+                checks::add::<L>(&a, &b)
+            });
+
+            sliced!(sub_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
+                checks::sub::<L>(&a, &b)
+            });
+
+            sliced!(
+                ring_laws,
+                (s::law_operand(L), s::law_operand(L), s::law_operand(L)),
+                |(a, b, c)| checks::ring_laws::<L>(&a, &b, &c)
+            );
+
+            sliced!(
+                order_is_transitive,
+                (s::value(L), s::value(L), s::value(L)),
+                |(a, b, c)| checks::order_transitive::<L>(&a, &b, &c)
+            );
+
+            sliced!(
+                products_of_extreme_coordinates,
+                (vec(coordinate(), 1..=16),),
+                |(factors,)| kernel_use::coordinate_product::<L>(&factors)
+            );
+
+            sliced!(
+                orient3d_at_extreme_coordinates,
+                (prop::array::uniform4(prop::array::uniform3(coordinate())),),
+                |(p,)| {
+                    let det = kernel_use::orient3d::<L>(&p);
+                    prop_assert!(oracle::top(L) >= ORIENT3D_BITS);
+                    prop_assert!(det.is_some(), "orient3d fits Wide<{}> at {:?}", L, p);
+                    Ok(())
+                }
+            );
+
             #[test]
             fn constants() {
                 run(checks::constants::<L>());
@@ -1061,9 +1238,11 @@ macro_rules! width_suite {
                 run(checks::edges::<L>());
             }
 
-            #[test]
-            fn products_at_every_split_of_the_threshold() {
-                run(checks::threshold_splits::<L>());
+            /// Every split of the threshold product, in slices of the split exponents.
+            mod products_at_every_split_of_the_threshold {
+                use super::*;
+
+                parts!(|part| run(checks::threshold_splits::<L>(part)));
             }
 
             #[test]
@@ -1191,11 +1370,12 @@ mod extreme_corners {
         }
     }
 
-    #[test]
-    fn incircle_overflow_is_reported_exactly_at_every_corner() {
+    /// Every corner pattern of `part` (`crate::corner_patterns`): incircle's narrow evaluation
+    /// against the oracle, and the wide ones agreeing; how many fitted and how many overflowed.
+    fn incircle_at_corners(part: u32) -> (u32, u32) {
         assert!(oracle::top(2) < INCIRCLE_BITS && oracle::top(4) >= INCIRCLE_BITS);
         let (mut fitted, mut overflowed) = (0, 0);
-        for bits in 0u32..1 << 8 {
+        for bits in crate::corner_patterns(part) {
             let c = |i| corner(bits, i);
             let p = [[c(0), c(1)], [c(2), c(3)], [c(4), c(5)], [c(6), c(7)]];
             // Every step of the narrow evaluation is checked against the oracle inside `Tracked`.
@@ -1207,11 +1387,42 @@ mod extreme_corners {
             let wider = kernel_use::incircle::<8>(&p).expect("incircle fits I512");
             assert_eq!(wide.value(), wider.value());
         }
-        // Both outcomes occur, so both paths of the narrow evaluation were exercised.
-        assert!(
-            fitted > 0 && overflowed > 0,
-            "fitted {fitted}, overflowed {overflowed}"
-        );
+        (fitted, overflowed)
+    }
+
+    /// The corners, in quarters of the corner patterns (`crate::corner_patterns`). Each quarter
+    /// holds a corner that fits and one that overflows (both outcomes occur in each, so both paths
+    /// of the narrow evaluation are exercised in each), which over the whole is the old test's
+    /// check that both occur.
+    mod incircle_overflow_is_reported_exactly_at_every_corner {
+        fn quarter(part: u32) {
+            let (fitted, overflowed) = super::incircle_at_corners(part);
+            assert!(
+                fitted > 0 && overflowed > 0,
+                "part {}: fitted {fitted}, overflowed {overflowed}",
+                part + 1
+            );
+        }
+
+        #[test]
+        fn quarter_1() {
+            quarter(0);
+        }
+
+        #[test]
+        fn quarter_2() {
+            quarter(1);
+        }
+
+        #[test]
+        fn quarter_3() {
+            quarter(2);
+        }
+
+        #[test]
+        fn quarter_4() {
+            quarter(3);
+        }
     }
 
     #[test]

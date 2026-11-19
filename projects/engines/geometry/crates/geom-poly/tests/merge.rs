@@ -636,39 +636,70 @@ fn seams_follow_the_source_a_caller_names() {
     assert_eq!(counts(&m), [1, 6, 6, 12, 8]);
 }
 
-#[test]
-fn a_section_runs_where_two_owners_meet() {
-    let pieces = |blocks: &[Block], leaf: usize| -> Vec<(Piece, usize)> {
+/// A section runs where two owners meet: one test a scene (decision 32.78: the six sections
+/// together were too long for one Miri gate part), each with all its checks.
+mod a_section_runs_where_two_owners_meet {
+    use super::*;
+
+    /// The pieces of `blocks` classified at leaf size `leaf`, each with its owner.
+    fn pieces(blocks: &[Block], leaf: usize) -> Vec<(Piece, usize)> {
         let polygons = scene(blocks);
         let owner = |c: &Classified| polygons[c.polygon].entry.unwrap_or(0) as usize;
         let found = classified(&polygons, leaf);
         found.iter().map(|c| (c.piece.clone(), owner(c))).collect()
-    };
-    for leaf in [1, LEAF_POLYGONS] {
+    }
+
+    fn two_blocks_at(leaf: usize) {
         let curves = section(&pieces(&[A, B], leaf), &mut meter()).unwrap();
         assert_eq!((curves.edges.len(), curves.vertices.len()), (6, 6));
         assert!(curves.edges.iter().all(|(low, high)| low < high));
     }
-    // Two bars over one block: two stretches of one line, with a gap between them.
-    let long = block([0, 0, 0], [10, 4, 4]);
-    let bars = [
-        long,
-        block([1, -1, 2], [3, 5, 6]),
-        block([6, -1, 2], [8, 5, 6]),
-    ];
-    let curves = section(&pieces(&bars, LEAF_POLYGONS), &mut meter()).unwrap();
-    assert_eq!((curves.edges.len(), curves.vertices.len()), (16, 16));
-    let flush = block([4, 0, 0], [8, 4, 4]);
-    let curves = section(&pieces(&[A, flush], LEAF_POLYGONS), &mut meter()).unwrap();
-    assert_eq!(curves.edges.len(), 4, "around their contact, not across it");
-    let apart = block([9, 9, 9], [12, 12, 12]);
-    let curves = section(&pieces(&[A, apart], LEAF_POLYGONS), &mut meter()).unwrap();
-    assert_eq!((curves.edges.len(), curves.vertices.len()), (0, 0));
-    let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
-    assert!(matches!(
-        section(&pieces(&[A, B], LEAF_POLYGONS), &mut small),
-        Err(MergeError::Stopped(_))
-    ));
+
+    #[test]
+    fn two_blocks_at_a_leaf_of_one_polygon() {
+        two_blocks_at(1);
+    }
+
+    #[test]
+    fn two_blocks_at_the_usual_leaf() {
+        two_blocks_at(LEAF_POLYGONS);
+    }
+
+    /// Two bars over one block: two stretches of one line, with a gap between them.
+    #[test]
+    fn two_bars_over_one_block() {
+        let long = block([0, 0, 0], [10, 4, 4]);
+        let bars = [
+            long,
+            block([1, -1, 2], [3, 5, 6]),
+            block([6, -1, 2], [8, 5, 6]),
+        ];
+        let curves = section(&pieces(&bars, LEAF_POLYGONS), &mut meter()).unwrap();
+        assert_eq!((curves.edges.len(), curves.vertices.len()), (16, 16));
+    }
+
+    #[test]
+    fn flush_blocks_meet_around_their_contact() {
+        let flush = block([4, 0, 0], [8, 4, 4]);
+        let curves = section(&pieces(&[A, flush], LEAF_POLYGONS), &mut meter()).unwrap();
+        assert_eq!(curves.edges.len(), 4, "around their contact, not across it");
+    }
+
+    #[test]
+    fn blocks_apart_meet_nowhere() {
+        let apart = block([9, 9, 9], [12, 12, 12]);
+        let curves = section(&pieces(&[A, apart], LEAF_POLYGONS), &mut meter()).unwrap();
+        assert_eq!((curves.edges.len(), curves.vertices.len()), (0, 0));
+    }
+
+    #[test]
+    fn a_small_budget_stops_it() {
+        let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
+        assert!(matches!(
+            section(&pieces(&[A, B], LEAF_POLYGONS), &mut small),
+            Err(MergeError::Stopped(_))
+        ));
+    }
 }
 
 #[test]
@@ -2315,8 +2346,23 @@ fn a_fraction_that_stops_is_ordered_by_its_places_when_w_is_wide() {
     assert!(w.bits() > 97);
 }
 
-#[test]
-fn lines_whose_marked_cells_pass_the_reach_keep_their_order() {
+/// Lines whose marked cells pass the reach keep their order: at a leaf of one polygon and at the
+/// usual leaf, one test each (decision 32.78: the two together were too long for one Miri gate
+/// part).
+mod lines_whose_marked_cells_pass_the_reach_keep_their_order {
+    #[test]
+    fn at_a_leaf_of_one_polygon() {
+        super::lines_past_the_reach_at(1);
+    }
+
+    #[test]
+    fn at_the_usual_leaf() {
+        super::lines_past_the_reach_at(super::LEAF_POLYGONS);
+    }
+}
+
+/// The check of `lines_whose_marked_cells_pass_the_reach_keep_their_order` at leaf size `leaf`.
+fn lines_past_the_reach_at(leaf: usize) {
     // A prism along x over a sliver in (y, z): its right side is two faces nearly square to y,
     // normals (0, K, 2) with K just past 2^63 and differing by two, meeting at (y, z) = (-1, 4),
     // and its left side a third, normal (0, -K', 2). Where an end of the prism meets them, a line
@@ -2334,18 +2380,16 @@ fn lines_whose_marked_cells_pass_the_reach_keep_their_order() {
     ];
     let mut polygons = Vec::new();
     prism(0, (0, 8), &sides, 0, &mut polygons);
-    for leaf in [1, LEAF_POLYGONS] {
-        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
-        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
-        closed(&m, &pieces);
-        in_point_order(&m);
-        in_line_order(&m);
-        let beyond = edge_lines(&m)
-            .iter()
-            .filter(|(first, c, over)| *first == 1 && num_integer_floor(&c[2], over).bits() > 62)
-            .count();
-        assert!(beyond >= 6, "leaf {leaf}: {beyond}");
-    }
+    let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    in_point_order(&m);
+    in_line_order(&m);
+    let beyond = edge_lines(&m)
+        .iter()
+        .filter(|(first, c, over)| *first == 1 && num_integer_floor(&c[2], over).bits() > 62)
+        .count();
+    assert!(beyond >= 6, "leaf {leaf}: {beyond}");
 }
 
 #[test]
