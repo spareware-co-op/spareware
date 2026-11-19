@@ -616,13 +616,13 @@ fn line_cylinder(
     if exact == Some(Meeting::Within) {
         return along_ruling(line, cylinder, meter).map(Some);
     }
-    let known = match exact {
-        Some(_) => (exact, None),
-        None if straddles(terms)? => {
-            let n = lift(cylinder.frame().normal())?;
-            stored_count(cylinder_excess(line, cylinder), dot(n, n)?)?
-        }
-        None => (None, None),
+    // Whole-number data too: the exact sum counts as `closed::line_cylinder` would, and holds Δ to
+    // a step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        let n = lift(cylinder.frame().normal())?;
+        stored_count(cylinder_excess(line, cylinder), dot(n, n)?)?
+    } else {
+        (None, None)
     };
     // The point at v stands s·v along n̂, so the height z is at v = z/s (z·s only for s = ±1, as
     // built; a similarity scales the axial factor).
@@ -775,7 +775,8 @@ fn cylinder_excess(line: &Line<3>, cylinder: &Cylinder) -> Option<f64> {
     e.is_finite().then_some(e)
 }
 
-/// How a line meets a cylinder, exactly, where their data are whole.
+/// How a line meets a cylinder, exactly, where their data are whole. [`line_cylinder`] reads only
+/// whether it lies along a ruling: the count is the exact sum's, which encloses Δ too.
 fn exact_cylinder(line: &Line<3>, cylinder: &Cylinder) -> Option<Meeting> {
     let (base, along) = on_axis(&cylinder.center(), &cylinder.frame())?;
     let c = quadric::Cylinder {
@@ -860,28 +861,20 @@ fn line_cone(
         let flip = Interval::point(flip)?;
         Ok(around(x.mul(flip)?, y.mul(flip)?, domain.0)?.map(|u| (u, v)))
     };
-    let exact = exact_cone(line, cone);
-    let known = match exact {
-        Some(_) => (exact, None),
-        None if straddles(terms)? => {
-            if started {
-                started_count(line, cone)
-            } else {
-                let n = lift(cone.frame().normal())?;
-                let by = dot(n, n)?.mul(factor.square()?)?;
-                stored_count(cone_excess(line, cone), by)?
-            }
+    // Whole-number data too: the exact sums count as `closed::line_cone` would, and hold Δ to a
+    // step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        if started {
+            started_count(line, cone)
+        } else {
+            let n = lift(cone.frame().normal())?;
+            let by = dot(n, n)?.mul(factor.square()?)?;
+            stored_count(cone_excess(line, cone), by)?
         }
-        None => (None, None),
+    } else {
+        (None, None)
     };
     quadric_roots(line, terms, known, seams, place, meter)
-}
-
-/// How a line meets a cone, exactly, where their data are whole: the cone's apex and the point
-/// one step along its axis on the grid, and its slope a fraction of whole numbers.
-fn exact_cone(line: &Line<3>, cone: &Cone) -> Option<Meeting> {
-    let c = crate::quadrics::funnel(cone).ok()?.exact?;
-    closed::line_cone(&grid_line(line)?, &c).ok()
 }
 
 /// The components of (o − c) × d, each as four products of two stored doubles.

@@ -1,9 +1,10 @@
 //! A line through a cone's apex, and a line tangent to a cylinder or a cone off the grid (decision
 //! 32.87, issue 995, groups 1a and 1b). Where the enclosure of the discriminant reaches zero, its
-//! sign is decided exactly: on whole-number data by the exact closed forms, and on any stored
-//! doubles by a sum of products of six (a cylinder) or eight (a cone whose radius at v = 0 is zero)
-//! of them. A line through the apex, or tangent, is one point; one a step inside is two; one a
-//! step outside is none. Before, the engine bisected round the touching point to the floor: one
+//! sign is decided exactly, on whole-number data as on any other stored doubles, by a sum of
+//! products of six (a cylinder) or eight (a cone whose radius at v = 0 is zero) of them, which
+//! encloses the discriminant too, so a near tangent on the grid is two points apart. A line
+//! through the apex, or tangent, is one point; one a step inside is two; one a step outside is
+//! none. Before, the engine bisected round the touching point to the floor: one
 //! flagged item for 0.48 to 4.15 million units. A cone of any other start radius (decision 32.88,
 //! issue 1016 and issue 995's group Q) is decided by the exact sign of P + Q·√N in whole numbers
 //! of the stored doubles: the issue's edge beside one misses it, a tangent is one point, and a
@@ -322,6 +323,85 @@ fn a_line_a_step_from_tangent_is_two_points_or_none() {
         let (found, _) = meet(&edge, &surface);
         assert!(found.items().is_empty(), "{:?}", found.items());
     }
+}
+
+/// The cone about the origin on the z axis of slope 1 + 2^−20, of start radius zero or of radius
+/// the slope at v = 0 (its apex then one below the origin, on the grid), and the line along y
+/// through x = 2^39 + 2^19 + 1 at the height where the cone's radius is 2^−20 more: every datum is
+/// whole, Δ is 2^20 + 1 and a little, and the line crosses at t = ±1024.000488282065 (worked in
+/// exact rationals), while the coefficients' enclosure of Δ is about 2^28 wide and reaches zero.
+fn near_tangent_on_the_grid(started: bool) -> Pair {
+    let k = 1.0 + 1.0 / 1_048_576.0;
+    let (r0, z) = if started {
+        (k, 549_755_813_888.0)
+    } else {
+        (0.0, 549_755_813_889.0)
+    };
+    let reach = 1_099_511_627_776.0;
+    let edge = Line::new(
+        [549_756_338_177.0, 0.0, z],
+        [0.0, 1.0, 0.0],
+        (-2048.0, 2048.0),
+    )
+    .unwrap();
+    let domain = ((0.0, 2.0), (-reach, reach));
+    (
+        CurveKind::Line(edge),
+        SurfaceKind::Cone(Cone::new([0.0; 3], r0, k, frame(ON_Z), domain).unwrap()),
+    )
+}
+
+#[test]
+fn a_near_tangent_on_the_grid_is_two_points_in_closed_form() {
+    // The exact sum holds Δ to a step, so the two roots stand apart; the closed forms' count alone
+    // gave no enclosure of Δ, its roots met at t = 0, and the engine ran past the budget.
+    for started in [false, true] {
+        let (edge, surface) = near_tangent_on_the_grid(started);
+        let (found, work) = meet(&edge, &surface);
+        two_crossings(&found, 0.0);
+        for (item, at) in found
+            .items()
+            .iter()
+            .zip([-1_024.000_488_282_065, 1_024.000_488_282_065])
+        {
+            let (lo, hi) = t_of(item);
+            assert!(lo <= at && at <= hi, "{lo} {hi} against {at}");
+        }
+        assert_eq!(work, 8, "{started}");
+    }
+}
+
+/// The cylinder of radius 2^20 about the z axis, and the line along y at x = 2^20 − 1, z = 0, from
+/// y = 2^39 + 1: every datum is whole, Δ is 2^21 − 1, and the line crosses at
+/// t = −(2^39 + 1) ± 1448.1543426030252 (worked to 60 digits), while the coefficients' enclosure
+/// of Δ, from (2^39 + 1)² rounded, is about 2^26 wide and reaches zero.
+fn near_tangent_to_a_cylinder_on_the_grid() -> Pair {
+    let far = 549_755_813_889.0;
+    let edge = Line::new(
+        [1_048_575.0, far, 0.0],
+        [0.0, 1.0, 0.0],
+        (-far - 2048.0, -far + 2048.0),
+    )
+    .unwrap();
+    (CurveKind::Line(edge), cylinder([0.0; 3], 1_048_576.0, ON_Z))
+}
+
+#[test]
+fn a_near_tangent_to_a_cylinder_on_the_grid_is_two_points_in_closed_form() {
+    // As for the cone: the closed form's count alone gave no enclosure of Δ, the two roots met at
+    // t = −(2^39 + 1), and the engine ran past the budget.
+    let (edge, surface) = near_tangent_to_a_cylinder_on_the_grid();
+    let (found, work) = meet(&edge, &surface);
+    two_crossings(&found, -549_755_813_889.0);
+    for (item, at) in found
+        .items()
+        .iter()
+        .zip([-549_755_815_337.154_3, -549_755_812_440.845_64])
+    {
+        let (lo, hi) = t_of(item);
+        assert!(lo <= at && at <= hi, "{lo} {hi} against {at}");
+    }
+    assert_eq!(work, 8);
 }
 
 #[test]
