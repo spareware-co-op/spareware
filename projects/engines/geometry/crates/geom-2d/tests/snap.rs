@@ -16,12 +16,15 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use geom_2d::carrier::{Carriers, Circle2, Curve2};
-use geom_2d::entity::{Attr, Ends, Entity, Frac, Param, Polyline, Shape, Text};
+use geom_2d::entity::{
+    Attr, BlockIx, Ends, Entity, Frac, Insert, Param, Polyline, Shape, Spline, Text,
+};
 use geom_2d::point::{Place, Pt2};
 use geom_2d::snap::{Drawing, ExactParam, SnapError, SnapKind, SnapRef, Track};
+use geom_math::{GridTransform, TypedTransform};
 use geom_name::NameGraph;
 use geom_name::resolve::{
-    Body, ElementId, EntityKind, Lookup, Reference, Resolution, Signature, Want,
+    Body, CarrierIx, ElementId, EntityKind, Lookup, Reference, Resolution, Signature, Want,
 };
 use geom_num::Sign;
 use geom_num::arc::{Circle2 as GridCircle, Round};
@@ -636,4 +639,347 @@ fn the_cached_point_is_never_read() {
     snap.cached = Pt2::Grid(p(999, 999));
     assert!(is(&s.resolve(&snap, &mut c).unwrap(), &c, 6, 0, 1));
     let _ = Curve2::Line(Carrier::new(0, 1, 0).unwrap());
+}
+
+#[test]
+fn a_snap_error_reads_as_what_went_wrong() {
+    assert_eq!(
+        SnapError::Param.to_string(),
+        "the part, the pick or the parameter is out of range"
+    );
+    assert_eq!(
+        SnapError::OffExtent.to_string(),
+        "the crossing is off an entity's extent"
+    );
+}
+
+#[test]
+fn a_reference_to_a_carrier_snaps_to_the_carriers_centre() {
+    // The entities are a circle about (3, 4) and an ellipse about (10, 20); the carriers their
+    // names reach are a circle about (7, 8) and an ellipse about (-2, 5), so a centre snap on a
+    // carrier reads the carrier, not the entity.
+    let ellipse = Ellipse2::new(p(10, 20), [8, 6], 1, 2).unwrap();
+    let s = Scene::new(vec![
+        Shape::Circle(circle(3, 4, 10)),
+        Shape::Ellipse(ellipse),
+    ]);
+    let items = s
+        .drawing
+        .items()
+        .iter()
+        .map(|(n, e)| (*n, e.clone()))
+        .collect();
+    let drawing = Drawing::new(
+        items,
+        vec![
+            (
+                CarrierIx(1),
+                Curve2::Ellipse(Ellipse2::new(p(-2, 5), [4, 0], 1, 2).unwrap()),
+            ),
+            (CarrierIx(0), Curve2::Circle(circle(7, 8, 2))),
+        ],
+    )
+    .unwrap();
+    let mut table = vec![(s.names[0], CarrierIx(0)), (s.names[1], CarrierIx(1))];
+    table.sort_unstable();
+    let lookup = Lookup::Found {
+        body: Body {
+            names: &s.set,
+            carriers: &table,
+            history: &[],
+            graph: &s.graph,
+        },
+        version: None,
+    };
+    let mut c = Carriers::new();
+    for (i, (x, y)) in [(7, 8), (-2, 5)].into_iter().enumerate() {
+        let mut snap = s.snap(SnapKind::Center, i);
+        if let Some(r) = snap.on.as_mut() {
+            r.want = Want::Carrier;
+        }
+        let point = snap.resolve(&drawing, &lookup, &mut c).unwrap();
+        assert!(is(&point, &c, x, y, 1), "carrier {i}");
+    }
+}
+
+#[test]
+fn a_midpoint_on_the_grid_is_a_grid_point() {
+    // (0, 0) and (2, 6) have the midpoint (2, 6) / 2, which is (1, 3) once reduced.
+    let s = Scene::new(vec![segment((0, 0), (2, 6))]);
+    let mut c = Carriers::new();
+    let mid = s.resolve(&s.snap(SnapKind::Mid, 0), &mut c).unwrap();
+    assert!(matches!(mid, Pt2::Grid(g) if g == p(1, 3)), "{mid:?}");
+}
+
+#[test]
+fn an_ellipse_meets_a_circle_at_a_root_of_its_quartic_either_way_round() {
+    let ellipse = Ellipse2::new(p(0, 0), [10, 0], 1, 2).unwrap();
+    let s = Scene::new(vec![
+        Shape::Ellipse(ellipse),
+        Shape::Circle(circle(0, 0, 7)),
+    ]);
+    let mut c = Carriers::new();
+    for (on, with) in [(0, 1), (1, 0)] {
+        let mut x = s.snap(SnapKind::Intersection, on);
+        x.with = Some(s.reference(with));
+        let point = s.resolve(&x, &mut c).unwrap();
+        assert!(matches!(point, Pt2::ConicRoot { .. }), "{point:?}");
+    }
+}
+
+fn ray(from: (i64, i64), towards: (i64, i64)) -> Shape {
+    Shape::Line {
+        carrier: Carrier::through(p(from.0, from.1), p(towards.0, towards.1)).unwrap(),
+        ends: Ends::Ray(Pt2::Grid(p(from.0, from.1))),
+    }
+}
+
+#[test]
+fn a_ray_holds_the_crossings_ahead_of_its_start_and_at_it() {
+    // Rays from the origin east, west, north and south, crossed by segments 5 ahead, 5 behind
+    // and through the start.
+    let s = Scene::new(vec![
+        ray((0, 0), (1, 0)),
+        ray((0, 0), (-1, 0)),
+        ray((0, 0), (0, 1)),
+        ray((0, 0), (0, -1)),
+        segment((5, -9), (5, 9)),
+        segment((-5, -9), (-5, 9)),
+        segment((-9, 5), (9, 5)),
+        segment((-9, -5), (9, -5)),
+        segment((0, -9), (0, 9)),
+        segment((-9, 0), (9, 0)),
+    ]);
+    let mut c = Carriers::new();
+    let mut cross = |on: usize, with: usize| {
+        let mut x = s.snap(SnapKind::Intersection, on);
+        x.with = Some(s.reference(with));
+        s.resolve(&x, &mut c)
+    };
+    // (ray, ahead, behind, through its start)
+    for (r, ahead, behind, start) in [(0, 4, 5, 8), (1, 5, 4, 8), (2, 6, 7, 9), (3, 7, 6, 9)] {
+        assert!(cross(r, ahead).is_ok(), "ray {r} ahead");
+        assert_eq!(
+            cross(r, behind).unwrap_err(),
+            SnapError::OffExtent,
+            "ray {r} behind"
+        );
+        assert!(cross(r, start).is_ok(), "ray {r} at its start");
+    }
+}
+
+#[test]
+fn a_level_or_upright_segment_refuses_a_crossing_past_its_end() {
+    let s = Scene::new(vec![
+        segment((0, 0), (10, 0)),
+        segment((15, -5), (15, 5)),
+        segment((0, 20), (0, 30)),
+        segment((-5, 35), (5, 35)),
+    ]);
+    let mut c = Carriers::new();
+    for (on, with) in [(0, 1), (2, 3)] {
+        let mut x = s.snap(SnapKind::Intersection, on);
+        x.with = Some(s.reference(with));
+        assert_eq!(s.resolve(&x, &mut c).unwrap_err(), SnapError::OffExtent);
+    }
+}
+
+#[test]
+fn the_nearest_point_of_an_arc_is_refused_off_its_extent_for_every_kind_of_turn() {
+    let arc = |s: (i64, i64), e: (i64, i64)| Shape::Arc {
+        circle: circle(0, 0, 5),
+        start: Pt2::Grid(p(s.0, s.1)),
+        end: Pt2::Grid(p(e.0, e.1)),
+    };
+    let s = Scene::new(vec![
+        // Under a quarter turn, from (5, 0) to (4, 3).
+        arc((5, 0), (4, 3)),
+        // The whole circle: the ends are one.
+        arc((5, 0), (5, 0)),
+        // A half turn, over the top.
+        arc((5, 0), (-5, 0)),
+        // Three quarters, from east round by north and west to south.
+        arc((5, 0), (0, -5)),
+    ]);
+    let mut c = Carriers::new();
+    let mut nearest = |on: usize, from: (i64, i64)| {
+        let mut n = s.snap(SnapKind::Nearest, on);
+        n.from = Some(Pt2::Grid(p(from.0, from.1)));
+        s.resolve(&n, &mut c)
+    };
+    // (arc, a point it holds, a point it does not)
+    for (a, on, off) in [
+        (0, (8, 6), (8, -6)),
+        (0, (10, 1), (-10, 0)),
+        (2, (0, 10), (0, -10)),
+        (3, (6, 8), (8, -6)),
+        (3, (-10, -1), (1, -10)),
+    ] {
+        assert!(
+            nearest(a, on).is_ok(),
+            "arc {a} holds the point towards {on:?}"
+        );
+        assert_eq!(
+            nearest(a, off).unwrap_err(),
+            SnapError::OffExtent,
+            "arc {a} does not hold the point towards {off:?}"
+        );
+    }
+    for from in [(0, -10), (-10, 0), (0, 10), (10, 1), (3, -10)] {
+        assert!(
+            nearest(1, from).is_ok(),
+            "the whole circle towards {from:?}"
+        );
+    }
+}
+
+#[test]
+fn an_insert_snaps_at_its_insertion_point() {
+    let insert = Insert {
+        block: BlockIx(0),
+        at: TypedTransform::from(GridTransform::translation([1, 2, 0]).unwrap()),
+        array: None,
+        values: Vec::new(),
+    };
+    let s = Scene::new(vec![Shape::Insert(insert)]);
+    let mut c = Carriers::new();
+    let point = s.resolve(&s.snap(SnapKind::Insertion, 0), &mut c).unwrap();
+    assert!(is(&point, &c, 1, 2, 1));
+}
+
+#[test]
+fn the_ends_of_an_arc_and_of_a_spline() {
+    let w = |n| Frac::whole(n).unwrap();
+    let spline = Spline::new(
+        2,
+        vec![p(0, 0), p(8, -2), p(4, 5)],
+        None,
+        vec![w(0), w(0), w(0), w(1), w(1), w(1)],
+        None,
+    )
+    .unwrap();
+    let s = Scene::new(vec![
+        Shape::Arc {
+            circle: circle(0, 0, 5),
+            start: Pt2::Grid(p(5, 0)),
+            end: Pt2::Grid(p(0, 5)),
+        },
+        Shape::Spline(spline),
+    ]);
+    let mut c = Carriers::new();
+    for (on, start, end) in [(0, (5, 0), (0, 5)), (1, (0, 0), (4, 5))] {
+        let a = s.resolve(&s.snap(SnapKind::Start, on), &mut c).unwrap();
+        assert!(is(&a, &c, start.0, start.1, 1), "start of {on}");
+        let b = s.resolve(&s.snap(SnapKind::End, on), &mut c).unwrap();
+        assert!(is(&b, &c, end.0, end.1, 1), "end of {on}");
+    }
+}
+
+#[test]
+fn the_middles_of_a_closed_polylines_segments_include_the_closing_one() {
+    let triangle = Polyline::new(
+        vec![p(0, 0), p(6, 0), p(0, 4)],
+        vec![Frac::whole(0).unwrap(); 3],
+        None,
+        true,
+    )
+    .unwrap();
+    let s = Scene::new(vec![Shape::Polyline(triangle)]);
+    let mut c = Carriers::new();
+    for (sub, (x, y)) in [(0, (3, 0)), (1, (3, 2)), (2, (0, 2))] {
+        let mut mid = s.snap(SnapKind::Mid, 0);
+        mid.sub = Some(sub);
+        let point = s.resolve(&mid, &mut c).unwrap();
+        assert!(is(&point, &c, x, y, 1), "segment {sub}");
+    }
+}
+
+#[test]
+fn the_middle_of_a_whole_circle_arc_is_opposite_its_start() {
+    let s = Scene::new(vec![
+        Shape::Arc {
+            circle: circle(0, 0, 5),
+            start: Pt2::Grid(p(5, 0)),
+            end: Pt2::Grid(p(5, 0)),
+        },
+        // An arc whose end is the centre (the shape does not check its ends are on the circle):
+        // no turn and no dot product, so the half-turn rule takes it, a quarter turn
+        // counter-clockwise from the start.
+        Shape::Arc {
+            circle: circle(0, 0, 5),
+            start: Pt2::Grid(p(5, 0)),
+            end: Pt2::Grid(p(0, 0)),
+        },
+    ]);
+    let mut c = Carriers::new();
+    let mid = s.resolve(&s.snap(SnapKind::Mid, 0), &mut c).unwrap();
+    assert!(is(&mid, &c, -5, 0, 1));
+    let mid = s.resolve(&s.snap(SnapKind::Mid, 1), &mut c).unwrap();
+    assert!(is(&mid, &c, 0, 5, 1));
+}
+
+#[test]
+fn the_quadrants_of_a_circle_about_a_rational_centre_point_each_its_own_way() {
+    // About (1, 1) / 2 through (3, 0); the axes through the centre are 2x = 1 and 2y = 1.
+    let round = Round::new(p(3, 0), Rational2::new(1, 1, 2).unwrap());
+    let s = Scene::new(vec![Shape::Circle(Circle2::Round(round))]);
+    let mut c = Carriers::new();
+    let upright = Carrier::new(2, 0, 1).unwrap();
+    let level = Carrier::new(0, 2, 1).unwrap();
+    let side = |l: &Carrier, x: i128, y: i128| l.side(&Rational2::new(x, y, 1).unwrap()).unwrap();
+    for (pick, axis, toward) in [
+        (0, &upright, (3, 0)),
+        (1, &level, (0, 3)),
+        (2, &upright, (-3, 0)),
+        (3, &level, (0, -3)),
+    ] {
+        let mut q = s.snap(SnapKind::Quadrant, 0);
+        q.pick = pick;
+        let z = at(&s.resolve(&q, &mut c).unwrap(), &c);
+        assert_eq!(
+            z.side(axis).unwrap(),
+            side(axis, toward.0, toward.1),
+            "quadrant {pick}"
+        );
+    }
+}
+
+#[test]
+fn the_nearest_point_of_a_segment_takes_both_ends_and_nothing_past_them() {
+    let s = Scene::new(vec![
+        segment((0, 0), (8, 4)),
+        Shape::Ellipse(Ellipse2::new(p(0, 0), [10, 0], 1, 2).unwrap()),
+    ]);
+    let mut c = Carriers::new();
+    let mut n = s.snap(SnapKind::Nearest, 0);
+    n.at = Some(ExactParam::new(0, 0).unwrap());
+    assert!(is(&s.resolve(&n, &mut c).unwrap(), &c, 0, 0, 1));
+    n.at = Some(ExactParam::new(8, 3).unwrap());
+    assert!(is(&s.resolve(&n, &mut c).unwrap(), &c, 8, 4, 1));
+    n.at = Some(ExactParam::new(-1, 3).unwrap());
+    assert_eq!(s.resolve(&n, &mut c).unwrap_err(), SnapError::Param);
+    // An ellipse has no nearest point here: refused as a kind the snap does not cover.
+    let mut n = s.snap(SnapKind::Nearest, 1);
+    n.from = Some(Pt2::Grid(p(30, 40)));
+    assert!(matches!(
+        s.resolve(&n, &mut c),
+        Err(SnapError::Unsupported(SnapKind::Nearest, _))
+    ));
+}
+
+#[test]
+fn an_open_loop_has_no_centroid() {
+    let open = Polyline::new(
+        vec![p(0, 0), p(6, 0), p(0, 3)],
+        vec![Frac::whole(0).unwrap(); 2],
+        None,
+        false,
+    )
+    .unwrap();
+    let s = Scene::new(vec![Shape::Polyline(open)]);
+    let mut c = Carriers::new();
+    assert!(matches!(
+        s.resolve(&s.snap(SnapKind::Centroid, 0), &mut c),
+        Err(SnapError::Unsupported(SnapKind::Centroid, _))
+    ));
 }

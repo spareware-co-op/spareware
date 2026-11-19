@@ -25,7 +25,7 @@
 )]
 
 use geom_2d::arrange::{Arrangement, arrange};
-use geom_2d::region::{Area, Boundary, Gap, IslandRule, Located, Regions, polygonize};
+use geom_2d::region::{Area, Boundary, Gap, IslandRule, Located, RegionError, Regions, polygonize};
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -271,6 +271,141 @@ fn an_open_room_shows_its_gaps_and_a_bridge_closes_it() {
             .unwrap(),
         Boundary::On
     ));
+}
+
+#[test]
+fn a_gap_of_exactly_the_bridging_size_is_bridged_and_each_free_end_only_once() {
+    // Three stubs whose near ends lie on a line: (0, 0), (5, 0) and (-7, 0), 25 and 49 apart
+    // squared from the first, 144 from each other.
+    let walls: &[&[(i64, i64)]] = &[
+        &[(0, 0), (0, 100)],
+        &[(5, 0), (5, -100)],
+        &[(-7, 0), (-7, -100)],
+    ];
+    let (arr, r) = built(walls);
+    let sizes: Vec<_> = r
+        .bridges(&arr, 100)
+        .unwrap()
+        .iter()
+        .map(|g| g.squared)
+        .collect();
+    // The nearest pair takes (0, 0), so the next nearest, which needs it too, is passed over.
+    assert_eq!(sizes, [Some(25)]);
+    // A gap exactly the size allowed is bridged.
+    assert_eq!(r.bridges(&arr, 25).unwrap().len(), 1);
+    assert_eq!(r.bridges(&arr, 24).unwrap().len(), 0);
+}
+
+#[test]
+fn a_shell_is_found_wherever_the_cut_edge_to_its_hole_is_tied() {
+    // A square of 100 holding a square of 20, tied to it by a cut edge from each corner of the
+    // outer square in turn, and from the middle of its top and bottom: whichever ring the face's
+    // cycle meets first, the outer one is the shell and the inner one its hole.
+    for tie in [
+        [(0, 0), (40, 40)],
+        [(100, 0), (60, 40)],
+        [(100, 100), (60, 60)],
+        [(0, 100), (40, 60)],
+        [(50, 0), (50, 40)],
+        [(50, 100), (50, 60)],
+    ] {
+        let (arr, r) = built(&[
+            &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+            &[(40, 40), (60, 40), (60, 60), (40, 60), (40, 40)],
+            &tie,
+        ]);
+        assert_eq!(r.cut_edges().len(), 1, "tied at {tie:?}");
+        assert_eq!(
+            shape(&arr, &r),
+            [(800, vec![]), (20_000, vec![-800])],
+            "tied at {tie:?}"
+        );
+    }
+}
+
+#[test]
+fn a_shell_is_found_when_the_faces_cycle_starts_on_the_cut_edge_to_its_hole() {
+    // The outer ring's lowest-leftmost corner (0, 0) is tied to the hole's corner (30, 25), which
+    // the sweep reaches before either of that corner's neighbours on the outer ring: the face's
+    // boundary walk starts along the cut edge, so the first ring it meets is the hole.
+    let (arr, r) = built(&[
+        &[(0, 0), (100, 50), (100, 100), (50, 100), (0, 0)],
+        &[(30, 25), (40, 25), (40, 35), (30, 35), (30, 25)],
+        &[(0, 0), (30, 25)],
+    ]);
+    assert_eq!(r.cut_edges().len(), 1);
+    assert_eq!(shape(&arr, &r), [(200, vec![]), (10_000, vec![-200])]);
+}
+
+#[test]
+fn a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell() {
+    // testPolygonWithTouchingHole upside down: the triangles meet at their lowest vertex.
+    let (arr, r) = built(&[
+        &[(100, 20), (160, 180), (20, 180), (100, 20)],
+        &[(100, 20), (120, 140), (80, 140), (100, 20)],
+    ]);
+    assert_eq!(shape(&arr, &r), [(4_800, vec![]), (17_600, vec![])]);
+    // And with the hole touching at its own lowest vertex the shell's lowest-leftmost side.
+    let (arr, r) = built(&[
+        &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+        &[(0, 0), (30, 10), (10, 30), (0, 0)],
+    ]);
+    let s = shape(&arr, &r);
+    assert_eq!(s.len(), 2, "{s:?}");
+    // The small triangle (twice 800) and the square less it, neither with a hole.
+    assert_eq!(s, [(800, vec![]), (19_200, vec![])]);
+}
+
+#[test]
+fn a_point_is_located_only_against_the_arrangement_the_regions_were_found_in() {
+    let square_with_hole: &[&[(i64, i64)]] = &[
+        &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+        &[(40, 40), (60, 40), (60, 60), (40, 60), (40, 40)],
+    ];
+    let (arr, r) = built(square_with_hole);
+    let outer = r
+        .regions()
+        .iter()
+        .position(|g| !g.holes.is_empty())
+        .unwrap();
+    let p = Rational2::new(5, 5, 1).unwrap();
+    // The same linework arranged again is the same arrangement.
+    let (again, _) = built(square_with_hole);
+    assert_eq!(r.at(&again, &p), Ok(Located::In(outer)));
+    // Two squares side by side have as many edges, but the regions' rings, read as half-edges of
+    // them, need not close, so no answer read from them would mean anything: refused.
+    let (other, _) = built(&[
+        &[(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)],
+        &[(20, 0), (30, 0), (30, 10), (20, 10), (20, 0)],
+    ]);
+    assert_eq!(other.edges().len(), arr.edges().len());
+    assert_eq!(r.at(&other, &p), Err(RegionError::Foreign));
+    assert_eq!(r.boundary_at(&other, &p), Err(RegionError::Foreign));
+    // The same segments in another order: the same vertices and lines, but each edge names other
+    // input places, so it is another arrangement and is refused too.
+    let (reordered, _) = built(&[square_with_hole[1], square_with_hole[0]]);
+    assert_eq!(reordered.vertices().len(), arr.vertices().len());
+    assert_eq!(r.at(&reordered, &p), Err(RegionError::Foreign));
+    // A square with a dangle along its bottom's line, and the same with a longer dangle: the same
+    // edges from the same inputs on the same lines, and one vertex elsewhere. Refused.
+    let square: &[(i64, i64)] = &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)];
+    let (short, r) = built(&[square, &[(100, 0), (150, 0)]]);
+    let (long, _) = built(&[square, &[(100, 0), (200, 0)]]);
+    assert_eq!(short.edges(), long.edges());
+    assert_eq!(r.at(&short, &p), Ok(Located::In(0)));
+    assert_eq!(r.at(&long, &p), Err(RegionError::Foreign));
+}
+
+#[test]
+fn a_region_error_reads_as_what_went_wrong() {
+    assert_eq!(
+        RegionError::Malformed.to_string(),
+        "the arrangement is not one the sweep built"
+    );
+    assert_eq!(
+        RegionError::Foreign.to_string(),
+        "the arrangement is not the one the regions were found in"
+    );
 }
 
 #[test]

@@ -28,6 +28,9 @@
 //!   points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when
 //!   every vertex of the ring is a grid point, and otherwise an interval rounded outward from the
 //!   exact terms (each a 512-bit numerator over its vertices' weights), which holds the exact area.
+//! - **Located in its own arrangement.** [`Regions::at`] refuses, as [`RegionError::Foreign`], an
+//!   arrangement whose vertices, edges or curves differ from those the regions were found in, so
+//!   every ring it reads is a closed walk of that arrangement's edges.
 //! - **Gaps are evidence, never a closure.** An open point is told every pair of free ends and the
 //!   exact square of their distance when both are grid points, nearest first, then by name; a gap
 //!   is closed only by a segment the caller adds between two free ends, never by moving a vertex.
@@ -67,7 +70,7 @@ use geom_num::one_root::enclose;
 use geom_num::wide::I512;
 use geom_num::{NumError, Sign};
 
-use crate::arrange::{Along, Arrangement, At};
+use crate::arrange::{Along, Arrangement, At, Edge};
 
 /// Why a region could not be found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +83,8 @@ pub enum RegionError {
     /// A point was located against a ring with an arc or a one-root vertex, which this module does
     /// not yet decide (chapter 14.4's arcs come with their own sides).
     Curved,
+    /// A point was located against an arrangement other than the one the regions were found in.
+    Foreign,
 }
 
 impl From<NumError> for RegionError {
@@ -94,6 +99,7 @@ impl fmt::Display for RegionError {
             RegionError::Range => "a step of the exact arithmetic did not fit its budget",
             RegionError::Malformed => "the arrangement is not one the sweep built",
             RegionError::Curved => "locating a point among arcs is not decided here yet",
+            RegionError::Foreign => "the arrangement is not the one the regions were found in",
         })
     }
 }
@@ -181,6 +187,20 @@ pub struct Regions {
     face_of: Vec<u32>,
     /// For each face, its region's place, if it is bounded.
     region_of: Vec<Option<usize>>,
+    /// The arrangement the regions were found in, as far as a point's location reads it: each
+    /// vertex's stored rational numbers (`None` for a one-root vertex), the edges, and what each
+    /// edge lies on.
+    vertices: Vec<Option<Stored>>,
+    edges: Vec<Edge>,
+    along: Vec<Along>,
+}
+
+/// A rational vertex's numbers as stored, x and y over their weight.
+type Stored = ([i128; 2], i128);
+
+/// The numbers of a vertex, as [`Regions`] keeps them.
+fn stored(v: &At) -> Option<Stored> {
+    v.rational().map(Rational2::coordinates)
 }
 
 /// The half-edge that runs the other way along the same edge.
@@ -379,6 +399,9 @@ pub fn polygonize(arr: &Arrangement) -> Result<Regions, RegionError> {
             holes,
         });
     }
+    let along = (0..edges)
+        .map(|e| index(e).and_then(|e| arr.along(e).ok_or(RegionError::Malformed)))
+        .collect::<Result<Vec<Along>, _>>()?;
     Ok(Regions {
         found: regions,
         dangles,
@@ -386,6 +409,9 @@ pub fn polygonize(arr: &Arrangement) -> Result<Regions, RegionError> {
         free_ends,
         face_of,
         region_of,
+        vertices: arr.vertices().iter().map(stored).collect(),
+        edges: arr.edges().to_vec(),
+        along,
     })
 }
 
@@ -530,13 +556,29 @@ impl Regions {
         }
     }
 
+    /// Whether `arr` is the arrangement these regions were found in: the same vertices, stored as
+    /// the same numbers, the same edges between them, from the same input places, and the same
+    /// curve under each edge. That is everything a location reads, so each ring is a closed walk
+    /// of `arr`'s edges, as it was when it was found.
+    fn found_in(&self, arr: &Arrangement) -> bool {
+        let vertices = arr.vertices().iter().map(stored);
+        let mut along = (0..).zip(&self.along);
+        arr.edges() == self.edges.as_slice()
+            && vertices.eq(self.vertices.iter().copied())
+            && along.all(|(e, a)| arr.along(e) == Some(*a))
+    }
+
     /// Where `p` lies: in a region, open, or on the linework.
     ///
     /// # Errors
     ///
-    /// [`RegionError::Curved`] if a ring tested has an arc or a one-root vertex;
-    /// [`RegionError::Range`] past the exact budget.
+    /// [`RegionError::Foreign`] if `arr` is not the arrangement the regions were found in (the
+    /// same vertices, edges and curves, from the same inputs); [`RegionError::Curved`] if a ring
+    /// tested has an arc or a one-root vertex; [`RegionError::Range`] past the exact budget.
     pub fn at(&self, arr: &Arrangement, p: &Rational2) -> Result<Located, RegionError> {
+        if !self.found_in(arr) {
+            return Err(RegionError::Foreign);
+        }
         // The innermost region whose shell holds p and none of whose holes do.
         for (place, region) in self.found.iter().enumerate() {
             match ring_side(arr, &region.shell, p)? {

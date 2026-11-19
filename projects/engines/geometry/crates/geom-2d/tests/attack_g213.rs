@@ -34,6 +34,7 @@
 )]
 
 use geom_2d::carrier::Circle2;
+use geom_2d::entity::{Frac, Spline};
 use geom_2d::fit::{BiarcArc, FIT_VERSION, FitError, biarc, fit_spline, spline_to_biarcs};
 use geom_math::F2;
 use geom_num::grid::{P2, Steps};
@@ -260,4 +261,206 @@ fn a_quarter_circle_spline_is_covered_by_biarcs_within_the_tolerance() {
     let c = fit.spline.control();
     assert!(first.first.start == c[0] || first.first.end == c[0]);
     assert!(last.second.start == *c.last().unwrap() || last.second.end == *c.last().unwrap());
+}
+
+#[test]
+fn a_fit_reaches_the_edge_of_the_grid() {
+    // A straight fit of degree 1 is its own fit points, the last on the grid's largest x.
+    let edge = (1_i64 << 40) - 1;
+    let pts = [p2(edge - 2000, 0), p2(edge - 1000, 10), p2(edge, 20)];
+    let fit = fit_spline(&pts, None, None, 1, Steps(1), &mut meter()).unwrap();
+    assert_eq!(fit.spline.control(), pts);
+    // Its control points need no rounding, but the solve's certified error is above zero, so
+    // the bound in whole steps is one, not zero.
+    assert_eq!(fit.deviation, Steps(1));
+}
+
+#[test]
+fn a_tolerance_equal_to_the_bound_is_met() {
+    let pts = quarter(1000, 8);
+    let ok = fit_spline(&pts, None, None, 3, Steps(8), &mut meter()).unwrap();
+    let met = fit_spline(&pts, None, None, 3, ok.deviation, &mut meter()).unwrap();
+    assert_eq!(met.deviation, ok.deviation);
+}
+
+fn w(n: i64) -> Frac {
+    Frac::whole(n).unwrap()
+}
+
+/// Cubic splines on one span, by their control points: a curve flatter than the biarc of its
+/// ends (it lies inside the arcs' circles), a curve rounder than it, an S-bend and a quadratic.
+fn biarc_cases() -> Vec<Spline> {
+    let cubic = |c: [(i64, i64); 4]| {
+        Spline::new(
+            3,
+            c.iter().map(|&(x, y)| p2(x, y)).collect(),
+            None,
+            vec![w(0), w(0), w(0), w(0), w(1), w(1), w(1), w(1)],
+            None,
+        )
+        .unwrap()
+    };
+    vec![
+        cubic([(0, 0), (3000, 0), (10_000, 7000), (10_000, 10_000)]),
+        cubic([(0, 0), (0, 6000), (4000, 10_000), (10_000, 10_000)]),
+        cubic([(0, 0), (4000, 3000), (6000, -3000), (10_000, 0)]),
+        Spline::new(
+            2,
+            vec![p2(0, 0), p2(5000, 0), p2(10_000, 5000)],
+            None,
+            vec![w(0), w(0), w(0), w(1), w(1), w(1)],
+            None,
+        )
+        .unwrap(),
+    ]
+}
+
+/// The larger and smaller of two doubles, by comparison, as the cover's own rules take them.
+fn larger(a: f64, b: f64) -> f64 {
+    if b > a { b } else { a }
+}
+
+fn smaller(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
+fn nearest(x: f64) -> Option<i64> {
+    let r = geom_num::math::round_ties_even(x).ok()?.get();
+    (r.abs() < 1_099_511_627_776.0).then_some(r as i64)
+}
+
+/// The oracle's biarc of the curve between `a` and `b`: the ends rounded to the grid and the end
+/// tangents to whole numbers of 1024ths of their taxicab length, as the cover's definition reads.
+fn piece(curve: &Curve<2>, a: f64, b: f64) -> Option<geom_2d::fit::Biarc> {
+    let mut d0 = [[0.0; 2]; 2];
+    let mut d1 = [[0.0; 2]; 2];
+    curve.derivs(a, Limit::FromRight, &mut d0).unwrap();
+    curve.derivs(b, Limit::FromLeft, &mut d1).unwrap();
+    let tan = |d: [f64; 2]| -> Option<[i64; 2]> {
+        let size = larger(d[0].abs() + d[1].abs(), 1e-300);
+        Some([
+            nearest(d[0] * 1024.0 / size)?,
+            nearest(d[1] * 1024.0 / size)?,
+        ])
+    };
+    let (t0, t1) = (tan(d0[1])?, tan(d1[1])?);
+    let at = |d: [f64; 2]| Some(p2(nearest(d[0])?, nearest(d[1])?));
+    match biarc(at(d0[0])?, t0, at(d1[0])?, t1) {
+        Ok(bi) => Some(bi),
+        Err(FitError::NoBiarc) => None,
+        Err(e) => panic!("{e:?}"),
+    }
+}
+
+/// How far `q` is from the circle of `arc`, in doubles: the size of the difference of its
+/// distance from the exact centre and the radius.
+fn off_circle(arc: &BiarcArc, q: [f64; 2]) -> f64 {
+    let Circle2::Round(round) = arc.circle else {
+        panic!("a biarc's circle is a round one");
+    };
+    let ([x, y], w) = round.centre().coordinates();
+    let c = [x as f64 / w as f64, y as f64 / w as f64];
+    let on = round.on();
+    let norm = |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).unwrap().get();
+    (norm(q[0] - c[0], q[1] - c[1]) - norm(on.x.get() as f64 - c[0], on.y.get() as f64 - c[1]))
+        .abs()
+}
+
+/// The oracle's cover: halve each parameter range, earlier half first, until the seven samples
+/// at its eighths are each within `tolerance` of the nearer circle of its biarc.
+fn oracle_cover(spline: &Spline, tolerance: f64) -> (Vec<geom_2d::fit::Biarc>, f64) {
+    let knots = spline
+        .knots()
+        .iter()
+        .map(|k| k.numerator() as f64 / k.denominator() as f64)
+        .collect();
+    let ctrl: Vec<F2> = spline
+        .control()
+        .iter()
+        .map(|p| F2::new(p.x.get() as f64, p.y.get() as f64).unwrap())
+        .collect();
+    let curve = Curve::<2>::new(
+        Basis::new(usize::from(spline.degree()), knots).unwrap(),
+        &ctrl,
+    )
+    .unwrap();
+    let (lo, hi) = curve.basis().domain();
+    let mut todo = vec![(lo, hi, 0)];
+    let mut done = Vec::new();
+    let mut worst = 0.0_f64;
+    while let Some((a, b, depth)) = todo.pop() {
+        let off = piece(&curve, a, b).map_or(f64::INFINITY, |bi| {
+            let mut most = 0.0_f64;
+            for k in 1..8_u32 {
+                let t = a + (b - a) * f64::from(k) / 8.0;
+                let q = curve.point(t, Limit::FromRight).unwrap();
+                let near = smaller(off_circle(&bi.first, q), off_circle(&bi.second, q));
+                most = larger(most, near);
+            }
+            most
+        });
+        if off <= tolerance {
+            worst = larger(worst, off);
+            done.push((a, b));
+            continue;
+        }
+        assert!(depth < geom_2d::fit::MAX_DEPTH, "the oracle went too deep");
+        let m = f64::midpoint(a, b);
+        todo.push((m, b, depth + 1));
+        todo.push((a, m, depth + 1));
+    }
+    let biarcs = done
+        .into_iter()
+        .filter_map(|(a, b)| piece(&curve, a, b))
+        .collect();
+    (biarcs, worst)
+}
+
+fn same_arc(a: &BiarcArc, b: &BiarcArc) -> bool {
+    let (Circle2::Round(x), Circle2::Round(y)) = (a.circle, b.circle) else {
+        return false;
+    };
+    x.centre().coordinates() == y.centre().coordinates()
+        && x.on() == y.on()
+        && (a.start, a.end, a.forward) == (b.start, b.end, b.forward)
+}
+
+#[test]
+fn a_cover_is_the_halving_its_definition_gives_with_the_worst_sample_it_measured() {
+    for (i, spline) in biarc_cases().iter().enumerate() {
+        for tolerance in [100_000_u64, 50, 5] {
+            let cover = spline_to_biarcs(spline, Steps(tolerance), &mut meter()).unwrap();
+            let (biarcs, worst) = oracle_cover(spline, tolerance as f64);
+            assert_eq!(cover.biarcs.len(), biarcs.len(), "case {i} at {tolerance}");
+            for (got, want) in cover.biarcs.iter().zip(&biarcs) {
+                assert!(
+                    same_arc(&got.first, &want.first) && same_arc(&got.second, &want.second),
+                    "case {i} at {tolerance}"
+                );
+                assert_eq!(got.joint, want.joint);
+                assert_eq!(got.gap.to_bits(), want.gap.to_bits());
+            }
+            assert_eq!(
+                cover.worst.to_bits(),
+                worst.to_bits(),
+                "case {i} at {tolerance}: worst {} against {worst}",
+                cover.worst
+            );
+            assert!(cover.worst <= tolerance as f64);
+        }
+    }
+}
+
+#[test]
+fn a_curve_inside_its_biarcs_circles_is_not_taken_for_one_on_them() {
+    // The first case bows less than the biarc of its ends: every sample lies inside the arcs'
+    // circles, 221 to 1,338 steps from them. One biarc is not within 5 steps of it.
+    let spline = &biarc_cases()[0];
+    let cover = spline_to_biarcs(spline, Steps(5), &mut meter()).unwrap();
+    assert!(cover.biarcs.len() > 1, "{} biarcs", cover.biarcs.len());
+    assert!(
+        cover.worst > 0.0 && cover.worst <= 5.0,
+        "worst {}",
+        cover.worst
+    );
 }
