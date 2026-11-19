@@ -307,7 +307,8 @@ fn turning(
     let turn = Interval::norm(&[a, b, c, d, e, f])?;
     let kappa = turn.mul(trace)?.div(size.square()?)?.hi();
     let sigma = size.div(trace)?.lo();
-    Ok((sigma > 0.0 && kappa.is_finite()).then_some((sigma, kappa)))
+    // κ is finite: an interval's bounds always are, and an operation that would leave them errors.
+    Ok((sigma > 0.0).then_some((sigma, kappa)))
 }
 
 /// A lower bound on the sine of the angle between the normals over `a` on `first` and `b` on

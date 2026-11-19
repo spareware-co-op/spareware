@@ -1,8 +1,10 @@
 //! The fit's guards and bounds read exactly (G175, chapter 12.12): a ceiling that is not positive
-//! and a branch of one vertex are refused; two planes that meet in a line along which every read is
-//! exact get bounds of zero; a surface that moves fast is still bounded; a settled point outside a
-//! surface's domain is never fit data; and the bounds of the sheet and plane of `fit_refined` are
-//! the recorded ones, so any change to their arithmetic is seen.
+//! and a branch of one vertex are refused before any work; a surface that moves fast is still
+//! bounded; a settled point outside a surface's domain is never fit data; a refinement near an edge
+//! starts from the middle of its data; a true point is proven in a wide box, and on a circle it is
+//! the near one of two; and the bounds and true points of two planes (near the origin and far out)
+//! and of the sheet and plane of `fit_refined` are the recorded bits, so any change to their
+//! arithmetic is seen.
 
 #![allow(
     clippy::unwrap_used,
@@ -125,8 +127,8 @@ fn a_ceiling_that_is_not_positive_or_a_branch_of_one_vertex_is_refused() {
 fn two_planes_meeting_in_a_line_have_the_recorded_bounds() {
     // The cache and the pcurves are the line itself, up to the enclosures' rounding, and the
     // points reach x = 2, past 1, where a step of the double is counted from the point's size.
-    // Far out, from x = 1000 to 1003, the bounds are rounding only, below the few steps of the
-    // double that the true point's box is never narrower than, so that floor sets the box.
+    // Far out, from x = 1000 to 1003, the bounds are rounding only, at the step of the doubles
+    // there.
     for (xs, ends, want) in [
         ((-4.0, 4.0), [-1.0, 2.0], PLANES),
         ((990.0, 1010.0), [1000.0, 1003.0], PLANES_FAR),
@@ -280,6 +282,53 @@ fn a_true_point_in_a_wide_box_is_still_proven() {
         let t = lo + (hi - lo) * f64::from(k) / 8.0;
         let x = true_point(&top, &flat, &curve, t, &mut meter()).unwrap();
         assert!(x.is_some(), "{t}: no true point; widest bound {widest}");
+    }
+}
+
+#[test]
+fn the_true_point_on_a_circle_is_the_near_one_of_two() {
+    // The plane z = c cuts the bowl z = x² + y² − 1/4 in a circle, and the plane across the cache
+    // at t passes near its centre, so it meets the circle twice, at opposite sides: the box about
+    // the pcurves' points is as wide as the bounds ask and no wider, so it holds only the near one.
+    let along = || Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for (x, sx) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+        for (y, sy) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+            net.push([x, y, sx + sy - 0.25]);
+        }
+    }
+    let bowl = SurfaceKind::Nurbs(Surface::new(along(), along(), &net).unwrap());
+    let flat = plane(
+        [0.0, 0.0, C],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((-4.0, 4.0), (-4.0, 4.0)),
+    );
+    let r = (C + 0.25_f64).sqrt();
+    // At 0, a third and two thirds of a turn: (cos, sin) written out.
+    let h = 3.0_f64.sqrt() / 2.0;
+    let at = |(c, s): (f64, f64)| {
+        let (x, y) = (r * c, r * s);
+        [x, y, x, y].map(|q| Interval::point(q).unwrap())
+    };
+    let ring = Branch {
+        vertices: vec![at((1.0, 0.0)), at((-0.5, h)), at((-0.5, -h))],
+        ends: [CurveEnd::Closed, CurveEnd::Closed],
+        deviation: 0.0,
+        passes: Vec::new(),
+    };
+    let curve = fit((&bowl, &flat), REFS, &ring, CEILING, &mut meter()).unwrap();
+    let (lo, hi) = ParamCurve::domain(&curve);
+    for k in 1..8 {
+        let t = lo + (hi - lo) * f64::from(k) / 8.0;
+        let x = true_point(&bowl, &flat, &curve, t, &mut meter())
+            .unwrap()
+            .unwrap_or_else(|| panic!("{t}: no true point"));
+        let p = ParamCurve::point(&curve, t, geom_nurbs::Limit::FromRight).unwrap();
+        // The near one: within the ceiling of the cache's point, not across the circle.
+        let m = x.map(|i| i.lo() / 2.0 + i.hi() / 2.0);
+        let d = ((m[0] - p[0]) * (m[0] - p[0]) + (m[1] - p[1]) * (m[1] - p[1])).sqrt();
+        assert!(d <= 2.0 * CEILING, "{t}: {x:?} {p:?}");
     }
 }
 
