@@ -196,6 +196,14 @@ impl<const L: usize> Wide32<L> {
     /// decides overflow from the signs. Each limb: x + y + carry ≤ 2 (2^32 − 1) + 1 = 2^33 − 1, the
     /// low 32 bits and one carry bit; the two `overflowing_add`s cannot both carry, as for
     /// [`crate::wide::Wide`].
+    ///
+    /// Always inline: it is [`Self::checked_add`]'s own body, apart only to keep the carry chain
+    /// beside its proof, and it must be inlined wherever that sum is (see there).
+    #[allow(
+        clippy::inline_always,
+        reason = "measured: once the sum is inlined at every caller, this became the call"
+    )]
+    #[inline(always)]
     fn wrapping_add_limbs(a: &[u32; L], b: &[u32; L]) -> [u32; L] {
         let mut out = [0u32; L];
         let mut carry = false;
@@ -245,6 +253,17 @@ impl<const L: usize> Wide32<L> {
     }
 
     /// `self + other`, or `None` if the true sum does not fit.
+    ///
+    /// Always inline: a sum is one pass over the limbs, and left to itself the optimiser inlines
+    /// it only while its width has a single caller in a crate. A second caller of the same width
+    /// anywhere in that crate (as `crate::generated::limbs`'s ellipse predicates are at 12 limbs)
+    /// turned every sum of that width into a call that copies its result back: 16% more
+    /// instructions for the 12-limb sum in `geom-bench`, with no change to the sum.
+    #[allow(
+        clippy::inline_always,
+        reason = "measured: LLVM's choice moved with unrelated callers, and out of line costs more"
+    )]
+    #[inline(always)]
     #[must_use]
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         let r = Self(Self::wrapping_add_limbs(&self.0, &other.0));
