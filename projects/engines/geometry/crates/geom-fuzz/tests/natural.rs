@@ -122,14 +122,12 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 /// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
 /// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
 /// stop's count is the budget's own, which no test can hold tighter.
-const STILL_THE_ENGINES: [(&[u8], u128); 1] = [
-    (
-        &[
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
-        ],
-        19_133,
-    ),
-];
+const STILL_THE_ENGINES: [(&[u8], u128); 1] = [(
+    &[
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
+    ],
+    19_133,
+)];
 
 /// The issue's fifth input, stored in the target's `crashes` folder, with the work one call of
 /// `natural` takes on it now: a sphere of radius 256 against a cylinder of radius 1 about a line
