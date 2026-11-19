@@ -6284,7 +6284,7 @@
           "target": "lib"
         },
         {
-          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.",
+          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations. [`answer_of`] reads a case's answer and count, which the target's tests hold.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of five surfaces on small lattice sizes, and one of six functions on it. [`check`] traces the zero set and holds the answer to the laws below, with a dense grid of the function's own value as the oracle: the trace bounds and prunes, and the oracle only evaluates. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/level.rs",
@@ -7866,8 +7866,8 @@
           "target": "lib"
         },
         {
-          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
-          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
+          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. A cylinder's silhouette whose domain ends on a ruling takes one unit (decision 32.NN). Recursion: none.",
+          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). A function with a closed form for the case answers by it ([`Level::closed`]: a cylinder's silhouette where a domain end is a ruling). Otherwise the domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
           "guarantees": [

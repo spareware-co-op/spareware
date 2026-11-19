@@ -22,6 +22,7 @@
 //! smaller than a cell, which is why [`crate::level`]'s own tests carry small loops.
 //!
 //! Cost: one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.
+//! [`answer_of`] reads a case's answer and count, which the target's tests hold.
 
 #![allow(
     clippy::many_single_char_names,
@@ -63,7 +64,9 @@ const CEILING: f64 = 1e-3;
 /// 14 November campaign (`tests/__fuzz__/level/crashes`). 2^20 stops at about 6.7 thousand
 /// million, inside the ten seconds. Of 4,000 random inputs, 90 traced to an answer with
 /// between 2^19 and 2^20 units, so 2^19 would have skipped their laws; 101 more need up to 2^21,
-/// a budget that runs a stopped trace past the ten seconds.
+/// a budget that runs a stopped trace past the ten seconds. The three stored timeouts are a
+/// cylinder's silhouette along its domain's end, which ran to this budget and to 2^24 alike; it is
+/// a closed form now (decision 32.NN), one unit each.
 const WORK: u64 = 1 << 20;
 
 /// A half-turn is one parameter unit of the round kinds.
@@ -364,7 +367,29 @@ fn hold(surface: &SurfaceKind, level: &dyn Level, work: u64) -> Result<Outcome, 
 ///
 /// The first law the case breaks.
 pub fn check(case: &Case) -> Result<Outcome, Finding> {
-    let shape = surface(case)?;
+    with_function(*case, hold)
+}
+
+/// What one trace of the case's function answers at [`WORK`], and the work its meter counts:
+/// held by count (never by a clock) in the target's tests.
+///
+/// # Errors
+///
+/// A [`Finding`] if a drawn shape is not valid.
+pub fn answer_of(case: &Case) -> Result<(Result<LevelCurves, IntersectError>, u128), Finding> {
+    with_function(*case, |shape, level, _| {
+        let mut meter = WorkMeter::new(Budget::of_work(WORK));
+        let found = trace(shape, level, FLOOR, CEILING, &mut meter);
+        Ok((found, meter.used().work))
+    })
+}
+
+/// `hold` applied to the case's surface, its function and the work of its budgeted rerun.
+fn with_function<T>(
+    case: Case,
+    hold: impl FnOnce(&SurfaceKind, &dyn Level, u64) -> Result<T, Finding>,
+) -> Result<T, Finding> {
+    let shape = surface(&case)?;
     let numbers = case.numbers();
     let work = u64::from(case.work) * 64;
     let frame = must(Frame::standard(), LAW)?;

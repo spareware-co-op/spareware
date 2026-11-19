@@ -4,9 +4,10 @@
 //! What it does: [`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an
 //! implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the
 //! surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines
-//! ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then
-//! each box is excluded, settled or split, and the settled boxes' crossings are joined across their
-//! shared sides into branches.
+//! ([`Isocline`]) and envelopes ([`Envelope`]). A function with a closed form for the case answers
+//! by it ([`Level::closed`]: a cylinder's silhouette where a domain end is a ruling). Otherwise the
+//! domain is cut at the surface's breaks, then each box is excluded, settled or split, and the
+//! settled boxes' crossings are joined across their shared sides into branches.
 //!
 //! Guarantees:
 //!
@@ -54,7 +55,8 @@
 //!
 //! Cost: each box or span takes two reads of the surface's partials and the function, charged to
 //! the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with
-//! their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.
+//! their neighbours; a side's crossing takes log₂(side/floor) reads more. A cylinder's silhouette
+//! whose domain ends on a ruling takes one unit (decision 32.NN). Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -65,13 +67,14 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use geom_curve::tight::{larger, smaller};
-use geom_num::NumError;
 use geom_num::interval::Interval;
+use geom_num::{NumError, Sign, math};
 use geom_nurbs::Limit;
 use geom_run::WorkMeter;
-use geom_surface::{ImplicitBound, ParamBox as Region, ParamSurface, SurfaceKind};
+use geom_surface::{Cylinder, ImplicitBound, ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
+use crate::curve::sign_of;
 use crate::project::{dot, exact, halfway, negative, positive};
 use crate::result::{CurveEnd, Degeneracy, Test, Unresolved};
 use crate::seam::{Charts, Pass, Passing, charts};
@@ -108,6 +111,21 @@ pub trait Level {
     ///
     /// [`IntersectError::Internal`] for too few partials; an enclosure's own errors.
     fn sample(&self, partials: &[[Interval; 3]]) -> Result<Sample, IntersectError>;
+
+    /// g's zero set on `surface` by a closed form, where the function has one for the case;
+    /// `None` leaves it to the search. The default has none; [`Silhouette`] has one on a cylinder
+    /// whose domain ends on a ruling of it.
+    ///
+    /// # Errors
+    ///
+    /// As [`trace`].
+    fn closed(
+        &self,
+        _surface: &SurfaceKind,
+        _meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<LevelCurves>, IntersectError> {
+        Ok(None)
+    }
 }
 
 /// `F(S(u, v))`, an implicit surface substituted into the parametric one (12.8).
@@ -228,6 +246,118 @@ impl Level for Silhouette {
             smooth: true,
         })
     }
+
+    fn closed(
+        &self,
+        surface: &SurfaceKind,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<LevelCurves>, IntersectError> {
+        match surface {
+            SurfaceKind::Cylinder(cylinder) => rulings(surface, cylinder, self, meter),
+            _ => Ok(None),
+        }
+    }
+}
+
+/// Whether a·cos πu + b·sin πu is exactly zero, from which of a, b, a + b and a − b are zero.
+///
+/// a and b are rational (sums of products of doubles), so at a zero tan πu is rational or
+/// infinite, and u is rational (a double). By Niven's theorem (I. Niven, *Irrational Numbers*,
+/// MAA (1956), corollary 3.12) a rational multiple of π whose tangent is rational has tangent 0
+/// or ±1, so a zero needs 4u whole, and there cos πu and sin πu are 0, ±1 or ±√2/2: the four
+/// signs decide it. A u past 2^50 in size is not read, so that a zero's u + k stays exact for
+/// every whole k up to 2 in size: `false`, which sends the case to the search.
+fn vanishes(u: f64, [a, b, sum, difference]: [bool; 4]) -> Result<bool, IntersectError> {
+    // Exact: a double times a power of two, below the overflow.
+    let quarters = 4.0 * u;
+    if !(quarters.abs() <= 4_503_599_627_370_496.0 && math::floor(quarters)?.get() == quarters) {
+        return Ok(false);
+    }
+    // Eighths of a turn, from 0 to 7: whole numbers below 2^53 throughout, so each step and each
+    // comparison is exact.
+    let eighth = quarters - 8.0 * math::floor(quarters / 8.0)?.get();
+    Ok(if eighth == 0.0 || eighth == 4.0 {
+        a
+    } else if eighth == 2.0 || eighth == 6.0 {
+        b
+    } else if eighth == 1.0 || eighth == 5.0 {
+        sum
+    } else {
+        difference
+    })
+}
+
+/// A cylinder's silhouette in parallel view where a domain end is a ruling, by its closed form
+/// (decision 32.NN); `None` for every other case, which the search answers as before.
+///
+/// The normal is a positive multiple of s·e(u) (`geom_surface`'s table), so g = N·d is a multiple
+/// of a·cos πu + b·sin πu with a = x̂·d and b = ŷ·d, by a factor that is never zero, and does not
+/// change along v. Its zero set is whole rulings, a half-turn apart, each a branch across the
+/// domain in v whose chord is the ruling itself (deviation 0). Where the frame's unit vectors x̂
+/// and ŷ are doubles exactly and every factor is tame, a, b, a + b and a − b have exact signs, and
+/// [`vanishes`] says exactly whether a domain end is a ruling. If one is, every ruling is that end
+/// plus a whole number of half-turns, and a ruling on both ends of a closing domain is one ruling,
+/// kept at the first. A ruling along an end is what the search cannot do: g cannot be signed
+/// anywhere along that side, so it splits the side to the floor in every box along it. With a and
+/// b both zero, d lies along the axis and g vanishes everywhere, which is the search's too.
+fn rulings(
+    surface: &SurfaceKind,
+    cylinder: &Cylinder,
+    level: &Silhouette,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<LevelCurves>, IntersectError> {
+    let (_, [x, y, _]) = cylinder.frame().unit_vectors()?;
+    let d = level.direction;
+    // A unit vector is a double exactly where its enclosure is one point.
+    let held = |v: [Interval; 3]| v.iter().all(|i| i.lo() == i.hi() && tame(i.lo()));
+    if !(held(x) && held(y) && d.iter().all(|&w| tame(w))) {
+        return Ok(None);
+    }
+    let a: Vec<_> = x.iter().map(|i| i.lo()).zip(d).collect();
+    let b: Vec<_> = y.iter().map(|i| i.lo()).zip(d).collect();
+    let less: Vec<_> = y.iter().map(|i| -i.lo()).zip(d).collect();
+    let zero = |parts: &[&[(f64, f64)]]| sign_of(&parts.concat()) == Sign::Zero;
+    let (za, zb) = (zero(&[&a]), zero(&[&b]));
+    if za && zb {
+        return Ok(None);
+    }
+    let zeros = [za, zb, zero(&[&a, &b]), zero(&[&a, &less])];
+    let ((u0, u1), (v0, v1)) = surface.domain();
+    let end = if vanishes(u0, zeros)? {
+        u0
+    } else if vanishes(u1, zeros)? {
+        u1
+    } else {
+        return Ok(None);
+    };
+    meter.charge(STEP)?;
+    let [closes, _] = charts(surface).closes;
+    let (low, high) = (Interval::point(v0)?, Interval::point(v1)?);
+    let mut branches = Vec::new();
+    // `vanishes` read the end as a whole number of quarters of size at most 2^50, so each end + k
+    // is exact; the domain is at most two half-turns wide.
+    for k in -2_i8..=2 {
+        let u = end + f64::from(k);
+        if u0 <= u && u <= u1 && !(closes && u == u1) {
+            let at = Interval::point(u)?;
+            branches.push(Branch {
+                vertices: alloc::vec![[at, low], [at, high]],
+                ends: [CurveEnd::Boundary, CurveEnd::Boundary],
+                deviation: 0.0,
+                passes: Vec::new(),
+            });
+        }
+    }
+    Ok(Some(LevelCurves {
+        branches,
+        flagged: Vec::new(),
+    }))
+}
+
+/// Whether products of doubles this size are exact pairs: zero, or far from both ends of the
+/// doubles' range (as in 32.85).
+fn tame(x: f64) -> bool {
+    x == 0.0 || (1e-75..=1e75).contains(&x.abs())
 }
 
 impl Level for Perspective {
@@ -1034,6 +1164,9 @@ pub fn trace(
 ) -> Result<LevelCurves, IntersectError> {
     if floor.is_nan() || floor <= 0.0 || ceiling.is_nan() || ceiling <= 0.0 {
         return Err(IntersectError::InvalidInput);
+    }
+    if let Some(found) = level.closed(surface, meter)? {
+        return Ok(found);
     }
     let domain = surface.domain();
     let (us, vs) = surface.breaks();
