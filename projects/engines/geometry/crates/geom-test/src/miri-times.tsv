@@ -17,6 +17,7 @@
 # GitHub measuring run 44409922854 (miri_measure=new on fix/line-plane-exact at 549e13a42).
 # GitHub measuring run 44436033427 (miri_measure=new on fix/line-plane-exact at 99f67aeba).
 # GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
+# GitHub measuring run 44534311366 (miri_measure=new on fix/trimmed-on-edge at 5ead7eea5).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1198,12 +1199,19 @@ native-only over 601	geom-intersect::attack_g164	a_helix_on_a_leaning_cylinder_o
 native-only over 601	geom-intersect::attack_g164	grazing_is_banded_from_either_side
 native-only over 601	geom-intersect::attack_g164	no_root_is_lost_on_10_000_curves_through_patches
 310	geom-intersect::attack_g164	the_work_is_what_the_clipping_leaves
+36	geom-intersect::attack_g165	a_box_that_ends_exactly_at_an_edge_reaches_it
+native-only over 601	geom-intersect::attack_g165	a_column_on_a_slab_or_a_dome_meets_it_in_its_end_circle
 218	geom-intersect::attack_g165	a_cone_ending_at_its_apex_is_cut_there
 native-only over 601	geom-intersect::attack_g165	a_cone_on_a_coaxial_cylinder_is_a_circle_on_each_nappe
 11	geom-intersect::attack_g165	a_cylinder_and_cone_about_one_sphere_are_two_conics
+26	geom-intersect::attack_g165	a_cylinder_ending_a_rounding_off_a_surface_is_the_engines
 32	geom-intersect::attack_g165	a_domain_trims_what_it_cuts
+67	geom-intersect::attack_g165	a_far_plane_reads_a_piece_past_an_end_from_its_corner
 7	geom-intersect::attack_g165	a_half_plane_keeps_the_half_circle_on_it
 native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends_far_down_its_branch
+36	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
+19	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
+38	geom-intersect::attack_g165	a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept
 11	geom-intersect::attack_g165	a_pipe_tee_is_two_ellipses
 91	geom-intersect::attack_g165	a_plane_cuts_a_cone_in_each_conic
 9	geom-intersect::attack_g165	a_plane_cuts_a_cylinder_in_its_conics
@@ -1212,6 +1220,8 @@ native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends
 22	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cone_is_circles
 26	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cylinder_is_two_circles
 3	geom-intersect::attack_g165	a_stop_stops
+59	geom-intersect::attack_g165	a_stretch_between_cuts_is_kept_only_where_its_middle_is_proven_inside
+240	geom-intersect::attack_g165	an_offset_from_a_corner_that_ends_at_zero_reaches_it
 native-only over 601	geom-intersect::attack_g165	coaxial_cones_are_circles_or_one
 7	geom-intersect::attack_g165	coaxial_cylinders_are_one_or_none
 native-only over 601	geom-intersect::attack_g165	cones_of_one_slope_on_parallel_axes_meet_in_one_conic
@@ -1242,6 +1252,7 @@ native-only over 601	geom-intersect::attack_g166	a_cubic_and_its_line_are_walked
 120	geom-intersect::attack_g166	two_cones_apart
 83	geom-intersect::attack_g166	viviani_s_window_crosses_itself
 native-only over 601	geom-intersect::attack_g167	a_climbing_profile_sweeps_from_each_crossing
+native-only over 601	geom-intersect::attack_g167	a_cylinder_ending_on_a_torus_meets_it_in_its_end_circle
 4	geom-intersect::attack_g167	a_part_of_a_turn_is_left_to_the_general_paths
 native-only over 601	geom-intersect::attack_g167	a_plane_across_an_extrusion_cuts_a_copy_of_the_profile
 native-only over 601	geom-intersect::attack_g167	a_plane_along_an_extrusion_cuts_lines
