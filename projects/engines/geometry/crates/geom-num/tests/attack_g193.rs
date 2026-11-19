@@ -455,6 +455,30 @@ fn a_gap_is_exactly_zero_at_a_tangency_and_a_bound_otherwise() {
 }
 
 #[test]
+fn a_small_gap_is_the_angle_within_its_small_angle_factor() {
+    // Radius R = 2^22 about the origin, and the line 3x + 4y = 5R - 1 at distance R - 1/5: the
+    // sine at a crossing squared is (10R - 1) / (25R^2), about 2^-23, so the sine s is under 2^-10
+    // and the bound is s times 1 + 2^-20, as asin x ≤ x(1 + x²) allows there. It may not fall
+    // below the angle, which is past s by about s³/6, far more than the rounding of `sine` here,
+    // nor stand above s(1 + 2^-19).
+    let r = 1_i128 << 22;
+    let d = Disc::new(
+        Rational2::new(0, 0, 1).unwrap(),
+        I256::from_i128(r).checked_mul(&I256::from_i128(r)).unwrap(),
+    )
+    .unwrap();
+    let l = Carrier::new(3, 4, 5 * r - 1).unwrap();
+    let gap = d.gap_to_carrier(&l).unwrap().get();
+    let sine = ((10 * r - 1) as f64 / (25 * r * r) as f64).sqrt();
+    assert!(sine < 1.0 / 1_024.0, "{sine}");
+    assert!(gap >= sine, "{gap} under the sine {sine}");
+    assert!(
+        gap <= sine * (1.0 + 1.0 / 524_288.0),
+        "{gap} past the sine {sine} by more than the small-angle factor"
+    );
+}
+
+#[test]
 fn a_gap_between_circles_is_their_angle() {
     let square = |r: i128| I256::from_i128(r).checked_mul(&I256::from_i128(r)).unwrap();
     let disc = |x, r| Disc::new(Rational2::new(x, 0, 1).unwrap(), square(r)).unwrap();

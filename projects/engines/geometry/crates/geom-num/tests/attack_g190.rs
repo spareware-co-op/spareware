@@ -106,8 +106,11 @@ impl Rng {
         P2::new(c(), c()).unwrap()
     }
 
+    /// A random ellipse. About three draws in five are reduced ratios with a nonzero axis, so 1,000
+    /// draws with none taken mean the constructor refuses what it should take: a failure, not a
+    /// wait without end.
     fn ellipse(&mut self) -> Ellipse2 {
-        loop {
+        for _ in 0..1_000 {
             let centre = self.grid();
             let major = [
                 self.signed(RADIUS_BITS) as i64,
@@ -119,6 +122,7 @@ impl Rng {
                 return e;
             }
         }
+        panic!("no ellipse taken in 1,000 draws");
     }
 
     fn point(&mut self) -> Rational2 {
