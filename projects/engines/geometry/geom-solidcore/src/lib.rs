@@ -277,12 +277,13 @@ impl Modeller {
             // The record is written from a copy: solidcore adds the pcurves it lacks to the body
             // it writes, and the body returned stays as solidcore made it.
             let mut c = brep_copy(&mut self.kernel, &brep).map_err(|e| refused(operation, &e))?;
-            let (record, _) = solidcore_convert::brep::to_record(&mut self.kernel, &mut c)
+            let (record, order) = solidcore_convert::brep::to_record(&mut self.kernel, &mut c)
                 .map_err(|e| Error::Unconverted {
                     operation,
                     what: format!("what solidcore's record refuses ({e:?})"),
                 })?;
-            let (body, exactness) = convert::body_of(&record, self.step).map_err(unconverted)?;
+            let (body, exactness) =
+                convert::body_of(&record, &order, self.step).map_err(unconverted)?;
             convert::checked(body, exactness).map_err(|r| match r {
                 Refusal::Unconverted(u) => unconverted(u),
                 Refusal::Failed { first, faults } => Error::CheckFailed {

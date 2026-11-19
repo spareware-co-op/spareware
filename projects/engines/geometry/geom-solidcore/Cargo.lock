@@ -118,6 +118,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-make"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-math"
 version = "0.0.0"
 dependencies = [
@@ -165,8 +179,10 @@ dependencies = [
  "bigdecimal",
  "geom-check",
  "geom-curve",
+ "geom-make",
  "geom-math",
  "geom-num",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "geom-topo",

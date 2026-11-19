@@ -12,7 +12,11 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use bigdecimal::{BigDecimal, Signed, ToPrimitive};
+use geom_check::{Level, check};
+use geom_make::{RoundInput, cylinder};
 use geom_num::{GridStep, P3, Steps};
+use geom_op::{OpContext, OpId, OpPath};
+use geom_run::{Budget, WorkMeter};
 use geom_solidcore::convert::metres;
 use geom_solidcore::{Error, Modeller, Piece, Solid};
 use serde_json::Value;
@@ -381,6 +385,89 @@ fn results_are_the_kernels_bodies() {
     assert_eq!(ball.body().arenas().faces.len(), 1);
     let can = m.cylinder(o, r, r).expect("a cylinder");
     assert_eq!(can.body().arenas().faces.len(), 3);
+}
+
+/// The named list, `tests/named-faults.json`.
+fn named() -> Value {
+    serde_json::from_str(include_str!("named-faults.json")).expect("named-faults.json")
+}
+
+/// SC-5 stays the kernel's own (decision 32.76): the cylinder of radius 0.5 and height 1 on the
+/// origin, made by the kernel's own primitive (geom-make's `cylinder`), passes the kernel's checker
+/// at its full level, while the modeller's, made by solidcore, is refused at its top cap; and every
+/// SC-5 entry of the named list is marked as staying ours, naming this test and the measured reason
+/// (a cap written on the exactly square plane changes 89 of solidcore's own stored answers).
+#[test]
+fn the_kernel_makes_its_own_cylinder() {
+    let o = P3::new(0, 0, 0).expect("the origin");
+    let r = Steps(steps("0.5", STEP) as u64);
+    let h = Steps(steps("1", STEP) as u64);
+    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([5; 16])), Budget::UNLIMITED);
+    let input = RoundInput {
+        base: o,
+        radius: r,
+        height: h,
+        step: STEP,
+    };
+    let made = cylinder(&ctx, &input).expect("the kernel's cylinder");
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let report = check(&made.result.body, made.exactness, Level::Full, &mut meter)
+        .expect("the checker's report");
+    assert!(report.passed(), "{:?}", report.faults());
+    assert_eq!(made.result.body.arenas().faces.len(), 3);
+    let theirs = Modeller::new(STEP).cylinder(o, r, h);
+    assert!(
+        matches!(&theirs, Err(Error::CheckFailed { report, .. })
+            if report.ends_with("no certified test of this pair exists yet (face 1)")),
+        "{theirs:?}"
+    );
+    for f in named()["faults"].as_array().expect("faults") {
+        let sc5 = f["fault"].as_str().is_some_and(|s| s.starts_with("SC-5,"));
+        let stays = f.get("stays_ours").and_then(Value::as_str);
+        assert_eq!(
+            stays.is_some_and(|s| s.contains("the_kernel_makes_its_own_cylinder")
+                && s.contains("89 of solidcore's own stored answers")),
+            sc5,
+            "{}: {stays:?}",
+            f["test"]
+        );
+    }
+}
+
+/// SC-7: the tests and stored-answer units of solidcore's own suite that need upstream test files
+/// the public repository does not hold are named one by one and counted, and stay named until
+/// they run: the list's counts are its lengths, every name is listed once, in order.
+#[test]
+fn what_needs_upstream_files_is_named_and_counted() {
+    let n = named();
+    let sc7 = &n["upstream"];
+    assert!(
+        sc7["fault"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("SC-7,")),
+        "{sc7}"
+    );
+    for key in ["tests", "units"] {
+        let names: Vec<&str> = sc7[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("SC-7 {key}"))
+            .iter()
+            .map(|x| x.as_str().expect("a name"))
+            .collect();
+        assert_eq!(
+            names.len() as u64,
+            sc7["count"][key].as_u64().expect("a count"),
+            "{key}"
+        );
+        assert!(
+            names.windows(2).all(|w| w[0] < w[1]),
+            "{key} in order, once"
+        );
+    }
+    assert_eq!(sc7["count"]["units"].as_u64(), Some(132));
+    for key in ["blocks", "until"] {
+        assert!(sc7[key].as_str().is_some_and(|s| !s.is_empty()), "{key}");
+    }
 }
 
 /// Why isect-15 to isect-20 run on no grid, by exact arithmetic on the table's decimals: each

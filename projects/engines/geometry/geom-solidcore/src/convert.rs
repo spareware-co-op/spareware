@@ -9,7 +9,9 @@
 //! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns). A seam,
 //! where solidcore cuts a face that runs the whole way round a cylinder, cone or sphere, is left
 //! out as the kernel's own bodies have none, and a circle's vertex with it when nothing else
-//! meets there (`form`): no point, curve or surface moves. The body
+//! meets there (`form`): no point, curve or surface moves. An edge or vertex that solids touch
+//! along, which the record writes once for each solid, is one row, by the identity the record's
+//! order gives each copy, never by where the copies lie (decision 32.76). The body
 //! is recorded Certified, with a bound of solidcore's own largest tolerance in whole steps, rounded
 //! up, and one step more for the rounding of its vertices onto the grid. [`checked`] runs every
 //! group of the checker on it, in every build, and refuses a body the checker does not pass.
@@ -33,6 +35,7 @@
 //! Cost: linear in the record's rows, plus the checker's own cost. Recursion: none.
 
 use core::f64::consts::PI;
+use std::collections::BTreeMap;
 
 use geom_check::{Level, check};
 use geom_curve::{Circle, CurveKind, Frame, Line};
@@ -44,6 +47,7 @@ use geom_topo::{
     Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, RegionKind, Sense,
     Shell, Vertex,
 };
+use solidcore_convert::brep::Order;
 use solidcore_record::brep as r;
 
 /// Why a record could not be written as the kernel's body: what it holds that has no row or kind
@@ -349,10 +353,59 @@ fn wraps(k: &r::Surface) -> bool {
 struct Form<'a> {
     /// Each face's loops, in the record's order and the record's direction.
     loops: Vec<Vec<Vec<&'a r::OrientedEdge>>>,
-    /// Each record edge's row in the kernel's body, or none for a seam.
+    /// Each record edge's row in the kernel's body, or none for a seam; the copies of one
+    /// solidcore edge share its row.
     edge: Vec<Option<usize>>,
-    /// Each record vertex's row in the kernel's body, or none for a seam's end.
+    /// Each record vertex's row in the kernel's body, or none for a seam's end; the copies of one
+    /// solidcore vertex share its row.
     vertex: Vec<Option<usize>>,
+    /// Whether each record edge is the first copy of its solidcore edge, the one whose curve and
+    /// ends the row is written from.
+    first_edge: Vec<bool>,
+    /// Whether each record vertex is the first copy of its solidcore vertex.
+    first_vertex: Vec<bool>,
+}
+
+/// Each index's first index with the same entity in `of`, which must be `n` long: solidcore's
+/// record writes an edge or vertex that solids touch along once for each solid, and its order
+/// names the one entity of solidcore's body each copy is.
+fn firsts<T: Ord + Copy>(of: &[T], n: usize) -> Result<Vec<usize>, Unconverted> {
+    if of.len() != n {
+        return Err(no("an order that is not the record's"));
+    }
+    let mut seen = BTreeMap::new();
+    Ok(of
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| *seen.entry(t).or_insert(i))
+        .collect())
+}
+
+/// The kernel's row of each record entity: a new row, in record order, for each first copy that
+/// `keep` keeps, and the first copy's row for every later one. A later copy of an entity whose
+/// first copy is left out, or one left out whose first copy is kept, is refused: the copies of one
+/// entity are kept or left out together, never told apart.
+fn rows(first: &[usize], keep: impl Fn(usize) -> bool) -> Result<Vec<Option<usize>>, Unconverted> {
+    let mut out: Vec<Option<usize>> = Vec::with_capacity(first.len());
+    let mut kept = 0;
+    for (i, &f) in first.iter().enumerate() {
+        let row = if f == i {
+            keep(i).then(|| {
+                kept += 1;
+                kept - 1
+            })
+        } else {
+            let at = *out
+                .get(f)
+                .ok_or_else(|| no("an order naming a later copy first"))?;
+            if at.is_some() != keep(i) {
+                return Err(no("copies of one entity, one kept and one left out"));
+            }
+            at
+        };
+        out.push(row);
+    }
+    Ok(out)
 }
 
 /// `l` with every seam taken out: at each seam the loop parts in two, the run between its two
@@ -391,7 +444,14 @@ fn split<'a>(l: Vec<&'a r::OrientedEdge>, seam: &[bool]) -> Vec<Vec<&'a r::Orien
 /// vertices with it when nothing but one closed circle is left at it; that circle is then the full
 /// turn with no vertex. No point, curve or surface is moved: the same faces, on the same
 /// surfaces, bounded by the same circles.
-fn form(rec: &r::Brep) -> Result<Form<'_>, Unconverted> {
+///
+/// Where solids touch along an edge or at a vertex, solidcore's body has one edge or vertex that
+/// both use, and its record writes a copy of it for each solid, naming in `order` the one entity
+/// each copy is. The kernel's body keeps the one entity, shared, by that identity: the copies are
+/// one row, never joined because they lie at the same place.
+fn form<'a>(rec: &'a r::Brep, order: &Order) -> Result<Form<'a>, Unconverted> {
+    let edge_first = firsts(&order.edges, rec.edges.len())?;
+    let vertex_first = firsts(&order.vertices, rec.vertices.len())?;
     let mut uses = vec![0_u32; rec.edges.len()];
     let mut record_loops = Vec::with_capacity(rec.faces.len());
     for face in &rec.faces {
@@ -459,29 +519,21 @@ fn form(rec: &r::Brep) -> Result<Form<'_>, Unconverted> {
                 _ => false,
             }
     };
-    let mut kept = 0;
-    let vertex = (0..rec.vertices.len())
-        .map(|v| {
-            (!gone(v)).then(|| {
-                kept += 1;
-                kept - 1
-            })
-        })
-        .collect();
-    let mut kept = 0;
-    let edge = seam
-        .iter()
-        .map(|&s| {
-            (!s).then(|| {
-                kept += 1;
-                kept - 1
-            })
-        })
-        .collect();
+    // A later copy of an edge runs between the same solidcore vertices, the same way, as its
+    // first copy, whose curve and ends its row is written from; one that does not is refused.
+    let ends = |e: usize| rec.edges[e].vertices.map(|v| vertex_first[v as usize]);
+    if (0..rec.edges.len()).any(|e| ends(e) != ends(edge_first[e])) {
+        return Err(no("copies of one edge between different vertices"));
+    }
+    let vertex = rows(&vertex_first, |v| !gone(v))?;
+    let edge = rows(&edge_first, |e| !seam[e])?;
+    let first = |of: &[usize]| of.iter().enumerate().map(|(i, &f)| f == i).collect();
     Ok(Form {
         loops,
         edge,
         vertex,
+        first_edge: first(&edge_first),
+        first_vertex: first(&vertex_first),
     })
 }
 
@@ -526,7 +578,65 @@ pub fn empty() -> Result<Body, Unconverted> {
         .map_err(|_| no("the empty body"))
 }
 
+/// One fin of the kernel's body, as the test of its kind reads it.
+#[derive(Clone, Copy, Debug)]
+struct Use {
+    /// The shell of its face.
+    shell: usize,
+    /// Its edge's row.
+    edge: usize,
+    /// Whether it runs along its edge, from the edge's start to its end.
+    along: bool,
+    /// The row of the fin after it in its loop.
+    next: usize,
+}
+
+fn root(of: &mut [usize], mut i: usize) -> usize {
+    while of[i] != i {
+        of[i] = of[of[i]];
+        i = of[i];
+    }
+    i
+}
+
+/// Whether the body of these fins is non-manifold, so of the kernel's kind General (chapter 8.1:
+/// "mixed and non-manifold"), not Solid: an edge with more than two fins (`ring`, each edge's
+/// fins), or a vertex the faces round which do not make one fan. A loop's corner at a vertex is
+/// where one fin ends and the next begins; two corners at a vertex are of one fan when a chain of
+/// edges at that vertex, each used by both of two corners in the chain, joins them. A vertex with
+/// corners in two shells, or in two fans of one shell, is one where solids or parts of one touch.
+/// `ends` is each edge's start and end vertex, none for a closed edge without one.
+fn non_manifold(uses: &[Use], ends: &[[Option<usize>; 2]], ring: &[Vec<usize>]) -> bool {
+    if ring.iter().any(|fins| fins.len() > 2) {
+        return true;
+    }
+    let mut of: Vec<usize> = (0..uses.len()).collect();
+    let mut by_edge: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    let mut corners = Vec::new();
+    for (i, u) in uses.iter().enumerate() {
+        let Some(v) = ends[u.edge][usize::from(u.along)] else {
+            continue;
+        };
+        corners.push((v, i));
+        for e in [u.edge, uses[u.next].edge] {
+            let first = *by_edge.entry((v, e)).or_insert(i);
+            let (a, b) = (root(&mut of, first), root(&mut of, i));
+            of[a] = b;
+        }
+    }
+    let mut first: BTreeMap<usize, usize> = BTreeMap::new();
+    for (v, i) in corners {
+        let f = *first.entry(v).or_insert(i);
+        if root(&mut of, f) != root(&mut of, i) || uses[f].shell != uses[i].shell {
+            return true;
+        }
+    }
+    false
+}
+
 /// The record `rec` as the kernel's solid on `step`, unchecked, and its record of exactness.
+/// `order` is the order `solidcore-convert` wrote the record with: the copies it names as one
+/// solidcore edge or vertex are one row of the kernel's body.
 ///
 /// # Errors
 ///
@@ -535,7 +645,11 @@ pub fn empty() -> Result<Body, Unconverted> {
     clippy::too_many_lines,
     reason = "one pass over the record writes every arena's rows; split, each piece would need the others' counts"
 )]
-pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Unconverted> {
+pub fn body_of(
+    rec: &r::Brep,
+    order: &Order,
+    step: GridStep,
+) -> Result<(Body, Exactness), Unconverted> {
     let s = Scale(per_metre(step));
     let exactness = exactness(rec, step)?;
     let Exactness::Certified { bound, .. } = exactness else {
@@ -630,14 +744,14 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
         }
     }
 
-    let form = form(rec)?;
+    let form = form(rec, order)?;
 
     // Edges first: their curves and boxes, by the kernel's row.
     let mut curves = Vec::new();
     let mut edge_boxes = Vec::new();
     let mut edges = Vec::new();
     for (k, e) in rec.edges.iter().enumerate() {
-        if form.edge[k].is_none() {
+        if form.edge[k].is_none() || !form.first_edge[k] {
             continue;
         }
         let end = |v: u32| {
@@ -668,7 +782,7 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
     }
     let mut points = Vec::new();
     for (k, v) in rec.vertices.iter().enumerate() {
-        if form.vertex[k].is_some() {
+        if form.vertex[k].is_some() && form.first_vertex[k] {
             points.push(PointKind::Grid(s.grid(v.point)?));
         }
     }
@@ -678,6 +792,7 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
     let mut surfaces = Vec::new();
     let mut loops = Vec::new();
     let mut fins: Vec<Fin> = Vec::new();
+    let mut uses: Vec<Use> = Vec::new();
     let mut ring: Vec<Vec<usize>> = vec![Vec::new(); edges.len()];
     for (f, (face, face_loops)) in rec.faces.iter().zip(&form.loops).enumerate() {
         let (shell, forward) = face_use[f].ok_or_else(|| no("a face in no shell"))?;
@@ -728,6 +843,12 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
                     .ok_or_else(|| no("a loop naming an edge the record lacks"))?;
                 bx = Some(bx.map_or(eb, |b| join(b, eb)));
                 ring[e].push(at);
+                uses.push(Use {
+                    shell,
+                    edge: e,
+                    along: oe.forward == forward,
+                    next: first + (k + 1) % n,
+                });
                 fins.push(Fin {
                     loop_: ix(here)?,
                     next: ix(first + (k + 1) % n)?,
@@ -755,6 +876,7 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
             fins[fin].radial = ix(members[(k + 1) % members.len()])?;
         }
     }
+    let edges_ends = edges.clone();
     let edges: Vec<Edge> = edges
         .iter()
         .enumerate()
@@ -784,9 +906,16 @@ pub fn body_of(rec: &r::Brep, step: GridStep) -> Result<(Body, Exactness), Uncon
     a.surfaces.extend(surfaces).map_err(broke)?;
     a.curves.extend(curves).map_err(broke)?;
     a.points.extend(points).map_err(broke)?;
+    // A body where solids touch along an edge or at a vertex is non-manifold: the kernel's kind
+    // for it is General (chapter 8.1).
+    let kind = if non_manifold(&uses, &edges_ends, &ring) {
+        BodyKind::General
+    } else {
+        BodyKind::Solid
+    };
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let body = b
-        .publish(BodyKind::Solid, ix(outside)?, &mut meter)
+        .publish(kind, ix(outside)?, &mut meter)
         .map_err(|e| Unconverted(format!("the rows did not publish: {e:?}")))?;
     Ok((body, exactness))
 }
@@ -818,24 +947,113 @@ pub fn checked(body: Body, exactness: Exactness) -> Result<Body, Refusal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use solidcore::boolean::api_brep::boolean_union;
     use solidcore::primitive::api_primitives::create_box;
     use solidcore::{Kernel, KernelOptions, Point3};
 
-    /// The record of solidcore's unit cube at the origin.
-    fn cube() -> r::Brep {
+    /// The record of solidcore's unit cube at the origin, and its order.
+    fn cube() -> (r::Brep, Order) {
         let mut k = Kernel::new(&KernelOptions::default());
         let mut b = create_box(&mut k, Point3::new(0.0, 0.0, 0.0), 1.0, 1.0, 1.0).expect("a box");
-        solidcore_convert::brep::to_record(&mut k, &mut b)
-            .expect("its record")
-            .0
+        solidcore_convert::brep::to_record(&mut k, &mut b).expect("its record")
     }
 
     #[test]
     fn a_cube_passes_on_every_step() {
+        let (rec, order) = cube();
         for step in [GridStep::Q0, GridStep::Q1, GridStep::Q2] {
-            let (body, exactness) = body_of(&cube(), step).expect("the cube's rows");
+            let (body, exactness) = body_of(&rec, &order, step).expect("the cube's rows");
             assert!(checked(body, exactness).is_ok(), "{step:?}");
         }
+    }
+
+    /// The record and order of solidcore's union of the unit cube at the origin and the one whose
+    /// least corner is `at`, which touch along an edge or at a vertex only.
+    fn touching(at: [f64; 3]) -> (r::Brep, Order) {
+        let mut k = Kernel::new(&KernelOptions::default());
+        let a = create_box(&mut k, Point3::new(0.0, 0.0, 0.0), 1.0, 1.0, 1.0).expect("a box");
+        let b = create_box(&mut k, Point3::new(at[0], at[1], at[2]), 1.0, 1.0, 1.0).expect("a box");
+        let mut u = boolean_union(&mut k, a, b).expect("the union");
+        solidcore_convert::brep::to_record(&mut k, &mut u).expect("its record")
+    }
+
+    /// SC-6's one cause was ours (decision 32.76): two cubes that touch along an edge (bool-05) or
+    /// at a vertex (bool-06), united, are one body in solidcore with that edge and its vertices, or
+    /// that vertex, shared by its two shells. solidcore's record writes what solids touch along once
+    /// for each solid, and its order names the one entity each copy is. The kernel's body keeps
+    /// that one entity, shared, by the order's identity, never by where the copies lie, and the
+    /// checker passes it. Both bodies are non-manifold, the edge of four fins and the vertex two
+    /// shells share alike, so both are of the kernel's kind General (chapter 8.1), as is a body
+    /// with a vertex where the faces of one shell make two fans.
+    #[test]
+    fn what_two_solids_touch_along_stays_one() {
+        for (at, record, kernel) in [
+            ([1.0, 1.0, 0.0], (24, 16), (23, 14)),
+            ([1.0, 1.0, 1.0], (24, 16), (24, 15)),
+        ] {
+            let (rec, order) = touching(at);
+            assert_eq!((rec.edges.len(), rec.vertices.len()), record, "{at:?}");
+            let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
+            assert_eq!(body.kind(), BodyKind::General, "{at:?}");
+            let a = body.arenas();
+            assert_eq!(
+                (a.shells.len(), a.edges.len(), a.vertices.len()),
+                (2, kernel.0, kernel.1),
+                "{at:?}"
+            );
+            let found = checked(body, exactness);
+            assert!(found.is_ok(), "{at:?}: {found:?}");
+        }
+        // A vertex where the faces of one shell make two fans is non-manifold too, as one two
+        // shells share is; one fan is not. Four edges leave vertex 0: corners at it join edges 0
+        // and 1 in one fan, and 2 and 3 in another.
+        let ends = [
+            [Some(0), Some(1)],
+            [Some(0), Some(2)],
+            [Some(0), Some(3)],
+            [Some(0), Some(4)],
+        ];
+        let fan = |at: usize, a: usize, b: usize, shell: usize| {
+            [
+                Use {
+                    shell,
+                    edge: a,
+                    along: false,
+                    next: at + 1,
+                },
+                Use {
+                    shell,
+                    edge: b,
+                    along: true,
+                    next: at,
+                },
+                Use {
+                    shell,
+                    edge: b,
+                    along: false,
+                    next: at + 3,
+                },
+                Use {
+                    shell,
+                    edge: a,
+                    along: true,
+                    next: at + 2,
+                },
+            ]
+        };
+        let one: Vec<Use> = fan(0, 0, 1, 0).to_vec();
+        let ring = |uses: &[Use]| {
+            let mut r = vec![Vec::new(); ends.len()];
+            for (i, u) in uses.iter().enumerate() {
+                r[u.edge].push(i);
+            }
+            r
+        };
+        assert!(!non_manifold(&one, &ends, &ring(&one)));
+        let two: Vec<Use> = fan(0, 0, 1, 0).into_iter().chain(fan(4, 2, 3, 0)).collect();
+        assert!(non_manifold(&two, &ends, &ring(&two)));
+        let shells: Vec<Use> = fan(0, 0, 1, 0).into_iter().chain(fan(4, 2, 3, 1)).collect();
+        assert!(non_manifold(&shells, &ends, &ring(&shells)));
     }
 
     /// isect-28's cone passes on Q0 as on Q1: a metre is exactly 6.4e6 steps of Q0, so its unit
@@ -853,11 +1071,9 @@ mod tests {
             2.0,
         )
         .expect("a cone");
-        let rec = solidcore_convert::brep::to_record(&mut k, &mut c)
-            .expect("its record")
-            .0;
+        let (rec, order) = solidcore_convert::brep::to_record(&mut k, &mut c).expect("its record");
         for step in [GridStep::Q0, GridStep::Q1] {
-            let (body, exactness) = body_of(&rec, step).expect("the cone's rows");
+            let (body, exactness) = body_of(&rec, &order, step).expect("the cone's rows");
             let found = checked(body, exactness);
             assert!(found.is_ok(), "{step:?}: {found:?}");
         }
@@ -867,9 +1083,9 @@ mod tests {
     /// the body that fails the check is never returned.
     #[test]
     fn a_body_that_fails_the_check_is_refused() {
-        let mut rec = cube();
+        let (mut rec, order) = cube();
         rec.vertices[0].point[2] += 1e-3;
-        let (body, exactness) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         assert!(matches!(
             checked(body, exactness),
             Err(Refusal::Failed { faults, .. }) if faults > 0
@@ -879,7 +1095,7 @@ mod tests {
     /// The bound recorded is solidcore's own tolerance in whole steps, and one more.
     #[test]
     fn the_bound_is_solidcores_tolerance() {
-        let rec = cube();
+        let (rec, _) = cube();
         let tol = rec.tolerance;
         let Exactness::Certified { bound, step } = exactness(&rec, GridStep::Q0).expect("a record")
         else {
@@ -892,8 +1108,8 @@ mod tests {
         assert!(b - 2.0 < tol / metres(GridStep::Q0));
     }
 
-    /// The record of solidcore's cylinder of radius 0.5 and height 1 on the origin.
-    fn can() -> r::Brep {
+    /// The record of solidcore's cylinder of radius 0.5 and height 1 on the origin, and its order.
+    fn can() -> (r::Brep, Order) {
         let mut k = Kernel::new(&KernelOptions::default());
         let mut c = solidcore::primitive::api_primitives::create_cylinder(
             &mut k,
@@ -902,18 +1118,16 @@ mod tests {
             1.0,
         )
         .expect("a cylinder");
-        solidcore_convert::brep::to_record(&mut k, &mut c)
-            .expect("its record")
-            .0
+        solidcore_convert::brep::to_record(&mut k, &mut c).expect("its record")
     }
 
     /// solidcore's cylinder, with its seam and a vertex on each circle, is written as the kernel
     /// writes its own: three faces, two closed circles with no vertex, the side one loop on each.
     #[test]
     fn a_cylinder_has_no_seam() {
-        let rec = can();
+        let (rec, order) = can();
         assert_eq!((rec.edges.len(), rec.vertices.len()), (3, 2));
-        let (body, _) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let (body, _) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         let a = body.arenas();
         assert_eq!(
             (
@@ -937,8 +1151,8 @@ mod tests {
     /// the height of the circle it holds, pass: nothing else in the body is in the way.
     #[test]
     fn a_cylinder_fails_on_its_top_cap_alone() {
-        let mut rec = can();
-        let (body, exactness) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let (mut rec, order) = can();
+        let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         let found = checked(body, exactness);
         assert!(
             matches!(&found, Err(Refusal::Failed { first, .. })
@@ -959,7 +1173,7 @@ mod tests {
             }
         }
         assert_eq!(tilted, 1);
-        let (body, exactness) = body_of(&rec, GridStep::Q1).expect("the rows");
+        let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         let found = checked(body, exactness);
         assert!(found.is_ok(), "{found:?}");
     }
@@ -973,12 +1187,12 @@ mod tests {
 
     #[test]
     fn a_shape_with_no_kind_here_is_refused_by_name() {
-        let mut rec = cube();
+        let (mut rec, order) = cube();
         rec.edges[0].curve = r::Curve::Polyline {
             points: vec![[0.0; 3], [1.0, 0.0, 0.0]],
         };
         assert_eq!(
-            body_of(&rec, GridStep::Q1).map(|_| ()),
+            body_of(&rec, &order, GridStep::Q1).map(|_| ()),
             Err(Unconverted("a polyline".into()))
         );
     }
