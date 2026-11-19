@@ -2793,7 +2793,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace | with ^ in Tint::mul",
+      "mutant": "replace | with ^ in Tint::sum_partial_products",
       "line_text": "r.h = (r.h << 1) | (r.m >> 63);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -2801,7 +2801,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace | with ^ in Tint::mul",
+      "mutant": "replace | with ^ in Tint::sum_partial_products",
       "line_text": "r.m = (r.m << 1) | (r.l >> 63);",
       "occurrences": 1,
       "kind": "equivalent",
@@ -4416,7 +4416,7 @@
       "line_text": "let ub = fh + (fl + EPS);",
       "occurrences": 2,
       "kind": "equivalent",
-      "reason": "Two places on this line. Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. The first, fh * (fl + EPS), can equal lb, a double within an ulp of fh, only if fl + EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12, so it never matches; for 2^53 it can match only with RN(fl + EPS) = 1 or 1 + 2^-52 (giving 2^53 or 2^53 + 2), and for 2^54 only with RN(fl + EPS) = 1 (giving 2^54). In each such case the original's ub, RN(fh + RN(fl + EPS)), is that same double (2^53 + 1 rounds to even, 2^53 + 1 + 2^-52 up, 2^54 + 1 down), so where the mutant's bounds agree the original's do too, on the same value. So this form accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which gives the same correctly rounded result. The second, fl * EPS, keeps ub = fh (|fl·EPS| <= 2^-60.7, far below half an ulp of fh >= 1), so the test accepts exactly when fh + (fl - EPS) rounds to fh, and returns fh's subnormal. That puts e^x above the midpoint below it, so the answer is the correctly rounded one unless e^x passes the midpoint M = (fh - 2^s + u/2)·2^ie above it (s = -1022 - ie, u the ulp of fh); as fh + (fl - EPS) is below M, that needs e^x in (M, M + (2·EPS + 2^-68)·2^ie], within 2^(ie - 60) above M. exp.rs's unit test no_subnormal_result_just_above_the_midpoint_next_to_its_table_value walks the doubles at every one of the branch's 217089 reduction indices and finds none there. No worst-case list is assumed."
+      "reason": "Two places on this line. Here fh = RN(2^s + th) (s = -1022 - ie, 0 to 54, th in [1, 2)) and fl is that sum's rounding error, at most half the ulp u of fh, plus terms below 2^-12. The first, fh * (fl + EPS), can equal lb, a double within an ulp of fh, only if fl + EPS is within 2^-52 of 1, so u/2 must reach about 1: s >= 53, where fh is 2^53, 2^53 + 2 or 2^54 and the products are exact. For 2^53 + 2 (th > 1) fl < 2^-12, so it never matches; for 2^53 it can match only with RN(fl + EPS) = 1 or 1 + 2^-52 (giving 2^53 or 2^53 + 2), and for 2^54 only with RN(fl + EPS) = 1 (giving 2^54). In each such case the original's ub, RN(fh + RN(fl + EPS)), is that same double (2^53 + 1 rounds to even, 2^53 + 1 + 2^-52 up, 2^54 + 1 down), so where the mutant's bounds agree the original's do too, on the same value. So this form accepts only inputs the original accepts, with the same value, and sends the rest to exp_accurate, which gives the same correctly rounded result. The second, fl * EPS, keeps ub = fh (|fl·EPS| <= 2^-60.7, far below half an ulp of fh >= 1), so the test accepts exactly when fh + (fl - EPS) rounds to fh, and returns fh's subnormal. That puts e^x above the midpoint below it, so the answer is the correctly rounded one unless e^x passes the midpoint M = (fh - 2^s + u/2)·2^ie above it (s = -1022 - ie, u the ulp of fh); as fh + (fl - EPS) is below M, that needs e^x in (M, M + (2·EPS + 2^-68)·2^ie], within 2^(ie - 60) above M. exp.rs's four unit tests no_subnormal_result_just_above_the_midpoint_next_to_its_table_value_quarter_1 to _quarter_4 walk the doubles at every one of the branch's 217089 reduction indices (a quarter each) and find none there. No worst-case list is assumed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
@@ -4444,7 +4444,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < c))?;",
       "occurrences": 2,
       "kind": "proved",
@@ -4453,7 +4453,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "let mut cm = u64::from(l < lo2); // carry into m",
       "occurrences": 1,
       "kind": "proved",
@@ -4462,7 +4462,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "cm = cm.checked_add(u64::from(l < lo3))?;",
       "occurrences": 1,
       "kind": "proved",
@@ -4471,7 +4471,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with <= in Tint::mul",
+      "mutant": "replace < with <= in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < cm))?;",
       "occurrences": 1,
       "kind": "proved",
@@ -4480,7 +4480,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
-      "mutant": "replace < with == in Tint::mul",
+      "mutant": "replace < with == in Tint::sum_partial_products",
       "line_text": "h = h.checked_add(u64::from(m < cm))?;",
       "occurrences": 1,
       "kind": "proved",
@@ -7881,14 +7881,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "middle_of == hi turns to hi − period = lo, the same point of a loop: on_both reads the same point, to rounding, and the stretch is kept or dropped alike."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace < with <= in edges",
-      "line_text": "if u1 - u0 < 2.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On a whole turn the mutant adds the seam's rulings as edges, which cut a curve only where it crosses the seam or runs along it, places on the surface either side: trimming joins stretches on both domains end to end into one run, so a cut where the curve stays on both changes no piece."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",

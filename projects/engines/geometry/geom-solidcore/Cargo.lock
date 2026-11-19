@@ -3,11 +3,226 @@
 version = 4
 
 [[package]]
+name = "autocfg"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "bigdecimal"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a22f228ab7a1b23027ccc6c350b72868017af7ea8356fbdf19f8d991c690013"
+dependencies = [
+ "autocfg",
+ "libm",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "block-buffer"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
+name = "cfg-if"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "crypto-common"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
+name = "digest"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
+dependencies = [
+ "block-buffer",
+ "crypto-common",
+]
+
+[[package]]
+name = "geom-bvh"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-check"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-curve"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-intersect"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-linalg"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+]
+
+[[package]]
+name = "geom-make"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-math"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+]
+
+[[package]]
+name = "geom-num"
+version = "0.0.0"
+dependencies = [
+ "geom-run",
+ "libm",
+]
+
+[[package]]
+name = "geom-nurbs"
+version = "0.0.0"
+dependencies = [
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-op"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-run",
+ "sha2",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "geom-run"
+version = "0.0.0"
+
+[[package]]
 name = "geom-solidcore"
 version = "0.0.0"
 dependencies = [
+ "bigdecimal",
+ "geom-check",
+ "geom-curve",
+ "geom-make",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
  "serde_json",
  "solidcore",
+ "solidcore-convert",
+ "solidcore-record",
+]
+
+[[package]]
+name = "geom-surface"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-topo"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "hybrid-array"
+version = "0.4.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17"
+dependencies = [
+ "typenum",
 ]
 
 [[package]]
@@ -17,10 +232,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
+name = "libc"
+version = "0.2.191"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "num-bigint"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.47"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "proc-macro2"
@@ -84,11 +339,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha2"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest",
+]
+
+[[package]]
 name = "solidcore"
 version = "1.0.1"
 source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
 dependencies = [
  "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "solidcore-convert"
+version = "0.1.0"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+dependencies = [
+ "solidcore",
+ "solidcore-record",
+]
+
+[[package]]
+name = "solidcore-record"
+version = "0.1.0"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -124,10 +409,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
+name = "typenum"
+version = "1.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "zmij"

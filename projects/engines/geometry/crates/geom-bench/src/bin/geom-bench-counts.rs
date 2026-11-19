@@ -20,8 +20,8 @@
 //! 1, `<parts folder>/k/<side>.names` lists the run's benchmarks and `<parts folder>/k/home.list`
 //! the part's saved files; every listed benchmark must have been measured in exactly one part. A
 //! part's files that are missing (a part that dropped out) are a file that cannot be read. `times`
-//! prints each group's seconds (`<group> <seconds>`) from the durations in the summaries, and
-//! `plan` prints `parts.tsv` from one or more such files, each group at the most seconds any of
+//! prints each unit's seconds (`<unit> <seconds>`, a group or `group/op` for a split group) from the durations in the summaries, and
+//! `plan` prints `parts.tsv` from one or more such files, each unit at the most seconds any of
 //! them gives, after their comment lines (`geom_bench::parts::plan`, at `PART_SECONDS`).
 //!
 //! Each prints a Markdown report on standard output (`removed` prints one name per line) and exits
@@ -149,7 +149,7 @@ Every benchmark was measured in exactly one part.");
         ["plan", files @ ..] if !files.is_empty() => {
             let mut seconds = std::collections::BTreeMap::new();
             let mut header = vec![
-                "The instruction gate's parts (kernel-bench.yml): each group's part and seconds."
+                "The instruction gate's parts (kernel-bench.yml): each unit's part and seconds (a group, or an operation of mesh)."
                     .to_owned(),
                 "Written by `geom-bench-counts plan` from the times of a run, never by hand."
                     .to_owned(),

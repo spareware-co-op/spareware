@@ -25,9 +25,10 @@
 //! end circle on the frame off the grid, and a sphere's edge (issue 974). [`work_of`] reads a
 //! case's count, which the target's tests hold for the issue's four inputs, for the end circles
 //! a plane's domain holds a part of (decision 32.69), for an end circle about a line through a
-//! sphere's centre that stands off the sphere (decision 32.74), for a plane's edge through a
-//! cone's apex or tangent to a cylinder (decision 32.87) or beside a cone of start radius 100
-//! (decision 32.88), and for what is still the engine's.
+//! sphere's centre that stands off the sphere (decision 32.74), for the end circles of a cone
+//! across another on a parallel axis (decision 32.86), for a plane's edge through a cone's apex
+//! or tangent to a cylinder (decision 32.87) or beside a cone of start radius 100 (decision
+//! 32.88), and for what is still the engine's; [`answer_of`] reads its answer.
 
 #![allow(
     clippy::many_single_char_names,
@@ -428,6 +429,17 @@ pub fn work_of(case: &Case) -> Result<u128, Finding> {
     let mut work = meter();
     must(natural(&a, &b, &mut work), "a valid pair is answered")?;
     Ok(work.used().work)
+}
+
+/// What one call of `natural` says of the case, in the order drawn and under [`WORK`]: the answer
+/// the target's tests hold beside its count from [`work_of`].
+///
+/// # Errors
+///
+/// As [`work_of`].
+pub fn answer_of(case: &Case) -> Result<Option<Intersection>, Finding> {
+    let (a, b) = (surface(case.first)?, surface(case.second)?);
+    must(natural(&a, &b, &mut meter()), "a valid pair is answered")
 }
 
 /// [`decode`] then [`check`].

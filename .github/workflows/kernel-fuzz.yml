@@ -149,7 +149,7 @@ on:
         default: ""
         type: string
       kani:
-        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter"
+        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter_answer"
         required: false
         default: ""
         type: string
@@ -208,9 +208,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       # A pull request's checkout is its merge commit, whose first parent is the base: the diff
       # between them is the change, renames as a removed and an added file.
       - name: The files the change touches
@@ -284,8 +287,11 @@ jobs:
     # proved in parts, one job each: orient2d_proof_predicate_part_<k> for the draws of class k of
     # the six coordinates' signs, and orient2d_proof_predicate_cover, which proves that every draw
     # is in one of the 64 classes; a part took 4 to 9 minutes on a runner. geom-fuzz's
-    # tests/attack_g14.rs holds the parts and the cover to this list. 30 minutes is about twice the
-    # longest harness's on a runner.
+    # tests/attack_g14.rs holds the parts and the cover to this list. The filter's claim is proved
+    # one step of its check at a time after the one reference (decision 32.83): its exact path's
+    # stand-in, its predicate's stand-in and the filter's answer, one job each; as one harness it
+    # took 570 to 943 seconds on a runner, most of it in holding the reference's copies equal.
+    # 30 minutes is about twice the longest harness's on a runner.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -358,7 +364,9 @@ jobs:
           - orient2d_proof_predicate_part_62
           - orient2d_proof_predicate_part_63
           - orient2d_proof_exact_path
-          - orient2d_proof_filter
+          - orient2d_proof_filter_exact_stand_in
+          - orient2d_proof_filter_predicate_stand_in
+          - orient2d_proof_filter_answer
     defaults:
       run:
         shell: bash
@@ -450,8 +458,22 @@ jobs:
   # two_sum's law against 3, −0.1, 2^53 and the smallest subnormal is two harnesses a value, one
   # for each order of its operands, which together prove what one harness of both orders did: as
   # one they took 16 to 25 minutes on a hosted runner (run 44020080291), apart 1 to 8 (run
-  # 44051779140). A cut by claim is measured before it is kept: interval's mul alone ran past an
-  # hour where add, sub and mul in one harness take 46 minutes (run 44046765712).
+  # 44051779140). A cut is measured before it is kept: interval's mul alone, with its claim on
+  # the product of the two doubles, ran past an hour where add, sub and mul in one harness took
+  # 43 to 48 minutes (runs 44046765712 and 44244068917).
+  # interval's add, sub and mul are one harness each, on the same two points and with the same
+  # claim: add takes 8.5 to 8.8 minutes and sub 6.5 to 10.0. mul (8.2 to 9.4) has its claim on
+  # the product of the two points' bounds, the first product mul itself forms, and two more
+  # harnesses prove that this is the same claim: that the product of the bounds is the product
+  # of the doubles for every pair (2.5 to 3.4), and that equal doubles are finite alike and
+  # inside the same intervals (0.6 to 0.7). So the five together prove what the one did (runs
+  # 44251477765 and 44255063848, on the text that was proven).
+  # eft's two_prod with the splitter took 12.3, 14.3 and 18.2 minutes as one harness, on one
+  # text (runs 44244068917, 44222245211 and 44255063848): a job's minutes move by half again
+  # from run to run. Its law's two claims are one harness each, under a mask that asserts each
+  # claim exactly when its bit is set, so the two together prove what the one did: that the
+  # first answer is the rounded product takes 1.1 minutes, and that the error adds back 9.4
+  # (run 44251477765).
   # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
   # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
   # harness that proves every i128 is in one of the eight, so the nine together prove what the
@@ -463,14 +485,28 @@ jobs:
   # grid's law of `coarsen` (32 to 44 minutes as one harness of every coordinate and every pair
   # of steps) is cut by the pair of steps, each harness naming its pairs so that the divisor is a
   # constant: one harness for the six pairs that do not divide (0.8 minutes), and for each of the
-  # three that do, one for no larger and exactness (0.7 to 2.0) and two for nearest, by the
-  # coordinate's sign. Two cover harnesses prove that the pairs are every pair and the two signs
-  # every coordinate, so the twelve together prove what the one did. Below zero, nearest is
-  # asserted on the negated pair, and one more harness proves that the two ways of writing it
-  # give one verdict for every pair of values of the frame. Whole job minutes on the head that
-  # was proven (run 44175923704): nearest takes 1.4 to 2.1 minutes by 25, and by 625 at or
-  # above zero 10.5. One part is still over 15 minutes: nearest by 625 below zero, 23.5 under
-  # kissat. Bands of the magnitude do not shorten it, nor the direction of rounding.
+  # three that do, one for no larger and exactness (0.7 to 2.0) and, for nearest, one for each
+  # sign of the coordinate by 25, and by 625 one for each sign and each of nearest's two sides.
+  # Two cover harnesses prove that the pairs are every pair and the two signs every coordinate,
+  # so the fourteen together prove what the one did. Below zero, nearest by 25 is asserted on
+  # the negated pair, and one more harness proves that the two ways of writing it give one
+  # verdict for every pair of values of the frame. By 625, nearest for one sign took 15.7 and
+  # 19.4 minutes (run 44244068917), and neither bands of the magnitude nor the direction of
+  # rounding shorten it: a side is its own harness, that the answer is less than half a step
+  # above the value or that it is less than half a step below, and one more harness proves that
+  # the two sides together are nearest for every pair of values of the frame. Whole job minutes
+  # on the text that was proven (runs 44251477765 and 44255063848): nearest by 25 takes 1.2 to
+  # 2.0 minutes, and a side by 625 3.9 to 10.6.
+  # atan2's `mul_keeps_every_carry` took 27.6 to 35.9 minutes (main's push runs 44244068917,
+  # 44299434285, 44312155060 and 44322372914) while `mul` formed its six products inside and the
+  # proof formed them again, so the solver had to find the two copies equal. `mul` is now its two
+  # steps, `partial_products` and then `sum_partial_products`, each with its own proof:
+  # `mul_keeps_every_carry` runs the two steps on the one set of products and proves the sum
+  # (7.6 minutes, run 44342665715), and `partial_products_are_the_six_products` proves that the
+  # products are the six written out in it. What did not shorten it: a cut by the word of the answer
+  # (the exponent alone took 18.7, each of the three words ran to the job's 120-minute limit, run
+  # 44248734972), tying a copy of the steps to the old `mul` (ran to the limit, run 44246797569),
+  # and the SMT solvers z3 and cvc5 in place of SAT (both ran to the limit, run 44251931865).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
     needs: [cheap, select]
@@ -502,7 +538,8 @@ jobs:
           - distance::proofs::point_line_has_the_sign_of_its_gap
           - distance::proofs::point_point_has_the_sign_of_its_gap
           - distance::proofs::triple_has_the_sign_of_its_gap
-          - eft::proofs::two_prod_with_the_splitter
+          - eft::proofs::two_prod_with_the_splitter_adds_back
+          - eft::proofs::two_prod_with_the_splitter_is_the_rounded_product
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
           - eft::proofs::two_sum_of_any_and_minus_a_tenth
@@ -532,9 +569,11 @@ jobs:
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q1_to_q0_is_no_larger_and_reported
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_at_or_above_zero
-          - grid::proofs::coarsen_from_q2_to_q0_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q0_is_no_larger_and_reported
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_below_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_at_or_above_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_nearest_below_zero
           - grid::proofs::coarsen_from_q2_to_q1_is_no_larger_and_reported
@@ -542,20 +581,25 @@ jobs:
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
           - grid::proofs::every_coordinate_is_below_zero_or_not
+          - grid::proofs::nearest_is_its_two_sides
           - grid::proofs::nearest_on_the_negated_pair_is_nearest
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
           - grid::proofs::the_nine_pairs_are_every_pair_of_steps
-          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - interval::proofs::add_encloses_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
           - interval::proofs::div_by_minus_zero_is_refused
           - interval::proofs::div_by_the_largest_double
           - interval::proofs::div_by_the_smallest_subnormal
           - interval::proofs::div_by_three
           - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::equal_doubles_are_enclosed_alike
+          - interval::proofs::mul_encloses_the_product_of_its_bounds
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
+          - interval::proofs::sub_encloses_the_rounded_result
+          - interval::proofs::the_product_of_two_points_bounds_is_the_product
           - ladder::proofs::quarter_nm_always_answers_exactly
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps
@@ -563,6 +607,7 @@ jobs:
           - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
+          - math::atan2::proofs::partial_products_are_the_six_products
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
