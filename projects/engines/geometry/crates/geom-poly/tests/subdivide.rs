@@ -120,17 +120,18 @@ fn corner_of_tpi([p, q, r]: [Plane; 3]) -> [i64; 3] {
 }
 
 /// [`corner_of_tpi`], read straight off the planes where each is square to its own axis, as every
-/// plane of a block and of a box's split is: the plane n x_i + d = 0 holds x_i = −d / n, so the
-/// corner in half steps is −2d / n on each axis, the same rational X_i / w the three-plane point
-/// gives. Any other three go to [`corner_of_tpi`]. The two agree on every corner of every piece
-/// (`the_corners_read_off_square_planes_are_the_three_plane_points`). Under Miri the three-plane
-/// point's wide arithmetic was the oracle's cost: most of a test's time beside the arrangement.
+/// plane of a block and of a box's split is: the plane `n x_i + d = 0` holds `x_i = −d / n`, so
+/// the corner in half steps is `−2d / n` on each axis, the same rational `X_i / w` the three-plane
+/// point gives. Any other three go to [`corner_of_tpi`]. The two agree on every corner of every
+/// piece (`the_corners_read_off_square_planes_are_the_three_plane_points`). Under Miri the
+/// three-plane point's wide arithmetic was the oracle's cost: most of a test's time beside the
+/// arrangement.
 fn corner(planes: [Plane; 3]) -> [i64; 3] {
     let mut out = [None; 3];
     for plane in &planes {
         let n = plane.n();
-        let mut axes = (0..3).filter(|&i| n[i] != 0);
-        let (Some(axis), None) = (axes.next(), axes.next()) else {
+        let mut nonzero = (0..3).filter(|&i| n[i] != 0);
+        let (Some(axis), None) = (nonzero.next(), nonzero.next()) else {
             return corner_of_tpi(planes);
         };
         if out[axis].is_some() {
