@@ -350,7 +350,7 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
 ",
         "      - name: geom-num's every test vector in release as shipped (part 6 of 6)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'arc_*' --test '[b-z]*'
 ",
         "      - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
@@ -484,7 +484,7 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'arc_*' --test '[b-z]*'
 ",
         "      - name: Every golden in debug (part 1 of 4)
         if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}

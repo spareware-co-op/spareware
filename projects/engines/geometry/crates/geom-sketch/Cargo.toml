@@ -16,6 +16,73 @@ geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
+# Spline fitting and the basis a spline end is read from (piece G220); layer 2, below this crate.
+geom-nurbs = { path = "../geom-nurbs" }
+
+[dev-dependencies]
+# The golden store, its one SHA-256 and the perturbations every golden runs under (piece G19), from
+# the kernel's development crate, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
+# The 10,000-constraint benchmark (piece G217), with the standard library's clock only.
+# The exact oracle of the commit checks' tests (piece G226): rationals, never linked into the kernel.
+# MIT OR Apache-2.0; the versions geom-linalg's tests use, without default features.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+
+[[bench]]
+name = "assemble"
+harness = false
+
+# Each constraint kind's residual and Jacobian (piece G218), the same way.
+[[bench]]
+name = "catalogue"
+harness = false
+
+# The 100,000-equation benchmark (piece G221), the same way.
+[[bench]]
+name = "structure"
+harness = false
+
+# The spline rules' residual and Jacobian (piece G220), the same way.
+[[bench]]
+name = "spline"
+harness = false
+
+# A family sketch and a floor outline solved (piece G222), the same way.
+[[bench]]
+name = "solve"
+harness = false
+
+# The rigid clusters of a 1,000-entity family (piece G223), the same way.
+[[bench]]
+name = "cluster"
+harness = false
+
+# Dependency groups and free motions (piece G224), the same way.
+[[bench]]
+name = "diagnose"
+harness = false
+
+# The commit of a 1,000-entity sketch (piece G225), the same way.
+[[bench]]
+name = "commit"
+harness = false
+
+# The checks after the commit of a 1,000-entity sketch (piece G226), the same way.
+[[bench]]
+name = "check"
+harness = false
+
+# The chained certificates of a 200-constraint family (piece G227), the same way.
+[[bench]]
+name = "certify"
+harness = false
+
+# A frame of a drag in a 1,000-entity sketch (piece G228), the same way.
+[[bench]]
+name = "drag"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

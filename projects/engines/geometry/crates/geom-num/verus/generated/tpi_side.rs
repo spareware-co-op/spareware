@@ -465,10 +465,10 @@ pub open spec fn bound_of_s() -> int {
     clippy::too_many_arguments,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     ensures
-        match r {
-            Some(v) => in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(d1, 125) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(d2, 125) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83) && in_range(d3, 125) && in_range(n4x, 83) && in_range(n4y, 83) && in_range(n4z, 83) && in_range(d4, 125) && v.value() == spec_value(n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4),
+        match result_ {
+            Some(held_) => in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(d1, 125) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(d2, 125) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83) && in_range(d3, 125) && in_range(n4x, 83) && in_range(n4y, 83) && in_range(n4z, 83) && in_range(d4, 125) && held_.value() == spec_value(n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4),
             None => !(in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(d1, 125) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(d2, 125) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83) && in_range(d3, 125) && in_range(n4x, 83) && in_range(n4y, 83) && in_range(n4z, 83) && in_range(d4, 125)),
         },
 )]

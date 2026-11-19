@@ -42,11 +42,13 @@ use geom_fuzz::orient2d::{
     Case, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference,
 };
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract,
-    crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg,
-    make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing,
-    planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence,
-    solids, surface_offsets, surfaces, transforms, variants, wide,
+    Harness, arenas, arrange, arrange_curves, attributes, batch, bodies, booleans, boxtree, cache,
+    cbor, cdt, contract, crossings, curve_offsets, curves, edit, encoder, entity, euler, exact,
+    general, intersect, level, linalg, make, maths, names, naming, natural, nurbs, open,
+    operations, orient2d, p21, pencils, piercing, planes, predicates, project, prune, quadric,
+    records, reductions, references, roots, sequence, sketch_corpus, sketch_motions,
+    sketch_splines, sketch_text, snap, solids, surface_offsets, surfaces, transforms, variants,
+    wide, zone,
 };
 
 use geom_num::Sign;
@@ -59,8 +61,10 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 48] = [
+const TARGETS: [(&str, Harness); 58] = [
     ("arenas", arenas::harness),
+    ("arrange", arrange::harness),
+    ("arrange_curves", arrange_curves::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
     ("bodies", bodies::harness),
@@ -72,6 +76,8 @@ const TARGETS: [(&str, Harness); 48] = [
     ("contract", contract::harness),
     ("curve_offsets", curve_offsets::harness),
     ("curves", curves::harness),
+    ("edit", edit::harness),
+    ("entity", entity::harness),
     ("encoder", encoder::harness),
     ("euler", euler::harness),
     ("exact", exact::harness),
@@ -98,7 +104,12 @@ const TARGETS: [(&str, Harness); 48] = [
     ("records", records::harness),
     ("references", references::harness),
     ("roots", roots::harness),
+    ("sketch_text", sketch_text::harness),
+    ("snap", snap::harness),
     ("sequence", sequence::harness),
+    ("sketch_corpus", sketch_corpus::harness),
+    ("sketch_motions", sketch_motions::harness),
+    ("sketch_splines", sketch_splines::harness),
     ("solids", solids::harness),
     ("surface_offsets", surface_offsets::harness),
     ("surfaces", surfaces::harness),
@@ -107,6 +118,7 @@ const TARGETS: [(&str, Harness); 48] = [
     ("reductions", reductions::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
+    ("zone", zone::harness),
     ("crossings", crossings::harness),
 ];
 

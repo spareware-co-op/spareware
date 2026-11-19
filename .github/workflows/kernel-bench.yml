@@ -305,14 +305,23 @@ jobs:
 
   # geom-bench's own checks, as kernel.yml makes them for geom-num, with the pinned toolchain. The
   # fuel host (geom-bench/fuel) is a workspace of its own, so it is formatted and linted by its
-  # manifest.
+  # manifest. Two parts side by side, so no job takes more than 15 minutes (the owner's rule): in
+  # one job they took 21 minutes in run 44504523210, 6.7 of them the formatting, the lints and the
+  # release build and tests, and 13.8 the debug build and tests. Part 1 formats, lints and tests in
+  # release; part 2 tests in debug. Each part caches its own build. geom-test's
+  # tests/queue_wiring.rs holds every check to exactly one part.
   checks:
-    name: Format, lints and tests (geom-bench)
+    name: Format, lints and tests (geom-bench, part ${{ matrix.k }} of 2)
     needs: scope
     # The pull request's pushes ran these on its change; the merge queue measures only aarch64.
     if: needs.scope.outputs.measure == 'true' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      # Both parts report, so a failure in one does not hide the other's.
+      fail-fast: false
+      matrix:
+        k: [1, 2]
     env:
       HEAD_TOOLCHAIN: ${{ needs.scope.outputs.head_toolchain }}
     steps:
@@ -337,9 +346,10 @@ jobs:
           workspaces: |
             . -> target
             projects/engines/geometry/crates/geom-bench/fuel -> target
-          key: checks-${{ needs.scope.outputs.head_toolchain }}
+          key: checks-${{ needs.scope.outputs.head_toolchain }}-${{ matrix.k }}
 
       - name: Formatting
+        if: matrix.k == 1
         run: |
           set -euo pipefail
           cargo "+$HEAD_TOOLCHAIN" fmt --check -p geom-bench
@@ -348,6 +358,7 @@ jobs:
       # On Linux this also builds the Valgrind gate (benches/instructions/gate.rs), which no other
       # platform compiles.
       - name: Clippy with geom-bench's lints
+        if: matrix.k == 1
         run: |
           set -euo pipefail
           cargo "+$HEAD_TOOLCHAIN" clippy --locked -p geom-bench --all-targets -- -D warnings
@@ -355,11 +366,13 @@ jobs:
             --all-targets -- -D warnings
 
       - name: Test in release, with overflow checks on
+        if: matrix.k == 1
         env:
           RUSTFLAGS: -C overflow-checks=on -D warnings
         run: cargo "+$HEAD_TOOLCHAIN" test --locked --release -p geom-bench
 
       - name: Test in debug
+        if: matrix.k == 2
         env:
           RUSTFLAGS: -D warnings
         run: cargo "+$HEAD_TOOLCHAIN" test --locked -p geom-bench

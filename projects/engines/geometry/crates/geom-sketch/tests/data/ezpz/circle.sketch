@@ -1,0 +1,10 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 4096 3072
+entity 1.1 point 102.4 204.8
+entity 2.0 circle 1.1 39936
+constraint 4.0 driving 0 radius 2.0 3481.6
+constraint 4.1 driving 0 fix 1.0 0 5120
+constraint 4.2 driving 0 fix 1.0 1 5120
+constraint 4.3 driving 0 fix 1.1 0 102.4
+constraint 4.4 driving 0 fix 1.1 1 204.8

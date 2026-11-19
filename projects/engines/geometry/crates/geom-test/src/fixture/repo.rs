@@ -45,14 +45,16 @@ pub struct File {
     pub text: String,
 }
 
-/// The files compiled into this crate.
+/// The files compiled into this crate, with `\n` line ends: `include_str!` takes a file as checked
+/// out, which a Windows checkout with Git's `core.autocrlf` gives `\r\n` ends, and a fixture's one
+/// spelling has `\n` (as [`read_dir`]'s walk reads them).
 #[must_use]
 pub fn embedded() -> Vec<File> {
     EMBEDDED
         .iter()
         .map(|(path, text)| File {
             path: (*path).to_owned(),
-            text: (*text).to_owned(),
+            text: text.replace("\r\n", "\n"),
         })
         .collect()
 }
@@ -71,9 +73,11 @@ fn walk(dir: &Path, prefix: &str, out: &mut Vec<File>) -> Result<(), String> {
             walk(&path, &format!("{prefix}{name}/"), out)?;
         } else if path.extension().is_some_and(|e| e == "json") {
             let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            // A Windows checkout with Git's `core.autocrlf` gives the files `\r\n` line ends; a
+            // fixture's one spelling has `\n`, so they are read as `\n`.
             out.push(File {
                 path: format!("{prefix}{name}"),
-                text,
+                text: text.replace("\r\n", "\n"),
             });
         }
     }

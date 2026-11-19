@@ -120,6 +120,9 @@ geom-intersect = { path = "../geom-intersect" }
 # the usual Rust STL reader, which welds corners only where bit for bit the same. stl_io 0.11.0:
 # MIT, with no dependencies of its own.
 stl_io = "=0.11.0"
+# The sketch oracles (G222): the block solver the jobs are solved with and the sketch v1 reader they
+# are written for. Ours, Apache-2.0.
+geom-sketch = { path = "../geom-sketch" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 # The timeout of `fixture fails`, so a fixture that hangs on the merge base counts as failing there

@@ -1,0 +1,5 @@
+# Sketch files here are compared byte for byte with what `sketch v1` writes, so git must never
+# convert their line ends (a Windows checkout would otherwise turn \n into \r\n).
+* -text
+# These notes themselves are text.
+.gitattributes text diff merge eol=lf

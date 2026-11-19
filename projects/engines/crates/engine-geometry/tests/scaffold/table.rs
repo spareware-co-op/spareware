@@ -285,7 +285,7 @@ const ROWS: &[Row<'static>] = &[
     // 6. Arrangements.
     kernel("geom-poly",      6, Accepted,   Elsewhere("G123"), "base math topo"),
     kernel("geom-bool",      6, Accepted,   Elsewhere("G129"), "base poly intersect topo name check bvh"),
-    kernel("geom-2d",        6, Accepted,   Here, "base math curve topo name intersect bvh"),
+    kernel("geom-2d",        6, Accepted,   Elsewhere("G192"), "base math nurbs curve surface topo name intersect bvh"),
     // 7. Meshes and spatial.
     kernel("geom-mesh",      7, Accepted,   Elsewhere("G153"),
         "base math topo poly curve surface intersect bvh linalg 2d"),
@@ -302,7 +302,7 @@ const ROWS: &[Row<'static>] = &[
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
-    kernel("geom-sketch",   10, Accepted,   Here, "base math curve linalg"),
+    kernel("geom-sketch",   10, Accepted,   Elsewhere("G216"), "base math curve nurbs linalg"),
     kernel("geom-profile",  10, Amended27, Here, "base sketch 2d topo name check intersect"),
     kernel("geom-terrain",  10, Accepted,   Here,
         "base math 2d mesh topo poly bool skeleton curve surface name bvh"),

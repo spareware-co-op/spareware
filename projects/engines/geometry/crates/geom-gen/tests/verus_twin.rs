@@ -21,6 +21,9 @@
 //! - `every_predicate_has_a_twin_and_the_rest_is_refused`: every predicate of the kernel has a
 //!   twin, and a description with a step wider than `I384` is refused with the reason, never
 //!   emitted as a twin that models it wrongly.
+//! - `no_name_the_spec_binds_is_an_input_s`: the names a twin's `#[verus_spec]` binds, its result
+//!   and the integer inside `Some`, are never an input's, so a circle's radius `r` or a weight `v`
+//!   is not shadowed in its `ensures` (piece G188's circle twins).
 
 // Tests may use native arithmetic to walk their token lists.
 #![allow(
@@ -259,7 +262,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 23] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -315,6 +318,66 @@ const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
         include_str!("../../geom-num/verus/generated/lpi_side.rs"),
         include_str!("../../geom-num/src/generated/lpi_side.rs"),
     ),
+    (
+        "carrier_side",
+        include_str!("../../geom-num/verus/generated/carrier_side.rs"),
+        include_str!("../../geom-num/src/generated/carrier_side.rs"),
+    ),
+    (
+        "carrier_order",
+        include_str!("../../geom-num/verus/generated/carrier_order.rs"),
+        include_str!("../../geom-num/src/generated/carrier_order.rs"),
+    ),
+    (
+        "rational_cmp",
+        include_str!("../../geom-num/verus/generated/rational_cmp.rs"),
+        include_str!("../../geom-num/src/generated/rational_cmp.rs"),
+    ),
+    (
+        "rational_orient",
+        include_str!("../../geom-num/verus/generated/rational_orient.rs"),
+        include_str!("../../geom-num/src/generated/rational_orient.rs"),
+    ),
+    (
+        "round_grid",
+        include_str!("../../geom-num/verus/generated/round_grid.rs"),
+        include_str!("../../geom-num/src/generated/round_grid.rs"),
+    ),
+    (
+        "round_rational",
+        include_str!("../../geom-num/verus/generated/round_rational.rs"),
+        include_str!("../../geom-num/src/generated/round_rational.rs"),
+    ),
+    (
+        "round_line",
+        include_str!("../../geom-num/verus/generated/round_line.rs"),
+        include_str!("../../geom-num/src/generated/round_line.rs"),
+    ),
+    (
+        "circle_side",
+        include_str!("../../geom-num/verus/generated/circle_side.rs"),
+        include_str!("../../geom-num/src/generated/circle_side.rs"),
+    ),
+    (
+        "circle_line",
+        include_str!("../../geom-num/verus/generated/circle_line.rs"),
+        include_str!("../../geom-num/src/generated/circle_line.rs"),
+    ),
+    (
+        "circle_gap",
+        include_str!("../../geom-num/verus/generated/circle_gap.rs"),
+        include_str!("../../geom-num/src/generated/circle_gap.rs"),
+    ),
+    (
+        "ellipse_side",
+        include_str!("../../geom-num/verus/generated/ellipse_side.rs"),
+        include_str!("../../geom-num/src/generated/ellipse_side.rs"),
+    ),
+    (
+        "ellipse_line",
+        include_str!("../../geom-num/verus/generated/ellipse_line.rs"),
+        include_str!("../../geom-num/src/generated/ellipse_line.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -334,6 +397,18 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_tpi_side,
         geom_gen::predicates::generate_verus_lpi_weight,
         geom_gen::predicates::generate_verus_lpi_side,
+        geom_gen::predicates::generate_verus_carrier_side,
+        geom_gen::predicates::generate_verus_carrier_order,
+        geom_gen::predicates::generate_verus_rational_cmp,
+        geom_gen::predicates::generate_verus_rational_orient,
+        geom_gen::predicates::generate_verus_round_grid,
+        geom_gen::predicates::generate_verus_round_rational,
+        geom_gen::predicates::generate_verus_round_line,
+        geom_gen::predicates::generate_verus_circle_side,
+        geom_gen::predicates::generate_verus_circle_line,
+        geom_gen::predicates::generate_verus_circle_gap,
+        geom_gen::predicates::generate_verus_ellipse_side,
+        geom_gen::predicates::generate_verus_ellipse_line,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
@@ -370,6 +445,62 @@ sign b
     .unwrap();
     let e = verus_twin(&wide, "test", "shipped.rs").unwrap_err().0;
     assert!(e.contains("up to I384"), "{e}");
+}
+
+/// The names a twin's `#[verus_spec]` binds in its `ensures`: the result before `=>`, and the
+/// integer inside each `Some( … )`.
+fn spec_binders(twin: &str) -> Vec<String> {
+    let at = twin.find("#[verus_spec(").expect("a verus_spec");
+    let spec = &twin[at..at + twin[at..].find(")]\n").expect("the spec's end")];
+    let mut names = vec![
+        spec["#[verus_spec(".len()..spec.find("=>").unwrap()]
+            .trim()
+            .to_owned(),
+    ];
+    for (k, _) in spec.match_indices("Some(") {
+        let rest = &spec[k + "Some(".len()..];
+        names.push(rest[..rest.find(')').unwrap()].trim().to_owned());
+    }
+    names
+}
+
+#[test]
+fn no_name_the_spec_binds_is_an_input_s() {
+    let check = |d: &geom_gen::predicate_derive::Derivation, what: &str| {
+        let twin = verus_twin(d, "test", "shipped.rs").unwrap();
+        let binders = spec_binders(&twin);
+        assert_eq!(binders.len(), 2, "{what}: {binders:?}");
+        for input in &d.description.inputs {
+            assert!(
+                !binders.contains(&input.name),
+                "{what}: the spec binds `{}`, an input's name",
+                input.name
+            );
+        }
+    };
+    for p in &PREDICATES {
+        check(&derivation(p).unwrap(), p.comparison.name);
+    }
+    // Inputs named as the spec's names once were (a circle's radius `r`, a weight `v`), and as
+    // anything a description may name: the spec's names end in `_`, which no description's may.
+    let named = derive(
+        "predicate shadowed
+input r v: rounded 40 in g
+let held = r * v
+sign held
+",
+    )
+    .unwrap();
+    check(&named, "shadowed");
+    let refused = derive(
+        "predicate trailing
+input r: rounded 40 in g
+let held_ = r * r
+sign held_
+",
+    )
+    .unwrap_err();
+    assert!(format!("{refused:?}").contains("held_"), "{refused:?}");
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -204,7 +204,7 @@ pub open spec fn bound_of_s() -> int {
     clippy::similar_names,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     requires
         a.x.on_grid(),
         a.y.on_grid(),
@@ -219,7 +219,7 @@ pub open spec fn bound_of_s() -> int {
         q.x.on_grid(),
         q.y.on_grid(),
     ensures
-        r matches Some(v) && v.value() == spec_value(a, b, c, d, p, q),
+        result_ matches Some(held_) && held_.value() == spec_value(a, b, c, d, p, q),
 )]
 pub fn value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> {
     let dc_x = d.x.get().checked_sub(c.x.get())?;

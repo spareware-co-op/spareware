@@ -8,6 +8,8 @@
 //! cargo run -p geom-test --bin oracle -- jobs <mesh oracle> --cases <set> [--seed <hex> --count <n>]
 //! cargo run -p geom-test --bin oracle -- compare <oracle> --jobs <file> --answers <file>
 //!     [--cases <set>]
+//! cargo run -p geom-test --bin oracle -- families --seed <hex> --count <n>
+//! cargo run -p geom-test --bin oracle -- diagnose planegcs --cases <file> --reports <file>
 //! cargo run -p geom-test --bin oracle -- triage <oracle> --jobs <file> --id <n> --kind <kind>
 //!     --outcome <ours|theirs|within-bounds|undecided> --fixture <id> --why <words>
 //!     [--reference <words>] [--root <dir>]
@@ -23,6 +25,9 @@
 //!   (`--cases`, `seeded` by default; `geom_test::oracle::meshes::CASE_SETS`): the seeded set from
 //!   the seed and count, a stored set from nothing else. A job of a model the set records as
 //!   refused (`meshes::REFUSED_MODELS`) is not written: the oracle is not asked.
+//! - `families` writes a night's sketch cases (G231), each with the degrees of freedom, redundancy and
+//!   conflicts it is built to have; `diagnose` judges a sketch solver's report of the same three
+//!   counts against them and the kernel's.
 //! - `compare` judges each answer and prints the differences by signature. It fails only on a
 //!   signature the triage register does not hold: each is judged once (28.10). A mesh oracle's
 //!   comparison names its case set (`--cases`, `seeded` by default), every job must be of it, and
@@ -58,10 +63,11 @@ use geom_test::fixture::{OpLog, Triage};
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
+use geom_test::oracle::families::{self, Case, Diagnosis};
 use geom_test::oracle::geomdl::{self, Compared};
 use geom_test::oracle::meshes;
-use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
+use geom_test::oracle::{sketches, smlib};
 use geom_test::seed::Seed;
 
 /// The outside oracles' tool.
@@ -104,6 +110,26 @@ enum Tool {
         /// How many: the seeded set's.
         #[arg(long, requires = "seed")]
         count: Option<u64>,
+    },
+    /// Write a night's sketch cases, each with the diagnosis it is built to have (G231).
+    Families {
+        /// The seed, in hexadecimal.
+        #[arg(long)]
+        seed: String,
+        /// How many.
+        #[arg(long)]
+        count: u64,
+    },
+    /// Judge a sketch solver's reports of degrees of freedom, redundancy and conflicts (G231).
+    Diagnose {
+        /// The oracle.
+        oracle: String,
+        /// The cases, one JSON line each.
+        #[arg(long)]
+        cases: PathBuf,
+        /// The reports, one JSON line each.
+        #[arg(long)]
+        reports: PathBuf,
     },
     /// Judge the answers.
     Compare {
@@ -225,11 +251,22 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID || oracle == smlib::ID || meshes::holds(oracle) {
+    if oracle == geomdl::ID || oracle == smlib::ID || meshes::holds(oracle) || sketch(oracle) {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
     }
+}
+
+/// Whether `oracle` is a sketch solver, whose jobs are sketches (G222).
+fn sketch(oracle: &str) -> bool {
+    [
+        sketches::EZPZ,
+        sketches::FIKSI,
+        sketches::SOLVESPACE,
+        sketches::PLANEGCS,
+    ]
+    .contains(&oracle)
 }
 
 fn jobs(
@@ -259,6 +296,11 @@ fn jobs(
         printed(&jobs)?;
     } else if cases != meshes::SEEDED {
         return Err(format!("{oracle} has only seeded jobs, not {cases}"));
+    } else if sketch(oracle) {
+        let (seed, count) = seeded.ok_or("a sketch solver's jobs need --seed and --count")?;
+        let drawn =
+            sketches::jobs(oracle, seed, count).ok_or_else(|| format!("no jobs for {oracle}"))?;
+        printed(&drawn)?;
     } else if oracle == smlib::ID {
         let (seed, count) = seeded.ok_or("SMLib's jobs need --seed and --count")?;
         printed(&smlib::jobs(seed, count))?;
@@ -359,17 +401,31 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
         found
     } else if cases != meshes::SEEDED {
         return Err(format!("{oracle} has only seeded jobs, not {cases}"));
+    } else if sketch(oracle) {
+        judged(
+            &jobs,
+            &answers,
+            |job: &sketches::Job, answer: &sketches::Answer| {
+                Ok((job.id, sketches::judge(oracle, job, answer)?))
+            },
+        )?
     } else {
         // geomdl and SMLib's NLib write the same job and answer lines, each judged for its oracle.
         judged(&jobs, &answers, |job: &geomdl::Job, answer| {
             Ok((job.id, geomdl::judge_for(oracle, job, answer)?))
         })?
     };
+    finish(count, &differences, held)
+}
+
+/// Prints the differences by signature, and fails on a signature the register does not hold or
+/// when `held` is false (a job a case set records as refused was not refused so).
+fn finish(count: usize, differences: &[Signature], held: bool) -> Result<ExitCode, String> {
     let register = Register::embedded().map_err(|e| e.to_string())?;
-    for (signature, count) in group(&differences) {
+    for (signature, count) in group(differences) {
         println!("{signature}: {count}");
     }
-    let new = register.new_signatures(&differences);
+    let new = register.new_signatures(differences);
     println!(
         "oracle compare: {} jobs, {} differences, {} new signatures",
         count,
@@ -387,6 +443,33 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
     } else {
         ExitCode::from(1)
     })
+}
+
+/// A night's sketch cases to standard output, one JSON line each.
+fn family_cases(seed: &str, count: u64) -> Result<ExitCode, String> {
+    let seed = u64::from_str_radix(seed, 16).map_err(|e| format!("the seed {seed:?}: {e}"))?;
+    eprintln!("seed: {seed:016x}");
+    for case in families::cases(Seed(seed), count) {
+        println!(
+            "{}",
+            serde_json::to_string(&case).map_err(|e| e.to_string())?
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Judges a sketch solver's diagnoses of the cases.
+fn diagnose(oracle: &str, cases: &Path, reports: &Path) -> Result<ExitCode, String> {
+    known(oracle)?;
+    if !sketch(oracle) {
+        return Err(format!("{oracle} is no sketch solver"));
+    }
+    let (count, differences) = judged(
+        &read(cases)?,
+        &read(reports)?,
+        |case: &Case, report: &Diagnosis| Ok((case.job.id, families::judge(oracle, case, report)?)),
+    )?;
+    finish(count, &differences, true)
 }
 
 /// Job `id` of `text`: its operation's name, its family, and its operation for a log.
@@ -407,6 +490,12 @@ fn chosen(oracle: &str, text: &str, id: u64) -> Result<(String, String, Operatio
 
 fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
     known(&t.oracle)?;
+    if sketch(&t.oracle) {
+        return Err(format!(
+            "{}: a sketch job is triaged by hand until G231 writes its fixtures",
+            t.oracle
+        ));
+    }
     let root = match &t.root.root {
         Some(r) => r.clone(),
         None => workspace_root().map_err(|e| e.to_string())?,
@@ -461,6 +550,12 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
             seed,
             count,
         } => jobs(&oracle, &cases, seed.as_deref(), count),
+        Tool::Families { seed, count } => family_cases(&seed, count),
+        Tool::Diagnose {
+            oracle,
+            cases,
+            reports,
+        } => diagnose(&oracle, &cases, &reports),
         Tool::Compare {
             oracle,
             jobs,

@@ -17,12 +17,19 @@
 # `bin ssi`, `bin ssi-runner`, `test laws_intersections`, `test ssi`, `test ssi_tool` and
 # `test truth_corpus`) are measured once only: the wasm job's seconds on the Phase 5 branch's head
 # ac23963a5 (run 44068113586), when that branch still ran the job in one piece.
+# The fifteen units that came with Phase 6 (geom-fuzz's `test arrange`, `arrange_curves`, `edit`,
+# `entity`, `sketch_corpus`, `sketch_motions`, `sketch_splines`, `sketch_text`, `snap` and `zone`;
+# geom-test's `test arc_reference`, `exact_rank`, `oracle_families`, `oracle_sketches` and
+# `sketch_families_replay`) are not measured yet: each carries the slowest listed time, as the rule
+# above plans an unlisted unit, until the wasm job has run on them.
 # crate unit<TAB>seconds
 geom-fuzz bin replay-hashes	1
 geom-fuzz doc	1
 geom-fuzz lib	10
 geom-fuzz test adversarial	6
 geom-fuzz test arenas	5
+geom-fuzz test arrange	350
+geom-fuzz test arrange_curves	350
 geom-fuzz test attack_g14	10
 geom-fuzz test attributes	4
 geom-fuzz test batch	4
@@ -36,7 +43,9 @@ geom-fuzz test contract	9
 geom-fuzz test crossings	3
 geom-fuzz test curve_offsets	25
 geom-fuzz test curves	4
+geom-fuzz test edit	350
 geom-fuzz test encoder	3
+geom-fuzz test entity	350
 geom-fuzz test euler	30
 geom-fuzz test exact	2
 geom-fuzz test general	104
@@ -65,12 +74,18 @@ geom-fuzz test reductions	2
 geom-fuzz test references	12
 geom-fuzz test roots	4
 geom-fuzz test sequence	53
+geom-fuzz test sketch_corpus	350
+geom-fuzz test sketch_motions	350
+geom-fuzz test sketch_splines	350
+geom-fuzz test sketch_text	350
+geom-fuzz test snap	350
 geom-fuzz test solids	4
 geom-fuzz test surface_offsets	38
 geom-fuzz test surfaces	8
 geom-fuzz test transforms	2
 geom-fuzz test variants	2
 geom-fuzz test wide	3
+geom-fuzz test zone	350
 geom-gen bin geom-gen	1
 geom-gen doc	1
 geom-gen lib	8
@@ -98,6 +113,7 @@ geom-test bin ssi-runner	1
 geom-test bin trip	1
 geom-test doc	9
 geom-test lib	16
+geom-test test arc_reference	350
 geom-test test attack_g10	1
 geom-test test attack_g11	2
 geom-test test attack_g110	4
@@ -119,6 +135,7 @@ geom-test test corpus_runs	2
 geom-test test dependency_rule	1
 geom-test test determinism	6
 geom-test test ember_pairs	3
+geom-test test exact_rank	350
 geom-test test fixture_tool	1
 geom-test test fixtures	5
 geom-test test flat_reference	39
@@ -144,7 +161,9 @@ geom-test test museum	5
 geom-test test naming	14
 geom-test test nurbs_reference	3
 geom-test test oracle	5
+geom-test test oracle_families	350
 geom-test test oracle_meshes	35
+geom-test test oracle_sketches	350
 geom-test test oracle_tool	1
 geom-test test oracles_workflow	1
 geom-test test orient2d	3
@@ -157,6 +176,7 @@ geom-test test second_mesh	1
 geom-test test seed_replay	1
 geom-test test seeded_gates	1
 geom-test test shipped	10
+geom-test test sketch_families_replay	350
 geom-test test solidcore_job	350
 geom-test test ssi	233
 geom-test test ssi_tool	1

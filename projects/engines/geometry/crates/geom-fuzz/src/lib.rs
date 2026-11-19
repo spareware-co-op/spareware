@@ -62,7 +62,19 @@
 //! input order, and [`solids`] (G147 to G152), `geom-mesh`'s operations on small solids agree with
 //! counted cells, and [`booleans`] (G130 to G133, G137 to G139 and G144, with G129's rebuild),
 //! `geom-bool`'s boolean pipeline on small solids agrees with counted cells, every result passing
-//! both checkers. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! both checkers. Phase 6, the 2D drafting and the sketches, adds [`entity`] (G194), `geom-2d`'s
+//! entity model keeps its fraction, tag, polyline and kind-change laws; [`arrange`] and
+//! [`arrange_curves`], `geom-2d`'s arrangement of segments (G196a), and of segments, arcs and
+//! ellipses (G196b), has a pairwise oracle's vertices, keeps Euler's formula and does not depend on
+//! the input order; [`snap`] (G198), the snap index answers as a scan of every entity does, the
+//! same twice and within the aperture; [`zone`] (G199, G199a), segments and arcs inserted one by
+//! one give the sweep's arrangement; [`edit`] (G206), the placements and lengths keep their
+//! definitions and certified bounds; [`sketch_text`] (G217), any bytes are refused cleanly or read
+//! as a sketch that writes back to one fixed text; [`sketch_splines`] (G220a), everything
+//! `geom-sketch` does with splines holds its laws; [`sketch_motions`] (G224), the motions the sparse
+//! form finds are motions; and [`sketch_corpus`] (G231), every generated sketch family's case gets
+//! the diagnosis it is built to have.
+//! For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -157,6 +169,8 @@
 //!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-sketch` (Apache-2.0, ours), the code the [`sketch_text`], [`sketch_splines`],
+//!   [`sketch_motions`] and [`sketch_corpus`] targets test.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
 //! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
@@ -232,6 +246,8 @@ pub mod natural;
 
 pub mod adversarial;
 pub mod arenas;
+pub mod arrange;
+pub mod arrange_curves;
 pub mod attributes;
 pub mod batch;
 pub mod bodies;
@@ -243,7 +259,9 @@ pub mod cdt;
 pub mod contract;
 pub mod curve_offsets;
 pub mod curves;
+pub mod edit;
 pub mod encoder;
+pub mod entity;
 pub mod euler;
 pub mod exact;
 pub mod general;
@@ -271,12 +289,18 @@ pub mod robustness;
 pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod sketch_corpus;
+pub mod sketch_motions;
+pub mod sketch_splines;
+pub mod sketch_text;
+pub mod snap;
 pub mod solids;
 pub mod surface_offsets;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;
 pub mod wide;
+pub mod zone;
 
 /// A law a harness found broken, with the input that broke it.
 #[derive(Clone, Debug, PartialEq, Eq)]

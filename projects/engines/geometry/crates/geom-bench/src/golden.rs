@@ -23,8 +23,12 @@
 //! specify them, with SHA-256 (NIST FIPS 180-4, <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>).
 //!
 //! Cost: [`parse`] is O(n log n) for a file of n lines (each name is checked against those before
-//! it in an ordered set); [`check`] parses it and scans its entries, once per benchmark, always
-//! outside the measured region.
+//! it in an ordered set); [`check`] and [`lookup`] scan the lines in place, O(n), once per
+//! benchmark, outside the measured region, and take no heap when the digests match: the gate's
+//! teardown runs `check` inside the process DHAT measures, and DHAT's "At t-gmax" reading of a
+//! benchmark is its heap at the peak of the whole process, so heap the teardown took, growing with
+//! this file, would decide whether that peak falls in the teardown and move the reading of a
+//! benchmark that did not change (`tests/golden_heap.rs` holds `check` to no heap).
 
 use std::collections::BTreeSet;
 
@@ -89,14 +93,24 @@ pub fn parse(text: &str) -> Result<Vec<Entry<'_>>, String> {
     Ok(entries)
 }
 
-/// The recorded digests of the benchmark `name`, if it has an entry.
+/// The recorded digests of the benchmark `name`, if it has an entry: read from its line in place,
+/// with no heap (the module documentation says why). [`parse`], which `tests/golden.rs` runs,
+/// holds the whole file to one well-formed line a name.
 #[must_use]
 pub fn lookup(name: &str) -> Option<Digests> {
-    let entries = parse(GOLDEN).ok()?;
-    entries
-        .into_iter()
-        .find(|entry| entry.name == name)
-        .map(|entry| entry.digests)
+    GOLDEN.lines().find_map(|line| {
+        let mut fields = line.trim_end().split(' ');
+        if fields.next() != Some(name) {
+            return None;
+        }
+        match (fields.next(), fields.next(), fields.next()) {
+            (Some(inputs), Some(outputs), None) => Some(Digests {
+                inputs: Digest::from_hex(inputs)?,
+                outputs: Digest::from_hex(outputs)?,
+            }),
+            _ => None,
+        }
+    })
 }
 
 /// Checks a benchmark's digests against its recorded ones.
@@ -105,11 +119,8 @@ pub fn lookup(name: &str) -> Option<Digests> {
 ///
 /// A message saying what differs: no entry, the inputs, or the results.
 pub fn check(name: &str, actual: &Digests) -> Result<(), String> {
-    let recorded = parse(GOLDEN)?
-        .into_iter()
-        .find(|entry| entry.name == name)
-        .map(|entry| entry.digests)
-        .ok_or_else(|| format!("{name}: no golden digests recorded in golden.txt"))?;
+    let recorded =
+        lookup(name).ok_or_else(|| format!("{name}: no golden digests recorded in golden.txt"))?;
     if recorded.inputs != actual.inputs {
         return Err(format!(
             "{name}: the inputs changed (recorded {}, now {})",

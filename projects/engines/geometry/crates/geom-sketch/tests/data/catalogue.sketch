@@ -1,0 +1,124 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 0 0
+entity 1.1 point 40 0
+entity 1.2 point 40 30
+entity 1.3 point 0 30
+entity 1.4 point 20 0
+entity 1.5 point 80 0
+entity 1.6 point 0 0
+entity 1.7 point 20 50
+entity 1.8 point 20 50
+entity 1.9 point 30 50
+entity 1.10 point 20 60
+entity 1.11 point 10 50
+entity 1.12 point 40 50
+entity 1.13 point 25 50
+entity 1.14 point 30 70
+entity 1.15 point 0 40
+entity 1.16 point 40 40
+entity 1.17 point 20 -5
+entity 1.18 point 20 70
+entity 1.19 point 40 60
+entity 1.20 point 20 30
+entity 2.0 line 1.0 1.1 segment
+entity 2.1 line 1.1 1.2 segment
+entity 2.2 line 1.3 1.2 segment
+entity 2.3 line 1.0 1.3 segment
+entity 2.4 line 1.0 1.2 segment
+entity 2.5 line 1.4 1.5 segment
+entity 2.6 line 1.15 1.16 segment
+entity 2.7 line 1.9 1.14 segment
+entity 2.8 line 1.17 1.18 segment
+entity 3.0 circle 1.7 10
+entity 3.1 circle 1.8 10
+entity 3.2 circle 1.8 14
+entity 3.3 circle 1.12 10
+entity 3.4 circle 1.13 5
+entity 3.5 circle 1.20 10
+entity 4.0 arc 1.7 10 1.9 1.10
+entity 4.1 arc 1.7 10 1.10 1.9
+entity 4.2 arc 1.7 10 1.9 1.11
+entity 4.3 arc 1.12 10 1.9 1.19
+entity 5.0 scalar 50 1
+entity 5.1 scalar 0.5 64
+entity 5.2 scalar 10 1
+entity 5.3 scalar 3 1
+entity 5.4 scalar 7 1
+entity 5.5 scalar 21 1
+entity 5.6 scalar 30 1
+entity 5.7 scalar 40 1
+entity 5.8 scalar 4 1
+entity 5.9 scalar 20 1
+entity 5.10 scalar 15.707963267948966 1
+entity 6.0 reference 0 0
+entity 6.1 reference 40 0
+entity 6.2 line 6.0 6.1 segment
+constraint 10.0 driving 0 coincident 1.0 1.6
+constraint 10.1 driving 0 concentric 3.0 3.1
+constraint 10.2 driving 0 on-line 1.4 2.0
+constraint 10.3 driving 0 on-circle 1.9 3.0
+constraint 10.4 driving 0 midpoint 1.4 1.0 1.1
+constraint 10.5 driving 0 collinear 2.0 2.5
+constraint 10.6 driving 0 horizontal 2.0
+constraint 10.7 driving 0 vertical 2.1
+constraint 10.8 driving 0 parallel 2.0 2.2
+constraint 10.9 driving 0 perpendicular 2.0 2.1
+constraint 10.10 driving 0 turned 2.0 2.1 0.5
+constraint 10.11 driving 0 heading 2.1 0.5
+constraint 10.12 driving 0 distance 1.0 1.2 50
+constraint 10.13 driving 0 point-line 1.3 2.0 30 left
+constraint 10.14 driving 0 point-line 1.17 2.0 5 right
+constraint 10.15 driving 0 point-circle 1.12 3.0 10 outside
+constraint 10.16 driving 0 point-circle 1.13 3.0 5 inside
+constraint 10.17 driving 0 lines-apart 2.0 2.2 30 left
+constraint 10.18 driving 0 lines-apart 2.2 2.0 30 right
+constraint 10.19 driving 0 across 1.0 1.1 40
+constraint 10.20 driving 0 upward 1.1 1.2 30
+constraint 10.21 driving 0 length 2.4 50
+constraint 10.22 driving 0 equal-length 2.0 2.2
+constraint 10.23 driving 0 radius 3.0 10
+constraint 10.24 driving 0 diameter 3.0 20
+constraint 10.25 driving 0 equal-radius 3.0 3.1
+constraint 10.26 driving 0 offset 3.0 3.2 4 grows
+constraint 10.27 driving 0 offset 3.2 3.0 4 shrinks
+constraint 10.28 driving 0 sweep 4.0 0.5
+constraint 10.29 driving 0 sweep 4.1 1.5
+constraint 10.30 driving 0 arc-length 4.0 15.707963267948966
+constraint 10.31 driving 0 arc-length 4.1 47.12388980384689
+constraint 10.32 driving 0 arc-length 4.2 31.41592653589793
+constraint 10.33 driving 0 tangent-line 2.6 3.0 left
+constraint 10.34 driving 0 tangent-line 2.6 3.5 right
+constraint 10.35 driving 0 tangent-circles 3.0 3.3 outside
+constraint 10.36 driving 0 tangent-circles 3.4 3.0 inside
+constraint 10.37 driving 0 tangent-at-end 2.7 4.0 1.9
+constraint 10.38 driving 0 arcs-tangent-at-end 4.0 4.3 1.9
+constraint 10.39 driving 0 symmetric 1.0 1.1 2.8
+constraint 10.40 driving 0 symmetric-about 1.4 1.0 1.1
+constraint 10.41 driving 0 spaced 1.0 1.4 1.1
+constraint 10.42 driving 0 linear-pattern 1.0 1.1 1.3 1.2
+constraint 10.43 driving 0 circular-pattern 1.7 1.9 1.10 0.5
+constraint 10.44 driving 0 fix 1.0 0 0
+constraint 10.45 driving 0 fix 3.0 0 10
+constraint 10.46 driving 0 linear 5.4 5.3 2 1
+constraint 10.47 driving 0 product 5.5 5.3 5.4
+constraint 11.0 driving 0 distance 1.0 1.2 @5.0
+constraint 11.1 driving 0 turned 2.0 2.1 @5.1
+constraint 11.2 driving 0 heading 2.1 @5.1
+constraint 11.3 driving 0 point-line 1.3 2.0 @5.6 left
+constraint 11.4 driving 0 point-circle 1.12 3.0 @5.2 outside
+constraint 11.5 driving 0 lines-apart 2.0 2.2 @5.6 left
+constraint 11.6 driving 0 across 1.0 1.1 @5.7
+constraint 11.7 driving 0 upward 1.1 1.2 @5.6
+constraint 11.8 driving 0 length 2.4 @5.0
+constraint 11.9 driving 0 radius 3.0 @5.2
+constraint 11.10 driving 0 diameter 3.0 @5.9
+constraint 11.11 driving 0 offset 3.0 3.2 @5.8 grows
+constraint 11.12 driving 0 sweep 4.0 @5.1
+constraint 11.13 driving 0 arc-length 4.0 @5.10
+constraint 11.14 driving 0 circular-pattern 1.7 1.9 1.10 @5.1
+constraint 12.0 driving 0 coincident 1.0 6.0
+constraint 12.1 driving 0 on-line 1.4 6.2
+constraint 12.2 driving 0 collinear 2.0 6.2
+constraint 12.3 driving 0 distance 6.0 1.2 50
+constraint 12.4 driving 0 horizontal 6.2

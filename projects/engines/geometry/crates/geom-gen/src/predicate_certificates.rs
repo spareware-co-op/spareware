@@ -86,7 +86,7 @@ pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/genera
 /// `n4x * mx_x`), so no hypothesis on the inputs, or on products of two, bounds it by the case's
 /// S; Gappa's `LIN` rules relate scales only through products of maxima, and the ratio of two
 /// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
-pub const UNPROVEN: [(&str, u32); 8] = [
+pub const UNPROVEN: [(&str, u32); 15] = [
     ("tpi_side", 292),
     ("lpi_side", 292),
     ("line_sphere", 292),
@@ -95,6 +95,13 @@ pub const UNPROVEN: [(&str, u32); 8] = [
     ("line_cone_lead", 292),
     ("axis_gap", 292),
     ("cross_norm", 292),
+    ("round_grid", 292),
+    ("round_rational", 292),
+    ("round_line", 292),
+    ("circle_side", 292),
+    ("circle_line", 292),
+    ("ellipse_side", 292),
+    ("ellipse_line", 292),
 ];
 
 /// The filters whose `FPTaylor` problem bounds the sum of its error terms at once (`opt-exact`),
@@ -119,9 +126,10 @@ pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 /// `FPTaylor`'s own, term by term (`opt-approx`): a cut term's pieces are its inequality on the
 /// parts of its box, and the shard that has some of them proves the inequality on the whole box
 /// from them.
-pub const SHARDED: [(&str, Shards); 2] = [
+pub const SHARDED: [(&str, Shards); 3] = [
     ("lpi_side", LPI_SIDE_SHARDS),
     ("line_cone", LINE_CONE_SHARDS),
+    ("ellipse_side", ELLIPSE_SIDE_SHARDS),
 ];
 
 /// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
@@ -383,6 +391,69 @@ pub const LINE_CONE_SHARDS: Shards = {
             &[P(38, 62)],
             &[P(38, 63)],
             &[P(38, 64)],
+        ],
+    }
+};
+
+/// `ellipse_side`'s 60 terms (30 error terms, each bounded above and below), shared out by what
+/// each took to check on a hosted runner. Checked whole in one job, it never finished: the job
+/// stopped at its 350-minute limit at term 58 (run 43564407246: 73 minutes of setup, `FPTaylor`
+/// and HOL Light's load with its Taylor tables for 17 variables, then 0 to 22.4 minutes a term),
+/// and again at term 53 when a newer push replaced it (run 44504522597: 42 minutes of setup,
+/// terms 1 to 52 in 119 minutes, each about half its time in the first run). Planned as
+/// `lpi_side`'s are, from the slower of the two runs for each term: a term over 5.6 minutes is a
+/// shard alone, and so is each of terms 58 to 60, which no run finished; the rest, longest first,
+/// each go to the first shard they fit, filled to 13 minutes. Each shard restores the loaded
+/// state, so 40 jobs of 7.4 to 29.8 planned minutes replace the one that ran out of time. Still
+/// planned over 15 minutes, and why: the 14 terms over 7.6 minutes alone (the longest, term 53,
+/// 22.4 minutes, and term 51, 17.4) on the slower runner; a term is the least a shard proves
+/// unless it is cut as `line_cone`'s term 38 is, and a cut needs its own proof run first.
+pub const ELLIPSE_SIDE_SHARDS: Shards = {
+    use Part::Term as T;
+    Shards {
+        terms: 60,
+        cuts: &[],
+        shards: &[
+            &[T(1), T(45), T(49), T(50)],
+            &[T(2), T(46)],
+            &[T(3), T(5), T(6), T(7), T(8), T(9), T(10), T(48)],
+            &[T(4), T(23), T(24), T(32)],
+            &[T(11)],
+            &[T(12)],
+            &[T(13), T(33)],
+            &[T(14), T(34)],
+            &[T(15), T(16)],
+            &[T(17), T(18)],
+            &[T(19)],
+            &[T(20)],
+            &[T(21)],
+            &[T(22)],
+            &[T(25), T(26)],
+            &[T(27)],
+            &[T(28)],
+            &[T(29)],
+            &[T(30)],
+            &[T(31)],
+            &[T(35), T(36)],
+            &[T(37)],
+            &[T(38)],
+            &[T(39)],
+            &[T(40)],
+            &[T(41)],
+            &[T(42)],
+            &[T(43)],
+            &[T(44)],
+            &[T(47)],
+            &[T(51)],
+            &[T(52)],
+            &[T(53)],
+            &[T(54)],
+            &[T(55)],
+            &[T(56)],
+            &[T(57)],
+            &[T(58)],
+            &[T(59)],
+            &[T(60)],
         ],
     }
 };
@@ -899,11 +970,14 @@ pub fn gappa_cases(d: &Derivation) -> Result<Vec<String>, EmitError> {
 }
 
 /// Whether the cases of the largest group maximum state a scale set: its monomials have one
-/// degree, and for each group the monomial [`dominant`] gives is one of them. Otherwise (a
-/// plane's normal beside the axes, whose largest maximum makes no monomial the largest) each
-/// monomial is a case of its own.
+/// degree, each holds every group, so that a case's hypotheses can put every maximum at 1 or more
+/// (a zero one makes S zero), and for each group the monomial [`dominant`] gives is one of them.
+/// Otherwise (a plane's normal beside the axes, whose largest maximum makes no monomial the
+/// largest, or squares of different groups) each monomial is a case of its own.
 fn group_cases(set: &BTreeSet<Monomial>, groups: usize) -> bool {
-    one_degree(set) && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
+    one_degree(set)
+        && set.iter().all(|m| m.iter().all(|e| *e > 0))
+        && (0..groups).all(|g| dominant(set, g).is_some_and(|m| set.contains(&m)))
 }
 
 /// Whether every monomial of `set` has one degree.

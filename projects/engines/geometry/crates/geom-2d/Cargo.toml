@@ -19,6 +19,25 @@ geom-name = { path = "../geom-name" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
+geom-nurbs = { path = "../geom-nurbs" }
+geom-surface = { path = "../geom-surface" }
+
+[dev-dependencies]
+# Seeds, the test generator, and the golden store (piece G19): the kernel's development crate, a
+# development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+# Splines for the contact tests (piece G195). Ours, Apache-2.0.
+geom-nurbs = { path = "../geom-nurbs" }
+
+# The snap query on a million entities (piece G198), with the standard library's clock only.
+[[bench]]
+name = "snap"
+harness = false
+
+# One edit on a drawing of a million edges (piece G199), with the standard library's clock only.
+[[bench]]
+name = "zone"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

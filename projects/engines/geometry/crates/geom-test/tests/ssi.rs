@@ -1891,6 +1891,10 @@ fn judged_run(dir: &Path, cases: &[Case], stand_in: StandIn, ceilings: &Ceilings
     .expect("judged")
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 #[cfg_attr(
     target_family = "wasm",
@@ -1943,6 +1947,10 @@ fn a_report_publishes_every_case() {
     fs::remove_dir_all(&dir).expect("removed");
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 #[cfg_attr(
     target_family = "wasm",
@@ -1982,6 +1990,10 @@ fn a_scorers_infinity_is_not_a_reason_to_stop() {
     fs::remove_dir_all(&dir).expect("removed");
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 #[cfg_attr(
     target_family = "wasm",
@@ -2112,6 +2124,10 @@ fn the_catalogue_covers_the_lists_it_rebuilds() {
     }
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 #[cfg_attr(
     target_family = "wasm",

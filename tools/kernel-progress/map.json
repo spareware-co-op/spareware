@@ -106,6 +106,10 @@
       "G166": {"class": "Certified", "from": "architecture/12-intersections.md, 12.7, as built (G166): \"Each point is an enclosure of a point exactly on both surfaces\", and 12.2: Certified for \"every algebraic point\""},
       "G167": {"classes": ["Exact", "Certified"], "from": "architecture/12-intersections.md, 12.7's table: \"Exact where the profile is lines\", \"Exact where the crossing is rational\", and Certified otherwise"},
       "G170": {"class": "Certified", "from": "architecture/12-intersections.md, 12.7's table: the general paths of 12.8 are \"Certified\"; architecture/30-build-order.json, G170: certified marching"},
+      "G200": {"classes": ["Exact", "Certified"], "from": "architecture/14-2d-drafting.md, 14.13's table: region finding is \"Exact on their inputs\"; 14.4, as built (G200): \"`twice_area` is exact on a ring of grid points and `area` certified on any straight ring\""},
+      "G206": {"classes": ["Exact", "Certified"], "from": "architecture/14-2d-drafting.md, 14.7, as built (G206): placing, stretching, arrays, lengthening, dividing and measuring are exact, a result off the grid \"never rounded\", and `polyline_length` \"is an interval that holds the true length\""},
+      "G222": {"class": "Approximate", "from": "architecture/15-sketches.md, 15.6: a block has converged \"when every residual is at most\" q/64, a measured residual; 15.17: the open solvers \"report residuals\" and only the chained Krawczyk certificate proves a solution; the solved sketch is not committed"},
+      "G228": {"class": "Exact", "from": "architecture/15-sketches.md, 15.9, as built (G228): `Dragger::release` replays the log and \"commits it (15.10)\"; 15.10: \"in its own frame the profile it hands on is Exact\"; frames are previews, never stored"},
       "G300": {"class": "Certified", "from": "architecture/30-build-order.json, G300: results Certified(eps)"}
     }
   },

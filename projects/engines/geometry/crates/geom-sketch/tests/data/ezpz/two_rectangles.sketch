@@ -1,0 +1,34 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 1024 1024
+entity 1.1 point 4608 1536
+entity 1.2 point 4096 3584
+entity 1.3 point 1536 3072
+entity 1.4 point 2048 2048
+entity 1.5 point 5632 3584
+entity 1.6 point 5120 4608
+entity 1.7 point 2560 4096
+entity 3.0 construction line 1.0 1.1 segment
+entity 3.1 construction line 1.2 1.3 segment
+entity 3.2 construction line 1.1 1.2 segment
+entity 3.3 construction line 1.3 1.0 segment
+entity 3.4 construction line 1.4 1.5 segment
+entity 3.5 construction line 1.6 1.7 segment
+entity 3.6 construction line 1.5 1.6 segment
+entity 3.7 construction line 1.7 1.4 segment
+constraint 4.0 driving 0 fix 1.0 0 1024
+constraint 4.1 driving 0 fix 1.0 1 1024
+constraint 4.2 driving 0 horizontal 3.0
+constraint 4.3 driving 0 horizontal 3.1
+constraint 4.4 driving 0 vertical 3.2
+constraint 4.5 driving 0 vertical 3.3
+constraint 4.6 driving 0 distance 1.0 1.1 4096
+constraint 4.7 driving 0 distance 1.0 1.3 3072
+constraint 4.8 driving 0 fix 1.4 0 2048
+constraint 4.9 driving 0 fix 1.4 1 2048
+constraint 4.10 driving 0 horizontal 3.4
+constraint 4.11 driving 0 horizontal 3.5
+constraint 4.12 driving 0 vertical 3.6
+constraint 4.13 driving 0 vertical 3.7
+constraint 4.14 driving 0 distance 1.4 1.5 4096
+constraint 4.15 driving 0 distance 1.4 1.7 4096

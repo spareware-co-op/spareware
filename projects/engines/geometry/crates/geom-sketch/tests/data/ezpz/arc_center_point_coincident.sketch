@@ -1,0 +1,17 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 4515.84 3768.32
+entity 1.1 point 563.2 -3389.44
+entity 1.2 point -1187.84 -2693.12
+entity 1.3 point -6871.04 -2867.2
+entity 1.4 point 563.2 -3389.44
+entity 1.5 point 2304 -4085.76
+entity 1.6 point 1464.32 -1751.04
+entity 1.7 point 563.2 -3389.44
+entity 1.8 point 2304 -4085.76
+entity 1.9 point 1464.32 -1751.04
+entity 2.0 arc 1.7 1874.898979251949 1.8 1.9
+entity 3.0 construction line 1.0 1.1 segment
+constraint 4.0 driving 0 coincident 1.4 1.1
+constraint 4.1 driving 0 on-line 1.6 3.0
+constraint 4.2 driving 0 on-circle 1.2 2.0
