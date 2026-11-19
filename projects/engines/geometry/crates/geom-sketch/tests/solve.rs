@@ -586,6 +586,7 @@ fn cases() -> Vec<(String, Sketch)> {
     target_family = "wasm",
     ignore = "reads the repository's files, which WASI cannot without a preopened folder"
 )]
+#[cfg_attr(miri, ignore = "reads the repository's files, which Miri's isolation refuses")]
 #[test]
 fn the_ezpz_list_is_the_folder() {
     let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/ezpz");
