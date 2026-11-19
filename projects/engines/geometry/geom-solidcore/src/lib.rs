@@ -25,7 +25,9 @@
 //!
 //! What it does: a [`Modeller`] owns one solidcore kernel and one grid step. It makes the four
 //! primitives the stored cases need ([`Modeller::cuboid`], [`Modeller::sphere`],
-//! [`Modeller::cylinder`], [`Modeller::cone`]), the three booleans ([`Modeller::union`],
+//! [`Modeller::cylinder`], [`Modeller::cone`]), the extrusion of a plane profile with holes by a
+//! vector of whole steps ([`Modeller::extrude`], chapter 13.4's Extrude with distance ends and no
+//! taper), the three booleans ([`Modeller::union`],
 //! [`Modeller::difference`], [`Modeller::intersection`]), a solid cut by a plane
 //! ([`Modeller::plane_section`]) and two solids met ([`Modeller::meet`]), and reads a solid's
 //! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
@@ -53,13 +55,17 @@ use geom_num::{GridStep, P3, Steps};
 use geom_topo::Body;
 use solidcore::boolean::api_brep::{boolean_difference, boolean_intersection, boolean_union};
 use solidcore::curve::curve::Curve;
+use solidcore::geom::axis2_placement::Axis2Placement;
 use solidcore::intersect::api_intersectors::{
     BrepOperands, intersect_brep_with_plane, intersect_breps,
 };
 use solidcore::mass::integrator::properties::brep_volume_default;
+use solidcore::nurbs::b_spline_curve::p1::{BSplineCurve, NurbCircleParam};
+use solidcore::primitive::api_curves::create_line_segment;
 use solidcore::primitive::api_primitives::{
     create_box, create_cone, create_cylinder, create_sphere,
 };
+use solidcore::sweep::api_brep::create_linear_sweep;
 use solidcore::topology::brep::p3::brep_copy;
 use solidcore::topology::brep::validation::{CheckLevel, check_brep};
 use solidcore::{Brep, Kernel, KernelOptions, Point3, SolidError, Vec3};
@@ -95,6 +101,14 @@ pub enum Error {
         /// What has no row or kind, by name.
         what: String,
     },
+    /// The input is not one the operation takes, decided by this crate before solidcore is
+    /// reached.
+    Invalid {
+        /// The operation, by this crate's name for it.
+        operation: &'static str,
+        /// What is wrong with the input.
+        what: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -111,6 +125,9 @@ impl fmt::Display for Error {
                     f,
                     "{operation}: the result holds {what}, which the kernel has no kind for"
                 )
+            }
+            Error::Invalid { operation, what } => {
+                write!(f, "{operation}: not an input it takes: {what}")
             }
         }
     }
@@ -156,6 +173,65 @@ fn spheres_apart((a, ra): (P3, Steps), (b, rb): (P3, Steps)) -> bool {
         Some(dd > sum.checked_mul(sum)? || dd < diff.checked_mul(diff)?)
     };
     apart().unwrap_or(false)
+}
+
+/// One hole of a [`Profile`], in the profile's plane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Hole {
+    /// A polygon of grid points, in order either way round.
+    Polygon(Vec<P3>),
+    /// The circle of `radius` about the grid point `centre`.
+    Circle {
+        /// The circle's centre.
+        centre: P3,
+        /// The circle's radius.
+        radius: Steps,
+    },
+}
+
+/// A plane region: an outer polygon of grid points, in order either way round, and the holes
+/// inside it, every one in the outer polygon's plane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Profile {
+    /// The outer polygon's corners.
+    pub outer: Vec<P3>,
+    /// The holes.
+    pub holes: Vec<Hole>,
+}
+
+/// `a - b` for grid points, as whole steps in i128 (each coordinate is an i64).
+fn diff(a: P3, b: P3) -> [i128; 3] {
+    let d = |p: geom_num::Coord, q: geom_num::Coord| i128::from(p.get()) - i128::from(q.get());
+    [d(a.x, b.x), d(a.y, b.y), d(a.z, b.z)]
+}
+
+/// `a . b`, or `None` past i128.
+fn dot_i(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
+    a[0].checked_mul(b[0])?
+        .checked_add(a[1].checked_mul(b[1])?)?
+        .checked_add(a[2].checked_mul(b[2])?)
+}
+
+/// Twice the vector area of the polygon `ps` (its Newell normal), in whole squared steps, taken
+/// about its first corner; `None` past i128.
+fn newell(ps: &[P3]) -> Option<[i128; 3]> {
+    let o = *ps.first()?;
+    let mut n = [0_i128; 3];
+    for w in ps.windows(2).skip(1) {
+        let (a, b) = (diff(w[0], o), diff(w[1], o));
+        let c = [
+            a[1].checked_mul(b[2])?
+                .checked_sub(a[2].checked_mul(b[1])?)?,
+            a[2].checked_mul(b[0])?
+                .checked_sub(a[0].checked_mul(b[2])?)?,
+            a[0].checked_mul(b[1])?
+                .checked_sub(a[1].checked_mul(b[0])?)?,
+        ];
+        for (s, x) in n.iter_mut().zip(c) {
+            *s = s.checked_add(x)?;
+        }
+    }
+    Some(n)
 }
 
 /// One piece of a meeting curve, held privately, read by its parameter.
@@ -357,6 +433,137 @@ impl Modeller {
         );
         let b = create_cone(&mut self.kernel, o, rb, rt, h).map_err(|e| refused("cone", &e))?;
         self.checked("cone", b)
+    }
+
+    /// The solid swept by the region `profile` along the vector `by` (whole steps along x, y and
+    /// z), capped at both ends: chapter 13.4's Extrude with distance ends and no taper, made by
+    /// solidcore's linear sweep. The loops' order of corners does not matter: the outer polygon is
+    /// handed to solidcore counter-clockwise about `by` and each hole clockwise, decided exactly
+    /// from the corners' whole steps.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Invalid`] for an outer polygon or hole of fewer than three corners, a loop with
+    /// no area, a corner or circle centre off the outer polygon's plane, a vector in that plane,
+    /// or a profile too large to decide that in i128; [`Error::Refused`] if solidcore refuses;
+    /// [`Error::CheckFailed`] and [`Error::Unconverted`] as every result.
+    pub fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Solid, Error> {
+        const OP: &str = "extrude";
+        let invalid = |what: &str| Error::Invalid {
+            operation: OP,
+            what: what.to_owned(),
+        };
+        let too_large = || invalid("a profile too large to decide exactly");
+        let outer = &profile.outer;
+        if outer.len() < 3 {
+            return Err(invalid("an outer polygon of fewer than three corners"));
+        }
+        let by_i = by.map(i128::from);
+        let n = newell(outer).ok_or_else(too_large)?;
+        if n == [0; 3] {
+            return Err(invalid("an outer polygon with no area"));
+        }
+        let along = dot_i(n, by_i).ok_or_else(too_large)?;
+        if along == 0 {
+            return Err(invalid("a vector in the profile's plane"));
+        }
+        let o = outer[0];
+        let off = |p: P3| dot_i(n, diff(p, o)).map(|d| d != 0).ok_or_else(too_large);
+        for &p in outer {
+            if off(p)? {
+                return Err(invalid("an outer corner off the polygon's plane"));
+            }
+        }
+        // The loops as solidcore takes them: the outer one turning positively about `by`, each
+        // hole negatively.
+        let ccw = |ps: &[P3], positive: bool| -> Result<Vec<P3>, Error> {
+            let few = || invalid("a hole of fewer than three corners or with no area");
+            if ps.len() < 3 {
+                return Err(few());
+            }
+            let turn = dot_i(newell(ps).ok_or_else(too_large)?, by_i).ok_or_else(too_large)?;
+            if turn == 0 {
+                return Err(few());
+            }
+            let mut q = ps.to_vec();
+            if (turn > 0) != positive {
+                q.reverse();
+            }
+            Ok(q)
+        };
+        let mut curves: Vec<Curve> = Vec::new();
+        let mut polygon = |m: &Modeller, ps: &[P3]| -> Result<(), Error> {
+            for (i, &a) in ps.iter().enumerate() {
+                let b = ps[(i + 1) % ps.len()];
+                let line =
+                    create_line_segment(m.point(a), m.point(b)).map_err(|e| refused(OP, &e))?;
+                curves.push(Curve::from(line));
+            }
+            Ok(())
+        };
+        let outer = ccw(outer, true)?;
+        polygon(self, &outer)?;
+        let mut circles = Vec::new();
+        for hole in &profile.holes {
+            match hole {
+                Hole::Polygon(ps) => {
+                    for &p in ps {
+                        if off(p)? {
+                            return Err(invalid("a hole's corner off the profile's plane"));
+                        }
+                    }
+                    let q = ccw(ps, false)?;
+                    polygon(self, &q)?;
+                }
+                Hole::Circle { centre, radius } => {
+                    if off(*centre)? {
+                        return Err(invalid("a circle's centre off the profile's plane"));
+                    }
+                    circles.push((*centre, *radius));
+                }
+            }
+        }
+        // A circle's frame: its x axis along the outer polygon's first edge, its y axis so that
+        // the circle turns negatively about `by`, both in the profile's plane.
+        let unit = |v: [f64; 3]| {
+            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            Vec3::new(v[0] / l, v[1] / l, v[2] / l)
+        };
+        let (p0, p1) = (self.point(outer[0]), self.point(outer[1]));
+        let xa = unit([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "only the normal's direction is used, which the f64 keeps to rounding"
+        )]
+        let nu = {
+            let s = if along > 0 { 1.0 } else { -1.0 };
+            unit(n.map(|c| s * c as f64))
+        };
+        let ya = Vec3::new(
+            xa.y * nu.z - xa.z * nu.y,
+            xa.z * nu.x - xa.x * nu.z,
+            xa.x * nu.y - xa.y * nu.x,
+        );
+        for (centre, radius) in circles {
+            let frame = Axis2Placement::new(self.point(centre), xa, ya);
+            let arc = BSplineCurve::create_circle_segment(
+                3,
+                &frame,
+                self.length(radius),
+                0.0,
+                360.0,
+                NurbCircleParam::Quadratic,
+            )
+            .map_err(|e| refused(OP, &e))?;
+            curves.push(Curve::from(arc));
+        }
+        let v = by.map(|c| to_metres(c, self.step));
+        let dir = Vec3::new(v[0], v[1], v[2]);
+        let dist = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+        let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
+        let b = create_linear_sweep(&mut self.kernel, &refs, dir, dist, true)
+            .map_err(|e| refused(OP, &e))?;
+        self.checked(OP, b)
     }
 
     /// `a` united with `b`; neither is changed.
