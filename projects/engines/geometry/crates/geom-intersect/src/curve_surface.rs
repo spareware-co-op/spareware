@@ -2568,6 +2568,31 @@ pub fn curve_surface(
     if let Some(answer) = closed_form(curve, surface, meter)? {
         return Ok(answer);
     }
+    // A plane may run on without end (the only kind that may), and the engine needs a finite
+    // domain. Every point of the curve lies in its box, so the plane held, on each end it lacks, to
+    // that box read in its own parameters and a unit past it meets the curve where the plane does,
+    // and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across an
+    // endless plane was refused as invalid input).
+    let held;
+    let mut surface = surface;
+    if let SurfaceKind::Plane(p) = surface {
+        let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
+        if ![u0, u1, v0, v1].into_iter().all(f64::is_finite) {
+            let (u, v) = in_parameters(curve, p, finite(curve)?, meter)?;
+            let mut ends = [(u0, u1), (v0, v1)];
+            for ((lo, hi), x) in ends.iter_mut().zip([u, v]) {
+                if !lo.is_finite() {
+                    *lo = (smaller(x.lo(), *hi) - 1.0).next_down();
+                }
+                if !hi.is_finite() {
+                    *hi = (larger(x.hi(), *lo) + 1.0).next_up();
+                }
+            }
+            let (c, a, b) = p.vectors();
+            held = SurfaceKind::Plane(Plane::new(c, a, b, (ends[0], ends[1]))?);
+            surface = &held;
+        }
+    }
     let [seam_u, seam_v] = seams_of(surface);
     let seam_t = seam_of(curve, finite(curve)?);
     let field = Contact {

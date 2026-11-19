@@ -2092,3 +2092,98 @@ fn operands_past_the_frame_s_range_are_refused() {
         assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
     }
 }
+
+/// A plane that runs on without end, `c + u·a + v·b` for every u and v.
+fn endless(c: [f64; 3], a: [f64; 3], b: [f64; 3]) -> SurfaceKind {
+    let open = (f64::NEG_INFINITY, f64::INFINITY);
+    SurfaceKind::Plane(Plane::new(c, a, b, (open, open)).unwrap())
+}
+
+/// The plane x = 0 through the axis of the double cone about z with slope 1 (its domain 500 each
+/// way of the apex) holds the cone's points with |y| = |z|: the rulings y = z and y = −z, each
+/// through the apex at the origin and ending on the cone's end circles at z = ±500. With no ends
+/// to the plane, the cone's end circles are cut against it as against a plane with ends (issue
+/// 1071: they were refused as invalid input).
+#[test]
+fn an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex() {
+    let c = cone([0.0; 3], [0.0, 0.0, 1.0], 1.0);
+    let r = meet(&endless([0.0; 3], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
+    let found = curves(&r);
+    assert_eq!(found.len(), 2, "{:?}", r.items());
+    let mut slopes = Vec::new();
+    for curve in found {
+        assert!(matches!(curve, CurveKind::Line(_)), "{curve:?}");
+        let (lo, hi) = curve.domain();
+        let ends = [
+            curve.point(lo, Limit::FromRight).unwrap(),
+            curve.point(hi, Limit::FromLeft).unwrap(),
+        ];
+        for p in ends {
+            near(p[0], 0.0);
+            near(p[2].abs(), 500.0);
+            near(p[1].abs(), 500.0);
+        }
+        // Through the apex: its ends stand opposite each other about the origin.
+        near(ends[0][1] + ends[1][1], 0.0);
+        near(ends[0][2] + ends[1][2], 0.0);
+        slopes.push((ends[1][1] - ends[0][1]) / (ends[1][2] - ends[0][2]));
+    }
+    slopes.sort_by(f64::total_cmp);
+    near(slopes[0], -1.0);
+    near(slopes[1], 1.0);
+}
+
+/// The plane z = 4 with no ends, square to the axis of that cone, cuts it in the circle of radius
+/// 4 about (0, 0, 4), whole.
+#[test]
+fn an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle() {
+    let c = cone([0.0; 3], [0.0, 0.0, 1.0], 1.0);
+    let r = meet(
+        &endless([0.0, 0.0, 4.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+        &c,
+    );
+    let found = curves(&r);
+    assert_eq!(found.len(), 1, "{:?}", r.items());
+    let CurveKind::Circle(circle) = found[0] else {
+        panic!("{:?}", r.items());
+    };
+    near(circle.radius(), 4.0);
+    let [x, y, z] = circle.center();
+    near(x, 0.0);
+    near(y, 0.0);
+    near(z, 4.0);
+    let (lo, hi) = found[0].domain();
+    near(hi - lo, 2.0);
+}
+
+/// The half plane z = 4 for x ≥ 0, running on without end, cuts the cylinder of radius 5 about z
+/// in the half of its circle at that height with x ≥ 0: from (0, −5, 4) round (5, 0, 4) to
+/// (0, 5, 4), half a turn.
+#[test]
+fn an_endless_half_plane_cuts_a_cylinder_in_a_half_circle() {
+    let open = (f64::NEG_INFINITY, f64::INFINITY);
+    let half = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 4.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, f64::INFINITY), open),
+        )
+        .unwrap(),
+    );
+    let r = meet(&half, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 5.0));
+    let found = curves(&r);
+    assert_eq!(found.len(), 1, "{:?}", r.items());
+    let (lo, hi) = found[0].domain();
+    near(hi - lo, 1.0);
+    let p = mid(found[0]);
+    near(p[0], 5.0);
+    near(p[1], 0.0);
+    near(p[2], 4.0);
+    for (t, side) in [(lo, Limit::FromRight), (hi, Limit::FromLeft)] {
+        let q = found[0].point(t, side).unwrap();
+        near(q[0], 0.0);
+        near(q[1].abs(), 5.0);
+        near(q[2], 4.0);
+    }
+}
