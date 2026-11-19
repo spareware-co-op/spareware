@@ -611,6 +611,57 @@ fn a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside() {
     }
 }
 
+/// Issue 1018 with a line against a cone decided exactly (32.87): the natural target's input
+/// `082ee92f03fffe6b28ff` and the same with the plane on the other side of the axis. A plane along
+/// z, square to (0.6, 0.8, 0), stands 56 from the axis of a double cone of slope one half about z
+/// with its apex at (160, −4, 0), and meets it in a hyperbola whose vertices are at heights ±112.
+/// The plane's domain ends at z = −112, and the exact sign says that edge misses the cone: the
+/// stored doubles put the axis a hair more than 56 from the plane, so the lower branch lies wholly
+/// past the end and no edge cuts it. The closed form stores that branch a rounding off the meeting,
+/// its vertex 9e-14 above −112, so the box of the stored middle was inside both domains and the
+/// branch was kept whole, a curve running 900 past the plane's domain. The meeting's middle lies
+/// within the reach the item certifies of the stored one, and that grown box reaches the end: the
+/// pair is the engine's.
+#[test]
+fn a_piece_no_edge_cuts_is_read_where_the_meeting_may_lie() {
+    let cone = SurfaceKind::Cone(
+        Cone::new(
+            [160.0, -4.0, 0.0],
+            0.0,
+            0.5,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, (-300.0, 300.0)),
+        )
+        .unwrap(),
+    );
+    for y in [-92.0, 48.0] {
+        let plane = SurfaceKind::Plane(
+            Plane::new(
+                [184.0, y, 188.0],
+                [0.0, 0.0, 1.0],
+                [0.8, -0.6, 0.0],
+                ((-300.0, 300.0), (-300.0, 300.0)),
+            )
+            .unwrap(),
+        );
+        for (a, b) in [(&plane, &cone), (&cone, &plane)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            for c in r.iter().flat_map(curves) {
+                let (lo, hi) = c.domain();
+                for share in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                    let p = c.point(lo + (hi - lo) * share, Limit::FromRight).unwrap();
+                    assert!(p[2] > -112.0 - 1e-6, "{y}: {p:?} past the plane's end");
+                }
+            }
+            assert!(
+                r.is_none(),
+                "{y}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+}
+
 /// The ends of a whole turn are its join, and a sphere's pole is a point of it: a piece no edge
 /// cuts whose middle lies there is kept (32.94). The circle at √3 on a cylinder whose turn runs
 /// from −1 to 1 has its middle, along −x, on that join; the great circle in the plane x = y has its
@@ -732,8 +783,10 @@ fn a_box_that_ends_exactly_at_an_edge_reaches_it() {
             );
         }
     }
-    // A step further out each way, the box is wholly past the end, and the pair is nothing.
-    for short in [tube((h.next_up(), 1.9)), tube((-1.0, l.next_down()))] {
+    // Further out each way, past the reach the circle's item certifies (the meeting's middle lies
+    // within it of the stored one, so a step past the stored box can still hold the meeting), the
+    // box is wholly past the end, and the pair is nothing.
+    for short in [tube((h + 1e-9, 1.9)), tube((-1.0, l - 1e-9))] {
         assert_eq!(meet(&s, &short).items().len(), 0, "{height:?}");
     }
 }
