@@ -1340,6 +1340,8 @@ jobs:
           # compiles the workspace crates alone.
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: suite-cross-doc-${{ matrix.doc.k }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: List the kernel's crates the change can reach
         env:
           SELECTED: ${{ needs.scope.outputs.crates }}
