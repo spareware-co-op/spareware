@@ -631,14 +631,11 @@ fn add_product(sum: &mut ExactSum, factors: &[f64]) -> Option<()> {
     let mut count: usize = 1;
     for &f in rest {
         let mut next = [0.0; MOST_PARTS];
-        for (pair, &part) in next
-            .as_chunks_mut::<2>()
-            .0
-            .iter_mut()
-            .zip(parts.iter().take(count))
-        {
+        for (i, &part) in parts.iter().take(count).enumerate() {
             let (p, e) = two_prod(part, f);
-            *pair = [p, e];
+            let at = i.checked_mul(2)?;
+            *next.get_mut(at)? = p;
+            *next.get_mut(at.checked_add(1)?)? = e;
         }
         parts = next;
         count = count.checked_mul(2)?;
