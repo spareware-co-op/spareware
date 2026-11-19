@@ -68,8 +68,8 @@
 //! Cost: a few dozen interval operations per check; no loop. Recursion: none.
 
 use geom_curve::{Circle, Frame, Line, ParamCurve, tight};
-use geom_num::P3;
 use geom_num::interval::Interval;
+use geom_num::{P3, Sign};
 use geom_topo::SurfaceKind;
 
 /// Three enclosed coordinates.
@@ -304,6 +304,28 @@ impl Cone {
         let higher = tight::larger(fs.hi(), fe.hi());
         divide(Interval::new(lower, higher).ok()?, slant(self.slope)?)
     }
+
+    /// Whether the plane through `origin` with normal `normal` runs along this surface's axis and
+    /// is certainly farther from it than the radius and `stray` together, on a cylinder: then no
+    /// point within `stray` of the plane is within the radius of the axis, and two faces that
+    /// between them stray no more cannot meet.
+    ///
+    /// A point p of the cylinder is within the radius R of its foot on the axis, and every point
+    /// of the axis is at one distance D from a plane along it, so p is at least D − R from the
+    /// plane. "Along" is exact: the normal's dot product with the axis must be 0, and the slope
+    /// 0, with no width, since a plane that leans by any amount, or a cone, meets the surface
+    /// somewhere. D > R + stray is compared squared, ((C − o) · n)² > (R + stray)² · |n|², as two
+    /// parallel planes are ([`clear`]), on R + stray's certified upper end, so it is exact on exact
+    /// data and a plane at exactly the radius is not apart.
+    fn beside(&self, origin: V3, normal: V3, stray: f64) -> bool {
+        let far = || {
+            let along = dot(normal, self.axis)?;
+            let offset = dot(sub3(self.center, origin)?, normal)?;
+            let reach = plus(at(self.radius)?, at(stray)?)?.hi();
+            Some(zero([along, self.slope, at(0.0)?]) && clear(offset, normal, reach))
+        };
+        far().unwrap_or(false)
+    }
 }
 
 impl Torus {
@@ -342,8 +364,9 @@ impl Torus {
 /// How two faces' carriers lie, as far as group 3 can certify.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Pair {
-    /// Two parallel planes, certainly farther apart than their faces can stray from them: the
-    /// faces cannot meet.
+    /// Two parallel planes, certainly farther apart than their faces can stray from them, or a
+    /// cylinder and a plane along its axis certainly farther from it than the radius and that
+    /// stray: the faces cannot meet.
     Apart,
     /// Two planes that certainly cross along a line.
     Crossing,
@@ -361,7 +384,9 @@ pub(crate) enum Pair {
 /// group 2 has held within b of its plane lies within b of it, every point of it a mix of corners
 /// that do, so two such faces can meet wherever their planes are 2b apart or nearer, however the
 /// planes are written. For faces that lie on their planes exactly, `stray` is nothing, and any
-/// two parallel planes that are not one keep them apart.
+/// two parallel planes that are not one keep them apart. A cylinder and a plane exactly along its
+/// axis keep their faces apart in the same way, when the plane is more than the radius and `stray`
+/// from the axis ([`Cone::beside`]).
 ///
 /// Two planes that cross are left unknown, as `Pair::Crossing` is not given here: the one caller,
 /// group 3's test of two faces, settles only on apart or a shared circle, and treats crossing and
@@ -388,10 +413,12 @@ pub(crate) fn pair(first: &Carrier, second: &Carrier, stray: f64) -> Pair {
                 Pair::Unknown
             }
         }
-        (Carrier::Flat { normal, .. }, Carrier::Round(cone))
-        | (Carrier::Round(cone), Carrier::Flat { normal, .. }) => {
+        (Carrier::Flat { origin, normal }, Carrier::Round(cone))
+        | (Carrier::Round(cone), Carrier::Flat { origin, normal }) => {
             if cross(*normal, cone.axis).is_some_and(zero) {
                 Pair::Circle
+            } else if cone.beside(*origin, *normal, stray) {
+                Pair::Apart
             } else {
                 Pair::Unknown
             }
@@ -460,6 +487,27 @@ pub(crate) fn circles_apart(first: &Circle<3>, second: &Circle<3>, shared: bool)
         Some(shared && away(dot(gap, line)?))
     };
     apart().unwrap_or(false)
+}
+
+/// The side of the plane `on` that every point of `circle` lies on, if certain: the sign of
+/// (p − o) · n over the whole circle, whose values run over (c − o) · n ± r·|ẑ × n| (the largest
+/// of the affine distance, as the circle's bound on a plane is). Exact on exact data; `None` where
+/// the circle may touch or cross the plane, or `on` is not a plane, or a number cannot be enclosed.
+pub(crate) fn circle_side(circle: &Circle<3>, on: &Carrier) -> Option<Sign> {
+    let Carrier::Flat { origin, normal } = on else {
+        return None;
+    };
+    let (_, [_, _, own]) = circle.frame().unit_vectors().ok()?;
+    let off = dot(sub3(lift(circle.center())?, *origin)?, *normal)?;
+    let reach = times(at(circle.radius())?, length(cross(own, *normal)?)?)?;
+    let values = plus(off, spread(reach)?)?;
+    if values.lo() > 0.0 {
+        Some(Sign::Positive)
+    } else if values.hi() < 0.0 {
+        Some(Sign::Negative)
+    } else {
+        None
+    }
 }
 
 /// Whether every number in `a` is certainly not zero.

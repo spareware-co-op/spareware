@@ -16,9 +16,9 @@
 mod common;
 
 use common::{
-    CUBE, CUBE_FACES, Rows, annulus_sheet, certified, cube, cylinder, face_of, faces_into,
-    holed_sheet, ix, level, meter, parallel, polyhedron, report, round, round_cylinder, torus,
-    torus_surface,
+    CUBE, CUBE_FACES, Rows, annulus_sheet, certified, cube, cylinder, disc_sheet, face_of,
+    faces_into, holed_sheet, ix, level, meter, parallel, polyhedron, report, round, round_cylinder,
+    torus, torus_surface,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_curve::{Circle, CurveKind, Frame};
@@ -364,20 +364,22 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
         let r = sheets(&[&face[..], &crossing[..]]);
         assert_eq!(at(&r, BodyKind::General, 1), [], "{name}");
     }
-    let mut r = holed_sheet();
-    let s = r.shell(0);
-    for p in crossing {
-        r.vertex(p);
+    // A face holding a circle against a crossing plane: apart where the plane leaves its corners
+    // and its circle on one side (decision 32.96), and unchecked where it crosses the face.
+    let unchecked_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    for (x, faults) in [(20, &[][..]), (5, &unchecked_pair[..])] {
+        let mut r = holed_sheet();
+        let s = r.shell(0);
+        for [_, y, z] in crossing {
+            r.vertex([x, y, z]);
+        }
+        face_of(&mut r, s, &[&[4, 5, 6, 7]]);
+        assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
     }
-    face_of(&mut r, s, &[&[4, 5, 6, 7]]);
-    assert_eq!(
-        at(&r, BodyKind::General, 1),
-        [fault(
-            FaultKind::PairUnchecked,
-            Entity::Face(ix(0)),
-            Entity::Face(ix(1))
-        )]
-    );
     // A face with a hole against a crossing plane, listed after it.
     let mut r = sheets(&[&crossing[..]]);
     for p in [
@@ -717,22 +719,60 @@ fn shaft_box(x: i64, y: i64) -> Box3 {
 /// the bottom (face 0) and the top (face 1) each holding the opening's circle as a hole, and the
 /// opening's cylindrical face (face 6) between the two circles, facing its axis.
 fn wall_with_opening(x: i64, y: i64) -> Rows {
-    let corners = CUBE.map(|[a, b, c]| [a * 4, b * 3, c]);
+    wall_of([40, 30, 10], ([x, y], 4), 10.0)
+}
+
+/// A wall of `size` with a round opening through it about the vertical line through `centre`,
+/// of `radius`, as [`wall_with_opening`] makes it, its top circle at the height `top`.
+fn wall_of(size: [i64; 3], opening: ([i64; 2], i64), top: f64) -> Rows {
+    slab_of(([0; 2], size), opening, (top, 1.0))
+}
+
+/// A slab of `size` from the corner (`from`, 0) with a round opening through it about the
+/// vertical line through `centre`, of `radius`, as [`wall_with_opening`] makes it: its top circle
+/// at the height `top`, and both circles' normals `up` along z (1 or −1).
+fn slab_of(
+    (from, size): ([i64; 2], [i64; 3]),
+    (centre, radius): ([i64; 2], i64),
+    (top, up): (f64, f64),
+) -> Rows {
+    let corners = CUBE.map(|[a, b, c]| {
+        [
+            from[0] + a / 10 * size[0],
+            from[1] + b / 10 * size[1],
+            c / 10 * size[2],
+        ]
+    });
     let mut r = polyhedron(&corners, &CUBE_FACES);
     let (low, high) = (r.edge(None), r.edge(None));
-    let (cx, cy) = (x as f64, y as f64);
-    r.curves[low as usize] = round([cx, cy, 0.0], 4.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
-    r.curves[high as usize] = round([cx, cy, 10.0], 4.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    let [x, y] = centre;
+    let (cx, cy, rr) = (x as f64, y as f64, radius as f64);
+    r.curves[low as usize] = round([cx, cy, 0.0], rr, [1.0, 0.0, 0.0], [0.0, 0.0, up]);
+    r.curves[high as usize] = round([cx, cy, top], rr, [1.0, 0.0, 0.0], [0.0, 0.0, up]);
     // Seen from outside, the bottom from below and the top from above, each runs round its hole
     // clockwise.
-    add_loop_as(&mut r, 0, low, Sense::Forward);
-    add_loop_as(&mut r, 1, high, Sense::Reversed);
-    let side = r.face_with(
-        0,
-        &[&[(low, Sense::Reversed)], &[(high, Sense::Forward)]],
-        shaft(cx, cy),
-        shaft_box(x, y),
+    let (way, back) = if up > 0.0 {
+        (Sense::Forward, Sense::Reversed)
+    } else {
+        (Sense::Reversed, Sense::Forward)
+    };
+    add_loop_as(&mut r, 0, low, way);
+    add_loop_as(&mut r, 1, high, back);
+    let shaft = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [cx, cy, 0.0],
+            rr,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, size[2] as f64)),
+        )
+        .unwrap(),
     );
+    let around = Box3::new(
+        P3::new(x - radius, y - radius, 0).unwrap(),
+        P3::new(x + radius, y + radius, size[2]).unwrap(),
+    )
+    .unwrap();
+    let side = r.face_with(0, &[&[(low, back)], &[(high, way)]], shaft, around);
     r.faces[side as usize].sense = Sense::Reversed;
     r
 }
@@ -783,6 +823,29 @@ fn a_wall_with_a_round_opening_passes() {
     // Through its ends: each face holding a circle listed after the sides it meets, and the
     // cylinder 5 from the top and bottom and 15 from the front and back.
     assert_eq!(at(&wall_with_opening_along_x(), BodyKind::Solid, 1), []);
+    // bldg-25's own numbers on its grid (1.6e8 steps to the metre): a wall 4 by 3 by 0.2 with an
+    // opening of radius 0.4, and its top circle's centre 7.5e-9 steps above the top's plane, as
+    // the conversion writes solidcore's 0.20000000000000004, within the body's bound of 3202
+    // steps. The top is not on its plane exactly, and each side, which it reaches only along
+    // their shared edge, is still apart from it.
+    let bldg_25 = wall_of(
+        [640_000_000, 480_000_000, 32_000_000],
+        ([320_000_000, 240_000_000], 64_000_000),
+        32_000_000.000_000_007,
+    );
+    assert_eq!(at(&bldg_25, BodyKind::Solid, 3202), []);
+    // bldg-47's solid made exact, as lane sc8-fork set every number of solidcore's record to its
+    // quarter-metre: the square of side 2 about the z axis with a round hole of radius 0.5 at its
+    // centre, extruded 3, on the same grid, the hole's circles on the frame x (1, 0, 0),
+    // y (0, -1, 0) the modeller writes, so their normals point down. Its caps and its hole's
+    // cylinder were refused against each of the four sides, 12 pairs, and pass.
+    let bldg_47 = slab_of(
+        ([-160_000_000; 2], [320_000_000, 320_000_000, 480_000_000]),
+        ([0, 0], 80_000_000),
+        (480_000_000.0, -1.0),
+    );
+    assert_eq!(at(&bldg_47, BodyKind::Solid, 3202), []);
+    assert_eq!(at(&bldg_47, BodyKind::Solid, 1), []);
     // The opening touching the side x = 0: its cylinder and that side are not certified apart,
     // nor the circles and the sides' edges they touch.
     let faults = at(&wall_with_opening(4, 15), BodyKind::Solid, 1);
@@ -842,6 +905,76 @@ fn a_flat_face_holding_a_circle_is_apart_from_a_face_that_keeps_off_its_plane() 
     let mut r = holed_beside(1);
     r.curves[4] = round([5.0, 5.0, 0.0], 2.0, [1.0, 0.0, 0.0], [0.0, 0.5, 1.0]);
     assert_eq!(at(&r, BodyKind::General, 1), only_pair);
+}
+
+/// The holed square ([`holed_sheet`]) and a second sheet, a quadrilateral whose corners are the
+/// holed square's vertices numbered in `shared` and new vertices at `points`, in that order.
+fn holed_with(shared: &[u32], points: &[[i64; 3]]) -> Rows {
+    let mut r = holed_sheet();
+    let mut ring = shared.to_vec();
+    for &p in points {
+        ring.push(r.vertex(p));
+    }
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&ring]);
+    r
+}
+
+#[test]
+fn a_flat_face_holding_a_circle_keeps_off_a_plane_only_where_certified() {
+    let only_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    // Beyond the holed square, a square on the plane x + y = 20 whose side passes through its
+    // corner (10, 10, 0), which it does not share: they touch there.
+    let touching = holed_with(&[], &[[10, 10, -5], [20, 0, -5], [20, 0, 5], [10, 10, 5]]);
+    assert_eq!(at(&touching, BodyKind::General, 1), only_pair);
+    // A step further out, x + y = 21: the holed square's corners and its circle all lie below.
+    let clear = holed_with(&[], &[[11, 10, -5], [21, 0, -5], [21, 0, 5], [11, 10, 5]]);
+    assert_eq!(at(&clear, BodyKind::General, 1), []);
+    // A square standing on the holed square's far side, x = 10, sharing its two vertices but not
+    // the edge between them: they meet along it, and neither test excuses that.
+    let standing = holed_with(&[1, 2], &[[10, 10, 10], [10, 0, 10]]);
+    assert_eq!(at(&standing, BodyKind::General, 1), only_pair);
+    // A notched face holding a circle, and a square on x + y = 10 sharing its corners (10, 0, 0)
+    // and (0, 10, 0), the side between them the square's alone, outside the notch: what the face
+    // has on the plane is two vertices and no side, so the segment between them is among the
+    // mixes of its boundary there, which the square need not share. Not settled.
+    let mut r = Rows::empty();
+    for p in [[0, 0, 0], [10, 0, 0], [5, 3, 0], [0, 10, 0]] {
+        r.vertex(p);
+    }
+    let sides: Vec<(u32, Sense)> = (0..4)
+        .map(|k| (r.edge(Some((k, (k + 1) % 4))), Sense::Forward))
+        .collect();
+    let hole = r.edge(None);
+    r.curves[hole as usize] = round([2.0, 2.0, 0.0], 1.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    let s = r.shell(0);
+    r.face(s, &[&sides, &[(hole, Sense::Reversed)]]);
+    let (over_x, over_y) = (r.vertex([10, 0, 10]), r.vertex([0, 10, 10]));
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&[1, 3, over_y, over_x]]);
+    assert_eq!(at(&r, BodyKind::General, 1), only_pair);
+    // A disc of radius 5 about the z axis, no corner at all, and a square across its plane on
+    // x = `x`: at its rim on either side it touches the circle, and a step beyond it is apart.
+    for (x, faults) in [
+        (5, &only_pair[..]),
+        (-5, &only_pair[..]),
+        (6, &[][..]),
+        (-6, &[][..]),
+    ] {
+        let mut r = disc_sheet();
+        r.curves[0] = parallel(0.0, 5.0);
+        r.surfaces[0] = level(0.0);
+        for p in [[x, -5, -5], [x, 5, -5], [x, 5, 5], [x, -5, 5]] {
+            r.vertex(p);
+        }
+        let s = r.shell(0);
+        face_of(&mut r, s, &[&[0, 1, 2, 3]]);
+        assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
+    }
 }
 
 /// A tube on `surface`, from its circle `low` to its circle `high`, and a square sheet with

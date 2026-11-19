@@ -111,7 +111,7 @@ use geom_topo::query::Side as ShellSide;
 use geom_topo::{Arenas, Ix, SurfaceKind};
 
 use crate::combinatorial::{edge_fins, face_fins, face_loops, fin_edge, fin_ends, fin_face, rows};
-use crate::curved::Pair;
+use crate::curved::{self, Pair};
 use crate::geometric::{corner, planes_lie, surface};
 use crate::self_intersection::{Meet, cross, diff, dot};
 use crate::sink::Sink;
@@ -1295,6 +1295,110 @@ pub(crate) fn look(
         _ => Ok(Look::Left(Left::Coplanar)),
     };
     settled(found, Look::Found(Meet::Unknown))
+}
+
+/// Whether plain face `plain` ([`Read::Plain`], given with its plane) meets face `flat`, which is
+/// not an outline, only where the two share a vertex or an edge, because `flat` lies exactly on an
+/// integer plane that `plain` reaches only there.
+///
+/// Why that keeps them apart. `flat` is a plane's face whose every vertex and edge, circles and
+/// arcs among them, group 2's tests hold on its written plane at a bound of nothing
+/// ([`crate::geometric::Surface::holds_face`]), and that plane is given by integers: so the whole
+/// face lies in that plane, whatever its edges are. `plain` is the polygon of its grid corners on
+/// its own plane, and [`rests`] says it reaches the integer plane only at its corners on it, each
+/// a vertex of `flat`, and along its sides on it, each an edge of `flat`. Two faces meet only where
+/// both are, so only there. Nothing here is sampled or widened: one exact sign for each corner of
+/// `plain`.
+///
+/// A face that may stray from its plane (a vertex or an edge only within the body's bound of it),
+/// a plane not given by integers, and a plain face with a corner on the plane that is no vertex of
+/// `flat` are not settled here, and are left to the carriers.
+pub(crate) fn rests_on_flat(
+    a: &Arenas,
+    plain: Ix<Face>,
+    flat: Ix<Face>,
+    exact: bool,
+    sink: &mut Sink<'_, '_>,
+) -> Result<bool, Stopped> {
+    let on = surface(a, flat, exact).filter(|on| on.holds_face(a, flat));
+    let Some(plane) = on.and_then(|on| on.grid) else {
+        return Ok(false);
+    };
+    settled(
+        rests(fin_rounds(a, plain), &plane, has(a, flat), sink),
+        false,
+    )
+}
+
+/// Whether flat face `bare`, which is not an outline, reaches the plane of plain face `plain`
+/// (given with the plane its outline was read on) only where the two share one edge or one
+/// vertex: every corner of `bare` on one side of that plane or on it, every circle of it certainly
+/// on that side, and what it has on the plane one vertex of `plain`, or one edge of `plain` and
+/// that edge's ends.
+///
+/// Why that keeps them apart, even where `bare` may stray from its own plane. Group 3 takes a flat
+/// face to lie among the mixes of its boundary's points (`crate::curved::pair`), so the plane's
+/// equation, which is zero or of one sign along the whole boundary, is so over the face, and zero
+/// only at mixes of the boundary's points on the plane: one vertex, or one side, which `plain`
+/// shares. `plain` is the polygon of its corners in that plane, so the two meet only there. A
+/// straight side runs evenly from one end's value to the other's, so its corners decide it, each
+/// by an exact sign; a circle (or an arc, by its whole circle) is decided by the certified range
+/// of the equation over it ([`crate::curved::circle_side`]), on the plane `plain` is written on,
+/// which must be its outline's. Two corners on the plane that are not the ends of one side along
+/// it would put the segment between them among those mixes, which `plain` need not share, so they
+/// are not settled here; nor is a face with an edge of another kind.
+pub(crate) fn keeps_off(
+    a: &Arenas,
+    bare: Ix<Face>,
+    (plain, read): (Ix<Face>, &Plane),
+    exact: bool,
+    sink: &mut Sink<'_, '_>,
+) -> Result<bool, Stopped> {
+    let kind = a.faces.surface.get(bare).and_then(|s| a.surfaces.get(*s));
+    let written = surface(a, plain, exact).and_then(|on| {
+        let plane = on.grid?;
+        (planes_lie(&plane, read) == Pair::Unknown).then_some((plane, on.carrier))
+    });
+    let (Some(SurfaceKind::Plane(_)), Some((plane, carrier))) = (kind, written) else {
+        return Ok(false);
+    };
+    let (has_vertex, has_edge) = has(a, plain);
+    let side = |v| corner(a, v).and_then(|c| c.side(&plane).ok());
+    let (mut above, mut below) = (false, false);
+    let (mut on, mut along) = (0_u32, 0_u32);
+    for n in face_fins(a, bare) {
+        sink.charge()?;
+        let ends = fin_ends(a, n);
+        match (ends, ends.and_then(|(v, _)| side(v))) {
+            (Some((v, _)), Some(Sign::Zero)) if has_vertex(v) => on = on.saturating_add(1),
+            (Some(_), Some(Sign::Positive)) => above = true,
+            (Some(_), Some(Sign::Negative)) => below = true,
+            // A closed edge without vertices has no corner.
+            (None, _) => {}
+            _ => return Ok(false),
+        }
+        let edge = fin_edge(a, n);
+        let curve = edge
+            .and_then(|e| a.edges.curve.get(e))
+            .and_then(|c| a.curves.get(*c));
+        match (curve, ends) {
+            (Some(CurveKind::Line(_)), Some((v, w))) => {
+                if [side(v), side(w)] == [Some(Sign::Zero); 2] {
+                    if !edge.is_some_and(&has_edge) {
+                        return Ok(false);
+                    }
+                    along = along.saturating_add(1);
+                }
+            }
+            (Some(CurveKind::Circle(circle)), _) => match curved::circle_side(circle, &carrier) {
+                Some(Sign::Positive) => above = true,
+                Some(Sign::Negative) => below = true,
+                _ => return Ok(false),
+            },
+            _ => return Ok(false),
+        }
+    }
+    Ok(above != below && (on < 2 || (on == 2 && along == 1)))
 }
 
 /// How two plain faces meet that [`look`] left with `left`, tested on their outlines, `first`
