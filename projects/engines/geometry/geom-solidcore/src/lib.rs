@@ -40,7 +40,7 @@
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
 //! role (chapter 20) yet.
 //!
-//! Method: solidcore at commit cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3 of the project's fork of
+//! Method: solidcore at commit 1d8e14b46dedccbb03572956e7c708782fef1b8f of the project's fork of
 //! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's. Its record of a body is written
 //! by its own `solidcore-convert` and read here.
 //!

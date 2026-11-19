@@ -1474,7 +1474,7 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
           # hash of the lock files and rust-toolchain.toml, which names the toolchain.
-          key: solidcore-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
+          key: solidcore-1d8e14b46dedccbb03572956e7c708782fef1b8f
           workspaces: projects/engines/geometry/geom-solidcore -> target
           # Named without the runner image's own compilers (decision 32.90).
           add-rust-environment-hash-key: false
@@ -1551,7 +1551,7 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
           # hash of the lock files and rust-toolchain.toml, which names the toolchain.
-          key: solidcore-wasm-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
+          key: solidcore-wasm-1d8e14b46dedccbb03572956e7c708782fef1b8f
           workspaces: projects/engines/geometry/geom-solidcore -> target
           # Named without the runner image's own compilers (decision 32.90).
           add-rust-environment-hash-key: false
