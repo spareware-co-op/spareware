@@ -377,6 +377,53 @@ fn a_line_meets_a_circle() {
     );
 }
 
+/// Whether a point of `found` has a circle's span (its second) holding all of `p..=q`.
+fn held_over(found: &Intersection, p: f64, q: f64) -> bool {
+    found.items().iter().any(|i| {
+        let t = i.at().spans()[1];
+        matches!(i, Item::Point { .. }) && t.lo() <= p && t.hi() >= q
+    })
+}
+
+#[test]
+fn a_crossing_a_rounding_from_the_join_is_held_at_its_own_turn() {
+    // The line x = 1 on the circle of radius r about the origin, written over the turn (1/4, 9/4):
+    // it crosses at (1, ±y) with y² = r² − 1, at turns ±τ where τ = atan(y)/π, so on the domain at
+    // 2 + τ (or τ once it passes 1/4) and 2 − τ. For r a rounding either side of √2, τ is 1/4 less
+    // or more by under |r² − 2|/(3π) (atan's slope near 1 is under 0.51 and |1 − y| under
+    // |r² − 2|/1.99), which is under 2^-54, the doubles' step above 1/4 and the least step here:
+    // so each crossing lies strictly between two neighbouring doubles, and a span holds it only if
+    // it holds both. The crossing near 1/4 has its turn read as a box across 1/4, which meets the
+    // domain there and a whole turn on, at 9/4.
+    let pi = core::f64::consts::PI;
+    for r in [
+        core::f64::consts::SQRT_2.next_down(),
+        core::f64::consts::SQRT_2,
+    ] {
+        // r·r − 2 rounded once: its sign is exact.
+        let error = r.mul_add(r, -2.0);
+        assert!(error != 0.0 && error.abs() / (3.0 * pi) < f64::EPSILON / 4.0);
+        let found = meet(
+            &infinite([1.0, 0.0], [0.0, 1.0]),
+            &arc([0.0, 0.0], r, (0.25, 2.25)),
+        );
+        let between = if error < 0.0 {
+            // τ under 1/4: at 2 + τ, just short of 9/4, and 2 − τ, just past 7/4.
+            [(2.25_f64.next_down(), 2.25), (1.75, 1.75_f64.next_up())]
+        } else {
+            // τ over 1/4: just past the domain's start, and 2 − τ just short of 7/4.
+            [(0.25, 0.25_f64.next_up()), (1.75_f64.next_down(), 1.75)]
+        };
+        for (p, q) in between {
+            assert!(
+                held_over(&found, p, q),
+                "r {r}: ({p}, {q}) in {:?}",
+                found.items()
+            );
+        }
+    }
+}
+
 #[test]
 fn a_swapped_pair_gives_the_same_points_swapped() {
     let a = circle([0.0, 0.0], 5.0);
