@@ -103,7 +103,7 @@ impl Normal {
 }
 
 /// An interval around an `i128`: the doubles either side of its nearest double.
-fn around(x: i128) -> Option<Interval> {
+pub(crate) fn around(x: i128) -> Option<Interval> {
     #[allow(
         clippy::cast_precision_loss,
         reason = "the interval's two steps cover the rounding"

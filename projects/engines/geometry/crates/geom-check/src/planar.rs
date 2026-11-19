@@ -1343,8 +1343,9 @@ pub(crate) fn rests_on_flat(
 /// shares. `plain` is the polygon of its corners in that plane, so the two meet only there. A
 /// straight side runs evenly from one end's value to the other's, so its corners decide it, each
 /// by an exact sign; a circle (or an arc, by its whole circle) is decided by the certified range
-/// of the equation over it ([`crate::curved::circle_side`]), on the plane `plain` is written on,
-/// which must be its outline's. Two corners on the plane that are not the ends of one side along
+/// of the equation over it ([`crate::curved::circle_side`]), on the integer plane `plain` is
+/// written on, which must be its outline's: the very plane the corners are signed against. Two
+/// corners on the plane that are not the ends of one side along
 /// it would put the segment between them among those mixes, which `plain` need not share, so they
 /// are not settled here; nor is a face with an edge of another kind.
 pub(crate) fn keeps_off(
@@ -1357,9 +1358,9 @@ pub(crate) fn keeps_off(
     let kind = a.faces.surface.get(bare).and_then(|s| a.surfaces.get(*s));
     let written = surface(a, plain, exact).and_then(|on| {
         let plane = on.grid?;
-        (planes_lie(&plane, read) == Pair::Unknown).then_some((plane, on.carrier))
+        (planes_lie(&plane, read) == Pair::Unknown).then_some(plane)
     });
-    let (Some(SurfaceKind::Plane(_)), Some((plane, carrier))) = (kind, written) else {
+    let (Some(SurfaceKind::Plane(_)), Some(plane)) = (kind, written) else {
         return Ok(false);
     };
     let (has_vertex, has_edge) = has(a, plain);
@@ -1390,7 +1391,7 @@ pub(crate) fn keeps_off(
                     along = along.saturating_add(1);
                 }
             }
-            (Some(CurveKind::Circle(circle)), _) => match curved::circle_side(circle, &carrier) {
+            (Some(CurveKind::Circle(circle)), _) => match curved::circle_side(circle, &plane) {
                 Some(Sign::Positive) => above = true,
                 Some(Sign::Negative) => below = true,
                 _ => return Ok(false),

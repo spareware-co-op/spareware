@@ -976,6 +976,57 @@ fn a_flat_face_holding_a_circle_keeps_off_a_plane_only_where_certified() {
         face_of(&mut r, s, &[&[0, 1, 2, 3]]);
         assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
     }
+    // The square beyond it on x + y = 21 again, the hole now a line edge without vertices: an edge
+    // of another kind, which the test does not settle, so the pair is unchecked.
+    let mut r = holed_with(&[], &[[11, 10, -5], [21, 0, -5], [21, 0, 5], [11, 10, 5]]);
+    r.curves[4] = common::line([5, 5, 0], [6, 5, 0]);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(faults.contains(&only_pair[0]), "{faults:?}");
+    // A holed face with a third corner in its side x = 10, and a square standing on that side
+    // sharing its two edges there. On its plane exactly, the holed face rests on the square's
+    // plane only along what they share, and passes; its hole lifted half a step, within the bound
+    // but off the plane, it no longer rests, and three corners on the square's plane are more than
+    // one side's ends, so it is not settled.
+    assert_eq!(at(&split_side_standing(0.0), BodyKind::General, 1), []);
+    assert_eq!(
+        at(&split_side_standing(0.5), BodyKind::General, 1),
+        only_pair
+    );
+}
+
+/// A square of side 10 in z = 0 with a third corner (10, 5, 0) on its side x = 10 and a round hole
+/// of radius 2 about (5, 5, `lift`), and a square standing on that side, on x = 10 up to z = 10,
+/// through the three corners on it and along the holed face's two edges between them.
+fn split_side_standing(lift: f64) -> Rows {
+    let mut r = Rows::empty();
+    for p in [[0, 0, 0], [10, 0, 0], [10, 5, 0], [10, 10, 0], [0, 10, 0]] {
+        r.vertex(p);
+    }
+    let sides: Vec<(u32, Sense)> = (0..5)
+        .map(|k| (r.edge(Some((k, (k + 1) % 5))), Sense::Forward))
+        .collect();
+    let hole = r.edge(None);
+    r.curves[hole as usize] = round([5.0, 5.0, lift], 2.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    let s = r.shell(0);
+    r.face(s, &[&sides, &[(hole, Sense::Reversed)]]);
+    r.surfaces[0] = level(0.0);
+    let (near, far) = (r.vertex([10, 0, 10]), r.vertex([10, 10, 10]));
+    let up = r.edge(Some((1, near)));
+    let over = r.edge(Some((near, far)));
+    let down = r.edge(Some((far, 3)));
+    let s = r.shell(0);
+    r.face(
+        s,
+        &[&[
+            (sides[2].0, Sense::Reversed),
+            (sides[1].0, Sense::Reversed),
+            (up, Sense::Forward),
+            (over, Sense::Forward),
+            (down, Sense::Forward),
+        ]],
+    );
+    r
 }
 
 /// A tube on `surface`, from its circle `low` to its circle `high`, and a square sheet with

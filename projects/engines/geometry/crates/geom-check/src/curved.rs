@@ -69,8 +69,11 @@
 
 use geom_curve::{Circle, Frame, Line, ParamCurve, tight};
 use geom_num::interval::Interval;
+use geom_num::plane::Plane as GridPlane;
 use geom_num::{P3, Sign};
 use geom_topo::SurfaceKind;
+
+use crate::flat::around;
 
 /// Three enclosed coordinates.
 type V3 = [Interval; 3];
@@ -489,17 +492,19 @@ pub(crate) fn circles_apart(first: &Circle<3>, second: &Circle<3>, shared: bool)
     apart().unwrap_or(false)
 }
 
-/// The side of the plane `on` that every point of `circle` lies on, if certain: the sign of
-/// (p − o) · n over the whole circle, whose values run over (c − o) · n ± r·|ẑ × n| (the largest
-/// of the affine distance, as the circle's bound on a plane is). Exact on exact data; `None` where
-/// the circle may touch or cross the plane, or `on` is not a plane, or a number cannot be enclosed.
-pub(crate) fn circle_side(circle: &Circle<3>, on: &Carrier) -> Option<Sign> {
-    let Carrier::Flat { origin, normal } = on else {
-        return None;
-    };
+/// The side of the integer plane `plane` that every point of `circle` lies on, if certain: the
+/// sign of n · p + d over the whole circle, whose values run over n · c + d ± r·|ẑ × n| (the
+/// largest of the affine distance, as the circle's bound on a plane is). It takes the plane its
+/// caller's corners are signed against, so the circle's side and theirs are of one plane, its
+/// normal the same way round. The coefficients, integers up to 2^125, are enclosed by the doubles
+/// either side of their nearest (`crate::flat::around`), so the sign is certified, not exact;
+/// `None` where the circle may touch or cross the plane, or a number cannot be enclosed.
+pub(crate) fn circle_side(circle: &Circle<3>, plane: &GridPlane) -> Option<Sign> {
     let (_, [_, _, own]) = circle.frame().unit_vectors().ok()?;
-    let off = dot(sub3(lift(circle.center())?, *origin)?, *normal)?;
-    let reach = times(at(circle.radius())?, length(cross(own, *normal)?)?)?;
+    let [nx, ny, nz] = plane.n();
+    let normal = [around(nx)?, around(ny)?, around(nz)?];
+    let off = plus(dot(lift(circle.center())?, normal)?, around(plane.d())?)?;
+    let reach = times(at(circle.radius())?, length(cross(own, normal)?)?)?;
     let values = plus(off, spread(reach)?)?;
     if values.lo() > 0.0 {
         Some(Sign::Positive)
