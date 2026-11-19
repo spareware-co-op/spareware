@@ -71,7 +71,7 @@ use geom_num::interval::Interval;
 use geom_num::{Exactness, NumError, Sign, predicate, quadric};
 use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::WorkMeter;
-use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Torus};
 
 use crate::closed::{self, Natural, Position};
 use crate::curve::{
@@ -1350,16 +1350,7 @@ fn parameters(
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
             let v = if read_v {
-                let (major, _) = t.radii();
-                let out = tight::norm(&[x, y])?.sub(point(major)?)?;
-                let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
-                // The tube's turn reads from −1 to 1, and its domain from 0.
-                let two = point(2.0)?;
-                if turn.hi() < v_range.0 {
-                    turn.add(two)?
-                } else {
-                    turn
-                }
+                tube_turn(t, [x, y, z], v_range.0)?
             } else {
                 all_v()?
             };
@@ -1372,6 +1363,20 @@ fn parameters(
         }
         _ => return Ok(None),
     }))
+}
+
+/// A torus's tube turn at the point `local` in its frame: read from −1 to 1, and moved a turn on
+/// where that ends before the domain's start `v0`.
+fn tube_turn(t: &Torus, local: Vector, v0: f64) -> Result<Interval, IntersectError> {
+    let [x, y, z] = local;
+    let (major, _) = t.radii();
+    let out = tight::norm(&[x, y])?.sub(point(major)?)?;
+    let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
+    if turn.hi() < v0 {
+        Ok(turn.add(point(2.0)?)?)
+    } else {
+        Ok(turn)
+    }
 }
 
 /// `x`, held to `domain` when it meets it.
