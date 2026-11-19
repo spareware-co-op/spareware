@@ -918,7 +918,9 @@ fn line_torus(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    let [seam_u, seam_v] = seams;
+    let seams = [Seam::open(stretch), seam_u, seam_v];
+    Intersection::on(items, coverage, Vec::new(), &seams, meter)
 }
 
 /// C(t) − S(u, v).
@@ -1013,7 +1015,7 @@ fn projected(
 
 /// The seams of `surface` over its domain: a round kind closes about its axis, and a torus about its
 /// tube too.
-fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
+pub(crate) fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
     let (u, v) = ParamSurface::domain(surface);
     match surface {
         SurfaceKind::Torus(_) => [Seam::turns(u), Seam::turns(v)],
@@ -1180,26 +1182,50 @@ fn second_order(
     let not_smooth = Unresolved::NonSmooth {
         at: Degeneracy::Crease,
     };
-    // Over a run grown past where rounding swamps second derivatives, and on the domains.
+    // Over a run grown past where rounding swamps second derivatives, and on the domains: on a
+    // whole turn a run may run past the window's end by under a turn (decision 32.104), and is
+    // read modulo the turn, each stretch either side of the join on its own.
     let [seam_t, seam_u, seam_v] = field.seams;
     let [t, u, v] = grown(
         &[t, u, v],
-        &[seam_t.whole()?, seam_u.whole()?, seam_v.whole()?],
+        &[seam_t.reach()?, seam_u.reach()?, seam_v.reach()?],
     )?;
-    let (DerivativeBound::Bounded(d1), DerivativeBound::Bounded(d2)) = (
-        field.curve.derivative_bound(span(t), 1, meter)?,
-        field.curve.derivative_bound(span(t), 2, meter)?,
-    ) else {
-        return Ok(not_smooth);
+    let mut slopes: [Option<Bounds<3>>; 2] = [None, None];
+    for part in seam_t.spans(t).into_iter().flatten() {
+        for (slot, order) in slopes.iter_mut().zip([1, 2]) {
+            let DerivativeBound::Bounded(d) = field.curve.derivative_bound(part, order, meter)?
+            else {
+                return Ok(not_smooth);
+            };
+            *slot = Some(match slot.take() {
+                Some(a) => a.union(&d).map_err(CurveError::from)?,
+                None => d,
+            });
+        }
+    }
+    let [Some(d1), Some(d2)] = slopes else {
+        return Err(IntersectError::Internal);
     };
     let (d1, d2) = (sides(&d1)?, sides(&d2)?);
     let limit = (Limit::FromRight, Limit::FromRight);
-    let Ok(list) = field
-        .surface
-        .partials_over((span(u), span(v)), limit, 2, meter)
-    else {
-        return Ok(not_smooth);
-    };
+    let mut list: Vec<[Interval; 3]> = Vec::new();
+    for region in field.regions(u, v).into_iter().flatten() {
+        let Ok(part) = field.surface.partials_over(region, limit, 2, meter) else {
+            return Ok(not_smooth);
+        };
+        if list.is_empty() {
+            list = part;
+            continue;
+        }
+        if part.len() != list.len() {
+            return Err(IntersectError::Internal);
+        }
+        for (held, more) in list.iter_mut().zip(&part) {
+            for (a, b) in held.iter_mut().zip(more) {
+                *a = Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()))?;
+            }
+        }
+    }
     let partial = |i: usize, j: usize| -> Result<[Interval; 3], IntersectError> {
         list.get(partial_index(i, j)?)
             .copied()
@@ -1312,7 +1338,7 @@ fn finished(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    Intersection::on(items, coverage, Vec::new(), &field.seams, meter)
 }
 
 /// How a proven root stands against the two domains.
@@ -2010,6 +2036,7 @@ fn arcs_in_plane(
     }
     // Two stretches whose enclosures meet hold crossings the enclosures cannot tell apart, as
     // where a side stands within a rounding of touching the circle: the engine's (32.80).
+    // Raw on purpose: a stretch through the join is two pieces, which meet only modulo the turn.
     let apart = items.iter().enumerate().all(|(k, a)| {
         let later = items.get(k.saturating_add(1)..).unwrap_or_default();
         later.iter().all(|b| !a.at().meets(b.at()))
@@ -2327,9 +2354,12 @@ fn circle_across(
             class: certified(),
         });
     }
-    // Two crossings whose boxes meet are not told apart: the engine's.
+    // Two crossings whose boxes meet are not told apart: the engine's. On a whole turn they meet
+    // modulo the turn (decision 32.104).
+    let [seam_u, seam_v] = round.seams;
+    let seams = [Seam::turns((lo, hi)), seam_u, seam_v];
     if let [Some(a), Some(b)] = &found
-        && a.at().meets(b.at())
+        && a.at().meets_on(b.at(), &seams)?
     {
         return Ok(None);
     }

@@ -80,7 +80,9 @@ use crate::closed::{self, Natural, Position};
 use crate::curve::{
     bound_on, enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
 };
-use crate::curve_surface::{circle_lies_on, cross, curve_surface, dot, lift, minus, sides};
+use crate::curve_surface::{
+    circle_lies_on, cross, curve_surface, dot, lift, minus, seams_of, sides,
+};
 use crate::error::IntersectError;
 use crate::reduced;
 use crate::result::{
@@ -2403,7 +2405,14 @@ pub fn natural(
     let Some(items) = items_of(found, x, y, meter)? else {
         return Ok(None);
     };
-    let answer = Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)?;
+    let ([u1, v1], [u2, v2]) = (seams_of(x), seams_of(y));
+    let answer = Intersection::on(
+        items,
+        Coverage::TopologyCertified,
+        Vec::new(),
+        &[u1, v1, u2, v2],
+        meter,
+    )?;
     Ok(Some(if turned { answer.swapped(2) } else { answer }))
 }
 

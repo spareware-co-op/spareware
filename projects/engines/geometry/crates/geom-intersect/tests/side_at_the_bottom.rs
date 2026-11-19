@@ -25,6 +25,11 @@ const ENGINE: u128 = 5088;
 /// What the closed form spends before it finds the stretches meet and leaves the pair.
 const TRIED: u128 = 9;
 
+/// What the second order test spends more since decision 32.104: the run is the whole turn, and
+/// grown past the window's end it is read modulo the turn in two stretches, so the circle's first
+/// and second derivatives are each bounded once more, at a unit a coordinate.
+const ACROSS: u128 = 6;
+
 #[test]
 fn a_side_a_step_above_the_lowest_point_is_the_engines() {
     let mut c = -1.0_f64;
@@ -38,7 +43,7 @@ fn a_side_a_step_above_the_lowest_point_is_the_engines() {
         let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
         let found = curve_surface(&circle, &plane, &mut meter);
         let want = format!(
-            "[Flagged {{ at: ParamBox {{ spans: [Interval {{ lo: 0.0, hi: 1.876708984375 }}, \
+            "[Flagged {{ at: ParamBox {{ spans: [Interval {{ lo: 0.0, hi: 2.0 }}, \
              Interval {{ lo: -1.25, hi: 1.25 }}, Interval {{ lo: {c:?}, hi: 1.25 }}, \
              Interval {{ lo: 0.0, hi: 0.0 }}], unknowns: 3 }}, xyz: Box3 {{ min: P3 {{ x: Coord(-1), \
              y: Coord(-2), z: Coord(0) }}, max: P3 {{ x: Coord(1), y: Coord(2), z: Coord(0) }} }}, \
@@ -46,6 +51,6 @@ fn a_side_a_step_above_the_lowest_point_is_the_engines() {
         );
         let found = found.unwrap();
         assert_eq!(format!("{:?}", found.items()), want, "side at {c:e}");
-        assert_eq!(meter.used().work, ENGINE + TRIED, "side at {c:e}");
+        assert_eq!(meter.used().work, ENGINE + TRIED + ACROSS, "side at {c:e}");
     }
 }

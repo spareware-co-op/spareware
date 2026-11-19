@@ -76,6 +76,7 @@ pub mod seam;
 pub mod selfcross;
 pub mod solve;
 
+pub use curve::Seam;
 pub use error::IntersectError;
 pub use level::{
     Branch, Envelope, FlaggedBox, Isocline, Level, LevelCurves, OnImplicit, Perspective, Sample,

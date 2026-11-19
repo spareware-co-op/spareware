@@ -17,13 +17,14 @@
 )]
 
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
-use geom_intersect::IntersectError;
 use geom_intersect::curve::{curves, self_crossings};
 use geom_intersect::result::{Coincidence, Coverage, Intersection, Item, PointContact, Unresolved};
 use geom_intersect::solve::{Field, solve};
+use geom_intersect::{IntersectError, Seam};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
+use geom_surface::{Cylinder, Plane, SurfaceKind, Torus};
 use geom_test::{Seed, SplitMix64};
 
 /// A meter with a budget every test here fits in, so a change that sends the engine round for ever
@@ -2097,4 +2098,128 @@ fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
         "{:?}",
         r.items()
     );
+}
+
+fn span_of(lo: f64, hi: f64) -> Interval {
+    Interval::new(lo, hi).unwrap()
+}
+
+#[test]
+fn a_seam_says_two_spans_meet_modulo_a_whole_turn() {
+    // Decision 32.104: on a whole turn a span starts in the window and may run past its end.
+    let turn = Seam::turns((0.0, 2.0));
+    let open = Seam::open((0.0, 2.0));
+    let across = span_of(1.9, 2.1);
+    let cases = [
+        (across, span_of(0.0, 0.05), true, false),
+        (across, span_of(0.2, 0.3), false, false),
+        // The join's two names are one point.
+        (span_of(1.5, 2.0), span_of(0.0, 0.1), true, false),
+        (span_of(0.5, 1.0), span_of(0.9, 1.2), true, true),
+        (span_of(0.5, 1.0), span_of(1.1, 1.2), false, false),
+    ];
+    for (a, b, on_turn, on_open) in cases {
+        assert_eq!(turn.meets(a, b).unwrap(), on_turn, "{a:?} {b:?} on a turn");
+        assert_eq!(turn.meets(b, a).unwrap(), on_turn, "{b:?} {a:?} on a turn");
+        assert_eq!(open.meets(a, b).unwrap(), on_open, "{a:?} {b:?} open");
+    }
+    // Short of a whole turn the domain is open, whatever its spans.
+    let arc = Seam::turns((0.0, 1.5));
+    assert!(!arc.closed());
+    assert!(!arc.meets(span_of(1.4, 1.5), span_of(0.0, 0.1)).unwrap());
+    assert!(turn.closed());
+    assert!(!open.closed());
+    assert_eq!(turn.domain(), (0.0, 2.0));
+}
+
+#[test]
+fn a_seam_joins_two_spans_across_a_whole_turn_s_join() {
+    let turn = Seam::turns((0.0, 2.0));
+    // The second moved by the turn that meets the first, enclosed, and the join written past the
+    // end.
+    let moved = span_of(0.0, 0.1)
+        .add(Interval::point(2.0).unwrap())
+        .unwrap();
+    let joined = turn.hull(span_of(1.9, 2.05), span_of(0.0, 0.1)).unwrap();
+    assert_eq!((joined.lo(), joined.hi()), (1.9, moved.hi()));
+    assert!(joined.hi() >= 2.1);
+    // The other way round the join starts in the window too, and holds both, tight.
+    let joined = turn.hull(span_of(0.0, 0.1), span_of(1.9, 2.05)).unwrap();
+    assert!(joined.lo() <= 1.9 && joined.lo() > 1.89, "{joined:?}");
+    assert!(joined.hi() >= 2.1 && joined.hi() < 2.11, "{joined:?}");
+    // A join a turn wide or more is the whole turn.
+    let whole = turn.hull(span_of(0.0, 1.5), span_of(1.4, 2.6)).unwrap();
+    assert_eq!((whole.lo(), whole.hi()), (0.0, 2.0));
+    // An open domain joins as the plain hull.
+    let open = Seam::open((0.0, 2.0));
+    let plain = open.hull(span_of(0.5, 1.0), span_of(1.5, 1.8)).unwrap();
+    assert_eq!((plain.lo(), plain.hi()), (0.5, 1.8));
+}
+
+#[test]
+fn a_seam_wraps_a_value_into_its_window() {
+    let turn = Seam::turns((0.0, 2.0));
+    assert_eq!(turn.wrapped(2.25), 0.25);
+    assert_eq!(turn.wrapped(-0.5), 1.5);
+    assert_eq!(turn.wrapped(1.0), 1.0);
+    assert_eq!(turn.wrapped(2.0), 2.0);
+    let shifted = Seam::turns((1.0, 3.0));
+    assert_eq!(shifted.wrapped(3.5), 1.5);
+    assert_eq!(shifted.wrapped(0.5), 2.5);
+    assert_eq!(Seam::open((0.0, 2.0)).wrapped(2.25), 2.25);
+}
+
+#[test]
+fn a_seam_cuts_a_span_at_the_join_into_stretches_of_the_domain() {
+    let turn = Seam::turns((0.0, 2.0));
+    // 2.1 − 2 is exact (Sterbenz), so the far stretch's end is the double the span's end names.
+    assert_eq!(
+        turn.spans(span_of(1.9, 2.1)),
+        [Some((1.9, 2.0)), Some((0.0, 2.1 - 2.0))]
+    );
+    assert_eq!(turn.spans(span_of(0.5, 0.7)), [Some((0.5, 0.7)), None]);
+    assert_eq!(turn.spans(span_of(1.5, 2.0)), [Some((1.5, 2.0)), None]);
+    assert_eq!(turn.spans(span_of(0.0, 2.0)), [Some((0.0, 2.0)), None]);
+    // A point on the join has no length to cut: it is the join.
+    assert_eq!(turn.spans(span_of(2.0, 2.0)), [Some((2.0, 2.0)), None]);
+    // A kind refuses the span past its end, and takes each stretch, which lies in the domain.
+    let circle = arc([0.0, 0.0], 1.0, (0.0, 2.0));
+    let mut meter = meter();
+    assert!(geom_curve::ParamCurve::bound(&circle, (1.9, 2.1), &mut meter).is_err());
+    for part in turn.spans(span_of(1.9, 2.1)).into_iter().flatten() {
+        assert!(geom_curve::ParamCurve::bound(&circle, part, &mut meter).is_ok());
+    }
+    let open = Seam::open((0.0, 2.0));
+    assert_eq!(open.spans(span_of(1.9, 2.1)), [Some((1.9, 2.1)), None]);
+}
+
+#[test]
+fn a_seam_is_read_from_the_operand_the_answer_was_written_on() {
+    let frame = Frame::standard().unwrap();
+    let whole = arc([0.0, 0.0], 1.0, (0.0, 2.0));
+    let part = arc([0.0, 0.0], 1.0, (0.0, 1.0));
+    assert!(Seam::of_curve(&whole).closed());
+    assert!(Seam::of_curve(&ellipse([0.0, 0.0], 2.0, 1.0)).closed());
+    assert!(!Seam::of_curve(&part).closed());
+    assert!(!Seam::of_curve(&segment([0.0, 0.0], [1.0, 1.0])).closed());
+    assert_eq!(Seam::of_curve(&whole).domain(), (0.0, 2.0));
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new([0.0; 3], 1.0, frame, ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
+    );
+    let torus = SurfaceKind::Torus(
+        Torus::new([0.0; 3], 3.0, 1.0, frame, ((0.0, 2.0), (0.0, 2.0))).unwrap(),
+    );
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    let closed = |s: &SurfaceKind| Seam::of_surface(s).map(Seam::closed);
+    assert_eq!(closed(&cylinder), [true, false]);
+    assert_eq!(closed(&torus), [true, true]);
+    assert_eq!(closed(&plane), [false, false]);
 }

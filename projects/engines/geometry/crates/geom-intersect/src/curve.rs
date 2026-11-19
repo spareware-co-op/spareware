@@ -8,7 +8,9 @@
 //! are not both circles run the engine too: their exact counts are the fixed-integer predicates of
 //! chapter 14's piece G190. [`self_crossings`] runs the same engine on a curve and
 //! itself, above the diagonal, dropping every span whose tangents stay in one half-plane, since such a
-//! span cannot cross itself.
+//! span cannot cross itself. [`Seam`] is how any crate reads a span an answer gives on a whole turn
+//! (decision 32.104): it starts in the window and may run past its end by less than a turn, and
+//! [`Seam::meets`], [`Seam::hull`], [`Seam::wrapped`] and [`Seam::spans`] read it modulo the turn.
 //!
 //! Guarantees:
 //!
@@ -53,6 +55,7 @@ use geom_num::quadric;
 use geom_num::{Exactness, Sign, math, predicate};
 use geom_nurbs::{BernsteinCurve, Bounds, Limit, NurbsError, Slab};
 use geom_run::WorkMeter;
+use geom_surface::SurfaceKind;
 
 use crate::closed::{self, Meeting};
 use crate::error::IntersectError;
@@ -207,15 +210,24 @@ pub(crate) fn pieces<const D: usize>(
 /// A parameter's domain, and whether the kind closes on itself over it. A closed kind's join is no
 /// boundary: the search runs a little past it, so that a meeting on the join stands inside a box,
 /// and evaluates the far side on the near one.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Seam {
+///
+/// It is also how another crate reads a span an answer gives (decision 32.104): on a whole turn a
+/// span starts in the window and may run past its end by less than a turn, read modulo the turn.
+/// [`Seam::meets`] says whether two spans share a point, [`Seam::hull`] joins two,
+/// [`Seam::wrapped`] puts a value in the window, and [`Seam::spans`] cuts a span at the join into
+/// the one or two stretches of the domain it covers, each fit to evaluate a kind over. Take the
+/// seam from the operand ([`Seam::of_curve`], [`Seam::of_surface`]), so it is the one the answer
+/// was written on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Seam {
     domain: (f64, f64),
     closed: bool,
 }
 
 impl Seam {
     /// A domain that ends where it ends.
-    pub(crate) const fn open(domain: (f64, f64)) -> Seam {
+    #[must_use]
+    pub const fn open(domain: (f64, f64)) -> Seam {
         Seam {
             domain,
             closed: false,
@@ -223,11 +235,38 @@ impl Seam {
     }
 
     /// A domain in half-turns, closed if it is a whole turn.
-    pub(crate) fn turns(domain: (f64, f64)) -> Seam {
+    #[must_use]
+    pub fn turns(domain: (f64, f64)) -> Seam {
         Seam {
             domain,
             closed: domain.1 - domain.0 >= 2.0,
         }
+    }
+
+    /// The seam an answer writes `curve`'s parameter on: a circle's or ellipse's whole turn
+    /// closes, every other domain is open.
+    #[must_use]
+    pub fn of_curve<const D: usize>(curve: &CurveKind<D>) -> Seam {
+        seam_of(curve, ParamCurve::domain(curve))
+    }
+
+    /// The seams an answer writes `surface`'s u and v on: a round kind closes about its axis, and
+    /// a torus about its tube too.
+    #[must_use]
+    pub fn of_surface(surface: &SurfaceKind) -> [Seam; 2] {
+        crate::curve_surface::seams_of(surface)
+    }
+
+    /// Whether the domain is a whole turn, whose join is no end.
+    #[must_use]
+    pub const fn closed(self) -> bool {
+        self.closed
+    }
+
+    /// The domain, the window a span starts in.
+    #[must_use]
+    pub const fn domain(self) -> (f64, f64) {
+        self.domain
     }
 
     fn period(self) -> f64 {
@@ -271,8 +310,10 @@ impl Seam {
         !self.closed && (x.contains(lo) || x.contains(hi))
     }
 
-    /// `t` on the domain.
-    pub(crate) fn wrapped(self, t: f64) -> f64 {
+    /// `t` on the domain: on a whole turn a value within a turn past either end is moved by the
+    /// turn into the window; anything else is kept as it is.
+    #[must_use]
+    pub fn wrapped(self, t: f64) -> f64 {
         let (lo, hi) = self.domain;
         if self.closed && t < lo {
             t + self.period()
@@ -283,8 +324,11 @@ impl Seam {
         }
     }
 
-    /// The stretches of the domain that `x` covers: one, or one each side of the join.
-    pub(crate) fn spans(self, x: Interval) -> [Option<(f64, f64)>; 2] {
+    /// The stretches of the domain that `x` covers: one, or one each side of the join, the one
+    /// from `x`'s start first. Each lies in the domain, so a kind can be evaluated over it. An open
+    /// domain gives `x` itself.
+    #[must_use]
+    pub fn spans(self, x: Interval) -> [Option<(f64, f64)>; 2] {
         if !self.closed {
             return [Some(span(x)), None];
         }
@@ -328,7 +372,12 @@ impl Seam {
     }
 
     /// Whether `a` and `b` share a point, on a whole turn modulo the turn (decision 32.104).
-    pub(crate) fn meets(self, a: Interval, b: Interval) -> Result<bool, IntersectError> {
+    ///
+    /// # Errors
+    ///
+    /// [`IntersectError::FrameRange`] or [`IntersectError::InvalidInput`] if a span moved by the
+    /// turn leaves the doubles.
+    pub fn meets(self, a: Interval, b: Interval) -> Result<bool, IntersectError> {
         let touch = |b: Interval| a.lo() <= b.hi() && b.lo() <= a.hi();
         if touch(b) || !self.closed {
             return Ok(touch(b));
@@ -338,9 +387,14 @@ impl Seam {
     }
 
     /// The least span holding `a` and `b`. On a whole turn `b` is first moved by the turn that
-    /// meets `a`, if one does, and the span is written as [`Seam::onto`] writes it (decision
-    /// 32.104).
-    pub(crate) fn hull(self, a: Interval, b: Interval) -> Result<Interval, IntersectError> {
+    /// meets `a`, if one does, and the span is written as an answer writes one: starting in the
+    /// window, and the whole turn if it is a turn wide or more (decision 32.104).
+    ///
+    /// # Errors
+    ///
+    /// [`IntersectError::FrameRange`] or [`IntersectError::InvalidInput`] if a span moved by the
+    /// turn leaves the doubles.
+    pub fn hull(self, a: Interval, b: Interval) -> Result<Interval, IntersectError> {
         let touch = |b: Interval| a.lo() <= b.hi() && b.lo() <= a.hi();
         let near = if self.closed && !touch(b) {
             let shift = Interval::point(self.period())?;
@@ -360,6 +414,21 @@ impl Seam {
         } else {
             Ok(both)
         }
+    }
+
+    /// On a whole turn, where a span that reaches the window's end ends once moved back by the
+    /// turn, rounded up: a span starting by there may meet it modulo the turn. `None` on an open
+    /// domain, or for a span short of the end.
+    pub(crate) fn past_end(self, x: Interval) -> Option<f64> {
+        let (_, hi) = self.domain;
+        if !self.closed || x.hi() < hi {
+            return None;
+        }
+        let back = Interval::point(x.hi())
+            .ok()?
+            .sub(Interval::point(self.period()).ok()?)
+            .ok()?;
+        Some(back.hi())
     }
 }
 
@@ -1007,7 +1076,8 @@ fn circle_circle<const D: usize>(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    let seams = [a, b].map(|c| Seam::turns(ParamCurve::domain(c)));
+    Intersection::on(items, coverage, Vec::new(), &seams, meter)
 }
 
 /// The length of `(x, y)`; exactly `x`'s or `y`'s size when the other is zero.
@@ -1811,7 +1881,7 @@ fn finished<const D: usize>(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, route, meter)
+    Intersection::on(items, coverage, route, &gap.seams, meter)
 }
 
 /// A tangent of `curve` at `t`, in doubles.
