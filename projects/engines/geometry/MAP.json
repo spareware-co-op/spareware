@@ -537,7 +537,7 @@
           "target": "lib"
         },
         {
-          "cost": "[`parse`] is O(n log n) for a file of n lines (each name is checked against those before it in an ordered set); [`check`] parses it and scans its entries, once per benchmark, always outside the measured region.",
+          "cost": "[`parse`] is O(n log n) for a file of n lines (each name is checked against those before it in an ordered set); [`check`] and [`lookup`] scan the lines in place, O(n), once per benchmark, outside the measured region, and take no heap when the digests match: the gate's teardown runs `check` inside the process DHAT measures, and DHAT's \"At t-gmax\" reading of a benchmark is its heap at the peak of the whole process, so heap the teardown took, growing with this file, would decide whether that peak falls in the teardown and move the reading of a benchmark that did not change (`tests/golden_heap.rs` holds `check` to no heap).",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/golden.rs",
