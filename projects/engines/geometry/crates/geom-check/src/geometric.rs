@@ -342,12 +342,18 @@ pub(crate) const fn limit(exactness: Exactness) -> f64 {
 }
 
 /// Where vertex `v` lies: `None` for three planes that do not meet in one point.
+///
+/// Made by [`Tpi::meeting`], which finds only the sign of the point's weight: a `Tpi` holds its
+/// planes and that sign alone, so it is the point [`Tpi::new`] makes, which also works out the
+/// point's coordinates and drops them. The check asks for a vertex's corner at each edge, face
+/// and pair that reads it, so that work was most of a check of a body whose vertices are where
+/// planes meet (under Miri, half of `attack_g134`'s `the_same_body_gives_the_same_report`).
 pub(crate) fn corner(a: &Arenas, v: Ix<Vertex>) -> Option<Corner> {
     match a.vertices.point.get(v).and_then(|p| a.points.get(*p))? {
         PointKind::Grid(p) => Some(Corner::Grid(*p)),
         PointKind::Meet(planes) => {
             let [first, second, third] = planes.map(|ix| a.planes.get(ix).copied());
-            Tpi::new(first?, second?, third?).ok().map(Corner::Tpi)
+            Tpi::meeting(first?, second?, third?).ok().map(Corner::Tpi)
         }
     }
 }
