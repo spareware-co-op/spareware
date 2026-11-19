@@ -20,8 +20,14 @@
 //! - **Exact where the data are.** On whole-number data the count, and whether a root is double, come
 //!   from exact signs, within the budgets of chapter 6.2. Whether a line runs along a plane, and
 //!   whether it lies in it, are exact signs of the stored doubles on any data whose products of
-//!   three are exact (decision 32.85). Elsewhere an interval decides, and what it cannot tell goes
-//!   to the engine.
+//!   three are exact (decision 32.85). Where the enclosure of a line's discriminant against a
+//!   cylinder, or a cone whose radius at v = 0 is zero, reaches zero, its sign is exact on any
+//!   stored doubles whose products of eight are exact, and the discriminant is then enclosed
+//!   from its exact sum: a line through the apex or tangent is one point, and one a step either
+//!   side two or none (decision 32.87). For a cone of any other start radius the discriminant is
+//!   P + Q·√N, and its sign is exact in whole numbers of the stored doubles of at most 768 bits,
+//!   with P² against Q²·N in 1,536 where the signs of P and Q differ (decision 32.88). Elsewhere
+//!   an interval decides, and what it cannot tell goes to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
@@ -77,7 +83,14 @@
 //! where an enclosure of the same value holds zero.
 //! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
 //! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
-//! now a few predicates, and a box of the circle for each point. Recursion: none.
+//! now a few predicates, and a box of the circle for each point. A plane's edge through a cone's
+//! apex, or tangent to a cylinder off the grid, cost the engine 483,244 to 4,147,759 units before
+//! decision 32.87; now 4, and where the enclosure of the discriminant reaches zero, one exact sum
+//! of at most 432 products of six or eight doubles, each at most 128 doubles on the stack.
+//! A plane's edge beside a cone of start radius 100 off the grid cost the engine 3,824,869
+//! units, and a segment touching a start circle 387,503 to 597,337, before decision 32.88; now
+//! at most 4, and where the enclosure reaches zero 50 products of 768-bit integers and three
+//! of 1,536-bit ones, on the stack. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -99,6 +112,7 @@ use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::sturm::Roots;
+use geom_num::wide::Wide;
 use geom_num::{math, predicate, quadric};
 use geom_nurbs::{BernsteinCurve, BernsteinPatch, Bounds, Direction, Limit, NurbsError};
 use geom_run::WorkMeter;
@@ -109,8 +123,8 @@ use geom_surface::{
 use crate::closed::{self, Meeting};
 use crate::curve::{
     Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
-    grid_point, held, onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole,
-    widest,
+    grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span, turn_of,
+    whole, widest,
 };
 use crate::error::IntersectError;
 use crate::quadrics::{off_line, parallel, plus, same_line, scale};
@@ -497,16 +511,17 @@ fn on_domains(
     root(line, t, (u, v), standing(double, ends), meter).map(Some)
 }
 
-/// The roots of the line with A·t² + 2B·t + C = 0 on a quadric, as items.
+/// The roots of the line with A·t² + 2B·t + C = 0 on a quadric, as items: counted by `exact`
+/// where it is known, with `known` for the discriminant where an exact sum gave it.
 fn quadric_roots(
     line: &Line<3>,
     terms: [Interval; 3],
-    exact: Option<Meeting>,
+    (exact, known): (Option<Meeting>, Option<Interval>),
     seams: [Seam; 2],
     place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError> + Copy,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    let Some(roots) = quadratic(terms, exact)? else {
+    let Some(roots) = quadratic_with(terms, exact, known)? else {
         return Ok(None);
     };
     let double = exact == Some(Meeting::Tangent) || exact == Some(Meeting::Apex);
@@ -558,7 +573,7 @@ fn line_sphere(
     quadric_roots(
         line,
         [dot(d, d)?, dot(o, d)?, c],
-        exact,
+        (exact, None),
         seams,
         place,
         meter,
@@ -574,12 +589,20 @@ fn exact_sphere(line: &Line<3>, sphere: &Sphere) -> Option<Meeting> {
     closed::line_sphere(&grid_line(line)?, &s).ok()
 }
 
-/// The point `c + n`, on the grid.
+/// The axis's two points, the centre `c` and `c + n`, n the stored normal, if `c` and `n` are both
+/// on the grid and `c + n` is in reach. The far point is summed in integers, not doubles (#1063):
+/// near 2^39 a double holds only 2^-13, so a normal's fraction under half of that rounds away in
+/// `c + n`, the sum lands on the grid, and the closed forms would be handed an upright axis for a
+/// tilted surface.
 fn on_axis(center: &[f64; 3], frame: &Frame<3>) -> Option<(P3, P3)> {
-    let n = frame.normal();
-    let [a, b, c] = *center;
-    let [p, q, r] = n;
-    Some((grid_point(center)?, grid_point(&[a + p, b + q, c + r])?))
+    let (c, n) = (grid_point(center)?, grid_point(&frame.normal())?);
+    let along = P3::new(
+        c.x.get().checked_add(n.x.get())?,
+        c.y.get().checked_add(n.y.get())?,
+        c.z.get().checked_add(n.z.get())?,
+    )
+    .ok()?;
+    Some((c, along))
 }
 
 /// A line with a cylinder.
@@ -601,6 +624,14 @@ fn line_cylinder(
     if exact == Some(Meeting::Within) {
         return along_ruling(line, cylinder, meter).map(Some);
     }
+    // Whole-number data too: the exact sum counts as `closed::line_cylinder` would, and holds Δ to
+    // a step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        let n = lift(cylinder.frame().normal())?;
+        stored_count(cylinder_excess(line, cylinder), dot(n, n)?)?
+    } else {
+        (None, None)
+    };
     // The point at v stands s·v along n̂, so the height z is at v = z/s (z·s only for s = ±1, as
     // built; a similarity scales the axial factor).
     let factor = Interval::point(cylinder.axial_sign())?;
@@ -612,10 +643,148 @@ fn line_cylinder(
         };
         Ok(Some((u, v)))
     };
-    quadric_roots(line, terms, exact, seams, place, meter)
+    quadric_roots(line, terms, known, seams, place, meter)
 }
 
-/// How a line meets a cylinder, exactly, where their data are whole.
+/// Whether the enclosure of the discriminant B² − A·C reaches zero, so that it cannot count the
+/// roots.
+fn straddles([a, b, c]: [Interval; 3]) -> Result<bool, IntersectError> {
+    let d = b.square()?.sub(a.mul(c)?)?;
+    Ok(d.lo() <= 0.0 && d.hi() >= 0.0)
+}
+
+/// The count from an exact multiple of the discriminant, `excess` = `by`·Δ with `by` positive,
+/// and an enclosure of Δ two steps of `excess` wide. `(None, None)` where no exact sum was taken.
+fn stored_count(
+    excess: Option<f64>,
+    by: Interval,
+) -> Result<(Option<Meeting>, Option<Interval>), IntersectError> {
+    let Some(e) = excess else {
+        return Ok((None, None));
+    };
+    let meeting = if e > 0.0 {
+        Meeting::Twice
+    } else if e < 0.0 {
+        Meeting::Nowhere
+    } else {
+        Meeting::Tangent
+    };
+    let known = Interval::new(e.next_down(), e.next_up())?.div(by)?;
+    Ok((Some(meeting), Some(known)))
+}
+
+/// Whether products of up to [`MOST_FACTORS`] doubles this size are exact as sums of doubles:
+/// zero, or between 10⁻²⁴ and 10²⁴ in size. Every part of such a product is a whole multiple of
+/// the product of the factors' last places, each at least 2⁻¹³², so of 2⁻¹⁰⁵⁶, which a double
+/// holds, and none is near 2¹⁰²⁴.
+fn mild(x: f64) -> bool {
+    x == 0.0 || (1e-24..=1e24).contains(&x) || (-1e24..=-1e-24).contains(&x)
+}
+
+/// The most stored doubles in one product of an exact sum here.
+const MOST_FACTORS: usize = 8;
+
+/// The most doubles such a product is the sum of: 2^(`MOST_FACTORS` − 1).
+const MOST_PARTS: usize = 128;
+
+/// Adds the product of `factors`, at most [`MOST_FACTORS`] stored doubles, to `sum` exactly: each
+/// factor multiplies every part so far into a double and its error (`two_prod`), so the product
+/// is the sum of at most 128 doubles, held on the stack. `None` where a factor is not [`mild`] or
+/// there are too many.
+fn add_product(sum: &mut ExactSum, factors: &[f64]) -> Option<()> {
+    let (&first, rest) = factors.split_first()?;
+    if rest.len() >= MOST_FACTORS || !factors.iter().all(|x| mild(*x)) {
+        return None;
+    }
+    let mut parts = [0.0; MOST_PARTS];
+    *parts.first_mut()? = first;
+    let mut count: usize = 1;
+    for &f in rest {
+        let mut next = [0.0; MOST_PARTS];
+        for (i, &part) in parts.iter().take(count).enumerate() {
+            let (p, e) = two_prod(part, f);
+            let at = i.checked_mul(2)?;
+            *next.get_mut(at)? = p;
+            *next.get_mut(at.checked_add(1)?)? = e;
+        }
+        parts = next;
+        count = count.checked_mul(2)?;
+    }
+    sum.add_slice(parts.get(..count)?);
+    Some(())
+}
+
+/// Adds `±(Σ mᵢ)² · Π scale` to `sum` exactly, each mᵢ a product of stored doubles: every
+/// product mᵢ·mⱼ·Π scale in turn, negated where `negative`.
+fn add_square<const K: usize>(
+    sum: &mut ExactSum,
+    monomials: &[[f64; K]],
+    scale: &[f64],
+    negative: bool,
+) -> Option<()> {
+    for p in monomials {
+        for q in monomials {
+            let mut factors = [0.0; MOST_FACTORS];
+            let all = p.iter().chain(q).chain(scale);
+            let count = all.clone().count();
+            for (slot, x) in factors.iter_mut().zip(all) {
+                *slot = *x;
+            }
+            if negative {
+                let first = factors.first_mut()?;
+                *first = -*first;
+            }
+            add_product(sum, factors.get(..count)?)?;
+        }
+    }
+    Some(())
+}
+
+/// The twelve products of three stored doubles whose sum is W·(d × n), W = o − c.
+fn skew_terms(o: [f64; 3], c: [f64; 3], d: [f64; 3], n: [f64; 3]) -> [[f64; 3]; 12] {
+    let [c0, c1, c2] = c;
+    let mut terms = [[0.0; 3]; 12];
+    let parts = triple_terms(o, d, n);
+    let behind = triple_terms([-c0, -c1, -c2], d, n);
+    for (slot, term) in terms.iter_mut().zip(parts.iter().chain(&behind)) {
+        *slot = *term;
+    }
+    terms
+}
+
+/// The components of a × b, each as two products of two stored doubles.
+fn cross_parts(a: [f64; 3], b: [f64; 3]) -> [[[f64; 2]; 2]; 3] {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    [
+        [[a1, b2], [-a2, b1]],
+        [[a2, b0], [-a0, b2]],
+        [[a0, b1], [-a1, b0]],
+    ]
+}
+
+/// N·Δ for a line and a cylinder, exactly, rounded once: Δ is the discriminant of the line's
+/// quadratic in the cylinder's own coordinates and N = n·n, n the stored axis. A line meets the
+/// cylinder where it comes within r of the axis, and its distance from the axis is
+/// |W·(d × n)| / |d × n|, W = o − c, so N·Δ = r²·|d × n|² − (W·(d × n))², a sum of products of
+/// six stored doubles. `None` where a product would not be exact.
+fn cylinder_excess(line: &Line<3>, cylinder: &Cylinder) -> Option<f64> {
+    let (o, d) = (line.origin(), line.direction());
+    let (c, n, r) = (
+        cylinder.center(),
+        cylinder.frame().normal(),
+        cylinder.radius(),
+    );
+    let mut sum = ExactSum::new();
+    for part in cross_parts(d, n) {
+        add_square(&mut sum, &part, &[r, r], false)?;
+    }
+    add_square(&mut sum, &skew_terms(o, c, d, n), &[], true)?;
+    let e = sum.round_ieee();
+    e.is_finite().then_some(e)
+}
+
+/// How a line meets a cylinder, exactly, where their data are whole. [`line_cylinder`] reads only
+/// whether it lies along a ruling: the count is the exact sum's, which encloses Δ too.
 fn exact_cylinder(line: &Line<3>, cylinder: &Cylinder) -> Option<Meeting> {
     let (base, along) = on_axis(&cylinder.center(), &cylinder.frame())?;
     let c = quadric::Cylinder {
@@ -672,6 +841,7 @@ fn line_cone(
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
     let (r0, k) = cone.radius_and_slope();
+    let started = r0 != 0.0;
     // k/s and z/s, not k·s and z·s: the two agree only for s = ±1, as built, and a similarity
     // scales the axial factor.
     let factor = Interval::point(cone.axial_sign())?;
@@ -699,7 +869,284 @@ fn line_cone(
         let flip = Interval::point(flip)?;
         Ok(around(x.mul(flip)?, y.mul(flip)?, domain.0)?.map(|u| (u, v)))
     };
-    quadric_roots(line, terms, None, seams, place, meter)
+    // Whole-number data too: the exact sums count as `closed::line_cone` would, and hold Δ to a
+    // step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        if started {
+            started_count(line, cone)
+        } else {
+            let n = lift(cone.frame().normal())?;
+            let by = dot(n, n)?.mul(factor.square()?)?;
+            stored_count(cone_excess(line, cone), by)?
+        }
+    } else {
+        (None, None)
+    };
+    quadric_roots(line, terms, known, seams, place, meter)
+}
+
+/// The components of (o − c) × d, each as four products of two stored doubles.
+fn cross_parts_from(o: [f64; 3], c: [f64; 3], d: [f64; 3]) -> [[[f64; 2]; 4]; 3] {
+    let ([o0, o1, o2], [c0, c1, c2], [d0, d1, d2]) = (o, c, d);
+    [
+        [[o1, d2], [-c1, d2], [-o2, d1], [c2, d1]],
+        [[o2, d0], [-c2, d0], [-o0, d2], [c0, d2]],
+        [[o0, d1], [-c0, d1], [-o1, d0], [c1, d0]],
+    ]
+}
+
+/// s²·N·Δ for a line and a cone whose radius at v = 0 is zero, exactly, rounded once: Δ is the
+/// discriminant of the line's quadratic in the cone's own coordinates, N = n·n with n the stored
+/// axis, s the axial factor and k the slope. The apex is then the stored centre c, and the plane
+/// through it and the line, of normal m = W × d with W = o − c, cuts the double cone in two
+/// rulings, touches it along one, or holds the apex alone as k²·N·|m|² is above, equal to or
+/// below (s² + k²)·(m·n)²: s²·N·Δ is their difference, a sum of products of eight stored
+/// doubles. A line through the apex has m = 0, so Δ = 0: it meets the cone there alone, or lies
+/// along a ruling. For a cone whose radius at v = 0 is zero only (a cone of another start radius
+/// is [`started_count`]'s); `None` where a product would not be exact.
+fn cone_excess(line: &Line<3>, cone: &Cone) -> Option<f64> {
+    let (_, k) = cone.radius_and_slope();
+    let (o, d) = (line.origin(), line.direction());
+    let (c, n, s) = (cone.center(), cone.frame().normal(), cone.axial_sign());
+    let mut sum = ExactSum::new();
+    for part in cross_parts_from(o, c, d) {
+        for x in n {
+            add_square(&mut sum, &part, &[k, k, x, x], false)?;
+        }
+    }
+    let skew = skew_terms(o, c, d, n);
+    add_square(&mut sum, &skew, &[s, s], true)?;
+    add_square(&mut sum, &skew, &[k, k], true)?;
+    let e = sum.round_ieee();
+    e.is_finite().then_some(e)
+}
+
+/// The width of the whole numbers of [`started_count`]: 768 bits. Each factor there is below
+/// 2^127 ([`whole_numbers`]), and P and Q, sums of products of eight and seven, fit it while each
+/// kind's whole numbers stay below about 2^90; past that a step is `None` (the engine's).
+type Part = Wide<12>;
+
+/// The width of P² − Q²·N: 1,536 bits, twice [`Part`]'s.
+type Square = Wide<24>;
+
+/// The fraction field of a double's bits: the low 52 bits.
+const FRACTION: u64 = (1 << 52) - 1;
+
+/// A normal double's hidden bit, above its 52 fraction bits.
+const HIDDEN: i64 = 1 << 52;
+
+/// 2^32, the place of the upper half of a 64-bit limb.
+const TWO_POW_32: f64 = 4_294_967_296.0;
+
+/// A finite double as m·2^e exactly, m odd and below 2^53 in size, or (0, 0) for a zero: the
+/// significand with its hidden bit and the exponent less the bias and the 52 fraction bits (IEEE
+/// 754-2019, section 3.3; the subnormals have no hidden bit and the exponent of the least normal
+/// one). `None` for an infinity or NaN. (The same as `geom_math`'s `exact::dyadic`, which that
+/// crate keeps to itself.)
+fn dyadic(x: f64) -> Option<(i64, i32)> {
+    if !x.is_finite() {
+        return None;
+    }
+    let bits = x.to_bits();
+    let fraction = i64::try_from(bits & FRACTION).ok()?;
+    let field = i32::try_from((bits >> 52) & 0x7ff).ok()?;
+    // A subnormal, of field 0, has no hidden bit and the exponent of the least normal double.
+    let m = if field == 0 {
+        fraction
+    } else {
+        fraction.checked_add(HIDDEN)?
+    };
+    let e = field.max(1).checked_sub(1075)?;
+    if m == 0 {
+        return Some((0, 0));
+    }
+    // m ≠ 0 and below 2^53, so it has at most 52 trailing zeros.
+    let zeros = m.trailing_zeros();
+    let m = m.checked_shr(zeros)?;
+    let m = if x.is_sign_negative() {
+        m.checked_neg()?
+    } else {
+        m
+    };
+    Some((m, e.checked_add(i32::try_from(zeros).ok()?)?))
+}
+
+/// Stored doubles of one kind as whole numbers, exactly: each times 2^−e, with e the exponent of
+/// the least last place among them, and e. `None` where one would reach 2^127 (they span more
+/// than about 127 bits) or is not finite.
+fn whole_numbers<const K: usize>(xs: [f64; K]) -> Option<([Part; K], i32)> {
+    let mut parts = [(0, 0); K];
+    for (slot, x) in parts.iter_mut().zip(xs) {
+        *slot = dyadic(x)?;
+    }
+    let least = parts
+        .iter()
+        .filter(|(m, _)| *m != 0)
+        .map(|&(_, e)| e)
+        .min()
+        .unwrap_or(0);
+    let mut whole = [Part::ZERO; K];
+    for (slot, (m, e)) in whole.iter_mut().zip(parts) {
+        if m != 0 {
+            let shift = u32::try_from(e.checked_sub(least)?).ok()?;
+            *slot = Part::from_i128(i128::from(m).checked_mul(2_i128.checked_pow(shift)?)?);
+        }
+    }
+    Some((whole, least))
+}
+
+/// a·b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_dot(a: &[Part; 3], b: &[Part; 3]) -> Option<Part> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    a0.checked_mul(b0)?
+        .checked_add(&a1.checked_mul(b1)?)?
+        .checked_add(&a2.checked_mul(b2)?)
+}
+
+/// a × b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_cross(a: &[Part; 3], b: &[Part; 3]) -> Option<[Part; 3]> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    let minus = |p: &Part, q: &Part, r: &Part, s: &Part| -> Option<Part> {
+        p.checked_mul(q)?.checked_sub(&r.checked_mul(s)?)
+    };
+    Some([
+        minus(a1, b2, a2, b1)?,
+        minus(a2, b0, a0, b2)?,
+        minus(a0, b1, a1, b0)?,
+    ])
+}
+
+/// 2^e as a double, for the normal powers of two only (e from −1022 to 1023), from its bits.
+fn pow2(e: i32) -> Option<f64> {
+    let field = u64::try_from(e.checked_add(1023)?).ok()?;
+    (1..=2046)
+        .contains(&field)
+        .then(|| f64::from_bits(field << 52))
+}
+
+/// A whole number enclosed: its limbs' halves summed exactly and rounded once to nearest, then
+/// widened a step either way. `None` where it does not fit a double.
+fn enclose<const L: usize>(w: &Wide<L>) -> Option<Interval> {
+    let negative = w.is_negative();
+    let magnitude = if negative { w.checked_neg()? } else { *w };
+    let mut sum = ExactSum::new();
+    let mut place = 1.0;
+    for limb in magnitude.to_le_limbs() {
+        for half in [limb & 0xffff_ffff, limb >> 32] {
+            if half != 0 {
+                sum.add(f64::from(u32::try_from(half).ok()?) * place);
+            }
+            place *= TWO_POW_32;
+        }
+    }
+    let r = sum.round_ieee();
+    let r = if negative { -r } else { r };
+    if !r.is_finite() {
+        return None;
+    }
+    Interval::new(r.next_down(), r.next_up()).ok()
+}
+
+/// The count of a line on a cone of any start radius r₀, from the exact sign of its
+/// discriminant, and an enclosure of the discriminant (or `None` where its doubles cannot hold
+/// it). `(None, None)` where a whole number does not fit.
+///
+/// With W = o − c, m = W × d, N = n·n, s the axial factor and k the slope, Δ is
+/// (P + Q·√N) / (s²·N), where P = k²·N·|m|² − (s² + k²)·(m·n)² + r₀²·s²·|d × n|², a sum of
+/// products of eight stored doubles, and Q = 2·r₀·k·s·((d·d)(W·n) − (W·d)(d·n)), of seven. (For
+/// r₀ = 0 it is [`cone_excess`]'s.) Where P and Q do not have opposite signs, Δ has the sign of
+/// P + Q; where they do, P + Q·√N has P's sign times that of P² − Q²·N, which is then also
+/// (P² − Q²·N) / (P − Q·√N) with no cancellation in either part.
+///
+/// Each stored double is m·2^e exactly, so each of the four kinds of data (o, c and r₀; d; n;
+/// k and s) times one power of two is a whole number, and P and Q·√N are homogeneous in each kind
+/// (of degrees two, two, two and two), so the scaling keeps the sign, and Δ only gains the power
+/// of two of the first two kinds, squared. P, Q and N are then whole numbers of at most 768 bits
+/// and P² − Q²·N of at most 1,536 ([`Part`], [`Square`]).
+///
+/// Cost: four conversions of at most seven doubles, 50 products and 30 sums or differences of
+/// 768-bit integers, three products and a difference of 1,536-bit ones where the signs differ, and
+/// the enclosure's four or five conversions and a few interval steps. No allocation: every number
+/// is on the stack.
+fn started_count(line: &Line<3>, cone: &Cone) -> (Option<Meeting>, Option<Interval>) {
+    match started_sign(line, cone) {
+        Some((Sign::Positive, known)) => (Some(Meeting::Twice), known),
+        Some((Sign::Negative, known)) => (Some(Meeting::Nowhere), known),
+        Some((Sign::Zero, known)) => (Some(Meeting::Tangent), known),
+        None => (None, None),
+    }
+}
+
+/// The sign of Δ for [`started_count`], and its enclosure where the doubles hold it.
+fn started_sign(line: &Line<3>, cone: &Cone) -> Option<(Sign, Option<Interval>)> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cone.center());
+    let (r0, k) = cone.radius_and_slope();
+    let ([o0, o1, o2, c0, c1, c2, r0], lengths) = whole_numbers([o0, o1, o2, c0, c1, c2, r0])?;
+    let (d, along) = whole_numbers(line.direction())?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let (m, dn) = (wide_cross(&w, &d)?, wide_cross(&d, &n)?);
+    let (big_n, mn) = (wide_dot(&n, &n)?, wide_dot(&m, &n)?);
+    let (kk, ss) = (k.checked_mul(&k)?, s.checked_mul(&s)?);
+    let p = kk
+        .checked_mul(&big_n)?
+        .checked_mul(&wide_dot(&m, &m)?)?
+        .checked_sub(&ss.checked_add(&kk)?.checked_mul(&mn.checked_mul(&mn)?)?)?
+        .checked_add(
+            &r0.checked_mul(&r0)?
+                .checked_mul(&ss)?
+                .checked_mul(&wide_dot(&dn, &dn)?)?,
+        )?;
+    let q = wide_dot(&d, &d)?
+        .checked_mul(&wide_dot(&w, &n)?)?
+        .checked_sub(&wide_dot(&w, &d)?.checked_mul(&wide_dot(&d, &n)?)?)?
+        .checked_mul(&r0.checked_mul(&k)?.checked_mul(&s)?)?;
+    let q = q.checked_add(&q)?;
+    let opposite = matches!(
+        (p.signum(), q.signum()),
+        (Sign::Positive, Sign::Negative) | (Sign::Negative, Sign::Positive)
+    );
+    let gap = if opposite {
+        let (p2, q2) = (p.resize::<24>()?, q.resize::<24>()?);
+        let n2: Square = big_n.resize()?;
+        Some(
+            p2.checked_mul(&p2)?
+                .checked_sub(&q2.checked_mul(&q2)?.checked_mul(&n2)?)?,
+        )
+    } else {
+        None
+    };
+    let sign = match &gap {
+        Some(e) => p.signum().mul(e.signum()),
+        None => p.checked_add(&q)?.signum(),
+    };
+    let scale = lengths.checked_add(along)?.checked_mul(2)?;
+    Some((
+        sign,
+        started_delta([&p, &q, &big_n, &ss], gap.as_ref(), scale),
+    ))
+}
+
+/// Δ = (P + Q·√N) / (s²·N) · 2^`scale` enclosed, through (P² − Q²·N) / (P − Q·√N) where `gap`
+/// holds P² − Q²·N; `None` where a step leaves the doubles.
+fn started_delta(
+    [p, q, big_n, ss]: [&Part; 4],
+    gap: Option<&Square>,
+    scale: i32,
+) -> Option<Interval> {
+    let (p, q, big_n, ss) = (enclose(p)?, enclose(q)?, enclose(big_n)?, enclose(ss)?);
+    let q_root = q.mul(big_n.sqrt().ok()?).ok()?;
+    let top = match gap {
+        Some(e) => enclose(e)?.div(p.sub(q_root).ok()?).ok()?,
+        None => p.add(q_root).ok()?,
+    };
+    let unit = Interval::point(pow2(scale)?).ok()?;
+    top.div(ss.mul(big_n).ok()?).ok()?.mul(unit).ok()
 }
 
 /// What an exact chain says of a line and a torus, on whole-number data.
