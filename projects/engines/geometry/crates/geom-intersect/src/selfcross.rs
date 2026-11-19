@@ -245,12 +245,6 @@ impl Lines {
         out
     }
 
-    /// Whether a pole line lies strictly inside `region`, where S folds a line to a point.
-    fn pole_inside(&self, ((a, b), (c, d)): Region) -> bool {
-        let inside = |lines: &[f64], (lo, hi): (f64, f64)| lines.iter().any(|&p| lo < p && p < hi);
-        inside(&self.charts.poles.0, (a, b)) || inside(&self.charts.poles.1, (c, d))
-    }
-
     /// Whether two pieces share a point: in parameters, across a closing seam, or on one pole line.
     fn touch(&self, a: Region, b: Region) -> bool {
         let meets = |x: (f64, f64), y: (f64, f64)| x.0 <= y.1 && y.0 <= x.1;
@@ -426,9 +420,9 @@ fn clean(
     floor: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<bool, IntersectError> {
-    if pieces.iter().any(|p| lines.pole_inside(*p)) {
-        return Ok(false);
-    }
+    // No pole line lies strictly inside a piece: the kinds searched here, those not `embedded`,
+    // have their poles only on their domain's edges (a NURBS's collapsed edges; `charts` gives
+    // the others none), and every piece lies within the domain.
     let mut boxes = Vec::new();
     for piece in pieces {
         for part in lines.parts(*piece) {
