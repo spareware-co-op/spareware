@@ -499,20 +499,21 @@ pub(crate) fn circles_apart(first: &Circle<3>, second: &Circle<3>, shared: bool)
 /// normal the same way round. The coefficients, integers up to 2^125, are enclosed by the doubles
 /// either side of their nearest (`crate::flat::around`), so the sign is certified, not exact;
 /// `None` where the circle may touch or cross the plane, or a number cannot be enclosed.
+///
+/// The sign is the enclosure's own ([`Interval::certain_sign`]). Where an end of it is exactly 0,
+/// strict or not makes no unsound answer: `around(d)` lies strictly either side of d, so the
+/// lower end of n · c + d lies strictly below its value, and the upper end of the reach at or
+/// above it. A lower end of 0, at most that lower end less that reach, has every value strictly
+/// above it, and an upper end of 0 every value strictly below. Nor is the enclosure ever the
+/// point 0, which alone reads as `Sign::Zero`: `around(d)` is never a point, and a sum is at
+/// least as wide as each term. (The caller refuses `Sign::Zero` all the same.)
 pub(crate) fn circle_side(circle: &Circle<3>, plane: &GridPlane) -> Option<Sign> {
     let (_, [_, _, own]) = circle.frame().unit_vectors().ok()?;
     let [nx, ny, nz] = plane.n();
     let normal = [around(nx)?, around(ny)?, around(nz)?];
     let off = plus(dot(lift(circle.center())?, normal)?, around(plane.d())?)?;
     let reach = times(at(circle.radius())?, length(cross(own, normal)?)?)?;
-    let values = plus(off, spread(reach)?)?;
-    if values.lo() > 0.0 {
-        Some(Sign::Positive)
-    } else if values.hi() < 0.0 {
-        Some(Sign::Negative)
-    } else {
-        None
-    }
+    plus(off, spread(reach)?)?.certain_sign()
 }
 
 /// Whether every number in `a` is certainly not zero.
