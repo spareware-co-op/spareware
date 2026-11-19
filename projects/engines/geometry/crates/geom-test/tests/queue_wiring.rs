@@ -88,6 +88,15 @@
 //!   (`geom_test::ember::MODELS`), each held to the SHA-256 the corpus register holds for it before
 //!   any benchmark runs; every part lists the ember benchmark with the catalogue's, so the judge,
 //!   which reads both bench targets' summaries, refuses a run in which no part measured it.
+//! - `network_limits::every_network_step_of_the_kernel_workflows_retries_and_is_bounded`
+//!   (issues #1034 and #1038): one network stall or refusal must not cost a whole gate run. In
+//!   every step of every `kernel*.yml`, each apt-get gives apt's `Acquire::Retries` at least 1 and
+//!   both `Acquire::http::Timeout` and `Acquire::https::Timeout` from 1 to 60 s, no step runs apt
+//!   through another front end (`apt`, `aptitude`), and a step that runs apt-get has its own
+//!   `timeout-minutes`, at most 15 and at most a third of its job's limit (GitHub's 360 when the
+//!   job sets none); and each `gh run download` sits in a loop `for try in 1 2 ...; do` of 2 to 5
+//!   tries that waits (`sleep`) between them and stops on success (`break`). The steps known to
+//!   do either are among those read. (`actions/download-artifact` retries its own downloads.)
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -3497,7 +3506,7 @@ fn bench_part_problems(w: &Yaml) -> Vec<String> {
     let judge = runs("instructions");
     for needle in [
         "--name \"count-$side-$TARGET-$k\"",
-        "for k in $(seq 1 \"$OF\"); do\n    gh run download",
+        "for k in $(seq 1 \"$OF\"); do\n    for try in 1 2 3; do\n      rm -rf \"$t/parts/$side/$k\"\n      if gh run download",
         "sides=\"base head\"",
         "\"$counts\" parts \"$side\" \"$t/parts/$side\" \"$OF\" >> \"$t/parts.md\" || status=$?",
     ] {
@@ -3571,8 +3580,8 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
             "does not check every part",
         ),
         (
-            "for k in $(seq 1 \"$OF\"); do\n              gh run download",
-            "for k in 1; do\n              gh run download",
+            "for k in $(seq 1 \"$OF\"); do\n              for try in 1 2 3; do",
+            "for k in 1; do\n              for try in 1 2 3; do",
             "does not check every part",
         ),
         (
@@ -4264,5 +4273,496 @@ fn the_development_crates_built_on_arm64_run_every_step_of_native() {
         assert_ne!(planted, dev, "the planted edit {from:?} applies");
         let found = hand_over_problems("kernel-dev.yml", &planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// The network steps of the kernel's workflows retry and are bounded (issues #1034 and #1038): a
+/// stalled package mirror held a part of `kernel-bench.yml`'s merge-base measurement until its job's
+/// limit cancelled it, and one refused artifact download (HTTP 503) lost a judge every part of
+/// which had measured; each cost a whole run of the gate.
+mod network_limits {
+    use std::path::Path;
+
+    use yaml_rust2::{Yaml, YamlLoader};
+
+    /// The longest apt may wait on a connection or for data, in seconds, before it retries.
+    const MOST_SECONDS: i64 = 60;
+
+    /// The longest a step that runs apt-get may take, in minutes.
+    const MOST_MINUTES: i64 = 15;
+
+    /// GitHub's limit for a job that sets no `timeout-minutes`.
+    const GITHUB_JOB_MINUTES: i64 = 360;
+
+    /// The fewest and most tries of an artifact download.
+    const TRIES: std::ops::RangeInclusive<usize> = 2..=5;
+
+    /// The steps known to run apt-get: workflow file, job and step name.
+    const KNOWN_APT: [(&str, &str, &str); 4] = [
+        ("kernel-bench.yml", "instructions-base", "Install Valgrind"),
+        ("kernel-bench.yml", "instructions-parts", "Install Valgrind"),
+        ("kernel-bench.yml", "instructions", "Install Valgrind"),
+        (
+            "kernel.yml",
+            "big-endian",
+            "Install the cross linker and QEMU's user mode",
+        ),
+    ];
+
+    /// The steps known to download an artifact with `gh run download`.
+    const KNOWN_DOWNLOADS: [(&str, &str, &str); 3] = [
+        (
+            "kernel-bench.yml",
+            "instructions-base",
+            "The merge base's counts, if a trusted run kept them",
+        ),
+        (
+            "kernel-bench.yml",
+            "instructions-parts",
+            "This part's counts of the merge base",
+        ),
+        (
+            "kernel-bench.yml",
+            "instructions",
+            "Gather every part's counts",
+        ),
+    ];
+
+    /// Every kernel workflow, by file name, with its text.
+    fn kernel_workflows() -> Vec<(String, String)> {
+        let dir = super::root().join(super::WORKFLOWS);
+        let mut found: Vec<(String, String)> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|n| {
+                n.starts_with("kernel")
+                    && Path::new(n)
+                        .extension()
+                        .is_some_and(|x| x == "yml" || x == "yaml")
+            })
+            .map(|n| {
+                let text = std::fs::read_to_string(dir.join(&n))
+                    .unwrap()
+                    .replace("\r\n", "\n");
+                (n, text)
+            })
+            .collect();
+        found.sort();
+        found
+    }
+
+    /// A line's commands: split at `;`, `&&`, `||` and `|`, each as its words, a comment left out.
+    fn commands(line: &str) -> Vec<Vec<String>> {
+        line.split([';', '|', '&'])
+            .map(|c| {
+                c.split_whitespace()
+                    .take_while(|w| !w.starts_with('#'))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|w| !w.is_empty())
+            .collect()
+    }
+
+    /// Whether a word names the program `name`, alone or by a path.
+    fn is_program(word: &str, name: &str) -> bool {
+        word == name || word.ends_with(&format!("/{name}"))
+    }
+
+    /// The value apt is given for `key` (apt's keys ignore case) by the `-o` options after apt-get.
+    fn option(args: &[String], key: &str) -> Option<String> {
+        let mut i = 0;
+        let mut value = None;
+        while i < args.len() {
+            let w = &args[i];
+            let setting = if w == "-o" || w == "--option" {
+                i += 1;
+                args.get(i).cloned()
+            } else {
+                w.strip_prefix("-o").map(str::to_owned)
+            };
+            if let Some((k, v)) = setting.as_deref().and_then(|s| s.split_once('=')) {
+                if k.eq_ignore_ascii_case(key) {
+                    value = Some(v.to_owned());
+                }
+            }
+            i += 1;
+        }
+        value
+    }
+
+    /// What is wrong with one apt-get command's options, given the words after apt-get.
+    fn option_problems(args: &[String]) -> Vec<String> {
+        let mut found = Vec::new();
+        match option(args, "Acquire::Retries").map(|v| v.parse::<i64>()) {
+            None => found.push("gives apt no Acquire::Retries".to_owned()),
+            Some(Ok(n)) if n >= 1 => {}
+            Some(_) => found.push("does not let apt retry (Acquire::Retries under 1)".to_owned()),
+        }
+        for key in ["Acquire::http::Timeout", "Acquire::https::Timeout"] {
+            match option(args, key).map(|v| v.parse::<i64>()) {
+                None => found.push(format!("gives apt no {key}")),
+                Some(Ok(s)) if (1..=MOST_SECONDS).contains(&s) => {}
+                Some(_) => found.push(format!(
+                    "lets apt wait over {MOST_SECONDS} s or with no limit ({key})"
+                )),
+            }
+        }
+        found
+    }
+
+    /// A loop of a run: its first and last lines, its variable (none for `while` and `until`) and
+    /// its words.
+    struct Loop {
+        start: usize,
+        end: usize,
+        var: String,
+        words: Vec<String>,
+    }
+
+    /// The loops of a run's lines, each with the lines it holds, opened by a line `for v in ...; do`,
+    /// `while ...; do` or `until ...; do` and closed by a line that starts with `done`.
+    fn loops(lines: &[&str]) -> (Vec<Loop>, Vec<Vec<usize>>) {
+        let mut all: Vec<Loop> = Vec::new();
+        let mut open: Vec<usize> = Vec::new();
+        let mut inside = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            let t = line.trim();
+            if let Some(head) = t.strip_suffix("; do") {
+                let words: Vec<String> = head.split_whitespace().map(str::to_owned).collect();
+                let (var, words) = match words.as_slice() {
+                    [f, v, inn, rest @ ..] if f == "for" && inn == "in" => {
+                        (v.clone(), rest.to_vec())
+                    }
+                    _ => (String::new(), Vec::new()),
+                };
+                all.push(Loop {
+                    start: i,
+                    end: lines.len(),
+                    var,
+                    words,
+                });
+                open.push(all.len() - 1);
+            } else if t == "done" || t.starts_with("done ") {
+                if let Some(l) = open.pop() {
+                    all[l].end = i;
+                }
+            }
+            inside.push(open.clone());
+        }
+        (all, inside)
+    }
+
+    /// What is wrong with the downloads of one step's run.
+    fn download_problems(at: &str, run: &str) -> (Vec<String>, bool) {
+        let joined = run.replace("\\\n", " ");
+        let lines: Vec<&str> = joined.lines().collect();
+        let (all, inside) = loops(&lines);
+        let mut found = Vec::new();
+        let mut downloads = false;
+        for (i, line) in lines.iter().enumerate() {
+            let here = commands(line).iter().any(|w| {
+                w.windows(3)
+                    .any(|x| x[0] == "gh" && x[1] == "run" && x[2] == "download")
+            });
+            if !here {
+                continue;
+            }
+            downloads = true;
+            let Some(&l) = inside[i].iter().rev().find(|&&l| all[l].var == "try") else {
+                found.push(format!(
+                    "{at}: downloads an artifact with no retry (`for try in 1 2 3; do`)"
+                ));
+                continue;
+            };
+            let l = &all[l];
+            let counted = l
+                .words
+                .iter()
+                .enumerate()
+                .all(|(k, w)| w.parse::<usize>().ok() == Some(k + 1));
+            if !counted || !TRIES.contains(&l.words.len()) {
+                found.push(format!(
+                    "{at}: tries a download other than {} to {} times",
+                    TRIES.start(),
+                    TRIES.end()
+                ));
+            }
+            let body: Vec<Vec<String>> = lines[l.start + 1..l.end]
+                .iter()
+                .flat_map(|b| commands(b))
+                .collect();
+            if !body.iter().any(|w| {
+                w.first().is_some_and(|c| c == "sleep")
+                    && w.get(1)
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .is_some_and(|s| (1..=120).contains(&s))
+            }) {
+                found.push(format!(
+                    "{at}: retries a download with no wait between tries"
+                ));
+            }
+            if !body.iter().any(|w| w.first().is_some_and(|c| c == "break")) {
+                found.push(format!(
+                    "{at}: does not stop trying a download that succeeded"
+                ));
+            }
+        }
+        (found, downloads)
+    }
+
+    /// The steps a workflow's check found: (job, step, runs apt-get, downloads with gh).
+    type Seen = Vec<(String, String, bool, bool)>;
+
+    /// Everything wrong with one workflow's network steps, and the steps it found doing either.
+    fn problems(file: &str, text: &str) -> (Vec<String>, Seen) {
+        let mut found = Vec::new();
+        let mut seen = Vec::new();
+        let docs = match YamlLoader::load_from_str(text) {
+            Ok(d) => d,
+            Err(e) => return (vec![format!("{file} is not YAML: {e}")], seen),
+        };
+        let Some(jobs) = docs.first().and_then(|d| d["jobs"].as_hash()) else {
+            return (vec![format!("{file} has no jobs")], seen);
+        };
+        for (name, job) in jobs {
+            let job_name = name.as_str().unwrap_or("?");
+            let job_limit = match &job["timeout-minutes"] {
+                Yaml::BadValue => Some(GITHUB_JOB_MINUTES),
+                y => y.as_i64(),
+            };
+            for step in job["steps"].as_vec().map_or(&[][..], Vec::as_slice) {
+                let Some(run) = step["run"].as_str() else {
+                    continue;
+                };
+                let step_name = step["name"].as_str().unwrap_or("(unnamed)");
+                let at = format!("{file}, job {job_name}, step {step_name:?}");
+                let (download, downloads) = download_problems(&at, run);
+                found.extend(download);
+                let mut runs_apt_get = false;
+                for line in run.replace("\\\n", " ").lines() {
+                    for words in commands(line) {
+                        for (i, w) in words.iter().enumerate() {
+                            if is_program(w, "apt-get") {
+                                runs_apt_get = true;
+                                for p in option_problems(&words[i + 1..]) {
+                                    found.push(format!("{at}: `{}` {p}", words.join(" ")));
+                                }
+                            } else if is_program(w, "apt") || is_program(w, "aptitude") {
+                                found.push(format!(
+                                    "{at}: `{}` runs apt rather than apt-get",
+                                    words.join(" ")
+                                ));
+                            }
+                        }
+                    }
+                }
+                if runs_apt_get || downloads {
+                    seen.push((
+                        job_name.to_owned(),
+                        step_name.to_owned(),
+                        runs_apt_get,
+                        downloads,
+                    ));
+                }
+                if !runs_apt_get {
+                    continue;
+                }
+                let Some(job_limit) = job_limit else {
+                    found.push(format!("{at}: the job's timeout-minutes is not a number"));
+                    continue;
+                };
+                match step["timeout-minutes"].as_i64() {
+                    None => found.push(format!("{at}: runs apt-get with no timeout-minutes")),
+                    Some(m) if (1..=MOST_MINUTES).contains(&m) && m * 3 <= job_limit => {}
+                    Some(m) => found.push(format!(
+                        "{at}: its {m} minutes are not well under the job's {job_limit} \
+                         (at most {MOST_MINUTES} and a third of the job's)"
+                    )),
+                }
+            }
+        }
+        (found, seen)
+    }
+
+    #[cfg_attr(
+        target_family = "wasm",
+        ignore = "reads the repository's files, which a WebAssembly test run cannot"
+    )]
+    #[test]
+    fn every_network_step_of_the_kernel_workflows_retries_and_is_bounded() {
+        let workflows = kernel_workflows();
+        assert!(
+            workflows.iter().any(|(n, _)| n == "kernel.yml"),
+            "{workflows:?}"
+        );
+        let mut all = Vec::new();
+        let mut seen = Vec::new();
+        for (file, text) in &workflows {
+            let (found, steps) = problems(file, text);
+            all.extend(found);
+            seen.extend(steps.into_iter().map(|s| (file.clone(), s)));
+        }
+        assert_eq!(all, Vec::<String>::new());
+        for (known, apt) in [(&KNOWN_APT[..], true), (&KNOWN_DOWNLOADS[..], false)] {
+            for &(file, job, step) in known {
+                assert!(
+                    seen.iter().any(|(f, s)| f == file
+                        && s.0 == job
+                        && s.1 == step
+                        && if apt { s.2 } else { s.3 }),
+                    "the step {step:?} of {file}'s job {job} is read: {seen:#?}"
+                );
+            }
+        }
+    }
+
+    #[cfg_attr(
+        target_family = "wasm",
+        ignore = "reads the repository's files, which a WebAssembly test run cannot"
+    )]
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "each planted mistake reads best written out in one place"
+    )]
+    fn each_network_rule_fails_on_a_planted_violation() {
+        let workflows = kernel_workflows();
+        let text = |name: &str| {
+            workflows
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, t)| t.clone())
+                .unwrap()
+        };
+        let bench = text("kernel-bench.yml");
+        let kernel = text("kernel.yml");
+        let limits =
+            "-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30";
+        let s390x = "install --yes gcc-s390x-linux-gnu";
+        let gather = "for try in 1 2 3; do\n                rm -rf \"$t/parts/$side/$k\"\n";
+        for (file, original, from, to, said) in [
+            (
+                "kernel-bench.yml",
+                &bench,
+                "-o Acquire::Retries=3 -o Acquire::http".to_owned(),
+                "-o Acquire::http".to_owned(),
+                "no Acquire::Retries",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "Acquire::Retries=3".to_owned(),
+                "Acquire::Retries=0".to_owned(),
+                "does not let apt retry",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "-o Acquire::http::Timeout=30 ".to_owned(),
+                String::new(),
+                "no Acquire::http::Timeout",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "-o Acquire::https::Timeout=30 install".to_owned(),
+                "install".to_owned(),
+                "no Acquire::https::Timeout",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "Acquire::https::Timeout=30".to_owned(),
+                "Acquire::https::Timeout=600".to_owned(),
+                "wait over 60 s",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "        timeout-minutes: 10\n        run: |\n          sudo apt-get".to_owned(),
+                "        run: |\n          sudo apt-get".to_owned(),
+                "with no timeout-minutes",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "        timeout-minutes: 10\n        run: |\n          sudo apt-get".to_owned(),
+                "        timeout-minutes: 30\n        run: |\n          sudo apt-get".to_owned(),
+                "30 minutes are not well under the job's 30",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                format!("sudo apt-get {limits} install --yes --no-install-recommends valgrind"),
+                "sudo apt install --yes --no-install-recommends valgrind".to_owned(),
+                "runs apt rather than apt-get",
+            ),
+            // The job sets no limit of its own, so it is GitHub's 360 minutes, a third of it 120.
+            (
+                "kernel.yml",
+                &kernel,
+                format!("        timeout-minutes: 10\n        run: |\n          sudo apt-get {limits} update"),
+                format!("        timeout-minutes: 121\n        run: |\n          sudo apt-get {limits} update"),
+                "121 minutes are not well under the job's 360",
+            ),
+            // A second command on the line is held on its own.
+            (
+                "kernel.yml",
+                &kernel,
+                format!("update\n          sudo apt-get {limits} {s390x}"),
+                format!("update && sudo apt-get {s390x}"),
+                "`sudo apt-get install --yes gcc-s390x-linux-gnu",
+            ),
+            // The judge's download as it was before #1038's lost run: one try.
+            (
+                "kernel-bench.yml",
+                &bench,
+                "for try in 1 2 3; do\n                rm -rf \"$t/parts/$side/$k\"\n                if gh run download \"$GITHUB_RUN_ID\" --repo \"$GITHUB_REPOSITORY\" \\\n                  --name \"count-$side-$TARGET-$k\" --dir \"$t/parts/$side/$k\"; then\n                  break\n                fi\n".to_owned(),
+                "for once in 1; do\n                gh run download \"$GITHUB_RUN_ID\" --repo \"$GITHUB_REPOSITORY\" \\\n                  --name \"count-$side-$TARGET-$k\" --dir \"$t/parts/$side/$k\" \\\n                  || echo \"::error::Part $k of $OF on $TARGET left no counts of the $side.\"\n".to_owned(),
+                "Gather every part's counts\": downloads an artifact with no retry",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                gather.to_owned(),
+                gather.replacen("1 2 3", "1", 1),
+                "other than 2 to 5 times",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                gather.to_owned(),
+                gather.replacen("1 2 3", "$(seq 1 100)", 1),
+                "other than 2 to 5 times",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "trying again in 30 s.\"\n                sleep 30\n              fi\n            done\n          fi".to_owned(),
+                "trying again in 30 s.\"\n              fi\n            done\n          fi".to_owned(),
+                "kept them\": retries a download with no wait",
+            ),
+            (
+                "kernel-bench.yml",
+                &bench,
+                "--dir \"$t/parts/$side/$k\"; then\n                  break\n".to_owned(),
+                "--dir \"$t/parts/$side/$k\"; then\n                  true\n".to_owned(),
+                "does not stop trying a download that succeeded",
+            ),
+        ] {
+            let planted = original.replacen(&from, &to, 1);
+            assert_ne!(&planted, original, "the planted edit {from:?} applies");
+            let (found, _) = problems(file, &planted);
+            assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+        }
+        // A command split over two lines by `\` is read whole: no false alarm.
+        let split = kernel.replacen(
+            &format!("sudo apt-get {limits} update"),
+            "sudo apt-get -o Acquire::Retries=3 \\\n            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
+            1,
+        );
+        assert_ne!(split, kernel);
+        assert_eq!(problems("kernel.yml", &split).0, Vec::<String>::new());
     }
 }
