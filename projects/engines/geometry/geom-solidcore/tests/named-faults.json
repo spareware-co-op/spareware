@@ -274,10 +274,10 @@
       "case": "bldg-33",
       "test": "bldg_33_sloped_slab_with_a_vertical_round_opening",
       "ours": true,
-      "fault": "CK-4 (ours: geom-check, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, which the conversion now writes as the kernel's own ellipse (decision 32.93; it was WR-3, the conversion had no row for an ellipse); group 2 of the kernel's checker has no certified check of an ellipse as an edge's carrier, so each is reported unchecked, as the kernel's own body of the same shape would be. The extrusion itself (bldg-32) and the cylinder both pass the checker. What stands behind group 2 (group 3's pairs of an ellipse with the slab's other edges, and of the sloped plane and the cylinder meeting along it) is not yet measured",
-      "solidcore_gives": "the slab with its round opening, refused by the kernel's checker: 2 faults, the first \"group 2, curve 7: no certified check of this carrier exists yet (edge 7)\"",
+      "fault": "CK-4 (ours: geom-check, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, which the conversion now writes as the kernel's own ellipse (decision 32.93; it was WR-3, the conversion had no row for an ellipse); group 2 now certifies each ellipse on its plane and on the cylinder (decision 32.95), and the refusal is group 3's: it has no certified test of a pair with an ellipse (an ellipse edge against the slab's other edges, and the sloped face holding the ellipses, which keeps_off refuses, against the faces it meets), so the body is reported unchecked, as the kernel's own body of the same shape would be. The extrusion itself (bldg-32) and the cylinder both pass the checker",
+      "solidcore_gives": "the slab with its round opening, refused by the kernel's checker: 20 faults, the first \"group 3, edge 4: no certified test of this pair exists yet (edge 7)\"",
       "expected": "one solid of volume 6 - pi 0.5^2 0.25, passed by the checker",
-      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until group 2 certifies an ellipse on its faces' surfaces"
+      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until group 3 certifies pairs with an ellipse"
     },
     {
       "case": "bldg-47",
