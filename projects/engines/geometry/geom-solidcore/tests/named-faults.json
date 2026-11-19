@@ -271,24 +271,6 @@
       "blocks": "solids with two spherical faces, in every operation, until group 3 has a certified test of two spheres"
     },
     {
-      "case": "bldg-25",
-      "test": "bldg_25_round_opening_through_a_wall",
-      "ours": true,
-      "fault": "CK-2 (ours: geom-check, not solidcore), a flat face holding a circle beside a face that crosses its plane: a flat face with a circle among its edges (the wall's two faces round the opening) is not an outline, so group 3 tests its pairs by their carriers alone, and has no certified test of two crossing planes, nor of a cylinder and a plane along its axis; the wall with its round opening is reported unchecked, as the kernel's own body of it would be",
-      "solidcore_gives": "the wall with its round opening, refused by the kernel's checker: 12 faults, the first \"group 3, face 0: no certified test of this pair exists yet (face 3)\"",
-      "expected": "one solid of volume 2.4 - pi 0.4^2 0.2, passed by the checker",
-      "blocks": "openings, holes and cuts with circles in flat faces, until group 3 certifies such a face against a crossing plane"
-    },
-    {
-      "case": "bldg-26",
-      "test": "bldg_26_round_opening_flush_with_both_wall_faces",
-      "ours": true,
-      "fault": "CK-2 (ours: geom-check, not solidcore), a flat face holding a circle beside a face that crosses its plane: a flat face with a circle among its edges (the wall's two faces round the opening) is not an outline, so group 3 tests its pairs by their carriers alone, and has no certified test of two crossing planes, nor of a cylinder and a plane along its axis; the wall with its round opening is reported unchecked, as the kernel's own body of it would be",
-      "solidcore_gives": "the wall with its round opening, refused by the kernel's checker: 12 faults, the first \"group 3, face 0: no certified test of this pair exists yet (face 3)\"",
-      "expected": "one solid of volume 2.4 - pi 0.4^2 0.2, passed by the checker",
-      "blocks": "openings, holes and cuts with circles in flat faces, until group 3 certifies such a face against a crossing plane"
-    },
-    {
       "case": "bool-25",
       "test": "bool_25_sphere_intersect_box_octant",
       "ours": true,

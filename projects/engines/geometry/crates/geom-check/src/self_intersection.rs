@@ -26,7 +26,15 @@
 //!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
 //!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's
 //!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a
-//!   full circle edge meet only along it. Any other pair is reported unchecked.
+//!   full circle edge meet only along it. A cylinder and a plane exactly along its axis cannot
+//!   meet when the plane is certainly farther from the axis than the radius and the two faces'
+//!   stray. A flat face that is not an outline, one with a circle among its edges, is apart from
+//!   a plain face that reaches its plane only at the vertices and edges the two share, when every
+//!   vertex and edge of it lies on that plane exactly and the plane is given by integers
+//!   (`crate::planar::rests_on_flat`); and from a plain face whose plane it reaches only along one
+//!   edge or at one vertex the two share, its corners decided exactly and its circles certainly
+//!   on one side (`crate::planar::keeps_off`): so a wall's face round a round opening and the
+//!   sides that cross its plane. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
 //! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
 //!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
@@ -65,6 +73,7 @@
 use alloc::vec::Vec;
 
 use geom_curve::{Circle, ParamCurve};
+use geom_num::plane::Plane;
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
 use geom_op::run::reserve;
@@ -135,6 +144,12 @@ pub(crate) fn check(
                 continue;
             }
             let found = match (read(f), read(g)) {
+                (Read::Bare, Read::Plain(q)) => {
+                    bare_meets_plain(a, f, (g, &q), (exact, reach), sink)?
+                }
+                (Read::Plain(p), Read::Bare) => {
+                    bare_meets_plain(a, g, (f, &p), (exact, reach), sink)?
+                }
                 (Read::Bare, _) | (_, Read::Bare) => other_faces_meet(a, f, g, exact, reach),
                 (Read::Plain(p), Read::Plain(q)) => {
                     match planar::look(a, (f, &p), (g, &q), sink)? {
@@ -207,6 +222,32 @@ fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
 fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
     let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
     runs(a, f) == turned
+}
+
+/// How face `bare`, which is not an outline, meets plain face `plain` (given with the plane its
+/// outline is on), for a body recorded `exact` with the bound `reach`: apart if `bare` lies on an
+/// integer plane exactly and `plain` reaches that plane only where the two share a vertex or an
+/// edge (`crate::planar::rests_on_flat`), or if `bare` is flat and reaches `plain`'s plane only
+/// along one edge or at one vertex the two share (`crate::planar::keeps_off`); so a flat face
+/// holding a circle against a side that crosses its plane, as a wall's face round a round
+/// opening. Otherwise as their carriers say.
+fn bare_meets_plain(
+    a: &Arenas,
+    bare: Ix<Face>,
+    plain: (Ix<Face>, &Plane),
+    (exact, reach): (bool, f64),
+    sink: &mut Sink<'_, '_>,
+) -> Result<Meet, Stopped> {
+    let (face, _) = plain;
+    Ok(
+        if planar::rests_on_flat(a, face, bare, exact, sink)?
+            || planar::keeps_off(a, bare, plain, exact, sink)?
+        {
+            Meet::Apart
+        } else {
+            other_faces_meet(a, bare, face, exact, reach)
+        },
+    )
 }
 
 /// How two faces meet that are not both outlines, as far as their carriers say of two faces that
