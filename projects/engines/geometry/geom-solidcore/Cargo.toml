@@ -18,13 +18,13 @@ description = "Spare Kit geometry kernel: solidcore, taken whole at one commit, 
 # tangency-labs/solidcore, pinned to one commit (decision 32.70). Its normal dependency tree is
 # 11 crates, every one MIT OR Apache-2.0 (unicode-ident adds Unicode-3.0), and none has unsafe code.
 # The pin moves only through every case in tests/cases.rs passing first.
-solidcore = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
+solidcore = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
 # solidcore's own record of a body (solidcore-record, Apache-2.0) and its writer
 # (solidcore-convert, Apache-2.0), from the same repository at the same commit: the plain B-rep
 # this crate converts into the kernel's body. They add serde, serde_json and thiserror (each MIT
 # OR Apache-2.0), already in the tree.
-solidcore-convert = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
-solidcore-record = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
+solidcore-convert = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
+solidcore-record = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
 # The kernel's own crates the converted body is made of and checked by (Apache-2.0, this
 # repository).
 geom-check = { path = "../crates/geom-check" }
@@ -34,6 +34,12 @@ geom-num = { path = "../crates/geom-num" }
 geom-run = { path = "../crates/geom-run" }
 geom-surface = { path = "../crates/geom-surface" }
 geom-topo = { path = "../crates/geom-topo" }
+# Exact fractions for a profile's corners (decision 32.97): num-rational's ratio of num-bigint's
+# integers, whose conversion to f64 is correctly rounded, and num-traits' traits for them (each
+# MIT OR Apache-2.0). num-bigint and num-traits are in the tree already (bigdecimal's).
+num-bigint = "=0.4.8"
+num-rational = "=0.4.2"
+num-traits = "=0.2.19"
 
 # Unoptimised and without debug information: the one solidcore crate is almost all of the build,
 # and its code generation is what an optimised build spends its minutes on. The cases run in
@@ -51,3 +57,9 @@ serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }
 # Reads that text as an exact decimal (MIT OR Apache-2.0), so that a case's length is a whole
 # number of grid steps exactly or the case is refused, never rounded through an f64.
 bigdecimal = "=0.4.8"
+# The kernel's own primitives and their operation context (Apache-2.0, this repository): SC-5's
+# cylinder stays the kernel's (decision 32.76), and a test makes it the kernel's way beside
+# solidcore's. geom-op adds sha2 and unicode-normalization (each MIT OR Apache-2.0), already in
+# the kernel's tree.
+geom-make = { path = "../crates/geom-make" }
+geom-op = { path = "../crates/geom-op" }

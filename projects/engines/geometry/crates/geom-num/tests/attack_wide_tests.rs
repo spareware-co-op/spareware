@@ -55,12 +55,8 @@ use proptest::test_runner::{Config, TestCaseError};
 /// The outcome of one check: `Err` carries the first disagreement.
 type TestResult = Result<(), TestCaseError>;
 
-/// Cases per property. Under Miri a quarter of them, 128 cases, the same law on fewer inputs: at
-/// 512 cases twelve of this file's properties took Miri 398 to 582 s on GitHub's runners
-/// (measuring run 44004974529), over the 375 s a runner 1.6 times slower can take within the
-/// 600 s stop (32.68), and Miri is here to find undefined behaviour in the code the cases run,
-/// which each case runs alike. Natively the count is unchanged.
-const CASES: u32 = if cfg!(miri) { 128 } else { 512 };
+/// Cases per property.
+const CASES: u32 = 512;
 
 /// The grid's extreme coordinate, 2^40 − 1 grid steps.
 const C: i64 = (1 << 40) - 1;
@@ -79,6 +75,149 @@ fn cfg() -> Config {
 fn run(result: TestResult) {
     if let Err(e) = result {
         panic!("{e}");
+    }
+}
+
+/// The slices a long property's cases, and a list of split exponents, are cut into (`sliced!`,
+/// `parts!`), so that each slice ends within a Miri gate part (decision 32.78: a row of at most
+/// 486 yardstick seconds). Quarters were not enough: measuring run 44412249410 stopped many
+/// quarters at its 600 s stop.
+const SLICES: u32 = 32;
+
+/// The share of the `CASES` cases slice `k` of [`SLICES`] runs.
+fn slice(k: u32) -> std::ops::Range<u32> {
+    let each = CASES / SLICES;
+    each * k..each * (k + 1)
+}
+
+/// Runs slice `k` of a property. The file's `Config` draws from a random seed, so a property draws
+/// new cases on every run, natively and under Miri alike, and its cases are not a fixed set (the
+/// main session's ruling of 19 Nov 2026): each slice is a runner of the same strategy and `Config`,
+/// seed still random, that draws and checks its own share of the cases, never fewer.
+fn run_slice<S>(strategy: S, k: u32, check: impl Fn(S::Value) -> TestResult)
+where
+    S: proptest::strategy::Strategy,
+{
+    let cases = slice(k);
+    let share = cases.end - cases.start;
+    let mut runner = proptest::test_runner::TestRunner::new(Config {
+        cases: share,
+        ..cfg()
+    });
+    if let Err(e) = runner.run(&strategy, check) {
+        panic!("slice {} of {SLICES}, {share} cases: {e}", k + 1);
+    }
+}
+
+/// [`SLICES`] tests, `part_01` to `part_32`, each running `body` with its slice `k` (from 0):
+/// `parts!(|k| body)`.
+macro_rules! parts {
+    (|$k:ident| $body:expr) => {
+        parts!(@each |$k| $body;
+            part_01 0,
+            part_02 1,
+            part_03 2,
+            part_04 3,
+            part_05 4,
+            part_06 5,
+            part_07 6,
+            part_08 7,
+            part_09 8,
+            part_10 9,
+            part_11 10,
+            part_12 11,
+            part_13 12,
+            part_14 13,
+            part_15 14,
+            part_16 15,
+            part_17 16,
+            part_18 17,
+            part_19 18,
+            part_20 19,
+            part_21 20,
+            part_22 21,
+            part_23 22,
+            part_24 23,
+            part_25 24,
+            part_26 25,
+            part_27 26,
+            part_28 27,
+            part_29 28,
+            part_30 29,
+            part_31 30,
+            part_32 31
+        );
+    };
+    (@each |$k:ident| $body:expr; $($test:ident $n:literal),*) => {
+        $(
+            #[test]
+            fn $test() {
+                let $k: u32 = $n;
+                $body;
+            }
+        )*
+    };
+}
+
+/// A long property as [`SLICES`] tests, each its share of the cases (`part_01` to `part_32`).
+macro_rules! sliced {
+    ($name:ident, $strategy:expr, |$value:pat_param| $check:expr) => {
+        mod $name {
+            use super::*;
+
+            parts!(|k| crate::run_slice($strategy, k, |$value| $check));
+        }
+    };
+}
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    assert_eq!(
+        CASES % SLICES,
+        0,
+        "every slice holds the same number of cases"
+    );
+    let mut next = 0;
+    for k in 0..SLICES {
+        let cases = slice(k);
+        assert_eq!(
+            cases.start,
+            next,
+            "slice {} starts where the one before ends",
+            k + 1
+        );
+        assert!(cases.end > cases.start, "slice {} holds cases", k + 1);
+        next = cases.end;
+    }
+    assert_eq!(next, CASES, "the slices end at the last case");
+    // The split exponents of every width the file attacks, 0 to 64L − 1, each once.
+    for l in [2, 3, 4, 7, 16] {
+        let mut next = 0;
+        for part in 0..SLICES {
+            let ks = split_exponents(l, part);
+            assert_eq!(
+                ks.start,
+                next,
+                "Wide<{l}>: part {} starts where the one before ends",
+                part + 1
+            );
+            assert!(
+                ks.end > ks.start,
+                "Wide<{l}>: part {} holds exponents",
+                part + 1
+            );
+            next = ks.end;
+        }
+        assert_eq!(
+            usize::try_from(next).unwrap(),
+            top(l) + 1,
+            "Wide<{l}>: every exponent"
+        );
     }
 }
 
@@ -451,9 +590,25 @@ fn widen<const L: usize, const M: usize>(x: Wide<L>, y: Wide<L>) -> TestResult {
     Ok(())
 }
 
-/// The constants, the asymmetric limits, and every product 2^k × 2^(64L−1−k) with each factor
-/// moved by −1, 0 or +1 and every sign.
-fn constants<const L: usize>() -> TestResult {
+/// The split exponents `k` of [`constants`]' products, 0 to 64L − 1, cut into [`SLICES`] ranges:
+/// slice `part` of them. The ranges join to every exponent once (`the_slices_join_to_every_case_once`).
+fn split_exponents(l: usize, part: u32) -> std::ops::Range<u32> {
+    let all = u32::try_from(top(l)).unwrap() + 1;
+    let at = |k: u32| all * k / SLICES;
+    at(part)..at(part + 1)
+}
+
+/// Part `part` of [`SLICES`] of the constants' check: the constants and the asymmetric limits in
+/// the first, and in each its range of the split exponents ([`split_exponents`]).
+fn constants_part<const L: usize>(part: u32) -> TestResult {
+    if part == 0 {
+        constants_fixed::<L>()?;
+    }
+    threshold_splits::<L>(split_exponents(L, part))
+}
+
+/// The constants and the asymmetric limits.
+fn constants_fixed<const L: usize>() -> TestResult {
     let (zero, one) = (Wide::<L>::ZERO, Wide::<L>::one());
     let (max, min) = (Wide::<L>::max_value(), Wide::<L>::min_value());
     let minus_one = Wide::<L>::from_i64(-1);
@@ -492,8 +647,14 @@ fn constants<const L: usize>() -> TestResult {
         format!("{min:?}"),
         format!("Wide<{L}>(0x8{})", "0".repeat(16 * L - 1))
     );
+    Ok(())
+}
+
+/// Every product 2^k × 2^(64L−1−k), for each split exponent `k` of `ks`, with each factor moved by
+/// −1, 0 or +1 and every sign.
+fn threshold_splits<const L: usize>(ks: std::ops::Range<u32>) -> TestResult {
     let p = top(L);
-    for k in 0..=p {
+    for k in ks.map(|k| usize::try_from(k).unwrap()) {
         for da in -1i32..=1 {
             for db in -1i32..=1 {
                 let (ma, mb) = (pow2(k) + da, pow2(p - k) + db);
@@ -618,16 +779,6 @@ macro_rules! width_attack {
                 #![proptest_config(cfg())]
 
                 #[test]
-                fn unary_matches_oracle(x in wide::<L>()) {
-                    unary::<L>(x)?;
-                }
-
-                #[test]
-                fn binary_matches_oracle(x in wide::<L>(), y in wide::<L>()) {
-                    binary::<L>(x, y)?;
-                }
-
-                #[test]
                 fn products_at_the_threshold((x, y) in product_pair::<L>()) {
                     binary::<L>(x, y)?;
                 }
@@ -635,11 +786,6 @@ macro_rules! width_attack {
                 #[test]
                 fn sums_and_differences_at_the_limits((x, y) in limit_pair::<L>()) {
                     binary::<L>(x, y)?;
-                }
-
-                #[test]
-                fn three_operand_laws(x in wide::<L>(), y in wide::<L>(), z in wide::<L>()) {
-                    laws::<L>(x, y, z)?;
                 }
 
                 #[test]
@@ -652,22 +798,48 @@ macro_rules! width_attack {
                     repeated::<L>(x, k)?;
                 }
 
-                #[test]
-                fn narrow_agrees_with_wide(x in wide::<L>(), y in wide::<L>()) {
-                    widen::<L, $wider>(x, y)?;
-                    widen::<L, $double>(x, y)?;
-                }
-
-                #[test]
-                fn narrow_agrees_with_wide_at_the_threshold((x, y) in product_pair::<L>()) {
-                    widen::<L, $wider>(x, y)?;
-                    widen::<L, $double>(x, y)?;
-                }
             }
 
-            #[test]
-            fn constants_and_threshold_splits() {
-                run(constants::<L>());
+            // The longest properties under Miri, each cut into slices of its one stream of
+            // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(unary_matches_oracle, (wide::<L>(),), |(x,)| unary::<L>(x));
+
+            sliced!(binary_matches_oracle, (wide::<L>(), wide::<L>()), |(
+                x,
+                y,
+            )| {
+                binary::<L>(x, y)
+            });
+
+            sliced!(
+                three_operand_laws,
+                (wide::<L>(), wide::<L>(), wide::<L>()),
+                |(x, y, z)| laws::<L>(x, y, z)
+            );
+
+            sliced!(narrow_agrees_with_wide, (wide::<L>(), wide::<L>()), |(
+                x,
+                y,
+            )| {
+                widen::<L, $wider>(x, y)?;
+                widen::<L, $double>(x, y)
+            });
+
+            sliced!(
+                narrow_agrees_with_wide_at_the_threshold,
+                (product_pair::<L>(),),
+                |((x, y),)| {
+                    widen::<L, $wider>(x, y)?;
+                    widen::<L, $double>(x, y)
+                }
+            );
+
+            /// The constants and every split of the threshold product, in slices of the split
+            /// exponents (`split_exponents`).
+            mod constants_and_threshold_splits {
+                use super::*;
+
+                parts!(|part| run(constants_part::<L>(part)));
             }
         }
     };
@@ -1311,7 +1483,7 @@ mod kernel_extremes {
     }
 
     proptest! {
-        #![proptest_config(Config { cases: if cfg!(miri) { 64 } else { 256 }, ..cfg() })]
+        #![proptest_config(Config { cases: 256, ..cfg() })]
 
         #[test]
         fn insphere_near_the_extremes(p in prop::array::uniform5(prop::array::uniform3(coordinate()))) {

@@ -57,6 +57,9 @@
     clippy::indexing_slicing
 )]
 
+#[macro_use]
+mod slices;
+
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
@@ -381,14 +384,73 @@ fn philox4x32_10_matches_the_oracle_on_edge_inputs() {
     }
 }
 
+/// The strategy of `philox4x32_10_matches_the_oracle`: a counter and a key.
+fn philox_cases() -> (
+    impl Strategy<Value = [u32; 4]>,
+    impl Strategy<Value = [u32; 2]>,
+) {
+    (any::<[u32; 4]>(), any::<[u32; 2]>())
+}
+
+/// The seed the fixed-seed runner draws the first case of each quarter of
+/// `philox4x32_10_matches_the_oracle` from (`slices::case_seeds`; the join test checks them).
+const PHILOX_SEEDS: [[u8; 32]; 4] = [
+    [
+        238, 58, 2, 49, 122, 151, 18, 13, 214, 200, 25, 44, 119, 45, 163, 8, 94, 151, 97, 173, 101,
+        105, 25, 142, 6, 189, 182, 201, 97, 8, 196, 120,
+    ],
+    [
+        160, 232, 208, 93, 127, 108, 234, 215, 242, 97, 195, 207, 85, 4, 234, 142, 16, 51, 100, 90,
+        174, 64, 24, 30, 239, 68, 228, 228, 25, 225, 14, 60,
+    ],
+    [
+        9, 31, 5, 133, 136, 51, 139, 70, 211, 244, 68, 47, 220, 22, 111, 57, 166, 151, 118, 97,
+        240, 76, 147, 30, 154, 229, 5, 49, 226, 185, 149, 160,
+    ],
+    [
+        142, 244, 191, 37, 43, 98, 80, 57, 82, 148, 250, 25, 13, 217, 158, 12, 140, 234, 114, 97,
+        184, 54, 109, 178, 161, 37, 93, 238, 201, 53, 19, 217,
+    ],
+];
+
+// Generated counters and keys, in quarters of the one stream of cases from the fixed seed, each
+// quarter started at its first case's pinned seed, so none draws another's cases (decision 32.78,
+// `slices`).
+sliced_from!(
+    philox4x32_10_matches_the_oracle,
+    config(4096),
+    philox_cases(),
+    PHILOX_SEEDS,
+    |(counter, key)| {
+        prop_assert_eq!(philox4x32_10(counter, key), oracle(10, counter, key));
+        Ok(())
+    }
+);
+
+/// The pinned seeds are the runner's own: the chain of case seeds reproduces the runner's cases,
+/// and starts each quarter where the pins say.
+#[cfg_attr(
+    miri,
+    ignore = "draws all 4,096 cases to find the pins, which the quarters exist not to do under Miri"
+)]
+#[test]
+fn the_pinned_seeds_are_the_runners_own() {
+    let config = config(4096);
+    assert_eq!(
+        slices::chained_cases(&config, &philox_cases(), 64),
+        slices::runner_cases(&config, &philox_cases(), 64)
+    );
+    let starts: Vec<u32> = (0..slices::SLICES)
+        .map(|k| slices::range(config.cases, k).start)
+        .collect();
+    assert_eq!(
+        slices::case_seeds(&config, &philox_cases(), &starts),
+        PHILOX_SEEDS.to_vec()
+    );
+}
+
 proptest! {
     #![proptest_config(config(4096))]
-
-    /// Generated counters and keys.
-    #[test]
-    fn philox4x32_10_matches_the_oracle(counter in any::<[u32; 4]>(), key in any::<[u32; 2]>()) {
-        prop_assert_eq!(philox4x32_10(counter, key), oracle(10, counter, key));
-    }
 
     /// The layout: key = the seed's halves, counter = the block's halves then the stream's.
     #[test]
@@ -676,19 +738,25 @@ fn every_seed_block_and_stream_bit_reaches_every_output_bit() {
 
 /// Consecutive seeds, the way callers will number them, give unrelated first blocks: the mean
 /// Hamming distance between the first blocks of seeds k and k + 1 is 64 of 128 bits.
-#[test]
-fn consecutive_seeds_and_streams_give_unrelated_blocks() {
+///
+/// It runs as three tests, one for each of the three numberings (decision 32.78: together they
+/// were too long for one Miri gate part), each with the whole check of its numbering.
+fn consecutive_give_unrelated_blocks(which: &str) {
+    /// A numbering: its name and the first block of number k.
+    type Numbering = (&'static str, fn(u64) -> [u32; 4]);
     let n = 1u64 << 14;
-    for (name, f) in [
-        (
-            "seed",
-            (|k: u64| Philox::new(Seed(k), StreamId(0)).block(0)) as fn(u64) -> [u32; 4],
-        ),
+    let numberings: [Numbering; 3] = [
+        ("seed", |k: u64| Philox::new(Seed(k), StreamId(0)).block(0)),
         ("stream", |k: u64| {
             Philox::new(Seed(0), StreamId(k)).block(0)
         }),
         ("block", |k: u64| Philox::new(Seed(0), StreamId(0)).block(k)),
-    ] {
+    ];
+    assert!(
+        numberings.iter().any(|(name, _)| *name == which),
+        "no numbering {which}"
+    );
+    for (name, f) in numberings.into_iter().filter(|(name, _)| *name == which) {
         let mut total = 0u64;
         for k in 0..n {
             let (a, b) = (f(k), f(k + 1));
@@ -705,6 +773,34 @@ fn consecutive_seeds_and_streams_give_unrelated_blocks() {
             "consecutive {name}s: mean Hamming distance {mean}, expected 64 ± 0.3"
         );
     }
+}
+
+/// [`consecutive_give_unrelated_blocks`] for each numbering, one test each.
+mod consecutive_seeds_and_streams_give_unrelated_blocks {
+    #[test]
+    fn seeds() {
+        super::consecutive_give_unrelated_blocks("seed");
+    }
+
+    #[test]
+    fn streams() {
+        super::consecutive_give_unrelated_blocks("stream");
+    }
+
+    #[test]
+    fn blocks() {
+        super::consecutive_give_unrelated_blocks("block");
+    }
+}
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(config(4096).cases, "philox4x32_10's cases");
 }
 
 // ------------------------------------------------------------------------------------------------

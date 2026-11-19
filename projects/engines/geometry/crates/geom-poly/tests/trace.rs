@@ -14,6 +14,9 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
@@ -909,9 +912,48 @@ proptest! {
             prop_assert_eq!(volume(&test, &classified), counted(&test, &blocks));
         }
     }
+}
+
+// Every box agrees with the blocks: in quarters of its one stream of cases (decision 32.78,
+// `slices`).
+sliced!(
+    every_box_agrees_with_the_blocks,
+    ProptestConfig::with_cases(160),
+    (
+        prop::collection::vec(any_block(), 1..4),
+        [-6i64..6, -6i64..6, -6i64..6],
+        [1i64..7, 1i64..7, 1i64..7],
+    ),
+    |(blocks, low, size)| {
+        let cell = Cell {
+            low,
+            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+        };
+        agrees(&blocks, &in_cell(&blocks, &cell));
+        Ok(())
+    }
+);
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(
+        ProptestConfig::with_cases(160).cases,
+        "a property's 160 cases",
+    );
+}
+
+proptest! {
+    // The failures this file's regressions file records, replayed against the sliced property as
+    // `proptest!` replayed them before its new cases: the slices draw the new cases alone.
+    #![proptest_config(ProptestConfig::with_cases(0))]
 
     #[test]
-    fn every_box_agrees_with_the_blocks(
+    fn every_box_agrees_with_the_blocks_at_its_recorded_failures(
         blocks in prop::collection::vec(any_block(), 1..4),
         low in [-6i64..6, -6i64..6, -6i64..6],
         size in [1i64..7, 1i64..7, 1i64..7],

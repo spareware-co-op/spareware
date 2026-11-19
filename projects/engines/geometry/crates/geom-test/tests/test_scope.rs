@@ -448,7 +448,15 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
     if text(&scope["outputs"]["crates"]) != "${{ steps.scope.outputs.crates }}" {
         found.push("kernel.yml's job scope does not hand on its crates".to_owned());
     }
-    for job in ["linux", "suite", "wasm-build", "wasm-suite"] {
+    for job in [
+        "linux",
+        "suite",
+        "suite-cross-build",
+        "suite-cross",
+        "suite-cross-doc",
+        "wasm-build",
+        "wasm-suite",
+    ] {
         let y = &k["jobs"][job];
         let needs: Vec<String> = y["needs"]
             .as_vec()
@@ -557,6 +565,18 @@ fn the_suites_run_the_selection() {
             "--base \"$merge_base\" --build-of geom-bench",
             "--base \"$merge_base\" --build-of geom-num",
             "reaches geom-bench's build",
+        ),
+        // The cross-built part's archive made with no crate selected (decision 32.82).
+        (
+            "        if: ${{ env.KERNEL_CRATES != '' }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            "        env:\n          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            "suite-cross-build's step \"Build the suite's tests for macOS x86-64",
+        ),
+        // The cross-built part's run failing a part the selection left without a test.
+        (
+            "      NEXTEST_NO_TESTS: pass\n    defaults:\n      run:\n        shell: bash\n    steps:\n      # The checkout is the archive's",
+            "    defaults:\n      run:\n        shell: bash\n    steps:\n      # The checkout is the archive's",
+            "suite-cross fails a part the selection left",
         ),
     ] {
         let (k, b) = (kernel.replacen(from, to, 1), bench.replacen(from, to, 1));

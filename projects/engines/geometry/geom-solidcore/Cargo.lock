@@ -118,6 +118,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-make"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-math"
 version = "0.0.0"
 dependencies = [
@@ -165,11 +179,16 @@ dependencies = [
  "bigdecimal",
  "geom-check",
  "geom-curve",
+ "geom-make",
  "geom-math",
  "geom-num",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "geom-topo",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "serde_json",
  "solidcore",
  "solidcore-convert",
@@ -249,6 +268,17 @@ version = "0.1.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
 dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
+dependencies = [
+ "num-bigint",
+ "num-integer",
  "num-traits",
 ]
 
@@ -336,7 +366,7 @@ dependencies = [
 [[package]]
 name = "solidcore"
 version = "1.0.1"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "serde",
  "thiserror",
@@ -345,7 +375,7 @@ dependencies = [
 [[package]]
 name = "solidcore-convert"
 version = "0.1.0"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "solidcore",
  "solidcore-record",
@@ -354,7 +384,7 @@ dependencies = [
 [[package]]
 name = "solidcore-record"
 version = "0.1.0"
-source = "git+https://github.com/spareware-co-op/solidcore?rev=cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3#cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
 dependencies = [
  "serde",
  "serde_json",

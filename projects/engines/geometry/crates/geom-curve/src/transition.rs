@@ -1988,15 +1988,30 @@ mod tests {
         [x, y]
     }
 
-    #[test]
-    fn the_remainder_bounds_a_visible_rule_error() {
+    /// The remainder bounds a visible rule error: one test a rate c (decision 32.78: the three
+    /// together were too long for one Miri gate part).
+    mod the_remainder_bounds_a_visible_rule_error {
+        #[test]
+        fn at_c_1_5() {
+            super::remainder_bounds_the_rule_error(1.5, 0x3ef1_319e_7465_7d7d);
+        }
+
+        #[test]
+        fn at_c_3() {
+            super::remainder_bounds_the_rule_error(3.0, 0x3f8f_95e4_329b_dc55);
+        }
+
+        #[test]
+        fn at_c_6() {
+            super::remainder_bounds_the_rule_error(6.0, 0x4045_e7cd_e9bd_c798);
+        }
+    }
+
+    /// The check of `the_remainder_bounds_a_visible_rule_error` at rate `c`, its bound pinned.
+    fn remainder_bounds_the_rule_error(c: f64, pinned: u64) {
         // cos and sin of π·cξ² over one panel [0, 1]: eight nodes leave an error far above the
         // rounding, which the bound must cover; 1024 panels give the integrals to about 10⁻¹³.
-        for (c, pinned) in [
-            (1.5, 0x3ef1_319e_7465_7d7d),
-            (3.0, 0x3f8f_95e4_329b_dc55),
-            (6.0, 0x4045_e7cd_e9bd_c798),
-        ] {
+        {
             let h = quadratic(c);
             let r = remainder(&h, 0.0, 0.5, 1.0).unwrap();
             let one = integral(&h, point(0.0).unwrap(), point(0.5).unwrap()).unwrap();

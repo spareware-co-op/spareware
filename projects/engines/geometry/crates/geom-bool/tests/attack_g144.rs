@@ -522,8 +522,22 @@ fn pyramid() -> Body {
     body
 }
 
-#[test]
-fn cutting_off_an_apex_of_four_faces_splits_the_vertex() {
+/// Cutting off an apex of four faces splits the vertex: by a box subtracted, and by a half-space
+/// the pyramid is intersected with, one test each (decision 32.78: the two together were too
+/// long for one Miri gate part).
+mod cutting_off_an_apex_of_four_faces_splits_the_vertex {
+    #[test]
+    fn by_a_box() {
+        super::apex_cut_by_a_box();
+    }
+
+    #[test]
+    fn by_a_half_space() {
+        super::apex_cut_by_a_half_space();
+    }
+}
+
+fn apex_cut_by_a_box() {
     let target = pyramid();
     let tip = cuboid(2, [8, 8, 18], [4, 4, 7]);
     let done = step(&target, &[&tip], subtract(), Plan::Arrange, AllowSet::ALL).unwrap();
@@ -534,7 +548,11 @@ fn cutting_off_an_apex_of_four_faces_splits_the_vertex() {
         _ => None,
     });
     assert_eq!(split, Some(4), "the cut's four edges: {changes:?}");
-    // The same cut by a half-space the pyramid is intersected with: its face is the tool's own.
+}
+
+/// The same cut by a half-space the pyramid is intersected with: its face is the tool's own.
+fn apex_cut_by_a_half_space() {
+    let target = pyramid();
     let below = half_space(
         &OpPath::new(OpId::from_bytes([41; 16])),
         [p(0, 0, 18), p(1, 0, 18), p(0, 1, 18)],
