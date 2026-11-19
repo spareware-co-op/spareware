@@ -465,6 +465,21 @@ fn circles_below(tube: (f64, f64)) -> Vec<(f64, (f64, f64))> {
     out
 }
 
+/// The plane z = -1/2 meets `ring(tube)` in both its circles, radius 3 - √3/2 at the tube turn
+/// `inner` and 3 + √3/2 at `outer`, each turn's box holding its turn and lying on the domain.
+fn both_circles(tube: (f64, f64), inner: f64, outer: f64) {
+    let half = 3f64.sqrt() / 2.0;
+    let got = circles_below(tube);
+    assert_eq!(got.len(), 2, "{tube:?}: {got:?}");
+    for ((radius, (lo, hi)), (want, turn)) in
+        got.iter().zip([(3.0 - half, inner), (3.0 + half, outer)])
+    {
+        assert!((radius - want).abs() < 1e-12, "{tube:?}: {got:?}");
+        assert!((*lo..=*hi).contains(&turn), "{tube:?}: {got:?}");
+        assert!(tube.0 <= *lo && *hi <= tube.1, "{tube:?}: {got:?}");
+    }
+}
+
 #[test]
 fn a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back() {
     // The plane z = -1/2 meets the ring torus of radii 3 and 1 in two circles: radius 3 - √3/2 at
@@ -472,22 +487,13 @@ fn a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back() {
     // part of the tube each side of where the reading starts again, both lie on it, each at its
     // turn there: a turn read past the domain's end is a turn back, as one read before its start
     // is a turn on.
-    let half = 3f64.sqrt() / 2.0;
     for (tube, inner, outer) in [
         ((-0.9, -0.1), -5.0 / 6.0, -1.0 / 6.0),
         ((-1.9, -0.1), -5.0 / 6.0, -1.0 / 6.0),
         ((1.1, 1.9), 7.0 / 6.0, 11.0 / 6.0),
         ((0.1, 1.9), 7.0 / 6.0, 11.0 / 6.0),
     ] {
-        let got = circles_below(tube);
-        assert_eq!(got.len(), 2, "{tube:?}: {got:?}");
-        for ((radius, (lo, hi)), (want, turn)) in
-            got.iter().zip([(3.0 - half, inner), (3.0 + half, outer)])
-        {
-            assert!((radius - want).abs() < 1e-12, "{tube:?}: {got:?}");
-            assert!((*lo..=*hi).contains(&turn), "{tube:?}: {got:?}");
-            assert!(tube.0 <= *lo && *hi <= tube.1, "{tube:?}: {got:?}");
-        }
+        both_circles(tube, inner, outer);
     }
     // A box that starts on the domain's end meets it there and is held to it, not moved a turn
     // back (before the domain's start, where the point would be lost); from the next double down
@@ -496,6 +502,21 @@ fn a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back() {
     assert!((lo..=hi).contains(&1.0) && lo > 0.5, "{lo}, {hi}");
     assert_eq!(centre_turn(&horn((0.5, lo))), Some((lo, lo)));
     assert_eq!(centre_turn(&horn((0.5, lo.next_down()))), None);
+}
+
+#[test]
+fn a_tube_turn_is_moved_by_whole_turns_to_a_domain_far_out() {
+    // A tube domain may start any number of turns out, and each circle is found at its turn there,
+    // whole turns from where the reading puts it (7/6 and -1/6). From a start past 3/2 a turn on
+    // from the reading still falls short of the domain: (1.99, 3.98) needs two.
+    for (tube, inner, outer) in [
+        ((3.1, 3.9), 19.0 / 6.0, 23.0 / 6.0),
+        ((-2.9, -2.1), -17.0 / 6.0, -13.0 / 6.0),
+        ((1.99, 3.98), 19.0 / 6.0, 23.0 / 6.0),
+        ((1001.1, 1001.9), 1000.0 + 7.0 / 6.0, 1000.0 + 11.0 / 6.0),
+    ] {
+        both_circles(tube, inner, outer);
+    }
 }
 
 #[test]

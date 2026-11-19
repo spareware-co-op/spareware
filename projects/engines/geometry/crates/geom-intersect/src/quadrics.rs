@@ -1365,22 +1365,48 @@ fn parameters(
     }))
 }
 
-/// A torus's tube turn at the point `local` in its frame, on the tube's domain `(v0, v1)`. `turn_of`
-/// reads it from −1/2 to 3/2 (a point inside the tube's centre circle from 1/2 to 3/2, as its
-/// opposite's turn and a half-turn on), and a box across that circle down to −1. A box that ends
-/// before the domain's start is moved a turn on, and one that starts past its end a turn back; one
-/// that meets the domain is not moved, as [`on`] keeps it.
-fn tube_turn(t: &Torus, local: Vector, (v0, v1): (f64, f64)) -> Result<Interval, IntersectError> {
+/// A torus's tube turn at the point `local` in its frame, on the tube's domain: `turn_of` reads it
+/// from −1/2 to 3/2 (a point inside the tube's centre circle from 1/2 to 3/2, as its opposite's turn
+/// and a half-turn on), and a box across that circle down to −1, and [`to_domain`] moves it there.
+fn tube_turn(t: &Torus, local: Vector, domain: (f64, f64)) -> Result<Interval, IntersectError> {
     let [x, y, z] = local;
     let (major, _) = t.radii();
     let out = tight::norm(&[x, y])?.sub(point(major)?)?;
-    let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
-    if turn.hi() < v0 {
-        Ok(turn.add(point(2.0)?)?)
-    } else if turn.lo() > v1 {
-        Ok(turn.sub(point(2.0)?)?)
+    to_domain(turn_of(out, z.mul(point(t.axial_sign())?)?)?, domain)
+}
+
+/// `turn`, as [`turn_of`] reads it (from −1 to 3/2), moved by whole turns to the domain `(lo, hi)`
+/// of at most a turn, which may start any number of turns out.
+///
+/// First the turns to the domain's window: `m − m % 2` is a multiple of two, exactly, for every
+/// double m (`%` is exact), and for m the sum lo + 1/2, however it rounds, it leaves the start
+/// strictly between −5/2 and 3/2 past it. From there a turn on or back reaches every point of the
+/// domain from its reading: a box that ends before the start is moved a turn on, one that starts
+/// past the end a turn back, and one that meets the domain is not moved, as [`on`] keeps it.
+///
+/// A far domain costs one widening, as one move did before: the turns are summed exactly, in a
+/// double (even numbers under 2^53, as a domain of a turn or less starts only where its doubles
+/// stand under two apart), and added to the box once; the box that chooses the move is only read.
+/// A domain that starts from about −5/2 to 3/2 has no turns to its window and is not widened by
+/// adding none, so its box is moved, or kept, by the one add of before: the boundary tests' domains
+/// start there, and their boxes are the ones they were.
+fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Interval, IntersectError> {
+    let by = |turns: f64| -> Result<Interval, IntersectError> {
+        if turns == 0.0 {
+            Ok(turn)
+        } else {
+            Ok(turn.add(point(turns)?)?)
+        }
+    };
+    let above = lo + 0.5;
+    let window = above - above % 2.0;
+    let near = by(window)?;
+    if near.hi() < lo {
+        by(window + 2.0)
+    } else if near.lo() > hi {
+        by(window - 2.0)
     } else {
-        Ok(turn)
+        Ok(near)
     }
 }
 
