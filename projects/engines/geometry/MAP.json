@@ -2381,17 +2381,17 @@
           "target": "lib"
         },
         {
-          "cost": "a few dozen interval operations per check; no loop. Recursion: none.",
+          "cost": "a few dozen interval operations per check (an ellipse about 40 on a plane, about 95 with three more square roots on a cylinder, about 30 with a certified sine and cosine at an end); no loop. Recursion: none.",
           "does": "[`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each check bounds a distance from above and compares it with the body's bound b. With w = p − c, h = w · n̂ (height along the axis) and ρ = |w × n̂| (distance from it), the distance of a point from each kind is:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
           "guarantees": [
             "**Upper bounds, certified.** Every distance is bounded from above in interval arithmetic that stays exact where the doubles are (`geom_curve::tight`), on the exact unit vectors' enclosures (`geom_curve::Frame::unit_vectors`) and certified sines and cosines of half-turns (`geom_num::Interval::{sinpi, cospi}`).",
-            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails. A circle's points come from `sinpi` and `cospi`, which widen by a step even where exact: its checks hold to that step.",
+            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails; so is an ellipse whose centre and vectors are exact doubles on such a plane or cylinder. A circle's and an ellipse's points come from `sinpi` and `cospi`, which widen by a step even where exact: their ends' checks hold to that step.",
             "**Fails closed.** A value that cannot be enclosed, a cone point whose radius may be negative, a torus that is not a ring, a surface kind without a closed form here: not certified, never passed.",
             "**Nothing allocates; nothing is sampled.**"
           ],
-          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, and how far a grid point lies from a circle's end. Never sampled.",
+          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, how far an ellipse can lie from a plane or cylinder, and how far a grid point lies from a circle's or an ellipse's end. Never sampled.",
           "method": {
             "links": [
               "https://doi.org/10.1137/1.9780898717716",
@@ -2451,14 +2451,14 @@
           "target": "lib"
         },
         {
-          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row; nothing allocated. Recursion: none.",
-          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
+          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row (an ellipse's place on a face and its two ends are each a closed form of at most about a hundred interval operations, `crate::curved`); nothing allocated. Recursion: none.",
+          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line, circle or ellipse on that surface; for each edge, its vertices must lie at its curve's ends. An edge on another kind of curve, an ellipse on a surface other than a plane or a cylinder, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
           "guarantees": [
             "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the same way, end by end: a segment is never farther from a plane than its farther end, and no double holds the squared normal of a long edge's plane, so an interval could not say 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
             "**Exact on plane-based bodies.** A vertex where three planes meet lies exactly on an integer plane or it is a fault, in every class: `geom_num::plane::Plane::side_of_tpi`, the sign of a determinant within 384 bits (6.3, 8.3). A line with such an end is only a shadow of the edge, which is the two planes it lies on: the vertices decide what the edge lies on, and the line's end must be within a step of the vertex rounded to the grid, or of the body's bound.",
-            "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
+            "**Certified on lines, conics and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails. An ellipse is bounded on a plane and on a cylinder in closed form, as a circle is, and its ends by certified sines and cosines; an ellipse on a cone, sphere or torus is `Unchecked` on that face, never passed and never called off it.",
             "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
             "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
           ],
@@ -2601,7 +2601,7 @@
         },
         {
           "cost": "one meter unit per face, per pair of a face's edges and per pair of faces, and `crate::planar`'s; quadratic in a face's edges and in the faces. Recursion: none.",
-          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.",
+          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line, a circle or an ellipse on its faces.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
           "guarantees": [

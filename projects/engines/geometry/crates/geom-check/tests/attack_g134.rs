@@ -790,11 +790,10 @@ fn a_bent_face_with_a_second_loop_has_no_star() {
     let inner = numbers(&mut r, &[[-1, 10, 0], [-2, 9, 0], [-3, 8, 0], [-4, 6, 0]]);
     let (outer, inner) = (fins(&mut r, &outer), fins(&mut r, &inner));
     r.face(shell, &[&outer, &inner]);
+    // The face beside it crosses it at x = 5: a star would find them crossing. (At x = 20, wholly
+    // beyond its corners, the two are certified apart without a star, decision 32.96.)
     let shell = r.shell(0);
-    let beside = numbers(
-        &mut r,
-        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
-    );
+    let beside = numbers(&mut r, &[[5, 0, -5], [5, 10, -5], [5, 10, 5], [5, 0, 5]]);
     let beside = fins(&mut r, &beside);
     r.face(shell, &[&beside]);
     r.surfaces[0] = off_grid();

@@ -88,7 +88,7 @@
       "test": "bool_23_box_minus_cylinder_whose_axis_lies_in_a_face",
       "ours": true,
       "fault": "CK-3 (ours: geom-check, not solidcore), arcs of circles: the cylinder passes now, and the difference is refused at a pair group 3 of the kernel's checker has no certified test of: two half-circles of one circle (radius 0.5 about (0, 1), z = 0) meeting at their two shared vertices, where the box's face along the axis cuts the circle of the groove",
-      "solidcore_gives": "the box less the cylinder, refused by the kernel's checker: 39 faults, the first \"group 3, edge 11: no certified test of this pair exists yet (edge 12)\"",
+      "solidcore_gives": "the box less the cylinder, refused by the kernel's checker: 27 faults, the first \"group 3, edge 11: no certified test of this pair exists yet (edge 12)\"",
       "expected": "one solid of volume 8 - pi 0.25, passed by the checker",
       "blocks": "solids with arcs of circles meeting at vertices, until group 3 certifies such pairs"
     },
@@ -164,33 +164,6 @@
       "blocks": "plane sections by a plane that holds no grid point, until the modeller takes a plane some other exact way"
     },
     {
-      "case": "bool-26",
-      "test": "bool_26_sphere_minus_concentric_sphere",
-      "ours": true,
-      "fault": "CK-1 (ours: geom-check, not solidcore), two spherical faces: group 3 of the kernel's checker has no certified test of a pair of faces on two spheres, so the hollow ball (spheres of radius 1 and 0.5 about one centre, 0.5 apart everywhere) is reported unchecked, as the kernel's own body of the same shape would be",
-      "solidcore_gives": "the hollow ball as two shells, the outer sphere and the cavity's used reversed, refused by the kernel's checker: 1 fault, \"group 3, face 0: no certified test of this pair exists yet (face 1)\"",
-      "expected": "one solid of volume 4/3 pi (1 - 0.125), passed by the checker",
-      "blocks": "solids with two spherical faces, in every operation, until group 3 has a certified test of two spheres"
-    },
-    {
-      "case": "bldg-25",
-      "test": "bldg_25_round_opening_through_a_wall",
-      "ours": true,
-      "fault": "CK-2 (ours: geom-check, not solidcore), a flat face holding a circle beside a face that crosses its plane: a flat face with a circle among its edges (the wall's two faces round the opening) is not an outline, so group 3 tests its pairs by their carriers alone, and has no certified test of two crossing planes, nor of a cylinder and a plane along its axis; the wall with its round opening is reported unchecked, as the kernel's own body of it would be",
-      "solidcore_gives": "the wall with its round opening, refused by the kernel's checker: 12 faults, the first \"group 3, face 0: no certified test of this pair exists yet (face 3)\"",
-      "expected": "one solid of volume 2.4 - pi 0.4^2 0.2, passed by the checker",
-      "blocks": "openings, holes and cuts with circles in flat faces, until group 3 certifies such a face against a crossing plane"
-    },
-    {
-      "case": "bldg-26",
-      "test": "bldg_26_round_opening_flush_with_both_wall_faces",
-      "ours": true,
-      "fault": "CK-2 (ours: geom-check, not solidcore), a flat face holding a circle beside a face that crosses its plane: a flat face with a circle among its edges (the wall's two faces round the opening) is not an outline, so group 3 tests its pairs by their carriers alone, and has no certified test of two crossing planes, nor of a cylinder and a plane along its axis; the wall with its round opening is reported unchecked, as the kernel's own body of it would be",
-      "solidcore_gives": "the wall with its round opening, refused by the kernel's checker: 12 faults, the first \"group 3, face 0: no certified test of this pair exists yet (face 3)\"",
-      "expected": "one solid of volume 2.4 - pi 0.4^2 0.2, passed by the checker",
-      "blocks": "openings, holes and cuts with circles in flat faces, until group 3 certifies such a face against a crossing plane"
-    },
-    {
       "case": "bool-25",
       "test": "bool_25_sphere_intersect_box_octant",
       "ours": true,
@@ -203,24 +176,24 @@
       "case": "bldg-33",
       "test": "bldg_33_sloped_slab_with_a_vertical_round_opening",
       "ours": true,
-      "fault": "CK-4 (ours: geom-check, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, which the conversion now writes as the kernel's own ellipse (decision 32.93; it was WR-3, the conversion had no row for an ellipse); group 2 of the kernel's checker has no certified check of an ellipse as an edge's carrier, so each is reported unchecked, as the kernel's own body of the same shape would be. The extrusion itself (bldg-32) and the cylinder both pass the checker. What stands behind group 2 (group 3's pairs of an ellipse with the slab's other edges, and of the sloped plane and the cylinder meeting along it) is not yet measured",
-      "solidcore_gives": "the slab with its round opening, refused by the kernel's checker: 2 faults, the first \"group 2, curve 7: no certified check of this carrier exists yet (edge 7)\"",
+      "fault": "CK-4 (ours: geom-check, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, which the conversion now writes as the kernel's own ellipse (decision 32.93; it was WR-3, the conversion had no row for an ellipse); group 2 now certifies each ellipse on its plane and on the cylinder (decision 32.95), and the refusal is group 3's: it has no certified test of a pair with an ellipse (an ellipse edge against the slab's other edges, and the sloped face holding the ellipses, which keeps_off refuses, against the faces it meets), so the body is reported unchecked, as the kernel's own body of the same shape would be. The extrusion itself (bldg-32) and the cylinder both pass the checker",
+      "solidcore_gives": "the slab with its round opening, refused by the kernel's checker: 20 faults, the first \"group 3, edge 4: no certified test of this pair exists yet (edge 7)\"",
       "expected": "one solid of volume 6 - pi 0.5^2 0.25, passed by the checker",
-      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until group 2 certifies an ellipse on its faces' surfaces"
+      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until group 3 certifies pairs with an ellipse"
     },
     {
       "case": "bldg-47",
       "test": "bldg_47_extrusion_of_a_square_with_a_round_hole",
-      "fault": "SC-8, a round hole's top cap written off the profile's plane: the linear sweep turns the hole's circle a half-turn exactly (the fork's half_turn_about_x), so both circles lie in their flat faces' planes; the top cap is fitted through points of the hole's circle translated to z = 3, a rational quadratic B-spline (the kernel hands the extrusion BSplineCurve::create_circle_segment's circle), which crv_eval (solidcore's nurbs/b_spline_curve/p1.rs) evaluates at z = 3.0000000000000004 at 0.3 and 0.6 of its interval, so the cap is written off the profile's plane by that rounding. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (22 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"). Behind it stand SC-5's cap and then CK-2's flat face holding a circle",
-      "solidcore_gives": "the extruded square with a round hole, refused by the kernel's checker: 22 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"",
+      "fault": "SC-8, a round hole's top cap written off the profile's plane: the linear sweep turns the hole's circle a half-turn exactly (the fork's half_turn_about_x), so both circles lie in their flat faces' planes; the top cap is fitted through points of the hole's circle translated to z = 3, a rational quadratic B-spline (the kernel hands the extrusion BSplineCurve::create_circle_segment's circle), which crv_eval (solidcore's nurbs/b_spline_curve/p1.rs) evaluates at z = 3.0000000000000004 at 0.3 and 0.6 of its interval, so the cap is written off the profile's plane by that rounding. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (10 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"). Behind it stand SC-5's cap and then CK-2's flat face holding a circle",
+      "solidcore_gives": "the extruded square with a round hole, refused by the kernel's checker: 10 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"",
       "expected": "one solid of volume (4 - pi 0.25) 3, passed by the checker",
       "blocks": "the extrusion of a profile with a round hole (geom-solidcore's extrude with a circle): behind it, the cap's evaluation (as SC-5) and then group 3's flat face holding a circle (CK-2); extrusions of polygons with polygon holes are not affected (bldg-49, bldg-50 pass)"
     },
     {
       "case": "bldg-48",
       "test": "bldg_48_extrusion_of_a_square_with_a_round_hole_as_a_void_cutting_a_box",
-      "fault": "SC-8, a round hole's top cap written off the profile's plane: the linear sweep turns the hole's circle a half-turn exactly (the fork's half_turn_about_x), so both circles lie in their flat faces' planes; the top cap is fitted through points of the hole's circle translated to z = 3, a rational quadratic B-spline (the kernel hands the extrusion BSplineCurve::create_circle_segment's circle), which crv_eval (solidcore's nurbs/b_spline_curve/p1.rs) evaluates at z = 3.0000000000000004 at 0.3 and 0.6 of its interval, so the cap is written off the profile's plane by that rounding. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (22 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"). Behind it stand SC-5's cap and then CK-2's flat face holding a circle",
-      "solidcore_gives": "the extrusion it cuts with refused by the kernel's checker before the difference: 22 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"",
+      "fault": "SC-8, a round hole's top cap written off the profile's plane: the linear sweep turns the hole's circle a half-turn exactly (the fork's half_turn_about_x), so both circles lie in their flat faces' planes; the top cap is fitted through points of the hole's circle translated to z = 3, a rational quadratic B-spline (the kernel hands the extrusion BSplineCurve::create_circle_segment's circle), which crv_eval (solidcore's nurbs/b_spline_curve/p1.rs) evaluates at z = 3.0000000000000004 at 0.3 and 0.6 of its interval, so the cap is written off the profile's plane by that rounding. Group 3 of the kernel's checker then cannot separate the circle from the square's sides of its own face (10 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"). Behind it stand SC-5's cap and then CK-2's flat face holding a circle",
+      "solidcore_gives": "the extrusion it cuts with refused by the kernel's checker before the difference: 10 faults, the first \"group 3, edge 0: no certified test of this pair exists yet (edge 4)\"",
       "expected": "two solids, the frame and the round core, of 13 faces and volume 36 - (4 - 0.25 pi), passed by the checker",
       "blocks": "the extrusion of a profile with a round hole (geom-solidcore's extrude with a circle): behind it, the cap's evaluation (as SC-5) and then group 3's flat face holding a circle (CK-2); extrusions of polygons with polygon holes are not affected (bldg-49, bldg-50 pass)"
     }
