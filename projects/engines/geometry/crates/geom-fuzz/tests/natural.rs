@@ -177,12 +177,26 @@ const ARCS_A_PLANE_HOLDS: [(&[u8], u128); 3] = [
     ),
 ];
 
+/// Issue 995's input of a plane whose edge lies in another plane on the axis off the grid, stored in
+/// the target's `crashes` folder, with the work one call of `natural` takes on it now: the plane
+/// y = 0 on x in 0..600, and the plane through the origin square to (0.6, 0.8, 0), meeting in the
+/// z axis, the first plane's edge. That edge lying in the other plane is an exact sign of the
+/// stored doubles (decision 32.85); before, the engine ran it and flagged it (1,041,980 of
+/// 1,042,049 units). The answer, one curve, is the same in every field but the work.
+const AN_EDGE_IN_A_PLANE_OFF_THE_GRID: [(&[u8], u128); 1] = [(
+    &[
+        0x00, 0x4b, 0x00, 0x00, 0x00, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0xca, 0xf7,
+    ],
+    60,
+)];
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
     let held = STILL_THE_ENGINES
         .into_iter()
         .chain(ARCS_A_PLANE_HOLDS)
-        .chain(AN_END_CIRCLE_OFF_A_SPHERE);
+        .chain(AN_END_CIRCLE_OFF_A_SPHERE)
+        .chain(AN_EDGE_IN_A_PLANE_OFF_THE_GRID);
     for (data, most) in held {
         let (case, _) = decode(data);
         let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
