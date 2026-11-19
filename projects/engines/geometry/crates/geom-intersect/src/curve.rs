@@ -1122,17 +1122,19 @@ pub(crate) fn grid_point<const D: usize>(v: &[f64; D]) -> Option<P3> {
     P3::new(at(0)?, at(1)?, at(2)?).ok()
 }
 
-/// The line's two points, `o` and `o + d`, if they are on the grid.
+/// The line's two points, `o` and `o + d`, if `o` and `d` are both on the grid and `o + d` is in
+/// reach. The far point is summed in integers, not doubles (#1058): near 2^39 a double holds only
+/// 2^-13, so a direction's fraction under half of that rounds away in `o + d`, the sum lands on the
+/// grid, and the closed forms would be handed a line of another direction from the stored one.
 pub(crate) fn grid_line<const D: usize>(line: &Line<D>) -> Option<quadric::Line> {
-    let (o, d) = (line.origin(), line.direction());
-    let mut far = o;
-    for (x, y) in far.iter_mut().zip(&d) {
-        *x += y;
-    }
-    Some(quadric::Line {
-        a: grid_point(&o)?,
-        b: grid_point(&far)?,
-    })
+    let (a, d) = (grid_point(&line.origin())?, grid_point(&line.direction())?);
+    let b = P3::new(
+        a.x.get().checked_add(d.x.get())?,
+        a.y.get().checked_add(d.y.get())?,
+        a.z.get().checked_add(d.z.get())?,
+    )
+    .ok()?;
+    Some(quadric::Line { a, b })
 }
 
 /// How a line meets a circle in its plane, exactly, where their data are whole.
