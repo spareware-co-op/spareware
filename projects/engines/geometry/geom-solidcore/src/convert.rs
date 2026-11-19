@@ -8,10 +8,10 @@
 //! each surface and curve is the `geom-surface` or `geom-curve` kind of the same shape, in grid
 //! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns). A seam,
 //! where solidcore cuts a face that runs the whole way round a cylinder, cone or sphere, is left
-//! out as the kernel's own bodies have none, and a circle's vertex with it when nothing else
-//! meets there (`form`): no point, curve or surface moves. An edge or vertex that solids touch
-//! along, which the record writes once for each solid, is one row, by the identity the record's
-//! order gives each copy, never by where the copies lie (decision 32.76). The body
+//! out as the kernel's own bodies have none, and a circle's or ellipse's vertex with it when
+//! nothing else meets there (`form`): no point, curve or surface moves. An edge or vertex that
+//! solids touch along, which the record writes once for each solid, is one row, by the identity
+//! the record's order gives each copy, never by where the copies lie (decision 32.76). The body
 //! is recorded Certified, with a bound of solidcore's own largest tolerance in whole steps, rounded
 //! up, and one step more for the rounding of its vertices onto the grid. [`checked`] runs every
 //! group of the checker on it, in every build, and refuses a body the checker does not pass.
@@ -38,7 +38,7 @@ use core::f64::consts::PI;
 use std::collections::BTreeMap;
 
 use geom_check::{Level, check};
-use geom_curve::{Circle, CurveKind, Frame, Line};
+use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Line};
 use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::{Budget, WorkMeter};
@@ -286,7 +286,21 @@ fn curve(
                 [c.map(|x| x - rr), c.map(|x| x + rr)],
             ))
         }
-        r::Curve::Ellipse { .. } => Err(no("an ellipse")),
+        r::Curve::Ellipse { frame: f, radii } => {
+            let (c, a, b) = (s.p(f.origin), s.len(radii[0]), s.len(radii[1]));
+            // The record's t of a point, its eccentric angle about the frame, in half-turns:
+            // the kernel's ellipse takes its parameter, not the polar angle (chapter 7).
+            let turn = |p: [f64; 3]| {
+                let q = less(p, c);
+                (dot(q, f.y_axis) / b).atan2(dot(q, f.x_axis) / a) / PI
+            };
+            let t0 = turn(from);
+            let mut t1 = if closed { t0 + 2.0 } else { turn(to) };
+            while t1 <= t0 {
+                t1 += 2.0;
+            }
+            Ok((ellipse(c, frame(f)?, a, b, (t0, t1))?, reach(c, a.max(b))))
+        }
         r::Curve::Polyline { .. } => Err(no("a polyline")),
         r::Curve::Spline { .. } | r::Curve::RationalSpline { .. } => Err(no("a spline curve")),
         r::Curve::SurfaceIntersection { .. } => Err(no("a surface intersection curve")),
@@ -306,8 +320,31 @@ fn full(s: &Scale, k: &r::Curve) -> Result<(CurveKind<3>, [[f64; 3]; 2]), Unconv
                 [c.map(|x| x - rr), c.map(|x| x + rr)],
             ))
         }
+        r::Curve::Ellipse { frame: f, radii } => {
+            let (c, a, b) = (s.p(f.origin), s.len(radii[0]), s.len(radii[1]));
+            Ok((ellipse(c, frame(f)?, a, b, (0.0, 2.0))?, reach(c, a.max(b))))
+        }
         _ => Err(no("an edge with one end left out")),
     }
+}
+
+/// The kernel's ellipse c + cos πt·(a·x̂) + sin πt·(b·ŷ) on `frame` over `domain`: the record's
+/// ellipse, its semi-axes along the frame's x and y, on the record's own parameter.
+fn ellipse(
+    c: [f64; 3],
+    frame: Frame<3>,
+    a: f64,
+    b: f64,
+    domain: (f64, f64),
+) -> Result<CurveKind<3>, Unconverted> {
+    Ellipse::new(c, Axes::Frame { frame, a, b }, domain)
+        .map(CurveKind::Ellipse)
+        .map_err(|_| no("a curve its kind refuses"))
+}
+
+/// The box of the points within `r` of `c` on every axis.
+fn reach(c: [f64; 3], r: f64) -> [[f64; 3]; 2] {
+    [c.map(|x| x - r), c.map(|x| x + r)]
 }
 
 fn ix<K>(row: usize) -> Result<Ix<K>, Unconverted> {
@@ -455,12 +492,12 @@ fn split<'a>(l: Vec<&'a r::OrientedEdge>, seam: &[bool]) -> Vec<Vec<&'a r::Orien
 ///
 /// solidcore cuts a face that runs the whole way round a cylinder, cone or sphere along a seam:
 /// an edge the one face uses twice, once each way, in one loop, and used by nothing else, with a
-/// vertex at each end on the circles it joins. The kernel's own bodies have no seam (`geom-make`'s
+/// vertex at each end on the circles (or ellipses) it joins. The kernel's own bodies have no seam (`geom-make`'s
 /// cylinder is two closed circles with no vertex, its side one loop on each; its sphere one face
 /// with no edge). So a seam is left out, its loop parted where it ran, and each of its two
-/// vertices with it when nothing but one closed circle is left at it; that circle is then the full
-/// turn with no vertex. No point, curve or surface is moved: the same faces, on the same
-/// surfaces, bounded by the same circles.
+/// vertices with it when nothing but one closed circle or ellipse is left at it; that curve is then
+/// the full turn with no vertex. No point, curve or surface is moved: the same faces, on the same
+/// surfaces, bounded by the same curves.
 ///
 /// Where solids touch along an edge or at a vertex, solidcore's body has one edge or vertex that
 /// both use, and its record writes a copy of it for each solid, naming in `order` the one entity
@@ -508,7 +545,7 @@ fn form<'a>(rec: &'a r::Brep, order: &Order) -> Result<Form<'a>, Unconverted> {
         .into_iter()
         .map(|ls| ls.into_iter().flat_map(|l| split(l, &seam)).collect())
         .collect();
-    // A seam's end goes when what is left at it is one closed circle.
+    // A seam's end goes when what is left at it is one closed circle or ellipse.
     let mut at_vertex: Vec<Vec<usize>> = vec![Vec::new(); rec.vertices.len()];
     let mut seam_end = vec![false; rec.vertices.len()];
     for (e, edge) in rec.edges.iter().enumerate() {
@@ -531,7 +568,10 @@ fn form<'a>(rec: &'a r::Brep, order: &Order) -> Result<Form<'a>, Unconverted> {
                 [e] => {
                     let edge = &rec.edges[*e];
                     edge.vertices[0] == edge.vertices[1]
-                        && matches!(edge.curve, r::Curve::Circle { .. })
+                        && matches!(
+                            edge.curve,
+                            r::Curve::Circle { .. } | r::Curve::Ellipse { .. }
+                        )
                 }
                 _ => false,
             }
