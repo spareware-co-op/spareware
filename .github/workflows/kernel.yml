@@ -339,6 +339,8 @@ jobs:
           # (parts 12 to 29) are cached apart, so no part restores another
           # build's. Parts 30 to 46 build in their own folder, `target-native`, cached below.
           key: ${{ matrix.mode == 'release' && (matrix.k <= 11 && 'release-checked' || 'release-shipped') || 'debug' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       # The native parts (30 to 46) build for this runner's own CPU, so their cache is named by
       # that CPU: the digest of what rustc reads as `-C target-cpu=native` here (its every target
       # feature, and the processor it resolves to, named in its list of processors). Only a runner
@@ -362,6 +364,8 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (matrix.k == 30 || matrix.k == 41) }}
           workspaces: ". -> target-native"
           key: ${{ format('native-{0}-{1}', matrix.k <= 40 && 'goldens' || 'num', steps.cpu.outputs.digest) }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       # This run's own runner for this system: an artifact named here with no other run or
       # repository is this run's, and a part that finds none fails here.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -742,9 +746,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       # The diff between the base and this commit is the change, renames as a removed and an added
       # file.
       - name: The files the change touches
@@ -810,6 +817,8 @@ jobs:
           # Only a push to main saves the cache; a pull request restores main's. One part saves it.
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.k == 1 }}
           key: linux
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
@@ -993,6 +1002,8 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.part.k == 1 }}
           # Release and debug builds are cached apart, so neither leg restores the other's.
           key: suite-${{ matrix.part.mode }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       # The pre-built cargo-nextest of this version, its checksum checked by the action (a source
       # build is minutes of compiling on every part). The version is the one kernel-quality.yml
       # builds for Miri.
@@ -1090,6 +1101,8 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: guard
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: A one-bit change to libm's sin fails a golden
         run: cargo run --locked --release -p geom-test --bin guard -- prove
 
@@ -1133,9 +1146,11 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
-          # toolchain and the lock file's hash.
+          # hash of the lock files and rust-toolchain.toml, which names the toolchain.
           key: solidcore-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
           workspaces: projects/engines/geometry/geom-solidcore -> target
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
         run: |
           set -euo pipefail
@@ -1208,9 +1223,11 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           # The pinned commit of solidcore (geom-solidcore's Cargo.toml); the cache adds the
-          # toolchain and the lock file's hash.
+          # hash of the lock files and rust-toolchain.toml, which names the toolchain.
           key: solidcore-wasm-cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3
           workspaces: projects/engines/geometry/geom-solidcore -> target
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}
         uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
         with:
@@ -1306,6 +1323,8 @@ jobs:
           # The guard's build (part 1), with overflow checks on (2, 3), as shipped (4, 5) and in
           # debug (6 to 8) are cached apart, so no part restores another build's.
           key: wasm-${{ matrix.k == 1 && 'guard' || matrix.k <= 3 && 'checked' || matrix.k <= 5 && 'shipped' || 'debug' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       # Every kernel crate in the kernel's folder; the development crates (chapter 27) need
       # processes and files that WASI test runs do not have, and run natively above.
       - name: List the kernel's crates
@@ -1453,6 +1472,8 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           key: wasm-build-${{ matrix.build }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
@@ -1734,10 +1755,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only a push to main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          key: large-models
+          # Restores the one cache of geom-test's release test build on Linux x86-64, which
+          # kernel-oracles.yml's job ember-build saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-release-tests-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       - name: The models of more than 1,500 faces named here, united alone and with a moved copy
         if: ${{ contains(format(' {0} ', needs.scope.outputs.crates), ' geom-poly ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-bool ') || contains(format(' {0} ', needs.scope.outputs.crates), ' geom-mesh ') }}
         env:
@@ -1768,6 +1791,8 @@ jobs:
           # Only a push to main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       # Every crate in the kernel's folder is checked here, so a new crate is covered the day it
       # lands (chapter 27: one folder per crate, folder name = crate name).
       - name: List the kernel's crates

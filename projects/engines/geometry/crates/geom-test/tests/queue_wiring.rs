@@ -22,7 +22,11 @@
 //!   repository written through `gh` or `git push`) does so only on a push to main or in the merge
 //!   queue, by `&&` terms of its condition with no `||` beside them, so a run by hand, on main or
 //!   on any branch, writes nothing another run trusts. The one upload let through is an in-run
-//!   hand-over of [`HAND_OVERS`].
+//!   hand-over of [`HAND_OVERS`]; a build cache with `save-if: false` only restores.
+//! - `jobs_that_build_the_same_dependencies_share_one_cache_one_saves`: each of
+//!   [`SHARED_CACHES`] (decision 32.90) is named by exactly its jobs across the workflows, one
+//!   way, with no environment hash and no key of their own, on one runner; exactly its one job
+//!   saves it and the others only restore it; and no other cache uses a shared key.
 //! - `an_in_run_hand_over_is_kept_a_day_and_read_in_its_run`: each of [`HAND_OVERS`] (`kernel.yml`'s
 //!   wasm archive and goldens' runner, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
 //!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
@@ -455,6 +459,12 @@ fn writer_problems(kernel: &str) -> Vec<String> {
             // the same run (`hand_over_problems`). Anything else that uploads is held to the rule.
             if uses.starts_with("actions/upload-artifact@")
                 && is_hand_over(&w, "kernel.yml", &job, step)
+            {
+                continue;
+            }
+            // A build cache that only restores (`save-if: false`, decision 32.90) writes nothing.
+            if uses.starts_with("Swatinem/rust-cache@")
+                && step["with"]["save-if"].as_bool() == Some(false)
             {
                 continue;
             }
@@ -1663,8 +1673,14 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
         ),
         // A run by hand let in beside the terms.
         (
-            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: large-models",
-            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: large-models",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: wasm-build-",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: wasm-build-",
+            "wasm-build's step 3",
+        ),
+        // A cache that only restores made to save on any run of main.
+        (
+            "          save-if: false\n          shared-key: geom-test-release-tests-",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          shared-key: geom-test-release-tests-",
             "large-models's step 3",
         ),
         // The queue's mark uploaded on every event.
@@ -1711,6 +1727,207 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
         let k = kernel.replacen(from, to, 1);
         assert_ne!(k, kernel, "the planted edit {from:?} applies");
         let found = writer_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// A build cache several jobs share (decision 32.90): the start of its `shared-key`, the one job
+/// that saves it and the jobs that only restore it, each as (workflow, job). Every job of a group
+/// builds the same dependencies (the same units of cargo's unit graph outside the workspace), so
+/// one copy serves them all.
+struct SharedCache {
+    key: &'static str,
+    saver: (&'static str, &'static str),
+    readers: &'static [(&'static str, &'static str)],
+}
+
+/// The shared build caches: geom-test's development build on Linux x86-64, and its release test
+/// build there.
+const SHARED_CACHES: [SharedCache; 2] = [
+    SharedCache {
+        key: "geom-test-dev-",
+        saver: ("kernel-gate.yml", "rules"),
+        readers: &[
+            ("kernel-fuzz.yml", "select"),
+            ("kernel-gate.yml", "deny"),
+            ("kernel-golden.yml", "store"),
+            ("kernel-quality.yml", "when"),
+            ("kernel-release.yml", "freeze"),
+            ("kernel.yml", "scope"),
+        ],
+    },
+    SharedCache {
+        key: "geom-test-release-tests-",
+        saver: ("kernel-oracles.yml", "ember-build"),
+        readers: &[("kernel.yml", "large-models")],
+    },
+];
+
+/// Every workflow file, by name, as text.
+fn all_workflows() -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for entry in std::fs::read_dir(root().join(WORKFLOWS)).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if name.ends_with(".yml") {
+            let text = read(&format!("{WORKFLOWS}/{name}"));
+            out.insert(name, text);
+        }
+    }
+    out
+}
+
+/// What is wrong with the shared build caches of `workflows` (file name to text): each of
+/// [`SHARED_CACHES`] is named by exactly its jobs, one of which saves it (its `save-if` anything
+/// but `false`) and the rest of which only restore it (`save-if: false`); every one of them leaves
+/// the environment hash out of the name (rust-cache's hash counts the runner image's own
+/// compilers and each workflow's own variables, so with it the jobs' names never meet) and gives
+/// no `key` beside the shared one; all of them run on the same runner; and no other cache uses a
+/// shared key.
+fn shared_cache_problems(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    let mut found = Vec::new();
+    // Each step with a shared key: (shared key, workflow, job, saves, runner).
+    let mut members: Vec<(String, String, String, bool, String)> = Vec::new();
+    for (file, source) in workflows {
+        let w = parse(source);
+        for job in keys(&w["jobs"]) {
+            for step in w["jobs"][job.as_str()]["steps"]
+                .as_vec()
+                .into_iter()
+                .flatten()
+            {
+                if !text(&step["uses"]).starts_with("Swatinem/rust-cache@") {
+                    continue;
+                }
+                let with = &step["with"];
+                let shared = text(&with["shared-key"]);
+                if shared.is_empty() {
+                    continue;
+                }
+                let said = format!("{file}'s {job}");
+                if with["add-rust-environment-hash-key"].as_bool() != Some(false) {
+                    found.push(format!("{said} names {shared} with the environment hash"));
+                }
+                if !with["key"].is_badvalue() {
+                    found.push(format!("{said} gives a key beside the shared key {shared}"));
+                }
+                let saves = with["save-if"].as_bool() != Some(false);
+                let runner = text(&w["jobs"][job.as_str()]["runs-on"]);
+                members.push((shared, file.clone(), job.clone(), saves, runner));
+            }
+        }
+    }
+    for cache in &SHARED_CACHES {
+        let of: Vec<_> = members
+            .iter()
+            .filter(|m| m.0.starts_with(cache.key))
+            .collect();
+        let named: BTreeSet<&str> = of.iter().map(|m| m.0.as_str()).collect();
+        if named.len() != 1 {
+            found.push(format!("{} is named {named:?}, not one way", cache.key));
+        }
+        let savers: Vec<(&str, &str)> = of
+            .iter()
+            .filter(|m| m.3)
+            .map(|m| (m.1.as_str(), m.2.as_str()))
+            .collect();
+        if savers != [cache.saver] {
+            found.push(format!(
+                "{} is saved by {savers:?}, not by {:?} alone",
+                cache.key, cache.saver
+            ));
+        }
+        let readers: BTreeSet<(&str, &str)> = of
+            .iter()
+            .filter(|m| !m.3)
+            .map(|m| (m.1.as_str(), m.2.as_str()))
+            .collect();
+        let want: BTreeSet<(&str, &str)> = cache.readers.iter().copied().collect();
+        if readers != want {
+            found.push(format!(
+                "{} is restored only by {readers:?}, not by {want:?}",
+                cache.key
+            ));
+        }
+        let runners: BTreeSet<&str> = of.iter().map(|m| m.4.as_str()).collect();
+        if runners.len() > 1 {
+            found.push(format!("{} is used on runners {runners:?}", cache.key));
+        }
+    }
+    for m in &members {
+        if !SHARED_CACHES.iter().any(|c| m.0.starts_with(c.key)) {
+            found.push(format!(
+                "{}'s {} uses the shared key {}, which no group names",
+                m.1, m.2, m.0
+            ));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn jobs_that_build_the_same_dependencies_share_one_cache_one_saves() {
+    let workflows = all_workflows();
+    assert_eq!(shared_cache_problems(&workflows), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    let dev_reader = "          save-if: false\n          shared-key: geom-test-dev-";
+    for (file, from, to, said) in [
+        // A second job saving the shared cache.
+        (
+            "kernel-gate.yml",
+            dev_reader,
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          shared-key: geom-test-dev-",
+            "is saved by [(\"kernel-gate.yml\", \"rules\"), (\"kernel-gate.yml\", \"deny\")]",
+        ),
+        // The saver made to restore only, so nothing saves it.
+        (
+            "kernel-gate.yml",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          # The one cache",
+            "          save-if: false\n          # The one cache",
+            "geom-test-dev- is saved by []",
+        ),
+        // A reader that keeps the environment hash, so its name never meets the saver's.
+        (
+            "kernel.yml",
+            "          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}\n          add-rust-environment-hash-key: false\n",
+            "          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}\n",
+            "kernel.yml's scope names geom-test-dev-${{ env.RUST_TOOLCHAIN }} with the environment hash",
+        ),
+        // A reader under a name of its own.
+        (
+            "kernel-fuzz.yml",
+            "shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}",
+            "shared-key: geom-test-dev-fuzz-${{ env.RUST_TOOLCHAIN }}",
+            "geom-test-dev- is named",
+        ),
+        // A reader that goes back to a cache of its own.
+        (
+            "kernel-golden.yml",
+            dev_reader,
+            "          save-if: false\n          key: store\n          shared-key: geom-test-dev-",
+            "kernel-golden.yml's store gives a key beside the shared key",
+        ),
+        // A reader on another runner, whose build the saver's cannot hold.
+        (
+            "kernel-oracles.yml",
+            "    name: EMBER's pairs' test, built once\n    needs: scope\n    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')\n    runs-on: ubuntu-latest\n",
+            "    name: EMBER's pairs' test, built once\n    needs: scope\n    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')\n    runs-on: ubuntu-24.04-arm\n",
+            "geom-test-release-tests- is used on runners",
+        ),
+    ] {
+        let mut changed = workflows.clone();
+        let source = changed.get_mut(file).unwrap();
+        let edited = source.replacen(from, to, 1);
+        assert_ne!(
+            &edited, source,
+            "the planted edit {from:?} applies in {file}"
+        );
+        *source = edited;
+        let found = shared_cache_problems(&changed);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
