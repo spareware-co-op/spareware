@@ -1,4 +1,4 @@
-//! A surface's axis handed to the closed forms on the grid must be the stored axis (issue #NNNN).
+//! A surface's axis handed to the closed forms on the grid must be the stored axis (issue #1063).
 //! The closed forms of a line with a cylinder and a torus take the axis as two grid points, the
 //! centre `c` and `c + n`, n the frame's stored normal. That second point was summed in doubles and
 //! then checked to be whole, but near 2^39 a double holds only 2^-13, so a normal's fraction under

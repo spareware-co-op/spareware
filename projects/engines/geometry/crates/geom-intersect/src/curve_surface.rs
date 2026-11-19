@@ -589,12 +589,20 @@ fn exact_sphere(line: &Line<3>, sphere: &Sphere) -> Option<Meeting> {
     closed::line_sphere(&grid_line(line)?, &s).ok()
 }
 
-/// The point `c + n`, on the grid.
+/// The axis's two points, the centre `c` and `c + n`, n the stored normal, if `c` and `n` are both
+/// on the grid and `c + n` is in reach. The far point is summed in integers, not doubles (#1063):
+/// near 2^39 a double holds only 2^-13, so a normal's fraction under half of that rounds away in
+/// `c + n`, the sum lands on the grid, and the closed forms would be handed an upright axis for a
+/// tilted surface.
 fn on_axis(center: &[f64; 3], frame: &Frame<3>) -> Option<(P3, P3)> {
-    let n = frame.normal();
-    let [a, b, c] = *center;
-    let [p, q, r] = n;
-    Some((grid_point(center)?, grid_point(&[a + p, b + q, c + r])?))
+    let (c, n) = (grid_point(center)?, grid_point(&frame.normal())?);
+    let along = P3::new(
+        c.x.get().checked_add(n.x.get())?,
+        c.y.get().checked_add(n.y.get())?,
+        c.z.get().checked_add(n.z.get())?,
+    )
+    .ok()?;
+    Some((c, along))
 }
 
 /// A line with a cylinder.
