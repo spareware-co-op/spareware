@@ -1785,8 +1785,11 @@ struct Along {
 }
 
 /// The end circle of a cylinder's height that the circle `curve` lies along, where that end circle
-/// lies exactly on the other surface: the end circle itself, on `curve`'s frame and domain, and
-/// whose it is (decision 32.94). `None` for any other piece, which stays the engine's.
+/// lies exactly on the other surface: the end circle itself, on `curve`'s frame and domain, whose
+/// it is, and whether `curve` is that circle to the bit, its centre's and radius's doubles the end
+/// circle's (decision 32.94). `None` for any other piece, which stays the engine's. It reads
+/// exact signs and the stored doubles alone, and no enclosure of the pair's, so it costs the
+/// meter nothing.
 ///
 /// Theorem. The end circle at v of a cylinder of radius ρ is the circle of radius ρ about the point
 /// at v on its axis, across the axis ([`end_centre`]). Where a double holds that point, the end
@@ -1804,7 +1807,7 @@ fn along_edge(
     curve: &CurveKind<3>,
     reach: f64,
     (a, b): (&SurfaceKind, &SurfaceKind),
-) -> Result<Option<(CurveKind<3>, Along)>, IntersectError> {
+) -> Result<Option<(CurveKind<3>, Along, bool)>, IntersectError> {
     let CurveKind::Circle(found) = curve else {
         return Ok(None);
     };
@@ -1827,7 +1830,9 @@ fn along_edge(
             }
             if near && circle_lies_on(centre, rho, n, other) {
                 let edge = Circle::new(centre, rho, found.frame(), found.domain())?;
-                return Ok(Some((CurveKind::Circle(edge), Along { second })));
+                let itself = found.center().map(f64::to_bits) == centre.map(f64::to_bits)
+                    && found.radius().to_bits() == rho.to_bits();
+                return Ok(Some((CurveKind::Circle(edge), Along { second }, itself)));
             }
         }
     }
@@ -2064,6 +2069,42 @@ fn trimmed(
     Ok(Some(out))
 }
 
+/// What trimming keeps of the piece `curve` ([`trimmed`]), or, where no box decides it, of the end
+/// circle it lies along ([`along_edge`]), decided on that cylinder's turn: a piece no box decides
+/// may lie along an end circle that exact signs place on the other surface, and then it is that
+/// circle (32.94). `None` where neither decides, and the pair is the engine's.
+///
+/// Theorem. Where `curve` is the end circle to the bit, trimming it on its turn alone keeps what
+/// trimming it on both whole domains and then, where that stops, on its turn keeps, at the work of
+/// the second alone. Every point of that circle is at the end's height exactly, which the box of
+/// its height holds, so that box reaches the edge: the cylinder's whole reading is off where its
+/// turn's is and reaches an edge everywhere else. The two trims read the same points of the same
+/// curve against the same marks, in the same order, and their readings of both domains differ only
+/// where neither the turn's nor the other domain's is off: there the trim on both whole domains
+/// reads an edge reached and stops. So where it keeps a piece, every reading agreed and the trim on
+/// the turn keeps the same; where it stops, the trim on the turn is the answer. The end circle
+/// built for `curve` is then `curve` itself, made from the same doubles. Any other piece is trimmed
+/// on both whole domains first, and on its end circle's turn only where that stops.
+fn trimmed_or_along(
+    curve: &CurveKind<3>,
+    reach: f64,
+    (a, b): (&SurfaceKind, &SurfaceKind),
+    marks: &[Vector],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Vec<Part>>, IntersectError> {
+    let along = along_edge(curve, reach, (a, b))?;
+    if let Some((_, on, true)) = along {
+        return trimmed(curve, (a, b), marks, Some(on), meter);
+    }
+    if let Some(parts) = trimmed(curve, (a, b), marks, None, meter)? {
+        return Ok(Some(parts));
+    }
+    let Some((edge, on, _)) = along else {
+        return Ok(None);
+    };
+    trimmed(&edge, (a, b), marks, Some(on), meter)
+}
+
 /// A stretch of a piece between cuts, and whether it lies on both domains.
 struct Stretch {
     from: f64,
@@ -2232,18 +2273,8 @@ fn items_of(
                     None => marks(a, b, meter)?,
                 };
                 let curve = nearer(*curve)?;
-                // A piece no box decides may lie along an end circle that exact signs place on
-                // the other surface: then it is that circle, decided on its turn (32.94).
-                let parts = if let Some(parts) = trimmed(&curve, (a, b), &marks, None, meter)? {
-                    parts
-                } else {
-                    let Some((edge, along)) = along_edge(&curve, reach, (a, b))? else {
-                        return Ok(None);
-                    };
-                    let Some(parts) = trimmed(&edge, (a, b), &marks, Some(along), meter)? else {
-                        return Ok(None);
-                    };
-                    parts
+                let Some(parts) = trimmed_or_along(&curve, reach, (a, b), &marks, meter)? else {
+                    return Ok(None);
                 };
                 found_marks = Some(marks);
                 for kept in parts {

@@ -907,7 +907,11 @@ fn one_loop(a: &SurfaceKind, b: &SurfaceKind) -> ([f64; 3], f64) {
 /// [0, 10]², and one of radius 3 standing on a dome of radius 5 about (1, 2, 3), whose end circle
 /// at z = 7 lies on it exactly (3² + 4² = 5²), each meet it in that end circle, whole, kept as the
 /// edge itself: its centre and radius are the column's own, exactly. So does the column on the
-/// dome built the other way up, its axis down and its height from −12 to −7.
+/// dome built the other way up, its axis down and its height from −12 to −7. A column of radius 5
+/// on z from 0 to 600 standing across the edge x = 0 of a slab over x in [0, 600] (the natural
+/// fuzz target's stored input) meets it in the half of its end circle the slab holds, at the work
+/// of one trim, 70 units: the closed form's circle is the end circle to the bit, so it is trimmed
+/// on the column's turn alone, where trimming it on both whole domains first took 75.
 #[test]
 fn a_column_on_a_slab_or_a_dome_meets_it_in_its_end_circle() {
     let up = frame_along([0.0, 0.0, 1.0]);
@@ -934,6 +938,32 @@ fn a_column_on_a_slab_or_a_dome_meets_it_in_its_end_circle() {
         Cylinder::new([1.0, 2.0, 0.0], 3.0, down, (ROUND, (-12.0, -7.0))).unwrap(),
     );
     assert_eq!(one_loop(&dome, &column), ([1.0, 2.0, 7.0], 3.0));
+    let side = (-300.0, 300.0);
+    let edge_on = SurfaceKind::Plane(
+        Plane::new(
+            [300.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (side, side),
+        )
+        .unwrap(),
+    );
+    let column =
+        SurfaceKind::Cylinder(Cylinder::new([0.0, 0.0, 300.0], 5.0, up, (ROUND, side)).unwrap());
+    for (x, y) in [(&edge_on, &column), (&column, &edge_on)] {
+        let mut work = meter();
+        let r = natural(x, y, &mut work).unwrap().unwrap();
+        holds(&r, x, y);
+        let [Item::Curve { curve, ends, .. }] = r.items() else {
+            panic!("{:?}", r.items())
+        };
+        let CurveKind::Circle(c) = &**curve else {
+            panic!("{curve:?}")
+        };
+        assert_eq!((c.center(), c.radius()), ([0.0; 3], 5.0));
+        assert_eq!((c.domain(), *ends), ((1.5, 2.5), [CurveEnd::Boundary; 2]));
+        assert!(work.used().work <= 70, "{} units", work.used().work);
+    }
 }
 
 /// Issue 1044: where a cylinder's end stands a rounding off the other surface, nothing proves the
