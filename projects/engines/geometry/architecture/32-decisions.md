@@ -1912,3 +1912,16 @@ The other caches are different builds: the wasm32 parts build four profiles (the
 **Why.** `curve::onto` and `Seam::onto` held a box across the join to one side of it. Where the true parameter lay on the other side the reported span missed it: the line x = 1 on the circle of radius √2 rounded down, over (1/4, 9/4), crosses at 9/4 − δ with 0 < δ < 2^-54, and was held at [0.25, 0.2500000000000018]. The hull of both sides, the window's whole [lo, hi], is sound but makes every crossing on a join span the whole turn, so no join crossing could be told apart from any other point of the curve. A span that runs past the end is sound and stays tight.
 
 **Readers.** Every place that reads a span on a whole turn: in `geom-intersect`, the curves' and curve-and-surface engines' answers (`items_of`, `finished`: a zero found from both sides of the join is one, by `Seam::meets`), the image of a span (`bound_over`, which splits a span at the join), the second order test's derivatives, and the closed forms' images; in `geom-bool`, the paves on a closed edge and the pieces between them; in `geom-fuzz`, the oracles that evaluate an item's span.
+
+| Test | Before | After |
+|---|---|---|
+| `attack_g163` `a_crossing_a_rounding_from_the_join_is_held_at_its_own_turn`, r = √2 rounded down | [0.25, 0.2500000000000018], missing 9/4 − δ | from about 2.249999999999998 to past 2.25, holding it |
+| `attack_g163` `the_engine_holds_a_crossing_a_hair_before_the_join_across_it` (new), h = 10^-7 | [0, 4.02 · 10^-10], missing 2 − 6.4 · 10^-12 | across 2, holding it |
+| crossings on a join of (0, 2): `two_circles_cross_touch_or_miss`, `a_rotated_circle_is_met_on_its_own_turns`, `a_closed_curve_s_join_is_no_boundary_and_an_open_end_is`; `attack_g164` `a_line_meets_a_sphere`, `a_line_meets_a_cone` | midpoint 0 | midpoint 2 |
+| a ruling on a cylinder's join: `attack_g164` `a_line_meets_a_cylinder`, `an_axis_off_the_origin_is_read_exactly` | u held from 0 | u from 1.9999999999999998 to 2.0000000000000004 |
+| `a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts` | midpoint 0 on (0, 2), 1 on (1, 3) | 2 and 3 |
+| `a_whole_circle_s_search_takes_only_its_work`, the crossing on the join | 1313 units | 1315: the zero's span is bounded in two parts, one more bound of a plane circle at a unit a coordinate |
+
+**Started from:** none found; a convention of this kernel's results, not a method.
+
+**Changes:** this record; `geom-intersect`'s `curve.rs` (`Seam::onto`, `Seam::meets`, `onto`, `bound_over`, `circle_circle`, `items_of`, `second_order`) and `curve_surface.rs` (`finished`, the circle-on-round closed form); `tests/attack_g163.rs` and `tests/attack_g164.rs`.
