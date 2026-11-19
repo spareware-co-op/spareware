@@ -316,7 +316,10 @@ fn rulings(
     let a: Vec<_> = x.iter().map(|i| i.lo()).zip(d).collect();
     let b: Vec<_> = y.iter().map(|i| i.lo()).zip(d).collect();
     let less: Vec<_> = y.iter().map(|i| -i.lo()).zip(d).collect();
-    let zero = |parts: &[&[(f64, f64)]]| sign_of(&parts.concat()) == Sign::Zero;
+    let zero = |parts: &[&[(f64, f64)]]| {
+        let all: Vec<(f64, f64)> = parts.iter().flat_map(|p| p.iter().copied()).collect();
+        sign_of(&all) == Sign::Zero
+    };
     let (za, zb) = (zero(&[&a]), zero(&[&b]));
     if za && zb {
         return Ok(None);
