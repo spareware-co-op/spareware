@@ -28,7 +28,9 @@
 # GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
 # GitHub measuring run 44534311366 (miri_measure=new on fix/trimmed-on-edge at 5ead7eea5).
 # GitHub measuring run 44486343425 (miri_measure=new on fix/trimmed-proven at 27115e329).
+# GitHub measuring run 44459010430 (miri_measure=new on fix/cone-start-radius-exact at 6d5517af1).
 # GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
+# GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1273,9 +1275,10 @@ native-only over 601	geom-intersect::attack_g165	a_cone_on_a_coaxial_cylinder_is
 67	geom-intersect::attack_g165	a_far_plane_reads_a_piece_past_an_end_from_its_corner
 7	geom-intersect::attack_g165	a_half_plane_keeps_the_half_circle_on_it
 native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends_far_down_its_branch
-36	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
-19	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
-38	geom-intersect::attack_g165	a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept
+26	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
+11	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
+338	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_read_where_the_meeting_may_lie
+17	geom-intersect::attack_g165	a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept
 11	geom-intersect::attack_g165	a_pipe_tee_is_two_ellipses
 91	geom-intersect::attack_g165	a_plane_cuts_a_cone_in_each_conic
 9	geom-intersect::attack_g165	a_plane_cuts_a_cylinder_in_its_conics
@@ -1325,6 +1328,7 @@ native-only over 601	geom-intersect::attack_g167	a_plane_along_an_extrusion_cuts
 native-only over 601	geom-intersect::attack_g167	a_plane_through_a_revolution_s_axis_cuts_two_copies
 13	geom-intersect::attack_g167	a_plane_through_a_torus_s_axis
 111	geom-intersect::attack_g167	a_quadric_about_a_revolution
+13	geom-intersect::attack_g167	a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on
 native-only over 601	geom-intersect::attack_g167	every_reduction_makes_what_it_made
 95	geom-intersect::attack_g167	quadrics_about_a_torus_s_axis
 native-only over 601	geom-intersect::attack_g167	two_sweeps_of_one_direction_meet_in_lines
@@ -1542,6 +1546,22 @@ native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plan
 72	geom-intersect::half_plane	an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_centre
 1	geom-intersect::half_plane	two_lines_parallel_to_within_rounding_meet_nowhere_on_their_spans
 native-only over 601	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_taken_out_whole_by_its_own_equation
+3	geom-intersect::line_cone_exact	a_crossing_of_a_cone_with_a_start_radius_keeps_its_answer
+3	geom-intersect::line_cone_exact	a_crossing_the_enclosures_count_keeps_its_answer
+60	geom-intersect::line_cone_exact	a_line_a_step_beside_an_apex_misses_the_cone
+109	geom-intersect::line_cone_exact	a_line_a_step_from_tangent_is_two_points_or_none
+3	geom-intersect::line_cone_exact	a_line_across_a_sphere_or_a_circle_is_two_points_in_closed_form
+107	geom-intersect::line_cone_exact	a_line_tangent_off_the_grid_is_one_exact_point
+87	geom-intersect::line_cone_exact	a_line_through_an_apex_is_one_point_on_the_grid_and_off_it
+6	geom-intersect::line_cone_exact	a_segment_touching_a_start_circle_at_its_end_is_one_point
+10	geom-intersect::line_cone_exact	a_step_from_a_tangent_to_a_cone_with_a_start_radius_is_two_points_or_none
+8	geom-intersect::line_cone_exact	a_step_from_group_q_s_touch_is_two_points_or_none
+3	geom-intersect::line_cone_exact	a_tangent_to_a_cone_on_the_grid_off_its_apex_is_one_point
+8	geom-intersect::line_cone_exact	a_tangent_to_a_cone_with_a_start_radius_is_one_exact_point
+106	geom-intersect::line_cone_exact	a_tangent_to_a_started_cone_whose_data_span_too_far_is_the_engines
+56	geom-intersect::line_cone_exact	a_tangent_whose_data_pass_the_exact_range_is_the_engines
+4	geom-intersect::line_cone_exact	the_issue_cone_edge_misses_in_closed_form
+61	geom-intersect::line_cone_exact	the_issue_edges_are_one_point_each_in_closed_form
 3	geom-intersect::line_plane_exact	a_line_a_hair_off_a_plane_off_the_grid_meets_nothing
 2	geom-intersect::line_plane_exact	a_line_across_a_plane_off_the_grid_is_one_point
 2	geom-intersect::line_plane_exact	a_line_across_a_plane_off_the_grid_is_told_by_its_enclosure_alone

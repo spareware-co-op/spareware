@@ -403,6 +403,44 @@ fn a_plane_square_to_a_torus() {
     near(got[1].0, 5.8);
 }
 
+/// The horn torus of radius 1 about the z axis on tube turns `tube`: it closes on its centre at
+/// v = 1, where the plane z = 0 meets it in a point.
+fn horn(tube: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Torus(Torus::new([0.0; 3], 1.0, 1.0, up(), (ROUND, tube)).unwrap())
+}
+
+/// The tube turn, as its box's ends, of the one point the plane z = 0 meets `horn` in, if any.
+fn centre_turn(t: &SurfaceKind) -> Option<(f64, f64)> {
+    let r = natural(&level(0.0), t, &mut meter()).unwrap().unwrap();
+    let points: Vec<(f64, f64)> = r
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Point { at, .. } => Some((at.spans()[3].lo(), at.spans()[3].hi())),
+            _ => None,
+        })
+        .collect();
+    assert!(points.len() <= 1, "{points:?}");
+    points.first().copied()
+}
+
+#[test]
+fn a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on() {
+    // Over the whole tube the centre's turn is a box about 1, its ends where the roundings put
+    // them.
+    let (lo, hi) = centre_turn(&horn(ROUND)).unwrap();
+    assert!((lo..=hi).contains(&1.0) && hi < 1.5, "{lo}, {hi}");
+    // On part of the tube from a start inside that box, the box meets the domain and is held to
+    // it, as any box that meets a domain is. From exactly the box's top the box ends on the
+    // start, not before it, so it is not moved a turn on (past this tube's end, where the point
+    // would be lost): it meets the domain at its start alike.
+    let below = hi.next_down();
+    assert_eq!(centre_turn(&horn((below, 1.5))), Some((below, hi)));
+    assert_eq!(centre_turn(&horn((hi, 1.5))), Some((hi, hi)));
+    // From the next double up the box ends before the start, and a turn on is past the end.
+    assert_eq!(centre_turn(&horn((hi.next_up(), 1.5))), None);
+}
+
 #[test]
 fn a_plane_through_a_torus_s_axis() {
     let t = torus(0.0, 5.0, 1.0);

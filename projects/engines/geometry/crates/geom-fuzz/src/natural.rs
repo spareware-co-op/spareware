@@ -26,8 +26,9 @@
 //! case's count, which the target's tests hold for the issue's four inputs, for the end circles
 //! a plane's domain holds a part of (decision 32.69), for an end circle about a line through a
 //! sphere's centre that stands off the sphere (decision 32.74), for the end circles of a cone
-//! across another on a parallel axis (decision 32.86), and for what is still the engine's;
-//! [`answer_of`] reads its answer.
+//! across another on a parallel axis (decision 32.86), for a plane's edge through a cone's apex
+//! or tangent to a cylinder (decision 32.87) or beside a cone of start radius 100 (decision
+//! 32.88), and for what is still the engine's; [`answer_of`] reads its answer.
 
 #![allow(
     clippy::many_single_char_names,
