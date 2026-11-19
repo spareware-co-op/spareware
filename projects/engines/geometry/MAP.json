@@ -376,7 +376,7 @@
               "shape": "unit"
             },
             {
-              "doc": "A point was located against an arrangement other than the one the regions were found in.",
+              "doc": "A point was located, or gaps measured, against an arrangement other than the one the regions were found in.",
               "name": "Foreign",
               "shape": "unit"
             }
@@ -760,7 +760,7 @@
             "**The arrangement's own faces.** Every region is a bounded face of the arrangement and every bounded face is a region; no ring is guessed from coordinates. Which ring of a face is its shell is decided by the face's lowest-leftmost vertex, which lies on its outer boundary.",
             "**Dangles and cut edges never bound a region.** An edge with a free end, after every such edge is removed in turn, is a dangle; an edge left with the same face on both sides is a cut edge. Both are listed, in edge order, and no ring holds either.",
             "**Exact.** Locating a point decides by exact orientation and comparison signs of rational points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when every vertex of the ring is a grid point, and otherwise an interval rounded outward from the exact terms (each a 512-bit numerator over its vertices' weights), which holds the exact area.",
-            "**Located in its own arrangement.** [`Regions::at`] refuses, as [`RegionError::Foreign`], an arrangement whose vertices, edges or curves differ from those the regions were found in, so every ring it reads is a closed walk of that arrangement's edges.",
+            "**Located in its own arrangement.** [`Regions::at`], [`Regions::gaps`] and [`Regions::bridges`] refuse, as [`RegionError::Foreign`], an arrangement whose vertices, edges or curves differ from those the regions were found in, so every ring they read is a closed walk of that arrangement's edges and every free end one of its vertices.",
             "**Gaps are evidence, never a closure.** An open point is told every pair of free ends and the exact square of their distance when both are grid points, nearest first, then by name; a gap is closed only by a segment the caller adds between two free ends, never by moving a vertex.",
             "**Deterministic.** Regions are in face order, rings in half-edge order from their first half-edge, holes by their first half-edge."
           ],

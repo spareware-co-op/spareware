@@ -28,9 +28,10 @@
 //!   points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when
 //!   every vertex of the ring is a grid point, and otherwise an interval rounded outward from the
 //!   exact terms (each a 512-bit numerator over its vertices' weights), which holds the exact area.
-//! - **Located in its own arrangement.** [`Regions::at`] refuses, as [`RegionError::Foreign`], an
-//!   arrangement whose vertices, edges or curves differ from those the regions were found in, so
-//!   every ring it reads is a closed walk of that arrangement's edges.
+//! - **Located in its own arrangement.** [`Regions::at`], [`Regions::gaps`] and
+//!   [`Regions::bridges`] refuse, as [`RegionError::Foreign`], an arrangement whose vertices, edges
+//!   or curves differ from those the regions were found in, so every ring they read is a closed
+//!   walk of that arrangement's edges and every free end one of its vertices.
 //! - **Gaps are evidence, never a closure.** An open point is told every pair of free ends and the
 //!   exact square of their distance when both are grid points, nearest first, then by name; a gap
 //!   is closed only by a segment the caller adds between two free ends, never by moving a vertex.
@@ -83,7 +84,8 @@ pub enum RegionError {
     /// A point was located against a ring with an arc or a one-root vertex, which this module does
     /// not yet decide (chapter 14.4's arcs come with their own sides).
     Curved,
-    /// A point was located against an arrangement other than the one the regions were found in.
+    /// A point was located, or gaps measured, against an arrangement other than the one the
+    /// regions were found in.
     Foreign,
 }
 
@@ -445,9 +447,13 @@ impl Regions {
     ///
     /// # Errors
     ///
+    /// [`RegionError::Foreign`] if `arr` is not the arrangement the regions were found in;
     /// [`RegionError::Range`] past 128 bits; [`RegionError::Malformed`] for a vertex past the
     /// arrangement.
     pub fn gaps(&self, arr: &Arrangement) -> Result<Vec<Gap>, RegionError> {
+        if !self.found_in(arr) {
+            return Err(RegionError::Foreign);
+        }
         let mut gaps = Vec::new();
         for (i, &a) in self.free_ends.iter().enumerate() {
             for &b in self.free_ends.get(i.saturating_add(1)..).unwrap_or(&[]) {
@@ -493,6 +499,9 @@ impl Regions {
     ///
     /// As [`Regions::gaps`].
     pub fn bridges(&self, arr: &Arrangement, within: i128) -> Result<Vec<Gap>, RegionError> {
+        if !self.found_in(arr) {
+            return Err(RegionError::Foreign);
+        }
         let mut used: Vec<u32> = Vec::new();
         let mut out = Vec::new();
         for gap in self.gaps(arr)? {
@@ -558,8 +567,8 @@ impl Regions {
 
     /// Whether `arr` is the arrangement these regions were found in: the same vertices, stored as
     /// the same numbers, the same edges between them, from the same input places, and the same
-    /// curve under each edge. That is everything a location reads, so each ring is a closed walk
-    /// of `arr`'s edges, as it was when it was found.
+    /// curve under each edge. That is everything a location or a gap reads, so each ring is a
+    /// closed walk of `arr`'s edges, as it was when it was found.
     fn found_in(&self, arr: &Arrangement) -> bool {
         let vertices = arr.vertices().iter().map(stored);
         let mut along = (0..).zip(&self.along);
