@@ -1733,6 +1733,34 @@ fn a_whole_circle_s_search_takes_only_its_work() {
 }
 
 #[test]
+fn the_engine_holds_a_crossing_a_hair_before_the_join_across_it() {
+    // A whole circle of radius 5000 over (0, 2) and the straight quadratic y = -h cross at the turn
+    // 2 - d, d = asin(h/5000)/π, within a part in 10^12 of h/(5000π): a few hundred steps of the
+    // doubles below 2 or more. The engine's zero box there lies across the join, and decision
+    // 32.104 keeps it whole from the window's side; held to the join's near side, [0, ε], it would
+    // miss the crossing.
+    let turn = CurveKind::Circle(
+        Circle::new([0.0, 0.0], 5000.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+    );
+    let pi = core::f64::consts::PI;
+    let mut across = Vec::new();
+    for h in [1e-7, 1e-8, 1e-9, 1e-10] {
+        let r = meet(&turn, &bezier(&[[4000.0, -h], [5000.0, -h], [6000.0, -h]]));
+        let [Item::Point { at, .. }] = r.items() else {
+            panic!("h {h}: {:?}", r.items());
+        };
+        let s = at.spans()[0];
+        let d = h / (5000.0 * pi);
+        assert!(
+            s.lo() <= 2.0 - 1.01 * d && 2.0 - 0.99 * d <= s.hi() && s.hi() - s.lo() < 1e-6,
+            "h {h}: {s:?}"
+        );
+        across.push((h, s, s.hi() > 2.0));
+    }
+    assert!(across.iter().any(|(.., over)| *over), "{across:?}");
+}
+
+#[test]
 fn circles_on_later_turns_cross_on_their_own_domains() {
     // The circle about (6, 0) on whole turns from 8 or from -6 (half-turns): its two crossings with
     // the circle about the origin are at the same points, at parameters moved by those turns.
