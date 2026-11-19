@@ -78,7 +78,7 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
 use crate::closed::{self, Natural, Position};
 use crate::curve::{
-    enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
+    bound_on, enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
 };
 use crate::curve_surface::{circle_lies_on, cross, curve_surface, dot, lift, minus, sides};
 use crate::error::IntersectError;
@@ -1944,7 +1944,8 @@ fn marks(
                 let [t, ..] = item.at().spans() else {
                     continue;
                 };
-                out.push(sides(&edge.bound((t.lo(), t.hi()), meter)?)?);
+                // On an edge circle a span across its join is read modulo the turn (32.104).
+                out.push(sides(&bound_on(&edge, *t, meter)?)?);
             }
         }
         out.extend(apex_ends(surface)?);

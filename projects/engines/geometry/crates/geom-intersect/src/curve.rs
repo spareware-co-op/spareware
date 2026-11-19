@@ -245,6 +245,14 @@ impl Seam {
         Ok(Interval::new(self.domain.0, self.domain.1)?)
     }
 
+    /// Where a span written on the domain may lie: the domain, and on a whole turn up to a turn
+    /// past its end (decision 32.104).
+    pub(crate) fn reach(self) -> Result<Interval, IntersectError> {
+        let (lo, hi) = self.domain;
+        let past = if self.closed { self.period() } else { 0.0 };
+        Ok(Interval::new(lo, hi + past)?)
+    }
+
     /// The side to search.
     pub(crate) fn side(self) -> Result<Interval, IntersectError> {
         let (lo, hi) = self.domain;
@@ -328,6 +336,31 @@ impl Seam {
         let shift = Interval::point(self.period())?;
         Ok(touch(b.add(shift)?) || touch(b.sub(shift)?))
     }
+
+    /// The least span holding `a` and `b`. On a whole turn `b` is first moved by the turn that
+    /// meets `a`, if one does, and the span is written as [`Seam::onto`] writes it (decision
+    /// 32.104).
+    pub(crate) fn hull(self, a: Interval, b: Interval) -> Result<Interval, IntersectError> {
+        let touch = |b: Interval| a.lo() <= b.hi() && b.lo() <= a.hi();
+        let near = if self.closed && !touch(b) {
+            let shift = Interval::point(self.period())?;
+            [b.add(shift)?, b.sub(shift)?]
+                .into_iter()
+                .find(|moved| touch(*moved))
+                .unwrap_or(b)
+        } else {
+            b
+        };
+        let both = Interval::new(
+            tight::smaller(a.lo(), near.lo()),
+            tight::larger(a.hi(), near.hi()),
+        )?;
+        if self.closed {
+            self.onto(both)
+        } else {
+            Ok(both)
+        }
+    }
 }
 
 /// `curve`'s seam over `domain`.
@@ -354,6 +387,16 @@ pub(crate) fn bound_over<C: ParamCurve<D>, const D: usize>(
             .map_err(CurveError::from)?;
     }
     Ok(out)
+}
+
+/// A box around `curve` over `x`, a span an answer gives on it: across its join if `x` is, on the
+/// seam [`seam_of`] reads from its own domain (decision 32.104).
+pub(crate) fn bound_on<const D: usize>(
+    curve: &CurveKind<D>,
+    x: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Bounds<D>, IntersectError> {
+    bound_over(curve, seam_of(curve, finite(curve)?), x, meter)
 }
 
 /// A box around `curve`'s first derivative over `x`, across its join if `x` is; `None` where it has
@@ -524,7 +567,7 @@ fn items_of<const D: usize>(
         let [s, t] = f.region;
         f.region = [first.onto(s)?, second.onto(t)?];
     }
-    let runs = runs(flagged)?;
+    let runs = runs(flagged, &gap.seams)?;
     let mut items = Vec::new();
     let mut seen: Vec<[Interval; 2]> = Vec::new();
     let others: Vec<usize> = (0..D)
@@ -639,12 +682,7 @@ fn second_order<const D: usize>(
     // whole turn a run may run past the window's end by under a turn (decision 32.104), and is
     // read modulo the turn.
     let [first, second] = gap.seams;
-    let reach = |seam: Seam| -> Result<Interval, IntersectError> {
-        let (lo, hi) = seam.domain;
-        let past = if seam.closed { seam.period() } else { 0.0 };
-        Ok(Interval::new(lo, hi + past)?)
-    };
-    let [s, t] = grown(&[s, t], &[reach(first)?, reach(second)?])?;
+    let [s, t] = grown(&[s, t], &[first.reach()?, second.reach()?])?;
     let mut parts = [[Interval::point(0.0)?; 2]; 4];
     let wanted = [
         (gap.a, first, s, 1),

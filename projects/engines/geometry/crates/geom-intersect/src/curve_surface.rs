@@ -889,7 +889,7 @@ fn line_torus(
             items.push(item);
         }
     }
-    let regions = runs(solved.flagged)?;
+    let regions = runs(solved.flagged, &[Seam::open(stretch)])?;
     let settled = exact.is_some_and(|roots| {
         roots.repeated
             && solved.zeros.len().saturating_add(regions.len()) == usize::from(roots.distinct)
@@ -1261,7 +1261,7 @@ fn finished(
     for f in &mut flagged {
         f.region = held(f.region)?;
     }
-    let regions = runs(flagged)?;
+    let regions = runs(flagged, &field.seams)?;
     let mut items = Vec::new();
     let mut seen: Vec<[Interval; 3]> = Vec::new();
     for z in &solved.zeros {
