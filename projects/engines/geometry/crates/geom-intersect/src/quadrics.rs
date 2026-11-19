@@ -1255,8 +1255,16 @@ const fn rank(s: &SurfaceKind) -> Option<u8> {
 }
 
 /// The parameters of a surface's points in `at`, enclosed; a turn a box runs around is the domain's.
-fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>, IntersectError> {
-    let (u, _) = ParamSurface::domain(surface);
+/// Only the angles `read` names are worked out: one it leaves is the box of its whole range, which
+/// holds it, for a reader that needs nothing of it but that (an angle is a box's four corners'
+/// correctly rounded angles, the dearest part of the reading).
+fn parameters(
+    surface: &SurfaceKind,
+    at: Vector,
+    read: [bool; 2],
+) -> Result<Option<[Interval; 2]>, IntersectError> {
+    let (u, v_range) = ParamSurface::domain(surface);
+    let [read_u, read_v] = read;
     let whole_turn = |x: Interval, y: Interval| -> Result<Interval, IntersectError> {
         if x.contains(0.0) && y.contains(0.0) {
             Ok(Interval::new(u.0, u.1)?)
@@ -1288,6 +1296,14 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
             Ok(moved)
         }
     };
+    let whole_turn = |x: Interval, y: Interval| -> Result<Interval, IntersectError> {
+        if read_u {
+            whole_turn(x, y)
+        } else {
+            Ok(Interval::new(u.0, u.1)?)
+        }
+    };
+    let all_v = || -> Result<Interval, IntersectError> { Ok(Interval::new(v_range.0, v_range.1)?) };
     let local = |frame: &Frame<3>, center: [f64; 3]| -> Result<Vector, IntersectError> {
         let (_, [x, y, n]) = frame.unit_vectors()?;
         let w = minus(at, lift(center)?)?;
@@ -1324,21 +1340,29 @@ fn parameters(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
         SurfaceKind::Sphere(s) => {
             let [x, y, z] = local(&s.frame(), s.center())?;
             let z = z.mul(point(s.axial_sign())?)?;
-            let round = tight::norm(&[x, y])?;
-            [
-                whole_turn(x, y)?,
-                Interval::atan2(z, round)?.div(Interval::PI)?,
-            ]
+            let latitude = if read_v {
+                Interval::atan2(z, tight::norm(&[x, y])?)?.div(Interval::PI)?
+            } else {
+                all_v()?
+            };
+            [whole_turn(x, y)?, latitude]
         }
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
-            let (major, _) = t.radii();
-            let out = tight::norm(&[x, y])?.sub(point(major)?)?;
-            let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
-            // The tube's turn reads from −1 to 1, and its domain from 0.
-            let two = point(2.0)?;
-            let (_, (v0, _)) = ParamSurface::domain(t);
-            let v = if turn.hi() < v0 { turn.add(two)? } else { turn };
+            let v = if read_v {
+                let (major, _) = t.radii();
+                let out = tight::norm(&[x, y])?.sub(point(major)?)?;
+                let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
+                // The tube's turn reads from −1 to 1, and its domain from 0.
+                let two = point(2.0)?;
+                if turn.hi() < v_range.0 {
+                    turn.add(two)?
+                } else {
+                    turn
+                }
+            } else {
+                all_v()?
+            };
             [whole_turn(x, y)?, v]
         }
         // Each piece of these is built on them: a box of the domain is true, and all they need.
@@ -1360,7 +1384,7 @@ fn on(x: Interval, domain: (f64, f64)) -> Result<Option<Interval>, IntersectErro
 
 /// The box a piece stands in on one surface, inside its domain; `None` if it lies off it.
 fn on_surface(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>, IntersectError> {
-    let Some([u, v]) = parameters(surface, at)? else {
+    let Some([u, v]) = parameters(surface, at, [true; 2])? else {
         return Ok(None);
     };
     let (du, dv) = ParamSurface::domain(surface);
@@ -1461,13 +1485,15 @@ fn on_plane(plane: &Plane, at: Vector) -> Result<Standing, IntersectError> {
 /// can be closer than the box; its other answers stand as they are, since both read the one
 /// parameter and each holds it, so a box inside the range or past an end is proven so either way.
 /// The corners cost six exact sums, and most pieces are far from every end of a plane's domain, so
-/// they are read only where the plain box cannot tell (decision 32.94).
+/// they are read only where the plain box cannot tell (decision 32.94). A parameter with no edge at
+/// either end (a whole turn, a latitude from pole to pole) is read as its whole range: its box,
+/// wrapped onto the domain or inside it by construction, can neither pass an end nor reach an edge.
 fn standing(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectError> {
-    let Some([u, v]) = parameters(surface, at)? else {
+    let [ru, rv] = rims(surface);
+    let Some([u, v]) = parameters(surface, at, [ru.contains(&true), rv.contains(&true)])? else {
         return Ok(Standing::Off);
     };
     let (du, dv) = ParamSurface::domain(surface);
-    let [ru, rv] = rims(surface);
     let mut out = Standing::Inside;
     for (x, (lo, hi), [at_lo, at_hi]) in [(u, du, ru), (v, dv, rv)] {
         if x.hi() < lo || x.lo() > hi {
