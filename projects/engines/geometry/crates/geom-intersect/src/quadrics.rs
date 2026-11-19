@@ -1440,16 +1440,14 @@ fn on_plane(plane: &Plane, at: Vector) -> Result<Standing, IntersectError> {
             if !end.is_finite() {
                 continue;
             }
-            let (past, reaching) = if upper {
-                (d.lo() > 0.0, d.hi() >= 0.0)
-            } else {
-                (d.hi() < 0.0, d.lo() <= 0.0)
-            };
-            if past {
-                return Ok(Standing::Off);
-            }
-            if reaching {
+            // An offset whose box holds zero may stand on the end's edge, so it reaches it, an
+            // exact zero at either bound included. One that does not lies wholly to one side,
+            // whose sign either bound tells: past the end beyond the upper corner or before the
+            // lower one, else inside.
+            if d.contains(0.0) {
                 out = Standing::Reaching;
+            } else if d.lo().is_sign_positive() == upper {
+                return Ok(Standing::Off);
             }
         }
     }

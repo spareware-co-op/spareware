@@ -738,6 +738,96 @@ fn a_box_that_ends_exactly_at_an_edge_reaches_it() {
     }
 }
 
+/// A plane whose origin stands far from its points holds their parameters no closer than a step
+/// that may span its whole domain, so a box that reaches an end of it is read again from the
+/// domain's corners, and there a piece past an end is nothing (32.94). The plane z = 0 is written
+/// as x = u − 2^52 and y = v − 2^52, each over one unit from 2^52, where a double's step is 1. A
+/// ball of radius 1/4 about (1.5, 0.5, 0) meets it in a circle past x = 1, the end of u; one of
+/// radius 1/5 about (0.5, −0.25, 0), in a circle past y = 0, the start of v. No edge comes near
+/// either, and the box of each circle's middle reaches that end (2^52 + 1.25 is held from 2^52 + 1,
+/// 2^52 − 0.25 up to 2^52), so only the corner's offset, a quarter past, says it lies off.
+#[test]
+fn a_far_plane_reads_a_piece_past_an_end_from_its_corner() {
+    let start = two_to(52);
+    let sheet = SurfaceKind::Plane(
+        Plane::new(
+            [-start, -start, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((start, start + 1.0), (start, start + 1.0)),
+        )
+        .unwrap(),
+    );
+    for ball in [
+        sphere([1.5, 0.5, 0.0], 0.25),
+        sphere([0.5, -0.25, 0.0], 0.2),
+    ] {
+        for (a, b) in [(&sheet, &ball), (&ball, &sheet)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert_eq!(
+                r.as_ref().map(|x| x.items().len()),
+                Some(0),
+                "{:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    // Moved onto the plane's domain, each circle is kept whole.
+    for ball in [sphere([0.5, 0.5, 0.0], 0.25), sphere([0.5, 0.5, 0.0], 0.2)] {
+        assert_eq!(curves(&meet(&sheet, &ball)).len(), 1);
+    }
+}
+
+/// An offset from a plane's corner that ends exactly at zero reaches that end (32.94). A corner
+/// c + p·a is enclosed as the doubles either side of its exact sum rounded, while the domain's edge
+/// is the line through c + p·a in doubles. The plane z = 0 is written as x = c + 0.1·u, 2^52 out,
+/// with c set so that the edge at u's end p = 2^52 + 2 is x = 1 exactly; the exact corner there is
+/// 1 + e, with e = 0.0125 the error of the double product p·0.1. A ball of radius 1/4 meets it in a
+/// circle whose middle is the corner's upper bound, past the domain by a step of 1 + e and an
+/// eightieth clear of the edge, so no edge cuts the circle. A double holds that middle's u no
+/// closer than its whole step there, which reaches p, and its offset from the corner runs from
+/// exactly zero: it may lie on the corner's edge, so the pair is the engine's, never nothing. The
+/// same with x = c − 0.1·u (y = −v), where p = 2^52 + 1 is u's start and e = 0.025.
+#[test]
+fn an_offset_from_a_corner_that_ends_at_zero_reaches_it() {
+    let start = two_to(52);
+    for (along, end, upper) in [(0.1, start + 2.0, true), (-0.1, start + 1.0, false)] {
+        let (p, e) = geom_num::eft::two_prod(end, along);
+        let c = 1.0 - p;
+        assert!(c + p == 1.0 && e > 0.01, "{p} {e}");
+        // The corner's exact sum c + p + e is 1 + e, rounded once; its enclosure's upper bound.
+        let at = (1.0 + e).next_up();
+        let ball = sphere([at + 0.25, 0.5, 0.0], 0.25);
+        let found = meet(&level(0.0), &ball);
+        let [circle] = curves(&found)[..] else {
+            panic!("{:?}", found.items())
+        };
+        assert_eq!(mid(circle), [at, 0.5, 0.0]);
+        let (us, vs) = if upper {
+            ((end - 20.0, end), (0.0, 1.0))
+        } else {
+            ((end, end + 20.0), (-1.0, 0.0))
+        };
+        let sheet = SurfaceKind::Plane(
+            Plane::new(
+                [c, 0.0, 0.0],
+                [along, 0.0, 0.0],
+                [0.0, along * 10.0, 0.0],
+                (us, vs),
+            )
+            .unwrap(),
+        );
+        for (a, b) in [(&sheet, &ball), (&ball, &sheet)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{sheet:?}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+}
+
 #[test]
 fn either_order_gives_the_same_items_swapped() {
     let (a, b) = (level(3.0), sphere([0.0; 3], 5.0));
