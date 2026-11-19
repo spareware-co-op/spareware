@@ -8679,6 +8679,214 @@
       "reason": "With % the midpoint of neighbours a and b = a + 1 is a + 1 % 2 = b itself; when the key is below the piece there, b = mid changes nothing and the loop never ends, so the tests stop it by their timeout. It hangs; it never returns a wrong place."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace < with <= in floor",
+      "line_text": "let c = if v < -(FRAME as f64) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when v is exactly -(FRAME as f64), and then both give c that same value: the clamp's value is v itself."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace > with >= in floor",
+      "line_text": "let c = if c > FRAME as f64 { FRAME as f64 } else { c };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when c is exactly FRAME as f64, and then both give c that same value: the clamp's value is c itself."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace < with <= in root_up",
+      "line_text": "while lo < hi {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The search ends when lo meets hi, at the least root whose square is at least n. With <= it goes on there: mid = lo, whose square is at least n, so hi = mid again and nothing changes, for ever. The tests' timeout stops it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace / with % in root_up",
+      "line_text": "let mid = lo.saturating_add(hi.saturating_sub(lo) / 2);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "hi always has a square of at least n: it starts at 2^62 and only ever takes such a mid. With (hi - lo) % 2, the first step moves lo from 0 to 1 for any n above 0; from there lo stays odd and mid is lo + 1, so lo climbs two at a time (some 2^39 steps for a circle the frame's size) until mid's square reaches n and hi = lo + 1, and then mid = hi for ever and nothing changes. The tests' timeout stops it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace || with && in SnapIndex<'d>::best_among",
+      "line_text": "|| y.1[0] < x.0[0]",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant skips a pair only when both of the tests it joins hold, so it skips fewer pairs than the original, never more, and the pairs it adds are pairs whose boxes do not meet. Such a pair gives no snap. cross_subjects returns a point only for two curves (other entities are refused first) and only if within takes it on both entities, and such a point lies in both boxes: bounds holds each entity's whole extent (a segment in the box of its ends' boxes, a circle or an arc in its circle's box, an ellipse or elliptic arc in the square of its major axis, a ray, a line or a disc circle in the whole frame), a conic root, which within does not check, lies on both whole curves, which the boxes hold too, and every box in an index is inside the frame, since Aabb::new refuses any other. Two disjoint boxes share no point, and the carriers the extra try pushes are truncated away after it, so the answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace || with && in SnapIndex<'d>::best_among",
+      "line_text": "|| x.1[1] < y.0[1]",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant skips a pair only when both of the tests it joins hold, so it skips fewer pairs than the original, never more, and the pairs it adds are pairs whose boxes do not meet. Such a pair gives no snap. cross_subjects returns a point only for two curves (other entities are refused first) and only if within takes it on both entities, and such a point lies in both boxes: bounds holds each entity's whole extent (a segment in the box of its ends' boxes, a circle or an arc in its circle's box, an ellipse or elliptic arc in the square of its major axis, a ray, a line or a disc circle in the whole frame), a conic root, which within does not check, lies on both whole curves, which the boxes hold too, and every box in an index is inside the frame, since Aabb::new refuses any other. Two disjoint boxes share no point, and the carriers the extra try pushes are truncated away after it, so the answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace || with && in SnapIndex<'d>::best_among",
+      "line_text": "|| y.1[1] < x.0[1])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant skips a pair only when both of the tests it joins hold, so it skips fewer pairs than the original, never more, and the pairs it adds are pairs whose boxes do not meet. Such a pair gives no snap. cross_subjects returns a point only for two curves (other entities are refused first) and only if within takes it on both entities, and such a point lies in both boxes: bounds holds each entity's whole extent (a segment in the box of its ends' boxes, a circle or an arc in its circle's box, an ellipse or elliptic arc in the square of its major axis, a ray, a line or a disc circle in the whole frame), a conic root, which within does not check, lies on both whole curves, which the boxes hold too, and every box in an index is inside the frame, since Aabb::new refuses any other. Two disjoint boxes share no point, and the carriers the extra try pushes are truncated away after it, so the answer is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace < with == in better",
+      "line_text": "let farther = held.distance_squared[1] < found.distance_squared[0];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "better is private, and best_among, its one caller, takes the candidates in name order (Drawing::new sorts its items by name and refuses a repeated one; the tree's candidates come back sorted by key, the place in that order; scan passes the items in that order) and offers each snap after every one found before it, so found.name is never below held.name and `found.name < held.name` is false. tied is read only joined to that by &&, so whatever farther and tied are, the result is found exactly when closer holds, as in the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace < with > in better",
+      "line_text": "let farther = held.distance_squared[1] < found.distance_squared[0];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "better is private, and best_among, its one caller, takes the candidates in name order (Drawing::new sorts its items by name and refuses a repeated one; the tree's candidates come back sorted by key, the place in that order; scan passes the items in that order) and offers each snap after every one found before it, so found.name is never below held.name and `found.name < held.name` is false. tied is read only joined to that by &&, so whatever farther and tied are, the result is found exactly when closer holds, as in the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace < with <= in better",
+      "line_text": "let farther = held.distance_squared[1] < found.distance_squared[0];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "better is private, and best_among, its one caller, takes the candidates in name order (Drawing::new sorts its items by name and refuses a repeated one; the tree's candidates come back sorted by key, the place in that order; scan passes the items in that order) and offers each snap after every one found before it, so found.name is never below held.name and `found.name < held.name` is false. tied is read only joined to that by &&, so whatever farther and tied are, the result is found exactly when closer holds, as in the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "replace && with || in better",
+      "line_text": "let tied = !closer && !farther;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "better is private, and best_among, its one caller, takes the candidates in name order (Drawing::new sorts its items by name and refuses a repeated one; the tree's candidates come back sorted by key, the place in that order; scan passes the items in that order) and offers each snap after every one found before it, so found.name is never below held.name and `found.name < held.name` is false. tied is read only joined to that by &&, so whatever farther and tied are, the result is found exactly when closer holds, as in the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+      "mutant": "delete ! in better",
+      "line_text": "let tied = !closer && !farther;",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "better is private, and best_among, its one caller, takes the candidates in name order (Drawing::new sorts its items by name and refuses a repeated one; the tree's candidates come back sorted by key, the place in that order; scan passes the items in that order) and offers each snap after every one found before it, so found.name is never below held.name and `found.name < held.name` is false. tied is read only joined to that by &&, so whatever farther and tied are, the result is found exactly when closer holds, as in the original."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+      "mutant": "replace != with == in gcd",
+      "line_text": "while b != 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the loop runs only while b is 0, and then for ever: a.checked_rem(0) is None, read as 0, so a and b both become 0 and stay so. rational and the carrier builders call gcd with a zero second argument whenever a coordinate or coefficient is zero (a point on an axis, a line through the origin), which the tests make, so they run until their timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+      "mutant": "replace > with >= in within",
+      "line_text": "Ok(along.0 == Sign::Zero || (along.0 == Sign::Positive) == (along.1 > 0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "along.1 is the x part of the carrier's direction where that is not 0, and its y part otherwise. A carrier's direction is (b, -a), never (0, 0), since Carrier::new refuses a = b = 0, so along.1 is never 0, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+      "mutant": "replace || with && in within",
+      "line_text": "Ok(sa == Sign::Zero || sb == Sign::Zero || sa != sb)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant is (sa == Zero && sb == Zero) || sa != sb. With sa and sb both Zero both forms are true; with exactly one Zero, sa != sb makes both true; with neither Zero both are sa != sb. They agree on every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+      "mutant": "replace > with >= in arc_holds",
+      "line_text": "Ok(if turn == 0 && dot > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only where turn and dot are both 0, which needs ds or de to be (0, 0): two non-zero vectors are not both parallel and perpendicular. But normal_line, called just before with (-ds[1], ds[0]) and (-de[1], de[0]), then builds a carrier with a = b = 0, which Carrier::new refuses, so arc_holds returns that error before this test is read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+      "mutant": "replace > with >= in arc_holds",
+      "line_text": "} else if turn > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The branch before takes turn == 0, so turn is never 0 here, the one value where > and >= differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when b == a, and then give b for a: the same double unless they are +0.0 and -0.0 (a NaN compares false both ways). No call passes such a pair: fit_spline's moved starts at +0.0 and takes square roots of sums of squares (the square of either zero is +0.0, and so are their sum and its root); piece_biarc passes a sum of absolute values and 1e-300; deviation_of and spline_to_biarcs start their worst at +0.0 and pass distances, which are absolute values, +0.0 at least, or the smaller of two of them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Its one call folds a sample's distances from the two circles of a biarc, from f64::INFINITY. Each is an absolute value, +0.0 at least and never -0.0, so equal arguments are the same double and either may be returned (a NaN compares false both ways)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace > with >= in turns_left",
+      "line_text": "cross.is_some_and(|c| c > 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "turns_left is called only in biarc, after centre(p0, t0, j) and centre(p1, t1, j) have both returned a centre, which needs nd = -t[1] dx + t[0] dy, for the same point, tangent and j, not to be 0. cross is t[0] dy - t[1] dx, the same number (dx and dy differences of i64s, their products far inside i128), so cross is never 0 here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace && with || in biarc",
+      "line_text": "if !(d.is_finite() && d > 0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "d is finite (the coordinates are below 2^40, so v.v and vs are below 2^84, k is between 1e-12 and 4, and d is below 2^126), and d > 0 unless p0 = p1: with v not 0, v.v is at least 1 and k v.v is at least k vs^2 / 4 (|s| is at most 2), so disc exceeds vs^2 by a relative 2.5e-13 at least, far above the rounding of its few steps, its root exceeds |vs|, and -vs + sqrt(disc) > 0. Where p0 = p1, v = 0 and d = 0: the original refuses with NoBiarc here, and the mutant goes on to j = p0 and centre(p0, t0, p0), whose nd is 0, so it returns None and the biarc is refused with NoBiarc too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace > with >= in biarc",
+      "line_text": "if !(d.is_finite() && d > 0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "d is finite and above 0 unless p0 = p1 (the reasoning of the && to || entry on this line), and never -0.0 or 0 otherwise. Where p0 = p1, d = 0: the original refuses with NoBiarc here, and the mutant goes on to j = p0 and centre(p0, t0, p0), whose nd is 0, so it returns None and the biarc is refused with NoBiarc too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace * with / in biarc",
+      "line_text": "let g0 = [-r0[1] * sign0, r0[0] * sign0];",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "sign0 is exactly 1.0 or -1.0, and a double times or divided by either is the same double, sign and NaN included: IEEE 754 makes both exact."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+      "mutant": "replace * with / in biarc",
+      "line_text": "let g1 = [-r1[1] * sign1, r1[0] * sign1];",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "sign1 is exactly 1.0 or -1.0, and a double times or divided by either is the same double, sign and NaN included: IEEE 754 makes both exact."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/region.rs",
+      "mutant": "replace < with > in polygonize",
+      "line_text": "if lowest.is_none_or(|(lv, _)| v < lv) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "polygonize takes as a face's shell the ring through the lowest-numbered vertex of the face's outer cycle; the mutant takes the highest-numbered one. Vertices are numbered in the sweep's order, a total order of the plane. The outer cycle's kept half-edges are the ring of the face's outer boundary and the rings of the parts tied to it by cut edges (dangles are not kept). A part tied on by a cut edge meets the outer boundary nowhere else, or the edge would not be a cut edge, so it lies strictly inside it, and the first and the last points of the closed region in the sweep's order are vertices of the outer boundary, never of such a part. So both forms pick a half-edge of the outer boundary's ring, and the shell and holes come out the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/region.rs",
+      "mutant": "replace < with <= in polygonize",
+      "line_text": "if lowest.is_none_or(|(lv, _)| v < lv) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant takes the last kept half-edge of the face's outer cycle that starts at the lowest-numbered vertex instead of the first. That vertex is on the face's outer boundary, and a part tied on by a cut edge meets that boundary nowhere (or the edge would not be a cut edge), so every kept half-edge of the cycle starting there is on the outer boundary's ring, and the shell is that ring either way."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/colamd.rs",
       "mutant": "replace > with >= in dense",
       "line_text": "len > DENSE_FLOOR",

@@ -324,6 +324,20 @@ fn a_shell_is_found_wherever_the_cut_edge_to_its_hole_is_tied() {
 }
 
 #[test]
+fn a_shell_is_found_when_the_faces_cycle_starts_on_the_cut_edge_to_its_hole() {
+    // The outer ring's lowest-leftmost corner (0, 0) is tied to the hole's corner (30, 25), which
+    // the sweep reaches before either of that corner's neighbours on the outer ring: the face's
+    // boundary walk starts along the cut edge, so the first ring it meets is the hole.
+    let (arr, r) = built(&[
+        &[(0, 0), (100, 50), (100, 100), (50, 100), (0, 0)],
+        &[(30, 25), (40, 25), (40, 35), (30, 35), (30, 25)],
+        &[(0, 0), (30, 25)],
+    ]);
+    assert_eq!(r.cut_edges().len(), 1);
+    assert_eq!(shape(&arr, &r), [(200, vec![]), (10_000, vec![-200])]);
+}
+
+#[test]
 fn a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell() {
     // testPolygonWithTouchingHole upside down: the triangles meet at their lowest vertex.
     let (arr, r) = built(&[
