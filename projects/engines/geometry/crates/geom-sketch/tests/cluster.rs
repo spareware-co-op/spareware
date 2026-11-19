@@ -11,7 +11,9 @@
 //! space), the plan is the one the definitions give; on random Laman graphs built by Henneberg's
 //! two moves (Henneberg 1911; Laman 1970, doi:10.1007/BF01534980) the whole graph is one rigid
 //! cluster, and with one bar removed it is not; a plan is the same for every order of the input;
-//! a component past the size limit is reported and left alone; and a budget too small refuses.
+//! a component past the size limit is reported and left alone, even by a search through the ground
+//! that holds its fixed point, while a body fixed to that ground beside it is still grounded; and a
+//! budget too small refuses.
 //! Kabsch placement recovers every rotation and shift tried in the plane and in space and fits a
 //! mirror image by the nearest rotation, never a reflection; the flow network gives the textbook
 //! flow and cut, takes flow back along an arc, refuses bad nodes before any work, and charges its
@@ -513,6 +515,137 @@ fn a_component_past_the_size_limit_is_named_and_left_alone() {
 /// The plan of `p` with components past `limit` nodes left alone.
 fn planned_within(p: &Problem, limit: usize) -> Plan {
     plan(p, limit, &mut meter()).unwrap()
+}
+
+/// A component of five past a limit of 4, keys `large` upwards, appended to `nodes` and `links`: a
+/// fixed point, a point on it held twice over (a coincidence and a distance, one equation
+/// redundant, so the pair is dense: 2 + 3 - 3 = 2) and a chain of three bars from that point.
+fn add_too_large_component(large: u64, nodes: &mut Vec<Node>, links: &mut Vec<Link>) {
+    let at = nodes.len();
+    for i in 0..5 {
+        nodes.push(Node {
+            key: large + i,
+            weight: 2,
+            fixed: i == 0,
+        });
+    }
+    links.extend([
+        mate(50, at + 1, at, 2),
+        bar(51, at + 1, at),
+        bar(52, at + 1, at + 2),
+        bar(53, at + 2, at + 3),
+        bar(54, at + 3, at + 4),
+    ]);
+}
+
+/// A bar AB joined to a fixed point F by a coincidence of A (2 equations) and a distance from B (1):
+/// a small rigid body, dense with the ground (3 + 4 - 4 = 3), keys `small` (F), `small + 1` (A) and
+/// `small + 2` (B); beside it, the component of [`add_too_large_component`] at keys `large`. With
+/// `body_first` the bar is tried first, so the body is one cluster by the time its links to F are
+/// tried and their lowest member is the ground; else those links are tried while A and B are points.
+fn beside_a_too_large_component(small: u64, large: u64, body_first: bool) -> Problem {
+    let mut nodes = vec![
+        Node {
+            key: small,
+            weight: 2,
+            fixed: true,
+        },
+        Node {
+            key: small + 1,
+            weight: 2,
+            fixed: false,
+        },
+        Node {
+            key: small + 2,
+            weight: 2,
+            fixed: false,
+        },
+    ];
+    let (ab, af, bf) = if body_first { (1, 2, 3) } else { (3, 1, 2) };
+    let mut links = vec![bar(ab, 1, 2), mate(af, 1, 0, 2), bar(bf, 2, 0)];
+    add_too_large_component(large, &mut nodes, &mut links);
+    planar(nodes, links)
+}
+
+#[test]
+fn a_body_fixed_to_the_ground_beside_a_too_large_component_is_grounded() {
+    // Issue #1056: the ground holds the large component's fixed point too, and must stay open to
+    // the small component all the same, whichever of its links is tried first and wherever its
+    // keys lie against the large component's, while the large component stays unsearched.
+    for (small, large) in [(10, 30), (30, 10)] {
+        for body_first in [true, false] {
+            let p = beside_a_too_large_component(small, large, body_first);
+            let plan = planned_within(&p, 4);
+            let case = format!("small {small}, large {large}, body first {body_first}: {plan:?}");
+            assert_eq!(plan.too_large, [large], "{case}");
+            assert!(plan.clusters[0].grounded, "{case}");
+            assert_eq!(
+                keys_under(&plan, Child::Cluster(0)),
+                BTreeSet::from([small, large]),
+                "{case}"
+            );
+            // The body is grounded: the last cluster holds it and the ground, with no redundancy.
+            let last = plan.clusters.len() - 1;
+            assert!(plan.clusters[last].grounded, "{case}");
+            assert_eq!(plan.clusters[last].redundant, 0, "{case}");
+            assert_eq!(
+                keys_under(&plan, Child::Cluster(last)),
+                BTreeSet::from([small, small + 1, small + 2, large]),
+                "{case}"
+            );
+            // Nothing past the ground reaches the large component: its four free points are each
+            // left at the top, beside the grounded body, and no cluster holds one.
+            let mut top = vec![Child::Cluster(last)];
+            top.extend((large + 1..large + 5).map(Child::Node));
+            top.sort_unstable_by_key(|&c| keys_under(&plan, c).first().copied());
+            assert_eq!(plan.top, top, "{case}");
+            for c in 1..plan.clusters.len() {
+                let keys = keys_under(&plan, Child::Cluster(c));
+                assert!((large + 1..large + 5).all(|k| !keys.contains(&k)), "{case}");
+            }
+        }
+    }
+}
+
+#[test]
+fn no_search_grows_through_the_ground_into_a_too_large_component() {
+    // Issue #1056: a point P hangs from a fixed point F by one bar, so the search from that bar,
+    // a pair of 4 freedoms, grows a ring at a time; F is in the ground with the large component's
+    // fixed point, so the ring through the ground would reach that component's doubly held point
+    // and find it dense with the ground. The large component is not searched, so the plan is the
+    // ground alone, with P loose.
+    let mut nodes = vec![
+        Node {
+            key: 10,
+            weight: 2,
+            fixed: true,
+        },
+        Node {
+            key: 11,
+            weight: 2,
+            fixed: false,
+        },
+    ];
+    let mut links = vec![bar(1, 1, 0)];
+    add_too_large_component(20, &mut nodes, &mut links);
+    let plan = planned_within(&planar(nodes, links), 4);
+    assert_eq!(plan.too_large, [20]);
+    assert_eq!(plan.clusters.len(), 1, "{plan:?}");
+    assert_eq!(
+        keys_under(&plan, Child::Cluster(0)),
+        BTreeSet::from([10, 20])
+    );
+    assert_eq!(
+        plan.top,
+        [
+            Child::Cluster(0),
+            Child::Node(11),
+            Child::Node(21),
+            Child::Node(22),
+            Child::Node(23),
+            Child::Node(24)
+        ]
+    );
 }
 
 #[test]

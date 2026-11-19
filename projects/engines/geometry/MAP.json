@@ -17622,7 +17622,7 @@
             "**Complete.** Each node belongs to at most one cluster of a level; a cluster is minimal; when [`plan`] returns, no dense set of two nodes or more with a constraint among them is left in a component within the size limit, so the top-level nodes are what no rigid body explains.",
             "**The ground.** The fixed nodes form one ground cluster of weight D, made first. A cluster that absorbs it is `grounded`: it is placed in the sketch's frame and keeps no freedom. Any other cluster keeps D freedoms.",
             "**Iterative.** Every search keeps an explicit stack or queue charged to the meter, so no sketch can overflow the machine's stack (principle 13).",
-            "**Size limit.** A component of more than `limit` nodes is not searched and is reported in [`Plan::too_large`], by its lowest key (15.5; until measured the limit is [`SIZE_LIMIT`])."
+            "**Size limit.** A component of more than `limit` nodes is not searched and is reported in [`Plan::too_large`], by its lowest key (15.5; until measured the limit is [`SIZE_LIMIT`]): no search starts in it or grows into its nodes, not even through the ground that holds its fixed nodes, and the ground stays open to every component within the limit."
           ],
           "job": "Rigid clusters: the Hoffmann–Lomonosov–Sitharam decomposition of a constraint graph, for any number of rigid motions D.",
           "method": {

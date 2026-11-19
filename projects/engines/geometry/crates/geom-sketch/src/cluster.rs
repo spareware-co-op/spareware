@@ -29,7 +29,9 @@
 //! - **Iterative.** Every search keeps an explicit stack or queue charged to the meter, so no
 //!   sketch can overflow the machine's stack (principle 13).
 //! - **Size limit.** A component of more than `limit` nodes is not searched and is reported in
-//!   [`Plan::too_large`], by its lowest key (15.5; until measured the limit is [`SIZE_LIMIT`]).
+//!   [`Plan::too_large`], by its lowest key (15.5; until measured the limit is [`SIZE_LIMIT`]): no
+//!   search starts in it or grows into its nodes, not even through the ground that holds its fixed
+//!   nodes, and the ground stays open to every component within the limit.
 //!
 //! Method: Hoffmann, Lomonosov and Sitharam, "Finding solvable subsets of constraint graphs"
 //! (CP'97, doi:10.1007/BFb0017460) and "Decomposition plans for geometric constraint systems, Part
@@ -165,6 +167,7 @@ struct Work {
     key: Vec<u64>,
     child: Vec<Child>,
     ground: Vec<bool>,
+    /// The nodes of the components past the size limit, which no search starts at or reaches.
     blocked: Vec<bool>,
     alive: Vec<bool>,
     members: Vec<Vec<usize>>,
@@ -333,7 +336,8 @@ impl Work {
         }
     }
 
-    /// The nodes within `hops` links of `from`, ascending.
+    /// The nodes within `hops` links of `from`, ascending, never a blocked one: the ground holds
+    /// the fixed nodes of a component past the size limit, so its links lead into that component.
     fn region(
         &mut self,
         from: &[usize],
@@ -353,7 +357,9 @@ impl Work {
                         continue;
                     }
                     for &u in self.members.get(l).ok_or(SketchError::Internal)? {
-                        push(&mut fresh, u)?;
+                        if !get(&self.blocked, u)? {
+                            push(&mut fresh, u)?;
+                        }
                     }
                 }
             }
@@ -420,11 +426,9 @@ impl Work {
         let mut touched = Vec::new();
         let mut children = Vec::new();
         let mut any_ground = grounded;
-        let mut any_blocked = false;
         let mut lowest = u64::MAX;
         for &v in set {
             any_ground |= get(&self.ground, v)?;
-            any_blocked |= get(&self.blocked, v)?;
             lowest = lowest.min(get(&self.key, v)?);
             push(&mut children, (get(&self.key, v)?, get(&self.child, v)?))?;
             for &l in self.incident.get(v).ok_or(SketchError::Internal)? {
@@ -464,7 +468,9 @@ impl Work {
         push(&mut self.key, lowest)?;
         push(&mut self.child, Child::Cluster(id))?;
         push(&mut self.ground, any_ground)?;
-        push(&mut self.blocked, any_blocked)?;
+        // Never blocked: no search reaches a blocked node, so the ground is the one cluster that
+        // can hold one, and it stays open to the components within the size limit.
+        push(&mut self.blocked, false)?;
         push(&mut self.alive, true)?;
         push(&mut self.incident, kept)?;
         push(&mut self.stamp, 0)?;
