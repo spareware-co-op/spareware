@@ -301,10 +301,10 @@
       "case": "bldg-33",
       "test": "bldg_33_sloped_slab_with_a_vertical_round_opening",
       "ours": true,
-      "fault": "WR-3 (ours: geom-solidcore's conversion, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, and the conversion of solidcore's record into the kernel's body has no row for a record's ellipse (convert.rs writes lines and circles; geom-curve has an Ellipse kind), so the result is refused as unconverted. The extrusion itself (bldg-32) and the cylinder both pass the checker",
-      "solidcore_gives": "a body the conversion refuses: Unconverted { operation: \"difference\", what: \"an ellipse\" }",
+      "fault": "CK-4 (ours: geom-check, not solidcore), an ellipse: the sloped slab less a vertical cylinder has the sloped plane cutting the cylinder in two ellipses, which the conversion now writes as the kernel's own ellipse (decision 32.93; it was WR-3, the conversion had no row for an ellipse); group 2 of the kernel's checker has no certified check of an ellipse as an edge's carrier, so each is reported unchecked, as the kernel's own body of the same shape would be. The extrusion itself (bldg-32) and the cylinder both pass the checker. What stands behind group 2 (group 3's pairs of an ellipse with the slab's other edges, and of the sloped plane and the cylinder meeting along it) is not yet measured",
+      "solidcore_gives": "the slab with its round opening, refused by the kernel's checker: 2 faults, the first \"group 2, curve 7: no certified check of this carrier exists yet (edge 7)\"",
       "expected": "one solid of volume 6 - pi 0.5^2 0.25, passed by the checker",
-      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until the conversion writes the kernel's ellipse"
+      "blocks": "every result with an elliptical edge (a sloped plane through a cylinder: sloped slabs and roofs with round openings), until group 2 certifies an ellipse on its faces' surfaces"
     },
     {
       "case": "bldg-47",
