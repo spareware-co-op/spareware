@@ -5573,11 +5573,13 @@ fn digests_do_not_depend_on_thread_count_or_order() {
                     let all = &all;
                     scope.spawn(move || {
                         // Each thread walks its share backwards, so the order differs too.
-                        let mine = all.iter().enumerate().filter(|(i, _)| i % threads == t);
-                        let mut out: Vec<(usize, Digests)> =
-                            mine.map(|(i, case)| (i, case.prepare().run())).collect();
-                        out.reverse();
-                        out
+                        let mine = all
+                            .iter()
+                            .enumerate()
+                            .rev()
+                            .filter(|(i, _)| i % threads == t);
+                        mine.map(|(i, case)| (i, case.prepare().run()))
+                            .collect::<Vec<(usize, Digests)>>()
                     })
                 })
                 .collect();
@@ -5590,12 +5592,23 @@ fn digests_do_not_depend_on_thread_count_or_order() {
         let got: Vec<Digests> = got.into_iter().map(Option::unwrap).collect();
         assert_eq!(got, sequential, "{threads} threads");
     }
-    // A prepared benchmark gives the same digest every time it runs.
-    for case in &all {
-        let mut prepared = case.prepare();
-        let first = prepared.run();
-        assert!((0..3).all(|_| prepared.run() == first), "{}", case.name());
-    }
+    // A prepared benchmark gives the same digest every time it runs. Each case's four runs are on
+    // one thread, the cases shared among as many threads as the machine runs at once: on one
+    // thread these were four of the nine runs of each benchmark this test makes, and the test
+    // took 489 seconds of the debug job of kernel-bench.yml in run 44504523210.
+    let width = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    std::thread::scope(|scope| {
+        for t in 0..width {
+            let all = &all;
+            scope.spawn(move || {
+                for case in all.iter().skip(t).step_by(width) {
+                    let mut prepared = case.prepare();
+                    let first = prepared.run();
+                    assert!((0..3).all(|_| prepared.run() == first), "{}", case.name());
+                }
+            });
+        }
+    });
 }
 
 #[test]

@@ -88,6 +88,10 @@
 //!   (`geom_test::ember::MODELS`), each held to the SHA-256 the corpus register holds for it before
 //!   any benchmark runs; every part lists the ember benchmark with the catalogue's, so the judge,
 //!   which reads both bench targets' summaries, refuses a run in which no part measured it.
+//! - `the_geom_bench_checks_run_each_once_in_parts`: `kernel-bench.yml`'s geom-bench checks run in
+//!   parts 1 to n side by side, so no job runs them all one after another: its formatting, lints,
+//!   release tests and debug tests each run in exactly one part, every part runs at least one, and
+//!   every step that sets a part up runs in every part.
 //!
 //! Each check is also shown to fail on a seeded violation.
 
@@ -3601,6 +3605,130 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
         let planted = bench.replacen(from, to, 1);
         assert_ne!(planted, bench, "the planted edit {from:?} applies");
         let found = bench_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// The checks of `kernel-bench.yml`'s job `checks`, each by its step's name with a piece of the
+/// command it runs.
+const BENCH_CHECKS: [(&str, &str); 4] = [
+    ("Formatting", "fmt --check -p geom-bench"),
+    (
+        "Clippy with geom-bench's lints",
+        "clippy --locked -p geom-bench --all-targets",
+    ),
+    (
+        "Test in release, with overflow checks on",
+        "test --locked --release -p geom-bench",
+    ),
+    ("Test in debug", "test --locked -p geom-bench"),
+];
+
+/// What is wrong with the parts of `kernel-bench.yml`'s `checks`: its matrix is parts 1 to n, n at
+/// least 2, and its name says which; each of [`BENCH_CHECKS`] runs its command in exactly one part,
+/// and every part runs at least one; every other step sets a part up, runs no cargo command and
+/// runs in every part.
+fn bench_check_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let job = &w["jobs"]["checks"];
+    let parts: Vec<i64> = job["strategy"]["matrix"]["k"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_i64)
+        .collect();
+    let n = i64::try_from(parts.len()).unwrap_or(0);
+    if n < 2 || parts != (1..=n).collect::<Vec<_>>() {
+        found.push(format!("checks is not in parts 1 to n: {parts:?}"));
+    }
+    if !text(&job["name"]).contains(&format!("part ${{{{ matrix.k }}}} of {n})")) {
+        found.push("the name of checks does not say its part".to_owned());
+    }
+    let steps: Vec<&Yaml> = job["steps"].as_vec().into_iter().flatten().collect();
+    let mut ran = vec![0_usize; parts.len()];
+    for (name, command) in BENCH_CHECKS {
+        let Some(step) = steps.iter().find(|s| s["name"].as_str() == Some(name)) else {
+            found.push(format!("checks has no step {name:?}"));
+            continue;
+        };
+        if !text(&step["run"]).contains(command) {
+            found.push(format!("{name:?} does not run {command:?}"));
+        }
+        match parts_of(&text(&step["if"]), &parts).as_deref() {
+            Some(&[k]) => {
+                if let Some(i) = parts.iter().position(|p| *p == k) {
+                    ran[i] += 1;
+                }
+            }
+            Some(p) => found.push(format!("{name:?} runs in parts {p:?}, not exactly one")),
+            None => found.push(format!("{name:?} names its part as this test cannot read")),
+        }
+    }
+    for step in &steps {
+        let name = text(&step["name"]);
+        if BENCH_CHECKS.iter().any(|(n, _)| *n == name) {
+            continue;
+        }
+        if text(&step["run"]).contains("cargo") {
+            found.push(format!("{name:?} runs cargo and is not one of the checks"));
+        }
+        if parts_of(&text(&step["if"]), &parts).as_ref() != Some(&parts) {
+            found.push(format!("{name:?} does not set up every part"));
+        }
+    }
+    for (k, count) in parts.iter().zip(&ran) {
+        if *count == 0 {
+            found.push(format!("part {k} of checks runs none of the checks"));
+        }
+    }
+    found
+}
+
+#[test]
+fn the_geom_bench_checks_run_each_once_in_parts() {
+    let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
+    let found = bench_check_problems(&parse(&bench));
+    assert!(found.is_empty(), "{found:#?}");
+    for (from, to, said) in [
+        (
+            "        k: [1, 2]\n",
+            "        k: [1]\n",
+            "not in parts 1 to n",
+        ),
+        (
+            "(geom-bench, part ${{ matrix.k }} of 2)",
+            "(geom-bench)",
+            "does not say its part",
+        ),
+        (
+            "      - name: Formatting\n        if: matrix.k == 1\n",
+            "      - name: Formatting\n",
+            "\"Formatting\" runs in parts [1, 2], not exactly one",
+        ),
+        (
+            "      - name: Test in debug\n        if: matrix.k == 2\n",
+            "      - name: Test in debug\n        if: matrix.k == 1\n",
+            "part 2 of checks runs none of the checks",
+        ),
+        (
+            "      - name: Test in debug\n",
+            "      - name: Test in debug, again\n",
+            "has no step \"Test in debug\"",
+        ),
+        (
+            "      - name: Formatting\n",
+            "      - name: Build\n        run: cargo build -p geom-bench\n\n      - name: Formatting\n",
+            "\"Build\" runs cargo and is not one of the checks",
+        ),
+        (
+            "          components: rustfmt, clippy\n\n      - name: Cache the Rust build\n",
+            "          components: rustfmt, clippy\n\n      - name: Cache the Rust build\n        if: matrix.k == 1\n",
+            "\"Cache the Rust build\" does not set up every part",
+        ),
+    ] {
+        let planted = bench.replacen(from, to, 1);
+        assert_ne!(planted, bench, "the planted edit {from:?} applies");
+        let found = bench_check_problems(&parse(&planted));
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
