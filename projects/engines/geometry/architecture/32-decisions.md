@@ -1479,7 +1479,7 @@ Guarded by planted cases (`geom-test`'s `tests/oracle_meshes.rs`): a solid that 
 
 **Changes:** this record; geom-solidcore's `src/lib.rs` (`Profile`, `Hole`, `Modeller::extrude`, `Error::Invalid`, the module header), `tests/cases.rs` (the shape `extrusion`, the operation `extrude`, 21 cases and the unit test), `tests/cases.json`, `tests/case_names.txt` and `tests/named-faults.json` (SC-8, WR-3, WR-4); `kernel.yml`'s two counts.
 
-## 32.97 Group 3 certifies two faces on spheres apart when the spheres, widened by the faces' stray, are apart
+## 32.98 Group 3 certifies two faces on spheres apart when the spheres, widened by the faces' stray, are apart
 
 **Decided by the main session, 19 Nov 2026** (its brief to the lane `ck1-sphere`, issue #991, named fault CK-1), under chapter 8.3's rule that a pair is certified with bounds, not sampled, and is otherwise a fault. The case bool-26 (a ball of radius 1 less a concentric ball of radius 0.5) was refused by group 3 with one fault, "no certified test of this pair exists yet": nothing certified two faces on spheres, so the outer sphere and the cavity were `PairUnchecked`, as the kernel's own form of a hollow ball (two shells, each one sphere face with no edge, as `geom-make` writes a ball, the cavity's reversed) would be.
 
