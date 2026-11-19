@@ -17,8 +17,8 @@
 mod common;
 
 use common::{
-    CUBE, CUBE_FACES, Rows, acorn, certified, circle, cube, faces_into, faults, has, ix, kinds,
-    pcircle, polyhedron, report, sphere, square_sheet, wire,
+    CUBE, CUBE_FACES, Rows, acorn, certified, circle, cube, cylinder, faces_into, faults, has, ix,
+    kinds, pcircle, polyhedron, report, sphere, square_sheet, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, MAX_FAULTS};
 use geom_num::Exactness;
@@ -431,11 +431,13 @@ const PINCHED: [[i64; 3]; 8] = [
     [-1, 1, 1],
 ];
 
-#[test]
-fn a_vertex_two_shells_share_is_not_a_solids() {
-    // Two cubes touching at one corner, vertex 7 of the first and the second's least corner,
-    // each the one shell of a solid region of its own: each shell closes, and the solids touch
-    // at that vertex (chapter 8.1, mixed and non-manifold), so the body is general, never solid.
+/// Two cubes touching at one corner, vertex 7 of the first and the second's least corner, each
+/// the one shell of a solid region of its own.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a cube's corners moved by its side"
+)]
+fn cubes_touching_at_a_corner() -> Rows {
     let mut r = cube();
     let solid = r.region(RegionKind::Solid);
     let s = r.shell(solid);
@@ -456,18 +458,52 @@ fn a_vertex_two_shells_share_is_not_a_solids() {
         .collect();
     let rings: Vec<&[u32]> = faces.iter().map(Vec::as_slice).collect();
     faces_into(&mut r, s, &rings);
+    r
+}
+
+/// The fault of [`cubes_touching_at_a_corner`] as a solid: the first corner at vertex 7 is the
+/// first cube's, and the first of the second's is where fin 27, the last of its first face's,
+/// ends.
+fn corner_in_two_shells() -> Fault {
+    Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(7))).with(Entity::Fin(ix(27)))
+}
+
+#[test]
+fn a_vertex_two_shells_share_is_not_a_solids() {
+    // Each shell closes, and the solids touch at that vertex (chapter 8.1, mixed and
+    // non-manifold), so the body is general, never solid.
+    let r = cubes_touching_at_a_corner();
     let f = faults(&r, BodyKind::Solid);
-    // The first corner at vertex 7 is the first cube's; the first of the second's is where fin
-    // 27, the last of its first face's, ends.
-    assert_eq!(
-        f,
-        [Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(7))).with(Entity::Fin(ix(27)))]
-    );
+    assert_eq!(f, [corner_in_two_shells()]);
     assert_eq!(
         f[0].to_string(),
         "group 1, vertex 7: the vertex of a solid has corners in two shells (fin 27)"
     );
     assert_eq!(faults(&r, BodyKind::General), []);
+}
+
+#[test]
+fn a_fin_on_a_closed_edge_without_vertices_has_no_corner_to_judge() {
+    // A cylinder's fins run on its two circles, closed edges without vertices: no fin has a
+    // corner, so the fans check's sets pass over each, and no vertex is judged by them. The two
+    // ways a solid reaches those sets, with the cylinder's fins among the solid's:
+    //
+    // - The touching cubes, with the cylinder as a third solid region: sound until the fans,
+    //   where the walk fan by fan finds vertex 7's second fan. Its fault is the cubes' own, at
+    //   the same rows (the cylinder's come after them), and nothing is found at the cylinder.
+    let mut r = cubes_touching_at_a_corner();
+    common::cylinder_into(&mut r);
+    assert_eq!((r.vertices.len(), r.fins.len()), (15, 52));
+    assert_eq!(faults(&r, BodyKind::Solid), [corner_in_two_shells()]);
+    // - A cylinder whose side runs the same way as its top along the top circle: a partner fault
+    //   before the fans, so the body is not sound and is judged by the sets. It has no vertex, so
+    //   the partners are all that is wrong.
+    let mut r = cylinder();
+    r.fins[2].sense = Sense::Forward;
+    assert_eq!(
+        faults(&r, BodyKind::Solid),
+        [Fault::at(FaultKind::PartnerSense, Entity::Edge(ix(0)))]
+    );
 }
 
 #[test]
