@@ -1852,13 +1852,15 @@ enum Part {
 }
 
 /// The stretches of `curve` on both domains, and how each ends; a run of them on both too short to
-/// be a stretch, a point. `None` where no edge cuts the curve and its middle's box reaches an edge
-/// of a domain, off neither (decision 32.94): one box cannot say whether the whole curve lies on
-/// both, and the pair is the engine's.
+/// be a stretch, a point. `None` where no edge cuts the curve and the box of the meeting's middle
+/// reaches an edge of a domain, off neither (decision 32.94): one box cannot say whether the whole
+/// curve lies on both, and the pair is the engine's. `reach` is how far the stored curve may stand
+/// from the meeting it stands for, the bound its item certifies.
 fn trimmed(
     curve: &CurveKind<3>,
     (a, b): (&SurfaceKind, &SurfaceKind),
     marks: &[Vector],
+    reach: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Part>>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
@@ -1866,11 +1868,15 @@ fn trimmed(
     let loops = closed(curve);
     if cut.is_empty() {
         // No edge cuts the curve, so it lies on both domains all along or nowhere, and its middle
-        // tells which only where its box is inside both, or off one.
+        // tells which only where its box is inside both, or off one. The box is the meeting's: the
+        // stored curve's middle grown by its reach. An edge the exact signs place past the meeting
+        // can still cross the stored curve, a rounding off it (issue 1018 with 32.87's exact line
+        // against a cone), and the stored middle's own box would call it inside.
         let Some(kept) = stretch(curve, lo, hi)? else {
             return Ok(Some(Vec::new()));
         };
-        let at = at_parameter(curve, lo * 0.5 + hi * 0.5, meter)?;
+        let room = Interval::new(-reach, reach)?;
+        let at = plus(at_parameter(curve, lo * 0.5 + hi * 0.5, meter)?, [room; 3])?;
         let (p, q) = (standing(a, at)?, standing(b, at)?);
         if p == Standing::Off || q == Standing::Off {
             return Ok(Some(Vec::new()));
@@ -2105,7 +2111,7 @@ fn items_of(
                     Some(list) => list,
                     None => marks(a, b, meter)?,
                 };
-                let Some(parts) = trimmed(&nearer(*curve)?, (a, b), &marks, meter)? else {
+                let Some(parts) = trimmed(&nearer(*curve)?, (a, b), &marks, reach, meter)? else {
                     return Ok(None);
                 };
                 found_marks = Some(marks);
