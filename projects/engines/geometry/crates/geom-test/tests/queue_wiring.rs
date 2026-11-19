@@ -3684,6 +3684,10 @@ fn bench_check_problems(w: &Yaml) -> Vec<String> {
     found
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
 #[test]
 fn the_geom_bench_checks_run_each_once_in_parts() {
     let bench = read(&format!("{WORKFLOWS}/kernel-bench.yml"));
