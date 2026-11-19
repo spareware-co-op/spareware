@@ -1,0 +1,59 @@
+[package]
+name = "geom-solidcore"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "Spare Kit geometry kernel: solidcore, taken whole at one commit, behind the kernel's own interface."
+
+# Its own workspace, with its own Cargo.lock, outside the kernel's workspace and its no_std gate
+# (decision 32.70): solidcore is about a million lines and one compiler process of it takes 10 to
+# 17 minutes and about 7 GB, so it must never be pulled into the kernel's test, coverage, mutants,
+# Miri or Kani jobs. The repository's root Cargo.toml excludes this folder, and `kernel.yml`'s job
+# `solidcore` builds and tests it alone.
+[workspace]
+
+[dependencies]
+# solidcore (Apache-2.0), the Rust port of SMLib, from the project's own fork of
+# tangency-labs/solidcore, pinned to one commit (decision 32.70). Its normal dependency tree is
+# 11 crates, every one MIT OR Apache-2.0 (unicode-ident adds Unicode-3.0), and none has unsafe code.
+# The pin moves only through every case in tests/cases.rs passing first.
+solidcore = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
+# solidcore's own record of a body (solidcore-record, Apache-2.0) and its writer
+# (solidcore-convert, Apache-2.0), from the same repository at the same commit: the plain B-rep
+# this crate converts into the kernel's body. They add serde, serde_json and thiserror (each MIT
+# OR Apache-2.0), already in the tree.
+solidcore-convert = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
+solidcore-record = { git = "https://github.com/spareware-co-op/solidcore", rev = "cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3" }
+# The kernel's own crates the converted body is made of and checked by (Apache-2.0, this
+# repository).
+geom-check = { path = "../crates/geom-check" }
+geom-curve = { path = "../crates/geom-curve" }
+geom-math = { path = "../crates/geom-math" }
+geom-num = { path = "../crates/geom-num" }
+geom-run = { path = "../crates/geom-run" }
+geom-surface = { path = "../crates/geom-surface" }
+geom-topo = { path = "../crates/geom-topo" }
+
+# Unoptimised and without debug information: the one solidcore crate is almost all of the build,
+# and its code generation is what an optimised build spends its minutes on. The cases run in
+# seconds unoptimised. What the cases compare does not depend on the profile.
+[profile.dev]
+debug = false
+
+[profile.test]
+debug = false
+
+[dev-dependencies]
+# The case table's reader (MIT OR Apache-2.0), the version the kernel's own workspace uses, with
+# `arbitrary_precision` so that each number keeps the decimal text the table writes.
+serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }
+# Reads that text as an exact decimal (MIT OR Apache-2.0), so that a case's length is a whole
+# number of grid steps exactly or the case is refused, never rounded through an f64.
+bigdecimal = "=0.4.8"
+# The kernel's own primitives and their operation context (Apache-2.0, this repository): SC-5's
+# cylinder stays the kernel's (decision 32.76), and a test makes it the kernel's way beside
+# solidcore's. geom-op adds sha2 and unicode-normalization (each MIT OR Apache-2.0), already in
+# the kernel's tree.
+geom-make = { path = "../crates/geom-make" }
+geom-op = { path = "../crates/geom-op" }

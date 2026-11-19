@@ -3,11 +3,12 @@
 //!
 //! - `piercing_fuzz` wraps `geom_fuzz::piercing::harness` in `bolero::check!`: the crate's corpus and
 //!   crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test piercing_fuzz --package geom-fuzz` it is a
-//!   libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`.
 //! - `piercing_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and the cases reach every kind of surface.
+//! - Issue 995's segments along planes off the grid are answered by the closed form, each held to
+//!   its answer and its count.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -27,7 +28,7 @@ mod common;
 
 use common::holds;
 
-use geom_fuzz::piercing::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness};
+use geom_fuzz::piercing::{Case, Drawn, MAX_INPUT_BYTES, answer_of, check, decode, harness};
 use geom_fuzz::seeded;
 use geom_test::Seed;
 
@@ -85,6 +86,112 @@ fn the_input_bound_is_reached_and_never_passed() {
     let (empty, read) = decode(&[]);
     assert_eq!(read, 0);
     holds(check(&empty));
+}
+
+/// An input, the (u, v) enclosures of the overlap it answers (`None` for no item), and its count.
+type Pinned = (&'static [u8], Option<[(f64, f64); 2]>, u128);
+
+/// The inputs of issue 995 stored in the target's `crashes` folder, each with the answer one call
+/// of `curve_surface` gives and the work it takes: a segment along y lying in, or parallel to, a
+/// plane whose first vector holds a half. The first three are the timeouts of the 14 November
+/// campaign, which ran the engine to the budget (1,048,577 units each); the next three are slow
+/// units of a search on the Phase 5 train, parallel and 0.48, 8.3 and 3.97 off the plane (913,098,
+/// 720,686 and 919,038 units to say nothing); the last lies in its plane (1,017,940 units for one
+/// flagged item). Lying in a plane and running along it are exact signs now (decision 32.85): a
+/// segment in its plane is one overlap by identity over all of it, t in [0, 1], at the enclosures
+/// of (u, v) given, and one along it off the plane is nothing.
+const LINES_ALONG_PLANES: [Pinned; 7] = [
+    (
+        &[
+            0x00, 0x00, 0x20, 0x00, 0x00, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xa9, 0x00,
+            0x09,
+        ],
+        Some([
+            (-5e-324, 5e-324),
+            (-100.000_000_000_000_24, 128.000_000_000_000_34),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0xde, 0x00, 0x03, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x61, 0xa8,
+            0x2e, 0x60,
+        ],
+        Some([
+            (-5e-324, 5e-324),
+            (0.071_005_917_159_763_12, 0.094_674_556_213_018_03),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x31,
+        ],
+        Some([
+            (-1e-323, 1e-323),
+            (-7.105_427_357_601_023e-17, 0.320_000_000_000_000_95),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x25, 0x00, 0x00, 0xe7, 0x00, 0xfc, 0xff, 0xff, 0xff, 0x07, 0x13, 0x00,
+            0xa2, 0x21, 0x09,
+        ],
+        None,
+        0,
+    ),
+    (
+        &[
+            0xde, 0x00, 0x03, 0x00, 0x00, 0x04, 0x00, 0x00, 0x04, 0xff, 0x00, 0x4f, 0x61, 0xa8,
+            0x2e, 0x00,
+        ],
+        None,
+        0,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x01, 0xd5, 0x31,
+        ],
+        None,
+        0,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x29, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01,
+            0x09,
+        ],
+        Some([
+            (-1.67e-321, 1.67e-321),
+            (63.999_999_999_999_81, 82.000_000_000_000_24),
+        ]),
+        1,
+    ),
+];
+
+/// The answer's items as `Debug` prints them: the overlap over all of the segment at `uv`, or none.
+fn along(uv: Option<[(f64, f64); 2]>) -> String {
+    let Some([(u0, u1), (v0, v1)]) = uv else {
+        return "[]".to_owned();
+    };
+    format!(
+        "[Overlap {{ at: ParamBox {{ spans: [Interval {{ lo: 0.0, hi: 1.0 }}, Interval {{ lo: \
+         {u0:?}, hi: {u1:?} }}, Interval {{ lo: {v0:?}, hi: {v1:?} }}, Interval {{ lo: 0.0, hi: \
+         0.0 }}], unknowns: 3 }}, region: OverlapRegion {{ boundary: [] }}, proof: Identical, \
+         class: Certified {{ bound: Steps(1), step: Q0 }} }}]"
+    )
+}
+
+#[test]
+fn a_segment_along_a_plane_off_the_grid_is_a_closed_form() {
+    for (data, uv, work) in LINES_ALONG_PLANES {
+        let (case, _) = decode(data);
+        let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let found = found.unwrap_or_else(|| panic!("stopped on the budget: {data:02x?}"));
+        assert_eq!(format!("{:?}", found.items()), along(uv), "{data:02x?}");
+        assert_eq!(used, work, "{data:02x?}");
+        holds(check(&case));
+    }
 }
 
 #[test]

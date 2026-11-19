@@ -110,7 +110,7 @@ use geom_test::golden::{self, Sha256, hex};
 ///
 /// The same digest must hold on every target and thread count: see the module documentation. A
 /// change is either a bug or a deliberate kernel edition change, recorded in the store in a pull
-/// request that says which and is approved by a kernel owner.
+/// request that says which, in the golden's history record (decision 32.54).
 ///
 /// Its digest replaced the corpus's 64-bit FNV-1a golden, `0x8643_5a99_5463_851e`, when the hash
 /// moved to SHA-256 (chapter 28.13): both are hashes of the same bytes, so no result changed. It

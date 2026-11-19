@@ -27,6 +27,12 @@ h1 a { color: inherit; text-decoration: none; }
 .s-none, .k-none { background: var(--sink); }
 .k { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin: 0 5px 0 0; vertical-align: -1px; border: 1px solid var(--rule); }
 .k-main { border-color: var(--spare-red); }
+.o-ours { background: var(--spare-red); border-color: var(--spare-red); }
+.o-sc { background: var(--info); border-color: var(--info); }
+.o-held { background: repeating-linear-gradient(135deg, var(--info-tint) 0 4px, var(--panel) 4px 7px); box-shadow: inset 0 0 0 1px var(--info); }
+.o-none { background: var(--sink); }
+.why { color: var(--ink-2); }
+h2 { font-size: 17px; margin: 0; }
 .legend, .counts { font-size: 13px; color: var(--ink-2); margin: 0; }
 .legend > span, .counts > span { display: inline-block; white-space: nowrap; margin-right: 12px; }
 .next { margin: 0; padding: 8px 12px; background: var(--panel-alt); border-left: 3px solid var(--spare-red); }
@@ -49,9 +55,21 @@ footer p { margin: 0; }
 <div class="wrap">
   <header>
     <h1><a href="./">Spareware</a> · The geometry kernel</h1>
-    <p class="sub">How far the Spare Kit geometry kernel has come, against its build board of {{SIZE}} pieces in {{PHASES}} phases. Each phase ends at a gate, a review that proves the phase before the next one leans on it.</p>
+    <p class="sub">How far the Spare Kit geometry kernel has come. Some of its work is done by our own exact core, and some by solidcore, an outside modelling engine taken in whole, which counts only where it passes every one of our own tests.</p>
+    <p class="sub"><a href="./kernel-map.html">The map: how the kernel fits together, from the programs down to the files</a></p>
   </header>
   <div class="card">
+    <h2>The operations</h2>
+    <div class="big"><span class="pct">{{OP_PCT}}%</span><span class="what">of the kernel's {{OP_SIZE}} operations work today</span></div>
+    <p>{{OP_HEADLINE}}</p>
+    {{OP_BAR}}
+    <p class="legend">{{OP_LEGEND}}</p>
+    <p class="why">An operation is something a program asks the kernel to do, such as cutting a window out of a wall. <b>Ours, on main</b>: built by our own exact core and merged. <b>Done by solidcore</b>: every one of our tests for it passes, on Linux and in the browser (WebAssembly). <b>solidcore, held back</b>: solidcore has it, but one of our tests finds a fault (named SC-1, SC-2 and so on) or is waiting for the link to solidcore to offer the operation it needs.{{OP_LANDING}}</p>
+    <details><summary>The operations, one by one</summary>{{OP_LISTS}}</details>
+  </div>
+  <div class="card">
+    <h2>The build board</h2>
+    <p class="why">Every piece of work on our build board of {{SIZE}} pieces in {{PHASES}} phases, operations and the parts under them. Each phase ends at a gate, a review that proves the phase before the next one leans on it.</p>
     <div class="big"><span class="pct">{{PCT}}%</span><span class="what">on main, and {{PCT_BUILT}}% built counting the work waiting to land</span></div>
     {{BAR}}
     <p class="legend"><span><span class="k k-main"></span>{{ON_MAIN}} on main</span><span><span class="k k-wait"></span>{{WAITING}} built, waiting to land</span><span><span class="k k-none"></span>{{NOT_STARTED}} not started</span></p>
@@ -62,6 +80,7 @@ footer p { margin: 0; }
   </div>
   <footer>
     <p><b>On main</b> means merged into the kernel. <b>Built, waiting to land</b> means the work is done and pushed, on a merge train, in an open pull request or on its own branch, but not merged yet. Owner decisions count as pieces; gates are shown on their phase's line instead.</p>
+    <p>The operations are the board's pieces listed in <code>tools/kernel-progress/operations.json</code>, which also links each of solidcore's tests to its operation. The tests and their named faults are read from <code>geom-solidcore/tests/</code>; main takes no change unless the tests that fail, on Linux and in WebAssembly, are exactly the named faults.</p>
     <p>{{SOURCE}}</p>
     <p>Last built {{BUILT}}, by <code>tools/kernel-progress/build.py</code> on every push to main.</p>
   </footer>

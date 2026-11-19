@@ -4,23 +4,52 @@
 //! equation, a line with a sphere, cylinder or cone a quadratic in the surface's own coordinates, and
 //! a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign
 //! or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an
-//! overlap. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected
-//! Polyhedron step narrowing the boxes of NURBS pieces.
+//! overlap, and so is each arc of a circle lying in a plane that the plane's domain holds, and a
+//! circle about the axis of a cylinder or cone at its radius there. A circle about a line through
+//! a sphere's centre that stands off the sphere meets nothing, by one exact sign (decision
+//! 32.74). A circle across the axis of a cylinder or cone, its normal parallel to the axis, meets
+//! nothing where its plane is past the domain, and otherwise meets it where it meets the circle the
+//! surface cuts in that plane: nothing, two crossings or one touch, told by enclosures and, on a
+//! coordinate axis, by exact signs (decision 32.86). Every other pair runs [`crate::solve`] on
+//! C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
 //!
 //! - **Every root found or flagged.** A box is discarded only on a proof, so a meeting no item reports
 //!   does not exist.
 //! - **Exact where the data are.** On whole-number data the count, and whether a root is double, come
-//!   from exact signs, within the budgets of chapter 6.2. Elsewhere an interval decides, and what it
-//!   cannot tell goes to the engine.
+//!   from exact signs, within the budgets of chapter 6.2. Whether a line runs along a plane, and
+//!   whether it lies in it, are exact signs of the stored doubles on any data whose products of
+//!   three are exact (decision 32.85). Elsewhere an interval decides, and what it cannot tell goes
+//!   to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
 //!   [`Unresolved::HigherOrderContact`] where they cannot be told apart, and
 //!   [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.
-//! - **Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of
-//!   its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].
+//! - **Overlap by identity.** A line in a plane or along a ruling, a helix on a coaxial cylinder of
+//!   its radius, and a circle lying in a plane or on a coaxial cylinder or cone, are
+//!   [`Item::Overlap`]s with [`Coincidence::Identical`]. Whether a circle lies on the surface is
+//!   decided by exact signs of sums of products of the stored doubles, never by an enclosure. A
+//!   circle the signs cannot place goes to the engine as before: on a cone, or at an end of a
+//!   round kind's domain, where the axis is off the coordinate axes; where a round kind's domain
+//!   is short of a whole turn; and on a sphere (decision 32.64). A plane's domain that holds a
+//!   part of a whole circle holds arcs of it: which arcs is decided by exact signs where the
+//!   plane's vectors run along coordinate axes, each arc is an overlap over an enclosure of its
+//!   stretch of the circle, and a lone point of the circle in the domain, or a plane on other
+//!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
+//!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
+//!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
+//!   circle whose stretches would meet, as where a side stands within a rounding of touching it
+//!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
+//! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
+//!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
+//!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
+//!   plane whose enclosure reaches an end of the domain meets nothing where the two circles are
+//!   proven apart for every height it holds, and is the engine's where they are not. A touch off
+//!   the coordinate axes, a plane through a cone's apex, and a domain short of a whole turn are
+//!   the engine's (decision 32.86).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -33,7 +62,22 @@
 //! fat plane; Krawczyk's test finishes every box.
 //!
 //! Cost: a closed form is a few predicates. The engine's boxes are near the logarithm of the kinds'
-//! reach for a transversal root, each a few evaluations; a clip is O(p·q). Recursion: none.
+//! reach for a transversal root, each a few evaluations; a clip is O(p·q). A curve lying on the
+//! surface that no closed form takes costs the engine boxes in proportion to its length over the
+//! resolution floor, each flagged: a circle of radius 207 lying in a plane cost 1,164,603 work
+//! units (46,647 boxes) before its closed form, and one on an axis off the coordinate axes still
+//! does, bounded by the work budget (issue 974). A circle of radius 600 in a plane whose domain
+//! holds an arc of it cost 1,252,043 units before decision 32.69; now the signs of at most four
+//! sides and eight crossings, and one box of the circle for each arc. A circle of radius 1 about
+//! a line through the centre of a sphere of radius 256, standing 0.002 off it all the way round,
+//! cost 782,639 units before decision 32.74: the engine's boxes under that gap in three
+//! variables. A segment lying in a plane whose vectors hold a half ran the engine past 2^20 units,
+//! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
+//! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
+//! where an enclosure of the same value holds zero.
+//! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
+//! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
+//! now a few predicates, and a box of the circle for each point. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -42,15 +86,20 @@
 )]
 
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_curve::tight::{self, larger, smaller};
-use geom_curve::{CurveError, CurveKind, DerivativeBound, Frame, HelixAxes, Line, ParamCurve};
+use geom_curve::{
+    Circle, CurveError, CurveKind, DerivativeBound, Frame, HelixAxes, Line, ParamCurve,
+};
 use geom_num::Sign;
+use geom_num::eft::two_prod;
+use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::sturm::Roots;
-use geom_num::{predicate, quadric};
+use geom_num::{math, predicate, quadric};
 use geom_nurbs::{BernsteinCurve, BernsteinPatch, Bounds, Direction, Limit, NurbsError};
 use geom_run::WorkMeter;
 use geom_surface::{
@@ -59,10 +108,12 @@ use geom_surface::{
 
 use crate::closed::{self, Meeting};
 use crate::curve::{
-    Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line, grid_point, held,
-    onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole, widest,
+    Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
+    grid_point, held, onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole,
+    widest,
 };
 use crate::error::IntersectError;
+use crate::quadrics::{off_line, parallel, plus, same_line, scale};
 use crate::result::{
     Coincidence, Coverage, Degeneracy, Intersection, Item, OverlapRegion, ParamBox, PointContact,
     StepsInterval, Test, Unresolved,
@@ -170,29 +221,27 @@ fn within(x: Interval, domain: (f64, f64)) -> Result<Option<Interval>, Intersect
     held(x, domain).map(Some)
 }
 
-/// A line with a plane. Parallel, and lying in it, are exact signs on whole-number data, and
-/// otherwise a determinant proven apart from zero. `None` where neither tells.
+/// A line with a plane. Parallel, and lying in it, are exact signs, on whole-number data and on
+/// any stored doubles whose products of three are exact (decision 32.85); a line that is neither
+/// meets it where a determinant proven apart from zero puts it. `None` where neither tells.
 fn line_plane(
     line: &Line<3>,
     plane: &Plane,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    let (c, a, b) = plane.vectors();
-    let (o, d) = (line.origin(), line.direction());
-    let exact = plane_signs(line, plane)?;
-    let normal = cross(lift(a)?, lift(b)?)?;
-    let step = dot(normal, lift(d)?)?;
-    let offset = dot(normal, minus(lift(c)?, lift(o)?)?)?;
+    let (step, offset) = plane_enclosures(line, plane)?;
     let domain = ParamSurface::domain(plane);
-    // Parallel, and lying in it, only from the exact signs: every operation rounds outward, so an
-    // enclosure of the step or the offset is never the one point zero.
-    if let Some((Sign::Zero, side)) = exact {
-        if side != Sign::Zero {
-            return proven(Vec::new(), meter).map(Some);
+    // A step proven apart from zero is a line across the plane: its enclosure's sign is the true
+    // one, so the exact signs are asked only where the enclosure holds zero.
+    if apart(step).is_none() {
+        // Parallel, and lying in it, only from the exact signs: every operation rounds outward,
+        // so an enclosure of the step or the offset is never the one point zero.
+        if let Some((Sign::Zero, side)) = plane_signs(line, plane, step, offset)? {
+            if side != Sign::Zero {
+                return proven(Vec::new(), meter).map(Some);
+            }
+            return in_plane(line, plane, meter).map(Some);
         }
-        return in_plane(line, plane, meter).map(Some);
-    }
-    if step.contains(0.0) {
         return Ok(None);
     }
     let t = offset.div(step)?;
@@ -238,8 +287,117 @@ fn plane_parameters(
     ))
 }
 
+/// Enclosures of a line's step against a plane, n·d with n = a × b, and of the plane's offset from
+/// the line's origin, n·(c − o), from the stored doubles.
+fn plane_enclosures(line: &Line<3>, plane: &Plane) -> Result<(Interval, Interval), IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let (o, d) = (line.origin(), line.direction());
+    let normal = cross(lift(a)?, lift(b)?)?;
+    let step = dot(normal, lift(d)?)?;
+    let offset = dot(normal, minus(lift(c)?, lift(o)?)?)?;
+    Ok((step, offset))
+}
+
+/// The sign of the value `x` encloses, where `x` excludes zero: every real in it has the sign, the
+/// true value among them. `None` where `x` holds zero, and only an exact sign can tell.
+fn apart(x: Interval) -> Option<Sign> {
+    if x.contains(0.0) {
+        None
+    } else {
+        x.certain_sign()
+    }
+}
+
+/// A line's direction against a plane and which side its origin lies on, exactly: on whole-number
+/// data by `orient3d` on the stored points, and otherwise by the signs of the stored doubles
+/// (decision 32.85), where `step` and `offset`, their enclosures, cannot tell. `None` where a
+/// product of three of the doubles would not be exact.
+fn plane_signs(
+    line: &Line<3>,
+    plane: &Plane,
+    step: Interval,
+    offset: Interval,
+) -> Result<Option<(Sign, Sign)>, IntersectError> {
+    if let Some(signs) = grid_signs(line, plane)? {
+        return Ok(Some(signs));
+    }
+    Ok(stored_signs(line, plane, step, offset))
+}
+
+/// The six products of three whose sum is `w · (a × b)`, each a triple of stored doubles.
+fn triple_terms(w: [f64; 3], a: [f64; 3], b: [f64; 3]) -> [[f64; 3]; 6] {
+    let ([w0, w1, w2], [a0, a1, a2], [b0, b1, b2]) = (w, a, b);
+    [
+        [w0, a1, b2],
+        [-w0, a2, b1],
+        [w1, a2, b0],
+        [-w1, a0, b2],
+        [w2, a0, b1],
+        [-w2, a1, b0],
+    ]
+}
+
+/// The sign of Σ aᵢ·bᵢ·cᵢ, which `enclosure` holds: the enclosure's where it excludes zero, and
+/// otherwise the exact one. `None` where a factor is far enough toward either end of the doubles'
+/// range that a product of three would not be exact.
+fn sign_of_triples(terms: &[[f64; 3]], enclosure: Interval) -> Option<Sign> {
+    if !terms.iter().flatten().all(|x| tame(*x)) {
+        return None;
+    }
+    Some(apart(enclosure).unwrap_or_else(|| exact_sign_of_triples(terms)))
+}
+
+/// The sign of Σ aᵢ·bᵢ·cᵢ, exactly, for tame factors: a·b is a double and its error, each times c
+/// a double and its error, and the sum of the four is exact.
+fn exact_sign_of_triples(terms: &[[f64; 3]]) -> Sign {
+    let mut sum = ExactSum::new();
+    for &[a, b, c] in terms {
+        let (p, e) = two_prod(a, b);
+        let (pp, pe) = two_prod(p, c);
+        let (ep, ee) = two_prod(e, c);
+        sum.add_slice(&[pp, pe, ep, ee]);
+    }
+    let v = sum.round_ieee();
+    if v > 0.0 {
+        Sign::Positive
+    } else if v < 0.0 {
+        Sign::Negative
+    } else {
+        Sign::Zero
+    }
+}
+
+/// A line's direction against a plane, n·d with n = a × b, and the side its origin lies on,
+/// n·(c − o), each the sign of a sum of products of three stored doubles. The plane is
+/// c + u·a + v·b and the line o + t·d, so these doubles are the two kinds exactly, whether or
+/// not they are whole numbers. Where `step` or `offset`, the enclosures of the two, excludes zero,
+/// its sign is the true one and no exact sum is formed.
+fn stored_signs(
+    line: &Line<3>,
+    plane: &Plane,
+    step: Interval,
+    offset: Interval,
+) -> Option<(Sign, Sign)> {
+    let (c, a, b) = plane.vectors();
+    let (o, d) = (line.origin(), line.direction());
+    let along = sign_of_triples(&triple_terms(d, a, b), step)?;
+    let side = sign_of_triples(&side_terms(c, o, a, b), offset)?;
+    Some((along, side))
+}
+
+/// The twelve products of three whose sum is `(c − o) · (a × b)`: `c`'s six and `−o`'s.
+fn side_terms(c: [f64; 3], o: [f64; 3], a: [f64; 3], b: [f64; 3]) -> [[f64; 3]; 12] {
+    let [o0, o1, o2] = o;
+    let [ahead, behind] = [triple_terms(c, a, b), triple_terms([-o0, -o1, -o2], a, b)];
+    let mut terms = [[0.0; 3]; 12];
+    for (slot, term) in terms.iter_mut().zip(ahead.iter().chain(&behind)) {
+        *slot = *term;
+    }
+    terms
+}
+
 /// A line's direction against a plane and which side its origin lies on, on whole-number data.
-fn plane_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, IntersectError> {
+fn grid_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, IntersectError> {
     let (c, a, b) = plane.vectors();
     let (Some(g), Some(x), Some(y), Some(d), Some(l)) = (
         grid_point(&c),
@@ -443,10 +601,12 @@ fn line_cylinder(
     if exact == Some(Meeting::Within) {
         return along_ruling(line, cylinder, meter).map(Some);
     }
-    let sign = cylinder.axial_sign();
+    // The point at v stands s·v along n̂, so the height z is at v = z/s (z·s only for s = ±1, as
+    // built; a similarity scales the axial factor).
+    let factor = Interval::point(cylinder.axial_sign())?;
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
         let (x, y, z) = (along(ox, dx, t)?, along(oy, dy, t)?, along(oz, dz, t)?);
-        let v = z.mul(Interval::point(sign)?)?;
+        let v = z.div(factor)?;
         let (Some(u), Some(v)) = (around(x, y, domain.0)?, within(v, domain.1)?) else {
             return Ok(None);
         };
@@ -477,10 +637,11 @@ fn along_ruling(
     let Some(u) = around(ox, oy, domain.0)? else {
         return proven(Vec::new(), meter);
     };
-    let sign = Interval::point(cylinder.axial_sign())?;
+    // The height z is at v = z/s.
+    let factor = Interval::point(cylinder.axial_sign())?;
     let (start, end) = finite_line(line)?;
     let v_of = |t: f64| -> Result<Interval, IntersectError> {
-        Ok(along(oz, dz, Interval::point(t)?)?.mul(sign)?)
+        Ok(along(oz, dz, Interval::point(t)?)?.div(factor)?)
     };
     let (first, last) = (v_of(start)?, v_of(end)?);
     let (lo, hi) = (
@@ -501,7 +662,8 @@ fn along_ruling(
     proven(alloc::vec![overlap], meter)
 }
 
-/// A line with a cone: ρ = r₀ + k·v on the axis at s·v, ρ² against x² + y².
+/// A line with a cone: ρ = r₀ + k·v on the axis at z = s·v, so ρ = r₀ + (k/s)·z, ρ² against
+/// x² + y².
 fn line_cone(
     line: &Line<3>,
     cone: &Cone,
@@ -510,9 +672,12 @@ fn line_cone(
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
     let (r0, k) = cone.radius_and_slope();
-    let sign = Interval::point(cone.axial_sign())?;
+    // k/s and z/s, not k·s and z·s: the two agree only for s = ±1, as built, and a similarity
+    // scales the axial factor.
+    let factor = Interval::point(cone.axial_sign())?;
     let (r0, k) = (Interval::point(r0)?, Interval::point(k)?);
-    let (e, f) = (r0.add(k.mul(sign)?.mul(oz)?)?, k.mul(sign)?.mul(dz)?);
+    let sigma = k.div(factor)?;
+    let (e, f) = (r0.add(sigma.mul(oz)?)?, sigma.mul(dz)?);
     let terms = [
         dx.square()?.add(dy.square()?)?.sub(f.square()?)?,
         ox.mul(dx)?.add(oy.mul(dy)?)?.sub(e.mul(f)?)?,
@@ -521,7 +686,7 @@ fn line_cone(
     let domain = ParamSurface::domain(cone);
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
         let (x, y, z) = (along(ox, dx, t)?, along(oy, dy, t)?, along(oz, dz, t)?);
-        let v = z.mul(sign)?;
+        let v = z.div(factor)?;
         let rho = r0.add(k.mul(v)?)?;
         let Some(v) = within(v, domain.1)? else {
             return Ok(None);
@@ -859,17 +1024,19 @@ fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
     }
 }
 
+/// A stretch of a surface's domain: its range in u and its range in v.
+type Stretch = ((f64, f64), (f64, f64));
+
 impl Contact<'_> {
-    /// Every stretch of the surface's domain that `u` × `v` covers.
-    fn regions(&self, u: Interval, v: Interval) -> Vec<((f64, f64), (f64, f64))> {
+    /// Every stretch of the surface's domain that `u` × `v` covers, `u`'s stretches outer: at
+    /// most two in each parameter, so at most four, held in a fixed array with no heap block (the
+    /// engine asks for them on every box it bounds). A slot is `None` where a parameter has one
+    /// stretch only.
+    fn regions(&self, u: Interval, v: Interval) -> [Option<Stretch>; 4] {
         let [_, seam_u, seam_v] = self.seams;
-        let mut out = Vec::new();
-        for p in seam_u.spans(u).into_iter().flatten() {
-            for q in seam_v.spans(v).into_iter().flatten() {
-                out.push((p, q));
-            }
-        }
-        out
+        let [p0, p1] = seam_u.spans(u);
+        let [q0, q1] = seam_v.spans(v);
+        [p0.zip(q0), p0.zip(q1), p1.zip(q0), p1.zip(q1)]
     }
 
     /// A box around the surface over `u` × `v`, across its joins.
@@ -880,7 +1047,7 @@ impl Contact<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Bounds<3>, IntersectError> {
         let mut out: Option<Bounds<3>> = None;
-        for region in self.regions(u, v) {
+        for region in self.regions(u, v).into_iter().flatten() {
             let b = self.surface.bound(region, meter)?;
             out = Some(match out {
                 Some(a) => a.union(&b).map_err(CurveError::from)?,
@@ -899,7 +1066,7 @@ impl Contact<'_> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<Bounds<3>>, IntersectError> {
         let mut out: Option<Bounds<3>> = None;
-        for region in self.regions(u, v) {
+        for region in self.regions(u, v).into_iter().flatten() {
             let DerivativeBound::Bounded(b) = self.surface.derivative_bound(region, dir, meter)?
             else {
                 return Ok(None);
@@ -921,13 +1088,12 @@ impl Field<3> for Contact<'_> {
     ) -> Result<[Interval; 3], IntersectError> {
         let [seam_t, seam_u, seam_v] = self.seams;
         let (t, u, v) = (seam_t.wrapped(t), seam_u.wrapped(u), seam_v.wrapped(v));
-        let c = self.curve.enclose(t, Limit::FromRight, 0, meter)?;
-        let [c] = c.as_slice() else {
+        let Some(c) = self.curve.enclose_point(t, Limit::FromRight, meter)? else {
             return Err(IntersectError::Internal);
         };
         let sides = (Limit::FromRight, Limit::FromRight);
         let [s, ..] = self.surface.enclose(u, v, sides, meter)?;
-        minus(*c, s)
+        minus(c, s)
     }
 
     fn over(
@@ -1192,10 +1358,11 @@ fn helix_on_cylinder(
     let (_, [_, _, m]) = frame.unit_vectors()?;
     let start = dot(minus(lift([p, q, r])?, lift([e, f, g])?)?, n)?;
     let rise = dot(m, n)?.mul(Interval::point(pitch * 0.5)?)?;
-    let sign = Interval::point(cylinder.axial_sign())?;
+    // The cylinder's point at v stands s·v along n̂: the height is at v = height/s.
+    let factor = Interval::point(cylinder.axial_sign())?;
     let (t0, t1) = curve.domain();
     let v_at = |t: f64| -> Result<Interval, IntersectError> {
-        Ok(along(start, rise, Interval::point(t)?)?.mul(sign)?)
+        Ok(along(start, rise, Interval::point(t)?)?.div(factor)?)
     };
     let (first, last) = (v_at(t0)?, v_at(t1)?);
     let (lo, hi) = (
@@ -1217,6 +1384,1062 @@ fn helix_on_cylinder(
     proven(alloc::vec![overlap], meter).map(Some)
 }
 
+/// The height of `p` over `c` along the unit vector of `n`, as two exact terms, where `n` runs along
+/// one coordinate axis: there the unit vector is that axis, signed, and the height is a difference
+/// of two stored doubles. `None` for any other direction: its unit vector is no vector of doubles
+/// (the only ones of length exactly one are the signed axes), so the height is no sum of products
+/// of stored doubles. With the terms, whether that axis is taken positive (`true`) or negative.
+fn height_terms(n: [f64; 3], p: [f64; 3], c: [f64; 3]) -> Option<(bool, [(f64, f64); 2])> {
+    let [a, b, e] = n;
+    let [p0, p1, p2] = p;
+    let [c0, c1, c2] = c;
+    let (along, at, from) = match (a != 0.0, b != 0.0, e != 0.0) {
+        (true, false, false) => (a, p0, c0),
+        (false, true, false) => (b, p1, c1),
+        (false, false, true) => (e, p2, c2),
+        _ => return None,
+    };
+    // The match picked the one component that is not zero.
+    let up = positive(along);
+    let sigma = if up { 1.0 } else { -1.0 };
+    Some((up, [(sigma, at), (-sigma, from)]))
+}
+
+/// Whether `x` is positive, where its caller knows it is neither zero nor NaN: read from its sign
+/// bit, so no comparison with a zero that cannot occur is written.
+fn positive(x: f64) -> bool {
+    x.is_sign_positive()
+}
+
+/// The sign of `(p − c) · n`, exactly: a sum of six products of stored doubles.
+fn side_of(p: [f64; 3], c: [f64; 3], n: [f64; 3]) -> Sign {
+    let [p0, p1, p2] = p;
+    let [c0, c1, c2] = c;
+    let [n0, n1, n2] = n;
+    sign_of(&[
+        (p0, n0),
+        (-c0, n0),
+        (p1, n1),
+        (-c1, n1),
+        (p2, n2),
+        (-c2, n2),
+    ])
+}
+
+/// The whole of `curve`, a circle lying on the surface, as an overlap over `u` and `v`.
+fn lying(
+    curve: &CurveKind<3>,
+    u: Interval,
+    v: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Intersection, IntersectError> {
+    let (t0, t1) = curve.domain();
+    let overlap = Item::Overlap {
+        at: ParamBox::new(&[Interval::new(t0, t1)?, u, v])?,
+        region: OverlapRegion {
+            boundary: Vec::new(),
+        },
+        proof: Coincidence::Identical,
+        class: certified(),
+    };
+    proven(alloc::vec![overlap], meter)
+}
+
+/// The plane's parameters over the stretch `t` of `curve`, enclosed: its box there, read in the
+/// plane's own vectors.
+fn in_parameters(
+    curve: &CurveKind<3>,
+    plane: &Plane,
+    t: (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Interval, Interval), IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let w = minus(sides(&curve.bound(t, meter)?)?, lift(c)?)?;
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let (wa, wb) = (dot(w, a)?, dot(w, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
+    let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
+    Ok((u, v))
+}
+
+/// A circle lying in a plane: an overlap for each part of it the plane's domain holds, nothing
+/// where it holds none of it, and `None`, the engine's, where the circle stands off the plane or
+/// [`arcs_in_plane`] cannot decide.
+///
+/// Theorem. A circle of positive radius (a circle kind has no other) holds three points not on one
+/// line, so exactly one plane holds it: the plane through its centre across its frame's stored
+/// normal n, which defines the frame exactly. It lies in the plane c + u·a + v·b if and only if
+/// that is the same plane: n·a = 0, n·b = 0 (a and b are not parallel, so n is then the plane's
+/// normal) and (centre − c)·n = 0. Each is the sign of a sum of products of stored doubles, exact.
+fn circle_in_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let n = circle.frame().normal();
+    let zero = [0.0; 3];
+    let signs = [
+        side_of(a, zero, n),
+        side_of(b, zero, n),
+        side_of(circle.center(), c, n),
+    ];
+    if signs.iter().any(|s| *s != Sign::Zero) {
+        return Ok(None);
+    }
+    // The circle's box, read in the plane's parameters, holds every (u, v) of the circle.
+    let (u, v) = in_parameters(curve, plane, curve.domain(), meter)?;
+    let ((u0, u1), (v0, v1)) = ParamSurface::domain(plane);
+    if u.hi() < u0 || u.lo() > u1 || v.hi() < v0 || v.lo() > v1 {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    if u.lo() < u0 || u.hi() > u1 || v.lo() < v0 || v.hi() > v1 {
+        return arcs_in_plane(curve, circle, plane, meter);
+    }
+    lying(curve, u, v, meter).map(Some)
+}
+
+/// A coordinate of a point of a circle, measured from the circle's centre: its sign, its square as
+/// a sum of products of doubles (exact), and an enclosure of it.
+#[derive(Clone)]
+struct Coord {
+    sign: Sign,
+    square: Vec<(f64, f64)>,
+    near: Interval,
+}
+
+impl Coord {
+    /// What [`order`] reads of it: its sign and its square.
+    fn exact(&self) -> Exact<'_> {
+        (self.sign, &self.square)
+    }
+}
+
+/// A coordinate's sign and its square as a sum of products of doubles: all that [`order`] reads.
+type Exact<'a> = (Sign, &'a [(f64, f64)]);
+
+/// The sign of `a − b`, exactly: the signs where they differ, the squares where they agree.
+fn order(a: Exact<'_>, b: Exact<'_>) -> Sign {
+    let squares = |p: Exact<'_>, q: Exact<'_>| {
+        let mut terms = p.1.to_vec();
+        terms.extend(q.1.iter().map(|&(x, y)| (-x, y)));
+        sign_of(&terms)
+    };
+    match (a.0, b.0) {
+        (Sign::Positive, Sign::Positive) => squares(a, b),
+        (Sign::Negative, Sign::Negative) => squares(b, a),
+        (Sign::Zero, Sign::Zero) => Sign::Zero,
+        (Sign::Positive, _) | (Sign::Zero, Sign::Negative) => Sign::Positive,
+        (Sign::Negative, _) | (Sign::Zero, Sign::Positive) => Sign::Negative,
+    }
+}
+
+/// Whether products of pairs of doubles this size are exact: zero, or far from both ends of the
+/// doubles' range.
+fn tame(x: f64) -> bool {
+    x == 0.0 || (1e-75..=1e75).contains(&x) || (-1e75..=-1e-75).contains(&x)
+}
+
+/// The coordinate `from + end·along − at` as a [`Coord`]: four doubles whose sum is it exactly
+/// (the product is a double and its error), so its sign is an exact sum and its square sixteen
+/// products. `None` where a product of the doubles would not be exact.
+fn offset(from: f64, end: f64, along: f64, at: f64) -> Result<Option<Coord>, IntersectError> {
+    let (p, e) = two_prod(end, along);
+    let sum = [from, p, e, -at];
+    if !(tame(end) && tame(along) && sum.iter().all(|x| tame(*x))) {
+        return Ok(None);
+    }
+    let sign = sign_of(&sum.map(|x| (1.0, x)));
+    let mut square = Vec::new();
+    let mut near = Interval::point(0.0)?;
+    for x in sum {
+        square.extend(sum.map(|y| (x, y)));
+        near = near.add(Interval::point(x)?)?;
+    }
+    Ok(Some(Coord { sign, square, near }))
+}
+
+/// The other coordinate of the circle's point whose one coordinate is `b`, on the side `sign`:
+/// its square is r² − b².
+fn across(b: &Coord, r: f64, sign: Sign) -> Result<Coord, IntersectError> {
+    let mut square = alloc::vec![(r, r)];
+    square.extend(b.square.iter().map(|&(x, y)| (-x, y)));
+    let r = Interval::point(r)?;
+    let d = r.mul(r)?.sub(b.near.mul(b.near)?)?;
+    // The square is positive where this is called; its enclosure may reach below zero.
+    let root = Interval::new(larger(d.lo(), 0.0), larger(d.hi(), 0.0))?.sqrt()?;
+    let near = if sign == Sign::Negative {
+        root.neg()
+    } else {
+        root
+    };
+    Ok(Coord { sign, square, near })
+}
+
+/// A point of the circle, from its centre, in the two coordinates of its plane.
+#[derive(Clone)]
+struct Spot {
+    x: Coord,
+    y: Coord,
+}
+
+/// The order of two points of the circle going round it from (r, 0) towards (0, r): the upper
+/// half (y ≥ 0) first, by falling x, then the lower half by rising x. Exact, and equal only for
+/// one point.
+fn round(p: &Spot, q: &Spot) -> Ordering {
+    let upper = |s: &Spot| s.y.sign != Sign::Negative;
+    let by = |s: Sign| match s {
+        Sign::Negative => Ordering::Less,
+        Sign::Zero => Ordering::Equal,
+        Sign::Positive => Ordering::Greater,
+    };
+    match (upper(p), upper(q)) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (true, true) => by(order(q.x.exact(), p.x.exact())),
+        (false, false) => by(order(p.x.exact(), q.x.exact())),
+    }
+}
+
+/// The angle of `s` from (r, 0) towards (0, r), in half-turns on [0, 2), enclosed. `turn_of`
+/// writes a point of the upper half in place; a point of the lower half is the mirror of one of
+/// the upper half in the first axis, so its angle is two half-turns less the mirror's. No
+/// threshold on an enclosure decides it (decision 32.80). Its cost: where x is surely negative,
+/// the enclosure is up to two units in the last place wider at its lower end, and one at its
+/// upper, than `turn_of`'s own moved a turn on; it holds the true angle everywhere.
+fn angle(s: &Spot) -> Result<Interval, IntersectError> {
+    if s.y.sign == Sign::Negative {
+        let mirror = turn_of(s.x.near, s.y.near.neg())?;
+        Ok(Interval::point(2.0)?.sub(mirror)?)
+    } else {
+        Ok(turn_of(s.x.near, s.y.near)?)
+    }
+}
+
+/// One side of a rectangle: the half-plane where the coordinate `axis` (0 or 1) is at least `at`
+/// (`keep` positive) or at most `at` (`keep` negative).
+struct Half {
+    axis: usize,
+    at: Coord,
+    keep: Sign,
+}
+
+impl Half {
+    /// Whether `s` is in the half-plane, its line included.
+    fn holds(&self, s: &Spot) -> bool {
+        let side = order(
+            if self.axis == 0 { &s.x } else { &s.y }.exact(),
+            self.at.exact(),
+        );
+        side == Sign::Zero || side == self.keep
+    }
+}
+
+/// What a rectangle holds of a circle.
+enum Held {
+    /// None of it.
+    Nothing,
+    /// All of it.
+    Whole,
+    /// These arcs of it, each from its first point round to its second in [`round`]'s direction.
+    Arcs(Vec<(Spot, Spot)>),
+}
+
+/// What the rectangle of `sides` holds of the circle of radius `r` about the origin of their
+/// coordinates, by exact signs. `None` where it holds a lone point: a touch from outside, at a
+/// side or a corner.
+///
+/// Theorem. A half-plane whose line crosses the circle holds one closed arc of it, from the
+/// crossing where the circle enters to the one where it leaves, and both crossings are
+/// transversal. One whose line misses or touches the circle holds all of it, none of it, or the
+/// one point of a touch from outside. The rectangle is the intersection of its half-planes, so the
+/// points where the circle meets the rectangle's edge are among the crossings that every other
+/// half-plane holds, and between two such points next to each other round the circle the open arc
+/// meets no edge: it is all inside or all outside. It is inside exactly when no half-plane's
+/// leaving crossing lies on it or at its start, since both its ends are in every half-plane and
+/// each half-plane's part is one arc. A touch from inside is no crossing and cuts nothing.
+fn held_of(r: f64, sides: &[Half]) -> Result<Option<Held>, IntersectError> {
+    match crossed_by(r, sides) {
+        None => Ok(None),
+        Some(Err(all)) => Ok(Some(if all { Held::Whole } else { Held::Nothing })),
+        Some(Ok(crossed)) => between(r, &crossed),
+    }
+}
+
+/// The sides whose lines the circle crosses, where every other side holds all of it; `Err` where
+/// that settles the answer, all of the circle (`true`) or none of it; `None` for a touch from
+/// outside.
+#[allow(
+    clippy::type_complexity,
+    reason = "three outcomes of one private step, read at once by its one caller"
+)]
+fn crossed_by(r: f64, sides: &[Half]) -> Option<Result<Vec<&Half>, bool>> {
+    // The circle's coordinate runs over [−r, r]: its ends' signs, and their square r².
+    let square = [(r, r)];
+    let (far, back) = ((Sign::Positive, &square[..]), (Sign::Negative, &square[..]));
+    let mut crossed = Vec::new();
+    let mut touched = false;
+    for half in sides {
+        let (low, high) = (order(half.at.exact(), back), order(half.at.exact(), far));
+        let (whole, none, touch) = if half.keep == Sign::Positive {
+            (
+                low != Sign::Positive,
+                high == Sign::Positive,
+                high == Sign::Zero,
+            )
+        } else {
+            (
+                high != Sign::Negative,
+                low == Sign::Negative,
+                low == Sign::Zero,
+            )
+        };
+        if none {
+            return Some(Err(false));
+        }
+        touched |= touch;
+        if !whole && !touch {
+            crossed.push(half);
+        }
+    }
+    if touched {
+        return None;
+    }
+    Some(if crossed.is_empty() {
+        Err(true)
+    } else {
+        Ok(crossed)
+    })
+}
+
+/// The arcs of the circle inside every half-plane of `crossed`, each crossed by it: the second
+/// half of [`held_of`].
+fn between(r: f64, crossed: &[&Half]) -> Result<Option<Held>, IntersectError> {
+    let mut spots = Vec::new();
+    let mut leaving = Vec::new();
+    for (k, half) in crossed.iter().enumerate() {
+        for sign in [Sign::Positive, Sign::Negative] {
+            let other = across(&half.at, r, sign)?;
+            let (spot, leaves) = if half.axis == 0 {
+                (
+                    Spot {
+                        x: half.at.clone(),
+                        y: other,
+                    },
+                    sign == half.keep,
+                )
+            } else {
+                (
+                    Spot {
+                        x: other,
+                        y: half.at.clone(),
+                    },
+                    sign != half.keep,
+                )
+            };
+            if leaves {
+                leaving.push(spot.clone());
+            }
+            if crossed
+                .iter()
+                .enumerate()
+                .all(|(j, g)| j == k || g.holds(&spot))
+            {
+                spots.push(spot);
+            }
+        }
+    }
+    spots.sort_by(round);
+    spots.dedup_by(|p, q| round(p, q) == Ordering::Equal);
+    let count = spots.len();
+    if count == 0 {
+        return Ok(Some(Held::Nothing));
+    }
+    let mut arcs = Vec::new();
+    let mut inside = Vec::new();
+    for (from, to) in spots.iter().zip(spots.iter().cycle().skip(1)) {
+        let wraps = round(from, to) != Ordering::Less;
+        let leaves = leaving.iter().any(|e| {
+            let (after, before) = (
+                round(from, e) != Ordering::Greater,
+                round(e, to) == Ordering::Less,
+            );
+            if wraps {
+                after || before
+            } else {
+                after && before
+            }
+        });
+        inside.push(!leaves);
+        if !leaves {
+            arcs.push((from.clone(), to.clone()));
+        }
+    }
+    // A point with no arc at either hand is a lone point of the circle in the rectangle.
+    let lone = inside
+        .iter()
+        .zip(inside.iter().cycle().skip(count.saturating_sub(1)))
+        .any(|(next, last)| !next && !last);
+    Ok(if lone { None } else { Some(Held::Arcs(arcs)) })
+}
+
+/// The coordinate axis `v` runs along, if it runs along one.
+fn axis_of(v: [f64; 3]) -> Option<usize> {
+    match v.map(|x| x != 0.0) {
+        [true, false, false] => Some(0),
+        [false, true, false] => Some(1),
+        [false, false, true] => Some(2),
+        _ => None,
+    }
+}
+
+/// Entry `k` of `v`; the last for any `k` past it.
+fn pick<T: Copy>(v: [T; 3], k: usize) -> T {
+    let [a, b, c] = v;
+    match k {
+        0 => a,
+        1 => b,
+        _ => c,
+    }
+}
+
+/// Which side of the circle's own join a point of the circle near the join is on: positive past
+/// it (its parameter just over the domain's start `lo`), negative before it (just under the
+/// domain's end), zero on it. `None` where no exact sign says so.
+///
+/// The join is the point at parameter `lo`. Where `lo` is a whole number it lies along the
+/// frame's x̂ (even) or against it (odd), and a point near it is past it exactly when it stands on
+/// the ŷ side of x̂'s line (even) or the other side (odd). `ahead` holds the frame's stored x
+/// along the plane's two axes (the frame's normal runs along the third, so these two are all of
+/// x̂'s direction). Where one of them is zero, x̂ is the other axis, signed, and ŷ = n̂ × x̂ is the
+/// first one, signed: the side is the sign of one coordinate of the point, which a [`Spot`] holds
+/// exactly. For any other `lo` or x the side is no sign of a sum of products of stored doubles.
+fn past_join(
+    spot: &Spot,
+    ahead: (f64, f64),
+    same: bool,
+    lo: f64,
+) -> Result<Option<Sign>, IntersectError> {
+    if lo != math::floor(lo)?.get() {
+        return Ok(None);
+    }
+    let half = lo / 2.0;
+    let even = half == math::floor(half)?.get();
+    let up = match (ahead.0 != 0.0, ahead.1 != 0.0) {
+        (true, false) if positive(ahead.0) == same => spot.y.sign,
+        (true, false) => spot.y.sign.negate(),
+        (false, true) if positive(ahead.1) == same => spot.x.sign.negate(),
+        (false, true) => spot.x.sign,
+        _ => return Ok(None),
+    };
+    Ok(Some(if even { up } else { up.negate() }))
+}
+
+/// The stretches of the circle's domain `(lo, hi)`, one turn long, that an arc covers: one, or
+/// one each side of the join where the arc passes it. `first` and `last` enclose the parameters
+/// of the arc's ends `enter` and `leave`, written on any turn, `last` over `first` by the arc's
+/// length; `ahead` and `same` are [`past_join`]'s. `None` where an end's enclosure reaches the
+/// join and no exact sign places the end against it.
+///
+/// Whole turns bring the upper end of the start's enclosure onto the domain, short of its last
+/// end, so the enclosure reaches the join only by its lower end, at the domain's first end. There
+/// it cannot say which end of the domain the start is at, and the exact side of the join does: a
+/// start before the join is a turn on, at the domain's last end; one on the join or past it is
+/// at the first end. The arc has a stretch past the join only where its end is truly past it: an
+/// end on the join is the domain's last end, and no enclosure's overhang makes a stretch.
+#[allow(
+    clippy::type_complexity,
+    reason = "one or two stretches, or none placed: read at once by its one caller"
+)]
+fn stretches_of(
+    (first, last): (Interval, Interval),
+    (enter, leave): (&Spot, &Spot),
+    (ahead, same): ((f64, f64), bool),
+    (lo, hi): (f64, f64),
+) -> Result<Option<[Option<(f64, f64)>; 2]>, IntersectError> {
+    let turn = Interval::point(2.0)?;
+    let back = Interval::point(2.0 * math::floor((first.hi() - lo) / 2.0)?.get())?;
+    let (mut first, mut last) = (first.sub(back)?, last.sub(back)?);
+    if first.lo() <= lo {
+        let Some(side) = past_join(enter, ahead, same, lo)? else {
+            return Ok(None);
+        };
+        if side == Sign::Negative {
+            (first, last) = (first.add(turn)?, last.add(turn)?);
+        }
+    }
+    let t0 = larger(first.lo(), lo);
+    let through = if last.hi() < hi {
+        false
+    } else if last.lo() > hi {
+        true
+    } else {
+        let Some(side) = past_join(leave, ahead, same, lo)? else {
+            return Ok(None);
+        };
+        side == Sign::Positive
+    };
+    Ok(Some(if through {
+        [
+            Some((t0, hi)),
+            Some((lo, smaller(last.sub(turn)?.hi(), hi))),
+        ]
+    } else {
+        [Some((t0, smaller(last.hi(), hi))), None]
+    }))
+}
+
+/// The parts of a whole circle lying in `plane` that the plane's domain holds, each an overlap
+/// over its own stretch of the circle; `None`, the engine's, where the plane's vectors run off the
+/// coordinate axes, the circle is not a whole turn, a product of the stored doubles would not be
+/// exact, the domain holds a lone point of the circle ([`held_of`]), or an end of an arc has an
+/// enclosure that reaches the circle's own join and no exact sign places it ([`past_join`]).
+///
+/// With the plane's vectors a and b along two coordinate axes, an end `e` of the domain in u is
+/// the line where that coordinate is c + e·a, and its distance from the circle's centre is
+/// c + e·a − centre: a sum of four doubles, exact ([`offset`]). Every question [`held_of`] asks is
+/// then the sign of a sum of products of doubles. The parameters of the ends of each arc are
+/// enclosures; which arcs there are is exact, and so is each arc's place against the join: an arc
+/// that starts on the join starts at the domain's first end exactly, one that ends on it ends at
+/// the domain's last end exactly, and there is a stretch past the join only where the arc passes
+/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn.)
+fn arcs_in_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let (Some(i), Some(j)) = (axis_of(a), axis_of(b)) else {
+        return Ok(None);
+    };
+    let (lo, hi) = curve.domain();
+    let (q, r) = (circle.center(), circle.radius());
+    if hi - lo < 2.0 || !tame(r) {
+        return Ok(None);
+    }
+    let (du, dv) = ParamSurface::domain(plane);
+    let mut sides = Vec::new();
+    for (axis, k, along, end, first) in [
+        (0, i, pick(a, i), du.0, true),
+        (0, i, pick(a, i), du.1, false),
+        (1, j, pick(b, j), dv.0, true),
+        (1, j, pick(b, j), dv.1, false),
+    ] {
+        if !end.is_finite() {
+            continue;
+        }
+        let Some(at) = offset(pick(c, k), end, along, pick(q, k))? else {
+            return Ok(None);
+        };
+        // `along` is the one component of the plane's vector that is not zero.
+        let keep = if positive(along) == first {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        };
+        sides.push(Half { axis, at, keep });
+    }
+    let arcs = match held_of(r, &sides)? {
+        None => return Ok(None),
+        Some(Held::Nothing) => return proven(Vec::new(), meter).map(Some),
+        Some(Held::Whole) => {
+            let (u, v) = in_parameters(curve, plane, (lo, hi), meter)?;
+            return lying(curve, held(u, du)?, held(v, dv)?, meter).map(Some);
+        }
+        Some(Held::Arcs(arcs)) => arcs,
+    };
+    // The circle's parameter is the angle from its frame's x̂ towards n̂ × x̂, in half-turns: the
+    // angle of [`round`] less x̂'s own where the plane's axes turn the same way as the frame,
+    // and x̂'s less it where they turn the other way.
+    let (_, [x, _, _]) = circle.frame().unit_vectors()?;
+    let zero = turn_of(pick(x, i), pick(x, j))?;
+    let (third, cyclic) = match (i, j) {
+        (0, 1) => (2, true),
+        (1, 2) => (0, true),
+        (2, 0) => (1, true),
+        (1, 0) => (2, false),
+        (2, 1) => (0, false),
+        (0, 2) => (1, false),
+        _ => return Ok(None),
+    };
+    // The circle lies in the plane, so its normal runs along the third axis: that component is
+    // the one that is not zero.
+    let same = cyclic == positive(pick(circle.frame().normal(), third));
+    let stored = circle.frame().x();
+    let ahead = (pick(stored, i), pick(stored, j));
+    let turn = Interval::point(2.0)?;
+    let mut items = Vec::new();
+    for (from, to) in &arcs {
+        let start = angle(from)?;
+        let end = if round(from, to) == Ordering::Less {
+            angle(to)?
+        } else {
+            angle(to)?.add(turn)?
+        };
+        // In the circle's own parameter the arc runs from `enter` to `leave`.
+        let (first, last, enter, leave) = if same {
+            (start.sub(zero)?, end.sub(zero)?, from, to)
+        } else {
+            (zero.sub(end)?, zero.sub(start)?, to, from)
+        };
+        let Some(stretches) = stretches_of((first, last), (enter, leave), (ahead, same), (lo, hi))?
+        else {
+            return Ok(None);
+        };
+        for (t0, t1) in stretches.into_iter().flatten() {
+            let (u, v) = in_parameters(curve, plane, (t0, t1), meter)?;
+            items.push(Item::Overlap {
+                at: ParamBox::new(&[Interval::new(t0, t1)?, held(u, du)?, held(v, dv)?])?,
+                region: OverlapRegion {
+                    boundary: Vec::new(),
+                },
+                proof: Coincidence::Identical,
+                class: certified(),
+            });
+        }
+    }
+    // Two stretches whose enclosures meet hold crossings the enclosures cannot tell apart, as
+    // where a side stands within a rounding of touching the circle: the engine's (32.80).
+    let apart = items.iter().enumerate().all(|(k, a)| {
+        let later = items.get(k.saturating_add(1)..).unwrap_or_default();
+        later.iter().all(|b| !a.at().meets(b.at()))
+    });
+    if !apart {
+        return Ok(None);
+    }
+    proven(items, meter).map(Some)
+}
+
+/// A circle about a round kind's axis and of its radius there: an overlap at the v of its height,
+/// over every u, where the domain holds that v; nothing where it does not; and `None`, the
+/// engine's, where the domain is short of a whole turn (it may hold a part of the circle) or an
+/// enclosure cannot place v against an end and the axis is off the coordinate axes.
+///
+/// The circle's v is placed by [`height_across`].
+fn ring_overlap(
+    curve: &CurveKind<3>,
+    at: [f64; 3],
+    (center, frame, factor): ([f64; 3], Frame<3>, f64),
+    (du, dv): ((f64, f64), (f64, f64)),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    if du.1 - du.0 < 2.0 {
+        return Ok(None);
+    }
+    let v = match height_across(at, (center, frame, factor), dv)? {
+        Across::Past => return proven(Vec::new(), meter).map(Some),
+        Across::Within(v) | Across::Reaching(v) => v,
+        Across::Unplaced(_) => return Ok(None),
+    };
+    lying(curve, Interval::new(du.0, du.1)?, held(v, dv)?, meter).map(Some)
+}
+
+/// Where the plane across a round kind's axis through a point stands against its domain in v.
+enum Across {
+    /// Past an end of the domain, by an enclosure or an exact sign: the plane meets none of it.
+    Past,
+    /// The plane's v, an enclosure inside the domain.
+    Within(Interval),
+    /// The plane's v, an enclosure that reaches an end, held to the domain: an exact sign says
+    /// it is not past that end.
+    Reaching(Interval),
+    /// The plane's v, an enclosure that reaches an end, held to the domain: no exact sign places
+    /// it, so the plane may be past that end, on it or inside it.
+    Unplaced(Interval),
+}
+
+/// Where the plane across the axis of the round kind `(center, frame, factor)` through `at`
+/// stands against the domain `dv` in v.
+///
+/// The point at v stands s·v along the unit axis, so the plane's v is the height of `at` over the
+/// centre divided by s, and v against an end `e` of the domain is the sign of (height − s·e) with
+/// the sign of s: exact where [`height_terms`] has the height.
+fn height_across(
+    at: [f64; 3],
+    (center, frame, factor): ([f64; 3], Frame<3>, f64),
+    dv: (f64, f64),
+) -> Result<Across, IntersectError> {
+    let (_, [_, _, n]) = frame.unit_vectors()?;
+    let height = dot(minus(lift(at)?, lift(center)?)?, n)?;
+    let v = height.div(Interval::point(factor)?)?;
+    if v.hi() < dv.0 || v.lo() > dv.1 {
+        return Ok(Across::Past);
+    }
+    if v.lo() >= dv.0 && v.hi() <= dv.1 {
+        return Ok(Across::Within(v));
+    }
+    let exact = height_terms(frame.normal(), at, center);
+    for (end, inside, outward) in [
+        (dv.0, v.lo() >= dv.0, Sign::Negative),
+        (dv.1, v.hi() <= dv.1, Sign::Positive),
+    ] {
+        if inside {
+            continue;
+        }
+        let Some((_, [p, q])) = exact else {
+            return Ok(Across::Unplaced(held(v, dv)?));
+        };
+        let side = sign_of(&[p, q, (-factor, end)]);
+        // `factor` is the kind's axial sign, 1 or -1.
+        let side = if positive(factor) {
+            side
+        } else {
+            side.negate()
+        };
+        if side == outward {
+            return Ok(Across::Past);
+        }
+    }
+    Ok(Across::Reaching(held(v, dv)?))
+}
+
+/// A circle lying on a cylinder.
+///
+/// Theorem. A plane across a right circular cylinder's axis cuts it in the circle of its radius
+/// about the axis; a plane tilted from that cuts it in an ellipse whose half-axes differ; and a
+/// plane along the axis in at most two lines. A circle of positive radius lies in one plane only
+/// and shares at most four points with any other conic, so it lies on the cylinder if and only if
+/// its normal is parallel to the axis, its centre is on the axis, and its radius is the
+/// cylinder's: the first two exact signs ([`same_line`]), the third two stored doubles compared.
+fn circle_on_cylinder(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    cylinder: &Cylinder,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (center, frame) = (cylinder.center(), cylinder.frame());
+    let coaxial = same_line(
+        center,
+        frame.normal(),
+        circle.center(),
+        circle.frame().normal(),
+    );
+    if !coaxial || circle.radius() != cylinder.radius() {
+        return Ok(None);
+    }
+    ring_overlap(
+        curve,
+        circle.center(),
+        (center, frame, cylinder.axial_sign()),
+        ParamSurface::domain(cylinder),
+        meter,
+    )
+}
+
+/// A circle lying on a cone.
+///
+/// Theorem. A plane across a right circular cone's axis at height h over its centre cuts it in
+/// the circle of radius |r₀ + k·h/s| about the axis; a plane tilted from that cuts it in a conic of
+/// eccentricity above zero, or through the apex in a point or lines. So, as for a cylinder, a
+/// circle of positive radius r lies on the cone if and only if its normal is parallel to the
+/// axis, its centre is on the axis, and r₀·s + k·h = r·s or −r·s. With the axis along a coordinate
+/// axis h is a difference of two stored doubles and each equation the sign of a sum of four
+/// products, exact; on any other axis h is no such sum, and the circle is left to the engine.
+fn circle_on_cone(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    cone: &Cone,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (center, frame) = (cone.center(), cone.frame());
+    let at = circle.center();
+    if !same_line(center, frame.normal(), at, circle.frame().normal()) {
+        return Ok(None);
+    }
+    let Some((up, [(_, p), (_, c)])) = height_terms(frame.normal(), at, center) else {
+        return Ok(None);
+    };
+    let (r0, k) = cone.radius_and_slope();
+    let (s, r) = (cone.axial_sign(), circle.radius());
+    // The slope along the axis as the height is taken: k, or −k where the axis runs negative.
+    let rise = if up { k } else { -k };
+    // The two equations r₀·s + k·h = r·s and = −r·s, as r₀·s + k·h + q·s = 0 for q = −r and r.
+    let on_it = [r, -r]
+        .iter()
+        .any(|&q| sign_of(&[(r0, s), (rise, p), (-rise, c), (q, s)]) == Sign::Zero);
+    if !on_it {
+        return Ok(None);
+    }
+    ring_overlap(
+        curve,
+        at,
+        (center, frame, s),
+        ParamSurface::domain(cone),
+        meter,
+    )
+}
+
+/// A cylinder or a cone, as [`circle_across`] reads it: its centre, frame and axial factor, its
+/// radius at v = 0 and its slope (a cylinder's is zero), its domain and its seams.
+struct RoundKind {
+    center: [f64; 3],
+    frame: Frame<3>,
+    factor: f64,
+    radius: f64,
+    slope: f64,
+    domain: ((f64, f64), (f64, f64)),
+    seams: [Seam; 2],
+}
+
+impl RoundKind {
+    fn cylinder(c: &Cylinder, seams: [Seam; 2]) -> RoundKind {
+        RoundKind {
+            center: c.center(),
+            frame: c.frame(),
+            factor: c.axial_sign(),
+            radius: c.radius(),
+            slope: 0.0,
+            domain: ParamSurface::domain(c),
+            seams,
+        }
+    }
+
+    fn cone(c: &Cone, seams: [Seam; 2]) -> RoundKind {
+        let (radius, slope) = c.radius_and_slope();
+        RoundKind {
+            center: c.center(),
+            frame: c.frame(),
+            factor: c.axial_sign(),
+            radius,
+            slope,
+            domain: ParamSurface::domain(c),
+            seams,
+        }
+    }
+}
+
+/// How two circles in one plane stand.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Meet {
+    /// Apart, one beside the other or inside it.
+    Apart,
+    /// Crossing, at two points.
+    Cross,
+    /// Touching, at one.
+    Touch,
+}
+
+/// A circle across the axis of a cylinder or cone, its normal parallel to that axis (decision
+/// 32.86): nothing where its plane is past the domain, and otherwise the points where it meets
+/// the circle the surface cuts in its plane. `None`, the engine's, where either domain is short of
+/// a whole turn, the plane holds a cone's apex, neither the enclosures nor exact signs tell how the
+/// two circles stand, the plane's enclosure reaches an end of the domain and the circles are not
+/// apart, or their two crossings are not apart.
+///
+/// Theorem. A plane square to the axis of a right circular cylinder or cone cuts it in the circle
+/// about the axis of the radius at that height, |r₀ + k·v|, or at a cone's apex in that point. A
+/// circle in that plane meets the surface where it meets that circle, and two circles in one plane
+/// whose centres are D apart, of radii r and ρ, cross at two points where (r − ρ)² < D² < (r + ρ)²,
+/// touch at one where D² is either end and D is not zero, and are apart where D² is past both. The
+/// normal parallel to the axis is an exact sign ([`parallel`]); D² and the radii are enclosed, and
+/// where the axis runs along a coordinate axis D² − (r ± ρ)², times s², is the sign of a sum of
+/// products of stored doubles ([`exactly`]).
+fn circle_across(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    round: &RoundKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let ((du, dv), (lo, hi)) = (round.domain, curve.domain());
+    if du.1 - du.0 < 2.0 || hi - lo < 2.0 {
+        return Ok(None);
+    }
+    if !parallel(round.frame.normal(), circle.frame().normal()) {
+        return Ok(None);
+    }
+    let q = circle.center();
+    // A plane whose enclosure reaches an end may be on it, inside or past it. Every point of the
+    // surface in the plane is on the cut circle wherever the end lies, so two circles apart for
+    // every v of the enclosure held to the domain meet nothing; points there are the engine's.
+    let (v, inside) = match height_across(q, (round.center, round.frame, round.factor), dv)? {
+        Across::Past => return proven(Vec::new(), meter).map(Some),
+        Across::Within(v) => (v, true),
+        Across::Reaching(v) | Across::Unplaced(v) => (v, false),
+    };
+    // The cut's radius, signed: past a cone's apex it is negative, and the point at u is half a
+    // turn round.
+    let rho = Interval::point(round.radius)?.add(Interval::point(round.slope)?.mul(v)?)?;
+    let (big, sense) = match rho.certain_sign() {
+        Some(Sign::Positive) => (rho, 1.0),
+        Some(Sign::Negative) => (rho.neg(), -1.0),
+        _ => return Ok(None),
+    };
+    // The circle's centre in the frame's x̂ and ŷ, from the axis.
+    let (_, [x, y, _]) = round.frame.unit_vectors()?;
+    let w = minus(lift(q)?, lift(round.center)?)?;
+    let off = [dot(w, x)?, dot(w, y)?];
+    let r = Interval::point(circle.radius())?;
+    let [ox, oy] = off;
+    let far = ox.square()?.add(oy.square()?)?;
+    // D² against (r + ρ)² and (r − ρ)², each sign where its enclosure holds it from zero.
+    let beyond = far.sub(r.add(big)?.square()?)?.certain_sign();
+    let within = far.sub(r.sub(big)?.square()?)?.certain_sign();
+    let meet = match (beyond, within) {
+        (Some(Sign::Positive), _) | (_, Some(Sign::Negative)) => Meet::Apart,
+        (Some(Sign::Negative), Some(Sign::Positive)) => Meet::Cross,
+        _ => {
+            let Some(meet) = exactly(circle, round) else {
+                return Ok(None);
+            };
+            meet
+        }
+    };
+    if meet == Meet::Apart {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    if !inside {
+        return Ok(None);
+    }
+    let tangent = meet == Meet::Touch;
+    // Measured from the axis, across the line to the circle's centre.
+    let cut = Crossing::between(off, big, r, tangent)?;
+    let heights = [Some(cut.height), (!tangent).then_some(cut.height.neg())];
+    let (_, [cx, cy, _]) = circle.frame().unit_vectors()?;
+    let sense = Interval::point(sense)?;
+    let mut found: [Option<Item>; 2] = [None, None];
+    for (slot, h) in found.iter_mut().zip(heights) {
+        let Some(h) = h else {
+            continue;
+        };
+        let ([ax, ay], [ex, ey]) = cut.point(h)?;
+        let e = plus(scale(x, ex)?, scale(y, ey)?)?;
+        let t = onto(turn_of(dot(e, cx)?, dot(e, cy)?)?, (lo, hi))?;
+        let u = around(ax.mul(sense)?, ay.mul(sense)?, du)?;
+        let (Some(t), Some(u)) = (t, u) else {
+            return Ok(None);
+        };
+        let [on_u, on_v] = surface_ends(round.seams, u, v);
+        *slot = Some(Item::Point {
+            at: ParamBox::new(&[t, u, v])?,
+            xyz: grid_box(&curve.bound(span(t), meter)?)?,
+            contact: standing(tangent, [false, on_u, on_v]),
+            class: certified(),
+        });
+    }
+    // Two crossings whose boxes meet are not told apart: the engine's.
+    if let [Some(a), Some(b)] = &found
+        && a.at().meets(b.at())
+    {
+        return Ok(None);
+    }
+    proven(found.into_iter().flatten().collect(), meter).map(Some)
+}
+
+/// How a circle and the circle `round` cuts in its plane stand, by exact signs, where the axis runs
+/// along a coordinate axis: there the height is a difference of two stored doubles
+/// ([`height_terms`]) and the centres' distance squared a sum of their products, so s²·(D² − (r ±
+/// ρ)²) is a sum of products of doubles, each factor written as a double and its error. `None` on
+/// any other axis, where a product would not be exact, and where the centres are one: a touch
+/// there is the circle lying on the surface, [`ring_overlap`]'s.
+fn exactly(circle: &Circle<3>, round: &RoundKind) -> Option<Meet> {
+    let n = round.frame.normal();
+    let (q, c) = (circle.center(), round.center);
+    let (up, [(_, p), (_, from)]) = height_terms(n, q, c)?;
+    let k = axis_of(n)?;
+    let (s, r, r0) = (round.factor, circle.radius(), round.radius);
+    let rise = if up { round.slope } else { -round.slope };
+    // s times each offset across the axis, and s·(r ± ρ) = r·s ± (r₀·s + k·h), as doubles whose sum
+    // is each exactly.
+    let others = match k {
+        0 => [1, 2],
+        1 => [2, 0],
+        _ => [0, 1],
+    };
+    let mut offsets = [[0.0; 4]; 2];
+    for (out, i) in offsets.iter_mut().zip(others) {
+        split(&[(s, pick(q, i)), (-s, pick(c, i))], out);
+    }
+    let sums = [1.0, -1.0].map(|way| {
+        let mut out = [0.0; 8];
+        split(
+            &[(r, s), (way * r0, s), (way * rise, p), (-way * rise, from)],
+            &mut out,
+        );
+        out
+    });
+    let factors = [s, r, r0, rise, p, from].into_iter().chain(q).chain(c);
+    let parts = offsets.iter().flatten().chain(sums.iter().flatten());
+    if !factors.chain(parts.copied()).all(tame) {
+        return None;
+    }
+    let [outer, inner] = sums.map(|sum| squares_less(&offsets, &sum));
+    match (outer, inner) {
+        (Sign::Zero, _) | (_, Sign::Zero) => {
+            (squares_less(&offsets, &[0.0; 8]) == Sign::Positive).then_some(Meet::Touch)
+        }
+        (a, b) if a == b => Some(Meet::Apart),
+        _ => Some(Meet::Cross),
+    }
+}
+
+/// Each product of `products` as a double and its error, in `out` in turn: their sum is the sum of
+/// the products, exactly.
+fn split(products: &[(f64, f64)], out: &mut [f64]) {
+    let parts = products.iter().flat_map(|&(a, b)| {
+        let (p, e) = two_prod(a, b);
+        [p, e]
+    });
+    for (slot, x) in out.iter_mut().zip(parts) {
+        *slot = x;
+    }
+}
+
+/// The sign of Σ (Σ y)² over the two `offsets`, less (Σ x)² over `sum`, exactly: every term a
+/// product of two of the doubles, held on the stack.
+fn squares_less(offsets: &[[f64; 4]; 2], sum: &[f64; 8]) -> Sign {
+    let mut terms = [(0.0, 0.0); 96];
+    let pairs = offsets
+        .iter()
+        .flat_map(|y| pairs_of(y, 1.0))
+        .chain(pairs_of(sum, -1.0));
+    for (slot, pair) in terms.iter_mut().zip(pairs) {
+        *slot = pair;
+    }
+    sign_of(&terms)
+}
+
+/// Every product of two of `v`'s doubles, the first taken with the sign of `way`.
+fn pairs_of(v: &[f64], way: f64) -> impl Iterator<Item = (f64, f64)> + '_ {
+    v.iter()
+        .flat_map(move |&a| v.iter().map(move |&b| (way * a, b)))
+}
+
+/// A circle about a line through a sphere's centre that stands off the sphere: nothing (decision
+/// 32.74).
+///
+/// Theorem. Every point p of a circle of centre q and radius r is the same distance from any
+/// point s of its axis, the line through q along its normal: |p − s|² = r² + |q − s|². So with
+/// the sphere's centre s on that axis the whole circle lies on the sphere of radius R where
+/// r² + |q − s|² = R², and no point of it is on the sphere otherwise, whatever the two domains.
+/// Whether s is on the axis, and whether the two sides are equal, are each the sign of a sum of
+/// products of stored doubles, exact. A circle that lies on the sphere, one whose axis misses
+/// the centre, and one with a number whose products would not be exact stay the engine's.
+fn circle_about_sphere(
+    circle: &Circle<3>,
+    sphere: &Sphere,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (q, r) = (circle.center(), circle.radius());
+    let (s, big) = (sphere.center(), sphere.radius());
+    let exact = [r, big].iter().chain(&q).chain(&s).all(|x| tame(*x));
+    if !exact || off_line(s, q, circle.frame().normal()) {
+        return Ok(None);
+    }
+    // r² − R² + |q − s|², a product at a time.
+    let mut terms = alloc::vec![(r, r), (-big, big)];
+    for (a, b) in q.into_iter().zip(s) {
+        terms.extend([(a, a), (b, b), (-a, b), (-b, a)]);
+    }
+    if sign_of(&terms) == Sign::Zero {
+        return Ok(None);
+    }
+    proven(Vec::new(), meter).map(Some)
+}
+
 /// The closed form for the pair, if one decides.
 fn closed_form(
     curve: &CurveKind<3>,
@@ -1230,6 +2453,18 @@ fn closed_form(
         (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
+        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
+        (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => {
+            match circle_on_cylinder(curve, k, c, meter)? {
+                None => circle_across(curve, k, &RoundKind::cylinder(c, seams), meter),
+                found => Ok(found),
+            }
+        }
+        (CurveKind::Circle(k), SurfaceKind::Cone(c)) => match circle_on_cone(curve, k, c, meter)? {
+            None => circle_across(curve, k, &RoundKind::cone(c, seams), meter),
+            found => Ok(found),
+        },
+        (CurveKind::Circle(k), SurfaceKind::Sphere(s)) => circle_about_sphere(k, s, meter),
         (_, SurfaceKind::Cylinder(c)) => helix_on_cylinder(curve, c, meter),
         _ => Ok(None),
     }
@@ -1278,4 +2513,186 @@ pub fn curve_surface(
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
     let solved = solve(&field, domain, |_, _| Ok(true), meter)?;
     finished(&field, solved, meter)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::float_cmp,
+        reason = "test code: a failure should stop loudly, and the doubles compared are exact"
+    )]
+
+    use super::*;
+
+    /// A point of the circle whose coordinates have the exact signs `sx`, `sy` and the enclosures
+    /// `x`, `y`.
+    fn spot(sx: Sign, x: Interval, sy: Sign, y: Interval) -> Spot {
+        let coord = |sign, near| Coord {
+            sign,
+            square: Vec::new(),
+            near,
+        };
+        Spot {
+            x: coord(sx, x),
+            y: coord(sy, y),
+        }
+    }
+
+    fn exactly(x: f64) -> Interval {
+        Interval::point(x).unwrap()
+    }
+
+    #[test]
+    fn a_lower_half_point_whose_x_is_not_surely_negative_is_its_mirror_a_turn_on() {
+        // Lower right: two half-turns less its mirror's 0.25, about 1.75.
+        let right = angle(&spot(
+            Sign::Positive,
+            exactly(1.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(right.lo() > 1.74 && right.hi() < 1.76, "{right:?}");
+        // Straight down, x's enclosure ending exactly at zero: 1.5.
+        let down = angle(&spot(
+            Sign::Zero,
+            exactly(0.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(down.lo() > 1.49 && down.hi() < 1.51, "{down:?}");
+    }
+
+    #[test]
+    fn a_lower_half_point_whose_x_is_surely_negative_is_its_mirror_a_turn_on() {
+        // Lower left: two half-turns less its mirror's 0.75, about 1.25.
+        let left = angle(&spot(
+            Sign::Negative,
+            exactly(-1.0),
+            Sign::Negative,
+            exactly(-1.0),
+        ))
+        .unwrap();
+        assert!(left.lo() > 1.24 && left.hi() < 1.26, "{left:?}");
+        // x surely negative by one step below zero: about 1.5.
+        let edge = Interval::new(-1e-300, 0.0_f64.next_down()).unwrap();
+        let near = angle(&spot(Sign::Negative, edge, Sign::Negative, exactly(-1.0))).unwrap();
+        assert!(near.lo() > 1.49 && near.hi() < 1.51, "{near:?}");
+    }
+
+    #[test]
+    fn an_upper_half_point_is_kept_on_either_side() {
+        let left = angle(&spot(
+            Sign::Negative,
+            exactly(-1.0),
+            Sign::Positive,
+            exactly(1.0),
+        ))
+        .unwrap();
+        assert!(left.lo() > 0.74 && left.hi() < 0.76, "{left:?}");
+        let right = angle(&spot(
+            Sign::Positive,
+            exactly(1.0),
+            Sign::Positive,
+            exactly(1.0),
+        ))
+        .unwrap();
+        assert!(right.lo() > 0.24 && right.hi() < 0.26, "{right:?}");
+    }
+
+    /// A double off the whole numbers as often as on them: a binary fraction, or a rounded decimal.
+    fn double(rng: &mut geom_test::SplitMix64) -> f64 {
+        let m = f64::from(i32::try_from(rng.range_i64(-4096, 4096).unwrap()).unwrap());
+        match rng.range_i64(0, 3).unwrap() {
+            0 => m,
+            1 => m / 64.0,
+            2 => m * 0.1,
+            _ => m / 3.0,
+        }
+    }
+
+    fn vector(rng: &mut geom_test::SplitMix64) -> [f64; 3] {
+        [double(rng), double(rng), double(rng)]
+    }
+
+    /// `p + s·q + r·w`, rounded.
+    fn along(p: [f64; 3], s: f64, q: [f64; 3], r: f64, w: [f64; 3]) -> [f64; 3] {
+        let mut out = p;
+        for ((x, e), f) in out.iter_mut().zip(q).zip(w) {
+            *x += s * e + r * f;
+        }
+        out
+    }
+
+    #[test]
+    fn the_enclosures_signs_are_the_exact_signs_wherever_they_exclude_zero() {
+        // Random planes and lines, a third of the lines parallel to the plane by construction
+        // (a direction that is a vector of it times a power of two) and a third of the origins
+        // rounded from points of it, so that both enclosures straddle zero on many pairs.
+        let mut rng = geom_test::SplitMix64::new(geom_test::seed::fixed(
+            "line_plane filter",
+            geom_test::Seed::DEFAULT,
+        ));
+        let count: u32 = if cfg!(miri) { 200 } else { 20_000 };
+        let (mut decided, mut straddled) = ([0_u32; 2], [0_u32; 2]);
+        for _ in 0..count {
+            let (c, a, b) = (vector(&mut rng), vector(&mut rng), vector(&mut rng));
+            let Ok(plane) = Plane::new(c, a, b, ((-1e3, 1e3), (-1e3, 1e3))) else {
+                continue;
+            };
+            let d = match rng.range_i64(0, 2).unwrap() {
+                0 => vector(&mut rng),
+                1 => along([0.0; 3], 0.25, a, 0.0, b),
+                _ => along([0.0; 3], 1.0, a, double(&mut rng), b),
+            };
+            let o = if rng.coin() {
+                vector(&mut rng)
+            } else {
+                along(c, double(&mut rng), a, double(&mut rng), b)
+            };
+            let Ok(line) = Line::new(o, d, (0.0, 1.0)) else {
+                continue;
+            };
+            let (step, offset) = plane_enclosures(&line, &plane).unwrap();
+            let terms: [&[[f64; 3]]; 2] = [&triple_terms(d, a, b), &side_terms(c, o, a, b)];
+            for (k, (terms, enclosure)) in terms.into_iter().zip([step, offset]).enumerate() {
+                let exact = exact_sign_of_triples(terms);
+                match apart(enclosure) {
+                    Some(sign) => {
+                        assert_eq!(sign, exact, "{k}: {o:?} {d:?} {c:?} {a:?} {b:?}");
+                        decided[k] += 1;
+                    }
+                    None => straddled[k] += 1,
+                }
+                assert_eq!(sign_of_triples(terms, enclosure), Some(exact));
+            }
+            let signs = stored_signs(&line, &plane, step, offset).unwrap();
+            assert_eq!(
+                signs,
+                (
+                    exact_sign_of_triples(terms[0]),
+                    exact_sign_of_triples(terms[1])
+                )
+            );
+        }
+        // Both ways taken often for both signs (natively about a third and two thirds of the step's,
+        // and half each of the offset's).
+        for k in 0..2 {
+            let often = |n: u32| n > count / 10;
+            assert!(
+                often(decided[k]) && often(straddled[k]),
+                "{decided:?} {straddled:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_sign_of_a_number_known_not_to_be_zero_is_its_sign_bit() {
+        assert!(positive(1.0));
+        assert!(positive(f64::MIN_POSITIVE));
+        assert!(!positive(-1.0));
+        assert!(!positive(-f64::MIN_POSITIVE));
+    }
 }

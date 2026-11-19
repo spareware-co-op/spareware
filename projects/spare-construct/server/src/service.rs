@@ -37,16 +37,22 @@ pub type Access<K> = cloud::Access<K, Cedar>;
 /// How wide a view may be, so one request can't ask for a million cells.
 const WIDEST_VIEW_MM: i64 = 500_000;
 
+/// Why the service said no. Its words are the ones a person sees.
 #[derive(Debug, Error)]
 pub enum Refusal {
+    /// Nobody is signed in, or the person is unknown.
     #[error("Please sign in.")]
     SignIn,
+    /// This person may not do this, and why.
     #[error("{0}")]
     Refused(String),
+    /// What was asked for isn't there, or isn't this person's to see.
     #[error("Not found.")]
     NotFound,
+    /// The request itself is wrong, and how.
     #[error("{0}")]
     Bad(String),
+    /// The store failed.
     #[error(transparent)]
     Failed(#[from] StoreError),
 }
@@ -68,29 +74,41 @@ struct PackageFile {
 /// be behind the log: the browser asks for what came after it, so it misses nothing.
 #[derive(Serialize, Debug)]
 pub struct AreaView {
+    /// How far regeneration had got when these were read.
     pub through: u64,
+    /// Each element in view, by ID, with its record's hash.
     pub pieces: BTreeMap<String, String>,
 }
 
 /// A stored shape, for someone who can't build this document's edition themselves.
 #[derive(Serialize, Debug)]
 pub struct ShapeView {
+    /// What regeneration made of the element.
     pub built: BuiltElement,
+    /// The level of detail asked for, when it was built.
     pub display: Option<Display>,
 }
 
 /// An area of a level.
 pub struct View {
+    /// The level.
     pub level: i32,
+    /// One corner's x, in millimetres.
     pub x0: i64,
+    /// One corner's y, in millimetres.
     pub y0: i64,
+    /// The opposite corner's x, in millimetres.
     pub x1: i64,
+    /// The opposite corner's y, in millimetres.
     pub y1: i64,
 }
 
+/// Everything a person can do, each step behind Cedar.
 pub struct Service<K: Kv, F: FileStore> {
     kv: K,
+    /// Cedar, answering Spare Construct's questions.
     pub access: Arc<Access<K>>,
+    /// People, sign-in and sessions.
     pub accounts: Accounts<K, DirectoryCommands<K>>,
     orderers: Arc<Orderers<K, ProjectCommands<K, Cedar>>>,
     clock: Arc<dyn Clock>,
@@ -100,6 +118,7 @@ pub struct Service<K: Kv, F: FileStore> {
 }
 
 impl<K: Kv, F: FileStore> Service<K, F> {
+    /// A service over a store, its file storage and its orderers, building shapes with `geometry`.
     pub fn new(
         kv: K,
         access: Arc<Access<K>>,
@@ -143,6 +162,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// Runs one edit from the server itself: it gets a client of its own, and an answer.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the orderer rejects the edit.
     pub async fn edit(
         &self,
         person: &Id,
@@ -176,6 +199,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     // --- Who and where ---
 
     /// A person's own row and hubs, home first. Everyone may read their own.
+    ///
+    /// # Errors
+    ///
+    /// [`Refusal::SignIn`] when the person is unknown, or a [`Refusal`] when the store fails.
     pub async fn me(&self, person: &Id) -> Result<Value, Refusal> {
         let mut snapshot = self.kv.snapshot().await?;
         let row: Option<Person> =
@@ -202,6 +229,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// A hub's people, and the projects this person is on.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn hub(&self, person: &Id, id: &Id) -> Result<Value, Refusal> {
         self.require(person, "hub.open", Target::Hub(id)).await?;
         let mut snapshot = self.kv.snapshot().await?;
@@ -240,6 +271,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// A project's teams, with only the folders this person may open.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn project(&self, person: &Id, id: &Id) -> Result<Value, Refusal> {
         self.require(person, "project.open", Target::Project(id))
             .await?;
@@ -304,6 +339,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Where this project could bridge to. Lists hubs this one permits, saying whether they
     /// permit back. Cedar checks again when a bridge is made.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn bridge_targets(&self, person: &Id, id: &Id) -> Result<Value, Refusal> {
         self.require(person, "project.open", Target::Project(id))
             .await?;
@@ -349,6 +388,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// The pieces in view: element IDs and record hashes only. The browser fetches each record it
     /// hasn't already got, and its own cache keeps them by hash.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the view is too big.
     pub async fn area(
         &self,
         person: &Id,
@@ -358,8 +401,8 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     ) -> Result<AreaView, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;
-        if (view.x1 - view.x0).abs() > WIDEST_VIEW_MM || (view.y1 - view.y0).abs() > WIDEST_VIEW_MM
-        {
+        let widest = WIDEST_VIEW_MM.unsigned_abs();
+        if view.x1.abs_diff(view.x0) > widest || view.y1.abs_diff(view.y0) > widest {
             return Err(Refusal::Bad("That view is too big.".to_owned()));
         }
         let mut snapshot = self.kv.snapshot().await?;
@@ -380,6 +423,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(AreaView { through, pieces })
     }
 
+    /// Who is working on what in a model: each claimed element, with its claim.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn claims(&self, person: &Id, project: &Id, model: &Id) -> Result<Value, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;
@@ -394,6 +442,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(Value::Object(found))
     }
 
+    /// An element's record, by its hash, if it belongs to this model.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the record isn't this model's.
     pub async fn record(
         &self,
         person: &Id,
@@ -416,6 +469,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// An element's stored shape at a level of detail, or its coarsest. By element, not by hash,
     /// so a reader of one model can't reach another's shapes by naming a content ID.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or there is no such shape.
     pub async fn shape(
         &self,
         person: &Id,
@@ -474,6 +531,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         })
     }
 
+    /// A model's links.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn links(&self, person: &Id, project: &Id, model: &Id) -> Result<Vec<Link>, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;
@@ -482,6 +544,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// A package's file. Its row says where the bytes are, in this project's own folder.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or there is no such package.
     pub async fn package_file(
         &self,
         person: &Id,
@@ -552,6 +618,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Publishes a team's model as the next numbered package in its Shared folder. The file goes
     /// up first, under its own hash, so a refused publish leaves only an unused file.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the orderer rejects it.
     pub async fn publish(
         &self,
         person: &Id,
@@ -585,6 +655,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Sends a shared package to another hub's project. The orderer asks Cedar whether both hubs
     /// permit it, and writes both logs in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or either hub doesn't permit it.
     pub async fn bridge(
         &self,
         person: &Id,
@@ -604,6 +678,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Takes a bridged package into a team's Consumed folder, after checking the file against the
     /// hash it was published with.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the file doesn't match its hash.
     pub async fn consume(
         &self,
         person: &Id,
@@ -640,6 +718,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         item.ok_or_else(|| Refusal::Failed(StoreError::Damaged("consumed item missing".into())))
     }
 
+    /// Links a model to another model, or to a package in a folder.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails, or the orderer rejects it.
     pub async fn add_link(
         &self,
         person: &Id,
@@ -656,11 +739,21 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     // --- The live channel ---
 
+    /// Whether this person may open a project, for the live channel.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn may_open_project(&self, person: &Id, project: &Id) -> Result<(), Refusal> {
         self.require(person, "project.open", Target::Project(project))
             .await
     }
 
+    /// Whether this person may watch a model's edits on the live channel.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails.
     pub async fn may_watch(
         &self,
         person: &Id,
@@ -672,6 +765,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await
     }
 
+    /// The orderer of a project's log, starting its shapes keeping up with it.
     pub async fn orderer(&self, project: &Id) -> Arc<Orderer> {
         self.keep_up(project);
         self.orderers.get(&Scope::Project(project.clone())).await
@@ -679,11 +773,19 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Brings a project's shapes up to the end of its log now. A running server does this by
     /// itself; the seed and the operators' tools call it to know it's done.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails.
     pub async fn regenerate(&self, project: &Id) -> Result<(), StoreError> {
         self.regen.catch_up(project).await.map(|_| ())
     }
 
     /// How far a project's log has got.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn head(&self, person: &Id, project: &Id) -> Result<u64, Refusal> {
         self.require(person, "project.open", Target::Project(project))
             .await?;
@@ -695,12 +797,20 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// Whether the store answers, for the health check. It reads nobody's data.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store doesn't answer.
     pub async fn healthy(&self) -> Result<(), StoreError> {
         let mut snapshot = self.kv.snapshot().await?;
         snapshot.get(&KitPlace::Format.key()).await.map(|_| ())
     }
 
     /// How far a browser tab got. `person` is the one signed in on the connection.
+    ///
+    /// # Errors
+    ///
+    /// A [`StoreError`] when the store fails.
     pub async fn last_counter(
         &self,
         person: &Id,
@@ -715,6 +825,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// Log entries for the live channel to filter: the project must be open to this person, and
     /// the channel checks each entry against what they may watch before sending it.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
     pub async fn entries(
         &self,
         person: &Id,

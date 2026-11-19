@@ -25,6 +25,7 @@ pub struct PerfSet {
 
 impl PerfSet {
     /// Reads the settings as arcTime does (`S.junction.pff` within 0 to 1, `S.junction.T` above 0, else 1).
+    #[must_use]
     pub fn new(s: &Settings) -> PerfSet {
         let j = junction_set(s);
         PerfSet {
@@ -44,8 +45,9 @@ impl PerfSet {
 /// the degree of saturation (at most 1) at a roundabout and 2 s at give way. Junction delay uses
 /// the peak flow rate x / PFF and the analysis period T. Connectors and internal site links run
 /// at free-flow time; a major approach with right turners adds their delay (movement method).
+#[must_use]
 pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
-    if a.conn || a.internal {
+    if a.conn() || a.internal {
         return a.ff;
     }
     let mut t = a.ff * (1.0 + p.bpr_alpha * jsmath::pow(x / a.cap_mid, p.bpr_beta));
@@ -56,42 +58,48 @@ pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
         };
     }
     let (pff, tt) = (p.pff, p.t);
-    let q = x / pff;
+    let q_peak = x / pff;
     if a.ctrl == Ctrl::Sig {
         let g_c = a.g_c.unwrap_or(f64::NAN);
-        let c = math_max(1.0, a.gl as f64 * p.sat_flow * g_c);
-        let xx = q / c;
-        let g = g_c;
-        let d1 = 0.5 * a.c.unwrap_or(f64::NAN) * (1.0 - g) * (1.0 - g) / (1.0 - math_min(1.0, xx) * g);
-        let d2 = 900.0 * tt * ((xx - 1.0) + ((xx - 1.0) * (xx - 1.0) + 4.0 * xx / (c * tt)).sqrt());
+        let cap = math_max(1.0, f64::from(a.gl) * p.sat_flow * g_c);
+        let xx = q_peak / cap;
+        let d1 = 0.5 * a.c.unwrap_or(f64::NAN) * (1.0 - g_c) * (1.0 - g_c) / (1.0 - math_min(1.0, xx) * g_c);
+        let d2 = 900.0 * tt * ((xx - 1.0) + ((xx - 1.0) * (xx - 1.0) + 4.0 * xx / (cap * tt)).sqrt());
         t += d1 + d2;
     } else {
-        let c = math_max(1.0, or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid));
-        let xx = q / c;
-        let h = 3600.0 / c;
-        let extra = if a.stop {
+        let cap = math_max(1.0, or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid));
+        let xx = q_peak / cap;
+        let headway = 3600.0 / cap;
+        let extra = if a.stop() {
             5.0
         } else if a.ctrl == Ctrl::Rbt {
             5.0 * math_min(1.0, xx)
         } else {
             2.0
         };
-        t += h
-            + 900.0 * tt * ((xx - 1.0) + ((xx - 1.0) * (xx - 1.0) + h * xx / (450.0 * tt)).sqrt())
+        t += headway
+            + 900.0 * tt * ((xx - 1.0) + ((xx - 1.0) * (xx - 1.0) + headway * xx / (450.0 * tt)).sqrt())
             + extra;
     }
     t
 }
 
+// xt[j]: an arc's flow. Conflict and ring lists hold arcs of the graph, which xt covers; past the
+// end reads as NaN, as an undefined element does in the JavaScript.
+fn flow_at(xt: &[f64], j: usize) -> f64 {
+    xt.get(j).copied().unwrap_or(f64::NAN)
+}
+
 /// `effCap(a, S)`: capacity (pcu/h) of an arc: infinite for a connector, the signal or gap-acceptance capacity where lower than mid-block, else mid-block.
+#[must_use]
 pub fn eff_cap(a: &Arc, p: &PerfSet) -> f64 {
-    if a.conn {
+    if a.conn() {
         return f64::INFINITY;
     }
     match a.ctrl {
         Ctrl::Sig => math_min(
             a.cap_mid,
-            a.gl as f64 * p.sat_flow * a.g_c.unwrap_or(f64::NAN),
+            f64::from(a.gl) * p.sat_flow * a.g_c.unwrap_or(f64::NAN),
         ),
         Ctrl::Minor | Ctrl::Rbt => {
             math_min(a.cap_mid, or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid))
@@ -101,31 +109,32 @@ pub fn eff_cap(a: &Arc, p: &PerfSet) -> f64 {
 }
 
 /// `arcCap(a, xt)`: one gap-acceptance capacity per arc (arc method): a minor arc against all major flow, a roundabout entry against circulating flow; None for other arcs.
+#[must_use]
 pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
     match a.ctrl {
         Ctrl::Minor => {
             let mut vc = 0.0;
             for &(j, f) in a.conf.iter().flatten() {
-                vc += xt[j] * f;
+                vc += flow_at(xt, j) * f;
             }
             vc = math_max(vc, 1.0);
-            let (tc, tf) = if a.stop { (6.5, 3.5) } else { (6.0, 3.2) };
+            let (tc, tf) = if a.stop() { (6.5, 3.5) } else { (6.0, 3.2) };
             let cp = vc * jsmath::exp(-vc * tc / 3600.0) / (1.0 - jsmath::exp(-vc * tf / 3600.0));
             Some(math_max(
                 80.0,
-                math_min(a.cap_mid, cp * (1.0 + 0.6 * (a.gl as f64 - 1.0))),
+                math_min(a.cap_mid, cp * (1.0 + 0.6 * (f64::from(a.gl) - 1.0))),
             ))
         }
         Ctrl::Rbt => {
             let mut vc = 0.0;
             if let Some(ro) = &a.ring_out {
                 for &j in ro {
-                    vc += xt[j];
+                    vc += flow_at(xt, j);
                 }
-                vc = math_max(0.0, vc - xt[a.i]);
+                vc = math_max(0.0, vc - flow_at(xt, a.i));
             } else {
                 for &(j, f) in a.conf.iter().flatten() {
-                    vc += xt[j] * f;
+                    vc += flow_at(xt, j) * f;
                 }
             }
             let per = if a.gl > 1 {
@@ -133,7 +142,7 @@ pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
             } else {
                 1380.0 * jsmath::exp(-0.00102 * vc)
             };
-            Some(math_min(a.cap_mid, math_max(50.0, per * a.gl as f64)))
+            Some(math_min(a.cap_mid, math_max(50.0, per * f64::from(a.gl))))
         }
         _ => None,
     }
@@ -145,12 +154,9 @@ pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
 /// capacities make the costs non-separable, and undamped updates make the assignment oscillate.
 pub fn update_node_caps(g: &mut Graph, xt: &[f64], w: f64, x_t: Option<&[f64]>) {
     if g.cap_method == CapMethod::Movement {
-        match x_t {
-            Some(x) => movement_caps(g, xt, w, x),
-            None => {
-                let zeros = vec![0.0; g.n_t];
-                movement_caps(g, xt, w, &zeros);
-            }
+        if let Some(x) = x_t { movement_caps(g, xt, w, x) } else {
+            let zeros = vec![0.0; g.n_t];
+            movement_caps(g, xt, w, &zeros);
         }
         return;
     }
@@ -165,8 +171,10 @@ pub fn update_node_caps(g: &mut Graph, xt: &[f64], w: f64, x_t: Option<&[f64]>) 
 }
 
 /// `majorDelay(mj, x, S)`: delay (s) a major approach adds at x pcu/h for its right turners and the through traffic they block.
+#[must_use]
 pub fn major_delay(mj: &MajorState, x: f64, p: &PerfSet) -> f64 {
-    if !(mj.s_r > 0.0) || !(mj.cm_r > 0.0) {
+    // NaN shares and capacities add nothing, as !(x > 0) does in the JavaScript
+    if mj.s_r <= 0.0 || mj.s_r.is_nan() || mj.cm_r <= 0.0 || mj.cm_r.is_nan() {
         return 0.0;
     }
     let v_r = mj.s_r * x / p.pff;

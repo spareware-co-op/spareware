@@ -1076,7 +1076,11 @@ fn check_header(
 }
 
 fn check_attributes(row: &Row<'_>, package: &Package, add: &mut impl FnMut(&str, Rule, String)) {
-    let forbids = package.attributes.forbids_unsafe || package.manifest_forbids_unsafe;
+    // The manifest's lint reaches every target the crate builds, its integration tests, benchmarks
+    // and examples among them, which Miri runs; the crate root's attribute reaches the library
+    // only. Miri is aimed at the libraries the kernel drives because no kernel target can hold
+    // unsafe code (32.58), so the manifest must forbid it.
+    let forbids = package.manifest_forbids_unsafe;
     if row.kind == Kind::Kernel && !package.attributes.no_std {
         add(
             row.name,
@@ -1093,8 +1097,9 @@ fn check_attributes(row: &Row<'_>, package: &Package, add: &mut impl FnMut(&str,
             row.name,
             Rule::UnsafeNotForbidden,
             concat!(
-                "#![forbid(unsafe_code)] among the crate root's leading attributes, or ",
-                "unsafe_code = \"forbid\" in its manifest's [lints.rust] (27)"
+                "unsafe_code = \"forbid\" in its manifest's [lints.rust] (27), which reaches every ",
+                "target it builds; the crate root's #![forbid(unsafe_code)] reaches its library only, ",
+                "and Miri runs its tests too (32.58)"
             )
             .to_owned(),
         );

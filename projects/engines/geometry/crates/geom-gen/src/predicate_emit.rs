@@ -919,6 +919,24 @@ fn header(
         .scale_expr
         .roundings()
         .ok_or_else(|| EmitError("the scale's roundings".to_owned()))?;
+    // The monomials of S the run-time scale leaves out (`predicate_derive`'s rule), if any.
+    let computed = d.scale_expr.monomials(groups.len());
+    let left_out: Vec<String> = root
+        .scale
+        .iter()
+        .filter(|m| !computed.contains(*m))
+        .map(|m| monomial_text(m, &groups))
+        .collect();
+    let leaves_out = if left_out.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " The scale at run time leaves out {}, never the largest alone: a monomial left out \
+             is the average of other monomials of S, and the largest of the rest is S for every \
+             input (the proof in [`super`]).",
+            left_out.join(", ")
+        )
+    };
     doc_para(
         out,
         &format!(
@@ -926,7 +944,7 @@ fn header(
              its exact value: {scale_roundings} rounding(s), each product counting its own and \
              both its operands', each `larger` the larger of its operands'. It computes the bound \
              as the constant times S, one more rounding: k = {scale_roundings} + 1. The constant \
-             is E · (1 + 2u)^k, rounded up to an `f64`."
+             is E · (1 + 2u)^k, rounded up to an `f64`.{leaves_out}"
         ),
     );
     doc(out, "");
@@ -2523,7 +2541,11 @@ const PARENT_HEADER_TOP: &[&str] = &[
      k = r + 1 (each module's header gives both). The constant is at least E · (1 + 2u)^k and \
      (1 − u)(1 + 2u) ≥ 1, so the computed bound is at least E · S; a computed value beyond it has \
      the exact sign. A computed \
-     scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The full statement, with \
+     scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The scale at run time leaves \
+     out a monomial of the result's scale set that is the average of other monomials of the set \
+     (x^2·y^2, of x^4 and y^4): its value, their geometric mean, is never above the largest of \
+     them, and the largest of the monomials kept is S for every input, so the filter computes \
+     the same S. The full statement, with \
      references, is in geom-gen's `predicate_derive.rs`.",
     "",
     "P:The constants, beside Shewchuk's stage-A bounds (`exactinit` in `predicates.c`; \

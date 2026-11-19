@@ -21,6 +21,23 @@ phase and lane tables of chapter 30.4) is put in one of three states:
 - not started: everything else.
 
 Gates are not counted as pieces: each phase shows its gate as one line instead.
+
+Above the phases, the page counts the operations: the board pieces that are an operation a program
+would call (the `operations` of `operations.json`, beside this file). Each is in one of four states:
+
+- ours, on main: main holds the piece, as above. Our own work counts first, whatever solidcore does.
+- done by solidcore: not on main as ours, and solidcore, through the wrapper
+  `projects/engines/geometry/geom-solidcore`, passes every one of our stored cases for it
+  (`tests/cases.json` there) on Linux and under WebAssembly, with no case of it still waiting
+  (decision 32.70). A case belongs to the piece that `operations.json` links its operation to.
+- solidcore, held back: not on main as ours, and at least one of our cases for it fails (a named
+  fault of `tests/named-faults.json`, or a failure with no name) or waits for an operation the wrapper
+  does not have yet (the `waiting` cases of `operations.json`).
+- not started: everything else. Those of them built by us and waiting to land are said so.
+
+Which case passes where is what main's merge checks hold: `kernel.yml`'s jobs `solidcore` (Linux)
+and `solidcore-wasm` (WebAssembly) pass only when the tests that fail are exactly the named faults,
+so on main a named case fails on both targets and every other case passes on both.
 """
 import datetime
 import html
@@ -39,10 +56,16 @@ BOARD_JSON = KERNEL + "/architecture/30-build-order.json"
 BOARD_MD = KERNEL + "/architecture/30-build-order.md"
 DECISIONS = KERNEL + "/architecture/32-decisions.md"
 MAP = KERNEL + "/MAP.json"
+CASES = KERNEL + "/geom-solidcore/tests/cases.json"
+FAULTS = KERNEL + "/geom-solidcore/tests/named-faults.json"
 HERE = os.path.dirname(os.path.abspath(__file__))
+OPERATIONS = os.path.join(HERE, "operations.json")
 
 ID = r"G\d{2,3}"
 ON_MAIN, WAITING, NOT_STARTED = "main", "waiting", "none"
+# The four states of an operation.
+OURS, SC_DONE, SC_HELD, NOT_YET = "ours", "solidcore", "held", "none"
+OP_STATES = (OURS, SC_DONE, SC_HELD, NOT_YET)
 
 
 def base_id(text):
@@ -247,6 +270,126 @@ def next_gate(result):
     return "Every gate has passed."
 
 
+# ---- operations, and what solidcore does for them -------------------------------------------------
+
+def shares(counts, size):
+    """Whole percentages of `size` that add up to 100: the largest remainders get the spare points."""
+    if not size:
+        return {k: 0 for k in counts}
+    exact = {k: 100 * v / size for k, v in counts.items()}
+    out = {k: int(x) for k, x in exact.items()}
+    for k in sorted(exact, key=lambda k: (out[k] - exact[k], list(counts).index(k)))[:100 - sum(out.values())]:
+        out[k] += 1
+    return out
+
+
+def fault_label(fault):
+    """`SC-3, a wall ... one solid: why` is fault SC-3, said as `SC-3: a wall ... one solid`."""
+    text = fault.get("fault", "")
+    m = re.match(r"(SC-\d+),\s*([^:]*)", text)
+    return (m.group(1), m.group(2).strip()) if m else (text.split(",")[0] or fault["case"], "")
+
+
+def case_results(cases_json, faults_json):
+    """Each stored case's result on Linux and under WebAssembly as main's merge checks hold them:
+    a named fault fails on both, every other case passes on both (see the module's docstring)."""
+    named = {f["case"] for f in faults_json.get("faults", [])}
+    return {c["id"]: {"linux": c["id"] not in named, "wasm": c["id"] not in named}
+            for c in cases_json.get("cases", [])}
+
+
+def operation_states(phases, table, cases_json, faults_json, results, main_ids, waiting_ids):
+    """Every operation of `table` in one of the four states, with its cases, faults and waits.
+
+    `results` maps a case ID to {"linux": passed, "wasm": passed}; a case it does not name has not
+    been run and counts as not passed. A case passes only when it passed on both targets."""
+    titles = {p["id"]: p["title"] for ph in phases for p in ph["pieces"]}
+    ops = [o for o in table["operations"] if o["piece"] in titles]
+    op_ids = {o["piece"] for o in ops}
+    faults = {f["case"]: f for f in faults_json.get("faults", [])}
+    stored = {c["id"]: c for c in cases_json.get("cases", [])}
+    cases, waits, unlinked = {}, {}, []
+    for cid, c in stored.items():
+        pid = table.get("case_pieces", {}).get(cid) or table.get("wrapper", {}).get(c.get("operation"), {}).get("piece")
+        if pid in op_ids:
+            cases.setdefault(pid, []).append(cid)
+        else:
+            unlinked.append({"case": cid, "name": c.get("name", ""), "operation": c.get("operation", "")})
+    for w in table.get("waiting", []):
+        if w["case"] in stored:
+            continue  # it is a stored case now, and is judged as one
+        if w.get("piece") in op_ids:
+            waits.setdefault(w["piece"], []).append(w)
+        else:
+            unlinked.append({"case": w["case"], "name": w.get("name", ""), "operation": w.get("waits_for", "")})
+    rows = []
+    for o in ops:
+        pid = o["piece"]
+        mine = cases.get(pid, [])
+        # A named fault is a failing case whatever a result says: the list names it as failing.
+        failing = [cid for cid in mine if cid in faults
+                   or not (results.get(cid, {}).get("linux") and results.get(cid, {}).get("wasm"))]
+        named, unnamed = {}, []
+        for cid in failing:
+            if cid in faults:
+                code, what = fault_label(faults[cid])
+                named.setdefault(code, {"code": code, "what": what, "cases": []})["cases"].append(cid)
+            else:
+                unnamed.append(cid)
+        waiting = waits.get(pid, [])
+        if pid in main_ids:
+            state = OURS
+        elif mine and not failing and not waiting:
+            state = SC_DONE
+        elif mine or waiting:
+            state = SC_HELD
+        else:
+            state = NOT_YET
+        rows.append({"piece": pid, "name": o.get("name") or titles[pid], "title": titles[pid],
+                     "family": o.get("family", ""), "state": state, "cases": len(mine),
+                     "passing": len(mine) - len(failing), "faults": sorted(named.values(), key=lambda f: f["code"]),
+                     "unnamed": unnamed, "waiting": waiting,
+                     "landing": state == NOT_YET and pid in waiting_ids})
+    total = {s: sum(1 for r in rows if r["state"] == s) for s in OP_STATES}
+    missing = sorted(o["piece"] for o in table["operations"] if o["piece"] not in titles)
+    return {"rows": rows, "total": total, "size": len(rows), "share": shares(total, len(rows)),
+            "unlinked": unlinked, "not_on_board": missing,
+            "landing": sum(1 for r in rows if r["landing"])}
+
+
+def held_reason(row):
+    """Why a held-back operation is held back, in one plain sentence."""
+    parts = []
+    for f in row["faults"]:
+        n = len(f["cases"])
+        parts.append(f"fault {f['code']} ({f['what']}; {n} {'case' if n == 1 else 'cases'})")
+    if row["unnamed"]:
+        n = len(row["unnamed"])
+        parts.append(f"{n} {'case fails' if n == 1 else 'cases fail'} with no named fault ({', '.join(row['unnamed'])})")
+    if row["waiting"]:
+        n = len(row["waiting"])
+        by = {}
+        for w in row["waiting"]:
+            by[w["waits_for"]] = by.get(w["waits_for"], 0) + 1
+        what = ", ".join(f"{k} ({v})" for k, v in sorted(by.items(), key=lambda kv: (-kv[1], kv[0])))
+        parts.append(f"{n} {'case waits' if n == 1 else 'cases wait'} for the link to solidcore to offer the operation "
+                     f"{'it needs' if n == 1 else 'they need'}: {what}")
+    lead = f"{row['passing']} of {row['cases']} cases pass. " if row["cases"] else "No case can run yet. "
+    return lead + "Held back: " + "; ".join(parts) + "."
+
+
+def headline(ops):
+    """The page's first line: what share of the operations work today, and by which engine."""
+    t, s = ops["total"], ops["share"]
+    working = t[OURS] + t[SC_DONE]
+    pct = shares({"w": working, "r": ops["size"] - working}, ops["size"])["w"]
+    return (f"{pct}% of the kernel's {ops['size']} operations work today: {s[OURS]}% ({t[OURS]}) by our own exact core "
+            f"and {s[SC_DONE]}% ({t[SC_DONE]}) by solidcore. {s[SC_HELD]}% ({t[SC_HELD]}) are solidcore's but held back, "
+            f"and {s[NOT_YET]}% ({t[NOT_YET]}) do not work yet"
+            + (f": {ops['landing']} built by us and waiting to land, and {t[NOT_YET] - ops['landing']} not started."
+               if ops["landing"] else ": not started.")), pct
+
+
 # ---- GitHub, read-only -----------------------------------------------------------------------------
 
 def gh_get(path, token, accept="application/vnd.github+json", data=None):
@@ -335,9 +478,66 @@ def bar(c, size):
     return f'<div class="bar" role="img" aria-label="{c[ON_MAIN]} on main, {c[WAITING]} built and waiting to land, {c[NOT_STARTED]} not started">{"".join(segs)}</div>'
 
 
+OP_LABELS = {OURS: ("o-ours", "Ours, on main"), SC_DONE: ("o-sc", "Done by solidcore"),
+             SC_HELD: ("o-held", "solidcore, held back"), NOT_YET: ("o-none", "Not working yet")}
+
+
+def op_bar(ops):
+    t, size = ops["total"], ops["size"]
+    if not size:
+        return ""
+    segs = "".join(f'<span class="{OP_LABELS[s][0]}" style="width:{100 * t[s] / size:.3f}%"></span>'
+                   for s in OP_STATES if t[s])
+    label = ", ".join(f"{t[s]} {OP_LABELS[s][1].lower()}" for s in OP_STATES)
+    return f'<div class="bar" role="img" aria-label="{label}">{segs}</div>'
+
+
+def render_operations(ops):
+    """The operations card's legend and its four lists."""
+    e = html.escape
+    t, s = ops["total"], ops["share"]
+    legend = "".join(f'<span><span class="k {OP_LABELS[st][0]}"></span>{t[st]} {OP_LABELS[st][1].lower()} ({s[st]}%)</span>'
+                     for st in OP_STATES)
+    lists = []
+    for st in OP_STATES:
+        rows = sorted((r for r in ops["rows"] if r["state"] == st), key=lambda r: int(r["piece"][1:]))
+        if not rows:
+            continue
+        items = []
+        for r in rows:
+            note = ""
+            if st == SC_DONE:
+                note = f' <span class="why">All {r["cases"]} of our cases pass on Linux and in the browser (WebAssembly).</span>'
+            elif st == SC_HELD:
+                note = f' <span class="why">{e(held_reason(r))}</span>'
+            elif r["landing"]:
+                note = ' <span class="why">Built by us, waiting to land.</span>'
+            items.append(f'<li><span class="id">{e(r["piece"])}</span> {e(r["name"])}{note}</li>')
+        lists.append(f"<h4>{OP_LABELS[st][1]} ({len(rows)})</h4><ul>{''.join(items)}</ul>")
+    if ops["unlinked"]:
+        items = "".join(f'<li><span class="id">{e(u["case"])}</span> {e(u["name"])} ({e(u["operation"])})</li>'
+                        for u in ops["unlinked"])
+        lists.append(f"<h4>Cases linked to no operation ({len(ops['unlinked'])})</h4><ul>{items}</ul>")
+    else:
+        lists.append("<h4>Cases linked to no operation</h4><p class=\"why\">None: every case of solidcore's belongs to an operation.</p>")
+    if ops["not_on_board"]:
+        lists.append(f"<h4>Operations named in the list but missing from the board ({len(ops['not_on_board'])})</h4>"
+                     f"<p class=\"why\">{e(', '.join(ops['not_on_board']))}: not counted.</p>")
+    landing = ""
+    if ops["landing"]:
+        n = ops["landing"]
+        landing = (f" <b>Not working yet</b>: not started, or built by us and waiting to land ({n} of the {t[NOT_YET]}"
+                   " are, and are marked so).")
+    else:
+        landing = " <b>Not working yet</b>: not started."
+    return legend, landing, "".join(lists)
+
+
 def render(result, meta):
     e = html.escape
     t = result["total"]
+    ops = meta["ops"]
+    op_legend, op_landing, op_lists = render_operations(ops)
     phases = []
     for ph in result["phases"]:
         c = ph["counts"]
@@ -361,7 +561,16 @@ def render(result, meta):
 </section>""")
     with open(os.path.join(HERE, "page.html"), encoding="utf-8") as f:
         page = f.read()
+    head, op_pct = headline(ops)
     fill = {
+        "OP_PCT": str(op_pct),
+        # The big number above it already says the share that works; the sentence says the rest.
+        "OP_HEADLINE": e(head.split(" work today: ", 1)[-1]),
+        "OP_SIZE": str(ops["size"]),
+        "OP_BAR": op_bar(ops),
+        "OP_LEGEND": op_legend,
+        "OP_LANDING": op_landing,
+        "OP_LISTS": op_lists,
         "PCT": str(result["pct_main"]),
         "PCT_BUILT": str(result["pct_built"]),
         "ON_MAIN": str(t[ON_MAIN]), "WAITING": str(t[WAITING]), "NOT_STARTED": str(t[NOT_STARTED]),
@@ -381,10 +590,13 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", check=True).stdout
 
 
-def build(out_path, offline=False):
-    def read(path):
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def gather(offline=False):
+    """Everything both pages count: the board's counts, the operations' states and where they came from."""
     board_md = read(BOARD_MD)
     phases = read_board(json.loads(read(BOARD_JSON)), board_md)
     decisions = read_decisions(read(DECISIONS))
@@ -400,10 +612,18 @@ def build(out_path, offline=False):
     else:
         waiting, source = set(), "This copy was built without reading GitHub, so it counts only what main holds."
     result = count(phases, main_ids, waiting - main_ids, decisions[2])
+    cases, faults = json.loads(read(CASES)), json.loads(read(FAULTS))
+    ops = operation_states(phases, json.loads(read(OPERATIONS)), cases, faults, case_results(cases, faults),
+                           main_ids, waiting - main_ids)
     sha = git("rev-parse", "--short=8", "HEAD").strip()
     now = datetime.datetime.now(datetime.timezone.utc)
-    meta = {"next": next_gate(result), "source": source,
+    meta = {"next": next_gate(result), "source": source, "ops": ops,
             "built": f"{now:%d %B %Y}, {now:%H:%M} UTC, from main at {sha}"}
+    return result, meta
+
+
+def build(out_path, offline=False):
+    result, meta = gather(offline)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(render(result, meta))
     return result, meta
@@ -412,6 +632,14 @@ def build(out_path, offline=False):
 def main(argv):
     out = next((a for a in argv if not a.startswith("--")), "kernel-progress.html")
     result, meta = build(out, offline="--offline" in argv)
+    ops = meta["ops"]
+    print(headline(ops)[0])
+    for r in ops["rows"]:
+        if r["state"] in (SC_DONE, SC_HELD):
+            print(f"  {r['piece']}: {OP_LABELS[r['state']][1]}. " + (held_reason(r) if r["state"] == SC_HELD else ""))
+    if ops["unlinked"] or ops["not_on_board"]:
+        print(f"  cases linked to no operation: {[u['case'] for u in ops['unlinked']]}; "
+              f"operations not on the board: {ops['not_on_board']}")
     t = result["total"]
     print(f"{out}: {result['pct_main']}% on main ({t[ON_MAIN]} of {result['size']} pieces), "
           f"{t[WAITING]} built and waiting, {t[NOT_STARTED]} not started")

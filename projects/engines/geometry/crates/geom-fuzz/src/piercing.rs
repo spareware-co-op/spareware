@@ -19,7 +19,10 @@
 //! 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sides are read
 //! from the graph's Bernstein sum, which shares nothing with the solver it judges.
 //!
-//! Cost: a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.
+//! Cost: a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read. A
+//! segment lying in or along a plane whose vectors are not whole is a closed form (decision
+//! 32.85): before it, the engine ran the whole segment, to the budget on the three stored
+//! timeouts. [`answer_of`] reads a case's answer and count, which the target's tests hold.
 
 #![allow(
     clippy::many_single_char_names,
@@ -39,7 +42,13 @@ use crate::Finding;
 
 /// The work a case may take: a curve lying near a surface walks its length at the floor, and a stop
 /// there is an answer the laws accept.
-pub const WORK: u64 = 1 << 24;
+///
+/// Set by libFuzzer's ten seconds a case. Such a walk costs about 2,100 release instructions a
+/// unit, and the hosted fuzz build runs about a second for each thousand million of them, so the
+/// 2^24 this was ran a stopped case for 35 thousand million and timed out on two inputs of the
+/// 14 November campaign (`tests/__fuzz__/piercing/crashes`). 2^20 stops at about 2.2 thousand
+/// million, and a case answered within it runs the engine at most twice more.
+pub const WORK: u64 = 1 << 20;
 
 /// The most bytes [`decode`] reads from any input: 16.
 ///
@@ -353,6 +362,19 @@ pub fn check(case: &Case) -> Result<(), Finding> {
             || format!("{e:?}, {case:?}"),
         )),
     }
+}
+
+/// What one call of `curve_surface` answers on the case at [`WORK`], `None` for a stop on the
+/// budget, and the work its meter counts: held by count (never by a clock) in the target's tests.
+///
+/// # Errors
+///
+/// A [`Finding`] if a drawn shape is not valid, or the pair is refused.
+pub fn answer_of(case: &Case) -> Result<(Option<Intersection>, u128), Finding> {
+    let (a, b) = (curve(case.curve)?, surface(case.surface)?);
+    let mut work = meter();
+    let found = answer(curve_surface(&a, &b, &mut work), case)?;
+    Ok((found, work.used().work))
 }
 
 /// [`decode`] then [`check`].

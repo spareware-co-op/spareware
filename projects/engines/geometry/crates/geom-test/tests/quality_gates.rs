@@ -15,6 +15,11 @@
 //!   branch not taken, a run without branch data, a mark without a proof, and more.
 //! - **The binary.** `kernel-quality` itself is run on fixtures: exit 0 to pass, 1 to fail, 2 for
 //!   input it cannot use.
+//! - **Miri's plan.** `miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan`
+//!   packs drawn sets of tests for Miri's gate jobs and holds every part, in every order an oracle
+//!   written here starts its tests, within 15 minutes on a runner 1.6 times slower, each test
+//!   stopped at the budget, and runs `kernel-quality miri-plan` on the real table, which fails on
+//!   a test with no row.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them, and std's reductions, to build their oracles.
@@ -83,6 +88,15 @@ const REASON: &str =
     reason = "a test fixture, not kernel code: the counter only gives each temporary repository its own folder name"
 )]
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// This repository's root, five folders above geom-test's manifest.
+fn root_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(5)
+        .unwrap()
+        .to_path_buf()
+}
 
 /// A temporary repository, removed when dropped.
 struct Repo {
@@ -685,18 +699,37 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
         assert_eq!(shard_count(&of(package, per_shard + 1)), Ok(2), "{package}");
     }
     // cargo-mutants' slices (`--sharding slice`, its default; src/shard.rs at v27.1.0): shard k of
-    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer.
+    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer. The
+    // plan's `slice` is that rule, written out again here so a change to it shows.
     let slices = |len: u64, n: u64| -> Vec<u64> {
         let c = len.div_ceil(n);
         (0..n)
             .map(|k| len.min((k + 1) * c).saturating_sub(k * c))
             .collect()
     };
-    // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29, which the old
-    // plan of 4 minutes a mutant refused (17557 mutants in 293 shards), a few small lists, and
-    // geom-num beside a fast crate. Every shard is sized at the list's slowest crate, wherever
-    // its slice falls: each holds at least one mutant and fits the budget at that rate, and one
-    // shard fewer would give some slice more mutants than fit.
+    for (len, n) in [(10, 4), (9, 4), (17_589, 512), (1, 1), (7, 3)] {
+        let sizes: Vec<u64> = (0..n)
+            .map(|k| geom_test::mutants::slice(len, k, n).len() as u64)
+            .collect();
+        assert_eq!(sizes, slices(len as u64, n), "{len} in {n}");
+    }
+    // Each shard's planned seconds: its own mutants at their own crates' rates.
+    let planned = |mutants: &[Mutant], n: u64| -> Vec<u64> {
+        (0..n)
+            .map(|k| {
+                mutants[geom_test::mutants::slice(mutants.len(), k, n)]
+                    .iter()
+                    .map(|m| seconds_per_mutant(&m.package))
+                    .sum()
+            })
+            .collect()
+    };
+    let limit = geom_test::mutants::SHARD_LIMIT_MINUTES * 60;
+    assert!(budget < limit);
+    // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29 (17557 mutants),
+    // a few small lists, and geom-num beside a fast crate. Every shard holds a mutant and is
+    // planned within the budget (within the job's limit for a run too large for 512 shards of the
+    // budget), and no fewer shards would do: the plan is by each shard's own mutants.
     let kernel = [
         ("geom-bvh", 357),
         ("geom-curve", 5228),
@@ -718,32 +751,45 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
     for list in lists {
         let mutants: Vec<Mutant> = list.iter().flat_map(|(p, n)| of(p, *n)).collect();
         let len = mutants.len() as u64;
-        let rate = list
-            .iter()
-            .map(|(p, _)| seconds_per_mutant(p))
-            .max()
-            .unwrap();
         let shards = shard_count(&mutants).unwrap();
-        assert!(shards <= MAX_SHARDS, "{list:?}");
+        assert!((1..=MAX_SHARDS).contains(&shards), "{list:?}");
+        let fit = |n: u64, within: u64| {
+            slices(len, n).iter().all(|&size| size >= 1)
+                && planned(&mutants, n).iter().all(|&s| s <= within)
+        };
         for (k, size) in slices(len, shards).into_iter().enumerate() {
             assert!(size >= 1, "{list:?}: shard {k} of {shards} is empty");
-            assert!(
-                size * rate <= budget,
-                "{list:?}: shard {k} of {shards} holds {size}"
-            );
         }
-        if shards > 1 {
+        if fit(shards, budget) {
             assert!(
-                slices(len, shards - 1)
-                    .iter()
-                    .any(|size| size * rate > budget),
-                "{list:?}: {} shards would do",
-                shards - 1
+                (1..shards).all(|n| !fit(n, budget)),
+                "{list:?}: fewer than {shards} shards would do"
+            );
+        } else {
+            // Too large for the budget in 512 shards: within the limit, and the slowest shard
+            // planned at least.
+            assert!((1..=MAX_SHARDS).all(|n| !fit(n, budget)), "{list:?}");
+            let slowest = |n: u64| planned(&mutants, n).into_iter().max().unwrap();
+            assert!(slowest(shards) <= limit, "{list:?}");
+            assert!(
+                (1..=MAX_SHARDS)
+                    .filter(|&n| fit(n, u64::MAX))
+                    .all(|n| slowest(n) >= slowest(shards)),
+                "{list:?}"
             );
         }
     }
-    // More than the two shard jobs hold fails, and names why.
-    let per_shard = (budget / seconds_per_mutant("geom-num")) as usize;
+    // The planted case: a plan sized at the list's slowest crate (the plan before this one) gives
+    // the fast crate's mutants shards of their own, and the plan by each shard's own mutants
+    // needs fewer.
+    let mixed: Vec<Mutant> = [("geom-curve", 9000), ("geom-num", 1)]
+        .iter()
+        .flat_map(|(p, n)| of(p, *n))
+        .collect();
+    let by_slowest = 9001_u64.div_ceil(budget / seconds_per_mutant("geom-num"));
+    assert!(shard_count(&mixed).unwrap() < by_slowest);
+    // A run too large for 512 shards within the job's limit fails, and names why.
+    let per_shard = (limit / seconds_per_mutant("geom-num")) as usize;
     let most = of("geom-num", per_shard * MAX_SHARDS as usize);
     assert_eq!(shard_count(&most), Ok(MAX_SHARDS));
     let too_many = of("geom-num", per_shard * MAX_SHARDS as usize + 1);
@@ -1224,6 +1270,99 @@ fn mutants_outside_kernel_sources_mean_a_wrong_configuration() {
 // ---------------------------------------------------------------------------------------------
 // The coverage gate
 // ---------------------------------------------------------------------------------------------
+
+/// The coverage run's parts: every crate measured in exactly one part, the parts balanced by the
+/// recorded times within `PART_SECONDS` where one crate allows it, and a dropped part's crates
+/// named by the judge's check of its folder.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn coverage_parts_measure_every_crate_once_and_a_lost_part_fails() {
+    use coverage::{PART_SECONDS, TIMES, missing_outputs, parse_times, plan_parts, plan_problems};
+    let times = parse_times(TIMES).unwrap();
+    // The table names kernel crates only, each once (parse_times refuses a second line).
+    let kernel = geom_test::foundation::kernel_crates(&root_dir()).unwrap();
+    for krate in times.keys() {
+        assert!(kernel.contains(krate), "{krate} is not a kernel crate");
+    }
+    assert!(parse_times("geom-num\t3\ngeom-num\t4\n").is_err());
+    assert!(parse_times("geom-num\t0\n").is_err());
+    assert!(parse_times("geom-num 3\n").is_err());
+    let slowest = times.values().copied().max().unwrap();
+    let lists: Vec<Vec<String>> = vec![
+        kernel.clone(),
+        times.keys().cloned().collect(),
+        vec!["geom-num".to_owned()],
+        vec!["geom-unmeasured".to_owned(), "geom-p21".to_owned()],
+        Vec::new(),
+    ];
+    for crates in &lists {
+        let parts = plan_parts(crates, &times);
+        assert_eq!(
+            plan_problems(crates, &parts),
+            Vec::<String>::new(),
+            "{crates:?}"
+        );
+        assert!(!parts.is_empty());
+        let time = |k: &String| times.get(k).copied().unwrap_or(slowest);
+        for part in &parts {
+            let load: u64 = part.iter().map(time).sum();
+            // A part over the budget holds one crate, which no plan can split.
+            assert!(
+                load <= PART_SECONDS || part.len() == 1,
+                "{part:?}: {load} s"
+            );
+        }
+    }
+    // The planted cases: a crate dropped, measured twice, or not in the run is refused.
+    let crates: Vec<String> = times.keys().cloned().collect();
+    let mut parts = plan_parts(&crates, &times);
+    assert!(
+        parts.len() > 1,
+        "the kernel's coverage is measured in parts"
+    );
+    let dropped = parts[0].pop().unwrap();
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        [format!("{dropped} is in no part")]
+    );
+    parts[1].push(dropped.clone());
+    parts[2].push(dropped.clone());
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        [format!("{dropped} is in 2 parts")]
+    );
+    parts[2].pop();
+    parts[0].push("geom-elsewhere".to_owned());
+    assert_eq!(
+        plan_problems(&crates, &parts),
+        ["part 1: geom-elsewhere is not in the run"]
+    );
+    // A part whose files never reached the judge's folder: its crates are named, each file.
+    let repo = Repo::new("coverage-parts");
+    let dir = repo.path("cov");
+    let parts = plan_parts(&crates, &times);
+    for part in &parts[1..] {
+        for krate in part {
+            repo.write(&format!("cov/{krate}.lcov"), "");
+            repo.write(&format!("cov/{krate}.log"), "");
+        }
+    }
+    let missing = missing_outputs(&crates, &dir);
+    assert_eq!(missing.len(), parts[0].len() * 2, "{missing:?}");
+    for krate in &parts[0] {
+        assert!(
+            missing
+                .iter()
+                .any(|m| m.starts_with(&format!("{krate}: no coverage data"))),
+            "{missing:?}"
+        );
+    }
+    repo.write(&format!("cov/{}.lcov", parts[0][0]), "");
+    assert_eq!(missing_outputs(&crates, &dir).len(), parts[0].len() * 2 - 1);
+}
 
 /// An LCOV record for `file` under `repo`, with its lines and branch outcomes; `brf` defaults to
 /// the number of branch outcomes.
@@ -2220,4 +2359,165 @@ fn the_repository_ledger_reads_and_every_mark_in_the_kernel_has_its_proof() {
         assert!(text.lines().any(|l| l.trim() == s.line_text), "{s:?}");
     }
     assert_eq!(check_marks(&root, &ledger).unwrap(), Vec::<String>::new());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Miri's plan
+// ---------------------------------------------------------------------------------------------
+
+/// The latest a list schedule of `seconds` on four slots ends, tests started in `order`: each
+/// starts on the slot that frees first, as nextest starts the next test whenever one ends. An
+/// oracle written here, sharing no code with `geom_test::miri`.
+fn list_schedule(seconds: &[u64], order: &[usize]) -> u64 {
+    let mut slots = [0_u64; 4];
+    for &i in order {
+        let first = (0..4).min_by_key(|&s| slots[s]).unwrap();
+        slots[first] += seconds[i];
+    }
+    slots.into_iter().max().unwrap()
+}
+
+/// Miri's partitions: drawn sets of tests packed for a gate job, each test in exactly one part,
+/// and each part's set-up (120 s), listing (a second a binary) and tests, in every order the
+/// oracle tries, within 15 minutes on a runner 1.6 times slower, where each test takes 1.6 times
+/// its seconds or runs to nextest's 600 s stop, whichever is less; and the binary's plan of the
+/// real table, which fails on a test with no row.
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan() {
+    use geom_test::miri::{self, Rule, Timed};
+    let seed = resolve(
+        "quality gates: Miri's partitions",
+        Seed(0x6d69_7269_7061_7274),
+    )
+    .unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let below = |rng: &mut SplitMix64, n: u64| rng.below(NonZeroU64::new(n).unwrap());
+    // On a runner 1.6 times slower, in fifths of a second so the oracle rounds nothing: a test
+    // takes 8/5 of its seconds, or stops at 600 s; a binary's listing 8/5 of a second; and the
+    // job's set-up, 120 s, leaves the rest of 900 s.
+    let slow = |s: u64| (8 * s).min(5 * 600);
+    let room = 5 * (900 - 120);
+    for trial in 0..200 {
+        let count = 1 + below(&mut rng, 300) as usize;
+        let binaries = 1 + below(&mut rng, 60);
+        let tests: Vec<Timed> = (0..count)
+            .map(|i| {
+                // Mostly quick tests, some slow ones, a few near the budget.
+                let seconds = match below(&mut rng, 10) {
+                    0 => 400 + below(&mut rng, 200),
+                    1 | 2 => 30 + below(&mut rng, 300),
+                    _ => 1 + below(&mut rng, 20),
+                };
+                Timed {
+                    seconds,
+                    binary: format!("geom-x::b{}", below(&mut rng, binaries)),
+                    test: format!("t{i}"),
+                }
+            })
+            .collect();
+        let plan = miri::pack(&tests, Rule::Job).unwrap();
+        let by_name: BTreeMap<(&str, &str), u64> = tests
+            .iter()
+            .map(|t| ((t.binary.as_str(), t.test.as_str()), t.seconds))
+            .collect();
+        let mut placed = 0;
+        for k in 1..=plan.len() {
+            let names = plan.tests_of(k);
+            placed += names.len();
+            let seconds: Vec<u64> = names.iter().map(|n| slow(by_name[n])).collect();
+            let listing = names
+                .iter()
+                .map(|(b, _)| *b)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len() as u64;
+            assert_eq!(listing, plan.binaries(k) as u64, "trial {trial} part {k}");
+            let mut order: Vec<usize> = (0..seconds.len()).collect();
+            for _ in 0..20 {
+                // Fisher and Yates' shuffle, one order nextest might start the tests in.
+                for i in (1..order.len()).rev() {
+                    order.swap(i, below(&mut rng, i as u64 + 1) as usize);
+                }
+                let ends = list_schedule(&seconds, &order);
+                assert!(
+                    ends <= 5 * plan.part_seconds(k) && 8 * listing + ends <= room,
+                    "trial {trial} part {k}: {ends} fifths of a second of tests and {listing} \
+                     binaries, over {room} ({seed:?})"
+                );
+            }
+        }
+        assert_eq!(
+            placed, count,
+            "trial {trial}: a test left out or placed twice"
+        );
+    }
+
+    // The binary plans the real table: the partitions and geom-pool's part as the library plans
+    // them, one filterset a file.
+    let rows = miri::parse_table(miri::TIMES).unwrap();
+    let mut suites = serde_json::Map::new();
+    for r in &rows {
+        let suite = suites
+            .entry(r.binary.clone())
+            .or_insert_with(|| json!({"testcases": {}}));
+        suite["testcases"][r.test.as_str()] =
+            json!({"ignored": false, "filter-match": {"status": "matches"}});
+    }
+    let repo = Repo::new("miri-plan");
+    // Exit status, standard output, both streams, and the folder the plan wrote.
+    let run = |listing: &Value| -> (i32, String, String, PathBuf) {
+        let list = repo.path("miri-list.json");
+        std::fs::write(&list, listing.to_string()).unwrap();
+        let out_dir = repo.path("plan");
+        let _ = std::fs::remove_dir_all(&out_dir);
+        let out = Command::new(env!("CARGO_BIN_EXE_kernel-quality"))
+            .args(["miri-plan", "--list"])
+            .arg(&list)
+            .arg("--out")
+            .arg(&out_dir)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let text = format!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
+        (out.status.code().unwrap(), stdout, text, out_dir)
+    };
+    let listing = json!({"rust-suites": Value::Object(suites.clone())});
+    let (code, stdout, text, out_dir) = run(&listing);
+    assert_eq!(code, 0, "{text}");
+    let gate = miri::gate_plan(&rows).unwrap();
+    let printed: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(printed["count"], json!(gate.parts.len()), "{text}");
+    assert_eq!(
+        printed["parts"],
+        json!((1..=gate.parts.len()).collect::<Vec<_>>())
+    );
+    for k in 1..=gate.parts.len() {
+        let file = std::fs::read_to_string(out_dir.join(format!("part-{k}.txt"))).unwrap();
+        assert_eq!(file, gate.parts.filterset(k).unwrap(), "partition {k}");
+    }
+    assert!(
+        !out_dir
+            .join(format!("part-{}.txt", gate.parts.len() + 1))
+            .exists()
+    );
+    let pool = std::fs::read_to_string(out_dir.join("pool.txt")).unwrap();
+    assert_eq!(pool, gate.pool.filterset(1).unwrap());
+    assert!(pool.contains("geom-pool::attack_g33"), "{pool}");
+
+    // Seeded faults: a test with no row fails the plan, named, and writes no partition; a listing
+    // the plan cannot read is input it cannot use.
+    let mut unmeasured = suites;
+    unmeasured
+        .entry("geom-num".to_owned())
+        .or_insert_with(|| json!({"testcases": {}}))["testcases"]["a_test_nobody_measured"] =
+        json!({"ignored": false});
+    let (code, _, text, out_dir) = run(&json!({"rust-suites": Value::Object(unmeasured)}));
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("geom-num a_test_nobody_measured"), "{text}");
+    assert!(!out_dir.join("part-1.txt").exists());
+    let (code, _, text, _) = run(&json!({"not": "a listing"}));
+    assert_eq!(code, 2, "{text}");
 }

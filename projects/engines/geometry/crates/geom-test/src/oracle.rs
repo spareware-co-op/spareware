@@ -14,9 +14,10 @@
 //!   outcomes, each written as a fixture.
 //! - [`geomdl`]: the first oracle, geomdl, on NURBS: its jobs, and each answer compared, with any
 //!   difference settled in exact rationals by [`crate::nurbs_reference`].
-//!
 //! - [`smlib`]: the second, `SMLib`'s `NLib` layer, on the same lines: evaluation, knot insertion and
 //!   removal, and degree elevation.
+//! - [`meshes`]: mesh booleans against Manifold, manifold-rust, CGAL and Cherchi's exact booleans,
+//!   with any difference settled in exact rationals by [`crate::flat_reference`].
 //! - [`sketches`]: ezpz and fiksi, two sketch solvers, against the block solver on sketches drawn
 //!   from a known truth (G222).
 //!
@@ -31,7 +32,7 @@
 //!   same bits.
 //! - **The allowance never grows with the oracle's tolerance**: it is capped at our bound plus the
 //!   fit bound ([`compare::Allowance::total`]).
-//! - **Each signature is judged once**: a nightly run fails only on a new one.
+//! - **Each signature is judged once**: an oracle run fails only on a new one.
 //!
 //! Method: chapter 28.10 and decision 32.6
 //! (`projects/engines/geometry/architecture/28-testing.md`,
@@ -44,6 +45,7 @@ pub mod compare;
 pub mod exact;
 pub mod families;
 pub mod geomdl;
+pub mod meshes;
 pub mod sketches;
 pub mod smlib;
 pub mod triage;

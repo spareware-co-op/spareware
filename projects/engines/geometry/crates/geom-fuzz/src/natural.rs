@@ -19,8 +19,15 @@
 //! 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): each surface's
 //! equation is written here from the drawn numbers, sharing nothing with the closed forms it judges.
 //!
-//! Cost: a few predicates and square roots, and a curve-surface pair for each edge, up to [`WORK`]; at
-//! most [`MAX_INPUT_BYTES`] bytes read.
+//! Cost: a few predicates and square roots, and a curve-surface pair for each edge, once a call, up
+//! to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read. An edge that lies on the other surface is a
+//! closed form where exact signs place it, and otherwise costs the engine boxes all along it: an
+//! end circle on the frame off the grid, and a sphere's edge (issue 974). [`work_of`] reads a
+//! case's count, which the target's tests hold for the issue's four inputs, for the end circles
+//! a plane's domain holds a part of (decision 32.69), for an end circle about a line through a
+//! sphere's centre that stands off the sphere (decision 32.74), for the end circles of a cone
+//! across another on a parallel axis (decision 32.86), and for what is still the engine's;
+//! [`answer_of`] reads its answer.
 
 #![allow(
     clippy::many_single_char_names,
@@ -408,6 +415,30 @@ pub fn check(case: &Case) -> Result<(), Finding> {
             || format!("{other:?}, {budget}, {case:?}"),
         )),
     }
+}
+
+/// The work one call of `natural` takes on the case, as its meter counts it: what a caller of the
+/// kernel pays, held by count (never by a clock) in the target's tests.
+///
+/// # Errors
+///
+/// A [`Finding`] if a drawn surface is not valid, or the pair is refused or stopped.
+pub fn work_of(case: &Case) -> Result<u128, Finding> {
+    let (a, b) = (surface(case.first)?, surface(case.second)?);
+    let mut work = meter();
+    must(natural(&a, &b, &mut work), "a valid pair is answered")?;
+    Ok(work.used().work)
+}
+
+/// What one call of `natural` says of the case, in the order drawn and under [`WORK`]: the answer
+/// the target's tests hold beside its count from [`work_of`].
+///
+/// # Errors
+///
+/// As [`work_of`].
+pub fn answer_of(case: &Case) -> Result<Option<Intersection>, Finding> {
+    let (a, b) = (surface(case.first)?, surface(case.second)?);
+    must(natural(&a, &b, &mut meter()), "a valid pair is answered")
 }
 
 /// [`decode`] then [`check`].

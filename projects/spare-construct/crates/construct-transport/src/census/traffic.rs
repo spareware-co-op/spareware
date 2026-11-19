@@ -15,12 +15,14 @@ use serde_json::{Value, json};
 use std::rc::Rc;
 
 /// `gwCounted(sc)`: how many gateways have flows set from counts, and how many there are.
+#[must_use]
 pub fn gw_counted(sc: &Scenario) -> (usize, usize) {
     let g: Vec<_> = sc.zones.values().filter(|z| z.kind.is("gateway")).collect();
     (g.iter().filter(|z| z.gw_src.get().is_some_and(value_truthy)).count(), g.len())
 }
 
 /// `distBasis(sc, res, P, S)`: how the distribution of a result was made, in words.
+#[must_use]
 pub fn dist_basis(p: &Project, sc: &Scenario, res: &Res) -> String {
     if res.manual {
         return "manual OD matrix entered by the user".to_string();
@@ -66,13 +68,15 @@ pub struct Distribution {
 /// A result read back from a saved project lists its junctions and gateways alphabetically (the saved JSON is read into sorted maps), where the prototype keeps the
 /// order the run made them in; the rows are then in the same order unless two have exactly the same traffic. Pass the results of a run to [`distribution_of`]
 /// to keep the run's own order.
+#[must_use]
 pub fn distribution(p: &Project, sc: &Scenario) -> Option<Distribution> {
     let res: Vec<Res> = PERIODS.iter().filter_map(|per| stored_res(sc, per)).collect();
-    let refs: Vec<&Res> = res.iter().collect();
-    distribution_of(p, sc, &refs)
+    let held: Vec<&Res> = res.iter().collect();
+    distribution_of(p, sc, &held)
 }
 
 /// `distribution(sc)` for results the caller holds (AM then PM): those with development trips are used.
+#[must_use]
 pub fn distribution_of(p: &Project, sc: &Scenario, results: &[&Res]) -> Option<Distribution> {
     let res: Vec<&Res> = results.iter().copied().filter(|r| r.dev.trips > 0.0).collect();
     if res.is_empty() {
@@ -102,18 +106,19 @@ pub fn without_scenario(p: &Project, sc_idx: usize) -> Option<usize> {
     let others: Vec<usize> = (0..p.scenarios.len()).filter(|i| *i != sc_idx).collect();
     let chosen = p.extra.get("landuse").and_then(|l| l.get("without")).filter(|x| value_truthy(x)).map(value_to_js_string);
     if let Some(c) = chosen
-        && let Some(i) = others.iter().find(|i| p.scenarios[**i].id == c)
+        && let Some(i) = others.iter().find(|i| p.scenarios.get(**i).is_some_and(|s| s.id == c))
     {
         return Some(*i);
     }
-    let yr = |i: usize| year_of(Some(&p.scenarios[i]), &p.settings);
+    // Every index here is below p.scenarios.len() (sc_idx is the caller's scenario)
+    let yr = |i: usize| year_of(p.scenarios.get(i), &p.settings);
     let me = yr(sc_idx);
     let same: Vec<usize> = others.into_iter().filter(|i| yr(*i) == me).collect();
-    let role = |i: usize| p.scenarios[i].role.as_str().map(str::to_string);
+    let role = |i: usize| p.scenarios.get(i).and_then(|s| s.role.as_str()).map(str::to_string);
     same.iter()
         .find(|i| role(**i).as_deref() == Some("baseline"))
-        .or_else(|| same.iter().find(|i| p.base.is(&p.scenarios[**i].id)))
-        .or_else(|| same.iter().find(|i| !matches!(role(**i).as_deref(), Some("proposal") | Some("mitigation"))))
+        .or_else(|| same.iter().find(|i| p.scenarios.get(**i).is_some_and(|s| p.base.is(&s.id))))
+        .or_else(|| same.iter().find(|i| !matches!(role(**i).as_deref(), Some("proposal" | "mitigation"))))
         .copied()
 }
 
@@ -130,6 +135,7 @@ pub struct JunctionComparison {
 
 /// `withWithout(sc, woSc, period)`: junctions without and with the development in a period, from the results the two scenarios have stored; None unless both have one
 /// for it. (A result read back from a saved project lists its junctions alphabetically; see [`distribution`].)
+#[must_use]
 pub fn with_without_period(sc: &Scenario, wo: &Scenario, period: &str) -> Option<JunctionComparison> {
     let a = stored_res(wo, period)?;
     let b = stored_res(sc, period)?;
@@ -137,6 +143,7 @@ pub fn with_without_period(sc: &Scenario, wo: &Scenario, period: &str) -> Option
 }
 
 /// `withWithout(sc, woSc, period)` for results the caller holds: `without` is the scenario without the development, `with` the scenario `sc`.
+#[must_use]
 pub fn with_without_res(sc: &Scenario, a: &Res, b: &Res, period: &str) -> Option<JunctionComparison> {
     let name = |id: &str| -> String {
         let nr = b.nodes.get(id).or_else(|| a.nodes.get(id));
@@ -152,6 +159,7 @@ pub fn with_without_res(sc: &Scenario, a: &Res, b: &Res, period: &str) -> Option
 }
 
 /// `gwSrcText(z)`: the count source of a gateway as "NZTA 01N00478 \u{b7} SH1 Drury \u{b7} 61,200/day \u{b7} NB": each count named in the gateway's `gwSrc` with its direction, or "both directions" for a two-way count.
+#[must_use]
 pub fn gw_src_text(sc: &Scenario, gw_id: &str, counts: &[Rc<Count>]) -> String {
     let Some(z) = sc.zones.get(gw_id) else { return String::new() };
     let Some(src) = z.gw_src.get().filter(|v| value_truthy(v)) else { return String::new() };
@@ -204,9 +212,10 @@ pub struct UseCount {
 /// `useCount(sc, gwId, countId)`: sets a gateway's flows from one chosen count (every other count is set aside for the call). The count must be on the
 /// gateway's road and class within 3 km, as for the nearest counts.
 pub fn use_count(p: &mut Project, sc_idx: usize, gw_id: &str, count_id: &str) -> UseCount {
-    let fail = |m: String| UseCount { n: 0, src: None, error: Some(m) };
-    if !p.scenarios[sc_idx].zones.get(gw_id).is_some_and(|z| z.kind.is("gateway")) {
-        return fail("That gateway is no longer in this scenario.".to_string());
+    let fail = |msg: String| UseCount { n: 0, src: None, error: Some(msg) };
+    let gone = || "That gateway is no longer in this scenario.".to_string();
+    if !p.scenarios.get(sc_idx).is_some_and(|sc| sc.zones.get(gw_id).is_some_and(|zone| zone.kind.is("gateway"))) {
+        return fail(gone());
     }
     let data = Data::read(p);
     let Some(c) = data.counts.iter().find(|x| x.id == count_id).cloned() else {
@@ -220,47 +229,61 @@ pub fn use_count(p: &mut Project, sc_idx: usize, gw_id: &str, count_id: &str) ->
     let original = p.data.get().and_then(|d| d.extra.get("counts")).cloned();
     let mut aside = original.clone().unwrap_or_else(|| json!([]));
     if let Some(list) = aside.as_array_mut() {
-        for x in list.iter_mut() {
-            if x.get("id").and_then(Value::as_str) != Some(c.id.as_str())
-                && let Some(o) = x.as_object_mut()
+        for item in list.iter_mut() {
+            if item.get("id").and_then(Value::as_str) != Some(c.id.as_str())
+                && let Some(fields) = item.as_object_mut()
             {
-                o.insert("off".into(), json!(true));
+                fields.insert("off".into(), json!(true));
             }
         }
     }
-    if let Some(d) = p.data.get_mut() {
-        d.extra.insert("counts".into(), aside);
+    if let Some(dm) = p.data.get_mut() {
+        dm.extra.insert("counts".into(), aside);
     }
     let only = Data::read(p);
-    if let Some(d) = p.data.get_mut() {
+    if let Some(dm) = p.data.get_mut() {
         match original {
-            Some(o) => {
-                d.extra.insert("counts".into(), o);
+            Some(saved) => {
+                dm.extra.insert("counts".into(), saved);
             }
             None => {
-                d.extra.remove("counts");
+                dm.extra.remove("counts");
             }
         }
     }
-    let s = p.settings.clone();
-    let mut tmp = p.scenarios[sc_idx].clone();
-    let z = tmp.zones.get(gw_id).cloned().expect("gateway");
+    let settings = p.settings.clone();
+    // The scenario and its gateway were checked at the top, and nothing since removes them
+    let Some(mut tmp) = p.scenarios.get(sc_idx).cloned() else {
+        return fail(gone());
+    };
+    let Some(gw) = tmp.zones.get(gw_id).cloned() else {
+        return fail(gone());
+    };
     tmp.zones = crate::project::OrderedMap::new();
-    tmp.zones.insert(gw_id.to_string(), z);
-    let n = gateways_from_counts(&mut tmp, &s, &only);
-    let z = tmp.zones.get(gw_id).cloned().expect("gateway");
-    p.scenarios[sc_idx].zones.insert(gw_id.to_string(), z);
+    tmp.zones.insert(gw_id.to_string(), gw);
+    let n = gateways_from_counts(&mut tmp, &settings, &only);
+    let Some(gw) = tmp.zones.get(gw_id).cloned() else {
+        return fail(gone());
+    };
+    if let Some(sc) = p.scenarios.get_mut(sc_idx) {
+        sc.zones.insert(gw_id.to_string(), gw);
+    }
     if n > 0 {
         let counts = Data::read(p).counts;
-        return UseCount { n, src: Some(gw_src_text(&p.scenarios[sc_idx], gw_id, &counts)), error: None };
+        let src = p.scenarios.get(sc_idx).map_or_else(String::new, |sc| gw_src_text(sc, gw_id, &counts));
+        return UseCount { n, src: Some(src), error: None };
     }
-    let zname = p.scenarios[sc_idx].zones[gw_id].name.str_or("this gateway").to_string();
+    let zname = p.scenarios.get(sc_idx).and_then(|sc| sc.zones.get(gw_id)).map_or("this gateway", |zone| zone.name.str_or("this gateway")).to_string();
     fail(format!(
         "{c_name} cannot set {zname}'s flows: it must be on the gateway's road, of the same class, within 3 km (and its source switched on). Pick another count, or enter the flows by hand."
     ))
 }
 
 /// `cardCheck(k, raw)`: the answer of the zone card, checked: the land use and quantity, or an error message.
+///
+/// # Errors
+///
+/// The card's message when no known land use is chosen or the quantity is not a number above 0.
 pub fn card_check(k: &str, raw: &Value) -> Result<(String, f64), String> {
     if k.is_empty() || land_use(k).is_none() {
         return Err("Choose a land use.".to_string());
@@ -275,6 +298,7 @@ pub fn card_check(k: &str, raw: &Value) -> Result<(String, f64), String> {
 pub const CARD_USES: [&str; 6] = LANDUSES_CARD_USES;
 
 /// The `{ k, q }` answer of [`card_check`] as JSON.
+#[must_use]
 pub fn card_json(r: &Result<(String, f64), String>) -> Value {
     match r {
         Ok((k, q)) => json!({ "k": k, "q": crate::jsnum::json_number(*q) }),

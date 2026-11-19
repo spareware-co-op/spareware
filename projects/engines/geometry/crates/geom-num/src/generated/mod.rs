@@ -65,8 +65,11 @@
 //! and each `larger` as its larger operand's; the product by the constant makes k = r + 1 (each
 //! module's header gives both). The constant is at least E · (1 + 2u)^k and (1 − u)(1 + 2u) ≥ 1, so
 //! the computed bound is at least E · S; a computed value beyond it has the exact sign. A computed
-//! scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The full statement, with
-//! references, is in geom-gen's `predicate_derive.rs`.
+//! scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The scale at run time leaves out
+//! a monomial of the result's scale set that is the average of other monomials of the set (x^2·y^2,
+//! of x^4 and y^4): its value, their geometric mean, is never above the largest of them, and the
+//! largest of the monomials kept is S for every input, so the filter computes the same S. The full
+//! statement, with references, is in geom-gen's `predicate_derive.rs`.
 //!
 //! The constants, beside Shewchuk's stage-A bounds (`exactinit` in `predicates.c`; ε = 2^-53,
 //! scaled by a permanent computed at run time) and the constants of FPG's filters in Geogram

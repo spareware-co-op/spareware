@@ -1,0 +1,5806 @@
+{
+  "format": 1,
+  "about": "The 120 stored cases that geom-solidcore runs solidcore through (decision 32.70): 42 intersections of planes, spheres, cylinders and cones, 29 booleans, and 49 building cases (walls, openings, slabs and roofs of a building and a family's extruded forms, alone and as voids, ids bldg-NN), each with its expected answer, where that answer comes from, and the bits of every expected number (length_bits, volume_bits: the IEEE 754 bits of the closed form as computed in binary64). tests/cases.rs reads it. An intersection is the same when every sampled point of every curve is within max_residual of both surfaces and the total length within length_relerr of the closed form (the sampling's own bias is about 5e-8); a boolean when the volume is within volume_relerr (flat or curved) of the closed form, the face count where given is equal, and the result passes the check.",
+  "tolerances": {
+    "samples_per_piece": 4000,
+    "max_residual": 1e-09,
+    "length_relerr": 1e-06,
+    "volume_relerr_flat": 1e-12,
+    "volume_relerr_curved": 1e-09
+  },
+  "cases": [
+    {
+      "id": "isect-00",
+      "name": "plane-sphere n=z d=0",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "401921fb54442d18",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-01",
+      "name": "plane-sphere n=z d=0.3",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.3
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.3
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4017f9a09e6452e3",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-02",
+      "name": "plane-sphere n=z d=0.6",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.6
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.6
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "40141b2f769cf0e0",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-03",
+      "name": "plane-sphere n=z d=0.9",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.9
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.9
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4005e903e7b8a1fe",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-04",
+      "name": "plane-sphere n=z d=0.999",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.999
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.999
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "3fd1faa1a97f80ae",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-05",
+      "name": "plane-sphere n=z d=1",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-06",
+      "name": "plane-sphere n=z d=1.2",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          1.2
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              1.2
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-07",
+      "name": "plane-sphere n=x d=0",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "401921fb54442d18",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-08",
+      "name": "plane-sphere n=x d=0.3",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.3,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.3,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4017f9a09e6452e3",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-09",
+      "name": "plane-sphere n=x d=0.6",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.6,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.6,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "40141b2f769cf0e0",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-10",
+      "name": "plane-sphere n=x d=0.9",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.9,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.9,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4005e903e7b8a1fe",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-11",
+      "name": "plane-sphere n=x d=0.999",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.999,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.999,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "3fd1faa1a97f80ae",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-12",
+      "name": "plane-sphere n=x d=1",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              1.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-13",
+      "name": "plane-sphere n=x d=1.2",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          1.2,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              1.2,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-14",
+      "name": "plane-sphere n=diag d=0",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "401921fb54442d18",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-15",
+      "name": "plane-sphere n=diag d=0.3",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.17320508075688776,
+          0.17320508075688776,
+          0.17320508075688776
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.17320508075688776,
+              0.17320508075688776,
+              0.17320508075688776
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4017f9a09e6452e3",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-16",
+      "name": "plane-sphere n=diag d=0.6",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.3464101615137755,
+          0.3464101615137755,
+          0.3464101615137755
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.3464101615137755,
+              0.3464101615137755,
+              0.3464101615137755
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "40141b2f769cf0e0",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-17",
+      "name": "plane-sphere n=diag d=0.9",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.5196152422706632,
+          0.5196152422706632,
+          0.5196152422706632
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.5196152422706632,
+              0.5196152422706632,
+              0.5196152422706632
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4005e903e7b8a1fe",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-18",
+      "name": "plane-sphere n=diag d=0.999",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.5767729189204363,
+          0.5767729189204363,
+          0.5767729189204363
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.5767729189204363,
+              0.5767729189204363,
+              0.5767729189204363
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "3fd1faa1a97f80ae",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-19",
+      "name": "plane-sphere n=diag d=1",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.5773502691896258,
+          0.5773502691896258,
+          0.5773502691896258
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.5773502691896258,
+              0.5773502691896258,
+              0.5773502691896258
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-20",
+      "name": "plane-sphere n=diag d=1.2",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.692820323027551,
+          0.692820323027551,
+          0.692820323027551
+        ],
+        "normal": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.692820323027551,
+              0.692820323027551,
+              0.692820323027551
+            ],
+            "normal": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: a circle of radius sqrt(1 - d^2), length 2 pi sqrt(1 - d^2); none at d >= 1"
+    },
+    {
+      "id": "isect-21",
+      "name": "plane-cylinder perp z=2",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          2.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              2.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "401921fb54442d18",
+      "source": "closed form: a circle of radius 1, length 2 pi"
+    },
+    {
+      "id": "isect-22",
+      "name": "plane-cylinder tilt 30",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          2.0
+        ],
+        "normal": [
+          0.49999999999999994,
+          0.0,
+          0.8660254037844387
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              2.0
+            ],
+            "normal": [
+              0.49999999999999994,
+              0.0,
+              0.8660254037844387
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "401b1c966f46255f",
+      "source": "closed form: an ellipse of semi-axes 1/cos 30 and 1, its perimeter by the arithmetic-geometric mean"
+    },
+    {
+      "id": "isect-23",
+      "name": "plane-cylinder tilt 60",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          2.0
+        ],
+        "normal": [
+          0.8660254037844386,
+          0.0,
+          0.5000000000000001
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              2.0
+            ],
+            "normal": [
+              0.8660254037844386,
+              0.0,
+              0.5000000000000001
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "4023607c49007bba",
+      "source": "closed form: an ellipse of semi-axes 1/cos 60 and 1, its perimeter by the arithmetic-geometric mean"
+    },
+    {
+      "id": "isect-24",
+      "name": "plane-cylinder axial x=0",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "4028000000000000",
+      "source": "closed form: two lines of length 4 and two cap chords of length 2"
+    },
+    {
+      "id": "isect-25",
+      "name": "plane-cylinder axial x=0.5",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.5,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.5,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "4026ed9eba16132a",
+      "source": "closed form: two lines of length 4 and two cap chords of length 2 sqrt(0.75)"
+    },
+    {
+      "id": "isect-26",
+      "name": "plane-cylinder tangent x=1",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              1.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "4010000000000000",
+      "source": "closed form: the one line of tangency, length 4"
+    },
+    {
+      "id": "isect-27",
+      "name": "plane-cylinder miss x=1.5",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        }
+      ],
+      "plane": {
+        "at": [
+          1.5,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              1.5,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: none"
+    },
+    {
+      "id": "isect-28",
+      "name": "plane-cone perp z=1",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cone",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "base_radius": 1.0,
+          "top_radius": 0.25,
+          "height": 2.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "solid_cone": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "base_radius": 1.0,
+            "top_radius": 0.25,
+            "height": 2.0
+          }
+        }
+      ],
+      "length_bits": "400f6a7a2955385e",
+      "source": "closed form: a circle of radius 0.625, length 1.25 pi"
+    },
+    {
+      "id": "isect-29",
+      "name": "plane-cone perp z=0.4",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cone",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "base_radius": 1.0,
+          "top_radius": 0.25,
+          "height": 2.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.4
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.4
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          }
+        },
+        {
+          "solid_cone": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "base_radius": 1.0,
+            "top_radius": 0.25,
+            "height": 2.0
+          }
+        }
+      ],
+      "length_bits": "40155ce26e06bfee",
+      "source": "closed form: a circle of radius 0.85, length 1.7 pi"
+    },
+    {
+      "id": "isect-30",
+      "name": "plane-cone tilt 10 (ellipse)",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cone",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "base_radius": 1.0,
+          "top_radius": 0.25,
+          "height": 2.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "normal": [
+          0.17364817766693033,
+          0.0,
+          0.984807753012208
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "normal": [
+              0.17364817766693033,
+              0.0,
+              0.984807753012208
+            ]
+          }
+        },
+        {
+          "solid_cone": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "base_radius": 1.0,
+            "top_radius": 0.25,
+            "height": 2.0
+          }
+        }
+      ],
+      "length_bits": null,
+      "source": "closed form: on both surfaces; the length is not checked (no closed form was written)"
+    },
+    {
+      "id": "isect-31",
+      "name": "plane-cone axial x=0 (lines and chords)",
+      "operation": "plane_section",
+      "operands": [
+        {
+          "shape": "cone",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "base_radius": 1.0,
+          "top_radius": 0.25,
+          "height": 2.0
+        }
+      ],
+      "plane": {
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normal": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "surfaces": [
+        {
+          "plane": {
+            "at": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "solid_cone": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "base_radius": 1.0,
+            "top_radius": 0.25,
+            "height": 2.0
+          }
+        }
+      ],
+      "length_bits": "401b1687a8ae14a3",
+      "source": "closed form: two side lines of length sqrt(0.75^2 + 4) and cap chords of 2 and 0.5"
+    },
+    {
+      "id": "isect-32",
+      "name": "sphere-sphere r2=1 d=1",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              1.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "4015c3fddc92b2dd",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-33",
+      "name": "sphere-sphere r2=1 d=1.5",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            1.5,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              1.5,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "40109fadcd69f757",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-34",
+      "name": "sphere-sphere r2=1 d=0.5",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.5,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.5,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "401855ad115eb99e",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-35",
+      "name": "sphere-sphere r2=1 d=2",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              2.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-36",
+      "name": "sphere-sphere r2=1 d=2.5",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            2.5,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              2.5,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-37",
+      "name": "sphere-sphere r2=0.5 d=0.5",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.5,
+            0.0,
+            0.0
+          ],
+          "radius": 0.5
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.5,
+              0.0,
+              0.0
+            ],
+            "radius": 0.5
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-38",
+      "name": "sphere-sphere r2=0.5 d=0.25",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.25,
+            0.0,
+            0.0
+          ],
+          "radius": 0.5
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.25,
+              0.0,
+              0.0
+            ],
+            "radius": 0.5
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-39",
+      "name": "sphere-sphere r2=0.5 d=0",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 0.5
+        }
+      ],
+      "with_points": true,
+      "surfaces": [
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 0.5
+          }
+        }
+      ],
+      "length_bits": "0000000000000000",
+      "source": "closed form: the circle of the radical plane x = (d^2 + 1 - r2^2) / 2d, radius sqrt(1 - x^2); none when the spheres only touch, are apart, nested or concentric"
+    },
+    {
+      "id": "isect-40",
+      "name": "cylinder-sphere coaxial R=1.5",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            2.0
+          ],
+          "radius": 1.5
+        }
+      ],
+      "with_points": false,
+      "surfaces": [
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              2.0
+            ],
+            "radius": 1.5
+          }
+        }
+      ],
+      "length_bits": "402921fb54442d18",
+      "source": "closed form: two circles of radius 1 when R > 1, one (the tangency circle) when R = 1"
+    },
+    {
+      "id": "isect-41",
+      "name": "cylinder-sphere coaxial R=1",
+      "operation": "meet",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0,
+          "height": 4.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            2.0
+          ],
+          "radius": 1.0
+        }
+      ],
+      "with_points": false,
+      "surfaces": [
+        {
+          "solid_cylinder": {
+            "base": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "radius": 1.0,
+            "height": 4.0
+          }
+        },
+        {
+          "sphere": {
+            "centre": [
+              0.0,
+              0.0,
+              2.0
+            ],
+            "radius": 1.0
+          }
+        }
+      ],
+      "length_bits": "401921fb54442d18",
+      "source": "closed form: two circles of radius 1 when R > 1, one (the tangency circle) when R = 1"
+    },
+    {
+      "id": "bool-00",
+      "name": "union offset cubes",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3ffe000000000000",
+      "curved": false,
+      "source": "closed form: 1 + 1 - 0.125"
+    },
+    {
+      "id": "bool-01",
+      "name": "intersection offset cubes",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3fc0000000000000",
+      "curved": false,
+      "source": "closed form: 0.5^3"
+    },
+    {
+      "id": "bool-02",
+      "name": "difference offset cubes",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3fec000000000000",
+      "curved": false,
+      "source": "closed form: 1 - 0.125"
+    },
+    {
+      "id": "bool-03",
+      "name": "union sharing a whole face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "source": "closed form: 2"
+    },
+    {
+      "id": "bool-04",
+      "name": "union sharing part of a face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.5,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "source": "closed form: 2"
+    },
+    {
+      "id": "bool-05",
+      "name": "union sharing an edge",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            1.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "source": "closed form: 2"
+    },
+    {
+      "id": "bool-06",
+      "name": "union sharing a vertex",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "source": "closed form: 2"
+    },
+    {
+      "id": "bool-07",
+      "name": "union of identical cubes",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3ff0000000000000",
+      "curved": false,
+      "source": "closed form: 1"
+    },
+    {
+      "id": "bool-08",
+      "name": "difference of identical cubes (empty)",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "0000000000000000",
+      "curved": false,
+      "faces": 0,
+      "source": "closed form: empty, volume 0"
+    },
+    {
+      "id": "bool-09",
+      "name": "intersection of disjoint cubes (empty)",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "0000000000000000",
+      "curved": false,
+      "faces": 0,
+      "source": "closed form: empty, volume 0"
+    },
+    {
+      "id": "bool-10",
+      "name": "union of disjoint cubes (two lumps)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form: two lumps of volume 1, 12 faces"
+    },
+    {
+      "id": "bool-11",
+      "name": "L by union, coplanar top and bottom",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4008000000000000",
+      "curved": false,
+      "source": "closed form: 3"
+    },
+    {
+      "id": "bool-12",
+      "name": "wall with window, cutter thicker",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.4,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "400199999999999a",
+      "curved": false,
+      "source": "closed form: 4 x 0.2 x 3 - 1 x 0.2 x 1"
+    },
+    {
+      "id": "bool-13",
+      "name": "wall with window, cutter flush",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.0,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.2,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "400199999999999a",
+      "curved": false,
+      "source": "closed form: 4 x 0.2 x 3 - 1 x 0.2 x 1"
+    },
+    {
+      "id": "bool-14",
+      "name": "cavity",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            3.0,
+            3.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "403a000000000000",
+      "curved": false,
+      "source": "closed form: 27 - 1"
+    },
+    {
+      "id": "bool-15",
+      "name": "lump floating in a cavity",
+      "operation": "union",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                3.0,
+                3.0,
+                3.0
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "size": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.25,
+            1.25,
+            1.25
+          ],
+          "size": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      ],
+      "volume_bits": "403a200000000000",
+      "curved": false,
+      "source": "closed form: 26 + 0.125"
+    },
+    {
+      "id": "bool-16",
+      "name": "pocket flush with the top",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.25,
+            0.25,
+            0.5
+          ],
+          "size": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      ],
+      "volume_bits": "3fec000000000000",
+      "curved": false,
+      "source": "closed form: 1 - 0.125"
+    },
+    {
+      "id": "bool-17",
+      "name": "intersection with coplanar faces",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.5,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3fe0000000000000",
+      "curved": false,
+      "source": "closed form: 0.5"
+    },
+    {
+      "id": "bool-18",
+      "name": "tiny boxes (UB-175)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.005,
+            0.005,
+            0.005
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.002,
+            0.002,
+            0.002
+          ],
+          "size": [
+            0.004,
+            0.004,
+            0.004
+          ]
+        }
+      ],
+      "volume_bits": "3e85be4711d12795",
+      "curved": false,
+      "source": "closed form: 0.005^3 + 0.004^3 - 0.003^3"
+    },
+    {
+      "id": "bool-19",
+      "name": "far from the origin (1e5)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            100000.0,
+            100000.0,
+            100000.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            100000.5,
+            100000.5,
+            100000.5
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3ffe000000000000",
+      "curved": false,
+      "source": "closed form: 1.875"
+    },
+    {
+      "id": "bool-20",
+      "name": "gap of 1e-7 (two lumps)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0000001,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4000000000000000",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, and the kernel's exact geom-bool: two lumps of volume 1, 12 faces"
+    },
+    {
+      "id": "bool-21",
+      "name": "overlap of 1e-7",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.9999999,
+            0.0,
+            0.0
+          ],
+          "size": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "3fffffffe5280d65",
+      "curved": false,
+      "source": "closed form: 2 - 1e-7"
+    },
+    {
+      "id": "bool-22",
+      "name": "box minus through cylinder",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            1.0,
+            1.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 4.0
+        }
+      ],
+      "volume_bits": "4019b7812aeef4ba",
+      "curved": true,
+      "source": "closed form: 8 - 2 pi 0.25"
+    },
+    {
+      "id": "bool-23",
+      "name": "box minus cylinder whose axis lies in a face",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            1.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 4.0
+        }
+      ],
+      "volume_bits": "401cdbc095777a5d",
+      "curved": true,
+      "source": "closed form: 8 - pi 0.25"
+    },
+    {
+      "id": "bool-24",
+      "name": "box minus cylinder tangent to a face",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            0.5,
+            1.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 4.0
+        }
+      ],
+      "volume_bits": "4019b7812aeef4ba",
+      "curved": true,
+      "source": "closed form: 8 - 2 pi 0.25"
+    },
+    {
+      "id": "bool-25",
+      "name": "sphere intersect box (octant)",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        }
+      ],
+      "volume_bits": "3fe0c152382d7365",
+      "curved": true,
+      "source": "closed form: pi / 6"
+    },
+    {
+      "id": "bool-26",
+      "name": "sphere minus concentric sphere",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 1.0
+        },
+        {
+          "shape": "sphere",
+          "centre": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 0.5
+        }
+      ],
+      "volume_bits": "400d524fe24f89f1",
+      "curved": true,
+      "source": "closed form: 4/3 pi (1 - 0.125)"
+    },
+    {
+      "id": "bool-27",
+      "name": "column minus internally tangent cylinder (FAIL-3665)",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cylinder",
+          "base": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "radius": 2.0,
+          "height": 2.0
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            1.5,
+            0.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 4.0
+        }
+      ],
+      "volume_bits": "40378fdb9effea46",
+      "curved": true,
+      "source": "closed form: 8 pi - 0.5 pi"
+    },
+    {
+      "id": "bool-28",
+      "name": "box union cylinder with coplanar caps",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            2.0,
+            2.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            1.0,
+            1.0,
+            0.0
+          ],
+          "radius": 0.5,
+          "height": 1.0
+        }
+      ],
+      "volume_bits": "4010000000000000",
+      "curved": true,
+      "source": "closed form: 4"
+    },
+    {
+      "id": "bldg-00",
+      "name": "walls: L corner, butt and overlap",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4012b851eb851eb8",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(4t + 4t - t^2) = 3*1.56"
+    },
+    {
+      "id": "bldg-01",
+      "name": "walls: T, overlapping",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.9,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.2,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(0.8 + 0.64 - 0.04) = 3*1.4"
+    },
+    {
+      "id": "bldg-02",
+      "name": "walls: T, wall ending flush on the other's face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.2,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 0.2*3*3"
+    },
+    {
+      "id": "bldg-03",
+      "name": "walls: cross",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -2.0,
+            -0.1,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            -0.1,
+            -2.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4012b851eb851eb8",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(0.8+0.8-0.04); also 4 arms 1.9*0.2 + 0.04"
+    },
+    {
+      "id": "bldg-04",
+      "name": "walls: mitred corner at 30 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.7464101615137756,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.7464101615137756,
+              -0.2,
+              0.0
+            ],
+            [
+              2.498076211353316,
+              1.6732050807568875,
+              0.0
+            ],
+            [
+              2.598076211353316,
+              1.4999999999999998,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401030fe9135d958",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=30; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-05",
+      "name": "walls: mitred corner at 45 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.482842712474619,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.482842712474619,
+              -0.2,
+              0.0
+            ],
+            [
+              1.9798989873223334,
+              2.2627416997969525,
+              0.0
+            ],
+            [
+              2.121320343559643,
+              2.121320343559643,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400f1e1dfbe8e9fe",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=45; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-06",
+      "name": "walls: mitred corner at 60 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.3464101615137755,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.3464101615137755,
+              -0.2,
+              0.0
+            ],
+            [
+              1.3267949192431128,
+              2.698076211353316,
+              0.0
+            ],
+            [
+              1.5000000000000004,
+              2.598076211353316,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400e767803b360c4",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=60; the mitre's corners are the table's binary64 values of its trigonometry (the outer corner at -t cot(phi/2), the second wall's far corners at angle phi)"
+    },
+    {
+      "id": "bldg-07",
+      "name": "walls: mitred corner at 90 degrees",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.2,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              -0.2,
+              0.0
+            ],
+            [
+              3.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              -0.2,
+              -0.2,
+              0.0
+            ],
+            [
+              -0.2,
+              3.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "400dc28f5c28f5c4",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=90; every corner a grid point, written exactly"
+    },
+    {
+      "id": "bldg-08",
+      "name": "walls: walls of different thickness and height",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.3,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            2.5
+          ]
+        }
+      ],
+      "volume_bits": "4015cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 4*0.3*3 + 0.2*4*2.5 - 0.2*0.3*2.5; also 3.6 + 0.2*3.7*2.5"
+    },
+    {
+      "id": "bldg-09",
+      "name": "walls: two walls in line, end to end",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4013333333333333",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * 4*0.2*3"
+    },
+    {
+      "id": "bldg-10",
+      "name": "walls: wall 1e-7 away from another (two solids)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.20000010000000001,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 1.8, gap adds nothing; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-11",
+      "name": "walls: wall 1e-4 away from another (two solids)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.2001,
+            0.0
+          ],
+          "size": [
+            0.2,
+            3.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4010cccccccccccd",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 1.8; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-12",
+      "name": "walls: curved wall alone (cylindrical box)",
+      "operation": "intersection",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cylinder",
+              "base": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "radius": 5.0,
+              "height": 3.0
+            },
+            {
+              "shape": "cylinder",
+              "base": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "radius": 4.8,
+              "height": 5.0
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401278fa01c696ea",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: h*(pi/4)(5^2-4.8^2) = 1.47 pi; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-14",
+      "name": "walls: curved wall meeting a straight wall flush at its end",
+      "operation": "union",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.8,
+            -4.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401c12939b603084",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47 pi + 0.2*4*3; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-15",
+      "name": "walls: curved wall overlapping a straight wall",
+      "operation": "union",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.8,
+            -4.0,
+            0.0
+          ],
+          "size": [
+            0.2,
+            4.5,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "401c1f6556fb9959",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47pi + 0.2*4.5*3 - 3*(F(5,0.5) - 2.4), F(a,y)=int_0^y sqrt(a^2-s^2); the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-16",
+      "name": "openings: window through a straight wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.2,
+            0.4,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "400147ae147ae148",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 1.2*0.2*1"
+    },
+    {
+      "id": "bldg-17",
+      "name": "openings: door void running below the floor",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            -0.1
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.2
+          ]
+        }
+      ],
+      "volume_bits": "40002d0e56041893",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.9*0.2*2.1"
+    },
+    {
+      "id": "bldg-18",
+      "name": "openings: door void flush with the wall bottom",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            0.0
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.1
+          ]
+        }
+      ],
+      "volume_bits": "40002d0e56041893",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.9*0.2*2.1"
+    },
+    {
+      "id": "bldg-19",
+      "name": "openings: window and door in one wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                4.0,
+                0.2,
+                3.0
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.5,
+                -0.1,
+                1.0
+              ],
+              "size": [
+                1.2,
+                0.4,
+                1.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.5,
+            -0.1,
+            -0.1
+          ],
+          "size": [
+            0.9,
+            0.4,
+            2.2
+          ]
+        }
+      ],
+      "volume_bits": "3ffc83126e978d50",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.24 - 0.378"
+    },
+    {
+      "id": "bldg-20",
+      "name": "openings: niche: void flush with one face only",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.1,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4002666666666666",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 1*0.1*1"
+    },
+    {
+      "id": "bldg-21",
+      "name": "openings: window leaving a 1e-3 sliver of head",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.4,
+            1.999
+          ]
+        }
+      ],
+      "volume_bits": "40000068db8bac71",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.2*1*1.999"
+    },
+    {
+      "id": "bldg-22",
+      "name": "openings: window leaving a 1e-6 sliver of head",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            -0.1,
+            1.0
+          ],
+          "size": [
+            1.0,
+            0.4,
+            1.999999
+          ]
+        }
+      ],
+      "volume_bits": "400000001ad7f29a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - 0.2*1*(2-1e-6)"
+    },
+    {
+      "id": "bldg-24",
+      "name": "openings: rectangular opening through a curved wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "intersection": [
+            {
+              "difference": [
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "radius": 5.0,
+                  "height": 3.0
+                },
+                {
+                  "shape": "cylinder",
+                  "base": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "radius": 4.8,
+                  "height": 5.0
+                }
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                6.0,
+                3.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            4.0,
+            1.0,
+            1.0
+          ],
+          "size": [
+            1.5,
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4011a14c7de3c184",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 1.47pi - [F(5,y)-F(4.8,y)]_1^2 * 1; the curved wall made as cylinder r5 minus cylinder r4.8 cut to the first quadrant by a box (the table builds it with solidcore's cylindrical_box)"
+    },
+    {
+      "id": "bldg-25",
+      "name": "openings: round opening through a wall",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.2
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            2.0,
+            1.5,
+            -0.1
+          ],
+          "radius": 0.4,
+          "height": 0.4
+        }
+      ],
+      "volume_bits": "40026550057ed7a5",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - pi 0.4^2 0.2; the wall laid on its side (y and z swapped) so the opening's axis is the cylinder primitive's z (the table sweeps a circle along y)"
+    },
+    {
+      "id": "bldg-26",
+      "name": "openings: round opening flush with both wall faces",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.2
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            2.0,
+            1.5,
+            0.0
+          ],
+          "radius": 0.4,
+          "height": 0.2
+        }
+      ],
+      "volume_bits": "40026550057ed7a5",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 2.4 - pi 0.4^2 0.2; the wall laid on its side (y and z swapped) so the opening's axis is the cylinder primitive's z (the table sweeps a circle along y)"
+    },
+    {
+      "id": "bldg-27",
+      "name": "slabs: slab with a rectangular opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            1.0,
+            1.0,
+            -0.1
+          ],
+          "size": [
+            1.0,
+            1.0,
+            0.45
+          ]
+        }
+      ],
+      "volume_bits": "4017000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 6*4*0.25 - 1*1*0.25"
+    },
+    {
+      "id": "bldg-28",
+      "name": "slabs: slab with a round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            4.0,
+            2.0,
+            -0.1
+          ],
+          "radius": 0.5,
+          "height": 0.45
+        }
+      ],
+      "volume_bits": "401736f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - pi 0.5^2 0.25"
+    },
+    {
+      "id": "bldg-29",
+      "name": "slabs: slab with a rectangular and a round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "difference": [
+            {
+              "shape": "cuboid",
+              "corner": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "size": [
+                6.0,
+                4.0,
+                0.25
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                1.0,
+                1.0,
+                -0.1
+              ],
+              "size": [
+                1.0,
+                1.0,
+                0.45
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            4.0,
+            2.0,
+            -0.1
+          ],
+          "radius": 0.5,
+          "height": 0.45
+        }
+      ],
+      "volume_bits": "401636f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - 0.25 - 0.0625 pi"
+    },
+    {
+      "id": "bldg-30",
+      "name": "slabs: slab cut right through by a wall (two pieces)",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            2.9,
+            -1.0,
+            2.5
+          ],
+          "size": [
+            0.2,
+            6.0,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4017333333333333",
+      "curved": false,
+      "faces": 12,
+      "source": "closed form, worked by hand and checked a second way: 6 - 0.2*4*0.25; two lumps, 12 faces"
+    },
+    {
+      "id": "bldg-31",
+      "name": "slabs: slab notched by a wall along its edge",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            6.0,
+            4.0,
+            0.25
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            2.5
+          ],
+          "size": [
+            6.0,
+            0.2,
+            1.0
+          ]
+        }
+      ],
+      "volume_bits": "4016cccccccccccd",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 6 - 6*0.2*0.25"
+    },
+    {
+      "id": "bldg-32",
+      "name": "slabs: sloped slab",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.25
+            ],
+            [
+              0.0,
+              0.0,
+              0.25
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4018000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: parallelogram 6*0.25 * 4"
+    },
+    {
+      "id": "bldg-33",
+      "name": "slabs: sloped slab with a vertical round opening",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.0
+            ],
+            [
+              6.0,
+              0.0,
+              1.25
+            ],
+            [
+              0.0,
+              0.0,
+              0.25
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "cylinder",
+          "base": [
+            3.0,
+            2.0,
+            -1.0
+          ],
+          "radius": 0.5,
+          "height": 3.0
+        }
+      ],
+      "volume_bits": "401736f0255dde97",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: 6 - pi 0.5^2 * 0.25 (vertical thickness, Cavalieri)"
+    },
+    {
+      "id": "bldg-34",
+      "name": "slabs: slab edge shared with a wall face",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.2,
+            2.75
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.25
+          ]
+        }
+      ],
+      "volume_bits": "401599999999999a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 4*3*0.25"
+    },
+    {
+      "id": "bldg-35",
+      "name": "slabs: slab sitting on a wall top",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            4.0,
+            0.2,
+            3.0
+          ]
+        },
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            3.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            0.25
+          ]
+        }
+      ],
+      "volume_bits": "401599999999999a",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2.4 + 4*3*0.25"
+    },
+    {
+      "id": "bldg-36",
+      "name": "roofs: two roof planes meeting at a ridge (solid halves)",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              5.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4059000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * (5*2.5/2) * 8"
+    },
+    {
+      "id": "bldg-37",
+      "name": "roofs: two thick roof planes meeting at a ridge",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ],
+            [
+              5.0,
+              0.0,
+              2.8
+            ],
+            [
+              0.0,
+              0.0,
+              0.3
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              5.0,
+              0.0,
+              2.5
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.3
+            ],
+            [
+              5.0,
+              0.0,
+              2.8
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            8.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4038000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2 * (5*0.3) * 8"
+    },
+    {
+      "id": "bldg-38",
+      "name": "roofs: hip roof",
+      "operation": "intersection",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              6.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            10.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              10.0,
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0,
+              2.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            6.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4042000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: p W^2 (3L-W)/12, p=0.5 L=10 W=6; also gable 4.5*4 + pyramid 36*1.5/3"
+    },
+    {
+      "id": "bldg-39",
+      "name": "roofs: valley: two gables meeting in a T",
+      "operation": "union",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              6.0,
+              0.0
+            ],
+            [
+              0.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            10.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              2.0,
+              3.0,
+              0.0
+            ],
+            [
+              8.0,
+              3.0,
+              0.0
+            ],
+            [
+              5.0,
+              3.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            9.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4053200000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 45 + 40.5 - 9 (half pyramid 6x6, h 1.5); also 45 + 27 + 4.5"
+    },
+    {
+      "id": "bldg-40",
+      "name": "roofs: gable end wall cut by two roof planes",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            6.0,
+            0.2,
+            5.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              2.0
+            ],
+            [
+              3.0,
+              -1.0,
+              4.0
+            ],
+            [
+              7.0,
+              -1.0,
+              2.0
+            ],
+            [
+              7.0,
+              -1.0,
+              6.0
+            ],
+            [
+              -1.0,
+              -1.0,
+              6.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            2.2,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "400f333333333333",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 0.2*(6*2.5 + 6*1.5/2); also 0.2*(30 - 10.5)"
+    },
+    {
+      "id": "bldg-41",
+      "name": "roofs: eave wall cut by a shed roof plane",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "size": [
+            10.0,
+            0.2,
+            4.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              2.95
+            ],
+            [
+              11.0,
+              -1.0,
+              3.55
+            ],
+            [
+              11.0,
+              -1.0,
+              5.0
+            ],
+            [
+              -1.0,
+              -1.0,
+              5.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            2.2,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "401a000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 0.2 * int_0^10 (3 + 0.05x) dx"
+    },
+    {
+      "id": "bldg-42",
+      "name": "roofs: dormer through a roof plane",
+      "operation": "union",
+      "operands": [
+        {
+          "union": [
+            {
+              "shape": "extrusion",
+              "outer": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  6.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  3.0,
+                  1.5
+                ]
+              ],
+              "holes": [],
+              "by": [
+                10.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "shape": "cuboid",
+              "corner": [
+                4.0,
+                -1.0,
+                0.0
+              ],
+              "size": [
+                2.0,
+                4.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              4.0,
+              -1.0,
+              1.0
+            ],
+            [
+              6.0,
+              -1.0,
+              1.0
+            ],
+            [
+              5.0,
+              -1.0,
+              1.5
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            4.0,
+            0.0
+          ]
+        }
+      ],
+      "volume_bits": "4049555555555555",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 45 + 10 - 13/3 (overlap int min(0.5y, 1+0.5m(x)))"
+    },
+    {
+      "id": "bldg-43",
+      "name": "extrusion: extrusion of a rectangle",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4018000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 2*1*3"
+    },
+    {
+      "id": "bldg-44",
+      "name": "extrusion-void: extrusion of a rectangle as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -1.0,
+            -1.0,
+            1.0
+          ],
+          "size": [
+            4.0,
+            3.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4024000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 12 - 2*1*1"
+    },
+    {
+      "id": "bldg-45",
+      "name": "extrusion: extrusion of an L",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              2.0,
+              0.0
+            ],
+            [
+              0.0,
+              2.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4015000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: (2*0.5 + 0.5*1.5)*3; shoelace 1.75"
+    },
+    {
+      "id": "bldg-46",
+      "name": "extrusion-void: extrusion of an L as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -1.0,
+            -1.0,
+            1.0
+          ],
+          "size": [
+            4.0,
+            4.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.0,
+              0.0
+            ],
+            [
+              2.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              0.5,
+              0.0
+            ],
+            [
+              0.5,
+              2.0,
+              0.0
+            ],
+            [
+              0.0,
+              2.0,
+              0.0
+            ]
+          ],
+          "holes": [],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "402c800000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: 16 - 1.75"
+    },
+    {
+      "id": "bldg-47",
+      "name": "extrusion: extrusion of a square with a round hole",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "circle": {
+                "centre": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "radius": 0.5
+              }
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "402349a0e033378c",
+      "curved": true,
+      "source": "closed form, worked by hand and checked a second way: (4 - pi 0.25)*3"
+    },
+    {
+      "id": "bldg-48",
+      "name": "extrusion-void: extrusion of a square with a round hole as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -3.0,
+            -3.0,
+            1.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "circle": {
+                "centre": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "radius": 0.5
+              }
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "40406487ed5110b4",
+      "curved": true,
+      "faces": 13,
+      "source": "closed form, worked by hand and checked a second way: 36 - (4 - 0.25pi); the core inside the hole stays as its own piece; two lumps: the core inside the hole stays as its own piece (13 faces: the frame's 10 and the round core's 3)"
+    },
+    {
+      "id": "bldg-49",
+      "name": "extrusion: extrusion of a square with a square hole",
+      "operation": "extrude",
+      "operands": [
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "polygon": [
+                [
+                  -0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ]
+              ]
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4022000000000000",
+      "curved": false,
+      "source": "closed form, worked by hand and checked a second way: (4 - 1)*3"
+    },
+    {
+      "id": "bldg-50",
+      "name": "extrusion-void: extrusion of a square with a square hole as a void cutting a box",
+      "operation": "difference",
+      "operands": [
+        {
+          "shape": "cuboid",
+          "corner": [
+            -3.0,
+            -3.0,
+            1.0
+          ],
+          "size": [
+            6.0,
+            6.0,
+            1.0
+          ]
+        },
+        {
+          "shape": "extrusion",
+          "outer": [
+            [
+              -1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              -1.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0,
+              0.0
+            ],
+            [
+              -1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "holes": [
+            {
+              "polygon": [
+                [
+                  -0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ]
+              ]
+            }
+          ],
+          "by": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      ],
+      "volume_bits": "4040800000000000",
+      "curved": false,
+      "faces": 16,
+      "source": "closed form, worked by hand and checked a second way: 36 - 3; core stays as its own piece; two lumps: the core inside the hole stays as its own piece (16 faces: the frame's 10 and the square core's 6)"
+    }
+  ]
+}

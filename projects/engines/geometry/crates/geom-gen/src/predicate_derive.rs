@@ -75,6 +75,27 @@
 //! numbers below 2^1000 that are not zero is not zero), so S is exactly zero and
 //! |v| ≤ |ṽ| + E·S ≤ (B + E)·S = 0.
 //!
+//! The run-time scale leaves out the monomials of the result's scale set that can never be the
+//! largest alone. The rule: a monomial m is left out when some set K of other monomials of the
+//! set has m as its average, Σ e(g) over K = |K| · m(g) for every group g (x^2·y^2 is the
+//! average of x^4 and y^4). Each monomial is judged against the whole set, so the order they are
+//! taken in does not matter. Write T(e) = Π M(g)^e(g) for a monomial's value at the maxima, each
+//! M(g) ≥ 0 and 0^0 = 1. For such an m and K, T(m)^|K| = Π M(g)^(|K| · m(g)) = Π T(e) over K, so
+//! T(m) is at most the largest T(e) of K (were every one below T(m), their product would be below
+//! T(m)^|K|). The largest value over the monomials kept is S itself, for every input: let A be
+//! the monomials whose value is S. If S = 0 every value is 0, and the set kept is not empty (the
+//! last monomial of the whole set in the order below is kept, by the same argument with A the
+//! whole set). Otherwise, a left-out m of A has S^|K| as the product of |K| values each at most
+//! S, so each is S and K lies in A. Take p, the last monomial of A in lexicographic order of
+//! exponents. Were p left out, its K would be monomials of A before p in that order; at the
+//! first group where one of them differs from p, each has at most p's exponent and one has
+//! less, so their exponents there sum to less than |K| times p's, and p is not their average.
+//! So p is kept and T(p) = S. The filter therefore computes the same number S from fewer
+//! products, the induction above bounds its roundings as before, and a computed scale of zero
+//! still makes every kept monomial, and so S, exactly zero. The rule is sufficient, not complete:
+//! a monomial inside the others' convex hull with unequal weights (x^3·y between x^4 and y^4) is
+//! kept, which costs a product and is still sound.
+//!
 //! The certificate's bounds follow Fortune and Van Wyk's static analysis (*Static Analysis Yields
 //! Efficient Exact Integer Arithmetic for Computational Geometry*, ACM Transactions on Graphics
 //! 15(3), 1996, <https://doi.org/10.1145/231731.231735>), with exact values instead of bit
@@ -353,7 +374,7 @@ pub fn derive(text: &str) -> Result<Derivation, DeriveError> {
     let Some(root) = certs.get(result) else {
         return fail("the result step is missing");
     };
-    let scale_expr = scale_expr(&root.scale, groups.len())?;
+    let scale_expr = scale_expr(&undominated(&root.scale)?, groups.len())?;
     let roundings = scale_expr
         .roundings()
         .and_then(|k| k.checked_add(1))
@@ -580,6 +601,46 @@ fn certify(
     }
 }
 
+/// The monomials of a scale set that the run-time scale takes the largest of: every monomial
+/// that is not the average of a set of other monomials of the set. Their largest value is the
+/// whole set's, for every input (module header, "The run-time scale leaves out").
+fn undominated(scale: &BTreeSet<Monomial>) -> Result<BTreeSet<Monomial>, DeriveError> {
+    let mut kept = BTreeSet::new();
+    for m in scale {
+        if !is_average_of_others(m, scale)? {
+            kept.insert(m.clone());
+        }
+    }
+    Ok(kept)
+}
+
+/// Whether `m` is the average of some set of other monomials of `scale`: whether the differences
+/// e − m, over some set of one or more other monomials e, sum to zero in every group.
+fn is_average_of_others(m: &Monomial, scale: &BTreeSet<Monomial>) -> Result<bool, DeriveError> {
+    // Every sum of differences over a set of one or more of the other monomials taken so far.
+    let mut sums: BTreeSet<Vec<i64>> = BTreeSet::new();
+    for e in scale.iter().filter(|e| *e != m) {
+        let difference: Vec<i64> = e
+            .iter()
+            .zip(m)
+            .map(|(a, b)| i64::from(*a).checked_sub(i64::from(*b)))
+            .collect::<Option<_>>()
+            .ok_or_else(|| overflow("a difference of exponents"))?;
+        let mut with_e = BTreeSet::from([difference.clone()]);
+        for sum in &sums {
+            let longer: Vec<i64> = sum
+                .iter()
+                .zip(&difference)
+                .map(|(a, b)| a.checked_add(*b))
+                .collect::<Option<_>>()
+                .ok_or_else(|| overflow("a sum of exponents"))?;
+            with_e.insert(longer);
+        }
+        sums.extend(with_e);
+    }
+    Ok(sums.contains(&vec![0i64; m.len()]))
+}
+
 /// The scale expression for a scale set: the common factor of every monomial, times the largest
 /// of what remains of each (module header).
 fn scale_expr(scale: &BTreeSet<Monomial>, groups: usize) -> Result<ScaleExpr, DeriveError> {
@@ -759,6 +820,110 @@ mod tests {
         assert_eq!(d.scale_expr.roundings(), Some(3));
         assert_eq!(d.scale_expr.multiplications(), Some(4));
         assert_eq!(d.roundings, 4);
+    }
+
+    fn set(monomials: &[&[u32]]) -> BTreeSet<Monomial> {
+        monomials.iter().map(|m| m.to_vec()).collect()
+    }
+
+    /// The rule on sets worked by hand: an average of two, an average of three that is the
+    /// average of no two, an average that needs a monomial which is itself left out, and the
+    /// monomials the rule keeps (unequal weights, a lone monomial, a factor of another).
+    #[test]
+    fn a_monomial_that_is_an_average_of_others_is_left_out() {
+        let kept = |s: &[&[u32]]| undominated(&set(s)).unwrap();
+        assert_eq!(kept(&[&[4, 0], &[2, 2], &[0, 4]]), set(&[&[4, 0], &[0, 4]]));
+        assert_eq!(
+            kept(&[&[3, 0, 0], &[0, 3, 0], &[0, 0, 3], &[1, 1, 1]]),
+            set(&[&[3, 0, 0], &[0, 3, 0], &[0, 0, 3]])
+        );
+        // x^3·y is the average of x^4 and x^2·y^2, which is left out too; both are judged
+        // against the whole set, and x^4 and y^4 still bound them.
+        assert_eq!(
+            kept(&[&[4, 0], &[3, 1], &[2, 2], &[0, 4]]),
+            set(&[&[4, 0], &[0, 4]])
+        );
+        // Kept: x^3·y lies between x^4 and y^4 with unequal weights.
+        assert_eq!(
+            kept(&[&[4, 0], &[3, 1], &[0, 4]]),
+            set(&[&[4, 0], &[3, 1], &[0, 4]])
+        );
+        // Kept: x is not bounded by x·y (take y = 0), nor x·y by x (take y = 2).
+        assert_eq!(kept(&[&[1, 0], &[1, 1]]), set(&[&[1, 0], &[1, 1]]));
+        assert_eq!(kept(&[&[2, 1]]), set(&[&[2, 1]]));
+        assert_eq!(kept(&[&[3, 1], &[1, 3]]), set(&[&[3, 1], &[1, 3]]));
+        let three = set(&[&[4, 0], &[2, 2], &[0, 4]]);
+        assert!(is_average_of_others(&vec![2, 2], &three).unwrap());
+        assert!(!is_average_of_others(&vec![4, 0], &three).unwrap());
+        // A monomial that is not in the set is judged the same way.
+        assert!(is_average_of_others(&vec![2, 2], &set(&[&[4, 0], &[0, 4]])).unwrap());
+        assert!(!is_average_of_others(&vec![2, 2], &set(&[&[4, 0], &[1, 3]])).unwrap());
+    }
+
+    /// The value of a monomial at whole maxima.
+    fn value(m: &Monomial, maxima: &[u128]) -> u128 {
+        m.iter().zip(maxima).map(|(e, v)| v.pow(*e)).product()
+    }
+
+    /// Every registered predicate: the run-time scale computes exactly the result's scale set
+    /// without the monomials the rule leaves out, the last monomial is always kept, and at every
+    /// choice of maxima from 0, 1, 2, 3 and 7 (zeros, ties and each group largest in turn) the
+    /// largest kept monomial is the largest of the whole set. Three filters have something to
+    /// leave out: the two cone filters, and `lpi_side`, whose x·y·n1·n2, x·z·n1·n2 and y·z·n1·n2
+    /// are each the average of two of x^2·n1·n2, y^2·n1·n2 and z^2·n1·n2.
+    #[test]
+    fn the_run_time_scale_is_the_whole_sets_largest_value() {
+        let mut pruned = Vec::new();
+        for p in &crate::predicates::PREDICATES {
+            let d = derive(p.text).unwrap();
+            let whole = &d.certs[d.result].scale;
+            let kept = d.scale_expr.monomials(d.groups.len());
+            assert_eq!(kept, undominated(whole).unwrap(), "{}", p.generator);
+            assert!(kept.is_subset(whole), "{}", p.generator);
+            assert!(kept.contains(whole.last().unwrap()), "{}", p.generator);
+            if &kept != whole {
+                pruned.push((d.description.name.clone(), whole.len(), kept.len()));
+            }
+            let choices = [0u128, 1, 2, 3, 7];
+            let groups = d.groups.len();
+            for code in 0..choices.len().pow(groups as u32) {
+                let maxima: Vec<u128> = (0..groups)
+                    .map(|g| choices[code / choices.len().pow(g as u32) % choices.len()])
+                    .collect();
+                let largest = |s: &BTreeSet<Monomial>| s.iter().map(|m| value(m, &maxima)).max();
+                assert_eq!(largest(&kept), largest(whole), "{} {maxima:?}", p.generator);
+            }
+        }
+        pruned.sort();
+        assert_eq!(
+            pruned,
+            [
+                ("line_cone".to_owned(), 7, 6),
+                ("line_cone_lead".to_owned(), 6, 3),
+                ("lpi_side".to_owned(), 12, 9)
+            ]
+        );
+    }
+
+    /// The cone filters' scales by hand. The leading coefficient's: x^2·y^2, x^2·z^2 and y^2·z^2
+    /// are each the average of two fourth powers. The discriminant's: x^2·y^2·z^2 is the average
+    /// of the other six.
+    #[test]
+    fn the_cone_filters_leave_out_their_averages() {
+        let d = derive(crate::predicates::LINE_CONE_LEAD).unwrap();
+        assert_eq!(
+            d.scale_expr.monomials(d.groups.len()),
+            set(&[&[4, 0, 0, 2], &[0, 4, 0, 2], &[0, 0, 4, 2]])
+        );
+        assert_eq!(d.scale_expr.roundings(), Some(5));
+        assert_eq!(d.scale_expr.multiplications(), Some(11));
+        let d = derive(crate::predicates::LINE_CONE).unwrap();
+        let mut kept = d.certs[d.result].scale.clone();
+        assert_eq!(kept.len(), 7);
+        assert!(kept.remove(&vec![2, 2, 2, 2]));
+        assert_eq!(d.scale_expr.monomials(d.groups.len()), kept);
+        assert_eq!(d.scale_expr.roundings(), Some(7));
+        assert_eq!(d.scale_expr.multiplications(), Some(32));
     }
 
     /// The f64 value of a scale expression, as the generated filter computes it.

@@ -131,6 +131,26 @@ fn whole(metric: &Metric, name: &str, side: &str) -> Result<u64, String> {
     }
 }
 
+/// A summary's benchmark, as the gate names it: its module path and id joined by `/`, the path's
+/// first part (the benchmark file) dropped.
+///
+/// # Errors
+///
+/// A message, if the module path and id name no benchmark.
+pub fn benchmark_name(summary: &BenchmarkSummary) -> Result<String, String> {
+    let mut parts: Vec<&str> = summary.module_path.split("::").skip(1).collect();
+    if let Some(id) = summary.id.as_deref() {
+        parts.push(id);
+    }
+    if parts.is_empty() || parts.iter().any(|p| p.is_empty() || p.contains(['/', ' '])) {
+        return Err(format!(
+            "no benchmark name in module path {:?} and id {:?}",
+            summary.module_path, summary.id
+        ));
+    }
+    Ok(parts.join("/"))
+}
+
 /// Reads one benchmark's summary: its name from its module path and id (the path's first part,
 /// the benchmark file, dropped), and the counts of every [`JUDGED`] measure from its Callgrind run.
 ///
@@ -149,17 +169,7 @@ pub fn parse_summary(text: &str) -> Result<Summary, String> {
             summary.version
         ));
     }
-    let mut parts: Vec<&str> = summary.module_path.split("::").skip(1).collect();
-    if let Some(id) = summary.id.as_deref() {
-        parts.push(id);
-    }
-    if parts.is_empty() || parts.iter().any(|p| p.is_empty() || p.contains(['/', ' '])) {
-        return Err(format!(
-            "no benchmark name in module path {:?} and id {:?}",
-            summary.module_path, summary.id
-        ));
-    }
-    let name = parts.join("/");
+    let name = benchmark_name(&summary)?;
     let mut runs = summary
         .profiles
         .0
@@ -206,6 +216,22 @@ pub fn parse_summary(text: &str) -> Result<Summary, String> {
 ///
 /// A message naming the folder or file that cannot be read, or the summary that cannot be parsed.
 pub fn read_summaries(dir: &Path) -> Result<Vec<Summary>, String> {
+    summary_files(dir)?
+        .iter()
+        .map(|path: &PathBuf| {
+            let text =
+                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            parse_summary(&text).map_err(|e| format!("{}: {e}", path.display()))
+        })
+        .collect()
+}
+
+/// Every `summary.json` under `dir`, at any depth, in path order.
+///
+/// # Errors
+///
+/// A message naming the folder that cannot be read.
+pub fn summary_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
     let mut folders = vec![dir.to_path_buf()];
     while let Some(folder) = folders.pop() {
@@ -225,14 +251,7 @@ pub fn read_summaries(dir: &Path) -> Result<Vec<Summary>, String> {
         }
     }
     files.sort();
-    files
-        .iter()
-        .map(|path: &PathBuf| {
-            let text =
-                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            parse_summary(&text).map_err(|e| format!("{}: {e}", path.display()))
-        })
-        .collect()
+    Ok(files)
 }
 
 /// One measure of one benchmark that the report lists.

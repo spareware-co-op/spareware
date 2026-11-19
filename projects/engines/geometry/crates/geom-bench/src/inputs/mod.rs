@@ -19,9 +19,9 @@
 //! area or volume is the smallest nonzero one the grid allows.
 //!
 //! Guarantees: every batch is a pure function of its operation and class, the same on every
-//! target and in every build profile; every catalogued batch is full ([`BATCH`] inputs; the tests
-//! check it) and is what its class claims; a class an operation lacks gives an empty batch; and no
-//! builder panics.
+//! target and in every build profile; every catalogued batch is full ([`BATCH`] inputs, or the
+//! size [`SHORT_BATCHES`] gives the few heaviest, or one scenario; the tests check it) and is what
+//! its class claims; a class an operation lacks gives an empty batch; and no builder panics.
 //!
 //! Cost: building a batch takes O([`BATCH`]) generator draws (at most `ATTEMPTS` = 64 · [`BATCH`]
 //! candidates, so it always ends), once per benchmark, outside every measured run.
@@ -42,6 +42,7 @@ pub mod cbor;
 pub mod conic;
 pub mod crossing;
 pub mod curve;
+pub mod curved;
 pub mod dd;
 pub mod eft;
 pub mod encoder;
@@ -88,6 +89,24 @@ pub mod wide32;
 /// each count, small enough that every batch and its results fit the simulated 32 KiB first-level
 /// data cache.
 pub const BATCH: usize = 64;
+
+/// The benchmarks whose batch holds fewer than [`BATCH`] inputs, and how many each holds: a few
+/// inputs of the batch of [`BATCH`] their builder draws, so every call measured is one a full
+/// batch makes. Each call of these takes hundreds of millions of instructions, so a full batch
+/// kept a count gate's job running one benchmark for 8 to 28 minutes; the kept inputs take a
+/// minute or two.
+///
+/// The inputs kept ([`intersect::APEXES`], [`intersect::POLES`] and [`intersect::SWEEPS`]) are
+/// chosen so that the measured pass over them runs every function and every source line that the
+/// pass over all [`BATCH`] runs: Callgrind's counts of both passes were compared when the batches
+/// were cut (x86-64, the gate's build with line tables). No test keeps that true, so compare again
+/// when what these calls do changes. A scenario's batch is one whole job ([`scenario`]), and is
+/// not listed here.
+pub const SHORT_BATCHES: [(&str, usize); 3] = [
+    ("intersect/natural_apex/typical", intersect::APEXES.len()),
+    ("intersect/march_poles/typical", intersect::POLES.len()),
+    ("intersect/selfcross_sweep/typical", intersect::SWEEPS.len()),
+];
 
 /// How many candidates a builder may try before giving up on filling its batch. Builders reject a
 /// candidate only in rare cases (for example three random points that happen to be collinear), so
@@ -193,6 +212,17 @@ pub(crate) fn batch_of<T>(mut make: impl FnMut(usize) -> Option<T>) -> Vec<T> {
     out
 }
 
+/// The inputs of `full` at the places `kept` names (0 is the first), in the batch's order, for the
+/// few operations a batch of [`BATCH`] calls would keep inside a count gate's job for many minutes
+/// ([`SHORT_BATCHES`]). A place past the end of `full` keeps nothing.
+pub(crate) fn keep<T>(kept: &[usize], full: Vec<T>) -> Vec<T> {
+    full.into_iter()
+        .enumerate()
+        .filter(|(place, _)| kept.contains(place))
+        .map(|(_, input)| input)
+        .collect()
+}
+
 /// A coordinate of `v` grid steps, saturated into the frame. Every builder computes coordinates
 /// inside the frame, so the saturation never acts; it only lets the conversion be total.
 pub(crate) fn coord(v: i64) -> Coord {
@@ -278,5 +308,39 @@ pub(crate) fn extended_gcd(a: i64, b: i64) -> (i64, i64, i64) {
         (-r0, -u0, -v0)
     } else {
         (r0, u0, v0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A builder that rejects every third candidate, as a real one rejects a degenerate draw.
+    fn builder() -> impl FnMut(usize) -> Option<u64> {
+        let mut g = SplitMix64::new(7);
+        let mut tried = 0_u32;
+        move |_| {
+            tried += 1;
+            let draw = g.range(0, 1 << 20);
+            (!tried.is_multiple_of(3)).then_some(draw.unsigned_abs())
+        }
+    }
+
+    #[test]
+    fn the_inputs_kept_are_the_full_batch_s_at_those_places() {
+        let full = batch_of(builder());
+        assert_eq!(full.len(), BATCH);
+        assert_eq!(keep(&[4, 45], full.clone()), [full[4], full[45]]);
+        // In the batch's order, whatever order the places are named in.
+        assert_eq!(
+            keep(&[8, 0, 2, 1], full.clone()),
+            [full[0], full[1], full[2], full[8]]
+        );
+        let all: Vec<usize> = (0..BATCH).collect();
+        assert_eq!(keep(&all, full.clone()), full);
+        assert_eq!(keep(&all[..8], full.clone()), full[..8]);
+        // A place past the end keeps nothing, and no place keeps nothing.
+        assert_eq!(keep(&[BATCH - 1, BATCH], full.clone()), full[BATCH - 1..]);
+        assert!(keep(&[], full).is_empty());
     }
 }

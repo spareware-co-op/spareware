@@ -34,7 +34,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use geom_test::Seed;
-use geom_test::golden::diff::{ApprovalError, approved, diff};
+use geom_test::golden::diff::diff;
 use geom_test::golden::matrix::{RunError, plan, verify};
 use geom_test::golden::perturb::{Heap, MAX_BYTES, address_order_digest};
 use geom_test::golden::shuffle::{Orders, order_free};
@@ -206,67 +206,318 @@ fn the_goldens_the_crates_pinned_are_byte_identical_in_the_store() {
 /// release modes the whole-suite steps do not cover. Each is checked as written, so a step that
 /// lost its environment or its arguments fails here.
 #[test]
+#[allow(clippy::too_many_lines, reason = "the steps are written out in full")]
 fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     let steps = [
-        "      - name: Every golden in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        "      - name: Every golden in release, with overflow checks on (part 1 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 1 }}
         env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --release
+        run: '\"$GOLDEN\" run --part 1/11 --release'
 ",
-        "      - name: Every golden in release as shipped, without overflow checks
+        "      - name: Every golden in release, with overflow checks on (part 2 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 2 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 2/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 3 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 3 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 3/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 4 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 4 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 4/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 5 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 5 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 6 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 6 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 6/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 7 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 8 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 9 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 10 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release, with overflow checks on (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 11 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 1 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 12 }}
+        run: '\"$GOLDEN\" run --part 1/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 2 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 13 }}
+        run: '\"$GOLDEN\" run --part 2/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 3 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 14 }}
+        run: '\"$GOLDEN\" run --part 3/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 4 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 15 }}
+        run: '\"$GOLDEN\" run --part 4/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 5 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 16 }}
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 6 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 17 }}
+        run: '\"$GOLDEN\" run --part 6/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 18 }}
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 19 }}
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 20 }}
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 21 }}
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release as shipped, without overflow checks (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 22 }}
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: The replay corpus and the transform sweep with the checker as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 23 }}
+        run: cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism
+",
+        "      - name: geom-num's every test vector in release as shipped (part 1 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
+",
+        "      - name: geom-num's doctests in release as shipped
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 24 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
+",
+        "      - name: geom-num's every test vector in release as shipped (part 2 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 25 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 26 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 27 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 28 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
+",
+        "      - name: geom-num's every test vector in release as shipped (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+",
+        "      - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
-        run: cargo run --locked -p geom-test --bin golden -- run --release
+        run: rustc -vV && rustc --print cfg -C target-cpu=native
 ",
-        "      - name: geom-num's every test vector in release as shipped
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast
-",
-        "        env:
+        "      - name: Every golden in release for this machine's own CPU (part 1 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 30 }}
+        env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
-          # Its own build folder, which the build cache never saves or restores: the cache's key
-          # does not name the processor, so a restored native build from another machine's CPU
-          # can hold instructions this one lacks (SIGILL). Built fresh here, it is this CPU's.
+          # Its own build folder, which the main build cache never saves or restores: that key
+          # does not name the processor, so a native build restored from another machine's CPU
+          # could hold instructions this one lacks (SIGILL). Only the native cache, named by
+          # this CPU's digest, fills it on macOS x86-64; otherwise it is built fresh here.
           CARGO_TARGET_DIR: target-native
-        run: cargo run --locked -p geom-test --bin golden -- run --release
+        run: '\"$GOLDEN\" run --part 1/11 --release'
 ",
-        "      - name: geom-num's every test vector in release for this machine's own CPU
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
+        "      - name: Every golden in release for this machine's own CPU (part 2 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 31 }}
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast
+        run: '\"$GOLDEN\" run --part 2/11 --release'
 ",
-        "      - name: Every golden in debug
-        if: ${{ !cancelled() && matrix.mode == 'debug' }}
-        # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
-        # integration tests: in this same debug folder that can mean replacing the running golden
-        # binary, which Windows refuses (\"failed to remove file ... golden.exe: Access is denied\",
-        # so the goldens never ran). The release steps build their tests in another profile's
-        # folder. So the debug runner runs from a copy outside the build folder.
-        run: |
-          cargo build --locked -p geom-test --bin golden
-          exe=\"\"
-          if [ \"$RUNNER_OS\" = \"Windows\" ]; then exe=\".exe\"; fi
-          cp \"target/debug/golden$exe\" \"$RUNNER_TEMP/golden$exe\"
-          \"$RUNNER_TEMP/golden$exe\" run
+        "      - name: Every golden in release for this machine's own CPU (part 3 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 32 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 3/11 --release'
 ",
-        // The whole suite, in parts that run side by side (the job `suite`): every part runs the
-        // tests of `--partition count:k/n`, and the doctests, which nextest does not run, run in
-        // part 1.
+        "      - name: Every golden in release for this machine's own CPU (part 4 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 33 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 4/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 5 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 34 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 5/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 6 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 35 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 6/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 7 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 36 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 7/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 8 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 37 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 8/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 9 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 38 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 9/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 10 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 39 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 10/11 --release'
+",
+        "      - name: Every golden in release for this machine's own CPU (part 11 of 11)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 40 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: '\"$GOLDEN\" run --part 11/11 --release'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 1 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 41 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --lib --bins
+",
+        "      - name: geom-num's doctests in release for this machine's own CPU
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 41 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --doc
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 2 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 42 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[a-g]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 3 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 43 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[e-i]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 4 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 44 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack2_[p-z]*' --test 'attack_[s-z]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 5 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 45 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
+",
+        "      - name: geom-num's every test vector in release for this machine's own CPU (part 6 of 6)
+        if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 46 }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
+          CARGO_TARGET_DIR: target-native
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+",
+        "      - name: Every golden in debug (part 1 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}
+        run: '\"$GOLDEN\" run --part 1/4'
+",
+        "      - name: Every golden in debug (part 2 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 2 }}
+        run: '\"$GOLDEN\" run --part 2/4'
+",
+        "      - name: Every golden in debug (part 3 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 3 }}
+        run: '\"$GOLDEN\" run --part 3/4'
+",
+        "      - name: Every golden in debug (part 4 of 4)
+        if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 4 }}
+        run: '\"$GOLDEN\" run --part 4/4'
+",
+        // The whole suite, in parts that run side by side (the job `suite`): in release every part
+        // runs its own crates' tests (a share of the crates, or a crate's share of its targets),
+        // with its crates' doctests, which nextest does not run; in debug every part runs the tests
+        // of `--partition count:k/n`, and part 1 the doctests.
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
+        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast ${{ matrix.part.targets }}
 ",
-        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && env.KERNEL_CRATES != '' }}
         run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
 ",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
         run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
 ",
-        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 ",
     ];
@@ -294,32 +545,117 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
 fn kernel_yml_runs_every_golden_on_wasm32_in_every_build_mode() {
     let yml = KERNEL_YML.replace("\r\n", "\n");
     assert!(yml.contains("runtime: [wasmtime, node]"));
+    // Each build's goldens in shares, one to a part (queue_wiring.rs holds every share once).
     for step in [
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
-",
-        "      - name: Every golden on wasm32 in release as shipped, without overflow checks
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1 --release
-",
-        "      - name: Every golden on wasm32 in debug
-        if: ${{ !cancelled() }}
-        run: cargo run --locked -p geom-test --bin golden -- run --target wasm32-wasip1
-",
-        "      - name: geom-num's every test vector on wasm32 in release as shipped
-        if: ${{ !cancelled() }}
-        run: cargo test -p geom-num --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
 ",
         "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 1 of 2)
+        if: ${{ !cancelled() && matrix.k == 4 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in release as shipped, without overflow checks (part 2 of 2)
+        if: ${{ !cancelled() && matrix.k == 5 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/2 --target wasm32-wasip1 --release
+",
+        "      - name: Every golden on wasm32 in debug (part 1 of 3)
+        if: ${{ !cancelled() && matrix.k == 6 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 1/3 --target wasm32-wasip1
+",
+        "      - name: Every golden on wasm32 in debug (part 2 of 3)
+        if: ${{ !cancelled() && matrix.k == 7 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 2/3 --target wasm32-wasip1
+",
+        "      - name: Every golden on wasm32 in debug (part 3 of 3)
+        if: ${{ !cancelled() && matrix.k == 8 }}
+        run: cargo run --locked -p geom-test --bin golden -- run --part 3/3 --target wasm32-wasip1
+",
+        // geom-num's every test vector as shipped and the whole suite with overflow checks on, each
+        // built once into an archive (queue_wiring.rs holds the parts that run it), with their
+        // doctests beside the build.
+        "      - name: Build the suite's tests on wasm32 in release, with overflow checks on
+        if: ${{ matrix.build == 'checked' && env.KERNEL_CRATES != '' }}
+        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-checked.tar.zst\"
+",
+        "      - name: Build geom-num's every test vector on wasm32 in release as shipped
+        if: ${{ matrix.build == 'shipped' && env.KERNEL_CRATES != '' }}
+        run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-shipped.tar.zst\"
+",
+        "            if [ \"$BUILD\" = shipped ] && [ \"$c\" != geom-num ]; then continue; fi
 ",
     ] {
         assert!(yml.contains(step), "kernel.yml lacks the step:\n{step}");
     }
     // The single-golden steps G02 started with are gone: the store is the one list.
     assert!(!yml.contains("--test determinism -- --nocapture"));
+}
+
+/// A test that fails on wasm32 tells why. wasm32-wasip1 aborts on a panic, so libtest never prints
+/// what it captured: every `cargo test` for wasm32 passes `--nocapture` (the golden runner passes
+/// it too, `golden::matrix`); nextest runs each test of an archive in a process of its own with
+/// `--nocapture` and keeps that process's whole output, which it prints when the test fails, so
+/// its wasm32 runs add no capture of their own (no `--no-capture`, which would also run one test at
+/// a time); and each of Node's runners prints the seed of every random byte a failing binary drew,
+/// which `WASI_RUN_SEED` replays. A `cargo test --no-run` for wasm32 builds the test modules and
+/// runs none of them, so it has nothing to capture: the one such build is geom-solidcore's, and
+/// the step that runs its modules under wasmtime passes `--nocapture` to every test and keeps the
+/// test's whole output.
+#[test]
+fn a_wasm32_failure_reaches_the_log_with_its_message_and_its_seed() {
+    let yml = KERNEL_YML.replace("\r\n", "\n");
+    let mut runs = 0;
+    let mut builds = 0;
+    let mut archives = 0;
+    for line in yml.lines() {
+        let run = line.trim_start().trim_start_matches("run: ");
+        if run.starts_with("cargo test ") && run.contains("--target wasm32-wasip1") {
+            if run.contains(" --no-run ") {
+                builds += 1;
+                continue;
+            }
+            assert!(run.ends_with(" -- --nocapture"), "{run}");
+            runs += 1;
+        }
+        if run.starts_with("cargo nextest run --archive-file \"$RUNNER_TEMP/wasm-") {
+            assert!(!run.contains("capture") && !run.contains(" -- "), "{run}");
+            archives += 1;
+        }
+    }
+    assert_eq!(
+        runs, 5,
+        "the shipped leg, and the doctests of both builds under both runtimes"
+    );
+    assert_eq!(archives, 1, "the wasm32 suite's parts");
+    assert_eq!(
+        builds, 1,
+        "geom-solidcore's test modules, built and not run"
+    );
+    let one_test = "out=$(wasmtime run --allow-precompiled \"$module.cwasm\" --exact \"$t\" \
+                    --nocapture 2>&1) || rc=$?";
+    assert_eq!(
+        yml.matches(one_test).count(),
+        builds,
+        "each module built and not run has its tests run one a process, uncaptured, the output kept"
+    );
+    let draws = "imports.wasi_snapshot_preview1.random_get = ";
+    let replays = "failed; WASI_RUN_SEED=${seed} replays its random bytes";
+    assert_eq!(
+        yml.matches(draws).count(),
+        3,
+        "each of Node's runners draws from a seed (the goldens', the build's doctests', the suite's)"
+    );
+    assert_eq!(
+        yml.matches(replays).count(),
+        3,
+        "and prints it when a run fails"
+    );
 }
 
 /// The matrix runs exactly the store's test-checked goldens, each once, with libtest's exact
@@ -428,7 +764,8 @@ fn a_run_that_does_not_prove_its_goldens_is_refused() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2. A golden store keyed by edition, with the owner-approval rule for edits.
+// 2. A golden store keyed by edition, with the rule for edits: since decision 32.54, the record
+//    every moved answer carries, in place of a kernel owner's approval.
 // ---------------------------------------------------------------------------------------------
 
 /// Nothing ambiguous parses: every way to make the real store ambiguous or malformed is refused,
@@ -566,7 +903,9 @@ fn lookups_are_keyed_by_the_current_edition_and_operation_versions() {
 /// An edit to the store as JSON.
 type Edit = Box<dyn Fn(&mut Value)>;
 
-/// Every edit to the real store that the rule refuses is refused, whatever approval it has.
+/// Every edit to the real store that the rule refuses is refused: a planted move with no record,
+/// one whose record holds another digest than the old one, one whose record gives no reason, and
+/// every other refusal.
 #[test]
 fn the_refusals_hold_on_the_real_store() {
     let base_v = store_json();
@@ -619,19 +958,56 @@ fn the_refusals_hold_on_the_real_store() {
             "edition renamed",
             Box::new(|v| v["editions"][0]["edition"] = Value::from("first")),
         ),
+        (
+            "digest changed with a record that gives no reason",
+            Box::new(|v| {
+                let old = goldens(v)[1]["sha256"].clone();
+                goldens(v)[1]["history"] = serde_json::json!([{
+                    "sha256": old, "kind": "bug", "piece": "G1", "why": " "}]);
+                goldens(v)[1]["sha256"] = Value::from(fake('b'));
+            }),
+        ),
+        (
+            "edition released",
+            Box::new(|v| {
+                let editions = v["editions"].as_array_mut().unwrap();
+                let mut next = editions.last().unwrap().clone();
+                editions.last_mut().unwrap()["state"] = Value::from("frozen");
+                next["edition"] = Value::from("2027");
+                editions.push(next);
+            }),
+        ),
     ];
     for (name, f) in &refused {
-        // An edit that is not even a valid store is refused before any approval.
+        // An edit that is not even a valid store is refused before any diff: `golden diff` fails
+        // on a head store that does not parse.
         if let Ok(d) = classify(f.as_ref()) {
             assert!(!d.is_acceptable(), "{name} was acceptable:\n{d}");
+            assert!(d.moved.is_empty(), "{name} moved an answer:\n{d}");
         }
     }
+    // The planted moves name what is wrong.
+    let says = |f: &dyn Fn(&mut Value), what: &str| {
+        let d = classify(f).unwrap();
+        assert!(d.to_string().contains(what), "{d}");
+    };
+    says(
+        refused[0].1.as_ref(),
+        "without exactly one new history record",
+    );
+    says(refused[1].1.as_ref(), "not the old digest");
+    says(refused[9].1.as_ref(), "was released");
+    assert!(
+        classify(refused[8].1.as_ref()).is_err(),
+        "an empty reason parsed"
+    );
 }
 
-/// The edits to the real store that a kernel owner must approve say so and are not refused; a
-/// golden added needs ordinary review only; and once an edition is released, nothing in it changes.
+/// The planted move with a proper record passes, named with its record; an edit that moves no
+/// answer passes and is listed; a golden added passes; and once an edition is released, nothing
+/// in it changes.
 #[test]
-fn the_owner_rule_holds_on_the_real_store() {
+fn the_record_rule_holds_on_the_real_store() {
     let base_v = store_json();
     let base = parse(&base_v);
     let classify = |f: &dyn Fn(&mut Value)| -> Result<_, StoreError> {
@@ -639,16 +1015,35 @@ fn the_owner_rule_holds_on_the_real_store() {
         f(&mut v);
         Ok(diff(Some(&base), &Store::parse(&v.to_string())?))
     };
-    let owner: Vec<(&str, Edit)> = vec![
+    // A move with its record: the old digest, a kind the golden allows, its piece and why.
+    let d = classify(&|v| {
+        let old = goldens(v)[1]["sha256"].clone();
+        goldens(v)[1]["history"] = serde_json::json!([{
+            "sha256": old, "kind": "improvement", "piece": "G999", "why": "w"}]);
+        goldens(v)[1]["sha256"] = Value::from(fake('b'));
+    })
+    .unwrap();
+    assert!(d.is_acceptable(), "{d}");
+    assert_eq!(d.moved.len(), 1, "{d}");
+    let m = &d.moved[0];
+    assert_eq!(m.key.1, base.current().unwrap().goldens[1].id);
+    assert_eq!(m.was, base.current().unwrap().goldens[1].sha256);
+    assert_eq!(m.now, fake('b'));
+    assert_eq!(
         (
-            "digest changed with its record",
-            Box::new(|v| {
-                let old = goldens(v)[1]["sha256"].clone();
-                goldens(v)[1]["history"] = serde_json::json!([{
-                    "sha256": old, "kind": "improvement", "piece": "G999", "why": "w"}]);
-                goldens(v)[1]["sha256"] = Value::from(fake('b'));
-            }),
+            m.record.kind,
+            m.record.piece.as_str(),
+            m.record.why.as_str()
         ),
+        (ChangeKind::Improvement, "G999", "w")
+    );
+    assert!(d.changed.is_empty() && d.added.is_empty(), "{d}");
+    assert!(
+        d.to_string().contains("recorded as improvement by G999: w"),
+        "{d}"
+    );
+    // Edits that move no answer.
+    let moves_nothing: Vec<(&str, Edit)> = vec![
         (
             "check moved",
             Box::new(|v| goldens(v)[1]["check"]["function"] = Value::from("another_test")),
@@ -667,23 +1062,18 @@ fn the_owner_rule_holds_on_the_real_store() {
                 g["file"] = Value::from("projects/elsewhere/golden.txt");
             }),
         ),
-        (
-            "edition released",
-            Box::new(|v| {
-                let editions = v["editions"].as_array_mut().unwrap();
-                let mut next = editions.last().unwrap().clone();
-                editions.last_mut().unwrap()["state"] = Value::from("frozen");
-                next["edition"] = Value::from("2027");
-                editions.push(next);
-            }),
-        ),
     ];
-    for (name, f) in &owner {
+    for (name, f) in &moves_nothing {
         let d = classify(f.as_ref()).unwrap();
         assert!(d.is_acceptable(), "{name} was refused:\n{d}");
-        assert!(d.needs_approval(), "{name} needs no approval:\n{d}");
+        assert!(d.moved.is_empty(), "{name} moved an answer:\n{d}");
+        assert_eq!(d.changed.len(), 1, "{name}:\n{d}");
+        assert!(
+            d.to_string().contains("no stored answer moved"),
+            "{name}:\n{d}"
+        );
     }
-    // Ordinary review: a golden added.
+    // A golden added.
     let d = classify(&|v| {
         let mut g = goldens(v)[1].clone();
         g["id"] = Value::from("geom-num/new-corpus");
@@ -691,7 +1081,10 @@ fn the_owner_rule_holds_on_the_real_store() {
         goldens(v).push(g);
     })
     .unwrap();
-    assert!(d.is_acceptable() && !d.needs_approval(), "{d}");
+    assert!(
+        d.is_acceptable() && d.moved.is_empty() && d.changed.is_empty(),
+        "{d}"
+    );
     assert_eq!(d.added.len(), 1);
     // And a frozen edition, once released, never changes.
     let mut released_v = base_v.clone();
@@ -709,126 +1102,64 @@ fn the_owner_rule_holds_on_the_real_store() {
     assert!(!d.is_acceptable(), "{d}");
 }
 
-/// The review rule: only a qualified reviewer who is not the author, approving the current head
-/// commit, with no qualified reviewer's latest review asking for changes.
+/// The store's workflow holds pull requests to the record rule: its job `store` runs `golden
+/// check` and `golden diff` against the merge's base (decision 32.54), its job `fixtures` runs
+/// `fixture diff` against the same base (decision 32.55), and neither reads a review: no step
+/// fetches one, no review starts a run, and the workflow's token only reads the repository.
 #[test]
-fn approvals_that_must_not_count_do_not() {
-    let review = |login: &str, state: &str, commit: &str, association: &str| {
-        serde_json::json!({
-            "id": 1, "user": {"login": login}, "body": "", "state": state,
-            "commit_id": commit, "author_association": association,
-            "submitted_at": "2026-10-25T00:00:00Z"
-        })
-    };
-    let run = |reviews: Vec<Value>, perms: &[(&str, &str)]| {
-        let perms: BTreeMap<String, String> = perms
-            .iter()
-            .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
-            .collect();
-        approved(&Value::Array(reviews).to_string(), "head", "author", &perms)
-    };
-    // Counts: an organisation owner or member, or write access, on the head commit.
-    for association in ["OWNER", "MEMBER"] {
-        assert!(run(vec![review("o", "APPROVED", "head", association)], &[]).is_ok());
-    }
-    for permission in ["admin", "maintain", "write"] {
-        assert!(
-            run(
-                vec![review("c", "APPROVED", "head", "CONTRIBUTOR")],
-                &[("c", permission)]
-            )
-            .is_ok()
-        );
-    }
-    // Does not count.
-    let not_counted = [
-        vec![review("o", "APPROVED", "older", "MEMBER")],
-        vec![review("author", "APPROVED", "head", "OWNER")],
-        vec![review("c", "APPROVED", "head", "CONTRIBUTOR")],
-        vec![review("c", "APPROVED", "head", "FIRST_TIME_CONTRIBUTOR")],
-        vec![review("c", "APPROVED", "head", "NONE")],
-        vec![review("o", "COMMENTED", "head", "MEMBER")],
-        vec![review("o", "PENDING", "head", "MEMBER")],
-        vec![review("o", "DISMISSED", "head", "MEMBER")],
-        vec![
-            review("o", "APPROVED", "head", "MEMBER"),
-            review("o", "DISMISSED", "head", "MEMBER"),
-        ],
-        vec![],
-    ];
-    for (i, reviews) in not_counted.into_iter().enumerate() {
-        assert_eq!(
-            run(reviews, &[("c", "read")]),
-            Err(ApprovalError::NoApproval),
-            "case {i}"
-        );
-    }
-    // A qualified reviewer asking for changes blocks another's approval; an outsider's does not.
-    assert!(matches!(
-        run(
-            vec![
-                review("o1", "APPROVED", "head", "MEMBER"),
-                review("o2", "CHANGES_REQUESTED", "older", "MEMBER"),
-            ],
-            &[]
-        ),
-        Err(ApprovalError::ChangesRequested(who)) if who == "o2"
-    ));
-    assert!(
-        run(
-            vec![
-                review("o1", "APPROVED", "head", "MEMBER"),
-                review("x", "CHANGES_REQUESTED", "head", "NONE"),
-            ],
-            &[]
-        )
-        .is_ok()
-    );
-    // A request for changes, then a fresh approval of the head, approves.
-    assert!(
-        run(
-            vec![
-                review("o1", "CHANGES_REQUESTED", "older", "MEMBER"),
-                review("o1", "APPROVED", "head", "MEMBER"),
-            ],
-            &[]
-        )
-        .is_ok()
-    );
-    // A deleted account's review (no user) is skipped, not a crash.
-    let ghost = serde_json::json!([{"user": null, "state": "APPROVED", "commit_id": "head",
-        "author_association": "MEMBER"}]);
-    assert_eq!(
-        approved(&ghost.to_string(), "head", "author", &BTreeMap::new()),
-        Err(ApprovalError::NoApproval)
-    );
-}
-
-/// The store's workflow holds pull requests to the rule: it runs on every review as well as every
-/// pull request, reads the reviews with a read-only token, runs `golden check` and `golden diff`
-/// with the reviews, the head commit and the author, and pins the same toolchain.
-#[test]
-fn kernel_golden_yml_runs_the_check_and_the_approval_rule() {
+fn kernel_golden_yml_runs_the_check_and_the_record_rule() {
     let yml = GOLDEN_YML.replace("\r\n", "\n");
-    for needle in [
-        "  pull_request_review:\n    types: [submitted, edited, dismissed]\n",
-        "permissions:\n  contents: read\n  pull-requests: read\n",
-        "run: cargo run --locked -p geom-test --bin golden -- check\n",
-        "cargo run --locked -p geom-test --bin golden -- diff\n",
-        "--base \"$BASE\"\n",
-        "BASE: ${{ steps.edits.outputs.base }}\n",
-        "BASE=$(git rev-parse HEAD^1)\n",
-        "--reviews \"$RUNNER_TEMP/reviews.json\"\n",
-        "--permissions \"$RUNNER_TEMP/permissions.json\"\n",
-        "--head \"$HEAD_SHA\"\n",
-        "--author \"$AUTHOR\"\n",
-        "HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n",
-        "AUTHOR: ${{ github.event.pull_request.user.login }}\n",
-        "fetch-depth: 0\n",
-        "persist-credentials: false\n",
+    let (store, fixtures) = yml
+        .split_once("\n  store:\n")
+        .and_then(|(_, rest)| rest.split_once("\n  fixtures:\n"))
+        .expect("kernel-golden.yml has the jobs store and fixtures, in that order");
+    for (job, text, needles) in [
+        (
+            "store",
+            store,
+            [
+                "run: cargo run --locked -p geom-test --bin golden -- check\n",
+                "run: cargo run --locked -p geom-test --bin golden -- diff --base \"$BASE\"\n",
+                "if: github.event_name != 'push' && steps.edits.outputs.store == 'edited'\n",
+            ],
+        ),
+        (
+            "fixtures",
+            fixtures,
+            [
+                "run: cargo run --locked -p geom-test --bin fixture -- check\n",
+                "run: cargo run --locked -p geom-test --bin fixture -- diff --base \"$BASE\"\n",
+                "if: github.event_name != 'push' && steps.edits.outputs.fixtures == 'edited'\n",
+            ],
+        ),
     ] {
-        assert!(yml.contains(needle), "kernel-golden.yml lacks {needle:?}");
+        for needle in needles.into_iter().chain([
+            "BASE: ${{ steps.edits.outputs.base }}\n",
+            "BASE=$(git rev-parse HEAD^1)\n",
+            "fetch-depth: 0\n",
+            "persist-credentials: false\n",
+            "toolchain: ${{ env.RUST_TOOLCHAIN }}\n",
+        ]) {
+            assert!(text.contains(needle), "the job {job} lacks {needle:?}");
+        }
     }
+    for gone in [
+        "pull_request_review",
+        "pull-requests:",
+        "reviews.json",
+        "/reviews",
+        "--reviews",
+        "--permissions",
+        "--head",
+        "--author",
+        "GH_TOKEN",
+    ] {
+        assert!(!yml.contains(gone), "kernel-golden.yml still has {gone:?}");
+    }
+    assert!(
+        yml.contains("\npermissions:\n  contents: read\n\n"),
+        "the workflow's token reads the repository and nothing else"
+    );
     assert!(
         !yml.contains(": write") && !yml.contains("write-all"),
         "the workflow's token must only read"
@@ -1144,17 +1475,20 @@ mod native {
             vec![],
             vec!["check", "--rooot", "x"],
             vec!["diff"],
+            // The review options are gone with the review rule (decision 32.54).
+            vec!["diff", "--base", "HEAD", "--reviews", "reviews.json"],
+            vec!["diff", "--base", "HEAD", "--head", "h", "--author", "a"],
         ] {
             let out = golden_bin().args(&bad).output().unwrap();
             assert_eq!(out.status.code(), Some(2), "{bad:?}");
         }
     }
 
-    /// `golden diff` end to end in a scratch repository: an unchanged store passes, an added golden
-    /// passes, a recorded change fails without an owner's approval and passes with one on the head
-    /// commit, and an unrecorded change fails whatever the reviews say.
+    /// `golden diff` end to end in a scratch repository: an unchanged store passes; a planted move
+    /// with a proper record passes, with no review, and prints the moved answer with its record; a
+    /// planted move with no record fails, and so does one whose record holds a wrong old digest.
     #[test]
-    fn golden_diff_holds_a_change_to_the_owner_rule_end_to_end() {
+    fn golden_diff_holds_a_moved_answer_to_its_record_end_to_end() {
         let dir = std::env::temp_dir().join(format!("geom-test-attack-g19-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store_path = STORE_PATH.iter().fold(dir.clone(), |p, c| p.join(c));
@@ -1179,60 +1513,55 @@ mod native {
         git(&["add", "-A"]);
         git(&["commit", "-q", "-m", "base"]);
         let base = git(&["rev-parse", "HEAD"]).trim().to_owned();
-        let diff_cmd = |extra: &[&str]| {
-            let mut c = Command::new(env!("CARGO_BIN_EXE_golden"));
-            c.args(["diff", "--base", &base, "--root"])
+        let diff_cmd = || {
+            Command::new(env!("CARGO_BIN_EXE_golden"))
+                .args(["diff", "--base", &base, "--root"])
                 .arg(&dir)
-                .args(extra);
-            c.output().unwrap()
+                .output()
+                .unwrap()
         };
-        assert!(diff_cmd(&[]).status.success(), "unchanged store");
-        // A recorded change to the first golden.
+        let unchanged = diff_cmd();
+        assert!(unchanged.status.success(), "unchanged store");
+        assert!(String::from_utf8_lossy(&unchanged.stdout).contains("no stored answer moved"));
+        // The second golden moved, with the record `history` gives it.
+        let plant = |history: serde_json::Value| {
+            let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
+            let g = &mut super::goldens(&mut v)[1];
+            g["history"] = history;
+            g["sha256"] = serde_json::Value::from(super::fake('b'));
+            std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+        };
         let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
-        let first = &mut super::goldens(&mut v)[1];
-        let old = first["sha256"].clone();
-        first["history"] = serde_json::json!([{
-            "sha256": old, "kind": "improvement", "piece": "G999", "why": "attack"}]);
-        first["sha256"] = serde_json::Value::from(super::fake('b'));
-        std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
-        let out = diff_cmd(&[]);
+        let old = super::goldens(&mut v)[1]["sha256"].clone();
+        // A proper record: passes with no review, and names the moved answer and its record.
+        plant(serde_json::json!([{
+            "sha256": old, "kind": "improvement", "piece": "G999", "why": "attack"}]));
+        let out = diff_cmd();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        assert!(out.status.success(), "a recorded move failed:\n{text}");
+        assert!(
+            text.contains(&format!(
+                "-> {}; recorded as improvement by G999: attack",
+                super::fake('b')
+            )),
+            "{text}"
+        );
+        assert!(text.contains("carries its record"), "{text}");
+        // No record.
+        plant(serde_json::json!([]));
+        let out = diff_cmd();
+        assert_eq!(out.status.code(), Some(1), "a move with no record passed");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("refused"));
+        // A record whose digest is not the old one.
+        plant(serde_json::json!([{
+            "sha256": super::fake('c'), "kind": "bug", "piece": "G999", "why": "attack"}]));
+        let out = diff_cmd();
         assert_eq!(
             out.status.code(),
             Some(1),
-            "a change without reviews passed"
+            "a record of a wrong old digest passed"
         );
-        let reviews = dir.join("reviews.json");
-        let write_reviews = |login: &str, commit: &str, association: &str| {
-            let r = serde_json::json!([{"user": {"login": login}, "state": "APPROVED",
-                "commit_id": commit, "author_association": association}]);
-            std::fs::write(&reviews, r.to_string()).unwrap();
-        };
-        let with_reviews = |head: &str| {
-            let r = reviews.to_str().unwrap().to_owned();
-            diff_cmd(&["--reviews", &r, "--head", head, "--author", "author"])
-        };
-        write_reviews("owner", "headsha", "MEMBER");
-        assert!(
-            with_reviews("headsha").status.success(),
-            "an owner's approval did not pass"
-        );
-        assert_eq!(
-            with_reviews("newersha").status.code(),
-            Some(1),
-            "a stale approval passed"
-        );
-        write_reviews("author", "headsha", "OWNER");
-        assert_eq!(
-            with_reviews("headsha").status.code(),
-            Some(1),
-            "self-approval passed"
-        );
-        // An unrecorded change is refused whatever the reviews say.
-        let mut v: serde_json::Value = serde_json::from_str(&base_text).unwrap();
-        super::goldens(&mut v)[1]["sha256"] = serde_json::Value::from(super::fake('b'));
-        std::fs::write(&store_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
-        write_reviews("owner", "headsha", "MEMBER");
-        assert_eq!(with_reviews("headsha").status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&out.stdout).contains("not the old digest"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

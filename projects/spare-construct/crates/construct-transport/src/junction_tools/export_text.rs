@@ -2,27 +2,27 @@
 
 /// The SIDRA 11 loader script's text between its 15 filled-in values: the D1 and D12 comment blocks, the not-converged comment, the date, the scenario, the year, the periods, the counts, the setup, the scenario, the convergence text, the notice and the two JSON blocks.
 pub(super) const LOADER: [&str; 16] = [
-    r#####"#!/usr/bin/env python3
+    r"#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Spare Construct to SIDRA INTERSECTION 11 volume loader (New Zealand setup)
 #
 # D1 Screening status
-"#####,
-    r#####"
+",
+    r"
 # D12 Hand-over
-"#####,
-    r#####"
+",
+    r"
 #
 # Requires licensed SIDRA 11, 64-bit Python, pythonnet, .NET 8; close the project in SIDRA first; untested against a live install.
-#"#####,
-    r#####"
-# Made by Spare Construct on "#####,
-    r#####" for scenario "#####,
-    r#####" ("#####,
-    r#####"); periods "#####,
-    r#####"; "#####,
-    r#####" movements at "#####,
-    r#####" sites.
+#",
+    r"
+# Made by Spare Construct on ",
+    r" for scenario ",
+    r" (",
+    r"); periods ",
+    r"; ",
+    r" movements at ",
+    r" sites.
 # Volumes are modelled demand in vehicles per hour (light and heavy vehicles), not PCU and not throughput, from a
 # Spare Construct sketch model. Spare Construct junction results are HCM 6 / Akcelik-based, indicative and not SIDRA output.
 #
@@ -48,18 +48,18 @@ import os
 import sys
 
 SITE_TYPES = {0: 'signals', 1: 'roundabout', 2: 'give-way', 3: 'two-way stop'}
-NZ_SETUP = "#####,
-    r#####"  # SIDRA site standard: 2 = New Zealand
-SCENARIO = "#####,
-    r#####"
-NOT_CONVERGED = "#####,
-    r#####"
-NOTICE = "#####,
-    r#####"
-DATA =json.loads(r'''"#####,
-    r#####"''')
-LEG_LANES = json.loads(r'''"#####,
-    r#####"''')
+NZ_SETUP = ",
+    r"  # SIDRA site standard: 2 = New Zealand
+SCENARIO = ",
+    r"
+NOT_CONVERGED = ",
+    r"
+NOTICE = ",
+    r"
+DATA =json.loads(r'''",
+    r"''')
+LEG_LANES = json.loads(r'''",
+    r#"''')
 NUMERIC = ('lat', 'lng', 'site_type', 'origin_leg', 'dest_leg', 'lv_veh_h', 'hv_veh_h', 'pff_pct', 'unit_time_min', 'peak_flow_period_min', 'growth_pct')
 RETURNS = {'OpenProject': 'project', 'CreateAndOpenProject': 'project', 'AddSiteFolder': 'folder', 'AddSite': 'site'}
 
@@ -240,33 +240,33 @@ def main(argv=None, api=None):
 
 if __name__ == '__main__':
     sys.exit(main())
-"#####,
+"#,
 ];
 
 /// The volume grids page's text between its filled-in values.
 pub(super) const GRIDS: [&str; 11] = [
-    r#####"<!doctype html><html lang="en-NZ"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Turning volumes for SIDRA · "#####,
-    r#####"</title>
+    r#"<!doctype html><html lang="en-NZ"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Turning volumes for SIDRA · "#,
+    r#"</title>
 <style>body{font:13px/1.45 system-ui,sans-serif;color:#18201e;background:#fff;margin:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 2px}.meta,.note{color:#56635f;margin:2px 0 8px}
 table{border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #c9d1cd;padding:3px 7px;text-align:right;font-variant-numeric:tabular-nums}th{background:#f1f4f2;font-weight:600}tr th:first-child{text-align:left}
 .warn{color:#a15c07;font-weight:600}section{break-inside:avoid;page-break-inside:avoid}@media print{body{margin:10mm}}
 .disc{border:1px solid #c9d1cd;border-left:4px solid #56635f;padding:6px 10px;margin:8px 0 12px;color:#18201e}.disc p{margin:2px 0}
 table.pg{border-collapse:collapse;width:100%;margin:0}table.pg>tbody>tr>td,table.pg>tfoot>tr>td{border:0;padding:0;text-align:left;font-variant-numeric:normal}
 .pf{border-top:1px solid #c9d1cd;margin-top:14px;padding-top:6px;color:#56635f;font-size:11px}.pf p{margin:2px 0}@media print{.pf{font-size:8pt}}</style></head><body>
-<table class="pg" role="presentation"><tfoot><tr><td><footer class="pf"><p>"#####,
-    r#####".</p><p><b>D1 Screening status.</b> "#####,
-    r#####"</p><p><b>D12 Hand-over.</b> "#####,
-    r#####"</p></footer></td></tr></tfoot><tbody><tr><td>
-<h1>Turning volumes for SIDRA · "#####,
-    r#####"</h1>
-<p class="meta">Spare Construct, "#####,
-    r#####". Modelled demand in vehicles per hour (LV light, HV heavy vehicles), whole vehicles. Legs are named by where traffic comes from; turns use SIDRA drive-on-left designations.</p>
-<div class="disc" role="note"><p><b>D1 Screening status.</b> "#####,
-    r#####"</p><p><b>D12 Hand-over.</b> "#####,
-    r#####"</p></div>
-"#####,
-    r#####"
-"#####,
-    r#####"
-</td></tr></tbody></table></body></html>"#####,
+<table class="pg" role="presentation"><tfoot><tr><td><footer class="pf"><p>"#,
+    r".</p><p><b>D1 Screening status.</b> ",
+    r"</p><p><b>D12 Hand-over.</b> ",
+    r"</p></footer></td></tr></tfoot><tbody><tr><td>
+<h1>Turning volumes for SIDRA · ",
+    r#"</h1>
+<p class="meta">Spare Construct, "#,
+    r#". Modelled demand in vehicles per hour (LV light, HV heavy vehicles), whole vehicles. Legs are named by where traffic comes from; turns use SIDRA drive-on-left designations.</p>
+<div class="disc" role="note"><p><b>D1 Screening status.</b> "#,
+    r"</p><p><b>D12 Hand-over.</b> ",
+    r"</p></div>
+",
+    r"
+",
+    r"
+</td></tr></tbody></table></body></html>",
 ];

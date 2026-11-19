@@ -75,9 +75,10 @@
 //!   <https://github.com/gungraun/gungraun/blob/a11cdc156da6134f281302f889c1d25fa44e00da/README.md>,
 //!   for its library-benchmark API and its Callgrind and DHAT settings. No code copied.
 //!
-//! Cost: a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (two passes under
-//! the instruction-count gate, whose first pass warms the caches; one and two runs under the fuel
-//! gate, whose difference is one pass). Building a batch takes O([`inputs::BATCH`]) generator draws
+//! Cost: a benchmark is one pass of its operation over [`inputs::BATCH`] inputs (fewer for the
+//! heaviest few, [`inputs::SHORT_BATCHES`]; two passes under the instruction-count gate, whose
+//! first pass warms the caches; one and two runs under the fuel gate, whose difference is one
+//! pass). Building a batch takes O([`inputs::BATCH`]) generator draws
 //! and hashing it O([`inputs::BATCH`]) SHA-256 blocks, once per benchmark, outside every measured
 //! region.
 //!
@@ -313,6 +314,10 @@ pub mod guest;
 pub mod harness;
 pub mod inputs;
 pub mod kernels;
+// With the judge, for the same reasons: the parts' plan and the judge's check of them
+// (kernel-bench.yml).
+#[cfg(all(feature = "judge", any(unix, windows)))]
+pub mod parts;
 pub mod rng;
 pub mod sha256;
 pub mod steps;

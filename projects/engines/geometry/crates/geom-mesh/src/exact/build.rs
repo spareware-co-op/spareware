@@ -812,8 +812,8 @@ struct FaceKey {
     run: u32,
     /// Its lowest vertex over all its loops.
     lowest: u32,
-    /// The two vertices after its outer loop's lowest.
-    next: [u32; 2],
+    /// The first three vertices it is written with: its outer loop's lowest and the two after.
+    head: [u32; 3],
     /// Its outer loop's lowest corner.
     start: u32,
     /// The face, as it was given.
@@ -839,7 +839,7 @@ fn face_key(
     Ok(FaceKey {
         run: *at(run_rank, *at(&input.face_run, face)?)?,
         lowest,
-        next: [*at(vertex, second)?, *at(vertex, third)?],
+        head: [low, *at(vertex, second)?, *at(vertex, third)?],
         start,
         face,
     })
@@ -1214,7 +1214,7 @@ fn sorted_faces(
             Ok(face_key(input, corner_vertex, face, run_rank)?)
         });
     let keys = phase(keys)?;
-    let first = |k: &FaceKey| (k.run, k.lowest, k.next);
+    let first = |k: &FaceKey| (k.run, k.lowest, k.head);
     let order: Result<Vec<usize>, RunError<MeshError>> =
         exec.sort_stable(meter, SORT_FACES, SORT_PLAN, &keys, first);
     let order = phase(order)?;
@@ -1222,7 +1222,69 @@ fn sorted_faces(
     for i in order {
         sorted.push(*keys.get(i).ok_or(MeshFault::Shape)?);
     }
+    in_full_order(input, corner_vertex, &mut sorted)?;
     Ok(sorted)
+}
+
+/// A face's vertices as the mesh will hold them: its outer loop from its lowest corner, then its
+/// holes by their lowest vertices, each from its lowest corner.
+fn written(input: &Polygons, vertex: &[u32], key: &FaceKey) -> Result<Vec<u32>, MeshFault> {
+    let mut out = Vec::new();
+    for (looped, from) in ordered_loops(input, vertex, key)? {
+        let corners = span(&input.loop_start, looped)?;
+        let mut corner = from;
+        for _ in corners.0..corners.1 {
+            out.push(*at(vertex, corner)?);
+            corner = next_corner(corner, corners);
+        }
+    }
+    Ok(out)
+}
+
+/// Puts each stretch of faces of one run and one lowest vertex into the checker's canonical order
+/// (19.2: by the whole sequence of vertices, then the number of loops), where the sort by the
+/// first three vertices written does not already give it: where two faces tie on them. Those are
+/// the faces' own lowest vertex and the two after it, or, for a face whose lowest vertex is in a
+/// hole, its outer loop's lowest and the two after, which is where its sequence starts. Without
+/// this such faces kept the order they were given in, which the checker refuses
+/// (`FacesOutOfOrder`) and which differs with the input's order.
+fn in_full_order(
+    input: &Polygons,
+    vertex: &[u32],
+    sorted: &mut [FaceKey],
+) -> Result<(), MeshFault> {
+    let mut begin = 0;
+    while begin < sorted.len() {
+        let head = *sorted.get(begin).ok_or(MeshFault::Shape)?;
+        let mut end = begin.saturating_add(1);
+        while sorted
+            .get(end)
+            .is_some_and(|k| (k.run, k.lowest) == (head.run, head.lowest))
+        {
+            end = end.saturating_add(1);
+        }
+        let group = sorted.get_mut(begin..end).ok_or(MeshFault::Shape)?;
+        let tied = group
+            .windows(2)
+            .any(|w| matches!(w, [a, b] if a.head == b.head));
+        if tied {
+            let mut full = Vec::with_capacity(group.len());
+            for key in group.iter() {
+                let (first, last) = span(&input.face_loops, key.face)?;
+                full.push((
+                    written(input, vertex, key)?,
+                    last.saturating_sub(first),
+                    *key,
+                ));
+            }
+            full.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+            for (slot, (_, _, key)) in group.iter_mut().zip(full) {
+                *slot = key;
+            }
+        }
+        begin = end;
+    }
+    Ok(())
 }
 
 /// The mesh of `input`.

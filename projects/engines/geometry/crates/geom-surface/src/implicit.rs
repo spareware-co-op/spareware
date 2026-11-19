@@ -55,8 +55,10 @@ pub trait ImplicitBound {
     /// # Errors
     ///
     /// [`CurveError::NotFinite`] if an enclosure leaves the finite doubles.
-    fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
-        let _ = region;
+    fn hessian_box(
+        &self,
+        _region: [Interval; 3],
+    ) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
         Ok(None)
     }
 }

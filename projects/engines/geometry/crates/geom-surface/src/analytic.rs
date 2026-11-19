@@ -2,7 +2,8 @@
 //!
 //! What it does: each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`),
 //! with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term,
-//! ±1 as built, so that reversing either parameter is exact:
+//! ±1 as built, so that reversing either parameter is exact (a sphere's and a torus's is ±1 always,
+//! any other refused, as their routines read them as round):
 //!
 //! | Kind | S(u, v) | Normal direction (a positive multiple of `S_u` × `S_v`) |
 //! | --- | --- | --- |
@@ -264,8 +265,13 @@ fn normal_terms(which: Which, r: &Round) -> Result<Terms, CurveError> {
     })
 }
 
-/// The pieces a direction of a box is cut into: eighths of a turn for an angle, else one.
-pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)>, CurveError> {
+/// The pieces a direction of a box is cut into: eighths of a turn for an angle, else one. At most
+/// eight, in order from `lo`, held in a fixed array with no heap block (a surface is bounded on
+/// every box the engine looks at); the slots after the last piece are `None`.
+pub(crate) fn cuts(
+    (lo, hi): (f64, f64),
+    angular: bool,
+) -> Result<[Option<(f64, f64)>; 8], CurveError> {
     let n: u32 = if angular {
         let x = geom_num::math::ceil((hi - lo) * 4.0)?.get();
         if x >= 8.0 {
@@ -284,9 +290,10 @@ pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)
     } else {
         1
     };
-    let mut out = Vec::with_capacity(8);
+    let mut out = [None; 8];
     let mut start = lo;
-    for i in 1..=n {
+    // n is at most 8, so every piece has its slot.
+    for (i, slot) in (1..=n).zip(&mut out) {
         let end = if i == n {
             hi
         } else {
@@ -294,7 +301,7 @@ pub(crate) fn cuts((lo, hi): (f64, f64), angular: bool) -> Result<Vec<(f64, f64)
         };
         // Rounding may step past either end; the piece stays in [start, hi].
         let end = tight::larger(tight::smaller(end, hi), start);
-        out.push((start, end));
+        *slot = Some((start, end));
         start = end;
     }
     Ok(out)
@@ -311,8 +318,8 @@ fn hull(
         lo: [f64::INFINITY; 3],
         hi: [f64::NEG_INFINITY; 3],
     };
-    for (u0, u1) in cuts(region.0, angular.0)? {
-        for (v0, v1) in cuts(region.1, angular.1)? {
+    for (u0, u1) in cuts(region.0, angular.0)?.into_iter().flatten() {
+        for (v0, v1) in cuts(region.1, angular.1)?.into_iter().flatten() {
             meter.charge(1)?;
             let e = f(Interval::new(u0, u1)?, Interval::new(v0, v1)?)?;
             for ((l, h), x) in out.lo.iter_mut().zip(out.hi.iter_mut()).zip(&e) {
@@ -380,6 +387,13 @@ impl Round {
                     return Err(CurveError::Degenerate);
                 }
             }
+        }
+        // A sphere's and a torus's routines read the surface as round: a factor other than ±1
+        // would be a spheroid or a stretched torus, a different kind, so it is refused, never
+        // misread (a similarity's scale goes to their radii, so none of their own operations
+        // makes one).
+        if matches!(which, Which::Sphere | Which::Torus) && self.sign.abs() != 1.0 {
+            return Err(CurveError::AxialFactorNotUnit);
         }
         match which {
             Which::Cylinder | Which::Cone => check_finite((v0, v1)),
@@ -604,12 +618,14 @@ macro_rules! round_kind {
 
             /// The same surface with its axial factor set to `s`, as a similarity leaves a
             /// cylinder or cone (the scale times the old factor): what a stored surface whose
-            /// factor is neither +1 nor −1 is rebuilt from.
+            /// factor is neither +1 nor −1 is rebuilt from. A sphere's or torus's factor is +1
+            /// or −1 only.
             ///
             /// # Errors
             ///
             /// [`CurveError::NotFinite`] unless `s` is finite; [`CurveError::Degenerate`] for
-            /// zero; those of building the surface's terms.
+            /// zero; [`CurveError::AxialFactorNotUnit`] for a sphere or torus and any `s` other
+            /// than +1 or −1; those of building the surface's terms.
             pub fn with_axial_sign(&self, s: f64) -> Result<$kind, CurveError> {
                 if !s.is_finite() {
                     return Err(CurveError::NotFinite);
@@ -633,6 +649,17 @@ macro_rules! round_kind {
                 let mut round = self.round.clone();
                 round.domain = domain;
                 $kind::build(round)
+            }
+
+            /// An upper bound on the first partial's length along `dir` over `region`, from the
+            /// terms' forms alone ([`SurfaceKind::speed_ceiling`]).
+            pub(crate) fn ceiling(
+                &self,
+                region: ParamBox,
+                dir: Direction,
+            ) -> Result<f64, CurveError> {
+                check_box(region, self.round.domain)?;
+                self.terms.ceiling(region, dir)
             }
 
             fn build(round: Round) -> Result<$kind, CurveError> {
@@ -1050,6 +1077,13 @@ impl Plane {
     fn bounded(&self) -> bool {
         let ((a, b), (c, d)) = self.domain;
         a.is_finite() && b.is_finite() && c.is_finite() && d.is_finite()
+    }
+
+    /// An upper bound on the first partial's length along `dir` over `region`, from the terms'
+    /// forms alone ([`SurfaceKind::speed_ceiling`]).
+    pub(crate) fn ceiling(&self, region: ParamBox, dir: Direction) -> Result<f64, CurveError> {
+        check_box(region, self.domain)?;
+        self.terms.ceiling(region, dir)
     }
 }
 
@@ -1646,12 +1680,22 @@ impl ImplicitBound for Cylinder {
     }
 }
 
+impl Cone {
+    /// σ = k/s, how fast the radius grows with the height h along n̂: the point at v is at
+    /// h = s·v, so its radius r₀ + k·v is r₀ + σ·h. The axial factor s is ±1 as built, where k/s
+    /// is k·s, but a similarity multiplies it by its scale (`Round::moved`), and then only k/s is
+    /// the slope (k·s made the equation of a cone scaled by 2 miss it by far).
+    fn axial_slope(&self) -> Result<Interval, CurveError> {
+        let [_, k] = self.round.lengths;
+        tight::div(point(k)?, point(self.round.sign)?)
+    }
+}
+
 impl ImplicitBound for Cone {
-    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k·s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
+    /// F = |x − c|² − h² − (r₀ + σ·h)², σ = k/s, so ∇²F = 2·I − 2·(1 + σ²)·n̂n̂ᵀ.
     fn hessian_box(&self, region: [Interval; 3]) -> Result<Option<[[Interval; 3]; 3]>, CurveError> {
         let (_, _, n) = self.round.parts(&region)?;
-        let [_, k] = self.round.lengths;
-        let slope = Interval::point(k * self.round.sign)?;
+        let slope = self.axial_slope()?;
         let (zero, one, two) = (
             Interval::point(0.0)?,
             Interval::point(1.0)?,
@@ -1661,12 +1705,12 @@ impl ImplicitBound for Cone {
         Ok(Some(outer(two, (along, &n), (zero, &n))?))
     }
 
-    /// F(x) = |w|² − (r₀ + k·s·h)², for w and h the point's parts about the axis. It vanishes on
-    /// both nappes: past the apex as well as on the kind.
+    /// F(x) = |w|² − (r₀ + σ·h)², σ = k/s, for w and h the point's parts about the axis. It
+    /// vanishes on both nappes: past the apex as well as on the kind.
     fn enclose_box(&self, region: [Interval; 3]) -> Result<ImplicitEnclosure, CurveError> {
         let (w, h, n) = self.round.parts(&region)?;
-        let [r0, k] = self.round.lengths;
-        let slope = Interval::point(k * self.round.sign)?;
+        let [r0, _] = self.round.lengths;
+        let slope = self.axial_slope()?;
         let radius = Interval::point(r0)?.add(slope.mul(h)?)?;
         let two = Interval::point(2.0)?;
         Ok(ImplicitEnclosure {

@@ -3,8 +3,7 @@
 //!
 //! - `arrange_curves_fuzz` wraps `geom_fuzz::arrange_curves::harness` in `bolero::check!`: the
 //!   crate's corpus and crash files, then [`ITERATIONS`] random byte strings; a failing one's seed
-//!   is printed as `BOLERO_RANDOM_SEED=<seed>`. Under
-//!   `cargo bolero test arrange_curves_fuzz --package geom-fuzz` it is a libFuzzer target.
+//!   is printed as `BOLERO_RANDOM_SEED=<seed>`.
 //! - `arrange_curves_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the
 //!   printed seed (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and random bytes reach segments, arcs, ellipses and

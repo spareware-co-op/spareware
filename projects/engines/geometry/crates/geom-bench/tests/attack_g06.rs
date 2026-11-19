@@ -1850,13 +1850,13 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let sphere = geom_surface::Sphere::new(*centre, 5.0, frame, domain)?;
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
                 let level = geom_intersect::OnImplicit(&sphere);
-                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+                geom_intersect::trace(surface, &level, 1e-3, 1.0, &mut meter)
             },
         )),
         ("intersect", "subdivide_patch") => fold(inputs::intersect::sheets(class).iter().map(
             |(surface, centre)| {
                 let frame = geom_curve::Frame::standard().unwrap();
-                let domain = ((0.0, 1.875), (-0.45, 0.45));
+                let domain = ((0.0, 0.5), (-0.45, 0.45));
                 let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
                     *centre, 5.0, frame, domain,
                 )?);
@@ -1867,7 +1867,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("intersect", "march_plate") => fold(inputs::intersect::plates(class).iter().map(
             |(surface, centre)| {
                 let frame = geom_curve::Frame::standard().unwrap();
-                let domain = ((0.0, 1.875), (-0.45, 0.45));
+                let domain = ((0.0, 0.25), (-0.45, 0.45));
                 let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
                     *centre, 5.0, frame, domain,
                 )?);
@@ -1881,11 +1881,11 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let frame = geom_curve::Frame::standard().unwrap();
                 let domain = ((0.0, 2.0), (-0.5, 0.5));
                 let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
-                    *centre, 5.0, frame, domain,
+                    *centre, 2.0, frame, domain,
                 )?);
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
-                let found = geom_intersect::general::subdivide(&sphere, surface, 0.25, &mut meter)?;
-                geom_intersect::march::march(&sphere, surface, &found, 0.25, 1.0, &mut meter)
+                let found = geom_intersect::general::subdivide(&sphere, surface, 0.5, &mut meter)?;
+                geom_intersect::march::march(&sphere, surface, &found, 0.5, 1.0, &mut meter)
             },
         )),
         ("intersect", "known_tangent") => fold(inputs::intersect::tangents(class).iter().map(
@@ -1909,7 +1909,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("intersect", "selfcross_sweep") => {
             fold(inputs::intersect::sweeps(class).iter().map(|sheet| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
-                geom_intersect::selfcross::self_intersect(sheet, 1.0 / 16.0, 1.0 / 4.0, &mut meter)
+                geom_intersect::selfcross::self_intersect(sheet, 1.0 / 32.0, 1.0 / 4.0, &mut meter)
             }))
         }
         ("intersect", "fit_curve") => fold(inputs::intersect::crossings(class).iter().map(
@@ -1922,14 +1922,14 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 )?);
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
                 let refs = [geom_curve::SurfaceRef(1), geom_curve::SurfaceRef(2)];
-                geom_intersect::fit::fit((sheet, &ground), refs, branch, 1.0 / 256.0, &mut meter)
+                geom_intersect::fit::fit((sheet, &ground), refs, branch, 0.25, &mut meter)
             },
         )),
         ("intersect", "analyse_rest") => {
             fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
-                let found = geom_intersect::general::subdivide(plate, ball, 1e-2, &mut meter)?;
-                geom_intersect::contact::analyse(plate, ball, &found, 1e-2, 1.0, &mut meter)
+                let found = geom_intersect::general::subdivide(plate, ball, 0.25, &mut meter)?;
+                geom_intersect::contact::analyse(plate, ball, &found, 0.25, 1.0, &mut meter)
             }))
         }
         ("intersect", "trace_silhouette") => fold(inputs::intersect::tori(class).iter().map(
@@ -1938,19 +1938,19 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let level = geom_intersect::Silhouette {
                     direction: *direction,
                 };
-                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+                geom_intersect::trace(surface, &level, 1e-3, 1.0, &mut meter)
             },
         )),
         ("intersect", "project_arc") => {
             fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
-                geom_intersect::project_curve(curve, p, 1e-6, &mut meter)
+                geom_intersect::project_curve(curve, p, 1e-3, &mut meter)
             }))
         }
         ("intersect", "project_sphere") => fold(inputs::intersect::spheres(class).iter().map(
             |(surface, p)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
-                geom_intersect::project_surface(surface, p, 1e-6, &mut meter)
+                geom_intersect::project_surface(surface, p, 1e-3, &mut meter)
             },
         )),
         ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
@@ -2675,6 +2675,23 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
         ),
+        ("mesh", "decimate") => fold(inputs::mesh::decimate(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Decimate {
+                epsilon: 4,
+                target: 0,
+            };
+            geom_mesh::model::decimate(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
+        ("mesh", "remesh") => fold(inputs::mesh::remesh(class).iter().map(|(p, t)| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let settings = geom_mesh::model::Remesh {
+                epsilon: 4,
+                length: 64,
+                iterations: 1,
+            };
+            geom_mesh::model::remesh(p, t, settings, &geom_run::Exec::serial(), &mut meter)
+        })),
         ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::boolean::boolean(
@@ -2684,6 +2701,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &geom_run::Exec::serial(),
                 &mut meter,
             )
+        })),
+        ("mesh", "hull") => fold(inputs::mesh::hull(class).iter().map(|points| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::hull::Hull::of(points, &mut meter)
+        })),
+        ("mesh", "slice") => fold(inputs::mesh::slice(class).iter().map(|layers| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::slice::slice(&layers.solid, &layers.planes, &exec, &mut meter)
         })),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -2709,6 +2735,15 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        // The broad phase's pairs, recomputed from the box tree directly.
+        ("curved", "broad_pairs") => {
+            fold(inputs::curved::broad_scenes(class).iter().map(|entries| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let tree =
+                    geom_bvh::BoxTree::build(entries, &geom_run::Exec::serial(), &mut meter)?;
+                tree.pairs(&mut meter)
+            }))
+        }
         // The pool's results must be the serial executor's, so both are recomputed serially.
         ("helper", "lone_serial" | "lone_pool") => {
             let lists = if name == "lone_serial" {
@@ -6185,8 +6220,9 @@ fn the_pull_request_cannot_loosen_its_own_gate() {
 fn a_removed_benchmark_fails_the_gate() {
     // Renaming a benchmark drops it from the comparison, so a workflow that only warned would let
     // a rename hide a regression. The step must fail on an unretired removal.
-    let step = workflow_step("List changes over 1% and benchmarks not compared");
-    let fails = step.contains("::error::") || !step.trim_end().ends_with("exit 0");
+    let step = workflow_step("Benchmarks of the merge base the change no longer has");
+    assert!(step.contains("geom-bench-counts\" removed"), "{step}");
+    let fails = step.contains("::error::") && !step.trim_end().ends_with("exit 0");
     assert!(fails, "a removed benchmark only raises a warning:\n{step}");
 }
 

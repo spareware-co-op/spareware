@@ -232,3 +232,96 @@ fn the_second_checker_shares_no_code_with_the_first() {
         assert!(!source.contains(name), "{name}");
     }
 }
+
+#[test]
+fn a_face_square_to_another_is_read_in_its_own_plane() {
+    // Gate 4's corpus found the second checker calling two faces of this union crossed, where
+    // geom-check passes it: an L-shaped face on x = 4 and a face on y = 1 that meet only along
+    // their shared edge from (4, 1, 1) to (4, 1, 2). Read along x, the face on y = 1 is a segment
+    // whose shadow holds (4, 1, 0), a point of the L but not of that face. Each face is now read
+    // in its own plane (G156; geom-bool's laws drew the case, minimal by proptest).
+    use geom_bool::combine::{intersect, subtract, unite};
+    use geom_bool::operand::{Operand, OperandKey, OperandKind};
+    use geom_make::{BoxInput, make_box};
+    use geom_num::P3;
+    use geom_op::{OpContext, OpId, OpPath};
+    use geom_run::{Budget, Exec};
+    fn solid(n: u8, body: &Body) -> Operand<'_> {
+        Operand {
+            key: OperandKey([n; 16]),
+            body,
+            kind: OperandKind::Solid,
+            exactness: Exactness::Exact,
+        }
+    }
+    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
+    let cuboid = |low: [i64; 3], size: [u64; 3]| {
+        let min = P3::new(low[0], low[1], low[2]).unwrap();
+        let input = BoxInput {
+            min,
+            size: size.map(Steps),
+        };
+        make_box(&ctx, &input).unwrap().result.body
+    };
+    let a = cuboid([4, 0, 0], [4, 1, 2]);
+    let b = cuboid([4, 0, -1], [1, 2, 2]);
+    let both = [solid(1, &a), solid(2, &b)];
+    let serial = Exec::serial();
+    for body in [
+        unite(&ctx, &serial, &both).unwrap().result.body,
+        intersect(&ctx, &serial, &both).unwrap().result.body,
+        subtract(&ctx, &serial, OperandKey([1; 16]), &both)
+            .unwrap()
+            .result
+            .body,
+    ] {
+        assert_eq!(kinds(&body, Exactness::Exact), []);
+        assert_eq!(check(&body, Exactness::Exact), []);
+    }
+}
+
+#[test]
+fn a_wall_between_two_cells_is_read_as_one_wall() {
+    // Gate 4's corpus found the second checker calling the two faces of a general fuse's wall
+    // crossed, where geom-check passes them: a wall between two cells is two faces back to back,
+    // one in each cell's shell, on the same edges (11.7). The second checker now reads such a pair
+    // in a general body as one wall (G156; EMBER's figures 24 and 25 drew the case).
+    use geom_bool::combine::combine;
+    use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
+    use geom_make::{BoxInput, make_box};
+    use geom_num::P3;
+    use geom_op::{OpContext, OpId, OpPath};
+    use geom_poly::merge::Merge;
+    use geom_run::{Budget, Exec};
+    use geom_topo::BodyKind;
+    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([7; 16])), Budget::UNLIMITED);
+    let cuboid = |low: [i64; 3], size: [u64; 3]| {
+        let min = P3::new(low[0], low[1], low[2]).unwrap();
+        let input = BoxInput {
+            min,
+            size: size.map(Steps),
+        };
+        make_box(&ctx, &input).unwrap().result.body
+    };
+    let (a, b) = (cuboid([0, 0, 0], [4, 4, 4]), cuboid([2, 1, 1], [4, 2, 2]));
+    let operand = |n: u8, body| Operand {
+        key: OperandKey([n; 16]),
+        body,
+        kind: OperandKind::Solid,
+        exactness: Exactness::Exact,
+    };
+    let input = BooleanInput {
+        operands: vec![operand(1, &a), operand(2, &b)],
+        select: vec![Selection::GeneralFuse],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    let out = combine(&ctx, &Exec::serial(), &input).unwrap().result;
+    let bodies = &out[0];
+    assert_eq!(bodies.len(), 1, "one body of three cells");
+    for one in bodies {
+        assert_eq!(one.body.kind(), BodyKind::General);
+        assert_eq!(kinds(&one.body, Exactness::Exact), []);
+        assert_eq!(check(&one.body, Exactness::Exact), []);
+    }
+}

@@ -8,6 +8,8 @@
 //!   the cache uses; an order the jets cannot hold is refused by name before any work.
 //! - The offset of issue #765's smallest input, under the fuzz target's budget of 4,000,000
 //!   units, is a typed stop, and an ordinary offset's whole kind contract still fits that budget.
+//! - A cache its first sampling certifies stops there: it costs that one try, and a tolerance
+//!   that needs more samples costs the tries it takes.
 //!
 //! Covers: `SurfaceKind::Offset`.
 
@@ -25,7 +27,7 @@ use geom_curve::{CurveError, Frame};
 use geom_math::{Axis, Transform, TypedTransform};
 use geom_nurbs::{Limit, NurbsError};
 use geom_run::{Budget, Stop, WorkMeter};
-use geom_surface::{Cylinder, Offset, ParamBox, ParamSurface, SurfaceKind, contract};
+use geom_surface::{Cylinder, Offset, ParamBox, ParamSurface, Plane, SurfaceKind, contract};
 
 /// The surfaces fuzz target's budget (`geom_fuzz::surfaces::WORK`), which this crate cannot name.
 const FUZZ_WORK: u64 = 4_000_000;
@@ -207,4 +209,39 @@ fn an_ordinary_offsets_whole_contract_fits_the_fuzz_budget() {
     assert_eq!(contract::check(&kind, &params, &turn, &mut m), Ok(()));
     // Not by a hair: a quarter of the budget is left.
     assert!(m.used().work * 4 < u128::from(FUZZ_WORK) * 3);
+}
+
+#[test]
+fn a_cache_met_by_its_first_sampling_stops_there() {
+    // A flat offset's first sampling, 4 × 4 per direction, certifies it to rounding (about
+    // 2·10⁻¹²): asked for 10⁻⁹, the cache takes that one try and its knot removal, 267,281 units,
+    // and a budget of exactly that pays for it. A refinement that went on to the next try would
+    // stop on that budget at once.
+    let plane = Plane::new(
+        [1.0, 2.0, 3.0],
+        [2.0, 0.0, 1.0],
+        [0.0, 3.0, 0.0],
+        ((0.0, 1.0), (0.0, 1.0)),
+    )
+    .unwrap();
+    let flat = Offset::new(SurfaceKind::Plane(plane), 0.5).unwrap();
+    let first = 267_281;
+    let mut m = WorkMeter::new(Budget::of_work(first));
+    let form = flat.to_nurbs_within(1e-9, &mut m).unwrap();
+    assert!(form.deviation <= 1e-9);
+    assert_eq!(m.used().work, u128::from(first));
+    let mut m = WorkMeter::new(Budget::of_work(first - 1));
+    let Err(CurveError::Stopped(stop)) = flat.to_nurbs_within(1e-9, &mut m) else {
+        panic!("a budget one unit short must stop the conversion");
+    };
+    assert!(matches!(stop.reason(), Stop::OverBudget(_)));
+    // Asked for 10⁻¹², which rounding never certifies, the cache samples twice as densely once
+    // and stops there, its certificate no longer falling: refused after two tries, at 1,333,210
+    // units.
+    let mut m = WorkMeter::new(Budget::of_work(FUZZ_WORK));
+    assert_eq!(
+        flat.to_nurbs_within(1e-12, &mut m),
+        Err(CurveError::Nurbs(NurbsError::OutsideTolerance))
+    );
+    assert_eq!(m.used().work, 1_333_210);
 }

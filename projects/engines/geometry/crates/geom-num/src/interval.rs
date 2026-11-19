@@ -774,19 +774,95 @@ mod proofs {
         }
     }
 
-    /// `add`, `sub` and `mul` of two points enclose the rounded result of the same operation,
-    /// with ordered finite bounds, or refuse; never a panic.
-    #[kani::proof]
-    fn add_sub_mul_enclose_the_rounded_result() {
+    /// The two points of every pair of finite doubles, with the doubles.
+    fn two_points() -> (f64, f64, Interval, Interval) {
         let (x, y) = (finite(), finite());
-        let (a, b) = (Interval::point(x).unwrap(), Interval::point(y).unwrap());
-        for (got, rounded) in [(a.add(b), x + y), (a.sub(b), x - y), (a.mul(b), x * y)] {
-            if let Ok(r) = got {
-                assert!(r.lo() <= r.hi());
-                if rounded.is_finite() {
-                    assert!(r.contains(rounded));
-                }
+        (
+            x,
+            y,
+            Interval::point(x).unwrap(),
+            Interval::point(y).unwrap(),
+        )
+    }
+
+    /// What an operation's answer owes its rounded result: ordered bounds, and the rounded result
+    /// inside them when it is finite; a refusal owes nothing.
+    fn encloses(got: Result<Interval, NumError>, rounded: f64) {
+        if let Ok(r) = got {
+            assert!(r.lo() <= r.hi());
+            if rounded.is_finite() {
+                assert!(r.contains(rounded));
             }
+        }
+    }
+
+    /// `add` of two points encloses the rounded sum, with ordered finite bounds, or refuses;
+    /// never a panic. For every pair of finite doubles.
+    ///
+    /// `add`, `sub` and `mul` were one harness of the three, 43 to 48 minutes on a hosted
+    /// runner. They are one harness each: the same two points ([`two_points`]) and the same
+    /// claim ([`encloses`]) in each, so the three together prove what the one did.
+    #[kani::proof]
+    #[kani::solver(kissat)]
+    fn add_encloses_the_rounded_result() {
+        let (x, y, a, b) = two_points();
+        encloses(a.add(b), x + y);
+    }
+
+    /// `sub` of two points encloses the rounded difference, with ordered finite bounds, or
+    /// refuses; never a panic. For every pair of finite doubles.
+    #[kani::proof]
+    fn sub_encloses_the_rounded_result() {
+        let (x, y, a, b) = two_points();
+        encloses(a.sub(b), x - y);
+    }
+
+    /// `mul` of two points encloses the rounded product, with ordered finite bounds, or refuses;
+    /// never a panic. For every pair of finite doubles.
+    ///
+    /// The claim is that `mul` encloses `x * y`, the rounded product of the two doubles. It is
+    /// asserted on `a.lo() * b.lo()`, the product of the two points' bounds, which is the first
+    /// product `mul` itself forms: the solver then compares one multiplication with itself. With
+    /// `x * y` it compared two multiplications of different bits (a point stores −0 as +0, by an
+    /// addition), and `mul` alone ran past an hour. Why it is the same claim:
+    /// `the_product_of_two_points_bounds_is_the_product` proves the two products equal for every
+    /// pair, and `equal_doubles_are_enclosed_alike` that equal doubles are finite alike and
+    /// inside the same intervals, so [`encloses`] gives one verdict for both.
+    #[kani::proof]
+    fn mul_encloses_the_product_of_its_bounds() {
+        let (_, _, a, b) = two_points();
+        encloses(a.mul(b), a.lo() * b.lo());
+    }
+
+    /// The tie, first half: the product of the two points' bounds is the product of the two
+    /// doubles, for every pair of finite doubles. Where a double is a zero, both products are
+    /// zeros, which are equal. Where neither is, each bound is first shown to have its double's
+    /// bits (the first assertion), and the products are then compared knowing it: asserted in
+    /// one step, with the bits left for the solver to find, the comparison took 45 minutes on a
+    /// hosted runner.
+    #[kani::proof]
+    fn the_product_of_two_points_bounds_is_the_product() {
+        let (x, y, a, b) = two_points();
+        if x == 0.0 || y == 0.0 {
+            assert!(a.lo() * b.lo() == x * y);
+        } else {
+            assert!(a.lo().to_bits() == x.to_bits() && b.lo().to_bits() == y.to_bits());
+            assert!(a.lo() * b.lo() == x * y);
+        }
+    }
+
+    /// The tie, second half: two equal doubles are finite alike and inside the same intervals,
+    /// for every pair of doubles and every pair of bounds, whatever their order.
+    #[kani::proof]
+    fn equal_doubles_are_enclosed_alike() {
+        let (p, w) = (f64::from_bits(kani::any()), f64::from_bits(kani::any()));
+        let r = Interval {
+            lo: f64::from_bits(kani::any()),
+            hi: f64::from_bits(kani::any()),
+        };
+        if p == w {
+            assert!(p.is_finite() == w.is_finite());
+            assert!(r.contains(p) == r.contains(w));
         }
     }
 

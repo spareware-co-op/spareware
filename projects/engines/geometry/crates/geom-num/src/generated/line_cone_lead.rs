@@ -19,7 +19,7 @@
 //! (`fptaylor-line-cone-lead.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but
 //! that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record,
 //! cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every
-//! change and every night.
+//! change to a problem or a pinned tool.
 //!
 //! Method: Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>),
 //! with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers.
@@ -139,20 +139,23 @@
 //! The filter computes the scale S at run time at least (1 − u)^5 times its exact value: 5
 //! rounding(s), each product counting its own and both its operands', each `larger` the larger of
 //! its operands'. It computes the bound as the constant times S, one more rounding: k = 5 + 1. The
-//! constant is E · (1 + 2u)^k, rounded up to an `f64`.
+//! constant is E · (1 + 2u)^k, rounded up to an `f64`. The scale at run time leaves out
+//! y^2·z^2·slope^2, x^2·z^2·slope^2, x^2·y^2·slope^2, never the largest alone: a monomial left out
+//! is the average of other monomials of S, and the largest of the rest is S for every input (the
+//! proof in [`super`]).
 //!
 //! | Quantity | Value |
 //! | --- | --- |
 //! | Result | `lead` |
 //! | Unit error E | 242u + 1917u^2 + 5862u^3 + 9266u^4 + 9100u^5 + 6018u^6 + 2712u^7 + 805u^8 + 144u^9 + 12u^10 |
 //! | Scale S | max{z^4·slope^2, y^2·z^2·slope^2, y^4·slope^2, x^2·z^2·slope^2, x^2·y^2·slope^2, x^4·slope^2} |
-//! | Scale at run time | `m_slope * m_slope * larger(larger(larger(larger(larger(m_z * m_z * m_z * m_z, m_y * m_y * m_z * m_z), m_y * m_y * m_y * m_y), m_x * m_x * m_z * m_z), m_x * m_x * m_y * m_y), m_x * m_x * m_x * m_x)` |
+//! | Scale at run time | `m_slope * m_slope * larger(larger(m_z * m_z * m_z * m_z, m_y * m_y * m_y * m_y), m_x * m_x * m_x * m_x)` |
 //! | Roundings k | 6 |
 //! | Constant, exactly | 242u + 4821u^2 + 43386u^3 + 233350u^4 + 836812u^5 + 2115642u^6 + 3893920u^7 + 5322461u^8 + 5473644u^9 + 4268504u^10 + 2526320u^11 + 1122816u^12 + 364608u^13 + 82048u^14 + 11520u^15 + 768u^16 |
 //! | Constant as an `f64` | `0x3d1e400000000013` = 8514618045497363 · 2^-98 ≈ 2.6867397195928848e-14 |
 //!
 //! Cost: the filter is 31 `f64` operations, after 2 rounded input(s) converted to `f64`, then 8
-//! magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when
+//! magnitudes and their maxima and the bound's 12 multiplication(s); the exact path, run only when
 //! the filter cannot decide, is 31 checked integer operations.
 
 use crate::grid::P3;
@@ -216,10 +219,7 @@ pub fn filter(a: P3, b: P3, c: P3, f: P3, s: i128, t: i128) -> Option<Sign> {
     let m_y = largest_magnitude([d_y, e_y]);
     let m_z = largest_magnitude([d_z, e_z]);
     let m_slope = largest_magnitude([t, s]);
-    let scale = larger(m_z * m_z * m_z * m_z, m_y * m_y * m_z * m_z);
-    let scale = larger(scale, m_y * m_y * m_y * m_y);
-    let scale = larger(scale, m_x * m_x * m_z * m_z);
-    let scale = larger(scale, m_x * m_x * m_y * m_y);
+    let scale = larger(m_z * m_z * m_z * m_z, m_y * m_y * m_y * m_y);
     let scale = larger(scale, m_x * m_x * m_x * m_x);
     let scale = m_slope * m_slope * scale;
     decide(lead, ERROR, scale)

@@ -4,32 +4,38 @@ use crate::compliance::jv::{Jx, V};
 use crate::jsnum::to_int32;
 
 /// `${o[k]}` of a field that may be missing: a missing field reads "undefined", as a template string prints it.
+#[must_use]
 pub fn fld_s(o: &V, k: &str) -> String {
     if o.has(k) { o.g(k).s() } else { "undefined".to_string() }
 }
 
 /// `+o[k]` of a field that may be missing: a missing field reads NaN (null reads 0).
+#[must_use]
 pub fn numk(o: &V, k: &str) -> f64 {
     if o.has(k) { o.g(k).n() } else { f64::NAN }
 }
 
 /// `+x || 0`: the number a value reads as, 0 when that is NaN.
+#[must_use]
 pub fn n0(v: &V) -> f64 {
     let x = v.n();
     if x.is_nan() { 0.0 } else { x }
 }
 
 /// `x | 0` of a loose value.
+#[must_use]
 pub fn int32(v: &V) -> f64 {
-    to_int32(v.n()) as f64
+    f64::from(to_int32(v.n()))
 }
 
 /// `a || b`: the first value when it is truthy, else the second.
+#[must_use]
 pub fn or_v(a: &V, b: &V) -> V {
     if a.t() { a.clone() } else { b.clone() }
 }
 
 /// `a || 'text'`.
+#[must_use]
 pub fn or_s(a: &V, b: &str) -> V {
     if a.t() { a.clone() } else { V::String(b.to_string()) }
 }
@@ -49,6 +55,7 @@ pub fn copy_field(o: &mut V, k: &str, src: &V, from: &str) {
 }
 
 /// `+v` as a number, or None for NaN (null and missing read as 0 first, as `+null` does).
+#[must_use]
 pub fn num_or_none(v: &V) -> Option<f64> {
     let x = v.n();
     if x.is_nan() { None } else { Some(x) }
@@ -60,6 +67,7 @@ pub fn opt_num(x: Option<f64>) -> V {
 }
 
 /// The numbers of `Object.keys(obj)` order for a table lookup: the text of a loose key (`obj[key]`).
+#[must_use]
 pub fn key_of(v: &V) -> String {
     v.s()
 }
@@ -73,16 +81,19 @@ macro_rules! cells {
 pub(crate) use cells;
 
 /// A label of the Compliance+ rules (`STD.labels[k]`).
+#[must_use]
 pub fn label(k: &str) -> String {
     crate::compliance::data::x(&format!("STD.labels.{k}")).s()
 }
 
 /// A text of the Compliance+ tables by dotted path.
+#[must_use]
 pub fn xs(path: &str) -> String {
     crate::compliance::data::x(path).s()
 }
 
 /// A table of the report sections: `Kit.table({ head, rows, empty })` with the default compact layout.
+#[must_use]
 pub fn tbl(head: &[&str], rows: Vec<Vec<String>>, empty: &str) -> String {
     let h: Vec<crate::compliance::html::Th> = head.iter().map(|x| crate::compliance::html::th(x)).collect();
     tbl_th(&h, rows, empty)
@@ -95,6 +106,7 @@ pub fn tbl_th(head: &[crate::compliance::html::Th], rows: Vec<Vec<String>>, empt
 }
 
 /// `[...new Set(items)]`: the items with repeats left out, first occurrences kept in order.
+#[must_use]
 pub fn unique(items: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for i in items {

@@ -74,13 +74,7 @@ const REACH: f64 = COORD_MAX as f64;
 
 /// The sign of Σ aᵢ·bᵢ, exactly: each product is a double and its error, and their sum is exact.
 pub(crate) fn sign_of(terms: &[(f64, f64)]) -> Sign {
-    let mut sum = ExactSum::new();
-    for &(a, b) in terms {
-        let (p, e) = two_prod(a, b);
-        sum.add(p);
-        sum.add(e);
-    }
-    let v = sum.round_ieee();
+    let v = sum_of(terms);
     if v > 0.0 {
         Sign::Positive
     } else if v < 0.0 {
@@ -88,6 +82,24 @@ pub(crate) fn sign_of(terms: &[(f64, f64)]) -> Sign {
     } else {
         Sign::Zero
     }
+}
+
+/// Σ aᵢ·bᵢ, summed exactly and rounded once to the nearest double.
+fn sum_of(terms: &[(f64, f64)]) -> f64 {
+    let mut sum = ExactSum::new();
+    for &(a, b) in terms {
+        let (p, e) = two_prod(a, b);
+        sum.add(p);
+        sum.add(e);
+    }
+    sum.round_ieee()
+}
+
+/// An enclosure of Σ aᵢ·bᵢ two steps wide: the doubles either side of its exact sum rounded to
+/// nearest, which is within half a step of the sum.
+pub(crate) fn enclosed_sum(terms: &[(f64, f64)]) -> Result<Interval, IntersectError> {
+    let v = sum_of(terms);
+    Ok(Interval::new(v.next_down(), v.next_up())?)
 }
 
 /// The answer for items that all stand proven.
@@ -717,6 +729,15 @@ fn line_line<const D: usize>(
     let i = |v: f64| Interval::point(v);
     let (wx, wy) = (i(px)?.sub(i(ox)?)?, i(py)?.sub(i(oy)?)?);
     let d = i(dx)?.mul(i(ey)?)?.sub(i(dy)?.mul(i(ex)?)?)?;
+    // The exact sign says the lines are not parallel, but when they are parallel to within the
+    // products' rounding this enclosure can still reach zero (issue 921: a direction rounded from
+    // 30 to 30.000000000000004). Then the determinant's exact sum, two steps wide, encloses it
+    // away from zero. Only there, so every other answer keeps its boxes.
+    let d = if d.contains(0.0) {
+        enclosed_sum(&[(dx, ey), (-dy, ex)])?
+    } else {
+        d
+    };
     let (t_lo, t_hi) = ParamCurve::domain(b);
     let s = wx.mul(i(ey)?)?.sub(wy.mul(i(ex)?)?)?.div(d)?;
     let t = wx.mul(i(dy)?)?.sub(wy.mul(i(dx)?)?)?.div(d)?;
@@ -851,7 +872,8 @@ fn circle_circle<const D: usize>(
     } else {
         alloc::vec![c.height, c.height.neg()]
     };
-    let mut items = Vec::new();
+    // One item at most for each height, so the list holds no more than it can need.
+    let mut items = Vec::with_capacity(heights.len());
     for h in heights {
         let (from_near, from_far) = c.point(h)?;
         let ([e, f], [g, k]) = if small_first {
@@ -913,15 +935,15 @@ fn length(x: Interval, y: Interval) -> Result<Interval, IntersectError> {
 }
 
 /// Where two circles' crossings lie, measured from the smaller circle's centre.
-struct Crossing {
+pub(crate) struct Crossing {
     /// From the smaller circle's centre to the larger's.
     run: [Interval; 2],
     /// `run` as a unit vector.
     unit: [Interval; 2],
     /// How far along `unit` the crossings lie.
     foot: Interval,
-    /// How far across it.
-    height: Interval,
+    /// How far across it: zero for a touch.
+    pub(crate) height: Interval,
 }
 
 impl Crossing {
@@ -942,8 +964,21 @@ impl Crossing {
             tight::sub(tight::point(u)?, tight::point(p)?)?,
             tight::sub(tight::point(v)?, tight::point(q)?)?,
         );
-        let d = length(dx, dy)?;
         let (s, l) = (tight::point(small)?, tight::point(large)?);
+        Crossing::between([dx, dy], s, l, tangent)
+    }
+
+    /// The crossings of circles of radii `s` and `l` whose centres are `run` apart, measured from
+    /// the first's centre, from enclosures of each: [`Crossing::of`]'s method, which takes the
+    /// smaller first.
+    pub(crate) fn between(
+        run: [Interval; 2],
+        s: Interval,
+        l: Interval,
+        tangent: bool,
+    ) -> Result<Crossing, IntersectError> {
+        let [dx, dy] = run;
+        let d = length(dx, dy)?;
         let twice = tight::mul(d, tight::point(2.0)?)?;
         let foot = tight::add(
             tight::square(s)?,
@@ -971,7 +1006,10 @@ impl Crossing {
     }
 
     /// The crossing at height `h` from each circle's centre: the smaller's, then the larger's.
-    fn point(&self, h: Interval) -> Result<([Interval; 2], [Interval; 2]), IntersectError> {
+    pub(crate) fn point(
+        &self,
+        h: Interval,
+    ) -> Result<([Interval; 2], [Interval; 2]), IntersectError> {
         let [ux, uy] = self.unit;
         let [dx, dy] = self.run;
         let x = self.foot.mul(ux)?.sub(h.mul(uy)?)?;

@@ -85,14 +85,15 @@ pub struct IntersectionCurve<const D: usize> {
     spans: Vec<Span>,
 }
 
-/// Whether `spans` tile `domain` end to end, every bound finite and not negative.
+/// Whether `spans` tile `domain` end to end, each rising from where the one before it ended. The
+/// bounds are not read here: [`IntersectionCurve::new`] refuses one that is not finite or is
+/// negative before it asks.
 fn tiles(spans: &[Span], (lo, hi): (f64, f64)) -> bool {
     let mut from = lo;
     for s in spans {
         let (a, b) = s.at;
-        let fine = |x: f64| x.is_finite() && x >= 0.0;
         let rising = matches!(a.partial_cmp(&b), Some(core::cmp::Ordering::Less));
-        if a != from || !rising || !fine(s.curve) || !s.pcurves.iter().all(|&x| fine(x)) {
+        if a != from || !rising {
             return false;
         }
         from = b;
@@ -317,10 +318,11 @@ impl<const D: usize> ParamCurve<D> for IntersectionCurve<D> {
     fn reversed(&self, meter: &mut WorkMeter<'_>) -> Result<Changed<CurveKind<D>>, CurveError> {
         let c = ParamCurve::reversed(&self.cache, meter)?;
         // Every leaf kind reverses exactly; a pcurve moved in (u, v) would need the surface to
-        // say how far that moves the curve.
+        // say how far that moves the curve. The two deviations are read as one pair: since
+        // neither is ever other than 0, nothing could tell "either moved" from "both moved".
         let [p, q] = &*self.pcurves;
         let (p, q) = (p.reverse(meter)?, q.reverse(meter)?);
-        if p.deviation != 0.0 || q.deviation != 0.0 {
+        if [p.deviation, q.deviation] != [0.0, 0.0] {
             return Err(CurveError::Defect);
         }
         let mut spans = Vec::with_capacity(self.spans.len());

@@ -1,4 +1,4 @@
-//! Support for the f4 truth tests (tests/compliance_f4_*.rs): the recorded cases with their objects in the order the file lists them
+//! Support for the f4 truth tests (`tests/compliance_f4_*.rs`): the recorded cases with their objects in the order the file lists them
 //! (the cases hold inputs whose key order the checks read), the project a case ran on, and the comparison of an answer with the
 //! recorded one.
 #![allow(dead_code)] // each test file uses its own part of this module
@@ -28,7 +28,7 @@ pub fn project(case: &V) -> V {
 
 /// The clock the prototype's harness fixed: 21 October 2026, UTC midnight.
 pub fn set_clock() {
-    construct_transport::compliance::dates::set_clock(Some(1792540800000.0));
+    construct_transport::compliance::dates::set_clock(Some(1_792_540_800_000.0));
 }
 
 /// Panics unless an answer matches the case's recorded `ok` (numbers within the comparator's tolerance, text exactly).

@@ -157,6 +157,12 @@ harness = false
 name = "wall_clock"
 harness = false
 
+# EMBER's pair 827 under the same gate (Gate 4, G156): its two models are a download that only the
+# instruction gate's last part fetches (benches/ember/main.rs).
+[[bench]]
+name = "ember"
+harness = false
+
 [[bench]]
 name = "arrange_1m"
 harness = false

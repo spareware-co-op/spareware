@@ -4,56 +4,71 @@ use crate::error::{ApiError, ApiResult};
 use serde_json::{Map, Value, json};
 
 /// A text parameter.
+#[must_use]
 pub fn string(description: &str) -> Value {
     json!({ "type": "string", "description": description })
 }
 
 /// A number parameter.
+#[must_use]
 pub fn number(description: &str) -> Value {
     json!({ "type": "number", "description": description })
 }
 
 /// A whole-number parameter.
+#[must_use]
 pub fn integer(description: &str) -> Value {
     json!({ "type": "integer", "description": description })
 }
 
 /// A true or false parameter.
+#[must_use]
 pub fn boolean(description: &str) -> Value {
     json!({ "type": "boolean", "description": description })
 }
 
 /// A list parameter whose items follow the given schema.
+#[must_use]
 pub fn array(items: Value, description: &str) -> Value {
-    json!({ "type": "array", "items": items, "description": description })
+    let mut m = Map::new();
+    m.insert("type".to_string(), json!("array"));
+    m.insert("items".to_string(), items);
+    m.insert("description".to_string(), json!(description));
+    Value::Object(m)
 }
 
 /// An object parameter with any keys.
+#[must_use]
 pub fn free_object(description: &str) -> Value {
     json!({ "type": "object", "description": description })
 }
 
 /// A parameter of any JSON type.
+#[must_use]
 pub fn any(description: &str) -> Value {
     json!({ "description": description })
 }
 
 /// A text parameter that must be one of the listed values.
+#[must_use]
 pub fn choice(values: &[&str], description: &str) -> Value {
     json!({ "type": "string", "enum": values, "description": description })
 }
 
 /// A position: [latitude, longitude] in degrees.
+#[must_use]
 pub fn latlng(description: &str) -> Value {
     json!({ "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": description })
 }
 
 /// A list of text values.
+#[must_use]
 pub fn strings(description: &str) -> Value {
     array(json!({ "type": "string" }), description)
 }
 
 /// The schema of a command's parameters: an object with these properties, the required ones named, and no other keys.
+#[must_use]
 pub fn params(props: Vec<(&str, Value)>, required: &[&str]) -> Value {
     let mut p = Map::new();
     for (k, v) in props {
@@ -63,6 +78,7 @@ pub fn params(props: Vec<(&str, Value)>, required: &[&str]) -> Value {
 }
 
 /// The schema of a command that takes no parameters.
+#[must_use]
 pub fn none() -> Value {
     params(vec![], &[])
 }
@@ -79,6 +95,10 @@ fn type_name(v: &Value) -> &'static str {
 }
 
 /// Checks a value against a schema made with the builders above: types, enums, required keys, unknown keys (when the schema forbids them) and list items. Null counts as absent for an optional key.
+///
+/// # Errors
+///
+/// The first place the value does not fit the schema, in words for a person.
 pub fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String> {
     let at = if path.is_empty() {
         "the parameters".to_string()
@@ -139,51 +159,62 @@ pub fn validate(schema: &Value, value: &Value, path: &str) -> Result<(), String>
     if let Some(obj) = value.as_object()
         && let Some(props) = schema.get("properties").and_then(Value::as_object)
     {
-        if let Some(req) = schema.get("required").and_then(Value::as_array) {
-            for r in req.iter().filter_map(Value::as_str) {
-                if obj.get(r).is_none_or(Value::is_null) {
-                    let k = if path.is_empty() {
-                        r.to_string()
-                    } else {
-                        format!("{path}.{r}")
-                    };
-                    return Err(format!("missing parameter `{k}`"));
-                }
+        validate_object(schema, obj, props, path)?;
+    }
+    Ok(())
+}
+
+/// [`validate`] for an object and the properties its schema names: required keys, unknown keys and each value.
+fn validate_object(
+    schema: &Value,
+    obj: &Map<String, Value>,
+    props: &Map<String, Value>,
+    path: &str,
+) -> Result<(), String> {
+    if let Some(req) = schema.get("required").and_then(Value::as_array) {
+        for r in req.iter().filter_map(Value::as_str) {
+            if obj.get(r).is_none_or(Value::is_null) {
+                let k = if path.is_empty() {
+                    r.to_string()
+                } else {
+                    format!("{path}.{r}")
+                };
+                return Err(format!("missing parameter `{k}`"));
             }
         }
-        if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
-            for k in obj.keys() {
-                if !props.contains_key(k) {
-                    let mut allowed: Vec<&str> = props.keys().map(String::as_str).collect();
-                    allowed.sort_unstable();
-                    let name = if path.is_empty() {
-                        k.to_string()
-                    } else {
-                        format!("{path}.{k}")
-                    };
-                    return Err(format!(
-                        "unknown parameter `{name}`; this command takes: {}",
-                        if allowed.is_empty() {
-                            "no parameters".to_string()
-                        } else {
-                            allowed.join(", ")
-                        }
-                    ));
-                }
-            }
-        }
-        for (k, v) in obj {
-            if v.is_null() {
-                continue;
-            }
-            if let Some(s) = props.get(k) {
-                let p = if path.is_empty() {
+    }
+    if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+        for k in obj.keys() {
+            if !props.contains_key(k) {
+                let mut allowed: Vec<&str> = props.keys().map(String::as_str).collect();
+                allowed.sort_unstable();
+                let name = if path.is_empty() {
                     k.clone()
                 } else {
                     format!("{path}.{k}")
                 };
-                validate(s, v, &p)?;
+                return Err(format!(
+                    "unknown parameter `{name}`; this command takes: {}",
+                    if allowed.is_empty() {
+                        "no parameters".to_string()
+                    } else {
+                        allowed.join(", ")
+                    }
+                ));
             }
+        }
+    }
+    for (k, v) in obj {
+        if v.is_null() {
+            continue;
+        }
+        if let Some(s) = props.get(k) {
+            let p = if path.is_empty() {
+                k.clone()
+            } else {
+                format!("{path}.{k}")
+            };
+            validate(s, v, &p)?;
         }
     }
     Ok(())
@@ -205,6 +236,7 @@ fn wrong(k: &str, want: &str, got: &Value) -> ApiError {
 
 impl<'a> Params<'a> {
     /// Reads parameters from a JSON value (null reads as no parameters).
+    #[must_use]
     pub fn new(v: &'a Value) -> Params<'a> {
         static EMPTY: Value = Value::Null;
         Params {
@@ -212,22 +244,33 @@ impl<'a> Params<'a> {
         }
     }
     /// The raw value of a key, when given and not null.
+    #[must_use]
     pub fn get(&self, k: &str) -> Option<&'a Value> {
         self.v.get(k).filter(|x| !x.is_null())
     }
     /// True when the key is given and not null.
+    #[must_use]
     pub fn has(&self, k: &str) -> bool {
         self.get(k).is_some()
     }
     /// The whole parameters object.
+    #[must_use]
     pub fn value(&self) -> &'a Value {
         self.v
     }
     /// A text parameter that must be given.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key is missing or does not hold text.
     pub fn str(&self, k: &str) -> ApiResult<&'a str> {
         self.opt_str(k)?.ok_or_else(|| missing(k))
     }
     /// A text parameter that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than text.
     pub fn opt_str(&self, k: &str) -> ApiResult<Option<&'a str>> {
         match self.get(k) {
             None => Ok(None),
@@ -236,10 +279,18 @@ impl<'a> Params<'a> {
         }
     }
     /// A number parameter that must be given.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key is missing or does not hold a number.
     pub fn f64(&self, k: &str) -> ApiResult<f64> {
         self.opt_f64(k)?.ok_or_else(|| missing(k))
     }
     /// A number parameter that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than a number.
     pub fn opt_f64(&self, k: &str) -> ApiResult<Option<f64>> {
         match self.get(k) {
             None => Ok(None),
@@ -248,6 +299,10 @@ impl<'a> Params<'a> {
         }
     }
     /// A true or false parameter that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than true or false.
     pub fn opt_bool(&self, k: &str) -> ApiResult<Option<bool>> {
         match self.get(k) {
             None => Ok(None),
@@ -256,10 +311,18 @@ impl<'a> Params<'a> {
         }
     }
     /// A true or false parameter, false when left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than true or false.
     pub fn flag(&self, k: &str) -> ApiResult<bool> {
         Ok(self.opt_bool(k)?.unwrap_or(false))
     }
     /// A list parameter that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than a list.
     pub fn opt_array(&self, k: &str) -> ApiResult<Option<&'a Vec<Value>>> {
         match self.get(k) {
             None => Ok(None),
@@ -268,10 +331,18 @@ impl<'a> Params<'a> {
         }
     }
     /// A list parameter that must be given.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key is missing or does not hold a list.
     pub fn array(&self, k: &str) -> ApiResult<&'a Vec<Value>> {
         self.opt_array(k)?.ok_or_else(|| missing(k))
     }
     /// An object parameter that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than an object.
     pub fn opt_object(&self, k: &str) -> ApiResult<Option<&'a Map<String, Value>>> {
         match self.get(k) {
             None => Ok(None),
@@ -280,10 +351,18 @@ impl<'a> Params<'a> {
         }
     }
     /// An object parameter that must be given.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key is missing or does not hold an object.
     pub fn object(&self, k: &str) -> ApiResult<&'a Map<String, Value>> {
         self.opt_object(k)?.ok_or_else(|| missing(k))
     }
     /// A list of text values that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than a list of text.
     pub fn opt_strings(&self, k: &str) -> ApiResult<Option<Vec<String>>> {
         match self.opt_array(k)? {
             None => Ok(None),
@@ -299,6 +378,10 @@ impl<'a> Params<'a> {
         }
     }
     /// A position [latitude, longitude] that may be left out.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key holds something other than two finite numbers.
     pub fn opt_latlng(&self, k: &str) -> ApiResult<Option<[f64; 2]>> {
         match self.get(k) {
             None => Ok(None),
@@ -306,18 +389,28 @@ impl<'a> Params<'a> {
         }
     }
     /// A position [latitude, longitude] that must be given.
+    ///
+    /// # Errors
+    ///
+    /// `bad_params` when the key is missing or does not hold two finite numbers.
     pub fn latlng(&self, k: &str) -> ApiResult<[f64; 2]> {
         self.opt_latlng(k)?.ok_or_else(|| missing(k))
     }
 }
 
 /// A [latitude, longitude] pair from a JSON list, with both numbers finite.
+///
+/// # Errors
+///
+/// `bad_params` when the value is not a list of two finite numbers.
 pub fn latlng_of(v: &Value, name: &str) -> ApiResult<[f64; 2]> {
-    let a = v.as_array().filter(|a| a.len() == 2).ok_or_else(|| {
-        ApiError::bad_params(format!("`{name}` must be a [latitude, longitude] pair"))
-    })?;
-    let (la, ln) = (a[0].as_f64(), a[1].as_f64());
-    match (la, ln) {
+    let pair = v.as_array().map(Vec::as_slice);
+    let Some([la, ln]) = pair else {
+        return Err(ApiError::bad_params(format!(
+            "`{name}` must be a [latitude, longitude] pair"
+        )));
+    };
+    match (la.as_f64(), ln.as_f64()) {
         (Some(la), Some(ln)) if la.is_finite() && ln.is_finite() => Ok([la, ln]),
         _ => Err(ApiError::bad_params(format!(
             "`{name}` must be two numbers [latitude, longitude]"

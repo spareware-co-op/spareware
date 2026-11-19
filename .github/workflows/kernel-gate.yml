@@ -123,6 +123,12 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # The one cache of geom-test's development build on Linux x86-64: this job saves it, and
+          # deny, kernel.yml's scope, kernel-fuzz.yml's select, kernel-golden.yml's store,
+          # kernel-quality.yml's when and kernel-release.yml's freeze, which build the same
+          # dependencies, restore it (decision 32.90).
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       - name: The compiler in use is the pinned one
         run: |
           set -euo pipefail
@@ -153,9 +159,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
         run: |
           set -euo pipefail
@@ -197,6 +206,8 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Every crate that ships, and a probe that breaks each rule once
         run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_clippy --nocapture --test-threads 1
 
@@ -220,6 +231,8 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Every kernel crate on its own, for wasm32v1-none and wasm32-unknown-unknown, and the probes
         run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1
 
@@ -243,6 +256,8 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
         run: |
           set -euo pipefail

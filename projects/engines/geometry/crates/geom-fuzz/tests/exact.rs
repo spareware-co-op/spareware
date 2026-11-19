@@ -3,8 +3,7 @@
 //!
 //! - `exact_fuzz` wraps `geom_fuzz::exact::harness` in `bolero::check!`: the target's stored corpus
 //!   and crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is printed as
-//!   `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test exact_fuzz --package geom-fuzz` it is a
-//!   libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`.
 //! - `exact_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 

@@ -1,9 +1,11 @@
 //! Adaptive subdivision and the parallel task tree: steps 1 and 4 of 11.3, around the local work.
 //!
 //! What it does: [`arrange`] takes the polygons of an arrangement and classifies every piece. A
-//! box is split in two along its longest axis until it holds few polygons; polygons across the
-//! split are clipped exactly, and the upper box's reference point is walked up from the lower's,
-//! adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then
+//! box is split in two along its longest axis until it holds few polygons, as long as the split
+//! separates them and, for a box of more than [`LEAF_POLYGONS`], pays: its two halves must hold
+//! no more pairs of polygons than the box, the pairs a leaf's local cuts compare. Polygons across
+//! the split are clipped exactly, and the upper box's reference point is walked up from the
+//! lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then
 //! [`classify`]. A box whose every test is settled by its reference vector alone, whatever the
 //! polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids:
 //! no two of their faces cross, and their winding is 1 just behind every face and 0 just in front,
@@ -37,6 +39,13 @@
 //!   stack, so the tree's depth never threatens a WebAssembly stack (principle 13); the kept tree
 //!   is printed, compared and dropped on explicit stacks too. A box holding polygons that a split no longer separates,
 //!   such as many faces on one plane, stops as a leaf instead of dividing down to the grid.
+//! - **The boxes never hold more pairs than the polygons do.** A box of more than
+//!   [`LEAF_POLYGONS`] is split only when its halves hold no more pairs than the box, so with
+//!   leaves of that size, every caller's, the leaves together hold at most n² pairs of n
+//!   polygons, what one leaf of them all would compare, and the pieces and work stay within that
+//!   whatever the shape: a fan of a thousand slivers meeting at a point and running side by side,
+//!   which the boxes could part only a few at a time, clipping each sliver into pieces in
+//!   proportion to the fan's size, stays a few leaves (tested on a fan, at two sizes).
 //! - **A reused box is the box solved again.** A leaf is keyed by SHA-256, under its own domain
 //!   prefix, of everything its answer depends on, so a cache from any other inputs only misses:
 //!   the pieces are the same bits as without it, and a reused leaf charges the work it cost, so
@@ -76,7 +85,8 @@
 //! Cost: O(n) clips per level for n polygons across the level's boxes, and at most 126 levels:
 //! a box of the frame halves at most 42 times along each axis (the recursion statement above).
 //! Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one
-//! copy of each. A polygon's corner points are made once and carried into every box it enters
+//! copy of each; as no split of a box of more than [`LEAF_POLYGONS`] adds pairs, with leaves of
+//! that size the leaves' local cuts together compare at most n² pairs of the n polygons given. A polygon's corner points are made once and carried into every box it enters
 //! whole; only a split's two parts make theirs. Charges the meter one unit per polygon a split
 //! clips, and one per polygon of a solid's leaf.
 
@@ -102,7 +112,8 @@ use crate::trace::classify;
 use crate::trace::{Cell, Classified, Polygon, TraceError, classify_with, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
 
-/// How many polygons a leaf holds at most, unless a split no longer separates them: the size at
+/// How many polygons a leaf holds at most, unless a split no longer separates them or no split
+/// pays (its halves would hold more pairs than the box): the size at
 /// which local cuts, quadratic in the polygons, cost about what another level of boxes would.
 pub const LEAF_POLYGONS: usize = 32;
 
@@ -853,8 +864,17 @@ fn one_solid(node: &Node, solids: &[Entry]) -> Option<Entry> {
     (solids.contains(&only) && node.polygons.iter().all(|p| p.entry == Some(only))).then_some(only)
 }
 
+/// The pairs `n` polygons make, counted as `n` squared: what a leaf of them costs its local cuts,
+/// up to a constant factor.
+fn pairs(n: usize) -> u64 {
+    let n = u64::try_from(n).unwrap_or(u64::MAX);
+    n.saturating_mul(n)
+}
+
 /// What this level does to `node`. A box whose polygons all bound one solid is a leaf at once:
 /// solving it costs one copy of each polygon, so splitting it only makes more pieces to merge.
+/// Any other box is split along the first axis, longest first, whose split pays (see below), and
+/// is a leaf where none does.
 fn divide(
     node: &Node,
     (leaf, solids): (usize, &[Entry]),
@@ -868,7 +888,7 @@ fn divide(
     if count <= leaf || one_solid(node, solids).is_some() {
         return Ok(Outcome::Leaf);
     }
-    // Faces that span every split are not separated by more of them.
+    // The two halves hold every polygon once, and each split one twice.
     let enough = count
         .saturating_mul(2)
         .saturating_sub(count.saturating_div(8));
@@ -878,9 +898,10 @@ fn divide(
         };
         let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
         let plane = Plane::new(n, i128::from(at).saturating_neg())?;
-        // Where each polygon would go; nothing is copied until the split is taken.
+        // Where each polygon would go, and how many each half would hold: a polygon the plane
+        // splits is in both. Nothing is copied until the split is taken.
         let mut places = Vec::with_capacity(count);
-        let mut parts = 0usize;
+        let (mut below, mut above) = (0usize, 0usize);
         let mut in_plane = false;
         for (polygon, points) in node.polygons.iter().zip(&node.points) {
             meter.charge(1)?;
@@ -893,10 +914,17 @@ fn divide(
                 (polygon, points)
             };
             let goes = match clip_at(&polygon.piece, points, &plane)? {
-                Clipped::Front => Place::Above,
-                Clipped::Back => Place::Below,
+                Clipped::Front => {
+                    above = above.saturating_add(1);
+                    Place::Above
+                }
+                Clipped::Back => {
+                    below = below.saturating_add(1);
+                    Place::Below
+                }
                 Clipped::Split(front, back) => {
-                    parts = parts.saturating_add(1);
+                    above = above.saturating_add(1);
+                    below = below.saturating_add(1);
                     Place::Split(Box::new([part(front), part(back)]))
                 }
                 Clipped::On => {
@@ -906,8 +934,20 @@ fn divide(
             };
             places.push(goes);
         }
-        // The two halves hold every polygon once, and each split one twice.
-        if in_plane || places.len().saturating_add(parts) >= enough {
+        // Faces that span every split are not separated by more of them.
+        if in_plane || below.saturating_add(above) >= enough {
+            continue;
+        }
+        // A leaf's local cuts compare every pair of its polygons, so a split of a box larger than
+        // a leaf pays only if its halves hold no more pairs than the box. A split that copies
+        // most of the polygons into both halves does not, and neither does one that leaves nearly
+        // all of them in one half and copies the rest: the slivers of a fan, which meet at its
+        // apex and run side by side away from it, are separated only that way, a few at a time,
+        // and dividing them down to a leaf clips each sliver into pieces in proportion to the
+        // fan's size, so the pieces grow with its square (Manifold's `Generic_Twin_7081.1.t0`).
+        // A box of at most `LEAF_POLYGONS`, which costs no more than a leaf is allowed to, splits
+        // as long as a split separates its polygons, for a caller that asks for smaller leaves.
+        if count > LEAF_POLYGONS && pairs(below).saturating_add(pairs(above)) > pairs(count) {
             continue;
         }
         let reference =

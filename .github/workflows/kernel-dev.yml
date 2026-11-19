@@ -68,14 +68,15 @@ name: Kernel development crates
 #   Euler's formula.
 #
 # The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
-# banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
-# so the map's and the ledger's bytes are proved the same on each of them.
+# banned-source scan run on every operating system kernel.yml tests, the same six runners, so the
+# map's and the ledger's bytes are proved the same on each of them. On five they are built and run
+# natively (`native`); macOS x86-64's are compiled on macOS arm64 for x86_64-apple-darwin
+# (`native-cross-build`) and run on the Intel runner (`native-cross`), decision 32.92.
 #
 # Seeds: every seeded test prints its seed as `seed: <hex>` and runs from a fixed default on pull
 # requests, so they run the same cases every time (28.17); SPAREKIT_SEED=<hex> replays any printed
-# seed. bolero's test mode is the short fuzz of 28.17: bolero draws its inputs' seeds itself and
-# prints BOLERO_RANDOM_SEED=<seed> with any failure, which replays it. Long libFuzzer runs
-# (cargo-bolero) and nightly runs with fresh seeds belong to later pieces.
+# seed. bolero's test mode draws its inputs' seeds itself and prints BOLERO_RANDOM_SEED=<seed> with
+# any failure, which replays it. The fuzz harnesses are seeded tests of the suite (28.5).
 #
 # Path filters: the workflow runs when any file the dependency rule or the map reads changes, as
 # well as the development crates; projects/kit/notes/** is there for the evidence notes that
@@ -147,7 +148,7 @@ jobs:
       # Every platform reports, so a difference on one platform shows which.
       fail-fast: false
       matrix:
-        # The runners of kernel.yml's test job.
+        # The runners of kernel.yml's test job but macOS x86-64, whose run is `native-cross`'s.
         include:
           - name: Linux x86-64
             os: ubuntu-latest
@@ -159,12 +160,15 @@ jobs:
             os: windows-11-arm
           - name: macOS arm64
             os: macos-latest
-          - name: macOS x86-64
-            os: macos-15-intel
     defaults:
       run:
         # bash with -eo pipefail on every runner, Windows included.
         shell: bash
+    # No build cache: the repository's caches were over GitHub's 10 GB, so the least used were
+    # thrown out all the time, and these five (about 190 MB each) saved this job little. In main's
+    # run 44175516389, Linux arm64 found none and took 4.2 minutes, Linux x86-64 restored its own and
+    # took 2.8, and every system took under 10. macOS x86-64's was the one kept, and it is now
+    # `native-cross-build`'s (decision 32.92).
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,11 +176,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: The development-dependency rule, and CI's reruns of it
         run: cargo test --locked -p geom-test --test dependency_rule
       - name: The predicates fuzz target, in bolero's test mode and the seeded leg
@@ -190,9 +189,148 @@ jobs:
       - name: No banned-source marker in the kernel's crates
         run: cargo run --locked -p geom-test --bin source-scan -- check
 
+  # macOS x86-64's run of `native`, compiled on macOS arm64 (decision 32.92). On the Intel runner
+  # the job was nearly all compiling: 6.6 to 11.2 minutes with main's cache and 18.3 on main's push
+  # 78eed9501, when GitHub had thrown the cache out (run 44382890859), over the rule of 15 minutes
+  # a job; the arm64 runner compiles the same in a third of the time. This job builds, for
+  # x86_64-apple-darwin, exactly what `native`'s steps build, each as its step does: its two test
+  # targets packed with `cargo nextest archive`, one archive a step, and its four tools with `cargo
+  # build`, the same packages, binaries and profile (debug) and no other flags. They are handed to
+  # `native-cross` as an artifact of the run kept a day. geom-test's tests/queue_wiring.rs holds the
+  # two jobs to `native`'s steps.
+  native-cross-build:
+    name: Development crates build (macOS x86-64 on macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      # kernel.yml's pin.
+      CARGO_NEXTEST_VERSION: "0.9.146"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only a push to main saves the cache; a pull request restores main's.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: dev-cross
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      - name: The folder handed to native-cross
+        run: mkdir "$RUNNER_TEMP/dev-macos-x86-64"
+      - name: Build the development-dependency rule for macOS x86-64
+        run: cargo nextest archive --locked -p geom-test --test dependency_rule --target x86_64-apple-darwin --archive-file "$RUNNER_TEMP/dev-macos-x86-64/dependency_rule.tar.zst"
+      - name: Build the predicates fuzz target for macOS x86-64
+        run: cargo nextest archive --locked -p geom-fuzz --test predicates --target x86_64-apple-darwin --archive-file "$RUNNER_TEMP/dev-macos-x86-64/predicates.tar.zst"
+      - name: Build the generator check for macOS x86-64
+        run: cargo build --locked -p geom-gen --target x86_64-apple-darwin
+      - name: Build the map check for macOS x86-64
+        run: cargo build --locked -p geom-test --bin map --target x86_64-apple-darwin
+      - name: Build the ledger check for macOS x86-64
+        run: cargo build --locked -p geom-test --bin provenance --target x86_64-apple-darwin
+      - name: Build the banned-source scan for macOS x86-64
+        run: cargo build --locked -p geom-test --bin source-scan --target x86_64-apple-darwin
+      - name: Put the four tools beside the archives
+        run: cp target/x86_64-apple-darwin/debug/{geom-gen,map,provenance,source-scan} "$RUNNER_TEMP/dev-macos-x86-64/"
+      # Kept for a day: the run job of this run downloads it within minutes.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-macos-x86-64
+          path: ${{ runner.temp }}/dev-macos-x86-64
+          retention-days: 1
+          if-no-files-found: error
+
+  native-cross:
+    name: Development crates (macOS x86-64, built on macOS arm64)
+    needs: native-cross-build
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.146"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The checkout is the archives' workspace (`--workspace-remap`), at the same path as on the
+      # arm64 runner, where the tools also find it (each reads the workspace's path the build
+      # gave it, `env!("CARGO_MANIFEST_DIR")`).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # cargo itself: the dependency rule runs `cargo metadata` at test time.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: nextest@${{ env.CARGO_NEXTEST_VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dev-macos-x86-64
+          path: ${{ runner.temp }}/dev-macos-x86-64
+      # An artifact does not keep a file's mode.
+      - name: Make the four tools executable
+        run: chmod +x "$RUNNER_TEMP"/dev-macos-x86-64/{geom-gen,map,provenance,source-scan}
+      # The locked crates' sources in cargo's registry, as `native`'s build left them, for the
+      # dependency rule's `cargo metadata`.
+      - name: Fetch the locked dependencies
+        run: cargo fetch --locked
+      # Each archive's every test, none filtered: the tests `native`'s steps run. The archive is
+      # unpacked into the checkout, so its binaries sit at the path the arm64 build gave them.
+      - name: The development-dependency rule, and CI's reruns of it
+        run: cargo nextest run --archive-file "$RUNNER_TEMP/dev-macos-x86-64/dependency_rule.tar.zst" --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast
+      - name: The predicates fuzz target, in bolero's test mode and the seeded leg
+        run: cargo nextest run --archive-file "$RUNNER_TEMP/dev-macos-x86-64/predicates.tar.zst" --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast
+      - name: Every committed generator output is current, with no orphan
+        run: '"$RUNNER_TEMP/dev-macos-x86-64/geom-gen" check'
+      - name: Every crate and module header is complete, and MAP.json is current
+        run: '"$RUNNER_TEMP/dev-macos-x86-64/map" check'
+      - name: PROVENANCE.md and NOTICE are current, and every port has its licence text
+        run: '"$RUNNER_TEMP/dev-macos-x86-64/provenance" check'
+      - name: No banned-source marker in the kernel's crates
+        run: '"$RUNNER_TEMP/dev-macos-x86-64/source-scan" check'
+
+  # The tests in parts side by side, each part building and running only its own test units (the
+  # owner's rule of 15 minutes a job). On main's pushes e792e882e and 907247b27 (runs 44043473629
+  # and 44052487974) this job, then one job, took 17 and 23 minutes, and most of it was running, not
+  # building: the build took 3.2 and 3.7 minutes, and `cargo test` ran the 126 test binaries one
+  # after another for 13.4 and 18.9. wasm32-wasip1 has no threads, so each binary ran its tests one
+  # at a time too, the whole run on one core, and the runner's speed went straight into the job's
+  # minutes (no kernel code changed between those two pushes). Running each test in its own process
+  # under nextest did not help (run 44075158941: 18.5 minutes, of which 5.7 went on wasmtime compiling
+  # every binary to list its tests, before any test ran). So each part runs `cargo test` as before on
+  # its own units: a crate's library (`--lib`), its doctests (`--doc`), a binary or a test target,
+  # shared out by their measured seconds (geom-test's src/wasm-dev-times.tsv, the slowest of main's
+  # four runs above). `cargo run -p geom-test --bin kernel-quality -- wasm-dev-parts --parts 5`
+  # writes the `part:` lines below, and geom-test's tests/test_scope.rs holds them to what it
+  # writes and every test unit of the three crates to exactly one part.
+  # Five parts since Phase 5: its sixteen more test units add 567 s by the Phase 5 branch's own
+  # run of this job (run 44068113586), which would put each of four parts at 580 s of tests.
   wasm:
-    name: Development crates (wasm32-wasip1 under wasmtime)
+    name: Development crates (wasm32-wasip1 under wasmtime, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
     runs-on: ubuntu-latest
+    strategy:
+      # Every part reports, so one failure does not hide another.
+      fail-fast: false
+      matrix:
+        part:
+          - { k: 1, n: 5, planned: 464, run: "-p geom-fuzz --test adversarial --test attributes --test booleans --test cbor --test nurbs --test pencils --test planes --test prune --test records --test surfaces --test transforms; -p geom-gen --test drift; -p geom-test --bin fixture --bin oracle --bin ssi-runner --test attack_g11 --test certificates_workflow --test corpus_runs --test determinism --test fixture_tool --test laws_surfaces --test naming --test nurbs_reference --test oracle_tool --test quality_gates --test second_mesh" }
+          - { k: 2, n: 5, planned: 464, run: "-p geom-fuzz --lib --test cache --test cdt --test curve_offsets --test intersect --test naming --test open --test orient2d --test quadric; -p geom-gen --test certificate_problems --test facade --test verus_twin; -p geom-test --bin golden --bin provenance --bin trip --test attack_g43 --test completeness --test ember_pairs --test laws_names --test ledger_repo --test ledger_seeded --test oracle --test oracles_workflow --test replay --test seed_replay --test solidcore_job; -p geom-test --doc" }
+          - { k: 3, n: 5, planned: 464, run: "-p geom-fuzz --bin replay-hashes --test arenas --test batch --test crossings --test make --test maths --test operations --test predicates --test roots --test sequence --test variants --test wide; -p geom-gen --test predicate_rounded; -p geom-test --bin guard --bin recursion --test attack_g10 --test attack_g135 --test attack_g15 --test contract_kit --test fixtures --test flat_reference --test fuzz_scope --test laws_mass --test licences --test manifold_rust_oracle --test orient2d --test queue_wiring --test seeded_gates --test shipped --test ssi" }
+          - { k: 4, n: 5, planned: 464, run: "-p geom-fuzz --test boxtree --test contract --test encoder --test euler --test level --test natural --test piercing --test references --test solids --test surface_offsets; -p geom-gen --bin geom-gen --lib --test attack_g27 --test predicate_checker --test purity; -p geom-test --bin kernel-quality --bin source-scan --test attack_g13 --test attack_g17 --test attack_g19 --test corpus --test corpus_polyhedral --test kernel_quality_workflow --test laws_formats --test laws_intersections --test map_files --test scan_repo --test ssi_tool --test truth_corpus; -p geom-fuzz --doc" }
+          - { k: 5, n: 5, planned: 464, run: "-p geom-fuzz --test attack_g14 --test bodies --test curves --test exact --test general --test linalg --test names --test p21 --test project --test reductions; -p geom-gen --test write_check; -p geom-test --bin corpus --bin map --bin ssi --lib --test attack_g110 --test attack_g16 --test attack_g20 --test canonical --test dependency_rule --test laws_booleans --test laws_curves --test laws_numbers --test laws_nurbs --test map_repo --test map_seeded --test museum --test oracle_meshes --test scan_seeded --test test_scope; -p geom-gen --doc" }
     env:
       WASMTIME_VERSION: v50.0.0
       # GitHub's digest of the release asset wasmtime-v50.0.0-x86_64-linux.tar.xz.
@@ -214,12 +352,13 @@ jobs:
           # Only main saves the cache; a pull request restores main's (a pull request's own
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
         run: |
           cd "$RUNNER_TEMP"
           name="wasmtime-${WASMTIME_VERSION}-x86_64-linux"
-          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-delay 10 --retry-connrefused -o "$name.tar.xz" \
-            "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/$name.tar.xz"
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-delay 10 --retry-connrefused -o "$name.tar.xz"             "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/$name.tar.xz"
           echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
           tar -xJf "$name.tar.xz"
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
@@ -227,8 +366,19 @@ jobs:
       # Sturm chain code sets its integers up in place, in small steps, so even an unoptimised
       # build needs well under that (measured natively: 640 KiB), and the tests run on the
       # default stack with no linker flag.
+      # Each group of the part's arguments is one `cargo test` (cargo runs doctests alone), and every
+      # group runs, so one run reports every failure.
       - name: geom-test, geom-fuzz (the seeded leg) and geom-gen on a 32-bit target
-        run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1
+        env:
+          RUN: ${{ matrix.part.run }}
+        run: |
+          status=0
+          IFS=';' read -ra groups <<< "$RUN"
+          for group in "${groups[@]}"; do
+            echo "cargo test${group} --target wasm32-wasip1"
+            cargo test --locked $group --target wasm32-wasip1 -- --nocapture || status=1
+          done
+          exit "$status"
 
   verus:
     name: Verus proves the twins

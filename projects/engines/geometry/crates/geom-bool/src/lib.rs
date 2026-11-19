@@ -30,29 +30,61 @@
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
 //! - [`batch`]: any number of tools through any number of hosts (G138).
 //! - [`certificate`]: what a result must show before it is returned (G133).
+//! - [`broad`]: the broad phase: which pairs of entities may touch (G242).
+//! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
 //! - [`combine`]: the boolean's entry and its schema (G131).
+//! - [`common`]: common blocks, pave blocks of different edges on one curve (G243).
+//! - [`crossing`]: where a curve crosses a plane of the table, and how far it strays from one (G243a).
+//! - [`decide`]: the exact analytic decision table of the certified curved path (G242).
+//! - [`distance`]: certified distances of points from carriers, and between points (G242).
+//! - [`face`]: face information: vertices, edges and faces met with faces; On, In and sections (G243a).
+//! - [`merge`]: touching entities become one, checked against their carriers (G242).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
 //! - [`local`]: the arrangement step of local operations, its fast path, and the topology changes
 //!   it records (G144).
 //! - [`names`]: the names and history of a result (G132).
 //! - [`passage`]: the narrowest passage between two seeds of one cell (G137).
+//! - [`inside`]: where a point lies in a flat face, or one on a cylinder or cone, certified (G243a).
+//! - [`interfere`]: interferences, lowest dimension first, as paves on the edges (G243).
+//! - [`pave`]: paves in their proven order, pave blocks and split edges (G243).
+//! - `picture`: the picture a face is split in: a plane's, or a cylinder's or cone's from inside (G244).
+//! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
+//! - [`split`]: face splitting for flat and analytic carriers, loops traced by exact orientation (G244).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
-//! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest
-//! by pieces G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249,
-//! G250, G324.
+//! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the
+//! curved builder's data model (G242), its interferences, paves and common blocks (G243) and its
+//! face information (G243a) built;
+//! the rest by pieces G132, G133, G137, G138, G139, G144, G244, G245, G246, G247, G248, G249, G250,
+//! G324.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
 
+pub mod broad;
+
+pub mod carrier;
+
 pub mod batch;
 pub mod certificate;
 pub mod combine;
+pub mod common;
+pub mod crossing;
+pub mod decide;
+pub mod distance;
+pub mod face;
 pub mod half_space;
+pub mod inside;
+pub mod interfere;
 pub mod local;
+pub mod merge;
 pub mod names;
 pub mod operand;
 pub mod passage;
+pub mod pave;
+mod picture;
 pub mod rebuild;
+pub mod rule;
+pub mod split;
 mod wires;

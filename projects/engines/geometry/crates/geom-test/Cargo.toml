@@ -40,8 +40,11 @@ geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
-# The second checker for exact meshes (G135, src/second_mesh.rs): the arrays it reads.
+# The second checker for exact meshes (G135, src/second_mesh.rs): the arrays it reads; and the
+# booleans the mesh oracles are compared with (src/oracle/meshes.rs, G154), with the winding tests
+# they take. Ours, Apache-2.0.
 geom-mesh = { path = "../geom-mesh" }
+geom-poly = { path = "../geom-poly" }
 # The naming fixtures (G141): the boolean that cuts their openings and the resolver their references
 # go through. Ours, Apache-2.0.
 geom-bool = { path = "../geom-bool" }
@@ -101,6 +104,10 @@ regex-lite = "=0.1.9"
 # A fixture's names and logs in hexadecimal (src/fixture). MIT OR Apache-2.0, already in the lock
 # (the G21 tools' dependency tree), with its default `alloc` and `std`.
 hex = "=0.4.3"
+# Miri's measuring runs' reports, nextest's JUnit XML, read into a tree by `kernel-quality
+# miri-times` (`miri::read_junit`, decision 32.58). roxmltree 0.21.2: MIT OR Apache-2.0, without
+# its default `positions` feature; its one dependency, memchr, is already in the lock.
+roxmltree = { version = "=0.21.2", default-features = false, features = ["std"] }
 # The exact rationals of the NURBS reference implementation (G57, `nurbs_reference`): big integers
 # and rationals. MIT OR Apache-2.0, the versions geom-num's and geom-linalg's tests use, without
 # the default num-order and dashu-float features, which the reference does not use.
@@ -109,6 +116,10 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # The intersection harness (G160): the kernel's kinds a corpus case becomes and the result type an
 # answer comes back in. Ours, Apache-2.0.
 geom-intersect = { path = "../geom-intersect" }
+# STL files, binary and ASCII, for EMBER's pairs' Thingi10K models (src/stl.rs; Gate 4, G156):
+# the usual Rust STL reader, which welds corners only where bit for bit the same. stl_io 0.11.0:
+# MIT, with no dependencies of its own.
+stl_io = "=0.11.0"
 # The sketch oracles (G222): the block solver the jobs are solved with and the sketch v1 reader they
 # are written for. Ours, Apache-2.0.
 geom-sketch = { path = "../geom-sketch" }
@@ -120,6 +131,10 @@ geom-sketch = { path = "../geom-sketch" }
 wait-timeout = "=0.2.1"
 
 [dev-dependencies]
+# manifold-rust's rational engine, a mesh oracle (chapter 28.10; tests/manifold_rust_oracle.rs, piece
+# G154). Apache-2.0 (the crate's manifest), a development dependency only, so it is never shipped;
+# without default features, as nothing here needs its threads.
+manifold-rust = { version = "=0.19.2", default-features = false }
 # A CommonMark parser, so tests/attack_g17.rs reads the kernel's README.md, AGENTS.md and
 # GLOSSARY.md (their links, headings and code spans) as Markdown rather than by a home-made parser.
 # MIT (pulldown-cmark's manifest); without its default features, the HTML writer and the command
@@ -156,7 +171,6 @@ geom-bool = { path = "../geom-bool" }
 geom-make = { path = "../geom-make" }
 geom-topo = { path = "../geom-topo" }
 geom-check = { path = "../geom-check" }
-geom-poly = { path = "../geom-poly" }
 geom-name = { path = "../geom-name" }
 
 [lints.rust]
