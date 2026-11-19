@@ -10,8 +10,10 @@
 //!
 //! - No solidcore type appears in this crate's public interface: a [`Solid`] holds solidcore's
 //!   body privately and gives the kernel's own, a `geom_topo::Body`; operations take grid points
-//!   and lengths of the frame (`geom_num::P3`, `geom_num::Steps`) on the [`Modeller`]'s step, and
-//!   a profile's corners as exact fractions of its steps ([`Corner`]), a grid point among them.
+//!   and lengths of the frame (`geom_num::P3`, `geom_num::Steps`) on the [`Modeller`]'s step,
+//!   a profile's corners as exact fractions of its steps ([`Corner`]), a grid point among them,
+//!   and a section plane by a grid point on it or by its distance from one along a whole-number
+//!   normal.
 //! - Operands are never consumed or changed: solidcore's operations take their operands by value
 //!   and modify them, so each operation is handed copies made by solidcore's own `brep_copy`.
 //! - Every body that comes back is converted into `geom-topo`'s rows and checked by `geom-check`
@@ -30,11 +32,14 @@
 //! vector of whole steps ([`Modeller::extrude`], chapter 13.4's Extrude with distance ends and no
 //! taper), the three booleans ([`Modeller::union`],
 //! [`Modeller::difference`], [`Modeller::intersection`]), a solid cut by a plane
-//! ([`Modeller::plane_section`]) and two solids met ([`Modeller::meet`]), and reads a solid's
-//! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
-//! of whole steps becomes the f64 nearest its decimal value ([`convert::to_metres`]), and a
-//! profile's corner the f64 nearest its exact fraction, a corner on no grid included (decision
-//! 32.97): nothing is rounded before that one rounding at solidcore's door.
+//! ([`Modeller::plane_section`], [`Modeller::plane_section_at_distance`]) and two solids met
+//! ([`Modeller::meet`]), and reads a solid's volume and face count. Lengths reach solidcore in
+//! metres, the unit of its tolerances: a length of whole steps becomes the f64 nearest its
+//! decimal value ([`convert::to_metres`]), a profile's corner the f64 nearest its exact fraction,
+//! a corner on no grid included (decision 32.97), and a plane given by its distance the point of
+//! it nearest the grid point it is measured from, each coordinate the f64 nearest its exact
+//! value, a plane that holds no point of any grid included (decision 32.99): nothing is rounded
+//! before that one rounding at solidcore's door.
 //!
 //! Not yet the kernel's: the meeting curves and plane sections are solidcore's curves, read by
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
@@ -58,7 +63,7 @@ use geom_num::{GridStep, P3, Steps};
 use geom_topo::Body;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::{Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 use solidcore::boolean::api_brep::{boolean_difference, boolean_intersection, boolean_union};
 use solidcore::curve::curve::Curve;
 use solidcore::geom::axis2_placement::Axis2Placement;
@@ -693,9 +698,96 @@ impl Modeller {
         at: P3,
         normal: [f64; 3],
     ) -> Result<Vec<Piece>, Error> {
-        let mut c = self.copy("plane_section", s)?;
         let n = Vec3::new(normal[0], normal[1], normal[2]);
-        let curves = intersect_brep_with_plane(&self.kernel, &mut c, self.point(at), n)
+        self.section(s, self.point(at), n)
+    }
+
+    /// The curves where the plane `distance` steps from the grid point `from` along the
+    /// whole-number normal `normal` cuts `s`; `s` is not changed. The plane is exactly the one
+    /// meant, n . (x - from) = distance |n|, though it may hold no point of any grid (decision
+    /// 32.99): solidcore is handed its point nearest `from`, each coordinate the f64 nearest its
+    /// exact value in metres ([`Modeller::foot`]), as a grid point and a profile's corner are, and
+    /// the normal exactly. Nothing is rounded before that one rounding.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Invalid`] for the normal (0, 0, 0) or a distance past the frame's largest
+    /// clearance ([`geom_num::distance::MAX_CLEARANCE`], 2^42 steps); [`Error::Refused`] if
+    /// solidcore refuses.
+    pub fn plane_section_at_distance(
+        &mut self,
+        s: &Solid,
+        from: P3,
+        normal: [i32; 3],
+        distance: Steps,
+    ) -> Result<Vec<Piece>, Error> {
+        let invalid = |what: &str| Error::Invalid {
+            operation: "plane_section",
+            what: what.to_owned(),
+        };
+        if normal == [0; 3] {
+            return Err(invalid("the normal (0, 0, 0)"));
+        }
+        if distance.0 > geom_num::distance::MAX_CLEARANCE {
+            return Err(invalid("a distance past the frame's largest clearance"));
+        }
+        let n = Vec3::new(
+            f64::from(normal[0]),
+            f64::from(normal[1]),
+            f64::from(normal[2]),
+        );
+        self.section(s, self.foot(from, normal, distance), n)
+    }
+
+    /// The point `distance` steps from the grid point `from` along the normal `normal`, not
+    /// (0, 0, 0), and at most 2^42 steps: in metres, each coordinate the f64 nearest its exact
+    /// value, `from_i s + sign(n_i) sqrt(C_i)` with `s` the step in metres, `N = n . n` and
+    /// `C_i = (distance s n_i)^2 / N`.
+    ///
+    /// No library rounds such a sum of a fraction and a square root correctly, so it is done here
+    /// (exact maths the kernel's principles need): `l_i = from_i s + sign(n_i) floor(sqrt(C_i)
+    /// 2^K) / 2^K` is within 2^-K of `x_i`, and num-rational rounds the fraction `l_i` once,
+    /// correctly, to the f64 `x_i` rounds to, for no point where the rounding changes (a midpoint
+    /// `b = m / 2^e` of two f64s, `e <= 1075`) is as near `x_i` as 2^-K = 2^-2560 nor is `x_i`:
+    /// - `x_i` rational (`N` a square or `n_i = 0`): `x_i = M / (v 2^11 5^k)` for whole `M`, `v`
+    ///   the odd denominator of `n_i / sqrt(N)` and `2^11 5^k` the step's metre (32.71). A
+    ///   midpoint's odd numerator is at least 2^53 + 1 or its value below 2^-1022, but a dyadic
+    ///   `x_i` has a numerator below `(2^40 + 2^42) / 5^5 < 2^43` and is 0 or at least 2^-11; and
+    ///   `x_i != b` gives `|x_i - b| >= 1 / (v 2^32 2^e) >= 2^-1140`.
+    /// - `x_i` irrational: with `D = b - from_i s`, `|x_i - b|` is at least `sqrt(C_i)` (over
+    ///   2^-64) when `D` is 0 or of the other sign, and otherwise `|C_i - D^2| / (sqrt(C_i) + |D|)`,
+    ///   where `C_i - D^2 != 0` has a denominator at most 2^128 2^(2e + 64) and `sqrt(C_i) + |D|`
+    ///   is below 2^21 when `|x_i - b| < 1`: so `|x_i - b| >= 2^-(213 + 2e) >= 2^-2363`.
+    fn foot(&self, from: P3, normal: [i32; 3], distance: Steps) -> Point3 {
+        /// The bits kept after the binary point of each square root.
+        const K: usize = 2560;
+        let s = BigRational::new(
+            BigInt::from(self.step.quarter_nm()),
+            BigInt::from(4_000_000_000_u64),
+        );
+        let nn = BigRational::from_integer(normal.iter().map(|&c| BigInt::from(c) * c).sum());
+        let along = &s * BigInt::from(distance.0);
+        let m = |p: geom_num::Coord, c: i32| {
+            let r = &along * BigInt::from(c);
+            let sq = &r * &r / &nn;
+            let root = ((sq.numer() << (2 * K)) / sq.denom()).sqrt();
+            let x = &s * BigInt::from(p.get())
+                + BigRational::new(root * c.signum(), BigInt::one() << K);
+            // `None` is num-rational's answer for 0 / 0 alone, which a denominator 2^K never is.
+            x.to_f64().unwrap_or(f64::NAN)
+        };
+        Point3::new(
+            m(from.x, normal[0]),
+            m(from.y, normal[1]),
+            m(from.z, normal[2]),
+        )
+    }
+
+    /// The curves where the plane through `at` (in metres) with normal `n` cuts `s`; `s` is not
+    /// changed.
+    fn section(&mut self, s: &Solid, at: Point3, n: Vec3) -> Result<Vec<Piece>, Error> {
+        let mut c = self.copy("plane_section", s)?;
+        let curves = intersect_brep_with_plane(&self.kernel, &mut c, at, n)
             .map_err(|e| refused("plane_section", &e))?;
         Ok(curves.into_iter().map(|curve| Piece { curve }).collect())
     }
@@ -893,6 +985,97 @@ mod tests {
                 assert_eq!(r, f64::from(*half) / 2.0, "{corners:?}");
                 assert_eq!((xyz(xa), xyz(ya)), (x, y), "{corners:?}");
                 assert_eq!(cross(xyz(xa), xyz(ya)), normal.map(|c| -c), "{corners:?}");
+            }
+        }
+    }
+
+    /// Whether `y` is the f64 nearest `x = a + sign(n) sqrt(c)`, by exact comparison alone: `x`
+    /// lies between the midpoints of `y` and its two neighbours.
+    fn is_nearest(y: f64, a: &BigRational, n: i32, c: &BigRational) -> bool {
+        // Whether x < t.
+        let below = |t: &BigRational| {
+            let u = t - a;
+            match n.signum() {
+                0 => u.is_positive(),
+                1 => u.is_positive() && *c < &u * &u,
+                _ => !u.is_negative() || *c > &u * &u,
+            }
+        };
+        let q = |v: f64| BigRational::from_float(v).expect("a finite f64");
+        let two = BigRational::from_integer(BigInt::from(2));
+        let lo = (q(y.next_down()) + q(y)) / &two;
+        let hi = (q(y) + q(y.next_up())) / &two;
+        !below(&lo) && below(&hi)
+    }
+
+    /// The point solidcore is handed for a plane given by its distance (decision 32.99) is, in
+    /// each coordinate, the f64 nearest its exact value `from_i s + sign(n_i) sqrt(C_i)`, by exact
+    /// comparison: for isect-15 to isect-20's planes, `d / sqrt(3)` in each coordinate, one unit in
+    /// the last place below the decimal the table wrote for it before; and on each grid, for
+    /// planes from grid points off the origin (one at the edge of the frame) at distances up to
+    /// the largest clearance, along normals with components of each sign, of zero and past one, of
+    /// whole length and not.
+    #[test]
+    fn a_plane_s_point_is_the_f64_nearest_it() {
+        let origin = P3::new(0, 0, 0).expect("a grid point");
+        let m = Modeller::new(GridStep::Q1);
+        // Each distance in steps of Q1 (1.6e8 to the metre) and the table's decimal of before.
+        let six: [(u64, f64); 6] = [
+            (48_000_000, 0.173_205_080_756_887_76),
+            (96_000_000, 0.346_410_161_513_775_5),
+            (144_000_000, 0.519_615_242_270_663_2),
+            (159_840_000, 0.576_772_918_920_436_3),
+            (160_000_000, 0.577_350_269_189_625_8),
+            (192_000_000, 0.692_820_323_027_551),
+        ];
+        let zero = BigRational::zero();
+        for (k, wrote) in six {
+            let d = BigRational::new(BigInt::from(k), BigInt::from(160_000_000));
+            let c = &d * &d / BigRational::from_integer(BigInt::from(3));
+            let p = m.foot(origin, [1, 1, 1], Steps(k));
+            for y in [p.x, p.y, p.z] {
+                assert!(is_nearest(y, &zero, 1, &c), "{k}: {y}");
+                assert_eq!(y, wrote.next_down(), "{k}");
+            }
+        }
+        let edge = geom_num::grid::COORD_MAX;
+        let froms = [
+            P3::new(3, -5, 7).expect("a grid point"),
+            P3::new(edge, -edge, 12_345).expect("a grid point"),
+        ];
+        let normals = [
+            [1, 1, 1],
+            [-1, 1, -1],
+            [1, -2, 2],
+            [0, 0, -1],
+            [2, 0, -1],
+            [-3, -1, 2],
+            [i32::MAX, i32::MIN, 1],
+        ];
+        let far = geom_num::distance::MAX_CLEARANCE;
+        for step in [GridStep::Q0, GridStep::Q1, GridStep::Q2] {
+            let m = Modeller::new(step);
+            let s = BigRational::new(
+                BigInt::from(step.quarter_nm()),
+                BigInt::from(4_000_000_000_u64),
+            );
+            for from in froms {
+                for normal in normals {
+                    let nn: BigInt = normal.iter().map(|&c| BigInt::from(c) * c).sum();
+                    for k in [1, 48_000_000, far - 1, far] {
+                        let p = m.foot(from, normal, Steps(k));
+                        let given = [from.x, from.y, from.z];
+                        for (i, y) in [p.x, p.y, p.z].into_iter().enumerate() {
+                            let a = &s * BigInt::from(given[i].get());
+                            let r = &s * BigInt::from(k) * BigInt::from(normal[i]);
+                            let c = &r * &r / BigRational::from_integer(nn.clone());
+                            assert!(
+                                is_nearest(y, &a, normal[i], &c),
+                                "{step:?} {from:?} {normal:?} {k}: {i} {y}"
+                            );
+                        }
+                    }
+                }
             }
         }
     }

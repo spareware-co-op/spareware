@@ -34,7 +34,8 @@ geom-num = { path = "../crates/geom-num" }
 geom-run = { path = "../crates/geom-run" }
 geom-surface = { path = "../crates/geom-surface" }
 geom-topo = { path = "../crates/geom-topo" }
-# Exact fractions for a profile's corners (decision 32.97): num-rational's ratio of num-bigint's
+# Exact fractions for a profile's corners (decision 32.97) and for the point of a plane given by
+# its distance, with num-bigint's integer square root (32.99): num-rational's ratio of num-bigint's
 # integers, whose conversion to f64 is correctly rounded, and num-traits' traits for them (each
 # MIT OR Apache-2.0). num-bigint and num-traits are in the tree already (bigdecimal's).
 num-bigint = "=0.4.8"

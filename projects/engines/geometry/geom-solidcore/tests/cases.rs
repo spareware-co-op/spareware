@@ -52,6 +52,15 @@ fn p3(v: &Value) -> [f64; 3] {
     [num(&v[0]), num(&v[1]), num(&v[2])]
 }
 
+/// A plane's whole-number normal.
+fn whole_normal(v: &Value) -> [i32; 3] {
+    [0, 1, 2].map(|i| {
+        v[i].as_i64()
+            .and_then(|x| i32::try_from(x).ok())
+            .unwrap_or_else(|| panic!("not a whole-number normal: {v}"))
+    })
+}
+
 /// The grid step the table was written for, and of the tests that are not cases: 6.25 nm, on
 /// which every length of the table but those of seven cases is a whole number of steps.
 const STEP: GridStep = GridStep::Q1;
@@ -335,11 +344,14 @@ fn run_intersection(c: &Value) {
         .collect();
     let plane = &c["plane"];
     let pieces = match c["operation"].as_str() {
-        Some("plane_section") if plane.get("distance").is_some() => panic!(
-            "{}: the plane {} m from {} along {} is given by its distance, and the modeller takes \
-             a plane only by a grid point on it and a normal",
-            c["name"], plane["distance"], plane["from"], plane["normal"]
-        ),
+        Some("plane_section") if plane.get("distance").is_some() => m
+            .plane_section_at_distance(
+                &operands[0],
+                grid(&plane["from"], step),
+                whole_normal(&plane["normal"]),
+                length(&plane["distance"], step),
+            )
+            .expect("plane_section_at_distance"),
         Some("plane_section") => m
             .plane_section(&operands[0], grid(&plane["at"], step), p3(&plane["normal"]))
             .expect("plane_section"),
@@ -770,6 +782,92 @@ fn diagonal_planes_hold_no_point_of_any_grid() {
         );
         assert!(steps(&distance, STEP).is_positive(), "{id}");
     }
+}
+
+/// A plane given by its distance is the plane it means, wherever it lies (decision 32.99): the
+/// unit sphere about the grid point c = (0.5, -0.25, 1) m, cut by the planes 0.3 m and 0.6 m from c
+/// along six whole-number normals, with components of each sign, of zero and past one, two of
+/// whole length ((1, -2, 2) and (0, 0, -1)) and four not, is cut each time in a circle every
+/// sampled point of which is within the table's residual of the sphere and of the plane
+/// n . (q - c) = d |n|, its length within the table's bound of 2 pi sqrt(1 - d^2).
+#[test]
+fn a_plane_at_a_distance_is_the_plane_it_means() {
+    let mut m = Modeller::new(STEP);
+    let at = [0.5, -0.25, 1.0];
+    let centre = grid(&serde_json::json!(at), STEP);
+    let ball = m
+        .sphere(centre, length(&serde_json::json!(1.0), STEP))
+        .expect("the ball");
+    let normals = [
+        [1, 1, 1],
+        [-1, 1, -1],
+        [1, -2, 2],
+        [0, 0, -1],
+        [2, 0, -1],
+        [-3, -1, 2],
+    ];
+    for normal in normals {
+        for d in [0.3_f64, 0.6] {
+            let pieces = m
+                .plane_section_at_distance(
+                    &ball,
+                    centre,
+                    normal,
+                    length(&serde_json::json!(d), STEP),
+                )
+                .expect("plane_section_at_distance");
+            let surfaces = serde_json::json!([
+                {"plane": {"from": at, "normal": normal, "distance": d}},
+                {"sphere": {"centre": at, "radius": 1.0}},
+            ]);
+            let (worst, len) = sample(&m, &pieces, &surfaces);
+            assert!(
+                worst <= tolerance("max_residual"),
+                "{normal:?} {d}: a point {worst:e} off a surface"
+            );
+            let exact = std::f64::consts::TAU * (1.0 - d * d).sqrt();
+            let err = (len - exact).abs() / exact;
+            assert!(
+                err <= tolerance("length_relerr"),
+                "{normal:?} {d}: length {len}, expected {exact} (relative error {err:e})"
+            );
+        }
+    }
+}
+
+/// A plane given by its distance is refused before solidcore for the normal (0, 0, 0), at any
+/// distance, and for a distance past the frame's largest clearance (2^42 steps); at that
+/// clearance it is taken, and misses the unit ball.
+#[test]
+fn a_plane_with_no_normal_or_past_the_frame_is_refused() {
+    let mut m = Modeller::new(STEP);
+    let origin = P3::new(0, 0, 0).expect("a grid point");
+    let ball = m
+        .sphere(origin, length(&serde_json::json!(1.0), STEP))
+        .expect("the ball");
+    let far = geom_num::distance::MAX_CLEARANCE;
+    for (normal, d) in [
+        ([0, 0, 0], Steps(0)),
+        ([0, 0, 0], Steps(1)),
+        ([1, 1, 1], Steps(far + 1)),
+        ([0, 0, 1], Steps(u64::MAX)),
+    ] {
+        let found = m.plane_section_at_distance(&ball, origin, normal, d);
+        assert!(
+            matches!(
+                found,
+                Err(Error::Invalid {
+                    operation: "plane_section",
+                    ..
+                })
+            ),
+            "{normal:?} {d:?}: {found:?}"
+        );
+    }
+    let missed = m
+        .plane_section_at_distance(&ball, origin, [1, 1, 1], Steps(far))
+        .expect("a plane at the largest clearance");
+    assert!(missed.is_empty(), "{} pieces", missed.len());
 }
 
 /// The turn each mitred wall is given is within its stated angle of the angle it names, by exact
