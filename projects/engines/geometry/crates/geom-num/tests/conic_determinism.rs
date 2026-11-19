@@ -81,8 +81,11 @@ fn carrier(rng: &mut SplitMix64) -> Carrier {
     }
 }
 
+/// A random ellipse. About three draws in five are reduced ratios with a nonzero axis, so 1,000
+/// draws with none taken mean the constructor refuses what it should take: a failure, not a wait
+/// without end.
 fn ellipse(rng: &mut SplitMix64) -> Ellipse2 {
-    loop {
+    for _ in 0..1_000 {
         let centre = grid(rng);
         let major = [
             signed(rng, RADIUS_BITS) as i64,
@@ -94,6 +97,7 @@ fn ellipse(rng: &mut SplitMix64) -> Ellipse2 {
             return e;
         }
     }
+    panic!("no ellipse taken in 1,000 draws");
 }
 
 /// One answer as one byte: a sign, or the error that stood in its place.

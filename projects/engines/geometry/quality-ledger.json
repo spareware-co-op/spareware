@@ -9804,6 +9804,14 @@
       "reason": "The sign of every element at minus infinity flips with this test, and a sign vector and its negation have the same changes, so the count of changes is the same for either parity."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-num/src/conic_root.rs",
+      "mutant": "replace != with == in on_half",
+      "line_text": "if along_half(e, axis, half, (q, &a), (q, &b))? != Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "on_half is private and its one caller is mirrored, which calls it twice, once for the roots of the point's quartic on its half (mine) and once for those of the mirror's image on the other half (theirs). The original's insertion sort orders the roots it found from first to last along the half; the mutant swaps exactly where the original stops, so it orders them from last to first. along_half reads t's order (or -1/t's) through quartic::compare, which is Zero only for one number and, as its errors section says, cannot fail for coefficients within COEFFICIENT_BITS; rate, its only other step, depends on the ellipse and axis alone and half_of has already called it for every root before the sort. q.roots() lists each root once, so the roots on a half are distinct and either sort gives one strict order, its reverse in the mutant, with no other outcome. The mirror's image has as roots exactly the mirrors of the quartic's (mirror's own comment), carried from one half to the other, so both lists hold the same count n. mirrored takes rank, the index of the point's root in mine, and returns the rank-th of theirs counted from the end. Under the mutant both lists are reversed: rank becomes n - 1 - rank, and the (n - 1 - rank)-th from the end of theirs reversed is the (n - 1 - rank)-th from the start of theirs as the original orders it, which is the original's rank-th from the end. So mirrored returns the same image and root for every input, and on_half has no other use."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace > with >= in meridians",
       "line_text": "let rate = if sense > 0.0 { s } else { -s };",
