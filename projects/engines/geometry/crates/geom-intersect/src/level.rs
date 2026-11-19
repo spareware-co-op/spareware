@@ -56,7 +56,7 @@
 //! Cost: each box or span takes two reads of the surface's partials and the function, charged to
 //! the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with
 //! their neighbours; a side's crossing takes log₂(side/floor) reads more. A cylinder's silhouette
-//! whose domain ends on a ruling takes one unit (decision 32.NN). Recursion: none.
+//! whose domain ends on a ruling takes one unit (decision 32.101). Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -288,7 +288,7 @@ fn vanishes(u: f64, [a, b, sum, difference]: [bool; 4]) -> Result<bool, Intersec
 }
 
 /// A cylinder's silhouette in parallel view where a domain end is a ruling, by its closed form
-/// (decision 32.NN); `None` for every other case, which the search answers as before.
+/// (decision 32.101); `None` for every other case, which the search answers as before.
 ///
 /// The normal is a positive multiple of s·e(u) (`geom_surface`'s table), so g = N·d is a multiple
 /// of a·cos πu + b·sin πu with a = x̂·d and b = ŷ·d, by a factor that is never zero, and does not

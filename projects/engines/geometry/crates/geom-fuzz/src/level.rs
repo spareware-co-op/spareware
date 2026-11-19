@@ -66,7 +66,7 @@ const CEILING: f64 = 1e-3;
 /// between 2^19 and 2^20 units, so 2^19 would have skipped their laws; 101 more need up to 2^21,
 /// a budget that runs a stopped trace past the ten seconds. The three stored timeouts are a
 /// cylinder's silhouette along its domain's end, which ran to this budget and to 2^24 alike; it is
-/// a closed form now (decision 32.NN), one unit each.
+/// a closed form now (decision 32.101), one unit each.
 const WORK: u64 = 1 << 20;
 
 /// A half-turn is one parameter unit of the round kinds.

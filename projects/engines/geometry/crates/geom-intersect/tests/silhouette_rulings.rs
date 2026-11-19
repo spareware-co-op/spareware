@@ -1,5 +1,5 @@
 //! A cylinder's silhouette in parallel view whose domain ends on a ruling, by its closed form
-//! (decision 32.NN). The normal of a cylinder is a multiple of e(u), so N·d is a multiple of
+//! (decision 32.101). The normal of a cylinder is a multiple of e(u), so N·d is a multiple of
 //! a·cos πu + b·sin πu (a = x̂·d, b = ŷ·d) along every ruling: its zero set is whole rulings, each
 //! one branch across the domain in v. Whether a domain end is a ruling is decided exactly (Niven's
 //! theorem and the exact signs of a, b, a + b and a − b); every other case stays with the search,

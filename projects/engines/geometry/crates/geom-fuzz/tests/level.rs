@@ -125,7 +125,7 @@ fn the_cases_reach_every_surface_function_and_answer() {
 /// radius 4.5, 1.5 and 1, seen along (4, -4, -4), whose silhouette is the ruling at the domain's
 /// end u = 1/4. The first two are the timeouts of the 14 November campaign, the third the timeout
 /// of Phase 6's run on the Phase 5 train (pull request 866): each ran to the budget, 1,048,577
-/// units, and to 2^24 alike. A cylinder's silhouette is a closed form now (decision 32.NN): that
+/// units, and to 2^24 alike. A cylinder's silhouette is a closed form now (decision 32.101): that
 /// ruling, decided exactly, in one unit.
 const SILHOUETTES_ALONG_AN_END: [(&[u8], u128); 3] = [
     (&[0x2f, 0x17, 0xa4, 0xa4], 1),
