@@ -21,6 +21,7 @@ use geom_intersect::quadrics::natural;
 use geom_intersect::result::{
     Coincidence, CurveContact, CurveEnd, Intersection, Item, PointContact,
 };
+use geom_num::interval::Interval;
 use geom_nurbs::Limit;
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind};
@@ -566,6 +567,265 @@ fn a_domain_trims_what_it_cuts() {
     }
     // A plane past the end meets nothing.
     assert_eq!(meet(&level(20.0), &short).items().len(), 0);
+}
+
+/// Issue 1018: a piece no edge cuts was kept whole on its middle point alone, wherever that point's
+/// box reached the domains, inside them or not. A sphere of radius 2 about the origin meets the
+/// cylinder of radius 1 about z in the circles at heights ±√3, and the closed form stores the upper
+/// one at a height h that is √3 rounded down (h² < 3, read exactly from h·h and its error). A
+/// cylinder whose domain ends at h holds no point of either circle. Its end circle stands inside
+/// the sphere by an exact sign (32.74), so no edge cuts the upper circle, and that circle's
+/// middle has a box that reaches the domain's end h but is not inside it. Before, the circle
+/// was kept whole, a curve past the cylinder's domain all the way round; now a cut-free piece is
+/// kept only where its middle is proven inside both domains, and this pair is the engine's. So is
+/// its mirror, the domain from −h, which the lower circle's box reaches; and a domain to 1.75, or
+/// from −1.75, holds its circle with room, its end circle outside the sphere, and keeps it.
+#[test]
+fn a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside() {
+    let s = sphere([0.0; 3], 2.0);
+    let tall = meet(&s, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 1.0));
+    let h = curves(&tall)
+        .iter()
+        .map(|c| mid(c)[2])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let (square, error) = geom_num::eft::two_prod(h, h);
+    assert!(square < 3.0 || (square == 3.0 && error < 0.0), "{h}");
+    let tube = |height: (f64, f64)| {
+        SurfaceKind::Cylinder(
+            Cylinder::new([0.0; 3], 1.0, frame_along([0.0, 0.0, 1.0]), (ROUND, height)).unwrap(),
+        )
+    };
+    for short in [tube((-1.0, h)), tube((-h, 1.0))] {
+        for (a, b) in [(&s, &short), (&short, &s)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{h}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    for long in [tube((-1.0, 1.75)), tube((-1.75, 1.0))] {
+        let r = meet(&s, &long);
+        assert_eq!(curves(&r).len(), 1, "{h}: {:?}", r.items());
+    }
+}
+
+/// The ends of a whole turn are its join, and a sphere's pole is a point of it: a piece no edge
+/// cuts whose middle lies there is kept (32.94). The circle at √3 on a cylinder whose turn runs
+/// from −1 to 1 has its middle, along −x, on that join; the great circle in the plane x = y has its
+/// middle at the sphere's south pole; and the plane of a torus's equator meets it in two circles,
+/// the inner one on the join of a tube turn that runs from −1 to 1.
+#[test]
+fn a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept() {
+    let seam = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            1.0,
+            frame_along([0.0, 0.0, 1.0]),
+            ((-1.0, 1.0), TALL),
+        )
+        .unwrap(),
+    );
+    let r = meet(&sphere([0.0; 3], 2.0), &seam);
+    assert_eq!(curves(&r).len(), 2, "{:?}", r.items());
+    let r = meet(
+        &plane([0.0; 3], [1.0, -1.0, 0.0], [0.0, 0.0, 1.0]),
+        &sphere([0.0; 3], 5.0),
+    );
+    assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
+    let ring = SurfaceKind::Torus(
+        geom_surface::Torus::new(
+            [0.0; 3],
+            9.0,
+            2.0,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, (-1.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let r = meet(&level(0.0), &ring);
+    assert_eq!(curves(&r).len(), 2, "{:?}", r.items());
+}
+
+/// A piece no edge cuts whose middle is off a domain is nothing, and one whose middle reaches an
+/// end that is an edge is the engine's (32.94). The unit ball's equator lies in z = 0 but off a
+/// plane whose domain runs from 10 to 20 along x, or from −20 to −10, and no edge of it comes near
+/// the ball. A torus's tube turn from 1 to 2 ends at its inner equator and at its outer one, so
+/// the plane of its equator meets it in two circles whose middles reach the tube's ends.
+#[test]
+fn a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge() {
+    let ball = sphere([0.0; 3], 1.0);
+    for along in [(10.0, 20.0), (-20.0, -10.0)] {
+        let strip = SurfaceKind::Plane(
+            Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                (along, (-5.0, 5.0)),
+            )
+            .unwrap(),
+        );
+        assert_eq!(meet(&strip, &ball).items().len(), 0);
+        assert_eq!(meet(&ball, &strip).items().len(), 0);
+    }
+    let ring = SurfaceKind::Torus(
+        geom_surface::Torus::new(
+            [0.0; 3],
+            9.0,
+            2.0,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, (1.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    assert!(natural(&level(0.0), &ring, &mut meter()).unwrap().is_none());
+}
+
+/// A box that ends exactly at an end of a domain that is an edge reaches that end, from outside the
+/// domain or from inside it: it is off the domain only when it is wholly past the end (32.94). The
+/// circle where a sphere of radius 2 meets the cylinder of radius 1 about z stands at a height near
+/// √3, and the closed form reads the height of its middle as that point's offset from the centre
+/// along the axis's unit vector, enclosed (`quadrics::parameters`), a box from l to h a few steps
+/// wide; it is read here the same way. A cylinder whose domain starts at h, or ends at l, has its end
+/// circle there off the sphere (h² and l² are not 3) and the circle near −√3 off its domain, so
+/// nothing cuts the circle near √3, and that circle's box ends exactly at the domain's end. It may
+/// stand on the end circle's height, so the pair is the engine's, never nothing.
+#[test]
+fn a_box_that_ends_exactly_at_an_edge_reaches_it() {
+    let s = sphere([0.0; 3], 2.0);
+    let axis = frame_along([0.0, 0.0, 1.0]);
+    let tall = meet(&s, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 1.0));
+    let upper = curves(&tall)
+        .into_iter()
+        .max_by(|p, q| mid(p)[2].total_cmp(&mid(q)[2]))
+        .unwrap();
+    let (lo, hi) = upper.domain();
+    let at = upper
+        .enclose_point(lo * 0.5 + hi * 0.5, Limit::FromRight, &mut meter())
+        .unwrap()
+        .unwrap();
+    let (_, [_, _, n]) = axis.unit_vectors().unwrap();
+    let zero = Interval::point(0.0).unwrap();
+    let w = at.map(|c| c.sub(zero).unwrap());
+    let height = w[0]
+        .mul(n[0])
+        .unwrap()
+        .add(w[1].mul(n[1]).unwrap())
+        .unwrap()
+        .add(w[2].mul(n[2]).unwrap())
+        .unwrap()
+        .div(Interval::point(1.0).unwrap())
+        .unwrap();
+    let (l, h) = (height.lo(), height.hi());
+    assert!(1.7 < l && l < h && h < 1.8, "{height:?}");
+    let tube = |ends: (f64, f64)| {
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 1.0, axis, (ROUND, ends)).unwrap())
+    };
+    for short in [tube((h, 1.9)), tube((-1.0, l))] {
+        for (a, b) in [(&s, &short), (&short, &s)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{height:?}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    // A step further out each way, the box is wholly past the end, and the pair is nothing.
+    for short in [tube((h.next_up(), 1.9)), tube((-1.0, l.next_down()))] {
+        assert_eq!(meet(&s, &short).items().len(), 0, "{height:?}");
+    }
+}
+
+/// A plane whose origin stands far from its points holds their parameters no closer than a step
+/// that may span its whole domain, so a box that reaches an end of it is read again from the
+/// domain's corners, and there a piece past an end is nothing (32.94). The plane z = 0 is written
+/// as x = u − 2^52 and y = v − 2^52, each over one unit from 2^52, where a double's step is 1. A
+/// ball of radius 1/4 about (1.5, 0.5, 0) meets it in a circle past x = 1, the end of u; one of
+/// radius 1/5 about (0.5, −0.25, 0), in a circle past y = 0, the start of v. No edge comes near
+/// either, and the box of each circle's middle reaches that end (2^52 + 1.25 is held from 2^52 + 1,
+/// 2^52 − 0.25 up to 2^52), so only the corner's offset, a quarter past, says it lies off.
+#[test]
+fn a_far_plane_reads_a_piece_past_an_end_from_its_corner() {
+    let start = two_to(52);
+    let sheet = SurfaceKind::Plane(
+        Plane::new(
+            [-start, -start, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((start, start + 1.0), (start, start + 1.0)),
+        )
+        .unwrap(),
+    );
+    for ball in [
+        sphere([1.5, 0.5, 0.0], 0.25),
+        sphere([0.5, -0.25, 0.0], 0.2),
+    ] {
+        for (a, b) in [(&sheet, &ball), (&ball, &sheet)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert_eq!(
+                r.as_ref().map(|x| x.items().len()),
+                Some(0),
+                "{:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    // Moved onto the plane's domain, each circle is kept whole.
+    for ball in [sphere([0.5, 0.5, 0.0], 0.25), sphere([0.5, 0.5, 0.0], 0.2)] {
+        assert_eq!(curves(&meet(&sheet, &ball)).len(), 1);
+    }
+}
+
+/// An offset from a plane's corner that ends exactly at zero reaches that end (32.94). A corner
+/// c + p·a is enclosed as the doubles either side of its exact sum rounded, while the domain's edge
+/// is the line through c + p·a in doubles. The plane z = 0 is written as x = c + 0.1·u, 2^52 out,
+/// with c set so that the edge at u's end p = 2^52 + 2 is x = 1 exactly; the exact corner there is
+/// 1 + e, with e = 0.0125 the error of the double product p·0.1. A ball of radius 1/4 meets it in a
+/// circle whose middle is the corner's upper bound, past the domain by a step of 1 + e and an
+/// eightieth clear of the edge, so no edge cuts the circle. A double holds that middle's u no
+/// closer than its whole step there, which reaches p, and its offset from the corner runs from
+/// exactly zero: it may lie on the corner's edge, so the pair is the engine's, never nothing. The
+/// same with x = c − 0.1·u (y = −v), where p = 2^52 + 1 is u's start and e = 0.025.
+#[test]
+fn an_offset_from_a_corner_that_ends_at_zero_reaches_it() {
+    let start = two_to(52);
+    for (along, end, upper) in [(0.1, start + 2.0, true), (-0.1, start + 1.0, false)] {
+        let (p, e) = geom_num::eft::two_prod(end, along);
+        let c = 1.0 - p;
+        assert!(c + p == 1.0 && e > 0.01, "{p} {e}");
+        // The corner's exact sum c + p + e is 1 + e, rounded once; its enclosure's upper bound.
+        let at = (1.0 + e).next_up();
+        let ball = sphere([at + 0.25, 0.5, 0.0], 0.25);
+        let found = meet(&level(0.0), &ball);
+        let [circle] = curves(&found)[..] else {
+            panic!("{:?}", found.items())
+        };
+        assert_eq!(mid(circle), [at, 0.5, 0.0]);
+        let (us, vs) = if upper {
+            ((end - 20.0, end), (0.0, 1.0))
+        } else {
+            ((end, end + 20.0), (-1.0, 0.0))
+        };
+        let sheet = SurfaceKind::Plane(
+            Plane::new(
+                [c, 0.0, 0.0],
+                [along, 0.0, 0.0],
+                [0.0, along * 10.0, 0.0],
+                (us, vs),
+            )
+            .unwrap(),
+        );
+        for (a, b) in [(&sheet, &ball), (&ball, &sheet)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{sheet:?}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
 }
 
 #[test]
