@@ -23,7 +23,7 @@ use common::{
     torus, torus_surface,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
-use geom_curve::{Circle, CurveKind, Frame};
+use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame};
 use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
@@ -998,6 +998,41 @@ fn a_flat_face_holding_a_circle_is_apart_from_a_face_that_keeps_off_its_plane() 
     assert_eq!(at(&r, BodyKind::General, 1), only_pair);
 }
 
+#[test]
+fn a_flat_face_holding_an_ellipse_rests_on_its_plane_only_where_group_2_holds_it_there() {
+    // The holed square of `holed_beside`, its hole an ellipse instead (decision 32.95): a face
+    // holding an ellipse rests on its plane only when group 2 holds the ellipse on it exactly, and
+    // `keeps_off` has no test of an ellipse. Group 3 has no shape for an ellipse, so its pairs
+    // with the square's sides are unchecked either way; the question is the pair of faces.
+    let faces = fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    );
+    let oval = |z: f64| {
+        let frame = Frame::standard().unwrap();
+        let axes = Axes::Frame {
+            frame,
+            a: 2.0,
+            b: 1.5,
+        };
+        CurveKind::Ellipse(Ellipse::new([5.0, 5.0, z], axes, (0.0, 2.0)).unwrap())
+    };
+    // In the plane z = 0 exactly, a step below the square above it: the faces are apart.
+    let mut r = holed_beside(1);
+    r.curves[4] = oval(0.0);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(!faults.contains(&faces), "{faults:?}");
+    // Lifted a step, within the bound but off the plane, it touches the square's foot: the faces
+    // are not settled.
+    let mut r = holed_beside(1);
+    r.curves[4] = oval(1.0);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(faults.contains(&faces), "{faults:?}");
+}
+
 /// The holed square ([`holed_sheet`]) and a second sheet, a quadrilateral whose corners are the
 /// holed square's vertices numbered in `shared` and new vertices at `points`, in that order.
 fn holed_with(shared: &[u32], points: &[[i64; 3]]) -> Rows {
@@ -1212,7 +1247,6 @@ fn a_cylinder_and_a_plane_along_its_axis_are_apart_only_beyond_its_radius() {
         assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
     }
 }
-
 
 /// The whole sphere about `center` of `radius`.
 fn globe(center: [f64; 3], radius: f64) -> SurfaceKind {
