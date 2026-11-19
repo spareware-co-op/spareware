@@ -34,7 +34,7 @@
 //! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
 //! of whole steps becomes the f64 nearest its decimal value ([`convert::to_metres`]), and a
 //! profile's corner the f64 nearest its exact fraction, a corner on no grid included (decision
-//! 32.96): nothing is rounded before that one rounding at solidcore's door.
+//! 32.97): nothing is rounded before that one rounding at solidcore's door.
 //!
 //! Not yet the kernel's: the meeting curves and plane sections are solidcore's curves, read by
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
@@ -185,7 +185,7 @@ fn spheres_apart((a, ra): (P3, Steps), (b, rb): (P3, Steps)) -> bool {
 /// step, `num[i] / den` steps along each axis, within the grid's range. A grid point is the
 /// corner with denominator 1 ([`From<P3>`]). A corner the caller derives, such as where two of a
 /// profile's sides meet, is given as the fraction it is, never rounded to the grid or to an f64
-/// first (decision 32.96).
+/// first (decision 32.97).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Corner {
     num: [i128; 3],
@@ -492,7 +492,7 @@ impl Modeller {
     /// solidcore's linear sweep. The loops' order of corners does not matter: the outer polygon is
     /// handed to solidcore counter-clockwise about `by` and each hole clockwise, decided exactly
     /// from the corners' exact fractions of steps. solidcore is handed each corner as the f64
-    /// nearest it in metres, as it is every grid point (decision 32.96).
+    /// nearest it in metres, as it is every grid point (decision 32.97).
     ///
     /// # Errors
     ///

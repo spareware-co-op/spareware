@@ -3562,7 +3562,7 @@
       ],
       "volume_bits": "401030fe9135d958",
       "curved": false,
-      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=30; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = 2 - sqrt 3, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.96)"
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=30; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = 2 - sqrt 3, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.97)"
     },
     {
       "id": "bldg-05",
@@ -3612,7 +3612,7 @@
       ],
       "volume_bits": "400f1e1dfbe8e9fe",
       "curved": false,
-      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=45; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = sqrt 2 - 1, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.96)"
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=45; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = sqrt 2 - 1, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.97)"
     },
     {
       "id": "bldg-06",
@@ -3662,7 +3662,7 @@
       ],
       "volume_bits": "400e767803b360c4",
       "curved": false,
-      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=60; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = 1 / sqrt 3, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.96)"
+      "source": "closed form, worked by hand and checked a second way: h*(2tL + t^2 cot(phi/2)), L=3, phi=60; the walls are given by what the building program means (lengths, thickness, height and the second wall's turn), the turn the rational one whose half-angle tangent n/m is within 5e-16 of tan(phi/2) = 1 / sqrt 3, so within 1e-15 rad of phi, and every corner is the exact fraction of steps it is (decision 32.97)"
     },
     {
       "id": "bldg-07",

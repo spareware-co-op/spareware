@@ -104,7 +104,7 @@ fn lengths(v: &Value, out: &mut Vec<String>) {
 }
 
 /// The profile of one wall of a mitred corner, by what the building program means (decision
-/// 32.96), each corner the exact fraction of steps of `step` it is, `(numerators, denominator)`,
+/// 32.97), each corner the exact fraction of steps of `step` it is, `(numerators, denominator)`,
 /// nothing rounded: two walls of `length` and `thickness` from the shared inner corner at the
 /// origin, wall 0 along x with its thickness below it, wall 1 turned by the rational turn whose
 /// half-angle has the tangent `n / m` (`turn.tan_half`), its thickness on its outer side, both
@@ -506,7 +506,7 @@ fn extrude_takes_its_loops_either_way_round() {
     assert!(invalid(m.extrude(&off, up)));
 }
 
-/// A profile's corner is an exact fraction of steps within the grid's range (decision 32.96): a
+/// A profile's corner is an exact fraction of steps within the grid's range (decision 32.97): a
 /// denominator that is not positive, or a coordinate past 2^40 - 1 steps, is no corner, and a
 /// grid point is the corner of denominator 1. The extrusion takes the fraction as it is: the
 /// square with a square hole given in quarter-steps is the solid it is in steps, and a triangle
@@ -782,7 +782,7 @@ fn diagonal_planes_hold_no_point_of_any_grid() {
 }
 
 /// The turn each mitred wall is given is within its stated angle of the angle it names, by exact
-/// arithmetic on the table's whole numbers and decimals (decision 32.96). `tan(phi / 2)` is the one
+/// arithmetic on the table's whole numbers and decimals (decision 32.97). `tan(phi / 2)` is the one
 /// root in (0, 1) of the quadratic `a x^2 + b x + c` the table gives (`2 - sqrt 3`, `sqrt 2 - 1` and
 /// `1 / sqrt 3` for 30, 45 and 60 degrees: the quadratic has opposite signs at 0 and 1), and the
 /// quadratic has opposite signs at `n / m - w / 2` and `n / m + w / 2`, both in (0, 1): so the

@@ -1479,7 +1479,7 @@ Guarded by planted cases (`geom-test`'s `tests/oracle_meshes.rs`): a solid that 
 
 **Changes:** this record; geom-solidcore's `src/lib.rs` (`Profile`, `Hole`, `Modeller::extrude`, `Error::Invalid`, the module header), `tests/cases.rs` (the shape `extrusion`, the operation `extrude`, 21 cases and the unit test), `tests/cases.json`, `tests/case_names.txt` and `tests/named-faults.json` (SC-8, WR-3, WR-4); `kernel.yml`'s two counts.
 
-## 32.96 A profile's corner on no grid is the exact fraction it is: the mitres by what they mean
+## 32.97 A profile's corner on no grid is the exact fraction it is: the mitres by what they mean
 
 **Decided by the main session, 19 Nov 2026** (its brief to the lane `wr4-mitre`): find the rule for a profile's corner that is on no grid, never by rounding a number silently and never by loosening the exact reading of 32.71. The rule below is the lane's finding, with its evidence; it is the main session's to accept.
 
