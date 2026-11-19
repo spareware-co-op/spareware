@@ -1094,7 +1094,7 @@ jobs:
         if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 && env.KERNEL_CRATES != '' }}
         run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 
-  # A trial (decision 32.82): a part of macOS x86-64's release suite compiled on macOS arm64 for
+  # Decisions 32.82 and 32.NN: each part of macOS x86-64's release suite compiled on macOS arm64 for
   # x86_64-apple-darwin, packed with `cargo nextest archive` and handed to `suite-cross`, which runs
   # every test of it on the Intel runner. On that runner the compile was 85 to 97% of each part and
   # its speed swung about 2.1 times between runs (part 21 took 10.8 to 20.4 minutes on main's
@@ -1288,7 +1288,7 @@ jobs:
 
   # The doctests of every moved part that has them (`doc`), which an archive does not hold: one job
   # on the Intel runner, `suite`'s own release doctest step with its flags, over the crates of all
-  # those parts at once, so the libraries they share compile once (decision 32.82). SHARE is each
+  # those parts at once, so the libraries they share compile once (decision 32.NN). SHARE is each
   # such part's crates, in the parts' order: a share's from the job `scope`, a crate set apart by
   # its name; geom-test's tests/queue_wiring.rs holds it to the cross jobs' parts.
   suite-cross-doc:
