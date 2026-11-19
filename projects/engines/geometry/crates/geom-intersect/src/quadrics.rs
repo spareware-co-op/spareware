@@ -1260,7 +1260,8 @@ const fn rank(s: &SurfaceKind) -> Option<u8> {
 /// The parameters of a surface's points in `at`, enclosed; a turn a box runs around is the domain's.
 /// Only the angles `read` names are worked out: one it leaves is the box of its whole range, which
 /// holds it, for a reader that needs nothing of it but that (an angle is a box's four corners'
-/// correctly rounded angles, the dearest part of the reading).
+/// correctly rounded angles, the dearest part of the reading). `None` for a kind with no parameters
+/// here, or a torus's tube turn that meets its domain at no turn.
 fn parameters(
     surface: &SurfaceKind,
     at: Vector,
@@ -1353,7 +1354,10 @@ fn parameters(
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
             let v = if read_v {
-                tube_turn(t, [x, y, z], v_range.0)?
+                let Some(v) = tube_turn(t, [x, y, z], v_range)? else {
+                    return Ok(None);
+                };
+                v
             } else {
                 all_v()?
             };
@@ -1368,18 +1372,74 @@ fn parameters(
     }))
 }
 
-/// A torus's tube turn at the point `local` in its frame: read from −1 to 1, and moved a turn on
-/// where that ends before the domain's start `v0`.
-fn tube_turn(t: &Torus, local: Vector, v0: f64) -> Result<Interval, IntersectError> {
+/// A torus's tube turn at the point `local` in its frame, on the tube's domain: `turn_of` reads it
+/// from −1/2 to 3/2 (a point inside the tube's centre circle from 1/2 to 3/2, as its opposite's turn
+/// and a half-turn on), and a box across that circle down to −1, and [`to_domain`] moves it there.
+fn tube_turn(
+    t: &Torus,
+    local: Vector,
+    domain: (f64, f64),
+) -> Result<Option<Interval>, IntersectError> {
     let [x, y, z] = local;
     let (major, _) = t.radii();
     let out = tight::norm(&[x, y])?.sub(point(major)?)?;
-    let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
-    if turn.hi() < v0 {
-        Ok(turn.add(point(2.0)?)?)
-    } else {
-        Ok(turn)
+    to_domain(turn_of(out, z.mul(point(t.axial_sign())?)?)?, domain)
+}
+
+/// `turn`, as [`turn_of`] reads it (from −1 to 3/2), moved by whole turns to the domain `(lo, hi)`
+/// of at most a turn, which may start any number of turns out: the box of every turn of it that
+/// meets the domain, or `None` where none does. The domain is decided here alone: a box handed on
+/// off it could be read by its caller as meeting it at an end.
+///
+/// First the turns to the domain's window: `m − m % 2` is a multiple of two, exactly, for every
+/// double m (`%` is exact), and for m the sum lo + 1/2, however it rounds, it leaves the start
+/// strictly between −5/2 and 3/2 past it. From there a turn back, none, one or two on reach every
+/// turn of the box that can meet the domain: two back it ends by 3/2 − 4, under the start, and
+/// three on it starts from −1 + 6, over the end, which is under 3/2 + 2.
+///
+/// A box wider than the gap from the domain's end to its start a turn on can meet it at two turns
+/// (a box across a torus's centre circle, or across an arc's gap), one at each end, and the point
+/// may stand at either: the answer is the hull of both, which holds each. Both callers carry it.
+/// [`tube_turn`]'s read a box as an enclosure ([`on`] holds it to the domain, all of which it then
+/// covers), so the span and the standing read from it are true. [`cut_at`] needs one parameter,
+/// and takes the hull's middle, half a turn from both meetings: on an arc of radius over 2 the
+/// point there is farther from the mark than [`STEP`], so the mark is no cut, and on a smaller one
+/// a cut where the curve does not cross only splits a stretch, which [`runs`] joins again. Each
+/// meeting lies within the box's width of an end, where a cut cuts nothing while that width is
+/// under the room [`trimmed`] leaves at an end (10^−9 of a half-turn and more).
+///
+/// On a whole turn the end is the start's join, so a box that starts on the end meets the domain
+/// only at its start, where the box a turn back, always among the four, meets it too: it is no
+/// second meeting, and a box from 0 at the start of (0, 2) is kept, not widened to the whole turn.
+///
+/// A far domain costs one widening, as one move did before: the turns are summed exactly, in a
+/// double (even numbers under 2^53, as a domain of a turn or less starts only where its doubles
+/// stand under two apart), and added to the box once. A domain that starts from about −5/2 to 3/2
+/// has no turns to its window and is not widened by adding none, so its box is the one of before:
+/// the boundary tests' domains start there, and their boxes are the ones they were.
+fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, IntersectError> {
+    let by = |turns: f64| -> Result<Interval, IntersectError> {
+        if turns == 0.0 {
+            Ok(turn)
+        } else {
+            Ok(turn.add(point(turns)?)?)
+        }
+    };
+    let above = lo + 0.5;
+    let window = above - above % 2.0;
+    let joined = !part_turn(lo, hi);
+    let mut met: Option<Interval> = None;
+    for turns in [window - 2.0, window, window + 2.0, window + 4.0] {
+        let moved = by(turns)?;
+        if moved.hi() < lo || moved.lo() > hi || (joined && moved.lo() == hi) {
+            continue;
+        }
+        met = Some(match met {
+            Some(first) => Interval::new(first.lo(), moved.hi())?,
+            None => moved,
+        });
     }
+    Ok(met)
 }
 
 /// `x`, held to `domain` when it meets it.
@@ -1918,6 +1978,18 @@ fn cut_at(
         return Ok(None);
     };
     let (lo, hi) = crate::curve::finite(curve)?;
+    // An arc's turn is read as a loop's is, from −1 to 3/2, and its domain may start any number of
+    // turns from there: the box is moved by whole turns to it, as a tube's turn is. A box across
+    // the arc's gap meets it at both ends, and the hull of the two is no cut ([`to_domain`]).
+    let arc = matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && !closed(curve);
+    let s = if arc {
+        let Some(s) = to_domain(s, (lo, hi))? else {
+            return Ok(None);
+        };
+        s
+    } else {
+        s
+    };
     let mut t = tight::middle(s);
     // On a loop the turns wrap. The count, not t, ends the loop, and [`WRAPS`] periods bring the
     // angle into every loop's domain, which [`nearer`] has moved to within two turns of zero. Both
