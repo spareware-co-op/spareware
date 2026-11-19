@@ -116,23 +116,20 @@ pub(crate) fn check(
             );
         }
         // Every fin of a published body names its edge: the test decides, not the lookup.
-        if let Some(e) = fin_edge(a, n) {
-            match edge_on(a, e, &on, b, limit) {
-                Some(true) => {}
-                Some(false) => sink.push(
-                    Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e)).with(Entity::Face(face)),
-                ),
+        fin_edge(a, n)
+            .and_then(|e| match edge_on(a, e, &on, b, limit) {
+                Some(true) => None,
+                Some(false) => Some(Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e))),
                 None => {
-                    let curve = a
-                        .edges
-                        .curve
-                        .get(e)
-                        .copied()
-                        .map_or(Entity::Edge(e), Entity::Curve);
-                    sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Face(face)));
+                    let curve = a.edges.curve.get(e).copied();
+                    Some(Fault::at(
+                        FaultKind::Unchecked,
+                        curve.map_or(Entity::Edge(e), Entity::Curve),
+                    ))
                 }
-            }
-        }
+            })
+            .into_iter()
+            .for_each(|fault| sink.push(fault.with(Entity::Face(face))));
     }
     for e in rows::<Edge>(a.rows(Arena::Edge)) {
         sink.charge()?;
