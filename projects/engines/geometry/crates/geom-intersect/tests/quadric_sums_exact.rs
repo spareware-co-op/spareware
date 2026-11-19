@@ -1,5 +1,5 @@
 //! A stored vector added onto a grid point for the closed forms of two quadrics must be added
-//! exactly (issue #NNNN). Those closed forms take a plane as three grid points, its origin c and
+//! exactly (issue #1067). Those closed forms take a plane as three grid points, its origin c and
 //! c + a and c + b, and an axis as two, its centre c and c + n, n the frame's stored normal (a
 //! cone's apex and apex + n alike). The far points were summed in doubles and then checked to be
 //! whole, but near 2^39 a double holds only 2^-13, so a vector's fraction under half of that
