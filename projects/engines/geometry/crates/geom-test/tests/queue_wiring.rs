@@ -1768,7 +1768,7 @@ fn all_workflows() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for entry in std::fs::read_dir(root().join(WORKFLOWS)).unwrap() {
         let name = entry.unwrap().file_name().into_string().unwrap();
-        if name.ends_with(".yml") {
+        if Path::new(&name).extension().is_some_and(|e| e == "yml") {
             let text = read(&format!("{WORKFLOWS}/{name}"));
             out.insert(name, text);
         }
