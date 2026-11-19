@@ -14,7 +14,12 @@
 # GitHub measuring run 44040144910, join/p5-gen-prune at 5e41301d1 (#892's generated_quadrics)
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
 # GitHub measuring run 44085710191, fix/natural-slow at bae076419 (#974's circle_on_surface)
+# GitHub measuring run 44381701484 (miri_measure=new on fix/natural-arc at 11b1c04e1).
+# GitHub measuring run 44459005330 (miri_measure=new on fix/circle-parallel-cone at e57513b66).
 # GitHub measuring run 44409922854 (miri_measure=new on fix/line-plane-exact at 549e13a42).
+# GitHub measuring run 44436033427 (miri_measure=new on fix/line-plane-exact at 99f67aeba).
+# GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
+# GitHub measuring run 44486343425 (miri_measure=new on fix/trimmed-proven at 27115e329).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1035,6 +1040,7 @@ native-only over 601	geom-intersect	boundary::tests::a_curved_edge_is_halved_dow
 4	geom-intersect	curve_surface::tests::a_lower_half_point_whose_x_is_not_surely_negative_is_its_mirror_a_turn_on
 5	geom-intersect	curve_surface::tests::a_lower_half_point_whose_x_is_surely_negative_is_its_mirror_a_turn_on
 4	geom-intersect	curve_surface::tests::an_upper_half_point_is_kept_on_either_side
+68	geom-intersect	curve_surface::tests::the_enclosures_signs_are_the_exact_signs_wherever_they_exclude_zero
 5	geom-intersect	curve_surface::tests::the_sign_of_a_number_known_not_to_be_zero_is_its_sign_bit
 6	geom-intersect	quadrics::tests::cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines
 6	geom-intersect	quadrics::tests::equal_cylinders_on_parallel_axes_a_hair_apart_meet_in_two_lines
@@ -1195,12 +1201,17 @@ native-only over 601	geom-intersect::attack_g164	a_helix_on_a_leaning_cylinder_o
 native-only over 601	geom-intersect::attack_g164	grazing_is_banded_from_either_side
 native-only over 601	geom-intersect::attack_g164	no_root_is_lost_on_10_000_curves_through_patches
 310	geom-intersect::attack_g164	the_work_is_what_the_clipping_leaves
+23	geom-intersect::attack_g165	a_box_that_ends_exactly_at_an_edge_reaches_it
 218	geom-intersect::attack_g165	a_cone_ending_at_its_apex_is_cut_there
 native-only over 601	geom-intersect::attack_g165	a_cone_on_a_coaxial_cylinder_is_a_circle_on_each_nappe
 11	geom-intersect::attack_g165	a_cylinder_and_cone_about_one_sphere_are_two_conics
 32	geom-intersect::attack_g165	a_domain_trims_what_it_cuts
+44	geom-intersect::attack_g165	a_far_plane_reads_a_piece_past_an_end_from_its_corner
 7	geom-intersect::attack_g165	a_half_plane_keeps_the_half_circle_on_it
 native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends_far_down_its_branch
+26	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
+11	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
+17	geom-intersect::attack_g165	a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept
 11	geom-intersect::attack_g165	a_pipe_tee_is_two_ellipses
 91	geom-intersect::attack_g165	a_plane_cuts_a_cone_in_each_conic
 9	geom-intersect::attack_g165	a_plane_cuts_a_cylinder_in_its_conics
@@ -1209,6 +1220,7 @@ native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends
 22	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cone_is_circles
 26	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cylinder_is_two_circles
 3	geom-intersect::attack_g165	a_stop_stops
+180	geom-intersect::attack_g165	an_offset_from_a_corner_that_ends_at_zero_reaches_it
 native-only over 601	geom-intersect::attack_g165	coaxial_cones_are_circles_or_one
 7	geom-intersect::attack_g165	coaxial_cylinders_are_one_or_none
 native-only over 601	geom-intersect::attack_g165	cones_of_one_slope_on_parallel_axes_meet_in_one_conic
@@ -1398,9 +1410,11 @@ native-only over 601	geom-intersect::boundary_branch	two_patches_meeting_along_a
 native-only over 601	geom-intersect::boundary_units	a_planes_edge_along_a_cylinders_line_is_proven_in_pieces_of_half_a_unit
 native-only over 601	geom-intersect::boundary_units	a_strip_has_the_same_branch_however_its_parameters_are_written
 native-only over 601	geom-intersect::boundary_units	an_edge_along_a_plane_whose_vectors_lean_is_proven_where_it_lies
-5	geom-intersect::circle_on_surface	a_circle_about_a_spheres_centre_line_that_stands_off_it_misses_it
+4	geom-intersect::circle_on_surface	a_circle_about_a_spheres_centre_line_that_stands_off_it_misses_it
+5	geom-intersect::circle_on_surface	a_circle_across_a_round_axis_whose_plane_is_past_the_domain_misses_it
 42	geom-intersect::circle_on_surface	a_circle_at_an_end_of_a_round_domain_is_placed_exactly
 4	geom-intersect::circle_on_surface	a_circle_in_a_plane_is_an_overlap
+88	geom-intersect::circle_on_surface	a_circle_in_the_apex_plane_is_the_engines
 native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cone_is_the_engines
 native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cylinder_is_the_engines
 378	geom-intersect::circle_on_surface	a_circle_off_a_plane_is_the_engines
@@ -1409,13 +1423,21 @@ native-only over 601	geom-intersect::circle_on_surface	a_circle_off_a_cylinder_i
 native-only over 601	geom-intersect::circle_on_surface	a_circle_on_a_sphere_or_about_another_line_is_the_engines
 native-only over 601	geom-intersect::circle_on_surface	a_height_off_the_coordinate_axes_is_placed_only_where_its_enclosure_is_clear_of_an_end
 3	geom-intersect::circle_on_surface	a_plane_whose_domain_holds_none_of_the_circle_misses_it
-26	geom-intersect::circle_on_surface	a_round_domain_short_of_a_turn_is_the_engines_wherever_it_starts
+217	geom-intersect::circle_on_surface	a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis
+22	geom-intersect::circle_on_surface	a_round_domain_short_of_a_turn_is_the_engines_wherever_it_starts
 native-only over 601	geom-intersect::circle_on_surface	an_axis_off_the_coordinate_axes_is_placed_by_enclosures_alone
 3	geom-intersect::circle_on_surface	an_enclosure_clear_of_the_planes_domain_misses_it_on_each_side
 2	geom-intersect::circle_on_surface	an_enclosure_that_fills_the_planes_domain_exactly_is_wholly_held
 native-only over 601	geom-intersect::circle_on_surface	an_enclosure_that_reaches_the_planes_domain_is_not_proven_clear_of_it
-5	geom-intersect::circle_part_in_plane	a_centre_on_a_corner_of_the_domain_gives_the_quarter_circle_between_exact_quarter_turns
-7	geom-intersect::circle_part_in_plane	a_centre_on_a_side_of_the_domain_gives_the_half_circle_between_exact_quarter_turns
+62	geom-intersect::circle_on_surface	circles_a_hair_apart_on_a_coordinate_axis_are_told_apart_exactly
+22	geom-intersect::circle_on_surface	circles_apart_at_an_end_of_the_domain_meet_nothing
+13	geom-intersect::circle_on_surface	circles_apart_in_one_plane_meet_nothing
+native-only over 601	geom-intersect::circle_on_surface	circles_crossing_in_one_plane_meet_at_two_points_as_the_engine_finds
+native-only over 601	geom-intersect::circle_on_surface	circles_crossing_or_touching_at_an_end_of_the_domain_are_the_engines
+native-only over 601	geom-intersect::circle_on_surface	circles_touching_off_the_coordinate_axes_are_the_engines
+15	geom-intersect::circle_on_surface	circles_touching_on_a_coordinate_axis_meet_at_one_tangent_point
+8	geom-intersect::circle_part_in_plane	a_centre_on_a_corner_of_the_domain_gives_the_quarter_circle_between_exact_quarter_turns
+6	geom-intersect::circle_part_in_plane	a_centre_on_a_side_of_the_domain_gives_the_half_circle_between_exact_quarter_turns
 3	geom-intersect::circle_part_in_plane	a_circle_round_the_whole_domain_misses_it
 4	geom-intersect::circle_part_in_plane	a_circle_through_all_four_sides_is_four_arcs
 native-only over 601	geom-intersect::circle_part_in_plane	a_corner_touched_from_outside_is_the_engines
@@ -1456,7 +1478,10 @@ native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plan
 native-only over 601	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_taken_out_whole_by_its_own_equation
 3	geom-intersect::line_plane_exact	a_line_a_hair_off_a_plane_off_the_grid_meets_nothing
 2	geom-intersect::line_plane_exact	a_line_across_a_plane_off_the_grid_is_one_point
+2	geom-intersect::line_plane_exact	a_line_across_a_plane_off_the_grid_is_told_by_its_enclosure_alone
 3	geom-intersect::line_plane_exact	a_line_lying_in_a_plane_off_the_grid_is_one_overlap
+3	geom-intersect::line_plane_exact	a_pair_whose_enclosures_hold_zero_is_told_by_the_exact_signs
+1	geom-intersect::line_plane_exact	a_parallel_line_an_ulp_below_a_plane_whose_enclosures_hold_zero_meets_nothing
 3	geom-intersect::line_plane_exact	a_parallel_line_well_off_a_plane_off_the_grid_meets_nothing
 4	geom-intersect::line_plane_exact	every_product_of_a_general_plane_counts
 84	geom-intersect::loop_far_from_zero	a_cylinder_is_met_however_far_its_turn_starts

@@ -409,8 +409,12 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.when.outputs.kernel == 'true'
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: quality-tools
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       # A push to main: the files its full mutation run covers, and the crates Miri runs. With no
       # base (a first push), every mutant and every crate.
       - name: The files a push to main mutates, and the crates Miri runs

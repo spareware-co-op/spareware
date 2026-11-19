@@ -849,12 +849,11 @@ mod tests {
     /// −0x1.74910d52d3052p+9 to −0x1.6232bdd7abcd2p+9), this walks the doubles from `ln M` and
     /// checks that none has `e^x` in `(M, M + 2^(ie − 60)]`: `e^x` is increasing, so the first
     /// double above `M` decides it.
-    #[test]
-    #[cfg_attr(
-        debug_assertions,
-        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
-    )]
-    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value() {
+    ///
+    /// The check runs as four tests over a quarter of the reduction indices each, so a test run's
+    /// threads take them side by side: whole, it was one test of over three minutes in release.
+    /// Every index belongs to exactly one quarter, and each quarter checks what the whole did.
+    fn no_subnormal_result_just_above_the_midpoint_in_quarter(quarter: i64) {
         use num_traits::ToPrimitive;
         // e^x·2^1074 enclosed within far less than 2^−60 of it: as in the test above.
         let scaled_exp = |x: f64| -> Iv {
@@ -866,8 +865,13 @@ mod tests {
         let step = hf!("0x1p-43"); // the spacing of the doubles in [−1024, −512), where x lies
         let first = libm::rint(hf!("-0x1.74910d52d3052p+9") * S) as i64;
         let last = libm::rint(hf!("-0x1.6232bdd7abcd2p+9") * S) as i64;
-        let mut indices = 0u32;
-        for jt in first..=last {
+        let total = last - first + 1;
+        assert!(total > 200_000, "{total}");
+        // This quarter of the indices: the four quarters tile `first..=last` exactly.
+        let from = first + total * quarter / 4;
+        let to = first + total * (quarter + 1) / 4 - 1;
+        let mut indices = 0i64;
+        for jt in from..=to {
             let (t, ie, th, _) = reduce(jt as f64 / S);
             assert_eq!(t, jt as f64);
             let offset = pow2((-1022i64).checked_sub(ie));
@@ -896,8 +900,46 @@ mod tests {
             }
             indices += 1;
         }
-        eprintln!("{indices} reduction indices, none within 2^(ie - 60) above its midpoint");
-        assert!(indices > 200_000, "{indices}");
+        eprintln!(
+            "{indices} reduction indices (quarter {quarter} of 4), none within 2^(ie - 60) above its midpoint"
+        );
+        assert_eq!(indices, to - from + 1);
+    }
+
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value_quarter_1() {
+        no_subnormal_result_just_above_the_midpoint_in_quarter(0);
+    }
+
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value_quarter_2() {
+        no_subnormal_result_just_above_the_midpoint_in_quarter(1);
+    }
+
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value_quarter_3() {
+        no_subnormal_result_just_above_the_midpoint_in_quarter(2);
+    }
+
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "exact-arithmetic proof check: seconds in release, minutes in a debug build"
+    )]
+    fn no_subnormal_result_just_above_the_midpoint_next_to_its_table_value_quarter_4() {
+        no_subnormal_result_just_above_the_midpoint_in_quarter(3);
     }
 
     /// Step A2: the accurate polynomial and reduction are accurate to far below 2^−95.

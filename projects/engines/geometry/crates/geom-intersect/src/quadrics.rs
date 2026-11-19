@@ -18,7 +18,10 @@
 //! - **Tangency named.** A tangent line or circle is a curve of [`CurveContact::Tangent`] with no band,
 //!   and a touch at one point a [`PointContact::IsolatedTangent`].
 //! - **Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other,
-//!   and each stretch is kept if its middle lies on both.
+//!   and each stretch is kept if its middle lies on both. A curve no edge cuts is kept whole only
+//!   where its middle is proven inside both domains, its box inside each range or reaching only a
+//!   join, and is nothing where that box is off one; where the box reaches an edge of a domain, the
+//!   pair is `None`, the engine's (decision 32.94).
 //! - **A turn far from zero loses nothing.** A loop's parameter, or a round surface's, may start any
 //!   number of turns out. A loop is cut and kept on its domain moved by whole turns, exactly, to
 //!   within two turns of zero, and a surface's turn is read on its own domain the same way, so no
@@ -40,7 +43,9 @@
 //! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840). An end circle
 //! about a line through a sphere's centre that stands off the sphere meets nothing by one exact
 //! sign (decision 32.74: 23 units a call where the engine took 782,683 for a gap of 0.002).
-//! Where the signs
+//! An end circle across the axis of another cylinder or cone parallel to its own meets it where
+//! it meets the circle that surface cuts in its plane (decision 32.86: 1,377 to 3,984 units a
+//! call where the engine took 3,106,700 to 4,193,766 for four such circles). Where the signs
 //! cannot place an edge (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
 //! sphere's latitude; a round domain short of a whole turn; a plane whose vectors run off the
 //! coordinate axes, or whose domain holds a lone point of the circle) it costs the
@@ -1365,6 +1370,121 @@ fn on_surface(surface: &SurfaceKind, at: Vector) -> Result<Option<[Interval; 2]>
     Ok(Some([u, v]))
 }
 
+/// Where a point's box stands on one surface's domain.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Standing {
+    /// Inside the domain: each parameter strictly inside its range, or reaching only an end that is
+    /// a join.
+    Inside,
+    /// Off the domain: a parameter wholly past an end, or a kind with no parameters here.
+    Off,
+    /// Reaching an end that is an edge of the domain, inside it or not: the box cannot tell.
+    Reaching,
+}
+
+/// Whether a turn from `lo` to `hi` stops short of a whole one, so that its ends are edges of the
+/// domain, not its join: [`edges`] and [`rims`] read it alike.
+fn part_turn(lo: f64, hi: f64) -> bool {
+    hi - lo < 2.0
+}
+
+/// Whether a sphere's latitude `v` stops short of a pole, so that a domain ending there has an edge
+/// circle: [`edges`] and [`rims`] read it alike.
+fn short_of_pole(v: f64) -> bool {
+    v.abs() < 0.5
+}
+
+/// Which ends of each parameter's range are edges of the domain, as [`edges`] and [`apex_ends`]
+/// list them: every end of a plane's; a round kind's turn short of a whole one; a cylinder's or
+/// cone's height either way (an end circle, or a cone's apex); a sphere's latitude short of a
+/// pole; a torus's tube turn short of a whole one. A whole turn's ends are its join and a pole is a
+/// point of the sphere, so neither is an edge. A revolution's or extrusion's box is its whole
+/// domain by construction ([`parameters`]), so it names none.
+fn rims(surface: &SurfaceKind) -> [[bool; 2]; 2] {
+    let ((u0, u1), (v0, v1)) = ParamSurface::domain(surface);
+    let turn = [part_turn(u0, u1); 2];
+    match surface {
+        SurfaceKind::Plane(_) => [[true; 2]; 2],
+        SurfaceKind::Sphere(_) => [turn, [short_of_pole(v0), short_of_pole(v1)]],
+        SurfaceKind::Torus(_) => [turn, [part_turn(v0, v1); 2]],
+        SurfaceKind::Revolution(_) | SurfaceKind::Extrusion(_) => [[false; 2]; 2],
+        _ => [turn, [true; 2]],
+    }
+}
+
+/// Where the point in `at` stands on a plane's domain, each end of it an edge. Each parameter is
+/// read from the corner of the domain at its ends, as the point's offset from that corner: a
+/// plane's origin may stand far from its points, and its parameters with it, so far that a double
+/// holds them no closer than the whole domain (a domain of one unit 2^52 out, where the spacing is
+/// 1), and then the box of the parameter itself reaches both ends; the offset is as close as the
+/// point. The corner c + p·a + q·b is a sum of products of doubles, held to a step of its exact
+/// value (an enclosure of each product would be a step of the product wide, a whole unit there).
+/// An end without end is never reached, and its corner is read at 0.
+fn on_plane(plane: &Plane, at: Vector) -> Result<Standing, IntersectError> {
+    let (c, a, b) = plane.vectors();
+    let ([c0, c1, c2], [a0, a1, a2], [b0, b1, b2]) = (c, a, b);
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let det = aa.mul(bb)?.sub(ab.square()?)?;
+    let ((u0, u1), (v0, v1)) = ParamSurface::domain(plane);
+    let mut out = Standing::Inside;
+    for (upper, ends) in [(false, [u0, v0]), (true, [u1, v1])] {
+        let [p, q] = ends.map(|e| if e.is_finite() { e } else { 0.0 });
+        let sum = |x: f64, y: f64, z: f64| enclosed_sum(&[(x, 1.0), (p, y), (q, z)]);
+        let corner = [sum(c0, a0, b0)?, sum(c1, a1, b1)?, sum(c2, a2, b2)?];
+        let w = minus(at, corner)?;
+        let (wa, wb) = (dot(w, a)?, dot(w, b)?);
+        let offsets = [
+            wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?,
+            wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?,
+        ];
+        for (d, end) in offsets.iter().zip(ends) {
+            if !end.is_finite() {
+                continue;
+            }
+            // An offset whose box holds zero may stand on the end's edge, so it reaches it, an
+            // exact zero at either bound included. One that does not lies wholly to one side,
+            // whose sign either bound tells: past the end beyond the upper corner or before the
+            // lower one, else inside.
+            if d.contains(0.0) {
+                out = Standing::Reaching;
+            } else if d.lo().is_sign_positive() == upper {
+                return Ok(Standing::Off);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Where the point in `at` stands on `surface`'s domain, by the box of its parameters. A plane's
+/// box that reaches an end is read again from the domain's corners ([`on_plane`]), whose offsets
+/// can be closer than the box; its other answers stand as they are, since both read the one
+/// parameter and each holds it, so a box inside the range or past an end is proven so either way.
+/// The corners cost six exact sums, and most pieces are far from every end of a plane's domain, so
+/// they are read only where the plain box cannot tell (decision 32.94).
+fn standing(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectError> {
+    let Some([u, v]) = parameters(surface, at)? else {
+        return Ok(Standing::Off);
+    };
+    let (du, dv) = ParamSurface::domain(surface);
+    let [ru, rv] = rims(surface);
+    let mut out = Standing::Inside;
+    for (x, (lo, hi), [at_lo, at_hi]) in [(u, du, ru), (v, dv, rv)] {
+        if x.hi() < lo || x.lo() > hi {
+            return Ok(Standing::Off);
+        }
+        if (at_lo && x.lo() <= lo) || (at_hi && x.hi() >= hi) {
+            out = Standing::Reaching;
+        }
+    }
+    if out == Standing::Reaching
+        && let SurfaceKind::Plane(p) = surface
+    {
+        return on_plane(p, at);
+    }
+    Ok(out)
+}
+
 /// The edges of a surface's domain that are not joins.
 fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
     let mut out = Vec::new();
@@ -1398,7 +1518,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                 let curve = Circle::new(middle(at), c.radius(), c.frame(), (u0, u1))?;
                 out.push(CurveKind::Circle(curve));
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 rulings(surface, (u0, u1), (v0, v1), &mut out)?;
             }
         }
@@ -1417,7 +1537,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                     out.push(CurveKind::Circle(curve));
                 }
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 rulings(surface, (u0, u1), (v0, v1), &mut out)?;
             }
         }
@@ -1426,7 +1546,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
             let on = axis(s.center(), &s.frame(), s.axial_sign())?;
             let r = point(s.radius())?;
             for v in [v0, v1] {
-                if v.abs() < 0.5 {
+                if short_of_pole(v) {
                     let turn = Interval::point(v)?;
                     let at = plus(on.at, scale(on.along, r.mul(turn.sinpi()?)?)?)?;
                     let radius = tight::middle(r.mul(turn.cospi()?)?);
@@ -1434,7 +1554,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                     out.push(CurveKind::Circle(curve));
                 }
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 let (_, [x, y, n]) = s.frame().unit_vectors()?;
                 for u in [u0, u1] {
                     let turn = Interval::point(u)?;
@@ -1732,30 +1852,38 @@ enum Part {
 }
 
 /// The stretches of `curve` on both domains, and how each ends; a run of them on both too short to
-/// be a stretch, a point.
+/// be a stretch, a point. `None` where no edge cuts the curve and its middle's box reaches an edge
+/// of a domain, off neither (decision 32.94): one box cannot say whether the whole curve lies on
+/// both, and the pair is the engine's.
 fn trimmed(
     curve: &CurveKind<3>,
     (a, b): (&SurfaceKind, &SurfaceKind),
     marks: &[Vector],
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<Part>, IntersectError> {
+) -> Result<Option<Vec<Part>>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
     let cut = cuts(curve, marks, meter)?;
     let loops = closed(curve);
     if cut.is_empty() {
-        let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;
-        let kept = stretch(curve, lo, hi)?;
-        return Ok(match kept {
-            Some(c) if inside => {
-                let end = if loops {
-                    CurveEnd::Closed
-                } else {
-                    CurveEnd::Boundary
-                };
-                alloc::vec![Part::Curve(Box::new(c), [end; 2])]
-            }
-            _ => Vec::new(),
-        });
+        // No edge cuts the curve, so it lies on both domains all along or nowhere, and its middle
+        // tells which only where its box is inside both, or off one.
+        let Some(kept) = stretch(curve, lo, hi)? else {
+            return Ok(Some(Vec::new()));
+        };
+        let at = at_parameter(curve, lo * 0.5 + hi * 0.5, meter)?;
+        let (p, q) = (standing(a, at)?, standing(b, at)?);
+        if p == Standing::Off || q == Standing::Off {
+            return Ok(Some(Vec::new()));
+        }
+        if p == Standing::Reaching || q == Standing::Reaching {
+            return Ok(None);
+        }
+        let end = if loops {
+            CurveEnd::Closed
+        } else {
+            CurveEnd::Boundary
+        };
+        return Ok(Some(alloc::vec![Part::Curve(Box::new(kept), [end; 2])]));
     }
     // A loop is written from its first cut on.
     let period = hi - lo;
@@ -1807,7 +1935,7 @@ fn trimmed(
     for run in runs(&stretches, loops) {
         out.extend(kept(curve, &stretches, &run, (lo, hi, loops), meter)?);
     }
-    Ok(out)
+    Ok(Some(out))
 }
 
 /// A stretch of a piece between cuts, and whether it lies on both domains.
@@ -1930,13 +2058,13 @@ fn spans_of(
     Ok(Some(ParamBox::new(&[p, q, r, s])?))
 }
 
-/// The items of a pair's pieces.
+/// The items of a pair's pieces; `None` where [`trimmed`] leaves a piece to the engine.
 fn items_of(
     found: Vec<Piece>,
     a: &SurfaceKind,
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<Item>, IntersectError> {
+) -> Result<Option<Vec<Item>>, IntersectError> {
     let mut items = Vec::new();
     // The pair's marks, found on the first piece that is a curve and kept for the rest.
     let mut found_marks: Option<Vec<Vector>> = None;
@@ -1977,7 +2105,9 @@ fn items_of(
                     Some(list) => list,
                     None => marks(a, b, meter)?,
                 };
-                let parts = trimmed(&nearer(*curve)?, (a, b), &marks, meter)?;
+                let Some(parts) = trimmed(&nearer(*curve)?, (a, b), &marks, meter)? else {
+                    return Ok(None);
+                };
                 found_marks = Some(marks);
                 for kept in parts {
                     let (part, ends) = match kept {
@@ -2015,7 +2145,7 @@ fn items_of(
             }
         }
     }
-    Ok(items)
+    Ok(Some(items))
 }
 
 /// Whether an operand fits the frame's range (12.1): its box over its domain within 2^40 steps of
@@ -2099,7 +2229,9 @@ pub fn natural(
     let Some(found) = pieces(x, y, meter)? else {
         return Ok(None);
     };
-    let items = items_of(found, x, y, meter)?;
+    let Some(items) = items_of(found, x, y, meter)? else {
+        return Ok(None);
+    };
     let answer = Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)?;
     Ok(Some(if turned { answer.swapped(2) } else { answer }))
 }

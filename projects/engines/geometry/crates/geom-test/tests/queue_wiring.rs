@@ -22,11 +22,17 @@
 //!   repository written through `gh` or `git push`) does so only on a push to main or in the merge
 //!   queue, by `&&` terms of its condition with no `||` beside them, so a run by hand, on main or
 //!   on any branch, writes nothing another run trusts. The one upload let through is an in-run
-//!   hand-over of [`HAND_OVERS`].
+//!   hand-over of [`HAND_OVERS`]; a build cache with `save-if: false` only restores.
+//! - `jobs_that_build_the_same_dependencies_share_one_cache_one_saves`: each of
+//!   [`SHARED_CACHES`] (decision 32.90) is named by exactly its jobs across the workflows, one
+//!   way, with no environment hash and no key of their own, on one runner; exactly its one job
+//!   saves it and the others only restore it; and no other cache uses a shared key.
 //! - `an_in_run_hand_over_is_kept_a_day_and_read_in_its_run`: each of [`HAND_OVERS`] (`kernel.yml`'s
-//!   wasm archive and goldens' runner, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
+//!   wasm archive, goldens' runner and macOS x86-64 archive, `kernel-quality.yml`'s Miri plan) is uploaded by exactly its job under exactly
 //!   its name, kept one day, and downloaded under that name by exactly its jobs of the same run;
 //!   no other upload of either workflow is kept one day, and none other uses a hand-over's name.
+//!   `kernel-dev.yml`'s hand-over is held so by
+//!   `the_development_crates_built_on_arm64_run_every_step_of_native`.
 //! - `the_queue_and_the_pull_request_cover_every_leg`: the goldens' matrix (`test`) and the
 //!   pull request's Linux job (`linux`) together cover every native runner in release and debug,
 //!   once each; the suites run optimised with overflow checks and debug assertions on, on Linux
@@ -46,6 +52,22 @@
 //!   (`wasm-build`, its nextest archive uploaded and its doctests once under each runtime) and run
 //!   from that archive in parts (`wasm-suite`, `--partition count:k/n` for k = 1 to n once under
 //!   each runtime), the parts waiting for the build.
+//! - `a_cross_built_part_runs_every_test_of_the_part_it_replaces`: the parts of macOS x86-64's
+//!   release suite that `suite` leaves out (decision 32.82) are entries of its own release parts,
+//!   on macOS x86-64 alone and without doctests; `suite-cross-build` builds exactly those parts on
+//!   macOS arm64 for x86_64-apple-darwin, listing the crates as `suite` does and archiving their
+//!   crates and targets with `suite`'s flags (the build overrides' overflow checks from the
+//!   profile, which RUSTFLAGS no longer reach once `--target` is given), and `suite-cross` runs
+//!   every test of each archive on macOS x86-64's runner, after the build, none filtered.
+//! - `the_development_crates_built_on_arm64_run_every_step_of_native`: `kernel-dev.yml`'s `native`
+//!   runs on kernel.yml's six runners but macOS x86-64, whose run is `native-cross` on the Intel
+//!   runner, after `native-cross-build` on macOS arm64 (decision 32.92); the build installs
+//!   x86_64-apple-darwin and builds for it, with no flag `native` lacks, exactly what each step of
+//!   `native` builds (a test target archived with the step's selection, a tool built with it), in
+//!   order, and nothing else; the run runs each archive's every test, none filtered, and each tool
+//!   with the step's arguments, in order, and nothing else; no step of either is conditional;
+//!   their hand-over is kept a day and read by the run alone; and only a push to main saves the
+//!   build's cache.
 //! - `each_change_is_measured_against_its_base_and_marked_once`: `changes` measures a pull request
 //!   against its merge commit's first parent, the queue against the queue's base and a push against
 //!   the commit main was at; only the merge queue's last job marks a tree as tested, under the name
@@ -101,10 +123,12 @@ struct HandOver {
     read_as: &'static str,
 }
 
-/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts and its
-/// goldens' runner for each system's `test` parts, and `kernel-quality.yml`'s Miri plan
-/// (filtersets, crates and cargo-nextest) for its Miri jobs.
-const HAND_OVERS: [HandOver; 3] = [
+/// Every in-run hand-over: `kernel.yml`'s wasm build archive for its suite's parts, its
+/// goldens' runner for each system's `test` parts and the archive of each macOS x86-64 suite part
+/// built on macOS arm64 for its run, `kernel-quality.yml`'s Miri plan (filtersets, crates and
+/// cargo-nextest) for its Miri jobs, and `kernel-dev.yml`'s macOS x86-64 archives and tools built
+/// on macOS arm64 for its Intel job.
+const HAND_OVERS: [HandOver; 5] = [
     HandOver {
         workflow: "kernel.yml",
         job: "wasm-build",
@@ -120,13 +144,30 @@ const HAND_OVERS: [HandOver; 3] = [
         read_as: RUNNER_ARTIFACT,
     },
     HandOver {
+        workflow: "kernel.yml",
+        job: "suite-cross-build",
+        name: CROSS_ARCHIVE,
+        readers: &["suite-cross"],
+        read_as: CROSS_ARCHIVE,
+    },
+    HandOver {
         workflow: "kernel-quality.yml",
         job: "miri-plan",
         name: "miri-plan",
         readers: &["miri", "miri-pool"],
         read_as: "miri-plan",
     },
+    HandOver {
+        workflow: "kernel-dev.yml",
+        job: "native-cross-build",
+        name: DEV_CROSS,
+        readers: &["native-cross"],
+        read_as: DEV_CROSS,
+    },
 ];
+
+/// The archive a macOS x86-64 suite part built on macOS arm64 hands to its run, by its number.
+const CROSS_ARCHIVE: &str = "suite-macos-x86-64-${{ matrix.part.k }}";
 
 /// The one day an in-run hand-over is kept.
 const HAND_OVER_DAYS: i64 = 1;
@@ -458,6 +499,12 @@ fn writer_problems(kernel: &str) -> Vec<String> {
             {
                 continue;
             }
+            // A build cache that only restores (`save-if: false`, decision 32.90) writes nothing.
+            if uses.starts_with("Swatinem/rust-cache@")
+                && step["with"]["save-if"].as_bool() == Some(false)
+            {
+                continue;
+            }
             let condition = if uses.starts_with("Swatinem/rust-cache@") {
                 text(&step["with"]["save-if"])
             } else if uses.starts_with("actions/upload-artifact@")
@@ -660,6 +707,7 @@ fn leg_problems(kernel: &str) -> Vec<String> {
     found.extend(test_part_problems(&w, &geom_num_tests()));
     found.extend(wasm_part_problems(&w));
     found.extend(wasm_suite_part_problems(&w));
+    found.extend(cross_part_problems(&w));
     found
 }
 
@@ -1365,6 +1413,326 @@ fn wasm_build_problems(steps: &[&Yaml], builds: &[String]) -> Vec<String> {
     found
 }
 
+/// The steps of `job` in `w`.
+fn steps_of<'a>(w: &'a Yaml, job: &str) -> Vec<&'a Yaml> {
+    w["jobs"][job]["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// The step of `job` that lists its crates (`KERNEL_CRATES=`), if any.
+fn listing_of<'a>(w: &'a Yaml, job: &str) -> Option<&'a Yaml> {
+    steps_of(w, job)
+        .into_iter()
+        .find(|s| text(&s["run"]).contains("KERNEL_CRATES="))
+}
+
+/// What is wrong with the parts of macOS x86-64's release suite built on macOS arm64 and run from
+/// their archive on the Intel runner (decision 32.82): an exclusion of `suite` on another target
+/// than macOS x86-64, or not one of its release parts, or a part with doctests (an archive holds
+/// none); `suite-cross-build`'s or `suite-cross`'s parts not exactly those exclusions, in order, or
+/// their crates not listed as `suite` lists them; the build not on macOS arm64, without
+/// x86_64-apple-darwin, without debug assertions, or not archiving its part's own crates and
+/// targets for that target with `suite`'s RUSTFLAGS and the build overrides' overflow checks; the
+/// run not on macOS x86-64's runner, not waiting for the build, or not running every test of the
+/// archive.
+#[allow(clippy::too_many_lines, reason = "one rule after another")]
+fn cross_part_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let suite = &w["jobs"]["suite"];
+    let matrix = &suite["strategy"]["matrix"];
+    let targets: Vec<&Yaml> = matrix["target"].as_vec().into_iter().flatten().collect();
+    let named = |name: &str| targets.iter().find(|t| text(&t["name"]) == name).copied();
+    let (Some(intel), Some(arm)) = (named("macOS x86-64"), named("macOS arm64")) else {
+        found.push("suite has no macOS x86-64 or no macOS arm64 target".to_owned());
+        return found;
+    };
+    let release: Vec<&Yaml> = matrix["part"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .filter(|p| text(&p["mode"]) == "release")
+        .collect();
+    let mut excluded: Vec<&Yaml> = Vec::new();
+    for x in matrix["exclude"].as_vec().into_iter().flatten() {
+        let part = &x["part"];
+        if &x["target"] != intel {
+            found.push(format!(
+                "suite leaves out part {} on {:?}, not on macOS x86-64 alone",
+                part["k"].as_i64().unwrap_or(0),
+                text(&x["target"]["name"])
+            ));
+        }
+        if !release.contains(&part) {
+            found.push(format!(
+                "suite leaves out {part:?}, which is none of its release parts"
+            ));
+        }
+        excluded.push(part);
+    }
+    // An archive holds no doctest: the moved parts with doctests run them in jobs of their own on
+    // the Intel runner, as `suite`'s parts run them.
+    let with_doc: Vec<&Yaml> = excluded
+        .iter()
+        .copied()
+        .filter(|p| p["doc"].as_bool() == Some(true))
+        .collect();
+    found.extend(cross_doc_problems(w, &with_doc, intel));
+    let build_job = "suite-cross-build";
+    let run_job = "suite-cross";
+    for job in [build_job, run_job] {
+        let parts: Vec<&Yaml> = w["jobs"][job]["strategy"]["matrix"]["part"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+            .collect();
+        if parts != excluded {
+            found.push(format!(
+                "{job}'s parts {parts:?} are not the parts suite leaves out on macOS x86-64 \
+                 {excluded:?}"
+            ));
+        }
+        if listing_of(w, job).is_none() || listing_of(w, job) != listing_of(w, "suite") {
+            found.push(format!(
+                "{job} does not list its part's crates as suite does"
+            ));
+        }
+    }
+    if excluded.is_empty() {
+        return found;
+    }
+    let build = &w["jobs"][build_job];
+    if text(&build["runs-on"]) != os(arm) {
+        found.push(format!(
+            "{build_job} runs on {:?}, not macOS arm64's {:?}",
+            text(&build["runs-on"]),
+            os(arm)
+        ));
+    }
+    if build["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+        != suite["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+    {
+        found.push(format!(
+            "{build_job} builds without suite's debug assertions"
+        ));
+    }
+    let build_steps = steps_of(w, build_job);
+    if !build_steps.iter().any(|s| {
+        text(&s["uses"]).starts_with("dtolnay/rust-toolchain@")
+            && text(&s["with"]["targets"]) == "x86_64-apple-darwin"
+    }) {
+        found.push(format!(
+            "{build_job} does not install the x86_64-apple-darwin target"
+        ));
+    }
+    let flags = steps_of(w, "suite")
+        .into_iter()
+        .find(|s| text(&s["run"]).starts_with("cargo nextest run $KERNEL_CRATES --release"))
+        .map(|s| s["env"]["RUSTFLAGS"].clone());
+    let archive = format!(
+        "cargo nextest archive $KERNEL_CRATES --target x86_64-apple-darwin --release --locked \
+         ${{{{ matrix.part.targets }}}} --archive-file \"$RUNNER_TEMP/{CROSS_ARCHIVE}.tar.zst\""
+    );
+    let archives: Vec<&&Yaml> = build_steps
+        .iter()
+        .filter(|s| text(&s["run"]).starts_with("cargo nextest archive"))
+        .collect();
+    match archives.as_slice() {
+        [s] => {
+            if text(&s["run"]) != archive {
+                found.push(format!(
+                    "{build_job} does not archive its part's own crates and targets for \
+                     x86_64-apple-darwin: {:?}",
+                    text(&s["run"])
+                ));
+            }
+            if flags.is_none() || Some(&s["env"]["RUSTFLAGS"]) != flags.as_ref() {
+                found.push(format!(
+                    "{build_job} archives with other RUSTFLAGS than suite's release run"
+                ));
+            }
+            if text(&s["env"]["CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OVERFLOW_CHECKS"]) != "true" {
+                found.push(format!(
+                    "{build_job} builds its build scripts and proc macros without overflow checks"
+                ));
+            }
+            if !text(&s["if"]).contains("env.KERNEL_CRATES != ''") {
+                found.push(format!("{build_job} archives with no crate selected"));
+            }
+        }
+        _ => found.push(format!(
+            "{build_job} does not archive its part once: {} archive steps",
+            archives.len()
+        )),
+    }
+    let run = &w["jobs"][run_job];
+    if text(&run["runs-on"]) != os(intel) {
+        found.push(format!(
+            "{run_job} runs on {:?}, not macOS x86-64's {:?}",
+            text(&run["runs-on"]),
+            os(intel)
+        ));
+    }
+    if !strings(&run["needs"]).iter().any(|n| n == build_job) {
+        found.push(format!("{run_job} does not wait for {build_job}"));
+    }
+    // Unpacked into the checkout, at the build's own path, so baked binary paths resolve; the
+    // registry fetched first for the tests that run cargo offline.
+    let every = format!(
+        "cargo nextest run --archive-file \"$RUNNER_TEMP/{CROSS_ARCHIVE}.tar.zst\" \
+         --workspace-remap . --extract-to . --extract-overwrite --no-fail-fast"
+    );
+    let runs: Vec<String> = steps_of(w, run_job)
+        .into_iter()
+        .map(|s| text(&s["run"]))
+        .filter(|r| r.starts_with("cargo"))
+        .collect();
+    if runs != ["cargo fetch --locked", every.as_str()] {
+        found.push(format!(
+            "{run_job} does not run every test of its archive, and only that: {runs:#?}, not \
+             {every:?}"
+        ));
+    }
+    found
+}
+
+/// The crates `suite-cross-doc` must take, from the moved parts with doctests (`with_doc`), in
+/// their order, each kept only by the job whose `parts` names its number: a crate set apart by its
+/// name, a share by the job `scope`'s share of its number.
+fn cross_doc_share(with_doc: &[&Yaml]) -> String {
+    with_doc
+        .iter()
+        .map(|p| {
+            let k = p["k"].as_i64().unwrap_or(0);
+            let crates = if p["crate"].is_badvalue() {
+                format!("fromJSON(needs.scope.outputs.parts)['{k}']")
+            } else {
+                format!("'{}'", text(&p["crate"]))
+            };
+            format!("${{{{ contains(matrix.doc.parts, ' {k} ') && {crates} || '' }}}}")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What is wrong with how `suite-cross-doc`'s jobs share out the moved parts with doctests
+/// (`with_doc`): a part in no job or in two, a part that is none of them, or the jobs not numbered
+/// 1 to n of n. A job's `parts` is the parts' numbers with a space on each side, as SHARE reads it.
+fn cross_doc_jobs_problems(j: &Yaml, with_doc: &[&Yaml]) -> Vec<String> {
+    let job = "suite-cross-doc";
+    let mut found = Vec::new();
+    let jobs = j["strategy"]["matrix"]["doc"]
+        .as_vec()
+        .cloned()
+        .unwrap_or_default();
+    let n = i64::try_from(jobs.len()).unwrap_or(0);
+    let mut taken = Vec::new();
+    for (i, d) in (1_i64..).zip(&jobs) {
+        if d["k"].as_i64() != Some(i) || d["n"].as_i64() != Some(n) {
+            found.push(format!("{job}'s jobs are not numbered 1 to {n} of {n}"));
+        }
+        let parts = text(&d["parts"]);
+        if !parts.starts_with(' ') || !parts.ends_with(' ') {
+            found.push(format!(
+                "{job}'s job {i} names its parts without a space each side"
+            ));
+        }
+        taken.extend(
+            parts
+                .split_whitespace()
+                .map(|s| s.parse::<i64>().unwrap_or(0)),
+        );
+    }
+    let mut got = taken.clone();
+    got.sort_unstable();
+    let mut wanted: Vec<i64> = with_doc
+        .iter()
+        .map(|p| p["k"].as_i64().unwrap_or(0))
+        .collect();
+    wanted.sort_unstable();
+    if got != wanted {
+        found.push(format!(
+            "{job}'s jobs take the parts {taken:?}, not each moved part with doctests once \
+             {wanted:?}"
+        ));
+    }
+    found
+}
+
+/// What is wrong with `suite-cross-doc`, the jobs that run the doctests of every moved part that
+/// has them (`with_doc`): the parts not shared out one to a job ([`cross_doc_jobs_problems`]); its
+/// crates not exactly those parts' ([`cross_doc_share`]) or not narrowed as `suite` narrows them;
+/// not on macOS x86-64's runner (`intel`); without `suite`'s debug assertions; or its doctests not
+/// `suite`'s release doctest step with its flags.
+fn cross_doc_problems(w: &Yaml, with_doc: &[&Yaml], intel: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let job = "suite-cross-doc";
+    let j = &w["jobs"][job];
+    if with_doc.is_empty() {
+        if !j.is_badvalue() {
+            found.push(format!("{job} runs, but no moved part has doctests"));
+        }
+        return found;
+    }
+    found.extend(cross_doc_jobs_problems(j, with_doc));
+    let wanted = cross_doc_share(with_doc);
+    match (listing_of(w, job), listing_of(w, "suite")) {
+        (Some(ours), Some(theirs)) => {
+            if text(&ours["env"]["SHARE"]) != wanted {
+                found.push(format!(
+                    "{job}'s crates are {:?}, not the moved parts' with doctests {wanted:?}",
+                    text(&ours["env"]["SHARE"])
+                ));
+            }
+            if ours["run"] != theirs["run"]
+                || ours["env"]["SELECTED"] != theirs["env"]["SELECTED"]
+                || text(&ours["env"]["MODE"]) != "release"
+            {
+                found.push(format!(
+                    "{job} does not narrow its crates as suite's release parts do"
+                ));
+            }
+        }
+        _ => found.push(format!("{job} does not list its crates")),
+    }
+    if text(&j["runs-on"]) != os(intel) {
+        found.push(format!(
+            "{job} runs on {:?}, not macOS x86-64's {:?}",
+            text(&j["runs-on"]),
+            os(intel)
+        ));
+    }
+    let suite = &w["jobs"]["suite"];
+    if j["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+        != suite["env"]["CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS"]
+    {
+        found.push(format!("{job} builds without suite's debug assertions"));
+    }
+    let doc = |s: &&Yaml| text(&s["run"]).starts_with("cargo test $KERNEL_CRATES --doc");
+    let theirs: Vec<&Yaml> = steps_of(w, "suite")
+        .into_iter()
+        .filter(doc)
+        .filter(|s| text(&s["if"]).contains("matrix.part.mode == 'release'"))
+        .collect();
+    let ours: Vec<&Yaml> = steps_of(w, job).into_iter().filter(doc).collect();
+    match (theirs.as_slice(), ours.as_slice()) {
+        ([t], [o]) => {
+            if o["run"] != t["run"] || o["env"] != t["env"] {
+                found.push(format!(
+                    "{job} does not run suite's release doctests with its flags"
+                ));
+            }
+            if !text(&o["if"]).contains("env.KERNEL_CRATES != ''") {
+                found.push(format!("{job} runs its doctests with no crate selected"));
+            }
+        }
+        _ => found.push(format!("{job} does not run the doctests once")),
+    }
+    found
+}
+
 /// geom-num's test targets: the files of its `tests` folder.
 fn geom_num_tests() -> Vec<String> {
     crate_tests("geom-num")
@@ -1534,6 +1902,16 @@ fn the_ruleset_requires_checks_that_always_report() {
         .iter()
         .any(|p| p.contains("does not judge [\"wasm-build\"]"))
     );
+    // The cross-built part's run left out of the last job: its failed tests would go unjudged.
+    assert!(
+        seeded(
+            "kernel.yml",
+            " suite, suite-cross-build, suite-cross, suite-cross-doc, wasm,",
+            " suite, suite-cross-build, suite-cross, wasm,"
+        )
+        .iter()
+        .any(|p| p.contains("does not judge [\"suite-cross-doc\"]"))
+    );
     assert!(
         seeded(
             "kernel-quality.yml",
@@ -1565,20 +1943,26 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
         ),
         // A job dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The goldens' runner's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope test suite wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // The wasm32 suite's build dropped from what the queue must run.
         (
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-build wasm-suite big-endian large-models\"",
-            "merge_group) must=\"lint scope golden-runner test suite wasm wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-suite big-endian large-models\"",
+            "on merge_group the jobs",
+        ),
+        // The cross-built part's run dropped from what the queue must run (decision 32.82).
+        (
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
+            "merge_group) must=\"lint scope golden-runner test suite suite-cross-build suite-cross-doc wasm wasm-build wasm-suite big-endian large-models\"",
             "on merge_group the jobs",
         ),
         // A job that would run again on a tree the queue passed.
@@ -1625,8 +2009,9 @@ fn each_event_runs_the_jobs_the_last_job_expects() {
     }
 
     // An arm naming a push and a run by hand together is read as both, and asks the same.
-    let full = "lint scope linux guard solidcore solidcore-wasm golden-runner test suite wasm \
-                wasm-build wasm-suite big-endian large-models";
+    let full = "lint scope linux guard solidcore solidcore-wasm golden-runner test suite \
+                suite-cross-build suite-cross suite-cross-doc wasm wasm-build wasm-suite big-endian \
+                large-models";
     let both = kernel.replacen(
         "              *) must=",
         &format!(
@@ -1663,8 +2048,14 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
         ),
         // A run by hand let in beside the terms.
         (
-            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: large-models",
-            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: large-models",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: wasm-build-",
+            "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}\n          key: wasm-build-",
+            "wasm-build's step 3",
+        ),
+        // A cache that only restores made to save on any run of main.
+        (
+            "          save-if: false\n          shared-key: geom-test-release-tests-",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          shared-key: geom-test-release-tests-",
             "large-models's step 3",
         ),
         // The queue's mark uploaded on every event.
@@ -1711,6 +2102,207 @@ fn a_run_by_hand_writes_nothing_later_runs_read() {
         let k = kernel.replacen(from, to, 1);
         assert_ne!(k, kernel, "the planted edit {from:?} applies");
         let found = writer_problems(&k);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+/// A build cache several jobs share (decision 32.90): the start of its `shared-key`, the one job
+/// that saves it and the jobs that only restore it, each as (workflow, job). Every job of a group
+/// builds the same dependencies (the same units of cargo's unit graph outside the workspace), so
+/// one copy serves them all.
+struct SharedCache {
+    key: &'static str,
+    saver: (&'static str, &'static str),
+    readers: &'static [(&'static str, &'static str)],
+}
+
+/// The shared build caches: geom-test's development build on Linux x86-64, and its release test
+/// build there.
+const SHARED_CACHES: [SharedCache; 2] = [
+    SharedCache {
+        key: "geom-test-dev-",
+        saver: ("kernel-gate.yml", "rules"),
+        readers: &[
+            ("kernel-fuzz.yml", "select"),
+            ("kernel-gate.yml", "deny"),
+            ("kernel-golden.yml", "store"),
+            ("kernel-quality.yml", "when"),
+            ("kernel-release.yml", "freeze"),
+            ("kernel.yml", "scope"),
+        ],
+    },
+    SharedCache {
+        key: "geom-test-release-tests-",
+        saver: ("kernel-oracles.yml", "ember-build"),
+        readers: &[("kernel.yml", "large-models")],
+    },
+];
+
+/// Every workflow file, by name, as text.
+fn all_workflows() -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for entry in std::fs::read_dir(root().join(WORKFLOWS)).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if Path::new(&name).extension().is_some_and(|e| e == "yml") {
+            let text = read(&format!("{WORKFLOWS}/{name}"));
+            out.insert(name, text);
+        }
+    }
+    out
+}
+
+/// What is wrong with the shared build caches of `workflows` (file name to text): each of
+/// [`SHARED_CACHES`] is named by exactly its jobs, one of which saves it (its `save-if` anything
+/// but `false`) and the rest of which only restore it (`save-if: false`); every one of them leaves
+/// the environment hash out of the name (rust-cache's hash counts the runner image's own
+/// compilers and each workflow's own variables, so with it the jobs' names never meet) and gives
+/// no `key` beside the shared one; all of them run on the same runner; and no other cache uses a
+/// shared key.
+fn shared_cache_problems(workflows: &BTreeMap<String, String>) -> Vec<String> {
+    let mut found = Vec::new();
+    // Each step with a shared key: (shared key, workflow, job, saves, runner).
+    let mut members: Vec<(String, String, String, bool, String)> = Vec::new();
+    for (file, source) in workflows {
+        let w = parse(source);
+        for job in keys(&w["jobs"]) {
+            for step in w["jobs"][job.as_str()]["steps"]
+                .as_vec()
+                .into_iter()
+                .flatten()
+            {
+                if !text(&step["uses"]).starts_with("Swatinem/rust-cache@") {
+                    continue;
+                }
+                let with = &step["with"];
+                let shared = text(&with["shared-key"]);
+                if shared.is_empty() {
+                    continue;
+                }
+                let said = format!("{file}'s {job}");
+                if with["add-rust-environment-hash-key"].as_bool() != Some(false) {
+                    found.push(format!("{said} names {shared} with the environment hash"));
+                }
+                if !with["key"].is_badvalue() {
+                    found.push(format!("{said} gives a key beside the shared key {shared}"));
+                }
+                let saves = with["save-if"].as_bool() != Some(false);
+                let runner = text(&w["jobs"][job.as_str()]["runs-on"]);
+                members.push((shared, file.clone(), job.clone(), saves, runner));
+            }
+        }
+    }
+    for cache in &SHARED_CACHES {
+        let of: Vec<_> = members
+            .iter()
+            .filter(|m| m.0.starts_with(cache.key))
+            .collect();
+        let named: BTreeSet<&str> = of.iter().map(|m| m.0.as_str()).collect();
+        if named.len() != 1 {
+            found.push(format!("{} is named {named:?}, not one way", cache.key));
+        }
+        let savers: Vec<(&str, &str)> = of
+            .iter()
+            .filter(|m| m.3)
+            .map(|m| (m.1.as_str(), m.2.as_str()))
+            .collect();
+        if savers != [cache.saver] {
+            found.push(format!(
+                "{} is saved by {savers:?}, not by {:?} alone",
+                cache.key, cache.saver
+            ));
+        }
+        let readers: BTreeSet<(&str, &str)> = of
+            .iter()
+            .filter(|m| !m.3)
+            .map(|m| (m.1.as_str(), m.2.as_str()))
+            .collect();
+        let want: BTreeSet<(&str, &str)> = cache.readers.iter().copied().collect();
+        if readers != want {
+            found.push(format!(
+                "{} is restored only by {readers:?}, not by {want:?}",
+                cache.key
+            ));
+        }
+        let runners: BTreeSet<&str> = of.iter().map(|m| m.4.as_str()).collect();
+        if runners.len() > 1 {
+            found.push(format!("{} is used on runners {runners:?}", cache.key));
+        }
+    }
+    for m in &members {
+        if !SHARED_CACHES.iter().any(|c| m.0.starts_with(c.key)) {
+            found.push(format!(
+                "{}'s {} uses the shared key {}, which no group names",
+                m.1, m.2, m.0
+            ));
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn jobs_that_build_the_same_dependencies_share_one_cache_one_saves() {
+    let workflows = all_workflows();
+    assert_eq!(shared_cache_problems(&workflows), Vec::<String>::new());
+
+    // Seeded violations: each must be reported.
+    let dev_reader = "          save-if: false\n          shared-key: geom-test-dev-";
+    for (file, from, to, said) in [
+        // A second job saving the shared cache.
+        (
+            "kernel-gate.yml",
+            dev_reader,
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          shared-key: geom-test-dev-",
+            "is saved by [(\"kernel-gate.yml\", \"rules\"), (\"kernel-gate.yml\", \"deny\")]",
+        ),
+        // The saver made to restore only, so nothing saves it.
+        (
+            "kernel-gate.yml",
+            "          save-if: ${{ github.ref == 'refs/heads/main' }}\n          # The one cache",
+            "          save-if: false\n          # The one cache",
+            "geom-test-dev- is saved by []",
+        ),
+        // A reader that keeps the environment hash, so its name never meets the saver's.
+        (
+            "kernel.yml",
+            "          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}\n          add-rust-environment-hash-key: false\n",
+            "          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}\n",
+            "kernel.yml's scope names geom-test-dev-${{ env.RUST_TOOLCHAIN }} with the environment hash",
+        ),
+        // A reader under a name of its own.
+        (
+            "kernel-fuzz.yml",
+            "shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}",
+            "shared-key: geom-test-dev-fuzz-${{ env.RUST_TOOLCHAIN }}",
+            "geom-test-dev- is named",
+        ),
+        // A reader that goes back to a cache of its own.
+        (
+            "kernel-golden.yml",
+            dev_reader,
+            "          save-if: false\n          key: store\n          shared-key: geom-test-dev-",
+            "kernel-golden.yml's store gives a key beside the shared key",
+        ),
+        // A reader on another runner, whose build the saver's cannot hold.
+        (
+            "kernel-oracles.yml",
+            "    name: EMBER's pairs' test, built once\n    needs: scope\n    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')\n    runs-on: ubuntu-latest\n",
+            "    name: EMBER's pairs' test, built once\n    needs: scope\n    if: contains(format(' {0} ', needs.scope.outputs.crates), ' geom-test ')\n    runs-on: ubuntu-24.04-arm\n",
+            "geom-test-release-tests- is used on runners",
+        ),
+    ] {
+        let mut changed = workflows.clone();
+        let source = changed.get_mut(file).unwrap();
+        let edited = source.replacen(from, to, 1);
+        assert_ne!(
+            &edited, source,
+            "the planted edit {from:?} applies in {file}"
+        );
+        *source = edited;
+        let found = shared_cache_problems(&changed);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
@@ -1796,6 +2388,327 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         ))),
         "{found:#?}"
     );
+    // The macOS x86-64 archive kept a month: no longer a hand-over, and it is refused both as a
+    // hand-over not made and as a write for later runs.
+    let cross = "          name: suite-macos-x86-64-${{ matrix.part.k }}\n          path: ${{ runner.temp }}/suite-macos-x86-64-${{ matrix.part.k }}.tar.zst\n          retention-days: 1\n";
+    let planted = kernel.replacen(
+        cross,
+        &cross.replace("retention-days: 1", "retention-days: 30"),
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found.iter().any(|p| p.contains(&format!(
+            "suite-cross-build does not hand {CROSS_ARCHIVE} over once"
+        ))),
+        "{found:#?}"
+    );
+    assert!(
+        writer_problems(&planted)
+            .iter()
+            .any(|p| p.contains("suite-cross-build's step 7")),
+        "{:#?}",
+        writer_problems(&planted)
+    );
+    // The archive downloaded by another job than its run.
+    let planted = kernel.replacen(
+        "          name: wasm-${{ matrix.part.build }}\n          path: ${{ runner.temp }}\n",
+        "          name: suite-macos-x86-64-${{ matrix.part.k }}\n          path: ${{ runner.temp }}\n",
+        1,
+    );
+    assert_ne!(planted, kernel);
+    let found = hand_over_problems("kernel.yml", &planted);
+    assert!(
+        found.iter().any(|p| p
+            .contains("wasm-suite's step 5 downloads suite-macos-x86-64-${{ matrix.part.k }}, which is not handed to it")),
+        "{found:#?}"
+    );
+}
+
+/// A planted edit of `kernel.yml`: `from` replaced by `to` once, after the first `after` (a job's
+/// header), so a line several jobs share is changed in that job alone.
+fn planted_after(kernel: &str, after: &str, from: &str, to: &str) -> String {
+    let at = kernel.find(after).unwrap_or_else(|| panic!("no {after:?}"));
+    let (head, tail) = kernel.split_at(at);
+    assert!(tail.contains(from), "{after:?} lacks {from:?}");
+    format!("{head}{}", tail.replacen(from, to, 1))
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+#[allow(clippy::too_many_lines, reason = "the cases are written out in full")]
+fn a_cross_built_part_runs_every_test_of_the_part_it_replaces() {
+    let kernel = read(&format!("{WORKFLOWS}/kernel.yml"));
+    let w = parse(&kernel);
+    assert_eq!(cross_part_problems(&w), Vec::<String>::new());
+    // Every release part of macOS x86-64 (decision 32.82).
+    let parts = &w["jobs"]["suite"]["strategy"]["matrix"]["exclude"];
+    assert_eq!(parts.as_vec().map(Vec::len), Some(25));
+
+    let build = "  suite-cross-build:\n";
+    let run = "  suite-cross:\n";
+    let entry = "          - { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[b-z]*'\" }\n";
+    // Seeded violations: each must be reported.
+    for (planted, said) in [
+        // A second part left out of `suite` on macOS x86-64 that no cross job runs: it runs nowhere.
+        (
+            kernel.replacen(
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n          - part: { mode: release, k: 23, n: 25, crate: geom-format, targets: \"--test '[d-z]*'\" }\n            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                1,
+            ),
+            "suite-cross-build's parts",
+        ),
+        // The part left out on Windows x86-64, where nothing runs it.
+        (
+            kernel.replacen(
+                "            target: { name: macOS x86-64, os: macos-15-intel }\n",
+                "            target: { name: Windows x86-64, os: windows-latest }\n",
+                1,
+            ),
+            "not on macOS x86-64 alone",
+        ),
+        // A part left out that is none of suite's own: the real part 21 still runs natively.
+        (
+            kernel.replacen(
+                "          - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[b-z]*'\" }\n",
+                "          - part: { mode: release, k: 21, n: 25, crate: geom-bench, targets: \"--test '[c-z]*'\" }\n",
+                1,
+            ),
+            "which is none of its release parts",
+        ),
+        // The build archives other targets than the part it replaces: geom-bench's `b` tests lost.
+        (
+            planted_after(&kernel, build, entry, &entry.replace("[b-z]", "[c-z]")),
+            "suite-cross-build's parts",
+        ),
+        // The run's part another than the build's.
+        (
+            planted_after(&kernel, run, entry, &entry.replace("k: 21", "k: 20")),
+            "suite-cross's parts",
+        ),
+        // A part with doctests moved: an archive holds no doctest, so they would run nowhere.
+        (
+            kernel.replace(
+                "{ mode: release, k: 21, n: 25, crate: geom-bench,",
+                "{ mode: release, k: 21, n: 25, doc: true, crate: geom-bench,",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // The build's crates listed otherwise than suite's.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "(matrix.part.crate || fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)])",
+                "(fromJSON(needs.scope.outputs.parts)[format('{0}', matrix.part.k)])",
+            ),
+            "suite-cross-build does not list its part's crates as suite does",
+        ),
+        // The run's crates listed otherwise: it would skip its archive.
+        (
+            planted_after(&kernel, run, "case \" $SELECTED \" in", "case \" $SHARE \" in"),
+            "suite-cross does not list its part's crates as suite does",
+        ),
+        // Built on the Intel runner: the trial's point lost, and not what was measured.
+        (
+            planted_after(&kernel, build, "    runs-on: macos-latest\n", "    runs-on: macos-15-intel\n"),
+            "suite-cross-build runs on \"macos-15-intel\"",
+        ),
+        // Built without debug assertions, which suite's release legs have.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n",
+                "",
+            ),
+            "builds without suite's debug assertions",
+        ),
+        // No x86_64-apple-darwin installed.
+        (
+            planted_after(&kernel, build, "          targets: x86_64-apple-darwin\n", ""),
+            "does not install the x86_64-apple-darwin target",
+        ),
+        // Built for the arm64 runner's own target: binaries the Intel runner cannot run as tested.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "archive $KERNEL_CRATES --target x86_64-apple-darwin --release",
+                "archive $KERNEL_CRATES --release",
+            ),
+            "does not archive its part's own crates and targets for x86_64-apple-darwin",
+        ),
+        // Built without overflow checks in the tested code.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+                "          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            ),
+            "archives with other RUSTFLAGS than suite's release run",
+        ),
+        // Build scripts and proc macros without the overflow checks RUSTFLAGS gave them natively.
+        (
+            planted_after(
+                &kernel,
+                build,
+                "          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OVERFLOW_CHECKS: \"true\"\n",
+                "",
+            ),
+            "builds its build scripts and proc macros without overflow checks",
+        ),
+        // Run on the arm64 runner, under no Intel processor.
+        (
+            planted_after(&kernel, run, "    runs-on: macos-15-intel\n", "    runs-on: macos-latest\n"),
+            "suite-cross runs on \"macos-latest\"",
+        ),
+        // The run started before its archive exists.
+        (
+            kernel.replacen(
+                "    needs: [changes, lint, scope, suite-cross-build]\n",
+                "    needs: [changes, lint, scope]\n",
+                1,
+            ),
+            "suite-cross does not wait for suite-cross-build",
+        ),
+        // A test filtered out of the run to make a time.
+        (
+            kernel.replacen(
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast -E 'not test(=every_digest_matches_its_recorded_value)'\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // Unpacked in a temporary folder: a test's baked binary path would name nothing.
+        (
+            kernel.replacen(
+                " --extract-to . --extract-overwrite --no-fail-fast\n",
+                " --no-fail-fast\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // The registry not fetched: attack_g11's offline cargo would find no sources.
+        (
+            kernel.replacen(
+                "      - name: Fetch the locked dependencies\n        if: ${{ env.KERNEL_CRATES != '' }}\n        run: cargo fetch --locked\n",
+                "",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+        // A crate set apart dropped from the doctest jobs: its doctests would run nowhere.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "            ${{ contains(matrix.doc.parts, ' 14 ') && 'geom-test' || '' }}\n",
+                "",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // A share dropped from the doctest jobs.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "            ${{ contains(matrix.doc.parts, ' 3 ') && fromJSON(needs.scope.outputs.parts)['3'] || '' }}\n",
+                "",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // A crate kept by no job: the gate names a part no job takes.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "contains(matrix.doc.parts, ' 22 ')",
+                "contains(matrix.doc.parts, ' 23 ')",
+            ),
+            "suite-cross-doc's crates are",
+        ),
+        // A part in no doctest job: its doctests would run nowhere.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", " 24 \" }", " \" }"),
+            "suite-cross-doc's jobs take the parts",
+        ),
+        // A part in two doctest jobs.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "parts: \" 1 ", "parts: \" 24 1 "),
+            "suite-cross-doc's jobs take the parts",
+        ),
+        // A part's number without its spaces: SHARE would not find it.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "parts: \" 1 ", "parts: \"1 "),
+            "names its parts without a space each side",
+        ),
+        // The doctest jobs misnumbered.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "- { k: 1, n: ", "- { k: 2, n: "),
+            "suite-cross-doc's jobs are not numbered",
+        ),
+        // The doctest job's crates narrowed otherwise.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "case \" $SELECTED \" in", "case \" $SHARE \" in"),
+            "suite-cross-doc does not narrow its crates",
+        ),
+        // The doctests run on the arm64 runner.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "    runs-on: macos-15-intel\n",
+                "    runs-on: macos-latest\n",
+            ),
+            "suite-cross-doc runs on \"macos-latest\"",
+        ),
+        // The doctests without overflow checks.
+        (
+            planted_after(&kernel, "  suite-cross-doc:\n", "          RUSTFLAGS: -C overflow-checks=on\n", ""),
+            "suite-cross-doc does not run suite's release doctests with its flags",
+        ),
+        // A doctest skipped.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "--doc --release --locked --no-fail-fast\n",
+                "--doc --release --locked --no-fail-fast -- --skip geom_num\n",
+            ),
+            "suite-cross-doc does not run suite's release doctests with its flags",
+        ),
+        // The doctests without debug assertions.
+        (
+            planted_after(
+                &kernel,
+                "  suite-cross-doc:\n",
+                "      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: \"true\"\n",
+                "",
+            ),
+            "suite-cross-doc builds without suite's debug assertions",
+        ),
+        // Half the archive's tests run.
+        (
+            kernel.replacen(
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast\n",
+                "--workspace-remap . --extract-to . --extract-overwrite --no-fail-fast --partition count:1/2\n",
+                1,
+            ),
+            "suite-cross does not run every test of its archive",
+        ),
+    ] {
+        assert_ne!(planted, kernel, "{said}: the planted edit applies");
+        let found = cross_part_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
 
 #[cfg_attr(
@@ -1993,8 +2906,8 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A platform left out of the queue.
         (
-            "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
-            "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The one plain debug run",
+            "          - name: Windows arm64\n            os: windows-11-arm\n          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The parts of macOS x86-64 built",
+            "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n        # The parts of macOS x86-64 built",
             "not every other runner",
         ),
     ] {
@@ -2492,6 +3405,37 @@ fn bench_problems(bench: &str) -> Vec<String> {
     found
 }
 
+/// What is wrong with how each part of the instruction gate reads parts.tsv's units and keeps the
+/// Gungraun runner (see [`bench_part_problems`]).
+fn split_and_cache_problems(w: &Yaml) -> Vec<String> {
+    let mut found = Vec::new();
+    let jobs = &w["jobs"];
+    // Each part reads parts.tsv's units, a group or `group/op` for a group the plan splits by
+    // operation (mesh), and keeps the Gungraun runner in the Rust cache (cache-directories), whose `save-if`
+    // lets only main's part 1 save it.
+    for job in ["instructions-base", "instructions-parts"] {
+        if !runs(w, job).contains("by_op[substr($1, 1, i - 1)] = 1")
+            || !runs(w, job).contains("sub(\"/\", \"::\", u); print u")
+        {
+            found.push(format!(
+                "{job} does not read parts.tsv's split groups by operation"
+            ));
+        }
+        let kept = jobs[job]["steps"].as_vec().into_iter().flatten().any(|s| {
+            text(&s["uses"]).starts_with("Swatinem/rust-cache@")
+                && text(&s["with"]["cache-directories"])
+                    .lines()
+                    .any(|d| d == "~/.gungraun-runner")
+        });
+        if !kept {
+            found.push(format!(
+                "{job} does not keep the Gungraun runner in its Rust cache"
+            ));
+        }
+    }
+    found
+}
+
 /// What is wrong with the instruction gate's parts: each leg's parts are the scope's list, read
 /// from geom-bench/parts.tsv; the change's parts wait for the merge base's; the judge waits for
 /// both, judges when a part failed, and checks every part of both sides by the artifact names the
@@ -2525,6 +3469,7 @@ fn bench_part_problems(w: &Yaml) -> Vec<String> {
             found.push(format!("the scope's parts are not parts.tsv's: {needle}"));
         }
     }
+    found.extend(split_and_cache_problems(w));
     let needs = |job: &str| {
         jobs[job]["needs"]
             .as_vec()
@@ -2634,6 +3579,18 @@ fn the_count_gate_parts_measure_everything_once_and_a_lost_part_fails() {
             "name: count-head-${{ matrix.target }}-${{ matrix.part }}",
             "name: count-head-${{ matrix.target }}",
             "does not upload its counts",
+        ),
+        (
+            "by_op[substr($1, 1, i - 1)] = 1",
+            "by_op[substr($1, 1, i - 1)] = 0",
+            "split groups by operation",
+        ),
+        (
+            "cache-directories: ~/.gungraun-runner
+",
+            "cache-directories: ~/.cargo
+",
+            "in its Rust cache",
         ),
         (
             "        if: matrix.trip\n",
@@ -2892,4 +3849,420 @@ fn the_count_gates_measure_one_kind_a_push_and_the_base_once() {
             .any(|p| p.contains("before the merge base is kept")),
         "{found:#?}"
     );
+}
+
+/// The folder `kernel-dev.yml`'s `native-cross-build` fills and hands to `native-cross`, and the
+/// artifact's name (decision 32.92).
+const DEV_CROSS: &str = "dev-macos-x86-64";
+
+/// The runners of kernel.yml's test job, which `kernel-dev.yml`'s development crates run on.
+const DEV_RUNNERS: [&str; 6] = [
+    "ubuntu-latest",
+    "ubuntu-24.04-arm",
+    "windows-latest",
+    "windows-11-arm",
+    "macos-latest",
+    "macos-15-intel",
+];
+
+/// macOS arm64's runner, which builds macOS x86-64's run of `native`.
+const DEV_ARM: &str = "macos-latest";
+
+/// macOS x86-64's runner.
+const DEV_INTEL: &str = "macos-15-intel";
+
+/// The steps' commands of `native`, carried over: for each `run:` of `native` in order, what
+/// `native-cross-build` must run to build it and what `native-cross` must run to run it, with the
+/// tools' binary names; or what `native` runs that has no such form.
+struct Carried {
+    builds: Vec<String>,
+    runs: Vec<String>,
+    tools: Vec<String>,
+    strays: Vec<String>,
+}
+
+/// What `native-cross-build` and `native-cross` must run for `native`'s steps: a test target
+/// (`cargo test --locked <selection>`) archived with the same selection for x86_64-apple-darwin
+/// into the hand-over and run whole from that archive, and a tool (`cargo run --locked <selection>
+/// -- <arguments>`) built with the same selection for x86_64-apple-darwin and run from the
+/// hand-over with the same arguments.
+fn carried(dev: &Yaml) -> Carried {
+    let mut c = Carried {
+        builds: Vec::new(),
+        runs: Vec::new(),
+        tools: Vec::new(),
+        strays: Vec::new(),
+    };
+    for step in steps_of(dev, "native") {
+        let run = text(&step["run"]);
+        if run.is_empty() {
+            continue;
+        }
+        if let Some(selection) = run.strip_prefix("cargo test --locked ") {
+            let words: Vec<&str> = selection.split_whitespace().collect();
+            let tests: Vec<&str> = words
+                .windows(2)
+                .filter(|w| w[0] == "--test")
+                .map(|w| w[1])
+                .collect();
+            match tests.as_slice() {
+                [test] if !words.contains(&"--") => {
+                    let file = format!("\"$RUNNER_TEMP/{DEV_CROSS}/{test}.tar.zst\"");
+                    c.builds.push(format!(
+                        "cargo nextest archive --locked {selection} --target x86_64-apple-darwin \
+                         --archive-file {file}"
+                    ));
+                    c.runs.push(format!(
+                        "cargo nextest run --archive-file {file} --workspace-remap . --extract-to . \
+                         --extract-overwrite --no-fail-fast"
+                    ));
+                }
+                _ => c.strays.push(run),
+            }
+        } else if let Some((selection, arguments)) = run
+            .strip_prefix("cargo run --locked ")
+            .and_then(|r| r.split_once(" -- "))
+        {
+            let words: Vec<&str> = selection.split_whitespace().collect();
+            let named = |flag: &str| words.windows(2).find(|w| w[0] == flag).map(|w| w[1]);
+            match named("--bin").or_else(|| named("-p")) {
+                Some(tool) => {
+                    c.builds.push(format!(
+                        "cargo build --locked {selection} --target x86_64-apple-darwin"
+                    ));
+                    c.runs
+                        .push(format!("\"$RUNNER_TEMP/{DEV_CROSS}/{tool}\" {arguments}"));
+                    c.tools.push(tool.to_owned());
+                }
+                None => c.strays.push(run),
+            }
+        } else {
+            c.strays.push(run);
+        }
+    }
+    c
+}
+
+/// What is wrong with macOS x86-64's run of `kernel-dev.yml`'s `native`, built on macOS arm64 and
+/// run on the Intel runner (decision 32.92): `native` and `native-cross` not on kernel.yml's six
+/// runners, each once, `native-cross` not on macOS x86-64's or not after the build, the build not
+/// on macOS arm64's; the build without x86_64-apple-darwin, with a flag or setting in its
+/// environment that `native` lacks, or running other than exactly what `native`'s steps build, in
+/// order (with the hand-over's folder made first and the tools put in it last); the run running
+/// other than exactly each archive's every test and each tool with its step's arguments, in order
+/// (after the tools are made executable and the locked sources fetched); a step of either that is
+/// conditional or may fail; and the build's cache saved by any other run than a push to main.
+#[allow(clippy::too_many_lines, reason = "one rule after another")]
+fn dev_cross_problems(dev: &Yaml) -> Vec<String> {
+    let build_job = "native-cross-build";
+    let run_job = "native-cross";
+    let mut found = Vec::new();
+    let build = &dev["jobs"][build_job];
+    let run = &dev["jobs"][run_job];
+    if build.is_badvalue() || run.is_badvalue() {
+        found.push(format!("kernel-dev.yml has no {build_job} or no {run_job}"));
+        return found;
+    }
+    let mut runners: Vec<String> = dev["jobs"]["native"]["strategy"]["matrix"]["include"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .map(os)
+        .collect();
+    runners.push(text(&run["runs-on"]));
+    runners.sort();
+    let mut six: Vec<String> = DEV_RUNNERS.iter().map(|r| (*r).to_owned()).collect();
+    six.sort();
+    if runners != six {
+        found.push(format!(
+            "native's runners and {run_job}'s {runners:?} are not kernel.yml's six, each once: \
+             {six:?}"
+        ));
+    }
+    if text(&run["runs-on"]) != DEV_INTEL {
+        found.push(format!(
+            "{run_job} runs on {:?}, not macOS x86-64's {DEV_INTEL:?}",
+            text(&run["runs-on"])
+        ));
+    }
+    if text(&build["runs-on"]) != DEV_ARM {
+        found.push(format!(
+            "{build_job} runs on {:?}, not macOS arm64's {DEV_ARM:?}",
+            text(&build["runs-on"])
+        ));
+    }
+    if text(&run["needs"]) != build_job && !strings(&run["needs"]).iter().any(|n| n == build_job) {
+        found.push(format!("{run_job} does not wait for {build_job}"));
+    }
+    if !steps_of(dev, build_job).iter().any(|s| {
+        text(&s["uses"]).starts_with("dtolnay/rust-toolchain@")
+            && text(&s["with"]["targets"]) == "x86_64-apple-darwin"
+    }) {
+        found.push(format!(
+            "{build_job} does not install the x86_64-apple-darwin target"
+        ));
+    }
+    // `native` sets no flag of its own: neither job may set one (RUSTFLAGS, a profile's setting,
+    // a nextest filter or partition through its environment), and no step may be skipped or
+    // allowed to fail.
+    for job in [build_job, run_job] {
+        let mut envs = vec![(job.to_owned(), &dev["jobs"][job]["env"])];
+        for (i, s) in steps_of(dev, job).into_iter().enumerate() {
+            envs.push((format!("{job}'s step {}", i + 1), &s["env"]));
+            if !s["if"].is_badvalue() || !s["continue-on-error"].is_badvalue() {
+                found.push(format!(
+                    "{job}'s step {} ({}) may be skipped or fail unseen",
+                    i + 1,
+                    text(&s["name"])
+                ));
+            }
+        }
+        for (said, env) in envs {
+            for key in keys(env) {
+                if key != "CARGO_NEXTEST_VERSION" {
+                    found.push(format!("{said} sets {key}, which native does not"));
+                }
+            }
+        }
+        if !dev["jobs"][job]["continue-on-error"].is_badvalue()
+            || !dev["jobs"][job]["if"].is_badvalue()
+        {
+            found.push(format!("{job} may be skipped or fail unseen"));
+        }
+    }
+    let c = carried(dev);
+    for stray in &c.strays {
+        found.push(format!(
+            "native runs {stray:?}, which {build_job} and {run_job} do not carry"
+        ));
+    }
+    let tools = c.tools.join(",");
+    let mut builds = vec![format!("mkdir \"$RUNNER_TEMP/{DEV_CROSS}\"")];
+    builds.extend(c.builds);
+    builds.push(format!(
+        "cp target/x86_64-apple-darwin/debug/{{{tools}}} \"$RUNNER_TEMP/{DEV_CROSS}/\""
+    ));
+    let mut runs = vec![
+        format!("chmod +x \"$RUNNER_TEMP\"/{DEV_CROSS}/{{{tools}}}"),
+        "cargo fetch --locked".to_owned(),
+    ];
+    runs.extend(c.runs);
+    for (job, want) in [(build_job, builds), (run_job, runs)] {
+        let have: Vec<String> = steps_of(dev, job)
+            .into_iter()
+            .map(|s| text(&s["run"]))
+            .filter(|r| !r.is_empty())
+            .collect();
+        if have != want {
+            found.push(format!(
+                "{job} does not run exactly what native's steps build and run, in order: \
+                 {have:#?}, not {want:#?}"
+            ));
+        }
+    }
+    for s in steps_of(dev, build_job) {
+        if text(&s["uses"]).starts_with("Swatinem/rust-cache@") {
+            let t = terms(&text(&s["with"]["save-if"]));
+            let has = |term: &str| t.iter().any(|x| x == term);
+            if !(has("github.event_name == 'push'") && has("github.ref == 'refs/heads/main'"))
+                || t.iter().any(|x| x.contains("||"))
+            {
+                found.push(format!(
+                    "{build_job}'s cache is saved by another run than a push to main: {:?}",
+                    text(&s["with"]["save-if"])
+                ));
+            }
+        }
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+#[allow(clippy::too_many_lines, reason = "the cases are written out in full")]
+fn the_development_crates_built_on_arm64_run_every_step_of_native() {
+    let dev = read(&format!("{WORKFLOWS}/kernel-dev.yml"));
+    assert_eq!(dev_cross_problems(&parse(&dev)), Vec::<String>::new());
+    assert_eq!(
+        hand_over_problems("kernel-dev.yml", &dev),
+        Vec::<String>::new()
+    );
+    // Every step of `native` is carried: two test targets and four tools.
+    let c = carried(&parse(&dev));
+    assert_eq!(c.runs.len(), 6, "{:#?}", c.runs);
+    assert_eq!(c.tools, ["geom-gen", "map", "provenance", "source-scan"]);
+
+    let build = "  native-cross-build:\n";
+    let run = "  native-cross:\n";
+    let all = "--extract-overwrite --no-fail-fast\n";
+    // Seeded violations: each must be reported.
+    for (planted, said) in [
+        // A seventh step in `native` that the cross jobs do not build or run: macOS x86-64 loses it.
+        (
+            dev.replacen(
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n",
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n      - name: The goldens\n        run: cargo run --locked -p geom-test --bin golden -- check\n",
+                1,
+            ),
+            "native-cross-build does not run exactly",
+        ),
+        // A step of `native` the cross jobs cannot carry at all.
+        (
+            dev.replacen(
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n",
+                "        run: cargo run --locked -p geom-test --bin source-scan -- check\n      - name: A script\n        run: ./check.sh\n",
+                1,
+            ),
+            "native runs \"./check.sh\"",
+        ),
+        // A test filtered out of the Intel run.
+        (
+            dev.replacen(all, "--extract-overwrite --no-fail-fast -E 'not test(=seeded_violations_are_caught)'\n", 1),
+            "native-cross does not run exactly",
+        ),
+        // Half an archive's tests run.
+        (
+            dev.replacen(all, "--extract-overwrite --no-fail-fast --partition count:1/2\n", 1),
+            "native-cross does not run exactly",
+        ),
+        // A tool built but not run.
+        (
+            dev.replacen(
+                "      - name: Every crate and module header is complete, and MAP.json is current\n        run: '\"$RUNNER_TEMP/dev-macos-x86-64/map\" check'\n",
+                "",
+                1,
+            ),
+            "native-cross does not run exactly",
+        ),
+        // A tool run with other arguments: it would write, not check.
+        (
+            dev.replacen("/map\" check'", "/map\" write'", 1),
+            "native-cross does not run exactly",
+        ),
+        // A test target not built: its run would find no archive, and the build no longer matches.
+        (
+            dev.replacen(
+                "        run: cargo nextest archive --locked -p geom-fuzz --test predicates",
+                "        run: echo cargo nextest archive --locked -p geom-fuzz --test predicates",
+                1,
+            ),
+            "native-cross-build does not run exactly",
+        ),
+        // Built for the arm64 runner's own target: binaries the Intel runner would not run as tested.
+        (
+            dev.replacen("--test dependency_rule --target x86_64-apple-darwin", "--test dependency_rule", 1),
+            "native-cross-build does not run exactly",
+        ),
+        // A tool built in another profile than `cargo run`'s.
+        (
+            dev.replacen("cargo build --locked -p geom-gen --target", "cargo build --locked --release -p geom-gen --target", 1),
+            "native-cross-build does not run exactly",
+        ),
+        // Flags native does not have.
+        (
+            planted_after(
+                &dev,
+                build,
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n",
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n      RUSTFLAGS: -C opt-level=1\n",
+            ),
+            "native-cross-build sets RUSTFLAGS",
+        ),
+        // A nextest setting that leaves tests out, through the run's environment.
+        (
+            planted_after(
+                &dev,
+                run,
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n",
+                "      CARGO_NEXTEST_VERSION: \"0.9.146\"\n      NEXTEST_PROFILE: quick\n",
+            ),
+            "native-cross sets NEXTEST_PROFILE",
+        ),
+        // A step of the run that is skipped.
+        (
+            dev.replacen(
+                "      - name: No banned-source marker in the kernel's crates\n        run: '",
+                "      - name: No banned-source marker in the kernel's crates\n        if: false\n        run: '",
+                1,
+            ),
+            "may be skipped or fail unseen",
+        ),
+        // A step of the run that may fail unseen.
+        (
+            dev.replacen(
+                "      - name: Fetch the locked dependencies\n",
+                "      - name: Fetch the locked dependencies\n        continue-on-error: true\n",
+                1,
+            ),
+            "may be skipped or fail unseen",
+        ),
+        // Run on the arm64 runner, under no Intel processor: macOS x86-64 not run at all.
+        (
+            planted_after(&dev, run, "    runs-on: macos-15-intel\n", "    runs-on: macos-latest\n"),
+            "native-cross runs on \"macos-latest\"",
+        ),
+        // Built on the Intel runner, the job's time lost.
+        (
+            planted_after(&dev, build, "    runs-on: macos-latest\n", "    runs-on: macos-15-intel\n"),
+            "native-cross-build runs on \"macos-15-intel\"",
+        ),
+        // macOS x86-64 run natively as well: the runners are no longer six, each once.
+        (
+            dev.replacen(
+                "          - name: macOS arm64\n            os: macos-latest\n",
+                "          - name: macOS arm64\n            os: macos-latest\n          - name: macOS x86-64\n            os: macos-15-intel\n",
+                1,
+            ),
+            "are not kernel.yml's six, each once",
+        ),
+        // A runner dropped from `native`.
+        (
+            dev.replacen("          - name: Windows arm64\n            os: windows-11-arm\n", "", 1),
+            "are not kernel.yml's six, each once",
+        ),
+        // The run started before its build.
+        (
+            dev.replacen("    needs: native-cross-build\n", "", 1),
+            "native-cross does not wait for native-cross-build",
+        ),
+        // No x86_64-apple-darwin installed.
+        (
+            planted_after(&dev, build, "          targets: x86_64-apple-darwin\n", ""),
+            "does not install the x86_64-apple-darwin target",
+        ),
+        // The build's cache saved by a pull request's run.
+        (
+            dev.replacen(
+                "save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}\n          key: dev-cross",
+                "save-if: true\n          key: dev-cross",
+                1,
+            ),
+            "native-cross-build's cache is saved by another run than a push to main",
+        ),
+    ] {
+        assert_ne!(planted, dev, "{said}: the planted edit applies");
+        let found = dev_cross_problems(&parse(&planted));
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // The hand-over kept a month, for later runs to find; or read by another job.
+    for (from, to, said) in [
+        (
+            "          name: dev-macos-x86-64\n          path: ${{ runner.temp }}/dev-macos-x86-64\n          retention-days: 1\n",
+            "          name: dev-macos-x86-64\n          path: ${{ runner.temp }}/dev-macos-x86-64\n          retention-days: 30\n",
+            "native-cross-build does not hand dev-macos-x86-64 over once",
+        ),
+        (
+            "      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16\n        with:\n          toolchain: ${{ env.RUST_TOOLCHAIN }}\n          targets: wasm32-wasip1\n",
+            "      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16\n        with:\n          toolchain: ${{ env.RUST_TOOLCHAIN }}\n          targets: wasm32-wasip1\n      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        with:\n          name: dev-macos-x86-64\n",
+            "downloads dev-macos-x86-64, which is not handed to it",
+        ),
+    ] {
+        let planted = dev.replacen(from, to, 1);
+        assert_ne!(planted, dev, "the planted edit {from:?} applies");
+        let found = hand_over_problems("kernel-dev.yml", &planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
 }
