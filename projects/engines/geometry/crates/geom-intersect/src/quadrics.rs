@@ -18,10 +18,10 @@
 //! - **Tangency named.** A tangent line or circle is a curve of [`CurveContact::Tangent`] with no band,
 //!   and a touch at one point a [`PointContact::IsolatedTangent`].
 //! - **Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other,
-//!   and each stretch is kept if its middle lies on both. A curve no edge cuts is kept whole only
-//!   where its middle is proven inside both domains, its box inside each range or reaching only a
-//!   join, and is nothing where that box is off one; where the box reaches an edge of a domain, the
-//!   pair is `None`, the engine's (decision 32.94).
+//!   and no edge cuts a stretch between cuts, or a curve with none, so each is decided by its middle:
+//!   kept only where that middle is proven inside both domains, its box inside each range or
+//!   reaching only a join, and nothing where that box is off one; where the box reaches an edge of
+//!   a domain, the pair is `None`, the engine's (decision 32.94).
 //! - **A turn far from zero loses nothing.** A loop's parameter, or a round surface's, may start any
 //!   number of turns out. A loop is cut and kept on its domain moved by whole turns, exactly, to
 //!   within two turns of zero, and a surface's turn is read on its own domain the same way, so no
@@ -1729,16 +1729,24 @@ fn at_parameter(
         .ok_or(IntersectError::Internal)
 }
 
-/// Whether the point at `t` lies on both surfaces.
+/// Where the point at `t` stands on both domains ([`standing`]): off them if off either, inside
+/// them if inside both, else reaching an edge.
 fn on_both(
     curve: &CurveKind<3>,
     t: f64,
     a: &SurfaceKind,
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<bool, IntersectError> {
+) -> Result<Standing, IntersectError> {
     let at = at_parameter(curve, t, meter)?;
-    Ok(on_surface(a, at)?.is_some() && on_surface(b, at)?.is_some())
+    let (p, q) = (standing(a, at)?, standing(b, at)?);
+    Ok(if p == Standing::Off || q == Standing::Off {
+        Standing::Off
+    } else if p == Standing::Reaching || q == Standing::Reaching {
+        Standing::Reaching
+    } else {
+        Standing::Inside
+    })
 }
 
 /// Where `curve` passes through `at`, a point of an edge: its parameter there, or `None` if `at`
@@ -1850,9 +1858,9 @@ enum Part {
 }
 
 /// The stretches of `curve` on both domains, and how each ends; a run of them on both too short to
-/// be a stretch, a point. `None` where no edge cuts the curve and its middle's box reaches an edge
-/// of a domain, off neither (decision 32.94): one box cannot say whether the whole curve lies on
-/// both, and the pair is the engine's.
+/// be a stretch, a point. `None` where the box of the middle of the curve, if no edge cuts it, or
+/// of a stretch between cuts reaches an edge of a domain, off neither (decision 32.94): one box
+/// cannot say whether that piece lies on both, and the pair is the engine's.
 fn trimmed(
     curve: &CurveKind<3>,
     (a, b): (&SurfaceKind, &SurfaceKind),
@@ -1868,13 +1876,10 @@ fn trimmed(
         let Some(kept) = stretch(curve, lo, hi)? else {
             return Ok(Some(Vec::new()));
         };
-        let at = at_parameter(curve, lo * 0.5 + hi * 0.5, meter)?;
-        let (p, q) = (standing(a, at)?, standing(b, at)?);
-        if p == Standing::Off || q == Standing::Off {
-            return Ok(Some(Vec::new()));
-        }
-        if p == Standing::Reaching || q == Standing::Reaching {
-            return Ok(None);
+        match on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)? {
+            Standing::Off => return Ok(Some(Vec::new())),
+            Standing::Reaching => return Ok(None),
+            Standing::Inside => {}
         }
         let end = if loops {
             CurveEnd::Closed
@@ -1911,7 +1916,8 @@ fn trimmed(
         }
     }
     ends.push(stop);
-    // Each stretch between cuts, and whether it lies on both domains.
+    // Each stretch between cuts, and whether it lies on both domains. No edge cuts it between its
+    // ends, so it is decided as a curve no edge cuts is, by its middle (32.94).
     let mut stretches = Vec::new();
     for end in ends {
         let part = stretch(curve, start, end)?;
@@ -1921,7 +1927,12 @@ fn trimmed(
         } else {
             middle_of
         };
-        let on = part.is_some() && on_both(curve, on_loop, a, b, meter)?;
+        let on = part.is_some()
+            && match on_both(curve, on_loop, a, b, meter)? {
+                Standing::Inside => true,
+                Standing::Off => false,
+                Standing::Reaching => return Ok(None),
+            };
         stretches.push(Stretch {
             from: start,
             to: end,
