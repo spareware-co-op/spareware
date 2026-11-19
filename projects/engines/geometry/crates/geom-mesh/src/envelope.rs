@@ -963,6 +963,11 @@ impl Envelope {
         self.h
     }
 
+    /// Each triangle's body, in the order of the list the envelope was made from.
+    pub(crate) fn bodies(&self) -> &[TriangleEnvelope] {
+        &self.triangles
+    }
+
     /// The keys (positions in the list it was made from) of the triangles whose bodies' boxes meet
     /// the box from `low` to `high`: every triangle whose body meets the box is among them.
     ///

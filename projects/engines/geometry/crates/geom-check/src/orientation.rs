@@ -365,11 +365,121 @@ mod tests {
         clippy::unwrap_used,
         reason = "test code: a failure should stop loudly"
     )]
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_truncation,
+        reason = "test builders; the rules are for kernel code"
+    )]
 
     use geom_run::{Budget, WorkMeter};
     use geom_topo::Ix;
 
     use super::*;
+    use crate::common::{CUBE_FACES, Rows, faces_into};
+
+    /// The faults this module's checks alone find in `r`, a solid recorded Exact. The checks
+    /// before them refuse each body below, whose shells touch, so none of these bodies reaches
+    /// them through [`crate::check`]: what is asked here is what they answer if one did.
+    fn alone(r: &Rows) -> Vec<Fault> {
+        let body = r.body(BodyKind::Solid);
+        let shells = usize::try_from(body.arenas().rows(Arena::Shell)).unwrap();
+        let mut scratch = vec![0; shells];
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let mut sink = Sink::new(&mut meter).unwrap();
+        check(&body, true, &mut scratch, &mut sink).unwrap();
+        sink.faults
+    }
+
+    /// A cube dented on all six sides, and a cavity between four of the dents' tips, so every
+    /// corner of the cavity is a vertex of the cube; with `meet`, the first tip is a meeting of
+    /// three planes, which `crate::planar` reads.
+    fn dented(meet: bool) -> Rows {
+        let mut r = Rows::empty();
+        let region = r.region(RegionKind::Solid);
+        let outer = r.shell(region);
+        for v in 0..8_i64 {
+            r.vertex([0, 1, 2].map(|k| if v >> k & 1 == 1 { 12 } else { 0 }));
+        }
+        for tip in [
+            [6, 6, 2],
+            [6, 6, 10],
+            [6, 2, 6],
+            [6, 10, 6],
+            [2, 6, 6],
+            [10, 6, 6],
+        ] {
+            r.vertex(tip);
+        }
+        let mut rings: Vec<Vec<u32>> = Vec::new();
+        for (f, ring) in CUBE_FACES.iter().enumerate() {
+            for k in 0..4 {
+                rings.push(vec![ring[k], ring[(k + 1) % 4], 8 + f as u32]);
+            }
+        }
+        let refs: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+        faces_into(&mut r, outer, &refs);
+        let cavity = r.shell(region);
+        faces_into(
+            &mut r,
+            cavity,
+            &[&[8, 10, 9], &[8, 9, 12], &[8, 12, 10], &[9, 10, 12]],
+        );
+        if meet {
+            let x = r.plane_through([[6, 0, 0], [6, 1, 0], [6, 0, 1]]);
+            let y = r.plane_through([[0, 6, 0], [0, 6, 1], [1, 6, 0]]);
+            let z = r.plane_through([[0, 0, 2], [1, 0, 2], [0, 1, 2]]);
+            r.meets.push((8, [x, y, z]));
+        }
+        r
+    }
+
+    #[test]
+    fn shells_with_no_corner_to_decide_by_fail_closed() {
+        // No vertex of the cavity is off the cube, so no corner says which side of it the cavity
+        // lies on: by the winding number (an Exact body of grid points) and by `crate::planar`'s
+        // ray (a tip where three planes meet), the pair is unchecked, never a pass.
+        let unchecked = Fault::at(FaultKind::PairUnchecked, Entity::Shell(Ix::new(1).unwrap()))
+            .with(Entity::Shell(Ix::new(0).unwrap()));
+        for meet in [false, true] {
+            assert_eq!(alone(&dented(meet)), [unchecked], "meet {meet}");
+        }
+    }
+
+    #[test]
+    fn lumps_that_share_a_meeting_are_judged_by_their_other_corners() {
+        // Two tetrahedra, each a solid region's shell, touching only at their apex, a meeting of
+        // planes: the apex says nothing of which side of the other each lies on, and the next
+        // corner says outside.
+        let mut r = Rows::empty();
+        let x = r.plane_through([[0, 0, 0], [0, 1, 0], [0, 0, 1]]);
+        let y = r.plane_through([[0, 0, 0], [0, 0, 1], [1, 0, 0]]);
+        let z = r.plane_through([[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+        assert_eq!(r.meet([x, y, z]), 0);
+        for corner in [
+            [100, 0, 0],
+            [0, 100, 0],
+            [0, 0, 100],
+            [-100, 0, 0],
+            [0, -100, 0],
+            [0, 0, -100],
+        ] {
+            r.vertex(corner);
+        }
+        let up = r.region(RegionKind::Solid);
+        let down = r.region(RegionKind::Solid);
+        let (one, two) = (r.shell(up), r.shell(down));
+        faces_into(
+            &mut r,
+            one,
+            &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]],
+        );
+        faces_into(
+            &mut r,
+            two,
+            &[&[0, 4, 5], &[0, 6, 4], &[0, 5, 6], &[4, 6, 5]],
+        );
+        assert_eq!(alone(&r), []);
+    }
 
     #[test]
     fn a_volume_no_enclosure_can_sign_is_a_fault_never_a_pass() {

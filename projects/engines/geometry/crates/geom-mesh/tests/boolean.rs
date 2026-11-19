@@ -692,15 +692,27 @@ fn coplanar_runs_merge() {
     united.history.check(&inputs(&[1, 2])).unwrap();
 }
 
-#[test]
-fn the_threads_and_the_order_do_not_show() {
-    let a = solid([0, 0, 0], [40, 40, 40], 1);
-    let b = solid([20, 20, 20], [60, 60, 60], 2);
-    let c = solid([10, 30, 5], [70, 35, 50], 3);
-    let test = WindingTest::unite();
-    let plain = one(&[&a, &b, &c], test.clone());
+/// The threads and the order do not show: a union on a pool against the serial one, and one of
+/// the operands in another order against it, one test each (decision 32.78: the three unions
+/// together were too long for one Miri gate part; each test makes the serial union it compares
+/// with).
+mod the_threads_and_the_order_do_not_show {
+    use super::*;
+
+    fn three() -> [ExactMesh; 3] {
+        [
+            solid([0, 0, 0], [40, 40, 40], 1),
+            solid([20, 20, 20], [60, 60, 60], 2),
+            solid([10, 30, 5], [70, 35, 50], 3),
+        ]
+    }
+
     #[cfg(not(target_family = "wasm"))]
-    {
+    #[test]
+    fn the_threads() {
+        let [a, b, c] = three();
+        let test = WindingTest::unite();
+        let plain = one(&[&a, &b, &c], test.clone());
         let pool = miri::pool(4);
         let threaded = checked(
             boolean(
@@ -714,8 +726,15 @@ fn the_threads_and_the_order_do_not_show() {
         );
         assert_eq!(threaded[0], plain);
     }
-    let turned = one(&[&c, &a, &b], test);
-    assert_eq!(turned.mesh, plain.mesh);
+
+    #[test]
+    fn the_order() {
+        let [a, b, c] = three();
+        let test = WindingTest::unite();
+        let plain = one(&[&a, &b, &c], test.clone());
+        let turned = one(&[&c, &a, &b], test);
+        assert_eq!(turned.mesh, plain.mesh);
+    }
 }
 
 #[test]

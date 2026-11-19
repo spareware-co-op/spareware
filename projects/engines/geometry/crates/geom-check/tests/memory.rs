@@ -55,10 +55,10 @@ fn main() -> ExitCode {
 fn a_refused_reservation_stops_the_check() {
     let body = cube().body(BodyKind::Solid);
     let faults = MAX_FAULTS * size_of::<Fault>();
-    // The cube's scratch: three words per vertex and one per edge, its largest need. Nothing
-    // more: group 3 settles every pair of the cube's faces from their fins and keeps no outline,
-    // so the check passes with room for the two lists and not a byte more.
-    let scratch = (3 * 8 + 12) * size_of::<u32>();
+    // The cube's scratch: two words per vertex and two per edge, its largest need (group 1's
+    // fans). Nothing more: group 3 settles every pair of the cube's faces from their fins and
+    // keeps no outline, so the check passes with room for the two lists and not a byte more.
+    let scratch = (2 * 8 + 2 * 12) * size_of::<u32>();
     let mut outcomes = Vec::new();
     for room in [
         0,

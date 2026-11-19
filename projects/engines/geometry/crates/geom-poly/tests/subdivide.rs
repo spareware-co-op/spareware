@@ -96,19 +96,52 @@ fn oracle(blocks: &[Block], p: [i64; 3]) -> Winding {
 
 /// A piece's corners in half steps, where boxes put them.
 fn corners(piece: &Piece) -> Vec<[i64; 3]> {
+    corners_by(piece, corner)
+}
+
+/// A piece's corners, each the meeting of its face and two bounds in turn, found by `meet`.
+fn corners_by(piece: &Piece, meet: fn([Plane; 3]) -> [i64; 3]) -> Vec<[i64; 3]> {
     let k = piece.bounds.len();
     (0..k)
-        .map(|i| {
-            let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
-            let (x, w) = t.homogeneous().unwrap();
-            let w = w.to_i128().unwrap();
-            x.map(|v| {
-                let doubled = v.to_i128().unwrap() * 2;
-                assert_eq!(doubled % w, 0, "a corner off the half steps");
-                (doubled / w) as i64
-            })
-        })
+        .map(|i| meet([piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]]))
         .collect()
+}
+
+/// Where three planes meet, in half steps, by the three-plane point.
+fn corner_of_tpi([p, q, r]: [Plane; 3]) -> [i64; 3] {
+    let t = Tpi::new(p, q, r).unwrap();
+    let (x, w) = t.homogeneous().unwrap();
+    let w = w.to_i128().unwrap();
+    x.map(|v| {
+        let doubled = v.to_i128().unwrap() * 2;
+        assert_eq!(doubled % w, 0, "a corner off the half steps");
+        (doubled / w) as i64
+    })
+}
+
+/// [`corner_of_tpi`], read straight off the planes where each is square to its own axis, as every
+/// plane of a block and of a box's split is: the plane `n x_i + d = 0` holds `x_i = −d / n`, so
+/// the corner in half steps is `−2d / n` on each axis, the same rational `X_i / w` the three-plane
+/// point gives. Any other three go to [`corner_of_tpi`]. The two agree on every corner of every
+/// piece (`the_corners_read_off_square_planes_are_the_three_plane_points`). Under Miri the
+/// three-plane point's wide arithmetic was the oracle's cost: most of a test's time beside the
+/// arrangement.
+fn corner(planes: [Plane; 3]) -> [i64; 3] {
+    let mut out = [None; 3];
+    for plane in &planes {
+        let n = plane.n();
+        let mut nonzero = (0..3).filter(|&i| n[i] != 0);
+        let (Some(axis), None) = (nonzero.next(), nonzero.next()) else {
+            return corner_of_tpi(planes);
+        };
+        if out[axis].is_some() {
+            return corner_of_tpi(planes);
+        }
+        let doubled = -2 * plane.d();
+        assert_eq!(doubled % n[axis], 0, "a corner off the half steps");
+        out[axis] = Some((doubled / n[axis]) as i64);
+    }
+    out.map(Option::unwrap)
 }
 
 fn normal(piece: &Piece) -> (usize, bool) {
@@ -247,6 +280,56 @@ fn the_box_around_polygons_is_clear_of_them_on_odd_half_steps() {
         entry: None,
     };
     assert_eq!(around(&[broken]), Err(NumError::Degenerate));
+}
+
+/// The oracle's corners read off square planes are the three-plane points: for square planes of
+/// either way round, the whole and the half normal (a block's and a split's), offsets of either
+/// sign, odd and even, in every order; on the pieces of an arrangement; and a piece whose planes
+/// are not square is read by the three-plane point itself.
+#[test]
+fn the_corners_read_off_square_planes_are_the_three_plane_points() {
+    let normals = [1i128, -1, 2, -2];
+    let offsets = [-7i128, -6, -1, 0, 3, 8];
+    let square = |axis: usize, k: usize| {
+        let (n, d) = (normals[k % 4], offsets[(k / 4 + axis) % 6]);
+        let mut v = [0i128; 3];
+        v[axis] = n;
+        // A half normal at an odd offset puts the plane on a half step; at an even one, a whole.
+        Plane::new(v, d * if n.abs() == 2 { 1 } else { 2 }).unwrap()
+    };
+    let orders = [
+        [0, 1, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [0, 2, 1],
+        [2, 1, 0],
+        [1, 0, 2],
+    ];
+    for k in 0..24 {
+        let planes = [square(0, k), square(1, k + 1), square(2, k + 2)];
+        for order in orders {
+            let three = order.map(|i| planes[i]);
+            assert_eq!(corner(three), corner_of_tpi(three), "{three:?}");
+        }
+    }
+    let mut pieces: Vec<Piece> = run(&[A], 8, &[]).into_iter().map(|c| c.piece).collect();
+    let square_pieces = pieces.len();
+    pieces.extend(fan(4).into_iter().map(|p| p.piece));
+    for (at, piece) in pieces.iter().enumerate() {
+        let k = piece.bounds.len();
+        assert_eq!(
+            corners_by(piece, corner),
+            corners_by(piece, corner_of_tpi),
+            "{piece:?}"
+        );
+        let all_square = (0..k).all(|i| {
+            [piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]]
+                .iter()
+                .all(|p| p.n().iter().filter(|v| **v != 0).count() == 1)
+        });
+        assert_eq!(all_square, at < square_pieces, "{piece:?}");
+    }
+    assert_eq!((square_pieces, pieces.len()), (6, 10));
 }
 
 /// A and B as one entry: inside both its count is 2, so it is no solid, and a leaf holding only

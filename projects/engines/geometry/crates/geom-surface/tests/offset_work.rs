@@ -121,8 +121,23 @@ fn an_offsets_partials_cost_its_bases_and_its_jets() {
     }
 }
 
-#[test]
-fn an_order_the_jets_cannot_hold_is_refused_before_any_work() {
+/// An order the jets cannot hold is refused before any work: at a point and over a box, one test
+/// each (decision 32.78: the two together were too long for one Miri gate part).
+mod an_order_the_jets_cannot_hold_is_refused_before_any_work {
+    #[test]
+    fn at_a_point() {
+        super::orders_refused(0);
+    }
+
+    #[test]
+    fn over_a_box() {
+        super::orders_refused(1);
+    }
+}
+
+/// The check of `an_order_the_jets_cannot_hold_is_refused_before_any_work` at a point (`which`
+/// 0) or over a box (1).
+fn orders_refused(which: usize) {
     // The base's jets go one order higher, and a jet holds 18 at most: an offset's jets of order
     // 18 or more are refused as the jets refuse them (their first factorial past 18, 19!), before
     // the base is asked or anything is charged, and never the Defect of a count past u64 (from
@@ -131,7 +146,7 @@ fn an_order_the_jets_cannot_hold_is_refused_before_any_work() {
     let refused = Err(CurveError::Nurbs(NurbsError::DerivativeOrder { order: 19 }));
     let at = ((0.125, 0.125), (0.5, 0.5));
     let region = ((0.0, 0.25), (0.0, 1.0));
-    for (r, from) in [(at, 18), (region, 17)] {
+    for (r, from) in [[(at, 18), (region, 17)][which]] {
         for order in [from, from + 1, 65_533, 65_534, usize::MAX] {
             let mut m = meter();
             assert_eq!(

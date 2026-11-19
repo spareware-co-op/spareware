@@ -45,6 +45,9 @@
     reason = "tests may use native arithmetic, casts and std reductions"
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_num::{NumError, Real, math};
 
 /// What a public maths function owes for arguments `args` whose IEEE 754 value (correctly
@@ -1093,9 +1096,10 @@ fn exp_tiny_arguments_near_midpoints() {
     r.finish();
 }
 
-#[test]
-fn exp_thresholds() {
-    let mut r = Report::new("exp, thresholds");
+/// Every input `exp_thresholds` checks, in its order: around each threshold, then the smallest
+/// magnitudes.
+fn exp_threshold_inputs() -> Vec<f64> {
+    let mut xs = Vec::new();
     let edges = [
         hf("0x1p-54"),               // returns 1 + x at and below
         hf("0x1.62e42fefa39fp+9"),   // overflow
@@ -1111,20 +1115,72 @@ fn exp_thresholds() {
         -1.0,
     ];
     for e in edges {
-        for x in around(e, 60) {
-            r.exp(x);
-        }
+        xs.extend(around(e, 60));
     }
-    for x in [
+    xs.extend([
         f64::MIN_POSITIVE,
         -f64::MIN_POSITIVE,
         f64::from_bits(1),
         -f64::from_bits(1),
         1e-300,
-    ] {
+    ]);
+    xs
+}
+
+// exp at its thresholds, in quarters of its inputs (decision 32.78, `slices`).
+quarters!(exp_thresholds, |part| {
+    let xs = exp_threshold_inputs();
+    let mut r = Report::new("exp, thresholds");
+    for &x in &xs[slices::range_usize(xs.len(), part)] {
         r.exp(x);
     }
     r.finish();
+});
+
+/// Every input `ln_boundaries_powers_of_two_and_subnormals` checks, in its order: every power of
+/// two, then around each boundary.
+fn ln_boundary_inputs() -> Vec<f64> {
+    let mut xs: Vec<f64> = (-1074..=1023).map(p2).collect();
+    let edges = [
+        core::f64::consts::SQRT_2, // fast path halves above √2
+        hf("0x1.6a09e667f3bcdp+0"),
+        f64::MIN_POSITIVE,
+        f64::MAX,
+        f64::from_bits(1),
+        f64::from_bits(0x000f_ffff_ffff_ffff),
+        core::f64::consts::E,
+        hf("0x1.62a88613629b6p+678"), // the hardest known case
+    ];
+    for e in edges {
+        xs.extend(
+            around(e, 30)
+                .into_iter()
+                .filter(|x| *x > 0.0 && x.is_finite()),
+        );
+    }
+    xs
+}
+
+// ln at every power of two and its boundaries, in quarters of its inputs.
+quarters!(ln_boundaries_powers_of_two_and_subnormals, |part| {
+    let xs = ln_boundary_inputs();
+    let mut r = Report::new("ln boundaries");
+    for &x in &xs[slices::range_usize(xs.len(), part)] {
+        r.ln(x);
+    }
+    r.finish();
+});
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    let n = |xs: Vec<f64>| u32::try_from(xs.len()).unwrap();
+    slices::assert_joins(n(exp_threshold_inputs()), "exp_thresholds' inputs");
+    slices::assert_joins(n(ln_boundary_inputs()), "ln_boundaries' inputs");
 }
 
 #[test]
@@ -1168,32 +1224,6 @@ fn ln_near_one_and_at_the_top_of_every_binade() {
         .chain(around(1.0 + p2(-8), 30))
     {
         r.ln(x);
-    }
-    r.finish();
-}
-
-#[test]
-fn ln_boundaries_powers_of_two_and_subnormals() {
-    let mut r = Report::new("ln boundaries");
-    for k in -1074..=1023 {
-        r.ln(p2(k));
-    }
-    let edges = [
-        core::f64::consts::SQRT_2, // fast path halves above √2
-        hf("0x1.6a09e667f3bcdp+0"),
-        f64::MIN_POSITIVE,
-        f64::MAX,
-        f64::from_bits(1),
-        f64::from_bits(0x000f_ffff_ffff_ffff),
-        core::f64::consts::E,
-        hf("0x1.62a88613629b6p+678"), // the hardest known case
-    ];
-    for e in edges {
-        for x in around(e, 30) {
-            if x > 0.0 && x.is_finite() {
-                r.ln(x);
-            }
-        }
     }
     r.finish();
 }
