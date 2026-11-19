@@ -8887,6 +8887,14 @@
       "reason": "The mutant takes the last kept half-edge of the face's outer cycle that starts at the lowest-numbered vertex instead of the first. That vertex is on the face's outer boundary, and a part tied on by a cut edge meets that boundary nowhere (or the edge would not be a cut edge), so every kept half-edge of the cycle starting there is on the outer boundary's ring, and the shell is that ring either way."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-2d/src/region.rs",
+      "mutant": "replace == with != in ring_side",
+      "line_text": "if upward_turn == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ring_side's one caller is Regions::at, which first refuses with RegionError::Foreign any arrangement whose edges, vertices (their stored numbers) or curves differ from those polygonize read when it found the regions (found_in), and then tests only those regions' rings. polygonize builds a ring by following from each half-edge a half-edge of Arrangement::around at the vertex it ends at, which holds the half-edges leaving that vertex, and keeps the ring only if the walk comes back to its first half-edge (else Malformed). So each ring is a closed walk: every half-edge ends where the next one starts, and the last ends where the first starts, and as at reads the same edges, it is closed in the arrangement at reads too. Both forms change inside only on an edge with exactly one end above p (a_above != b_above). Along a closed walk, whether the vertex reached is above p changes exactly at those edges and comes back to its first value; each vertex is one rational point, read the same way every time, so those edges are even in number. The original flips inside at those whose upward_turn is Positive, the mutant at the others, an even total less that count, so both flip it a number of times of one parity and end with the same inside. Every early return (the on-edge test, an arc, a one-root vertex, the exact budget) comes before the line and is the same in both."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/colamd.rs",
       "mutant": "replace > with >= in dense",
       "line_text": "len > DENSE_FLOOR",

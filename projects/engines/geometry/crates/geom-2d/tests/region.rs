@@ -357,10 +357,54 @@ fn a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell() {
 }
 
 #[test]
+fn a_point_is_located_only_against_the_arrangement_the_regions_were_found_in() {
+    let square_with_hole: &[&[(i64, i64)]] = &[
+        &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+        &[(40, 40), (60, 40), (60, 60), (40, 60), (40, 40)],
+    ];
+    let (arr, r) = built(square_with_hole);
+    let outer = r
+        .regions()
+        .iter()
+        .position(|g| !g.holes.is_empty())
+        .unwrap();
+    let p = Rational2::new(5, 5, 1).unwrap();
+    // The same linework arranged again is the same arrangement.
+    let (again, _) = built(square_with_hole);
+    assert_eq!(r.at(&again, &p), Ok(Located::In(outer)));
+    // Two squares side by side have as many edges, but the regions' rings, read as half-edges of
+    // them, need not close, so no answer read from them would mean anything: refused.
+    let (other, _) = built(&[
+        &[(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)],
+        &[(20, 0), (30, 0), (30, 10), (20, 10), (20, 0)],
+    ]);
+    assert_eq!(other.edges().len(), arr.edges().len());
+    assert_eq!(r.at(&other, &p), Err(RegionError::Foreign));
+    assert_eq!(r.boundary_at(&other, &p), Err(RegionError::Foreign));
+    // The same segments in another order: the same vertices and lines, but each edge names other
+    // input places, so it is another arrangement and is refused too.
+    let (reordered, _) = built(&[square_with_hole[1], square_with_hole[0]]);
+    assert_eq!(reordered.vertices().len(), arr.vertices().len());
+    assert_eq!(r.at(&reordered, &p), Err(RegionError::Foreign));
+    // A square with a dangle along its bottom's line, and the same with a longer dangle: the same
+    // edges from the same inputs on the same lines, and one vertex elsewhere. Refused.
+    let square: &[(i64, i64)] = &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)];
+    let (short, r) = built(&[square, &[(100, 0), (150, 0)]]);
+    let (long, _) = built(&[square, &[(100, 0), (200, 0)]]);
+    assert_eq!(short.edges(), long.edges());
+    assert_eq!(r.at(&short, &p), Ok(Located::In(0)));
+    assert_eq!(r.at(&long, &p), Err(RegionError::Foreign));
+}
+
+#[test]
 fn a_region_error_reads_as_what_went_wrong() {
     assert_eq!(
         RegionError::Malformed.to_string(),
         "the arrangement is not one the sweep built"
+    );
+    assert_eq!(
+        RegionError::Foreign.to_string(),
+        "the arrangement is not the one the regions were found in"
     );
 }
 
