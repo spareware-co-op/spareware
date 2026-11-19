@@ -493,9 +493,18 @@ fn a_dimension_restates_its_value_and_nothing_else_does() {
 /// The independence threshold `σ_ind`, `2^-12`.
 const IND: f64 = 0.000_244_140_625;
 
+/// 2^e exactly, for e from -1022 to 1023, built from its bits. Not `f64::powi`: it is not exactly
+/// rounded, so its last digit is not the same everywhere (Miri varies it on purpose, and moved
+/// 2^-53 and 2^300 off their powers of two), and a bound or an expected value meant to be a power
+/// of two would not be one.
+fn two_to(e: i32) -> f64 {
+    assert!((-1022..=1023).contains(&e), "2^{e} is not a normal double");
+    f64::from_bits(u64::from((e + 1023).unsigned_abs()) << 52)
+}
+
 #[test]
 fn the_thresholds_follow_the_block_size_and_the_rounding_bound() {
-    let u = 2f64.powi(-53);
+    let u = two_to(-53);
     // A block of at most one step wants 1/64, held to σ_ind.
     let t = Thresholds::for_block(0.5, 2, 2, 1.0);
     assert_eq!(
@@ -515,10 +524,10 @@ fn the_thresholds_follow_the_block_size_and_the_rounding_bound() {
         (12.0 * u * 1.0e8, true)
     );
     // A bound exactly equal to what is wanted does not: 2^-53 · 2^47 = 2^-6 = 1/64.
-    let t = Thresholds::for_block(1.0, 1, 1, 2f64.powi(47));
+    let t = Thresholds::for_block(1.0, 1, 1, two_to(47));
     assert_eq!((t.dependent, t.limited_by_rounding), (IND, false));
     // A block of one step whose bound passes 1/64 is limited, though σ_dep stays σ_ind.
-    let t = Thresholds::for_block(0.5, 1, 1, 2f64.powi(50));
+    let t = Thresholds::for_block(0.5, 1, 1, two_to(50));
     assert_eq!((t.dependent, t.limited_by_rounding), (IND, true));
 }
 
@@ -846,7 +855,7 @@ constraint 2.4 reference 0 distance 1.0 1.1 3000
 fn the_range_resolution_is_two_to_minus_the_halvings() {
     assert_eq!(
         RANGE_RESOLUTION.to_bits(),
-        2f64.powi(-i32::try_from(RANGE_HALVINGS).unwrap()).to_bits()
+        two_to(-i32::try_from(RANGE_HALVINGS).unwrap()).to_bits()
     );
 }
 
@@ -1127,7 +1136,7 @@ fn choices_the_carried_bounds_cannot_settle_are_made_on_norms_computed_afresh() 
     // σ_dep is 2^-16 for 1024 steps. In each of the first two, a pivot below σ_ind leaves a
     // largest norm within the carried bounds of σ_dep, so the verdict rests on the norms computed
     // afresh: dependent in the first, near-singular in the second.
-    let s = 2f64.powi(-16);
+    let s = two_to(-16);
     assert_as_fresh(
         &[vec![0.0, -0.5 * s], vec![-s, 1.5 * s], vec![0.0, -s]],
         &equations(&[(2, 0), (2, 3), (1, 1)]),
@@ -1168,7 +1177,7 @@ fn every_choice_is_the_one_norms_computed_afresh_make() {
     .unwrap();
     let mut rng = SplitMix64::new(seed);
     let mut below = |n: u64| rng.next_u64() % n;
-    let scales = [1.0, 3.0, 2f64.powi(-15), 2f64.powi(-16), 2f64.powi(-17)];
+    let scales = [1.0, 3.0, two_to(-15), two_to(-16), two_to(-17)];
     let picks = [0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.25];
     for case in 0..4000 {
         let rows = 1 + below(5) as usize;
@@ -1198,7 +1207,7 @@ fn every_choice_is_the_one_norms_computed_afresh_make() {
 
 #[test]
 fn a_norm_bound_starts_from_the_square_and_grows_by_the_derived_terms() {
-    let u = 2f64.powi(-53);
+    let u = two_to(-53);
     // Computed from a tail of 4 rows: the square, with (3 · 4 + 6)u of it.
     let start = NormBound::computed(3.0, 4).unwrap();
     assert_eq!(
@@ -1221,8 +1230,8 @@ fn a_norm_bound_starts_from_the_square_and_grows_by_the_derived_terms() {
     );
     // The allowance for underflow shows at the smallest square carried: 6u of it to start, then
     // (square + error) · 28u and 2^-700 more.
-    let least = NormBound::computed(2f64.powi(-300), 0).unwrap();
-    assert_eq!(least.square, 2f64.powi(-600));
+    let least = NormBound::computed(two_to(-300), 0).unwrap();
+    assert_eq!(least.square, two_to(-600));
     assert_eq!(least.error, 1.605_329_113_043_264e-196);
     assert_eq!(
         least.downdate(0.0, 0).unwrap().error,
@@ -1234,10 +1243,10 @@ fn a_norm_bound_starts_from_the_square_and_grows_by_the_derived_terms() {
 fn a_norm_is_carried_only_inside_its_window_and_above_the_drift_test() {
     assert!(NormBound::computed(3.0, CARRY_ROWS).is_some());
     assert_eq!(NormBound::computed(3.0, CARRY_ROWS + 1), None);
-    assert!(NormBound::computed(2f64.powi(-300), 1).is_some());
-    assert_eq!(NormBound::computed(2f64.powi(-300).next_down(), 1), None);
-    assert!(NormBound::computed(2f64.powi(300), 1).is_some());
-    assert_eq!(NormBound::computed(2f64.powi(300).next_up(), 1), None);
+    assert!(NormBound::computed(two_to(-300), 1).is_some());
+    assert_eq!(NormBound::computed(two_to(-300).next_down(), 1), None);
+    assert!(NormBound::computed(two_to(300), 1).is_some());
+    assert_eq!(NormBound::computed(two_to(300).next_up(), 1), None);
     assert_eq!(NormBound::computed(0.0, 1), None);
     // xGEQP3's drift test: a square at most 2^-26 of the one last computed is computed again.
     let worn = |fresh: f64| NormBound {
@@ -1245,13 +1254,13 @@ fn a_norm_is_carried_only_inside_its_window_and_above_the_drift_test() {
         error: 0.0,
         fresh,
     };
-    assert_eq!(worn(2f64.powi(26)).downdate(0.0, 1), None);
+    assert_eq!(worn(two_to(26)).downdate(0.0, 1), None);
     assert_eq!(
-        worn(2f64.powi(26).next_down()).downdate(0.0, 1),
+        worn(two_to(26).next_down()).downdate(0.0, 1),
         Some(NormBound {
             square: 1.0,
-            error: 36.0 * 2f64.powi(-53),
-            fresh: 2f64.powi(26).next_down()
+            error: 36.0 * two_to(-53),
+            fresh: two_to(26).next_down()
         })
     );
     assert_eq!(worn(1.0).downdate(1.0, 1), None);
