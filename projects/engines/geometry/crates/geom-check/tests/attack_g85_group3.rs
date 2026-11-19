@@ -8,6 +8,7 @@
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::arithmetic_side_effects,
     clippy::too_many_lines,
     reason = "test code: a failure should stop loudly"
@@ -772,8 +773,8 @@ fn slab_of(
         P3::new(x + radius, y + radius, size[2]).unwrap(),
     )
     .unwrap();
-    let side = r.face_with(0, &[&[(low, back)], &[(high, way)]], shaft, around);
-    r.faces[side as usize].sense = Sense::Reversed;
+    let bore = r.face_with(0, &[&[(low, back)], &[(high, way)]], shaft, around);
+    r.faces[bore as usize].sense = Sense::Reversed;
     r
 }
 
