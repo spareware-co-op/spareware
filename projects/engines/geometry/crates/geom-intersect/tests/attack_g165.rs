@@ -15,8 +15,9 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
-use geom_curve::{CurveKind, Frame, ParamCurve};
+use geom_curve::{Circle, CurveKind, Frame, ParamCurve};
 use geom_intersect::IntersectError;
+use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{
     Coincidence, CurveContact, CurveEnd, Intersection, Item, PointContact,
@@ -2185,5 +2186,47 @@ fn an_endless_half_plane_cuts_a_cylinder_in_a_half_circle() {
         near(q[0], 0.0);
         near(q[1].abs(), 5.0);
         near(q[2], 4.0);
+    }
+}
+
+/// The circle of radius 500 about the origin in the plane x = 0 crosses the endless plane z = 0
+/// at (0, −500, 0) and (0, 500, 0): two proven crossings, nothing flagged and nothing touched,
+/// for the plane has no end. Both points stand on the circle's own box read in the plane's
+/// parameters (u = x is 0 all round, v = y is −500 and 500 there), so the ends the plane is held
+/// to on the engine's path must stand well past that box: held a rounding past it, the engine has
+/// no room past either point in u or v to prove it alone, and flags both as undecided at the floor.
+#[test]
+fn an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings() {
+    let circle = CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            500.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    );
+    let flat = endless([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let r = curve_surface(&circle, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<(Interval, PointContact)> = r
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Point { at, contact, .. } => {
+                let [_, u, v] = at.spans() else {
+                    panic!("{at:?}");
+                };
+                assert!(u.contains(0.0), "{u:?}");
+                Some((*v, *contact))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(found.len(), 2, "{:?}", r.items());
+    found.sort_by(|a, b| a.0.lo().total_cmp(&b.0.lo()));
+    assert!(found[0].0.contains(-500.0), "{:?}", r.items());
+    assert!(found[1].0.contains(500.0), "{:?}", r.items());
+    for (_, contact) in found {
+        assert_eq!(contact, PointContact::Crossing, "{:?}", r.items());
     }
 }
