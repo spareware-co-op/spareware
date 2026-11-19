@@ -11,6 +11,7 @@
 # Sources: geom-pool's rows are main's push run 44000736866 (79dd48d74), partition 1's Tree Borrows report under the default-miri profile, in its own seconds, stopped at 600 s.
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
+# GitHub measuring run 44491768122 (miri_measure=new on test/miri-twelve at 0db6136b8).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1084,6 +1085,7 @@ native-only over 601	geom-math::typed	rotations_and_sums_land_on_steps_and_midpo
 native-only over 601	geom-math::vectors	products_2d_are_exact
 native-only over 601	geom-math::vectors	products_3d_are_exact
 native-only over 601	geom-math::vectors	sums_are_checked
+8	geom-mesh	model::tests::a_new_surfaces_shell_is_each_triangles_own_body
 25	geom-mesh	model::tests::a_refused_operation_leaves_the_surface_as_it_was
 native-only over 601	geom-mesh	model::tests::kept_operations_keep_the_surface_whole
 69	geom-mesh::boolean	a_cut_through_splits_a_run_into_named_pieces
@@ -2998,6 +3000,7 @@ native-only over 601	geom-poly::subdivide	every_arrangement_agrees_with_the_bloc
 native-only over 601	geom-poly::subdivide	ten_by_ten_crossing_beams_are_counted_at_every_crossing
 250	geom-poly::subdivide	the_box_around_is_the_same_on_a_pool
 4	geom-poly::subdivide	the_box_around_polygons_is_clear_of_them_on_odd_half_steps
+44	geom-poly::subdivide	the_corners_read_off_square_planes_are_the_three_plane_points
 569	geom-poly::subdivide	the_same_pieces_come_out_on_any_threads
 native-only over 601	geom-poly::subdivide	twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes
 75	geom-poly::trace	a_block_inside_a_block_winds_twice
