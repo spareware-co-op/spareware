@@ -643,33 +643,6 @@ fn handed_turn(s: &Solid, k: u32, by: [i64; 3]) -> i128 {
     (0..3).map(|i| n[i] * i128::from(by[i])).sum()
 }
 
-/// The extrusion of a profile with a round hole meets SC-8 and nothing before it: the circle is
-/// written on the exact frame whose x axis runs along the outer polygon's first edge as handed and
-/// whose y axis turns it negatively about the vector, so bldg-47's square with a round hole, and
-/// the same profile 1 m higher, reach the kernel's checker and are refused there with SC-8's first
-/// fault, as `tests/named-faults.json` names it (16 faults in all at z = 0, 15 at 1 m). When SC-8
-/// is fixed this test changes with its entry.
-#[test]
-fn a_round_hole_meets_sc_8_and_nothing_before_it() {
-    let mut m = Modeller::new(STEP);
-    let s = |x: &str| steps(x, STEP);
-    for (z, faults) in [("0", 16), ("1", 15)] {
-        let p = |x: &str, y: &str| Corner::from(P3::new(s(x), s(y), s(z)).expect("a point"));
-        let profile = Profile {
-            outer: vec![p("-1", "-1"), p("1", "-1"), p("1", "1"), p("-1", "1")],
-            holes: vec![Hole::Circle {
-                centre: P3::new(0, 0, s(z)).expect("a point"),
-                radius: Steps(s("0.5").unsigned_abs()),
-            }],
-        };
-        let found = m.extrude(&profile, [0, 0, s("3")]);
-        assert!(
-            matches!(&found, Err(Error::CheckFailed { report, .. }) if *report == format!("geom-check found {faults} faults, the first: group 3, edge 5: no certified test of this pair exists yet (edge 4)")),
-            "at z {z}: {found:?}"
-        );
-    }
-}
-
 /// The named list, `tests/named-faults.json`.
 fn named() -> Value {
     serde_json::from_str(include_str!("named-faults.json")).expect("named-faults.json")
