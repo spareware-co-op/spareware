@@ -14,6 +14,7 @@
 # GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: #1007's tests, from the run's listing with #1011's cut tests put back whole.
 # GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: its own listing.
 # GitHub measuring runs 44429236632 (geom-num attack_wide_tests, geom-op hash) and 44446255855 (geom-num wide), miri_measure=new on test/miri-slices-2 at 436772b7f, in their own seconds, stopped at 600 s; listing: the run's listing with #1011's 22 cut tests put back whole.
+# GitHub measuring runs 44429236632 (geom-num attack_wide_tests, geom-op hash) and 44446255855 (geom-num wide), miri_measure=new on test/miri-slices-2 at 436772b7f, in their own seconds, stopped at 600 s; listing: its own listing.
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -4827,7 +4828,15 @@ native-only over 601	geom-op::fuzz	any_stream_of_calls_writes_only_canonical_ite
 native-only over 601	geom-op::hash	fips_180_4_examples
 native-only over 601	geom-op::hash	nist_monte_carlo_chain
 native-only over 601	geom-op::hash	nist_short_and_long_messages
-549	geom-op::hash	the_vector_files_are_as_published
+107	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_1
+100	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_2
+109	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_3
+103	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_4
+98	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_5
+104	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_6
+111	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_7
+102	geom-op::hash	the_vector_files_are_as_published::the_long_file_part_8
+14	geom-op::hash	the_vector_files_are_as_published::the_short_and_monte_carlo_files
 3	geom-op::history	a_hand_worked_chain_composes_by_chapter_20_3s_rules
 6	geom-op::history	a_history_encodes_as_its_doc_comment_states
 2	geom-op::history	each_topology_change_is_checked_against_the_records
