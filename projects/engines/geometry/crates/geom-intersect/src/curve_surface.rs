@@ -1267,26 +1267,32 @@ fn finished(
     for z in &solved.zeros {
         let enclosure = held(z.enclosure)?;
         // A zero inside a run is part of what the run could not tell apart, and one on a join is
-        // found from both sides of it.
-        let meeting = |hull: &[Interval; 3]| {
-            hull.iter()
-                .zip(&enclosure)
-                .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+        // found from both sides of it: on a whole turn, modulo the turn (decision 32.104).
+        let meeting = |hull: &[Interval; 3]| -> Result<bool, IntersectError> {
+            let mut all = true;
+            for ((seam, a), b) in field.seams.iter().zip(hull).zip(&enclosure) {
+                all &= seam.meets(*a, *b)?;
+            }
+            Ok(all)
         };
-        if regions.iter().any(|(hull, _)| meeting(hull)) || seen.iter().any(meeting) {
+        let mut known = false;
+        for hull in regions.iter().map(|(hull, _)| hull).chain(&seen) {
+            known |= meeting(hull)?;
+        }
+        if known {
             continue;
         }
         seen.push(enclosure);
         let [t, u, v] = enclosure;
         items.push(Item::Point {
             at: ParamBox::new(&enclosure)?,
-            xyz: grid_box(&field.curve.bound(span(t), meter)?)?,
+            xyz: grid_box(&bound_over(field.curve, seam_t, t, meter)?)?,
             contact: boundary(field, [t, u, v]),
             class: certified(),
         });
     }
     for ([t, u, v], why) in regions {
-        let image = field.curve.bound(span(t), meter)?;
+        let image = bound_over(field.curve, seam_t, t, meter)?;
         let at = ParamBox::new(&[t, u, v])?;
         let xyz = grid_box(&image)?;
         let why = match why {
@@ -2315,7 +2321,8 @@ fn circle_across(
         let [on_u, on_v] = surface_ends(round.seams, u, v);
         *slot = Some(Item::Point {
             at: ParamBox::new(&[t, u, v])?,
-            xyz: grid_box(&curve.bound(span(t), meter)?)?,
+            // A span across the join is read modulo the turn (decision 32.104).
+            xyz: grid_box(&bound_over(curve, Seam::turns((lo, hi)), t, meter)?)?,
             contact: standing(tangent, [false, on_u, on_v]),
             class: certified(),
         });

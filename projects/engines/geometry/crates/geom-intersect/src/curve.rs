@@ -295,18 +295,38 @@ impl Seam {
         [parts.next().or(Some((point, point))), parts.next()]
     }
 
-    /// `x` as the domain writes it, a box across the join held to its near side.
+    /// `x` as the domain writes it. An open domain cuts `x` to itself. On a whole turn the join is
+    /// no end (decision 32.104): `x` is moved by a turn to start in the window, from its start up to
+    /// short of its end, and is kept whole, so a box across the join runs past the window's end by
+    /// less than a turn and is read modulo the turn; a box a turn wide or more is the whole turn.
     pub(crate) fn onto(self, x: Interval) -> Result<Interval, IntersectError> {
         let (lo, hi) = self.domain;
+        if !self.closed {
+            return held(x, (lo, hi));
+        }
         let shift = Interval::point(self.period())?;
-        let moved = if self.closed && x.hi() > hi {
-            x.sub(shift)?
-        } else if self.closed && x.hi() < lo {
+        let moved = if x.lo() < lo {
             x.add(shift)?
+        } else if x.lo() >= hi {
+            x.sub(shift)?
         } else {
             x
         };
-        held(moved, (lo, hi))
+        // The width rounded is under the period only if the width is, the period being a double.
+        if moved.lo() < lo || moved.lo() > hi || moved.hi() - moved.lo() >= self.period() {
+            return self.whole();
+        }
+        Ok(moved)
+    }
+
+    /// Whether `a` and `b` share a point, on a whole turn modulo the turn (decision 32.104).
+    pub(crate) fn meets(self, a: Interval, b: Interval) -> Result<bool, IntersectError> {
+        let touch = |b: Interval| a.lo() <= b.hi() && b.lo() <= a.hi();
+        if touch(b) || !self.closed {
+            return Ok(touch(b));
+        }
+        let shift = Interval::point(self.period())?;
+        Ok(touch(b.add(shift)?) || touch(b.sub(shift)?))
     }
 }
 
@@ -319,8 +339,8 @@ pub(crate) fn seam_of<const D: usize>(curve: &CurveKind<D>, domain: (f64, f64)) 
 }
 
 /// A box around `curve` over `x`, across its join if `x` is.
-pub(crate) fn bound_over<const D: usize>(
-    curve: &CurveKind<D>,
+pub(crate) fn bound_over<C: ParamCurve<D>, const D: usize>(
+    curve: &C,
     seam: Seam,
     x: Interval,
     meter: &mut WorkMeter<'_>,
@@ -515,17 +535,22 @@ fn items_of<const D: usize>(
         let enclosure = [first.onto(s)?, second.onto(t)?];
         let [s, t] = enclosure;
         // A zero inside a run is part of what the run could not tell apart, and one on a join is
-        // found from both sides of it.
-        let meeting = |hull: &[Interval; 2]| {
-            hull.iter()
-                .zip(&enclosure)
-                .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+        // found from both sides of it: on a whole turn, modulo the turn.
+        let meeting = |[h, k]: &[Interval; 2]| -> Result<bool, IntersectError> {
+            Ok(first.meets(*h, s)? && second.meets(*k, t)?)
         };
-        if runs.iter().any(|(hull, _)| meeting(hull)) || seen.iter().any(meeting) {
+        let mut known = false;
+        for hull in runs.iter().map(|(hull, _)| hull).chain(&seen) {
+            known |= meeting(hull)?;
+        }
+        if known {
             continue;
         }
         seen.push(enclosure);
-        let (a, b) = (gap.a.bound(span(s), meter)?, gap.b.bound(span(t), meter)?);
+        let (a, b) = (
+            bound_over(gap.a, first, s, meter)?,
+            bound_over(gap.b, second, t, meter)?,
+        );
         let mut apart = false;
         let mut unsure = None;
         for k in &others {
@@ -563,7 +588,10 @@ fn items_of<const D: usize>(
         });
     }
     for ([s, t], why) in runs {
-        let (a, b) = (gap.a.bound(span(s), meter)?, gap.b.bound(span(t), meter)?);
+        let (a, b) = (
+            bound_over(gap.a, first, s, meter)?,
+            bound_over(gap.b, second, t, meter)?,
+        );
         // As for a zero: in 3D a run in the shadow is a meeting only if the third coordinate can
         // agree somewhere on it.
         let mut apart = false;
@@ -607,16 +635,35 @@ fn second_order<const D: usize>(
     let not_smooth = Unresolved::NonSmooth {
         at: crate::result::Degeneracy::Crease,
     };
-    // Over a run grown past where rounding swamps second derivatives, and on the domains.
+    // Over a run grown past where rounding swamps second derivatives, and on the domains: on a
+    // whole turn a run may run past the window's end by under a turn (decision 32.104), and is
+    // read modulo the turn.
     let [first, second] = gap.seams;
-    let [s, t] = grown(&[s, t], &[first.whole()?, second.whole()?])?;
+    let reach = |seam: Seam| -> Result<Interval, IntersectError> {
+        let (lo, hi) = seam.domain;
+        let past = if seam.closed { seam.period() } else { 0.0 };
+        Ok(Interval::new(lo, hi + past)?)
+    };
+    let [s, t] = grown(&[s, t], &[reach(first)?, reach(second)?])?;
     let mut parts = [[Interval::point(0.0)?; 2]; 4];
-    let wanted = [(gap.a, s, 1), (gap.a, s, 2), (gap.b, t, 1), (gap.b, t, 2)];
-    for (slot, (curve, x, order)) in parts.iter_mut().zip(wanted) {
-        let DerivativeBound::Bounded(d) = curve.derivative_bound(span(x), order, meter)? else {
-            return Ok(not_smooth);
-        };
-        *slot = picked(&d, gap.axes)?;
+    let wanted = [
+        (gap.a, first, s, 1),
+        (gap.a, first, s, 2),
+        (gap.b, second, t, 1),
+        (gap.b, second, t, 2),
+    ];
+    for (slot, (curve, seam, x, order)) in parts.iter_mut().zip(wanted) {
+        let mut out: Option<Bounds<D>> = None;
+        for part in seam.spans(x).into_iter().flatten() {
+            let DerivativeBound::Bounded(d) = curve.derivative_bound(part, order, meter)? else {
+                return Ok(not_smooth);
+            };
+            out = Some(match out {
+                Some(a) => a.union(&d).map_err(CurveError::from)?,
+                None => d,
+            });
+        }
+        *slot = picked(&out.ok_or(IntersectError::Internal)?, gap.axes)?;
     }
     let [a1, a2, b1, b2] = parts;
     let [ax, ay] = a1;
@@ -797,13 +844,15 @@ fn at<T: Copy, const N: usize>(v: &[T; N], k: usize) -> Result<T, IntersectError
     v.get(k).copied().ok_or(IntersectError::Internal)
 }
 
-/// `t`, a number of half-turns, moved by whole turns onto `domain`, if any of it lands there.
+/// `t`, a number of half-turns, moved by whole turns onto `domain`, if any of it lands there. An arc
+/// holds the first turn that lands. On a whole turn the join is no end (decision 32.104): a box across
+/// it is kept whole, starting in the window, as [`Seam::onto`] writes it.
 pub(crate) fn onto(t: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, IntersectError> {
     let mut turns = math::floor((lo - t.hi()) / 2.0)?.get();
     for _ in 0..3 {
         let moved = t.add(Interval::point(2.0 * turns)?)?;
         if moved.hi() >= lo && moved.lo() <= hi {
-            return Ok(Some(held(moved, (lo, hi))?));
+            return Ok(Some(Seam::turns((lo, hi)).onto(moved)?));
         }
         turns += 1.0;
     }
@@ -889,7 +938,9 @@ fn circle_circle<const D: usize>(
             continue;
         };
         let at = ParamBox::new(&[s, t])?;
-        let xyz = grid_box(&a.bound(span(s), meter)?)?;
+        // A span across the join is read modulo the turn.
+        let seam = Seam::turns(ParamCurve::domain(a));
+        let xyz = grid_box(&bound_over(a, seam, s, meter)?)?;
         items.push(if merged {
             Item::Flagged {
                 at,

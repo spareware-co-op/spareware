@@ -218,7 +218,7 @@ fn two_circles_cross_touch_or_miss() {
     assert_eq!(meet(&a, &circle([6.0, 0.0], 5.0)).items().len(), 2);
     let r = meet(&a, &circle([10.0, 0.0], 5.0));
     assert_eq!(contacts(&r), [PointContact::IsolatedTangent]);
-    near(points(&r)[0].0, 0.0);
+    near(points(&r)[0].0, 2.0);
     near(points(&r)[0].1, 1.0);
     let r = meet(&a, &circle([3.0, 0.0], 2.0));
     assert_eq!(contacts(&r), [PointContact::IsolatedTangent]);
@@ -377,11 +377,15 @@ fn a_line_meets_a_circle() {
     );
 }
 
-/// Whether a point of `found` has a circle's span (its second) holding all of `p..=q`.
+/// Whether a point of `found` has a circle's span (its second) holding all of `p..=q`, modulo the
+/// turn (decision 32.104: on a whole turn a span may run past the window's end). A span from 2 up
+/// to 4 less a turn is exact, so the shifted span is the same span.
 fn held_over(found: &Intersection, p: f64, q: f64) -> bool {
     found.items().iter().any(|i| {
         let t = i.at().spans()[1];
-        matches!(i, Item::Point { .. }) && t.lo() <= p && t.hi() >= q
+        let holds = |lo: f64, hi: f64| lo <= p && hi >= q;
+        let shifted = t.lo() >= 2.0 && t.hi() < 4.0 && holds(t.lo() - 2.0, t.hi() - 2.0);
+        matches!(i, Item::Point { .. }) && (holds(t.lo(), t.hi()) || shifted)
     })
 }
 
@@ -494,7 +498,7 @@ fn a_rotated_circle_is_met_on_its_own_turns() {
     let a = CurveKind::Circle(Circle::full([0.0, 0.0], 5.0, frame).unwrap());
     let p = points(&meet(&segment([0.0, 0.0], [0.0, 9.0]), &a));
     assert_eq!(p.len(), 1);
-    near(p[0].1, 0.0);
+    near(p[0].1, 2.0);
     let frame = Frame::new([1.0, 0.0], [0.0, 0.0, -1.0]).unwrap();
     let a = CurveKind::Circle(Circle::full([0.0, 0.0], 5.0, frame).unwrap());
     let p = points(&meet(&segment([0.0, 0.0], [0.0, 9.0]), &a));
@@ -1355,7 +1359,7 @@ fn a_closed_curve_s_join_is_no_boundary_and_an_open_end_is() {
     let other = circle([5.0, 5.0], 5.0);
     touches_are(
         &touches(&meet(&circle([0.0, 0.0], 5.0), &other)),
-        &[(Crossing, 0.0), (Crossing, 0.5)],
+        &[(Crossing, 0.5), (Crossing, 2.0)],
     );
     touches_are(
         &touches(&meet(&arc([0.0, 0.0], 5.0, (0.0, 1.0)), &other)),
@@ -1602,13 +1606,13 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
     let west = bezier(&[[0.0, 0.0], [-5000.0, 0.0], [-10000.0, 0.0]]);
     let slant = bezier(&[[-6000.0, -1000.0], [-5000.0, 0.0], [-4000.0, 1000.0]]);
     for (a, b, s, t) in [
-        (turn(0.0), east.clone(), 0.0, 0.5),
+        (turn(0.0), east.clone(), 2.0, 0.5),
         (turn(0.0), west.clone(), 1.0, 0.5),
-        (turn(1.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), west.clone(), 3.0, 0.5),
         (turn(1.0), east.clone(), 2.0, 0.5),
-        (turn(1.0), slant.clone(), 1.0, 0.5),
-        (east.clone(), turn(0.0), 0.5, 0.0),
-        (west.clone(), turn(1.0), 0.5, 1.0),
+        (turn(1.0), slant.clone(), 3.0, 0.5),
+        (east.clone(), turn(0.0), 0.5, 2.0),
+        (west.clone(), turn(1.0), 0.5, 3.0),
     ] {
         let r = meet(&a, &b);
         assert!(
@@ -1725,7 +1729,7 @@ fn a_whole_circle_s_search_takes_only_its_work() {
         work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
         work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
     ];
-    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
+    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1315)]);
 }
 
 #[test]
