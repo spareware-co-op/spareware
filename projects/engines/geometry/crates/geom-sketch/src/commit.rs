@@ -268,20 +268,21 @@ impl Offsets {
         Ok((at, total))
     }
 
-    /// Says `value(b) - value(a) = d`. `false` if that contradicts what is already said.
-    fn union(&mut self, a: usize, b: usize, d: i64) -> Result<bool, SketchError> {
+    /// Says `value(b) - value(a) = d`, unless it is already said or contradicts what is: a relation
+    /// left out here is only checked, in pass 6, and gives way there if the stored values miss it.
+    fn union(&mut self, a: usize, b: usize, d: i64) -> Result<(), SketchError> {
         let ((ra, oa), (rb, ob)) = (self.find(a)?, self.find(b)?);
+        if ra == rb {
+            return Ok(());
+        }
         let sum = |x: i64, y: i64| x.checked_add(y).ok_or(SketchError::Internal);
         let diff = |x: i64, y: i64| x.checked_sub(y).ok_or(SketchError::Internal);
-        if ra == rb {
-            return Ok(diff(ob, oa)? == d);
-        }
         // value(rb) = value(ra) + shift
         let shift = diff(sum(oa, d)?, ob)?;
         if let (Some(fa), Some(fb)) = (get(&self.fixed, ra)?, get(&self.fixed, rb)?)
             && sum(fa, shift)? != fb
         {
-            return Ok(false);
+            return Ok(());
         }
         if get(&self.fixed, ra)?.is_none()
             && let Some(fb) = get(&self.fixed, rb)?
@@ -290,19 +291,18 @@ impl Offsets {
         }
         *slot(&mut self.parent, rb)? = ra;
         *slot(&mut self.offset, rb)? = shift;
-        Ok(true)
+        Ok(())
     }
 
-    /// Says `value(s) = v`. `false` if that contradicts what is already said.
-    fn fix(&mut self, s: usize, v: i64) -> Result<bool, SketchError> {
+    /// Says `value(s) = v`, unless a value is already said, which this leaves (pass 6 checks it).
+    fn fix(&mut self, s: usize, v: i64) -> Result<(), SketchError> {
         let (r, o) = self.find(s)?;
         let target = v.checked_sub(o).ok_or(SketchError::Internal)?;
-        if let Some(x) = get(&self.fixed, r)? {
-            Ok(x == target)
-        } else {
-            *slot(&mut self.fixed, r)? = Some(target);
-            Ok(true)
+        let fixed = slot(&mut self.fixed, r)?;
+        if fixed.is_none() {
+            *fixed = Some(target);
         }
+        Ok(())
     }
 }
 
@@ -354,13 +354,10 @@ impl Classes {
             return Ok(());
         }
         let link = pa ^ pb ^ (turns & 1);
-        if ra < rb {
-            *slot(&mut self.parent, rb)? = ra;
-            *slot(&mut self.parity, rb)? = link;
-        } else {
-            *slot(&mut self.parent, ra)? = rb;
-            *slot(&mut self.parity, ra)? = link;
-        }
+        // The roots differ here, so the lower is the other's parent.
+        let (root, child) = (ra.min(rb), ra.max(rb));
+        *slot(&mut self.parent, child)? = root;
+        *slot(&mut self.parity, child)? = link;
         Ok(())
     }
 }
@@ -564,12 +561,11 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
     for c in plan.cons {
         match c.kind {
             ConstraintKind::Coincident { a, b } => {
+                // Both are points: the sketch takes no coincidence of anything else.
                 let (a, b) = (plan.at(a)?, plan.at(b)?);
-                if plan.is_point(a) && plan.is_point(b) {
-                    co.union(xs(a)?, xs(b)?, 0)?;
-                    co.union(ys(a)?, ys(b)?, 0)?;
-                    same_point.union(a, b, 0)?;
-                }
+                co.union(xs(a)?, xs(b)?, 0)?;
+                co.union(ys(a)?, ys(b)?, 0)?;
+                same_point.union(a, b, 0)?;
             }
             ConstraintKind::Concentric { a, b } => {
                 let (ca, cb) = (
@@ -613,8 +609,9 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
                 slot: which,
                 value,
             } => {
+                // A point's slots are 0 and 1, its x and y: the sketch takes no other.
                 let e = plan.at(entity)?;
-                if plan.is_point(e) && which < 2 {
+                if plan.is_point(e) {
                     let s = if which == 0 { xs(e)? } else { ys(e)? };
                     co.fix(s, nearest(value)?)?;
                 }
@@ -868,14 +865,10 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
                 if gp == gq {
                     return Err(SketchError::Degenerate(id));
                 }
-                let through = Carrier::through(gp, gq)?;
-                let ([a, b], c) = through.coefficients();
+                // In lowest terms: g divides c too, as c = a x + b y at the grid point gp.
+                let ([a, b], c) = Carrier::through(gp, gq)?.coefficients();
                 let g = gcd(a, b);
-                if g > 1 && c.checked_rem(g) == Some(0) {
-                    Carrier::new(div(a, g)?, div(b, g)?, div(c, g)?)?
-                } else {
-                    through
-                }
+                Carrier::new(div(a, g)?, div(b, g)?, div(c, g)?)?
             }
         } else {
             // The class's normal, in its root's frame: an axis fixes it; else the root's own line.
@@ -933,14 +926,13 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         }
     }
     for c in plan.cons {
+        // The sketch takes a point on a line only.
         if let ConstraintKind::OnLine { point, line } = c.kind {
             let (p, l) = (plan.at(point)?, plan.at(line)?);
-            if plan.is_point(p) && plan.ends(l)?.is_some() {
-                let r = same_point.find(p)?.0;
-                let list = slot(&mut through, r)?;
-                if !list.contains(&l) {
-                    push(list, l)?;
-                }
+            let r = same_point.find(p)?.0;
+            let list = slot(&mut through, r)?;
+            if !list.contains(&l) {
+                push(list, l)?;
             }
         }
     }
@@ -1376,7 +1368,8 @@ fn holds(
             slot: which,
             value,
         } => match grid_of(entity)? {
-            Some(p) if which < 2 => {
+            // Only a point has a grid form, and its slots are 0 and 1.
+            Some(p) => {
                 let v = if which == 0 { p.x.get() } else { p.y.get() };
                 Some(v == nearest(value)?)
             }

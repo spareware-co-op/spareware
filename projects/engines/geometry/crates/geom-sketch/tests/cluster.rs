@@ -11,7 +11,13 @@
 //! space), the plan is the one the definitions give; on random Laman graphs built by Henneberg's
 //! two moves (Henneberg 1911; Laman 1970, doi:10.1007/BF01534980) the whole graph is one rigid
 //! cluster, and with one bar removed it is not; a plan is the same for every order of the input;
-//! a component past the size limit is reported and left alone; and a budget too small refuses.
+//! a component past the size limit is reported and left alone, even by a search through the ground
+//! that holds its fixed point, while a body fixed to that ground beside it is still grounded; and a
+//! budget too small refuses.
+//! Kabsch placement recovers every rotation and shift tried in the plane and in space and fits a
+//! mirror image by the nearest rotation, never a reflection; the flow network gives the textbook
+//! flow and cut, takes flow back along an arc, refuses bad nodes before any work, and charges its
+//! work exactly.
 //! The paper's own figures are not reproduced: they were not available to the build, so the
 //! examples here are the standard ones the papers describe in words.
 
@@ -28,12 +34,17 @@
 
 use std::collections::BTreeSet;
 
+use geom_linalg::matrix::Work;
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::cluster::{Child, Link, Node, Plan, Problem, SIZE_LIMIT, plan};
+use geom_sketch::flow::Network;
 use geom_sketch::model::SketchError;
+use geom_sketch::place::{Placement, Rigid, kabsch, place};
 
+/// A budget far above what any plan here needs, so a search that runs away stops with an error
+/// instead of hanging.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(20_000_000))
 }
 
 /// `n` points in the plane, keys 100 upwards, two freedoms each.
@@ -495,6 +506,146 @@ fn a_component_past_the_size_limit_is_named_and_left_alone() {
     // The lowest key of the skipped component: its nodes are 3..8, keys 197 down to 193.
     assert_eq!(plan.too_large, [193]);
     assert_eq!(plan.top.len(), 1 + 5);
+    // At a limit of 5 the ring is not past it: it is searched, and is one body.
+    let at_limit = planned_within(&p, 5);
+    assert_eq!(at_limit.too_large, []);
+    assert_eq!(at_limit.top.len(), 2, "{at_limit:?}");
+}
+
+/// The plan of `p` with components past `limit` nodes left alone.
+fn planned_within(p: &Problem, limit: usize) -> Plan {
+    plan(p, limit, &mut meter()).unwrap()
+}
+
+/// A component of five past a limit of 4, keys `large` upwards, appended to `nodes` and `links`: a
+/// fixed point, a point on it held twice over (a coincidence and a distance, one equation
+/// redundant, so the pair is dense: 2 + 3 - 3 = 2) and a chain of three bars from that point.
+fn add_too_large_component(large: u64, nodes: &mut Vec<Node>, links: &mut Vec<Link>) {
+    let at = nodes.len();
+    for i in 0..5 {
+        nodes.push(Node {
+            key: large + i,
+            weight: 2,
+            fixed: i == 0,
+        });
+    }
+    links.extend([
+        mate(50, at + 1, at, 2),
+        bar(51, at + 1, at),
+        bar(52, at + 1, at + 2),
+        bar(53, at + 2, at + 3),
+        bar(54, at + 3, at + 4),
+    ]);
+}
+
+/// A bar AB joined to a fixed point F by a coincidence of A (2 equations) and a distance from B (1):
+/// a small rigid body, dense with the ground (3 + 4 - 4 = 3), keys `small` (F), `small + 1` (A) and
+/// `small + 2` (B); beside it, the component of [`add_too_large_component`] at keys `large`. With
+/// `body_first` the bar is tried first, so the body is one cluster by the time its links to F are
+/// tried and their lowest member is the ground; else those links are tried while A and B are points.
+fn beside_a_too_large_component(small: u64, large: u64, body_first: bool) -> Problem {
+    let mut nodes = vec![
+        Node {
+            key: small,
+            weight: 2,
+            fixed: true,
+        },
+        Node {
+            key: small + 1,
+            weight: 2,
+            fixed: false,
+        },
+        Node {
+            key: small + 2,
+            weight: 2,
+            fixed: false,
+        },
+    ];
+    let (ab, af, bf) = if body_first { (1, 2, 3) } else { (3, 1, 2) };
+    let mut links = vec![bar(ab, 1, 2), mate(af, 1, 0, 2), bar(bf, 2, 0)];
+    add_too_large_component(large, &mut nodes, &mut links);
+    planar(nodes, links)
+}
+
+#[test]
+fn a_body_fixed_to_the_ground_beside_a_too_large_component_is_grounded() {
+    // Issue #1056: the ground holds the large component's fixed point too, and must stay open to
+    // the small component all the same, whichever of its links is tried first and wherever its
+    // keys lie against the large component's, while the large component stays unsearched.
+    for (small, large) in [(10, 30), (30, 10)] {
+        for body_first in [true, false] {
+            let p = beside_a_too_large_component(small, large, body_first);
+            let plan = planned_within(&p, 4);
+            let case = format!("small {small}, large {large}, body first {body_first}: {plan:?}");
+            assert_eq!(plan.too_large, [large], "{case}");
+            assert!(plan.clusters[0].grounded, "{case}");
+            assert_eq!(
+                keys_under(&plan, Child::Cluster(0)),
+                BTreeSet::from([small, large]),
+                "{case}"
+            );
+            // The body is grounded: the last cluster holds it and the ground, with no redundancy.
+            let last = plan.clusters.len() - 1;
+            assert!(plan.clusters[last].grounded, "{case}");
+            assert_eq!(plan.clusters[last].redundant, 0, "{case}");
+            assert_eq!(
+                keys_under(&plan, Child::Cluster(last)),
+                BTreeSet::from([small, small + 1, small + 2, large]),
+                "{case}"
+            );
+            // Nothing past the ground reaches the large component: its four free points are each
+            // left at the top, beside the grounded body, and no cluster holds one.
+            let mut top = vec![Child::Cluster(last)];
+            top.extend((large + 1..large + 5).map(Child::Node));
+            top.sort_unstable_by_key(|&c| keys_under(&plan, c).first().copied());
+            assert_eq!(plan.top, top, "{case}");
+            for c in 1..plan.clusters.len() {
+                let keys = keys_under(&plan, Child::Cluster(c));
+                assert!((large + 1..large + 5).all(|k| !keys.contains(&k)), "{case}");
+            }
+        }
+    }
+}
+
+#[test]
+fn no_search_grows_through_the_ground_into_a_too_large_component() {
+    // Issue #1056: a point P hangs from a fixed point F by one bar, so the search from that bar,
+    // a pair of 4 freedoms, grows a ring at a time; F is in the ground with the large component's
+    // fixed point, so the ring through the ground would reach that component's doubly held point
+    // and find it dense with the ground. The large component is not searched, so the plan is the
+    // ground alone, with P loose.
+    let mut nodes = vec![
+        Node {
+            key: 10,
+            weight: 2,
+            fixed: true,
+        },
+        Node {
+            key: 11,
+            weight: 2,
+            fixed: false,
+        },
+    ];
+    let mut links = vec![bar(1, 1, 0)];
+    add_too_large_component(20, &mut nodes, &mut links);
+    let plan = planned_within(&planar(nodes, links), 4);
+    assert_eq!(plan.too_large, [20]);
+    assert_eq!(plan.clusters.len(), 1, "{plan:?}");
+    assert_eq!(
+        keys_under(&plan, Child::Cluster(0)),
+        BTreeSet::from([10, 20])
+    );
+    assert_eq!(
+        plan.top,
+        [
+            Child::Cluster(0),
+            Child::Node(11),
+            Child::Node(21),
+            Child::Node(22),
+            Child::Node(23),
+            Child::Node(24)
+        ]
+    );
 }
 
 #[test]
@@ -563,4 +714,404 @@ fn a_family_of_rigid_bodies_gives_one_body_each_and_a_floppy_chain_joins_none() 
     let chained = run(&family(12, true));
     assert_eq!(chained.clusters.len(), 3 * 12);
     assert_eq!(chained.top.len(), 12);
+}
+
+fn work() -> Work {
+    Work::new(u64::MAX)
+}
+
+/// `rotation` times `p`, plus `shift`.
+fn moved<const N: usize>(rotation: &[[f64; N]; N], shift: &[f64; N], p: &[f64; N]) -> [f64; N] {
+    let mut out = *shift;
+    for i in 0..N {
+        for j in 0..N {
+            out[i] += rotation[i][j] * p[j];
+        }
+    }
+    out
+}
+
+fn determinant<const N: usize>(m: &[[f64; N]; N]) -> f64 {
+    match N {
+        2 => m[0][0] * m[1][1] - m[0][1] * m[1][0],
+        3 => {
+            m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+                - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        }
+        _ => panic!("the tests use the plane and space only"),
+    }
+}
+
+/// Asserts that `kabsch` carries `local` onto its image under `rotation` and `shift`, and finds
+/// that rotation and shift.
+fn assert_recovered<const N: usize>(local: &[[f64; N]], rotation: [[f64; N]; N], shift: [f64; N]) {
+    let drawn: Vec<[f64; N]> = local.iter().map(|p| moved(&rotation, &shift, p)).collect();
+    let r = kabsch(local, &drawn, &mut work()).unwrap();
+    for i in 0..N {
+        assert!((r.translation[i] - shift[i]).abs() < 1e-9, "{r:?}");
+        for j in 0..N {
+            assert!((r.rotation[i][j] - rotation[i][j]).abs() < 1e-9, "{r:?}");
+        }
+    }
+    for (p, q) in local.iter().zip(&drawn) {
+        let image = r.apply(p);
+        assert!(
+            image.iter().zip(q).all(|(a, b)| (a - b).abs() < 1e-9),
+            "{image:?}"
+        );
+    }
+}
+
+#[test]
+fn a_rigid_motion_turns_a_point_and_then_moves_it() {
+    let r = Rigid {
+        rotation: [[0.0, -1.0], [1.0, 0.0]],
+        translation: [5.0, -2.0],
+        singular_values: [0.0; 2],
+    };
+    assert_eq!(r.apply(&[2.0, 1.0]), [4.0, 0.0]);
+    assert_eq!(r.apply(&[3.0, -7.0]), [12.0, 1.0]);
+}
+
+#[test]
+fn kabsch_recovers_every_rotation_and_shift_in_the_plane_and_in_space() {
+    let plane = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 3.0]];
+    // The cosine and sine of 0, 30, 90, 180, 250 and 300 degrees, written out (the platform's
+    // trigonometry is not for tests of the kernel either).
+    for (c, s) in [
+        (1.0, 0.0),
+        (0.866_025_403_784_438_6, 0.5),
+        (0.0, 1.0),
+        (-1.0, 0.0),
+        (-0.342_020_143_325_668_7, -0.939_692_620_785_908_4),
+        (0.5, -0.866_025_403_784_438_6),
+    ] {
+        assert_recovered(&plane, [[c, -s], [s, c]], [5.0, -2.0]);
+    }
+    let space = [
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+        [1.0, 1.0, 1.0],
+    ];
+    // A half turn about z, a quarter turn about x, a third of a turn about (1, 1, 1) (the cycle of
+    // the axes), and a turn about z then x.
+    // 40 degrees.
+    let (c, s) = (0.766_044_443_118_978, 0.642_787_609_686_539_3);
+    let about_z = [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]];
+    let about_x = [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]];
+    let mut both = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            for k in 0..3 {
+                both[i][j] += about_x[i][k] * about_z[k][j];
+            }
+        }
+    }
+    for rotation in [
+        [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+        [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        both,
+    ] {
+        assert_recovered(&space, rotation, [0.5, -1.0, 4.0]);
+    }
+}
+
+#[test]
+fn a_mirror_image_is_fitted_by_the_rotation_nearest_it_never_by_a_reflection() {
+    // The points spread three steps along x and one along y; mirrored in x, no rotation fits them.
+    // The best is near a half turn, which keeps the long side along its line: the direction the
+    // points fix least is the one turned the wrong way.
+    let local = [[0.0, 0.0], [3.0, 0.0], [0.0, 1.0]];
+    let drawn = [[0.0, 0.0], [-3.0, 0.0], [0.0, 1.0]];
+    let r = kabsch(&local, &drawn, &mut work()).unwrap();
+    assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    assert!(r.rotation[0][0] < -0.9, "{r:?}");
+    // Each reflection of the plane and of space, whatever its pivots, gives a rotation.
+    let plane = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 3.0]];
+    for mirror in [[[1.0, 0.0], [0.0, -1.0]], [[0.0, 1.0], [1.0, 0.0]]] {
+        let drawn: Vec<[f64; 2]> = plane
+            .iter()
+            .map(|p| moved(&mirror, &[1.0, 1.0], p))
+            .collect();
+        let r = kabsch(&plane, &drawn, &mut work()).unwrap();
+        assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    }
+    let space = [
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+        [1.0, 1.0, 1.0],
+    ];
+    for mirror in [
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+        [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+        [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]],
+    ] {
+        let drawn: Vec<[f64; 3]> = space.iter().map(|p| moved(&mirror, &[0.0; 3], p)).collect();
+        let r = kabsch(&space, &drawn, &mut work()).unwrap();
+        assert!((determinant(&r.rotation) - 1.0).abs() < 1e-12, "{r:?}");
+    }
+}
+
+#[test]
+fn the_ground_is_never_moved_and_bad_input_places_nothing() {
+    let a = [[0.0, 0.0], [1.0, 0.0]];
+    assert_eq!(place(true, &a, &a, &mut work()), Ok(Placement::Frame));
+    assert!(matches!(
+        place(false, &a, &a, &mut work()),
+        Ok(Placement::Moved(_))
+    ));
+    assert_eq!(
+        place(false, &a, &a[..1], &mut work()),
+        Err(SketchError::Internal)
+    );
+    assert_eq!(
+        place(false, &a[..1], &a, &mut work()),
+        Err(SketchError::Internal)
+    );
+    assert_eq!(
+        place::<2>(false, &[], &[], &mut work()),
+        Err(SketchError::Internal)
+    );
+    for bad in [[f64::NAN, 0.0], [0.0, f64::INFINITY]] {
+        assert_eq!(
+            place(false, &a, &[bad, [1.0, 0.0]], &mut work()),
+            Err(SketchError::NotFinite)
+        );
+        assert_eq!(
+            place(false, &[bad, [1.0, 0.0]], &a, &mut work()),
+            Err(SketchError::NotFinite)
+        );
+    }
+}
+
+/// A meter that stops a search that runs away instead of letting it hang.
+fn bounded() -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(100_000))
+}
+
+fn network(nodes: usize, arcs: &[(usize, usize, u64)]) -> Network {
+    let mut n = Network::new(nodes).unwrap();
+    for &(from, to, capacity) in arcs {
+        n.add_arc(from, to, capacity).unwrap();
+    }
+    n
+}
+
+fn side(reached: &[bool]) -> Vec<usize> {
+    (0..reached.len()).filter(|&i| reached[i]).collect()
+}
+
+#[test]
+fn the_largest_flow_and_the_smallest_source_side_of_a_cheapest_cut() {
+    // The network of Cormen, Leiserson, Rivest and Stein's figure 26.1: flow 23, cut by
+    // {s, v1, v2, v4} against {v3, t} (12 + 7 + 4).
+    let mut n = network(
+        6,
+        &[
+            (0, 1, 16),
+            (0, 2, 13),
+            (1, 2, 10),
+            (2, 1, 4),
+            (1, 3, 12),
+            (3, 2, 9),
+            (2, 4, 14),
+            (4, 3, 7),
+            (3, 5, 20),
+            (4, 5, 4),
+        ],
+    );
+    assert_eq!(n.max_flow(0, 5, &mut bounded()), Ok(23));
+    assert_eq!(
+        side(&n.source_side(0, &mut bounded()).unwrap()),
+        [0, 1, 2, 4]
+    );
+}
+
+#[test]
+fn a_flow_that_must_be_taken_back_along_an_arc_is_taken_back() {
+    // The search tries the arcs last added first, so the shortest path s 1 2 t fills 2 t; the second
+    // unit goes s 3 2, back along 1 2, then 1 4 5 t.
+    // Afterwards 1 reaches 2 again through the arc emptied, and from 2 reaches 3 and s backwards.
+    let mut n = network(
+        7,
+        &[
+            (0, 3, 1),
+            (0, 1, 1),
+            (1, 2, 1),
+            (3, 2, 1),
+            (2, 6, 1),
+            (1, 4, 1),
+            (4, 5, 1),
+            (5, 6, 1),
+        ],
+    );
+    assert_eq!(n.max_flow(0, 6, &mut bounded()), Ok(2));
+    assert_eq!(side(&n.source_side(0, &mut bounded()).unwrap()), [0]);
+    assert_eq!(
+        side(&n.source_side(1, &mut bounded()).unwrap()),
+        [0, 1, 2, 3]
+    );
+}
+
+#[test]
+fn a_flow_charges_each_arc_it_looks_at_each_step_and_its_arcs() {
+    // One arc of 5 from 0 to 1, and its reverse: the first level search looks at two arcs, the
+    // path takes two steps, the search for a second path one, the second level search one arc,
+    // and the flow then charges its two arcs: 8 in all.
+    let mut n = network(2, &[(0, 1, 5)]);
+    assert_eq!(
+        n.clone()
+            .max_flow(0, 1, &mut WorkMeter::new(Budget::of_work(8))),
+        Ok(5)
+    );
+    assert!(
+        n.max_flow(0, 1, &mut WorkMeter::new(Budget::of_work(7)))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_flow_between_nodes_that_are_not_two_of_the_networks_is_refused_before_any_work() {
+    let mut n = network(2, &[(0, 1, 5)]);
+    for (source, sink) in [(0, 9), (9, 0), (1, 1)] {
+        assert_eq!(
+            n.max_flow(source, sink, &mut WorkMeter::new(Budget::of_work(0))),
+            Err(SketchError::Internal),
+            "{source} {sink}"
+        );
+    }
+    // An arc to or from a node past the last is refused and leaves the network as it was.
+    assert_eq!(n.add_arc(0, 5, 1), Err(SketchError::Internal));
+    assert_eq!(n.add_arc(5, 0, 1), Err(SketchError::Internal));
+    assert_eq!(n.max_flow(0, 1, &mut bounded()), Ok(5));
+}
+
+#[test]
+fn a_plan_charges_each_links_members_each_seed_and_each_incidence_it_reads() {
+    // One bar: its two members (2), the one seed (1), the pair's freedoms read to find it and again
+    // to contract it, each reading the bar's list at both its ends (2 + 2), and the one link the
+    // contraction touches (1). Eight in all, and not one more.
+    let p = planar(points(2), vec![bar(1, 0, 1)]);
+    assert!(plan(&p, SIZE_LIMIT, &mut WorkMeter::new(Budget::of_work(8))).is_ok());
+    assert_eq!(
+        plan(&p, SIZE_LIMIT, &mut WorkMeter::new(Budget::of_work(7))),
+        Err(SketchError::Stopped)
+    );
+}
+
+#[test]
+fn a_link_of_three_nodes_is_counted_once() {
+    // Three points and one constraint of three equations among them all: 6 - 3 = 3, exactly rigid,
+    // and no two of them have a constraint of their own.
+    let p = planar(
+        points(3),
+        vec![Link {
+            key: 1,
+            members: vec![0, 1, 2],
+            weight: 3,
+        }],
+    );
+    let plan = run(&p);
+    assert_eq!(plan.clusters.len(), 1, "{plan:?}");
+    assert_eq!(
+        plan.clusters[0].children,
+        [Child::Node(100), Child::Node(101), Child::Node(102)]
+    );
+    assert_eq!(plan.clusters[0].links, [1]);
+    assert_eq!(plan.clusters[0].redundant, 0);
+    assert_eq!(plan.top, [Child::Cluster(0)]);
+}
+
+#[test]
+fn the_first_cluster_of_a_braced_square_is_its_first_bar() {
+    // Four points and all six bars between them: 8 - 6 = 2, one bar more than rigid. The first bar
+    // is a rigid pair by itself, so it is the first cluster, and the whole is one body with one
+    // redundant equation.
+    let edges = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
+    let p = planar(points(4), bars(&edges));
+    let plan = run(&p);
+    assert_eq!(
+        plan.clusters[0].children,
+        [Child::Node(100), Child::Node(101)],
+        "{plan:?}"
+    );
+    assert_eq!(plan.clusters[0].links, [1]);
+    assert_eq!(plan.top.len(), 1, "{plan:?}");
+    assert_eq!(
+        keys_under(&plan, plan.top[0]),
+        BTreeSet::from([100, 101, 102, 103])
+    );
+    let mut redundant = 0;
+    for c in &plan.clusters {
+        redundant += c.redundant;
+    }
+    assert_eq!(redundant, 1);
+}
+
+#[test]
+fn a_dense_set_found_around_a_seed_is_cut_down_to_a_minimal_one() {
+    // A constraint over three points (or four) with a bar between the first two: the set around
+    // the first constraint is dense, but the bar's pair alone is dense too, and that pair is the
+    // cluster made.
+    for (n, weight) in [(3, 3), (4, 5)] {
+        let p = planar(
+            points(n),
+            vec![
+                Link {
+                    key: 1,
+                    members: (0..n).collect(),
+                    weight,
+                },
+                bar(2, 0, 1),
+            ],
+        );
+        let plan = run(&p);
+        assert_eq!(
+            plan.clusters[0].children,
+            [Child::Node(100), Child::Node(101)],
+            "{n}: {plan:?}"
+        );
+        assert_eq!(plan.clusters[0].links, [2], "{n}: {plan:?}");
+        assert_eq!(plan.clusters[0].redundant, 0, "{n}: {plan:?}");
+    }
+}
+
+#[test]
+fn kabsch_centres_both_sets_before_it_correlates_them() {
+    // A quarter turn of four points with parts of 2^-13, once with the drawn set 10^12 away and once
+    // with the local one. Centred, every product of the correlation is exact and the turn comes
+    // back exactly; uncentred, each product of a coordinate near 2 10^12 rounds, and it would not.
+    let step = 1.0 / 8192.0;
+    let small = [
+        [0.0, 0.0],
+        [2.0 + step, 0.0],
+        [2.0, 1.0 + 3.0 * step],
+        [5.0 * step, 3.0],
+    ];
+    let turn = [[0.0, -1.0], [1.0, 0.0]];
+    let far = 1.0e12;
+    let near: Vec<[f64; 2]> = small.iter().map(|p| [-p[1], p[0]]).collect();
+    for (local, drawn) in [
+        (
+            small.to_vec(),
+            near.iter()
+                .map(|p| [p[0] + far, p[1] - far])
+                .collect::<Vec<_>>(),
+        ),
+        (
+            small.iter().map(|p| [p[0] + far, p[1] + far]).collect(),
+            near.clone(),
+        ),
+    ] {
+        let r = kabsch(&local, &drawn, &mut work()).unwrap();
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!((r.rotation[i][j] - turn[i][j]).abs() < 1e-12, "{r:?}");
+            }
+        }
+    }
 }

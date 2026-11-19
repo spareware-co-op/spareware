@@ -96,14 +96,15 @@ fn centroid<const N: usize>(points: &[[f64; N]]) -> Result<[f64; N], SketchError
     Ok(sum)
 }
 
-/// The sign of the determinant of the N × N matrix `m` (row-major), by LU: the product of the
-/// pivots' signs times the permutation's parity.
-fn determinant_sign<const N: usize>(m: &[f64], work: &mut Work) -> Result<f64, SketchError> {
+/// Whether the N × N orthogonal matrix `m` (row-major) is a reflection, its determinant negative,
+/// by LU: the product of the pivots' signs times the permutation's parity. An orthogonal matrix is
+/// never singular, so no pivot is zero and each has a sign.
+fn reflects<const N: usize>(m: &[f64], work: &mut Work) -> Result<bool, SketchError> {
     let a = Matrix::from_rows(N, N, m)?;
     let lu = Lu::factor(&a, work)?;
     let mut negative = false;
     for i in 0..N {
-        negative ^= lu.factors().get(i, i)? < 0.0;
+        negative ^= lu.factors().get(i, i)?.is_sign_negative();
     }
     // Parity of the row permutation: N minus its number of cycles.
     let perm = lu.permutation();
@@ -122,7 +123,7 @@ fn determinant_sign<const N: usize>(m: &[f64], work: &mut Work) -> Result<f64, S
     }
     let swaps = N.checked_sub(cycles).ok_or(SketchError::Internal)?;
     negative ^= swaps.checked_rem(2) == Some(1);
-    Ok(if negative { -1.0 } else { 1.0 })
+    Ok(negative)
 }
 
 /// The rigid motion that best carries `local` onto `drawn`, point for point.
@@ -157,18 +158,19 @@ pub fn kabsch<const N: usize>(
     let svd = Svd::jacobi(&Matrix::from_rows(N, N, &h)?, work)?;
     // R0 = V Uᵀ; its determinant decides the sign of the last column of V.
     let (u, v) = (svd.u(), svd.v());
-    let product = |flip: f64| -> Result<Vec<f64>, SketchError> {
+    // With `flip`, the last column of V, the smallest singular value's, is turned the other way.
+    let product = |flip: bool| -> Result<Vec<f64>, SketchError> {
         let mut r = alloc::vec![0.0; cells];
         for i in 0..N {
             for j in 0..N {
                 let mut sum = 0.0;
                 for k in 0..N {
-                    let scale = if k.checked_add(1) == Some(N) {
-                        flip
+                    let term = v.get(i, k)? * u.get(j, k)?;
+                    sum += if flip && k.checked_add(1) == Some(N) {
+                        -term
                     } else {
-                        1.0
+                        term
                     };
-                    sum += v.get(i, k)? * scale * u.get(j, k)?;
                 }
                 let at = i.checked_mul(N).and_then(|row| row.checked_add(j));
                 *at.and_then(|k| r.get_mut(k)).ok_or(SketchError::Internal)? = sum;
@@ -176,9 +178,12 @@ pub fn kabsch<const N: usize>(
         }
         Ok(r)
     };
-    let plain = product(1.0)?;
-    let flip = determinant_sign::<N>(&plain, work)?;
-    let r = if flip < 0.0 { product(-1.0)? } else { plain };
+    let plain = product(false)?;
+    let r = if reflects::<N>(&plain, work)? {
+        product(true)?
+    } else {
+        plain
+    };
     let mut rotation = [[0.0; N]; N];
     for (i, row) in rotation.iter_mut().enumerate() {
         for (j, cell) in row.iter_mut().enumerate() {
