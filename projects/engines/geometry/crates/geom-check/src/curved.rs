@@ -601,8 +601,9 @@ fn spheres_apart(first: (V3, f64), second: (V3, f64), stray: f64) -> bool {
 
 /// Whether the segment from grid point `from` to `to` certainly meets `circle` nowhere, or, when
 /// `shared` (`from` is a vertex of both), nowhere but at `from`: both ends strictly on one side of
-/// the circle's plane; or leaving that plane from the shared vertex; or, lying in it, on a line the
-/// circle certainly misses; or crossing it once, at a point certainly off the circle.
+/// the circle's plane; or leaving that plane from the shared vertex, which lies on it exactly; or,
+/// lying in it, on a line the circle certainly misses; or crossing it once, at a point certainly
+/// off the circle.
 pub(crate) fn segment_apart(from: P3, to: P3, shared: bool, circle: &Circle<3>) -> bool {
     let apart = || {
         let (_, [_, _, normal]) = circle.frame().unit_vectors().ok()?;
@@ -616,7 +617,10 @@ pub(crate) fn segment_apart(from: P3, to: P3, shared: bool, circle: &Circle<3>) 
         if same_side(above, below) {
             return Some(true);
         }
-        if shared {
+        // Leaving the plane from the shared vertex only if that vertex lies on it exactly: one
+        // within the bound off it, with the far end on the other side, crosses the plane again,
+        // perhaps on the circle, and that crossing is tested below as any other.
+        if shared && zero([above; 3]) {
             return Some(away(below));
         }
         let along = sub3(end, start)?;

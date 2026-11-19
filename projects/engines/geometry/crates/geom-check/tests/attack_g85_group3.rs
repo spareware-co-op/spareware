@@ -704,6 +704,44 @@ fn a_cone_listed_side_first_passes() {
 }
 
 #[test]
+fn a_seam_from_a_rim_vertex_off_the_rims_plane_is_not_passed() {
+    // A cone whose radius at height v is 6 − v, its apex at (0, 0, 6) and its rim the circle of
+    // radius 6 on z = 0. The rim's vertex (7, 0, −1) lies on the cone, a step below the rim's
+    // plane and √2 from the rim, within a bound of 2. The seam from it to the apex runs along the
+    // cone and crosses the rim's plane a second time, at (6, 0, 0), on the rim (issue #1036). Read
+    // only as leaving the plane from the shared vertex, it was passed.
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (base, apex) = (r.vertex([7, 0, -1]), r.vertex([0, 0, 6]));
+    let rim = r.edge(Some((base, base)));
+    let seam = r.edge(Some((apex, base)));
+    let s = r.shell(solid);
+    r.face(
+        s,
+        &[&[
+            (seam, Sense::Reversed),
+            (seam, Sense::Forward),
+            (rim, Sense::Reversed),
+        ]],
+    );
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.curves[rim as usize] = parallel(0.0, 6.0);
+    r.surfaces[0] = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            6.0,
+            -1.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-1.0, 6.0)),
+        )
+        .unwrap(),
+    );
+    r.surfaces[1] = level(0.0);
+    let faults = at(&r, BodyKind::Solid, 2);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+}
+
+#[test]
 fn group_3_runs_only_on_a_body_groups_1_and_2_passed() {
     // A bow tie whose corner is off its plane: group 2 finds it, and group 3 is neither run nor
     // missing.
