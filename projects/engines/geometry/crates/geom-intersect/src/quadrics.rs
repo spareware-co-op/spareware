@@ -1380,6 +1380,18 @@ enum Standing {
     Reaching,
 }
 
+/// Whether a turn from `lo` to `hi` stops short of a whole one, so that its ends are edges of the
+/// domain, not its join: [`edges`] and [`rims`] read it alike.
+fn part_turn(lo: f64, hi: f64) -> bool {
+    hi - lo < 2.0
+}
+
+/// Whether a sphere's latitude `v` stops short of a pole, so that a domain ending there has an edge
+/// circle: [`edges`] and [`rims`] read it alike.
+fn short_of_pole(v: f64) -> bool {
+    v.abs() < 0.5
+}
+
 /// Which ends of each parameter's range of a round kind are edges of the domain, as [`edges`] and
 /// [`apex_ends`] list them: its turn's short of a whole one; a cylinder's or cone's height either
 /// way (an end circle, or a cone's apex); a sphere's latitude short of a pole; a torus's tube turn
@@ -1388,10 +1400,10 @@ enum Standing {
 /// ([`parameters`]), so it names none.
 fn rims(surface: &SurfaceKind) -> [[bool; 2]; 2] {
     let ((u0, u1), (v0, v1)) = ParamSurface::domain(surface);
-    let turn = [u1 - u0 < 2.0; 2];
+    let turn = [part_turn(u0, u1); 2];
     match surface {
-        SurfaceKind::Sphere(_) => [turn, [v0.abs() < 0.5, v1.abs() < 0.5]],
-        SurfaceKind::Torus(_) => [turn, [v1 - v0 < 2.0; 2]],
+        SurfaceKind::Sphere(_) => [turn, [short_of_pole(v0), short_of_pole(v1)]],
+        SurfaceKind::Torus(_) => [turn, [part_turn(v0, v1); 2]],
         SurfaceKind::Revolution(_) | SurfaceKind::Extrusion(_) => [[false; 2]; 2],
         _ => [turn, [true; 2]],
     }
@@ -1498,7 +1510,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                 let curve = Circle::new(middle(at), c.radius(), c.frame(), (u0, u1))?;
                 out.push(CurveKind::Circle(curve));
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 rulings(surface, (u0, u1), (v0, v1), &mut out)?;
             }
         }
@@ -1517,7 +1529,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                     out.push(CurveKind::Circle(curve));
                 }
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 rulings(surface, (u0, u1), (v0, v1), &mut out)?;
             }
         }
@@ -1526,7 +1538,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
             let on = axis(s.center(), &s.frame(), s.axial_sign())?;
             let r = point(s.radius())?;
             for v in [v0, v1] {
-                if v.abs() < 0.5 {
+                if short_of_pole(v) {
                     let turn = Interval::point(v)?;
                     let at = plus(on.at, scale(on.along, r.mul(turn.sinpi()?)?)?)?;
                     let radius = tight::middle(r.mul(turn.cospi()?)?);
@@ -1534,7 +1546,7 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
                     out.push(CurveKind::Circle(curve));
                 }
             }
-            if u1 - u0 < 2.0 {
+            if part_turn(u0, u1) {
                 let (_, [x, y, n]) = s.frame().unit_vectors()?;
                 for u in [u0, u1] {
                     let turn = Interval::point(u)?;
