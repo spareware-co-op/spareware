@@ -501,38 +501,58 @@ fn an_imprint_splits_faces_and_changes_no_shape() {
     checked(body);
 }
 
-#[test]
-fn a_split_gives_one_body_per_cell() {
-    let wall = cuboid([0, 0, 0], [100, 10, 60]);
-    let tool = cuboid([40, -5, -5], [20, 20, 70]);
-    let selection = Selection::Split { target: key(1) };
-    let out = picked(vec![solid(1, &wall), solid(2, &tool)], selection.clone());
-    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
-    volumes.sort_unstable();
-    assert_eq!(
-        volumes,
-        [6 * 12_000, 6 * 24_000, 6 * 24_000],
-        "both ends and the middle"
-    );
-    out.result[0].iter().for_each(|c| checked(&c.body));
-    // The wall's long faces lie in all three bodies, so their pieces' names are qualified.
-    assert!(
-        out.diagnostics
-            .iter()
-            .any(|d| d.code == "bool.names_qualified")
-    );
-    let line = sheet(0, 30, [-10, -10], [20, 70]);
-    let out = picked(vec![solid(1, &wall), cutter(2, &line)], selection.clone());
-    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
-    volumes.sort_unstable();
-    assert_eq!(volumes, [6 * 18_000, 6 * 42_000]);
-    out.result[0].iter().for_each(|c| checked(&c.body));
-    let inside = cuboid([10, 2, 10], [20, 6, 20]);
-    let out = picked(vec![solid(1, &wall), solid(2, &inside)], selection);
-    let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
-    volumes.sort_unstable();
-    assert_eq!(volumes, [6 * 2_400, 6 * (60_000 - 2_400)]);
-    out.result[0].iter().for_each(|c| checked(&c.body));
+/// A split gives one body per cell: by a box through the wall, by a sheet, and by a box inside
+/// it, one test each (decision 32.78: the three together were too long for one Miri gate part).
+mod a_split_gives_one_body_per_cell {
+    use super::*;
+
+    fn wall() -> Body {
+        cuboid([0, 0, 0], [100, 10, 60])
+    }
+
+    /// The wall split by `tool`: its cells' sixfold volumes, smallest first, each cell checked.
+    fn split_by(tool: Operand<'_>) -> (Vec<i128>, geom_op::OpOutput<Vec<Vec<Combined>>>) {
+        let wall = wall();
+        let out = picked(
+            vec![solid(1, &wall), tool],
+            Selection::Split { target: key(1) },
+        );
+        let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
+        volumes.sort_unstable();
+        out.result[0].iter().for_each(|c| checked(&c.body));
+        (volumes, out)
+    }
+
+    #[test]
+    fn by_a_box_through_it() {
+        let tool = cuboid([40, -5, -5], [20, 20, 70]);
+        let (volumes, out) = split_by(solid(2, &tool));
+        assert_eq!(
+            volumes,
+            [6 * 12_000, 6 * 24_000, 6 * 24_000],
+            "both ends and the middle"
+        );
+        // The wall's long faces lie in all three bodies, so their pieces' names are qualified.
+        assert!(
+            out.diagnostics
+                .iter()
+                .any(|d| d.code == "bool.names_qualified")
+        );
+    }
+
+    #[test]
+    fn by_a_sheet() {
+        let line = sheet(0, 30, [-10, -10], [20, 70]);
+        let (volumes, _) = split_by(cutter(2, &line));
+        assert_eq!(volumes, [6 * 18_000, 6 * 42_000]);
+    }
+
+    #[test]
+    fn by_a_box_inside_it() {
+        let inside = cuboid([10, 2, 10], [20, 6, 20]);
+        let (volumes, _) = split_by(solid(2, &inside));
+        assert_eq!(volumes, [6 * 2_400, 6 * (60_000 - 2_400)]);
+    }
 }
 
 #[test]
@@ -1037,47 +1057,89 @@ fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
     }
 }
 
-#[test]
-fn a_box_inside_another_unites_cuts_and_meets() {
-    let outer = cuboid([0, 0, 0], [40, 40, 40]);
-    let inner = cuboid([10, 10, 10], [10, 10, 10]);
-    let both = [solid(1, &outer), solid(2, &inner)];
-    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&whole), sixfold(&whole)),
-        (counted(&outer), sixfold(&outer))
-    );
-    // Clear of every face, the inner box leaves a cavity: a second shell.
-    let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
-        .unwrap()
-        .result
-        .body;
-    assert_eq!(counted(&hollow), [12, 24, 16, 2]);
-    assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
-    checked(&hollow);
-    let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
-    assert!(noted(&none, "bool.empty_result"));
-    checked(&none.result.body);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&met), sixfold(&met)),
-        (counted(&inner), sixfold(&inner))
-    );
-    // On one of the outer box's faces, it leaves a pocket in one shell.
-    let flush = cuboid([0, 10, 10], [10, 10, 10]);
-    let both = [solid(1, &outer), solid(2, &flush)];
-    let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
-        .unwrap()
-        .result
-        .body;
-    assert_eq!(pocket.arenas().shells.len(), 1);
-    assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
-    checked(&pocket);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&met), sixfold(&met)),
-        (counted(&flush), sixfold(&flush))
-    );
+/// A box inside another unites, cuts and meets: one test an operation (decision 32.78: the six
+/// together were too long for one Miri gate part), each with all its checks.
+mod a_box_inside_another_unites_cuts_and_meets {
+    use super::*;
+
+    /// The outer box, the inner one clear of every face, and the inner one on a face.
+    fn boxes() -> (Body, Body, Body) {
+        (
+            cuboid([0, 0, 0], [40, 40, 40]),
+            cuboid([10, 10, 10], [10, 10, 10]),
+            cuboid([0, 10, 10], [10, 10, 10]),
+        )
+    }
+
+    #[test]
+    fn unites() {
+        let (outer, inner, _) = boxes();
+        let both = [solid(1, &outer), solid(2, &inner)];
+        let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
+        assert_eq!(
+            (counted(&whole), sixfold(&whole)),
+            (counted(&outer), sixfold(&outer))
+        );
+    }
+
+    /// Clear of every face, the inner box leaves a cavity: a second shell.
+    #[test]
+    fn cuts_a_cavity() {
+        let (outer, inner, _) = boxes();
+        let both = [solid(1, &outer), solid(2, &inner)];
+        let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
+            .unwrap()
+            .result
+            .body;
+        assert_eq!(counted(&hollow), [12, 24, 16, 2]);
+        assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
+        checked(&hollow);
+    }
+
+    #[test]
+    fn cuts_the_inner_box_away_to_nothing() {
+        let (outer, inner, _) = boxes();
+        let both = [solid(1, &outer), solid(2, &inner)];
+        let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
+        assert!(noted(&none, "bool.empty_result"));
+        checked(&none.result.body);
+    }
+
+    #[test]
+    fn meets() {
+        let (outer, inner, _) = boxes();
+        let both = [solid(1, &outer), solid(2, &inner)];
+        let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+        assert_eq!(
+            (counted(&met), sixfold(&met)),
+            (counted(&inner), sixfold(&inner))
+        );
+    }
+
+    /// On one of the outer box's faces, it leaves a pocket in one shell.
+    #[test]
+    fn cuts_a_pocket_on_a_face() {
+        let (outer, _, flush) = boxes();
+        let both = [solid(1, &outer), solid(2, &flush)];
+        let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
+            .unwrap()
+            .result
+            .body;
+        assert_eq!(pocket.arenas().shells.len(), 1);
+        assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
+        checked(&pocket);
+    }
+
+    #[test]
+    fn meets_on_a_face() {
+        let (outer, _, flush) = boxes();
+        let both = [solid(1, &outer), solid(2, &flush)];
+        let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+        assert_eq!(
+            (counted(&met), sixfold(&met)),
+            (counted(&flush), sixfold(&flush))
+        );
+    }
 }
 
 #[test]

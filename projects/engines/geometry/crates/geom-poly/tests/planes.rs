@@ -11,6 +11,8 @@
     reason = "tests: native arithmetic and short names as in the formulas"
 )]
 
+mod slices;
+
 use core::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
@@ -555,8 +557,10 @@ fn around_an_edge_every_flap_has_its_place() {
     );
 }
 
-#[test]
-fn the_extremes_of_the_grid_stay_within_budget() {
+/// The planes through three corners of the frame's cube, and the (a, b, c, d) of them
+/// `the_extremes_of_the_grid_stay_within_budget` compares, in its order: a line a ∩ b, and c and d
+/// not parallel to it.
+fn extreme_comparisons() -> (Vec<Plane>, Vec<[usize; 4]>) {
     // Planes through the corners of the frame's cube reach the budget's values (6.2).
     let corner = |k: usize| {
         let at = |bit: usize| if k >> bit & 1 == 1 { M } else { -M };
@@ -573,26 +577,83 @@ fn the_extremes_of_the_grid_stay_within_budget() {
         }
     }
     assert_eq!(planes.len(), 56);
-    let mut compared = 0;
-    for (i, a) in planes.iter().enumerate().step_by(5) {
-        for b in planes.iter().skip(i + 1).step_by(7) {
-            let Ok(line) = Line::new(*a, *b) else {
+    let n = planes.len();
+    let mut compared = Vec::new();
+    for i in (0..n).step_by(5) {
+        for j in (i + 1..n).step_by(7) {
+            if Line::new(planes[i], planes[j]).is_err() {
                 continue;
-            };
-            for c in planes.iter().step_by(11) {
-                for d in planes.iter().skip(3).step_by(13) {
-                    if normals_det(a, b, c).unwrap() == Sign::Zero
-                        || normals_det(a, b, d).unwrap() == Sign::Zero
+            }
+            for k in (0..n).step_by(11) {
+                for l in (3..n).step_by(13) {
+                    let (a, b) = (&planes[i], &planes[j]);
+                    if normals_det(a, b, &planes[k]).unwrap() == Sign::Zero
+                        || normals_det(a, b, &planes[l]).unwrap() == Sign::Zero
                     {
                         continue;
                     }
-                    assert_eq!(along(&line, c, d), Ok(oracle_along((a, b), c, d)));
-                    compared += 1;
+                    compared.push([i, j, k, l]);
                 }
             }
         }
     }
-    assert!(compared > 100, "{compared}");
+    (planes, compared)
+}
+
+/// The extremes of the grid stay within budget: in quarters of its comparisons (decision 32.78:
+/// whole, it was too long for one Miri gate part).
+mod the_extremes_of_the_grid_stay_within_budget {
+    #[test]
+    fn quarter_1() {
+        super::extreme_quarter(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        super::extreme_quarter(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        super::extreme_quarter(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        super::extreme_quarter(3);
+    }
+
+    /// Over a hundred comparisons, and the quarters hold each once.
+    #[test]
+    fn the_quarters_join_to_every_comparison() {
+        let (_, compared) = super::extreme_comparisons();
+        let all = u32::try_from(compared.len()).unwrap();
+        assert!(all > 100, "{all}");
+        let mut next = 0;
+        for part in 0..4 {
+            let r = super::quarter_of(all, part);
+            assert_eq!(r.start, next);
+            assert!(r.end > r.start);
+            next = r.end;
+        }
+        assert_eq!(next, all);
+    }
+}
+
+/// Quarter `part` of `the_extremes_of_the_grid_stay_within_budget`'s comparisons.
+fn extreme_quarter(part: u32) {
+    let (planes, compared) = extreme_comparisons();
+    let all = u32::try_from(compared.len()).unwrap();
+    let r = quarter_of(all, part);
+    let r = usize::try_from(r.start).unwrap()..usize::try_from(r.end).unwrap();
+    for &[i, j, k, l] in &compared[r] {
+        let (a, b) = (&planes[i], &planes[j]);
+        let line = Line::new(*a, *b).unwrap();
+        assert_eq!(
+            along(&line, &planes[k], &planes[l]),
+            Ok(oracle_along((a, b), &planes[k], &planes[l]))
+        );
+    }
 }
 
 /// `s` turned over.
@@ -720,29 +781,143 @@ fn turns_agree_with_big_integers() {
     );
 }
 
-#[test]
-fn a_table_gives_one_entry_to_one_plane() {
+/// A table gives one entry to one plane: in quarters of its one stream of 256 cases from its seed
+/// (decision 32.78: whole, it was too long for one Miri gate part).
+mod a_table_gives_one_entry_to_one_plane {
+    #[test]
+    fn quarter_1() {
+        super::table_cases(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        super::table_cases(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        super::table_cases(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        super::table_cases(3);
+    }
+
+    /// The quarters hold every case once.
+    #[test]
+    fn the_quarters_join_to_every_case() {
+        let mut next = 0;
+        for part in 0..4 {
+            let r = super::quarter_of(256, part);
+            assert_eq!(r.start, next);
+            assert!(r.end > r.start);
+            next = r.end;
+        }
+        assert_eq!(next, 256);
+    }
+}
+
+/// Quarter `part` (from 0) of a list of `all` cases.
+fn quarter_of(all: u32, part: u32) -> std::ops::Range<u32> {
+    all * part / 4..all * (part + 1) / 4
+}
+
+/// Quarter `part` of `a_table_gives_one_entry_to_one_plane`: the stream's cases from the first up
+/// to the quarter's end are all drawn, as `seeded` draws them, and those in the quarter checked.
+fn table_cases(part: u32) {
+    if std::env::var_os("SPAREKIT_SEED").is_none() {
+        // From the default seed: the quarter starts at its first case's pinned seed, so it draws
+        // no earlier quarter's cases (decision 32.78, `slices`).
+        let config = geom_test::prop::config(Seed(0x6142_0007), 256);
+        slices::run_slice_from(
+            &config,
+            (any_plane(), any_plane()),
+            part,
+            TABLE_SEEDS[usize::try_from(part).unwrap()],
+            table_check,
+        );
+        return;
+    }
+    // From a seed SPAREKIT_SEED names: every case up to the quarter's end drawn, those in it
+    // checked.
     let cases = (any_plane(), any_plane());
+    let range = quarter_of(256, part);
+    let drawn = std::cell::Cell::new(0_u32);
     seeded(
         "geom-poly planes: table",
         0x6142_0007,
-        256,
+        range.end,
         &cases,
-        |(q, r)| {
-            let mut table = PlaneTable::new();
-            let (a, b) = (
-                table.insert(&q).unwrap(),
-                table.insert(&flipped(&q)).unwrap(),
-            );
-            prop_assert_eq!(a.plane, b.plane);
-            prop_assert_ne!(a.flipped, b.flipped);
-            let c = table.insert(&r).unwrap();
-            let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
-            prop_assert_eq!(a.plane == c.plane, same);
-            prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
-            Ok(())
+        |planes| {
+            let at = drawn.get();
+            drawn.set(at + 1);
+            if at < range.start {
+                return Ok(());
+            }
+            table_check(planes)
         },
     );
+}
+
+/// The seed the default-seeded runner draws the first case of each quarter of
+/// `a_table_gives_one_entry_to_one_plane` from (`slices::case_seeds`; checked below).
+const TABLE_SEEDS: [[u8; 32]; 4] = [
+    [
+        206, 230, 125, 127, 230, 197, 45, 252, 146, 152, 43, 5, 122, 170, 118, 247, 102, 44, 239,
+        29, 148, 49, 56, 235, 113, 236, 47, 140, 206, 222, 94, 101,
+    ],
+    [
+        215, 176, 186, 79, 163, 156, 188, 216, 37, 107, 185, 145, 20, 153, 175, 74, 109, 8, 179,
+        220, 229, 2, 176, 51, 222, 155, 242, 144, 152, 36, 142, 130,
+    ],
+    [
+        27, 149, 202, 94, 61, 65, 139, 158, 4, 81, 237, 234, 10, 200, 10, 206, 244, 244, 85, 78,
+        48, 161, 248, 251, 153, 94, 213, 13, 245, 232, 109, 118,
+    ],
+    [
+        248, 235, 64, 150, 25, 217, 4, 150, 157, 178, 93, 44, 242, 123, 199, 138, 122, 142, 121,
+        119, 27, 16, 121, 173, 53, 73, 238, 203, 83, 186, 238, 97,
+    ],
+];
+
+/// The pinned seeds are the runner's own: the chain of case seeds reproduces the runner's cases,
+/// and starts each quarter where the pins say.
+#[cfg_attr(
+    miri,
+    ignore = "draws all 256 cases to find the pins, which the quarters exist not to do under Miri"
+)]
+#[test]
+fn the_table_quarters_pinned_seeds_are_the_runners_own() {
+    let config = geom_test::prop::config(Seed(0x6142_0007), 256);
+    let strategy = (any_plane(), any_plane());
+    assert_eq!(
+        slices::chained_cases(&config, &strategy, 32),
+        slices::runner_cases(&config, &strategy, 32)
+    );
+    let starts: Vec<u32> = (0..slices::SLICES)
+        .map(|k| slices::range(config.cases, k).start)
+        .collect();
+    assert_eq!(
+        slices::case_seeds(&config, &strategy, &starts),
+        TABLE_SEEDS.to_vec()
+    );
+}
+
+/// One case of `a_table_gives_one_entry_to_one_plane`.
+fn table_check((q, r): (Plane, Plane)) -> Result<(), TestCaseError> {
+    let mut table = PlaneTable::new();
+    let (a, b) = (
+        table.insert(&q).unwrap(),
+        table.insert(&flipped(&q)).unwrap(),
+    );
+    prop_assert_eq!(a.plane, b.plane);
+    prop_assert_ne!(a.flipped, b.flipped);
+    let c = table.insert(&r).unwrap();
+    let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
+    prop_assert_eq!(a.plane == c.plane, same);
+    prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
+    Ok(())
 }
 
 /// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from

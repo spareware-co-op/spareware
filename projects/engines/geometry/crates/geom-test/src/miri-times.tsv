@@ -11,6 +11,8 @@
 # Sources: geom-pool's rows are main's push run 44000736866 (79dd48d74), partition 1's Tree Borrows report under the default-miri profile, in its own seconds, stopped at 600 s.
 # GitHub measuring run 44032408206, land/miri-bool at 96f3b42ac
 # GitHub measuring run 44071252392, ci/miri-plan at a0123c23b (geom-pool attack_g33 attack_rayon_pools, Tree Borrows)
+# GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: #1007's tests, from the run's listing with #1011's cut tests put back whole.
+# GitHub measuring runs 44429236632 (geom-num attack_wide_tests, geom-op hash) and 44446255855 (geom-num wide), miri_measure=new on test/miri-slices-2 at 436772b7f, in their own seconds, stopped at 600 s; listing: the run's listing with #1011's 22 cut tests put back whole.
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -80,7 +82,12 @@ native-only over 601	geom-bool::cells	a_leak_is_reported_where_it_is_narrowest
 37	geom-bool::certificate	an_edge_with_one_fin_is_caught
 2	geom-bool::certificate	faults_say_what_broke
 34	geom-bool::certificate	fins_that_run_the_same_way_are_caught
-454	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets
+190	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::cuts_a_cavity
+163	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::cuts_a_pocket_on_a_face
+89	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::cuts_the_inner_box_away_to_nothing
+220	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::meets
+216	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::meets_on_a_face
+218	geom-bool::combine	a_box_inside_another_unites_cuts_and_meets::unites
 248	geom-bool::combine	a_box_less_itself_or_a_box_around_it_is_nothing_and_goes_back_in
 native-only over 601	geom-bool::combine	a_budget_that_runs_out_at_the_very_end_stops_cleanly
 native-only over 601	geom-bool::combine	a_budget_that_runs_out_in_the_rebuild_stops_cleanly
@@ -99,7 +106,9 @@ native-only over 601	geom-bool::combine	a_seam_that_ends_off_the_grid_comes_back
 209	geom-bool::combine	a_section_is_the_curve_where_operands_meet
 99	geom-bool::combine	a_section_through_a_tilted_face_meets_off_the_grid
 53	geom-bool::combine	a_small_budget_stops_the_call
-562	geom-bool::combine	a_split_gives_one_body_per_cell
+305	geom-bool::combine	a_split_gives_one_body_per_cell::by_a_box_inside_it
+303	geom-bool::combine	a_split_gives_one_body_per_cell::by_a_box_through_it
+159	geom-bool::combine	a_split_gives_one_body_per_cell::by_a_sheet
 152	geom-bool::combine	a_subtraction_that_leaves_nothing_is_an_empty_body
 native-only over 601	geom-bool::combine	a_tilted_prism_cuts_and_comes_back
 native-only over 601	geom-bool::combine	a_walls_end_on_anothers_side_follows_the_shared_face_table
@@ -280,18 +289,28 @@ native-only over 601	geom-check::attack_g134	a_check_stops_cleanly_wherever_its_
 19	geom-check::attack_g134	a_seam_between_faces_on_one_plane_passes
 82	geom-check::attack_g134	a_shadow_line_a_long_way_from_its_vertex_is_a_fault
 169	geom-check::attack_g134	a_shadow_line_a_step_off_passes
-414	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts
+33	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts::a_step_lower_and_recorded_exact
+55	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts::start_1
+93	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts::start_2
+93	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts::start_3
+94	geom-check::attack_g134	a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts::start_4
 194	geom-check::attack_g134	a_shell_of_meetings_inside_a_bent_one_is_found_through_its_stars
 105	geom-check::attack_g134	a_shell_of_meetings_with_every_corner_on_another_fails_closed
 140	geom-check::attack_g134	a_shell_turned_inside_out_is_found_by_its_certified_volume
-460	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign
+127	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign::tilt_1
+227	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign::tilt_2
+229	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign::tilt_3
+230	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign::tilt_4
+229	geom-check::attack_g134	a_small_tilted_box_far_from_the_origin_keeps_its_sign::tilt_5
 native-only over 601	geom-check::attack_g134	a_solid_with_caps_written_off_their_corners_is_judged_by_its_corners
 18	geom-check::attack_g134	a_tilted_body_has_vertices_no_grid_point_holds
 native-only over 601	geom-check::attack_g134	a_tooth_through_a_window_and_a_tooth_into_the_wall_differ
 200	geom-check::attack_g134	a_vertex_on_four_planes_keeps_three_and_its_edges_find_the_fourth
 34	geom-check::attack_g134	an_edge_folded_back_along_its_neighbour_is_found
 10	geom-check::attack_g134	an_edge_on_no_plane_of_its_ends_fails_closed
-494	geom-check::attack_g134	coplanar_faces_apart_pass_and_overlapping_ones_are_found
+268	geom-check::attack_g134	coplanar_faces_apart_pass_and_overlapping_ones_are_found::apart
+227	geom-check::attack_g134	coplanar_faces_apart_pass_and_overlapping_ones_are_found::one_inside_the_others_box
+198	geom-check::attack_g134	coplanar_faces_apart_pass_and_overlapping_ones_are_found::overlapping
 native-only over 601	geom-check::attack_g134	every_face_pair_is_charged_and_a_stop_is_a_stop
 native-only over 601	geom-check::attack_g134	every_tilted_polyhedron_passes
 41	geom-check::attack_g134	faces_on_parallel_planes_nearer_than_they_may_stray_are_not_passed_as_apart
@@ -441,7 +460,11 @@ native-only over 601	geom-curve::attack_g61	nurbs_forms_keep_their_deviation
 native-only over 601	geom-curve::attack_g61	transforms_keep_their_deviation
 3	geom-curve::attack_g62	a_break_inside_a_segment_counts_in_the_deviation
 2	geom-curve::attack_g62	a_leaf_answers_with_its_kind
-289	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle
+109	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle::quarter_1
+119	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle::quarter_2
+97	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle::quarter_3
+110	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle::quarter_4
+2	geom-curve::attack_g62	an_offset_circle_stays_on_its_circle::the_quarters_join_to_every_circle
 6	geom-curve::attack_g62	bulge_derivative_bounds_keep_every_term
 native-only over 601	geom-curve::attack_g62	bulge_enclosures_hold_the_exact_point
 3	geom-curve::attack_g62	bulge_polylines_refuse_what_they_cannot_be
@@ -1078,12 +1101,16 @@ native-only over 601	geom-math::typed	certified_images_round_exactly
 3	geom-math::typed	persisted_regression_runs_on_every_target
 native-only over 601	geom-math::typed	rotations_and_sums_land_on_steps_and_midpoints
 58	geom-math::typed	rotations_take_the_most_exact_variant
-496	geom-math::vectors	between_and_offset_round_trip
+140	geom-math::vectors	between_and_offset_round_trip::quarter_1
+198	geom-math::vectors	between_and_offset_round_trip::quarter_2
+198	geom-math::vectors	between_and_offset_round_trip::quarter_3
+178	geom-math::vectors	between_and_offset_round_trip::quarter_4
 2	geom-math::vectors	differences_of_extreme_points
 7	geom-math::vectors	extremes_stay_within_budget
 native-only over 601	geom-math::vectors	products_2d_are_exact
 native-only over 601	geom-math::vectors	products_3d_are_exact
 native-only over 601	geom-math::vectors	sums_are_checked
+2	geom-math::vectors	the_slices_join_to_every_case_once
 25	geom-mesh	model::tests::a_refused_operation_leaves_the_surface_as_it_was
 native-only over 601	geom-mesh	model::tests::kept_operations_keep_the_surface_whole
 69	geom-mesh::boolean	a_cut_through_splits_a_run_into_named_pieces
@@ -1547,7 +1574,11 @@ native-only over 601	geom-num::attack2_interval	roots::points_one_step_apart_hav
 native-only over 601	geom-num::attack2_interval	roots::root_of_a_square_holds_the_magnitude
 native-only over 601	geom-num::attack2_interval	roots::sqrt_hard_cases_next_to_midpoints
 native-only over 601	geom-num::attack2_interval	roots::sqrt_nonneg_holds_the_root_of_every_non_negative_value
-387	geom-num::attack2_interval	roots::sqrt_of_subnormals
+103	geom-num::attack2_interval	roots::sqrt_of_subnormals::quarter_1
+104	geom-num::attack2_interval	roots::sqrt_of_subnormals::quarter_2
+108	geom-num::attack2_interval	roots::sqrt_of_subnormals::quarter_3
+115	geom-num::attack2_interval	roots::sqrt_of_subnormals::quarter_4
+2	geom-num::attack2_interval	roots::sqrt_of_subnormals::the_quarters_join_to_every_bit_position
 native-only over 601	geom-num::attack2_interval	tightness_claim::at_most_one_and_a_half_steps_when_the_steps_agree
 native-only over 601	geom-num::attack2_interval	tightness_claim::at_most_two_and_a_half_steps_of_the_exact_bound
 native-only over 601	geom-num::attack2_interval	tightness_claim::at_most_two_steps_of_the_computed_bound
@@ -1581,7 +1612,10 @@ native-only over 601	geom-num::attack2_predicate	cospherical_points_in_general_p
 native-only over 601	geom-num::attack2_predicate	fast_and_total_paths_agree_exactly_on_the_grid
 native-only over 601	geom-num::attack2_predicate	grid_signs_obey_every_symmetry_by_both_paths
 205	geom-num::attack2_predicate	incircle_at_the_edges_of_i128_and_i256
-573	geom-num::attack2_predicate	incircle_with_collinear_a_b_c_keeps_the_documented_identity
+190	geom-num::attack2_predicate	incircle_with_collinear_a_b_c_keeps_the_documented_identity::quarter_1
+191	geom-num::attack2_predicate	incircle_with_collinear_a_b_c_keeps_the_documented_identity::quarter_2
+192	geom-num::attack2_predicate	incircle_with_collinear_a_b_c_keeps_the_documented_identity::quarter_3
+192	geom-num::attack2_predicate	incircle_with_collinear_a_b_c_keeps_the_documented_identity::quarter_4
 native-only over 601	geom-num::attack2_predicate	insphere_where_the_i256_sum_overflows_off_the_grid
 native-only over 601	geom-num::attack2_predicate	insphere_with_collinear_a_b_c_keeps_the_documented_identity
 native-only over 601	geom-num::attack2_predicate	insphere_with_coplanar_a_b_c_d_keeps_the_documented_identity
@@ -1594,6 +1628,7 @@ native-only over 601	geom-num::attack2_predicate	off_the_grid_the_fast_path_is_e
 native-only over 601	geom-num::attack2_predicate	the_copy_answers_as_the_crate_does
 71	geom-num::attack2_predicate	the_copy_is_still_predicate_rs_code_token_for_token
 9	geom-num::attack2_predicate	the_oracle_and_both_paths_follow_the_documented_geometry
+2	geom-num::attack2_predicate	the_slices_join_to_every_case_once
 native-only over 601	geom-num::attack2_predicate	total_path_is_exact_at_every_extreme_configuration_in_2d
 native-only over 601	geom-num::attack2_predicate	total_path_is_exact_at_extreme_configurations_in_3d
 native-only over 601	geom-num::attack2_predicate	total_path_is_exact_for_any_i64_coordinates
@@ -1612,10 +1647,14 @@ native-only over 601	geom-num::attack_eft_interval	eft_attacks::orient2d_by_expa
 2	geom-num::attack_eft_interval	eft_attacks::reported_pairs_carry_the_sign_of_the_error
 136	geom-num::attack_eft_interval	eft_attacks::split_at_the_top_of_the_range
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::split_claims_the_product_proof_relies_on
-385	geom-num::attack_eft_interval	eft_attacks::split_outside_its_precondition_is_exact_or_reported
+87	geom-num::attack_eft_interval	eft_attacks::split_outside_its_precondition_is_exact_or_reported::quarter_1
+70	geom-num::attack_eft_interval	eft_attacks::split_outside_its_precondition_is_exact_or_reported::quarter_2
+91	geom-num::attack_eft_interval	eft_attacks::split_outside_its_precondition_is_exact_or_reported::quarter_3
+77	geom-num::attack_eft_interval	eft_attacks::split_outside_its_precondition_is_exact_or_reported::quarter_4
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::split_whole_contract_any_double
 2	geom-num::attack_eft_interval	eft_attacks::splitter_is_exact
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::sums_in_the_subnormal_range_have_zero_error
+16	geom-num::attack_eft_interval	eft_attacks::the_slices_join_to_every_case_once
 155	geom-num::attack_eft_interval	eft_attacks::two_prod_above_its_exponent_limit_is_reported_or_exact
 168	geom-num::attack_eft_interval	eft_attacks::two_prod_below_its_exponent_limit_is_reported_or_exact
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_prod_dense_across_the_underflow_frontier
@@ -1626,7 +1665,10 @@ native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_prod_whole_c
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_prod_whole_contract_large_factor
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_prod_whole_contract_near_underflow
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_factor_at_or_above_2_996_is_reported_or_exact
-554	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_subnormal_factor_is_reported_or_exact
+103	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_subnormal_factor_is_reported_or_exact::quarter_1
+82	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_subnormal_factor_is_reported_or_exact::quarter_2
+188	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_subnormal_factor_is_reported_or_exact::quarter_3
+195	geom-num::attack_eft_interval	eft_attacks::two_prod_with_a_subnormal_factor_is_reported_or_exact::quarter_4
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_sum_any_finite_pair
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_sum_near_overflow
 native-only over 601	geom-num::attack_eft_interval	eft_attacks::two_sum_overflow_frontier_exhaustive
@@ -1666,13 +1708,19 @@ native-only over 601	geom-num::attack_g05	every_large_argument_table_entry
 4	geom-num::attack_g05	exp_ln_and_atan2_special_values
 native-only over 601	geom-num::attack_g05	exp_near_the_midpoints_next_to_one
 native-only over 601	geom-num::attack_g05	exp_random_arguments
-556	geom-num::attack_g05	exp_thresholds
+174	geom-num::attack_g05	exp_thresholds::quarter_1
+183	geom-num::attack_g05	exp_thresholds::quarter_2
+276	geom-num::attack_g05	exp_thresholds::quarter_3
+507	geom-num::attack_g05	exp_thresholds::quarter_4
 native-only over 601	geom-num::attack_g05	exp_tiny_arguments_near_midpoints
 native-only over 601	geom-num::attack_g05	golden_hash_is_the_same_on_every_target
 397	geom-num::attack_g05	hex_float_reader_is_only_evaluated_at_compile_time
 native-only over 601	geom-num::attack_g05	identical_bits_on_every_thread_count
 native-only over 601	geom-num::attack_g05	kernel_maths_code_has_no_panicking_or_nondeterministic_constructs
-native-only over 601	geom-num::attack_g05	ln_boundaries_powers_of_two_and_subnormals
+151	geom-num::attack_g05	ln_boundaries_powers_of_two_and_subnormals::quarter_1
+151	geom-num::attack_g05	ln_boundaries_powers_of_two_and_subnormals::quarter_2
+58	geom-num::attack_g05	ln_boundaries_powers_of_two_and_subnormals::quarter_3
+108	geom-num::attack_g05	ln_boundaries_powers_of_two_and_subnormals::quarter_4
 native-only over 601	geom-num::attack_g05	ln_near_one_and_at_the_top_of_every_binade
 native-only over 601	geom-num::attack_g05	ln_random_over_every_binade
 native-only over 601	geom-num::attack_g05	monotone_on_consecutive_doubles
@@ -1689,6 +1737,7 @@ native-only over 601	geom-num::attack_g05	sinpi_and_cospi_near_integers_and_half
 native-only over 601	geom-num::attack_g05	sinpi_and_cospi_random_over_every_binade
 native-only over 601	geom-num::attack_g05	sinpi_every_scaled_worst_case_near_zero
 native-only over 601	geom-num::attack_g05	symmetries_and_periodicity_hold_bit_for_bit
+3	geom-num::attack_g05	the_slices_join_to_every_case_once
 native-only over 601	geom-num::attack_g05	total_on_every_bit_pattern_and_refused_only_where_documented
 2	geom-num::attack_g05	unproven_functions_refuse_instead_of_returning_nan
 2	geom-num::attack_g106	a_call_outside_the_switch_is_found
@@ -1763,16 +1812,22 @@ native-only over 601	geom-num::attack_g32	clippy_bans_no_std_randomly_seeded_has
 native-only over 601	geom-num::attack_g32	clippy_bans_rayons_thread_index
 native-only over 601	geom-num::attack_g32	clippy_bans_thread_identity
 3	geom-num::attack_g32	compile_time_draws_with_rejections_match_run_time
-512	geom-num::attack_g32	consecutive_seeds_and_streams_give_unrelated_blocks
+237	geom-num::attack_g32	consecutive_seeds_and_streams_give_unrelated_blocks::blocks
+238	geom-num::attack_g32	consecutive_seeds_and_streams_give_unrelated_blocks::seeds
+237	geom-num::attack_g32	consecutive_seeds_and_streams_give_unrelated_blocks::streams
 275	geom-num::attack_g32	every_draw_runs_out_cleanly_from_every_offset_of_the_last_block
 native-only over 601	geom-num::attack_g32	every_seed_block_and_stream_bit_reaches_every_output_bit
 2	geom-num::attack_g32	no_default_seed_and_streams_are_not_copy
 1	geom-num::attack_g32	philox4x32_10_is_ten_rounds_at_the_published_inputs
-395	geom-num::attack_g32	philox4x32_10_matches_the_oracle
+260	geom-num::attack_g32	philox4x32_10_matches_the_oracle::quarter_1
+86	geom-num::attack_g32	philox4x32_10_matches_the_oracle::quarter_2
+116	geom-num::attack_g32	philox4x32_10_matches_the_oracle::quarter_3
+115	geom-num::attack_g32	philox4x32_10_matches_the_oracle::quarter_4
 66	geom-num::attack_g32	philox4x32_10_matches_the_oracle_on_edge_inputs
 native-only over 601	geom-num::attack_g32	philox_block_follows_the_documented_layout
 15	geom-num::attack_g32	the_crate_header_states_the_generator_and_its_modular_arithmetic
 2	geom-num::attack_g32	the_oracle_gives_all_six_published_answers
+2	geom-num::attack_g32	the_slices_join_to_every_case_once
 3	geom-num::attack_g42	a_rounded_input_past_its_range_is_refused_by_every_variant
 native-only over 601	geom-num::attack_g42	explicit_point_predicates_agree_at_every_extreme
 native-only over 601	geom-num::attack_g42	explicit_point_predicates_agree_on_random_inputs
@@ -1865,7 +1920,10 @@ native-only over 601	geom-num::attack_plane	to_grid_around_plus_minus_2_pow_127
 native-only over 601	geom-num::attack_plane	to_grid_exact_ties_with_huge_w_of_both_signs
 193	geom-num::attack_plane	to_grid_integral_points_at_frame_and_i128_edges
 native-only over 601	geom-num::attack_plane	to_grid_integral_points_with_huge_w_are_exact
-599	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192
+328	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_1
+333	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_2
+306	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_3
+347	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_4
 44	geom-num::attack_plane	to_grid_reports_the_first_out_of_range_axis
 native-only over 601	geom-num::attack_plane	to_grid_within_2_pow_minus_116_of_a_half_step
 native-only over 601	geom-num::attack_plane	tpi_degenerate_configurations_at_the_extremes
@@ -1883,7 +1941,10 @@ native-only over 601	geom-num::attack_predicate	grid_corners_with_a_point_on_or_
 native-only over 601	geom-num::attack_predicate	incircle_is_minus_orient3d_of_the_points_lifted_onto_the_paraboloid
 native-only over 601	geom-num::attack_predicate	incircle_is_orientation_times_the_power_of_d
 native-only over 601	geom-num::attack_predicate	incircle_obeys_every_symmetry
-483	geom-num::attack_predicate	incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c
+210	geom-num::attack_predicate	incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c::quarter_1
+211	geom-num::attack_predicate	incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c::quarter_2
+210	geom-num::attack_predicate	incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c::quarter_3
+210	geom-num::attack_predicate	incircle_with_collinear_a_b_c_is_orient2d_of_a_b_d_times_the_power_of_c::quarter_4
 native-only over 601	geom-num::attack_predicate	insphere_is_orientation_times_the_power_of_e
 native-only over 601	geom-num::attack_predicate	insphere_obeys_every_symmetry
 native-only over 601	geom-num::attack_predicate	insphere_with_collinear_a_b_c_is_minus_orient3d_of_a_b_d_e_times_the_power_of_c
@@ -1900,7 +1961,11 @@ native-only over 601	geom-num::attack_predicate	random_points_against_bareiss_an
 native-only over 601	geom-num::attack_predicate	rectangle_circles_decide_incircle_at_full_scale
 3	geom-num::attack_predicate	shewchuk_port_obeys_shewchuks_own_documentation
 native-only over 601	geom-num::attack_predicate	small_grid_configurations_keep_their_signs_scaled_to_the_full_grid
-native-only over 601	geom-num::attack_predicate	three_collinear_points_and_a_fourth_in_their_plane
+2	geom-num::attack_predicate	the_slices_join_to_every_case_once
+101	geom-num::attack_predicate	three_collinear_points_and_a_fourth_in_their_plane::quarter_1
+76	geom-num::attack_predicate	three_collinear_points_and_a_fourth_in_their_plane::quarter_2
+101	geom-num::attack_predicate	three_collinear_points_and_a_fourth_in_their_plane::quarter_3
+94	geom-num::attack_predicate	three_collinear_points_and_a_fourth_in_their_plane::quarter_4
 native-only over 601	geom-num::attack_predicate	unimodular_generator_always_reaches_the_grid
 native-only over 601	geom-num::attack_predicate	unimodular_tetrahedra_have_orient3d_plus_or_minus_one
 native-only over 601	geom-num::attack_predicate	unimodular_triangles_have_orient2d_plus_or_minus_one
@@ -1931,56 +1996,987 @@ native-only over 601	geom-num::attack_wide_tests	sweeps::every_wide3_limb_patter
 2	geom-num::attack_wide_tests	sweeps::oracle_reads_and_writes_hand_written_limbs
 24	geom-num::attack_wide_tests	sweeps::resize_chains_through_odd_widths
 19	geom-num::attack_wide_tests	sweeps::sorting_by_ord_sorts_by_value
-native-only over 601	geom-num::attack_wide_tests	w16::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits
+3	geom-num::attack_wide_tests	the_slices_join_to_every_case_once
+115	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_01
+115	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_02
+115	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_03
+115	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_04
+79	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_05
+79	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_06
+78	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_07
+79	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_08
+120	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_09
+118	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_10
+118	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_11
+120	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_12
+50	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_13
+50	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_14
+49	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_15
+50	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_16
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_17
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_18
+76	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_19
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_20
+95	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_21
+95	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_22
+95	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_23
+95	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_24
+76	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_25
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_26
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_27
+77	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_28
+49	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_29
+49	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_30
+48	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_31
+49	geom-num::attack_wide_tests	w16::binary_matches_oracle::part_32
+389	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_01
+388	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_02
+405	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_03
+405	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_04
+411	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_05
+412	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_06
+415	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_07
+418	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_08
+457	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_09
+453	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_10
+457	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_11
+459	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_12
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_13
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_14
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_15
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_16
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_17
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_18
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_19
+native-only over 601	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_20
+236	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_21
+237	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_22
+237	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_23
+236	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_24
+251	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_25
+250	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_26
+249	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_27
+249	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_28
+250	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_29
+249	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_30
+243	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_31
+238	geom-num::attack_wide_tests	w16::constants_and_threshold_splits::part_32
 native-only over 601	geom-num::attack_wide_tests	w16::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold
+162	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_01
+163	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_02
+162	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_03
+162	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_04
+166	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_05
+164	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_06
+164	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_07
+164	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_08
+73	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_09
+72	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_10
+73	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_11
+73	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_12
+114	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_13
+114	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_14
+115	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_15
+114	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_16
+113	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_17
+114	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_18
+114	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_19
+112	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_20
+64	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_21
+65	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_22
+64	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_23
+65	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_24
+117	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_25
+118	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_26
+118	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_27
+118	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_28
+113	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_29
+111	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_30
+112	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_31
+111	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide::part_32
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_01
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_02
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_03
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_04
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_05
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_06
+31	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_07
+31	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_08
+46	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_09
+45	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_10
+45	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_11
+46	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_12
+21	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_13
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_14
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_15
+21	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_16
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_17
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_18
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_19
+20	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_20
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_21
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_22
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_23
+32	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_24
+30	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_25
+30	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_26
+30	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_27
+30	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_28
+33	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_29
+33	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_30
+34	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_31
+33	geom-num::attack_wide_tests	w16::narrow_agrees_with_wide_at_the_threshold::part_32
 native-only over 601	geom-num::attack_wide_tests	w16::products_at_the_threshold
 203	geom-num::attack_wide_tests	w16::small_operand_laws
 native-only over 601	geom-num::attack_wide_tests	w16::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w16::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w16::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w2::binary_matches_oracle
-542	geom-num::attack_wide_tests	w2::constants_and_threshold_splits
+90	geom-num::attack_wide_tests	w16::three_operand_laws::part_01
+89	geom-num::attack_wide_tests	w16::three_operand_laws::part_02
+91	geom-num::attack_wide_tests	w16::three_operand_laws::part_03
+91	geom-num::attack_wide_tests	w16::three_operand_laws::part_04
+197	geom-num::attack_wide_tests	w16::three_operand_laws::part_05
+199	geom-num::attack_wide_tests	w16::three_operand_laws::part_06
+198	geom-num::attack_wide_tests	w16::three_operand_laws::part_07
+198	geom-num::attack_wide_tests	w16::three_operand_laws::part_08
+207	geom-num::attack_wide_tests	w16::three_operand_laws::part_09
+209	geom-num::attack_wide_tests	w16::three_operand_laws::part_10
+209	geom-num::attack_wide_tests	w16::three_operand_laws::part_11
+208	geom-num::attack_wide_tests	w16::three_operand_laws::part_12
+204	geom-num::attack_wide_tests	w16::three_operand_laws::part_13
+201	geom-num::attack_wide_tests	w16::three_operand_laws::part_14
+203	geom-num::attack_wide_tests	w16::three_operand_laws::part_15
+202	geom-num::attack_wide_tests	w16::three_operand_laws::part_16
+136	geom-num::attack_wide_tests	w16::three_operand_laws::part_17
+136	geom-num::attack_wide_tests	w16::three_operand_laws::part_18
+136	geom-num::attack_wide_tests	w16::three_operand_laws::part_19
+136	geom-num::attack_wide_tests	w16::three_operand_laws::part_20
+206	geom-num::attack_wide_tests	w16::three_operand_laws::part_21
+206	geom-num::attack_wide_tests	w16::three_operand_laws::part_22
+205	geom-num::attack_wide_tests	w16::three_operand_laws::part_23
+206	geom-num::attack_wide_tests	w16::three_operand_laws::part_24
+140	geom-num::attack_wide_tests	w16::three_operand_laws::part_25
+140	geom-num::attack_wide_tests	w16::three_operand_laws::part_26
+140	geom-num::attack_wide_tests	w16::three_operand_laws::part_27
+140	geom-num::attack_wide_tests	w16::three_operand_laws::part_28
+138	geom-num::attack_wide_tests	w16::three_operand_laws::part_29
+138	geom-num::attack_wide_tests	w16::three_operand_laws::part_30
+138	geom-num::attack_wide_tests	w16::three_operand_laws::part_31
+137	geom-num::attack_wide_tests	w16::three_operand_laws::part_32
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_01
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_02
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_03
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_04
+80	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_05
+80	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_06
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_07
+79	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_08
+56	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_09
+55	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_10
+55	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_11
+55	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_12
+57	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_13
+56	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_14
+57	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_15
+56	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_16
+80	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_17
+81	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_18
+80	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_19
+80	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_20
+81	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_21
+81	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_22
+81	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_23
+81	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_24
+82	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_25
+82	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_26
+82	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_27
+83	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_28
+54	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_29
+55	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_30
+55	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_31
+54	geom-num::attack_wide_tests	w16::unary_matches_oracle::part_32
+35	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_01
+35	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_02
+35	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_03
+35	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_04
+24	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_05
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_06
+24	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_07
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_08
+26	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_09
+26	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_10
+26	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_11
+26	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_12
+18	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_13
+18	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_14
+18	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_15
+18	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_16
+36	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_17
+36	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_18
+35	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_19
+36	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_20
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_21
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_22
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_23
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_24
+37	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_25
+37	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_26
+37	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_27
+36	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_28
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_29
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_30
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_31
+25	geom-num::attack_wide_tests	w2::binary_matches_oracle::part_32
+11	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_01
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_02
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_03
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_04
+21	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_05
+21	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_06
+21	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_07
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_08
+22	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_09
+22	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_10
+22	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_11
+23	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_12
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_13
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_14
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_15
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_16
+13	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_17
+13	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_18
+13	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_19
+13	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_20
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_21
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_22
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_23
+20	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_24
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_25
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_26
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_27
+12	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_28
+26	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_29
+27	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_30
+26	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_31
+24	geom-num::attack_wide_tests	w2::constants_and_threshold_splits::part_32
 538	geom-num::attack_wide_tests	w2::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide
-289	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_01
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_02
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_03
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_04
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_05
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_06
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_07
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_08
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_09
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_10
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_11
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_12
+41	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_13
+41	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_14
+41	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_15
+41	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_16
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_17
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_18
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_19
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_20
+39	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_21
+39	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_22
+39	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_23
+39	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_24
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_25
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_26
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_27
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_28
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_29
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_30
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_31
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide::part_32
+19	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_01
+19	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_02
+19	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_03
+19	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_04
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_05
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_06
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_07
+17	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_08
+27	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_09
+27	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_10
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_11
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_12
+28	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_13
+29	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_14
+29	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_15
+29	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_16
+22	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_17
+23	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_18
+23	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_19
+22	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_20
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_21
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_22
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_23
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_24
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_25
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_26
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_27
+18	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_28
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_29
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_30
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_31
+26	geom-num::attack_wide_tests	w2::narrow_agrees_with_wide_at_the_threshold::part_32
 495	geom-num::attack_wide_tests	w2::products_at_the_threshold
 113	geom-num::attack_wide_tests	w2::small_operand_laws
 331	geom-num::attack_wide_tests	w2::sums_and_differences_at_the_limits
-556	geom-num::attack_wide_tests	w2::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w2::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w3::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w3::constants_and_threshold_splits
+37	geom-num::attack_wide_tests	w2::three_operand_laws::part_01
+37	geom-num::attack_wide_tests	w2::three_operand_laws::part_02
+37	geom-num::attack_wide_tests	w2::three_operand_laws::part_03
+37	geom-num::attack_wide_tests	w2::three_operand_laws::part_04
+39	geom-num::attack_wide_tests	w2::three_operand_laws::part_05
+39	geom-num::attack_wide_tests	w2::three_operand_laws::part_06
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_07
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_08
+21	geom-num::attack_wide_tests	w2::three_operand_laws::part_09
+21	geom-num::attack_wide_tests	w2::three_operand_laws::part_10
+21	geom-num::attack_wide_tests	w2::three_operand_laws::part_11
+21	geom-num::attack_wide_tests	w2::three_operand_laws::part_12
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_13
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_14
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_15
+38	geom-num::attack_wide_tests	w2::three_operand_laws::part_16
+23	geom-num::attack_wide_tests	w2::three_operand_laws::part_17
+23	geom-num::attack_wide_tests	w2::three_operand_laws::part_18
+23	geom-num::attack_wide_tests	w2::three_operand_laws::part_19
+23	geom-num::attack_wide_tests	w2::three_operand_laws::part_20
+27	geom-num::attack_wide_tests	w2::three_operand_laws::part_21
+27	geom-num::attack_wide_tests	w2::three_operand_laws::part_22
+27	geom-num::attack_wide_tests	w2::three_operand_laws::part_23
+27	geom-num::attack_wide_tests	w2::three_operand_laws::part_24
+26	geom-num::attack_wide_tests	w2::three_operand_laws::part_25
+26	geom-num::attack_wide_tests	w2::three_operand_laws::part_26
+26	geom-num::attack_wide_tests	w2::three_operand_laws::part_27
+26	geom-num::attack_wide_tests	w2::three_operand_laws::part_28
+28	geom-num::attack_wide_tests	w2::three_operand_laws::part_29
+28	geom-num::attack_wide_tests	w2::three_operand_laws::part_30
+28	geom-num::attack_wide_tests	w2::three_operand_laws::part_31
+28	geom-num::attack_wide_tests	w2::three_operand_laws::part_32
+26	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_01
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_02
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_03
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_04
+38	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_05
+37	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_06
+37	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_07
+37	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_08
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_09
+26	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_10
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_11
+26	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_12
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_13
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_14
+28	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_15
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_16
+39	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_17
+39	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_18
+39	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_19
+39	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_20
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_21
+28	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_22
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_23
+27	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_24
+16	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_25
+16	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_26
+16	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_27
+16	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_28
+33	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_29
+32	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_30
+33	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_31
+33	geom-num::attack_wide_tests	w2::unary_matches_oracle::part_32
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_01
+23	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_02
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_03
+23	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_04
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_05
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_06
+23	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_07
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_08
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_09
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_10
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_11
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_12
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_13
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_14
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_15
+34	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_16
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_17
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_18
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_19
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_20
+35	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_21
+35	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_22
+35	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_23
+35	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_24
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_25
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_26
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_27
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_28
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_29
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_30
+24	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_31
+25	geom-num::attack_wide_tests	w3::binary_matches_oracle::part_32
+43	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_01
+44	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_02
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_03
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_04
+31	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_05
+32	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_06
+32	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_07
+32	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_08
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_09
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_10
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_11
+36	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_12
+21	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_13
+22	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_14
+22	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_15
+22	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_16
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_17
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_18
+34	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_19
+35	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_20
+21	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_21
+20	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_22
+20	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_23
+20	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_24
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_25
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_26
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_27
+45	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_28
+32	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_29
+31	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_30
+32	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_31
+31	geom-num::attack_wide_tests	w3::constants_and_threshold_splits::part_32
 native-only over 601	geom-num::attack_wide_tests	w3::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide
-520	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold
+18	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_01
+18	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_02
+18	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_03
+18	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_04
+39	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_05
+39	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_06
+39	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_07
+39	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_08
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_09
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_10
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_11
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_12
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_13
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_14
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_15
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_16
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_17
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_18
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_19
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_20
+16	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_21
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_22
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_23
+16	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_24
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_25
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_26
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_27
+17	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_28
+34	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_29
+34	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_30
+34	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_31
+34	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide::part_32
+30	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_01
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_02
+29	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_03
+30	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_04
+26	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_05
+26	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_06
+26	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_07
+26	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_08
+15	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_09
+16	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_10
+16	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_11
+15	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_12
+14	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_13
+14	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_14
+14	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_15
+14	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_16
+21	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_17
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_18
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_19
+20	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_20
+13	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_21
+12	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_22
+12	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_23
+12	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_24
+21	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_25
+21	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_26
+21	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_27
+21	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_28
+23	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_29
+23	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_30
+23	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_31
+23	geom-num::attack_wide_tests	w3::narrow_agrees_with_wide_at_the_threshold::part_32
 554	geom-num::attack_wide_tests	w3::products_at_the_threshold
 125	geom-num::attack_wide_tests	w3::small_operand_laws
 539	geom-num::attack_wide_tests	w3::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w3::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w3::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w4::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w4::constants_and_threshold_splits
+38	geom-num::attack_wide_tests	w3::three_operand_laws::part_01
+38	geom-num::attack_wide_tests	w3::three_operand_laws::part_02
+39	geom-num::attack_wide_tests	w3::three_operand_laws::part_03
+38	geom-num::attack_wide_tests	w3::three_operand_laws::part_04
+37	geom-num::attack_wide_tests	w3::three_operand_laws::part_05
+37	geom-num::attack_wide_tests	w3::three_operand_laws::part_06
+37	geom-num::attack_wide_tests	w3::three_operand_laws::part_07
+37	geom-num::attack_wide_tests	w3::three_operand_laws::part_08
+53	geom-num::attack_wide_tests	w3::three_operand_laws::part_09
+53	geom-num::attack_wide_tests	w3::three_operand_laws::part_10
+52	geom-num::attack_wide_tests	w3::three_operand_laws::part_11
+53	geom-num::attack_wide_tests	w3::three_operand_laws::part_12
+22	geom-num::attack_wide_tests	w3::three_operand_laws::part_13
+22	geom-num::attack_wide_tests	w3::three_operand_laws::part_14
+22	geom-num::attack_wide_tests	w3::three_operand_laws::part_15
+22	geom-num::attack_wide_tests	w3::three_operand_laws::part_16
+54	geom-num::attack_wide_tests	w3::three_operand_laws::part_17
+54	geom-num::attack_wide_tests	w3::three_operand_laws::part_18
+53	geom-num::attack_wide_tests	w3::three_operand_laws::part_19
+54	geom-num::attack_wide_tests	w3::three_operand_laws::part_20
+25	geom-num::attack_wide_tests	w3::three_operand_laws::part_21
+25	geom-num::attack_wide_tests	w3::three_operand_laws::part_22
+25	geom-num::attack_wide_tests	w3::three_operand_laws::part_23
+25	geom-num::attack_wide_tests	w3::three_operand_laws::part_24
+48	geom-num::attack_wide_tests	w3::three_operand_laws::part_25
+47	geom-num::attack_wide_tests	w3::three_operand_laws::part_26
+48	geom-num::attack_wide_tests	w3::three_operand_laws::part_27
+48	geom-num::attack_wide_tests	w3::three_operand_laws::part_28
+56	geom-num::attack_wide_tests	w3::three_operand_laws::part_29
+56	geom-num::attack_wide_tests	w3::three_operand_laws::part_30
+56	geom-num::attack_wide_tests	w3::three_operand_laws::part_31
+56	geom-num::attack_wide_tests	w3::three_operand_laws::part_32
+35	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_01
+35	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_02
+35	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_03
+35	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_04
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_05
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_06
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_07
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_08
+36	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_09
+36	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_10
+36	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_11
+36	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_12
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_13
+26	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_14
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_15
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_16
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_17
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_18
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_19
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_20
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_21
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_22
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_23
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_24
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_25
+24	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_26
+23	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_27
+23	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_28
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_29
+26	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_30
+26	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_31
+25	geom-num::attack_wide_tests	w3::unary_matches_oracle::part_32
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_01
+49	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_02
+49	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_03
+49	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_04
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_05
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_06
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_07
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_08
+44	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_09
+44	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_10
+44	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_11
+44	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_12
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_13
+36	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_14
+35	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_15
+34	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_16
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_17
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_18
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_19
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_20
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_21
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_22
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_23
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_24
+27	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_25
+27	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_26
+28	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_27
+27	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_28
+51	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_29
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_30
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_31
+50	geom-num::attack_wide_tests	w4::binary_matches_oracle::part_32
+64	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_01
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_02
+65	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_03
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_04
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_05
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_06
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_07
+66	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_08
+30	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_09
+31	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_10
+31	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_11
+31	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_12
+70	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_13
+71	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_14
+71	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_15
+71	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_16
+51	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_17
+50	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_18
+51	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_19
+50	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_20
+49	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_21
+49	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_22
+49	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_23
+49	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_24
+46	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_25
+47	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_26
+46	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_27
+46	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_28
+45	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_29
+46	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_30
+45	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_31
+42	geom-num::attack_wide_tests	w4::constants_and_threshold_splits::part_32
 native-only over 601	geom-num::attack_wide_tests	w4::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_01
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_02
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_03
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_04
+22	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_05
+22	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_06
+22	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_07
+22	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_08
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_09
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_10
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_11
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_12
+32	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_13
+33	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_14
+32	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_15
+32	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_16
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_17
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_18
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_19
+50	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_20
+47	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_21
+47	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_22
+47	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_23
+47	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_24
+41	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_25
+41	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_26
+42	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_27
+42	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_28
+21	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_29
+21	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_30
+21	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_31
+21	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide::part_32
+28	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_01
+27	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_02
+28	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_03
+28	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_04
+12	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_05
+12	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_06
+12	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_07
+12	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_08
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_09
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_10
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_11
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_12
+19	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_13
+19	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_14
+19	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_15
+20	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_16
+20	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_17
+20	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_18
+20	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_19
+20	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_20
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_21
+30	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_22
+30	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_23
+30	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_24
+28	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_25
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_26
+29	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_27
+28	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_28
+25	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_29
+25	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_30
+25	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_31
+25	geom-num::attack_wide_tests	w4::narrow_agrees_with_wide_at_the_threshold::part_32
 398	geom-num::attack_wide_tests	w4::products_at_the_threshold
 127	geom-num::attack_wide_tests	w4::small_operand_laws
 421	geom-num::attack_wide_tests	w4::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w4::three_operand_laws
-582	geom-num::attack_wide_tests	w4::unary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w7::binary_matches_oracle
-native-only over 601	geom-num::attack_wide_tests	w7::constants_and_threshold_splits
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_01
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_02
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_03
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_04
+39	geom-num::attack_wide_tests	w4::three_operand_laws::part_05
+39	geom-num::attack_wide_tests	w4::three_operand_laws::part_06
+39	geom-num::attack_wide_tests	w4::three_operand_laws::part_07
+39	geom-num::attack_wide_tests	w4::three_operand_laws::part_08
+56	geom-num::attack_wide_tests	w4::three_operand_laws::part_09
+57	geom-num::attack_wide_tests	w4::three_operand_laws::part_10
+56	geom-num::attack_wide_tests	w4::three_operand_laws::part_11
+56	geom-num::attack_wide_tests	w4::three_operand_laws::part_12
+33	geom-num::attack_wide_tests	w4::three_operand_laws::part_13
+32	geom-num::attack_wide_tests	w4::three_operand_laws::part_14
+33	geom-num::attack_wide_tests	w4::three_operand_laws::part_15
+32	geom-num::attack_wide_tests	w4::three_operand_laws::part_16
+81	geom-num::attack_wide_tests	w4::three_operand_laws::part_17
+81	geom-num::attack_wide_tests	w4::three_operand_laws::part_18
+81	geom-num::attack_wide_tests	w4::three_operand_laws::part_19
+82	geom-num::attack_wide_tests	w4::three_operand_laws::part_20
+47	geom-num::attack_wide_tests	w4::three_operand_laws::part_21
+47	geom-num::attack_wide_tests	w4::three_operand_laws::part_22
+48	geom-num::attack_wide_tests	w4::three_operand_laws::part_23
+48	geom-num::attack_wide_tests	w4::three_operand_laws::part_24
+60	geom-num::attack_wide_tests	w4::three_operand_laws::part_25
+60	geom-num::attack_wide_tests	w4::three_operand_laws::part_26
+60	geom-num::attack_wide_tests	w4::three_operand_laws::part_27
+61	geom-num::attack_wide_tests	w4::three_operand_laws::part_28
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_29
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_30
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_31
+54	geom-num::attack_wide_tests	w4::three_operand_laws::part_32
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_01
+32	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_02
+32	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_03
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_04
+45	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_05
+45	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_06
+45	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_07
+45	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_08
+31	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_09
+32	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_10
+31	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_11
+31	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_12
+19	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_13
+20	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_14
+19	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_15
+20	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_16
+47	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_17
+46	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_18
+47	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_19
+46	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_20
+32	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_21
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_22
+32	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_23
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_24
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_25
+34	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_26
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_27
+33	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_28
+40	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_29
+40	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_30
+40	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_31
+40	geom-num::attack_wide_tests	w4::unary_matches_oracle::part_32
+58	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_01
+57	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_02
+58	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_03
+57	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_04
+60	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_05
+60	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_06
+60	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_07
+60	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_08
+30	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_09
+30	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_10
+29	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_11
+30	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_12
+41	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_13
+41	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_14
+41	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_15
+41	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_16
+39	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_17
+39	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_18
+39	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_19
+39	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_20
+25	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_21
+25	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_22
+25	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_23
+25	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_24
+59	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_25
+59	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_26
+59	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_27
+60	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_28
+27	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_29
+27	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_30
+27	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_31
+27	geom-num::attack_wide_tests	w7::binary_matches_oracle::part_32
+142	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_01
+145	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_02
+144	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_03
+144	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_04
+103	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_05
+106	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_06
+105	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_07
+104	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_08
+155	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_09
+156	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_10
+155	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_11
+155	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_12
+161	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_13
+161	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_14
+162	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_15
+162	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_16
+108	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_17
+109	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_18
+109	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_19
+109	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_20
+163	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_21
+163	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_22
+163	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_23
+163	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_24
+70	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_25
+69	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_26
+70	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_27
+67	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_28
+110	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_29
+108	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_30
+109	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_31
+105	geom-num::attack_wide_tests	w7::constants_and_threshold_splits::part_32
 420	geom-num::attack_wide_tests	w7::multiplication_is_repeated_addition
-native-only over 601	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide
-native-only over 601	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_01
+41	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_02
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_03
+41	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_04
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_05
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_06
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_07
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_08
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_09
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_10
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_11
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_12
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_13
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_14
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_15
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_16
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_17
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_18
+37	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_19
+38	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_20
+37	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_21
+37	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_22
+37	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_23
+37	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_24
+56	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_25
+56	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_26
+56	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_27
+56	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_28
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_29
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_30
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_31
+24	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide::part_32
+46	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_01
+46	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_02
+46	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_03
+46	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_04
+44	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_05
+44	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_06
+44	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_07
+44	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_08
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_09
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_10
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_11
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_12
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_13
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_14
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_15
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_16
+32	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_17
+32	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_18
+32	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_19
+32	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_20
+21	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_21
+21	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_22
+21	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_23
+21	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_24
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_25
+40	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_26
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_27
+39	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_28
+21	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_29
+22	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_30
+22	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_31
+22	geom-num::attack_wide_tests	w7::narrow_agrees_with_wide_at_the_threshold::part_32
 native-only over 601	geom-num::attack_wide_tests	w7::products_at_the_threshold
 219	geom-num::attack_wide_tests	w7::small_operand_laws
 native-only over 601	geom-num::attack_wide_tests	w7::sums_and_differences_at_the_limits
-native-only over 601	geom-num::attack_wide_tests	w7::three_operand_laws
-native-only over 601	geom-num::attack_wide_tests	w7::unary_matches_oracle
+68	geom-num::attack_wide_tests	w7::three_operand_laws::part_01
+66	geom-num::attack_wide_tests	w7::three_operand_laws::part_02
+68	geom-num::attack_wide_tests	w7::three_operand_laws::part_03
+67	geom-num::attack_wide_tests	w7::three_operand_laws::part_04
+56	geom-num::attack_wide_tests	w7::three_operand_laws::part_05
+56	geom-num::attack_wide_tests	w7::three_operand_laws::part_06
+56	geom-num::attack_wide_tests	w7::three_operand_laws::part_07
+56	geom-num::attack_wide_tests	w7::three_operand_laws::part_08
+54	geom-num::attack_wide_tests	w7::three_operand_laws::part_09
+54	geom-num::attack_wide_tests	w7::three_operand_laws::part_10
+54	geom-num::attack_wide_tests	w7::three_operand_laws::part_11
+54	geom-num::attack_wide_tests	w7::three_operand_laws::part_12
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_13
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_14
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_15
+54	geom-num::attack_wide_tests	w7::three_operand_laws::part_16
+79	geom-num::attack_wide_tests	w7::three_operand_laws::part_17
+79	geom-num::attack_wide_tests	w7::three_operand_laws::part_18
+79	geom-num::attack_wide_tests	w7::three_operand_laws::part_19
+78	geom-num::attack_wide_tests	w7::three_operand_laws::part_20
+57	geom-num::attack_wide_tests	w7::three_operand_laws::part_21
+57	geom-num::attack_wide_tests	w7::three_operand_laws::part_22
+57	geom-num::attack_wide_tests	w7::three_operand_laws::part_23
+58	geom-num::attack_wide_tests	w7::three_operand_laws::part_24
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_25
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_26
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_27
+53	geom-num::attack_wide_tests	w7::three_operand_laws::part_28
+41	geom-num::attack_wide_tests	w7::three_operand_laws::part_29
+41	geom-num::attack_wide_tests	w7::three_operand_laws::part_30
+41	geom-num::attack_wide_tests	w7::three_operand_laws::part_31
+40	geom-num::attack_wide_tests	w7::three_operand_laws::part_32
+39	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_01
+39	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_02
+39	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_03
+39	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_04
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_05
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_06
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_07
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_08
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_09
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_10
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_11
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_12
+19	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_13
+19	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_14
+19	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_15
+19	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_16
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_17
+31	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_18
+32	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_19
+31	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_20
+33	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_21
+33	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_22
+33	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_23
+33	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_24
+46	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_25
+46	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_26
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_27
+45	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_28
+30	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_29
+31	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_30
+30	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_31
+30	geom-num::attack_wide_tests	w7::unary_matches_oracle::part_32
 2	geom-num::brent	bad_inputs_are_refused
 2	geom-num::brent	caps_are_errors_never_guesses
 2	geom-num::brent	minimum_finds_smooth_minima_inside_the_interval
@@ -2090,7 +3086,10 @@ native-only over 601	geom-num::exact_sum	ties_to_even_and_far_sticky_bits
 2	geom-num::gate1_core	the_published_bounds_are_the_documented_values
 3	geom-num::gate1_core	tpi_side_exact_path_gives_the_side
 1	geom-num::gate1_core	tpi_weight_filter_decides_the_axes
-419	geom-num::gate1_libm	atan2_hard_cases_at_the_fast_path_bound
+116	geom-num::gate1_libm	atan2_hard_cases_at_the_fast_path_bound::pair_1
+115	geom-num::gate1_libm	atan2_hard_cases_at_the_fast_path_bound::pair_2
+142	geom-num::gate1_libm	atan2_hard_cases_at_the_fast_path_bound::pair_3
+2	geom-num::gate1_libm	atan2_hard_cases_at_the_fast_path_bound::the_pairs_join_to_the_whole_list
 native-only over 601	geom-num::gate1_libm	atan2_hard_cases_at_the_first_fast_path_bound
 native-only over 601	geom-num::gate1_libm	atan2_hard_cases_in_every_octant
 native-only over 601	geom-num::gate1_libm	atan2_scaled_hard_cases
@@ -2183,7 +3182,10 @@ native-only over 601	geom-num::plane	tpi_translation_and_mirror_laws
 2	geom-num::predicates	conventions_orient3d
 6	geom-num::predicates	degenerate_inputs_mean_what_the_docs_say
 254	geom-num::predicates	incircle_at_the_extremes
-238	geom-num::predicates	incircle_matches_the_oracle
+76	geom-num::predicates	incircle_matches_the_oracle::quarter_1
+96	geom-num::predicates	incircle_matches_the_oracle::quarter_2
+79	geom-num::predicates	incircle_matches_the_oracle::quarter_3
+79	geom-num::predicates	incircle_matches_the_oracle::quarter_4
 native-only over 601	geom-num::predicates	incircle_on_cocircular_points_and_one_step_off
 native-only over 601	geom-num::predicates	insphere_at_the_extremes
 native-only over 601	geom-num::predicates	insphere_matches_the_oracle
@@ -2191,11 +3193,18 @@ native-only over 601	geom-num::predicates	insphere_on_cospherical_points_and_one
 native-only over 601	geom-num::predicates	lattice_circles_and_spheres_are_exact
 26	geom-num::predicates	orient2d_at_the_extremes
 153	geom-num::predicates	orient2d_matches_the_oracle
-592	geom-num::predicates	orient2d_on_collinear_points_and_one_step_off
+112	geom-num::predicates	orient2d_on_collinear_points_and_one_step_off::quarter_1
+112	geom-num::predicates	orient2d_on_collinear_points_and_one_step_off::quarter_2
+198	geom-num::predicates	orient2d_on_collinear_points_and_one_step_off::quarter_3
+197	geom-num::predicates	orient2d_on_collinear_points_and_one_step_off::quarter_4
 103	geom-num::predicates	orient3d_at_the_extremes
-395	geom-num::predicates	orient3d_matches_the_oracle
+172	geom-num::predicates	orient3d_matches_the_oracle::quarter_1
+172	geom-num::predicates	orient3d_matches_the_oracle::quarter_2
+92	geom-num::predicates	orient3d_matches_the_oracle::quarter_3
+74	geom-num::predicates	orient3d_matches_the_oracle::quarter_4
 2	geom-num::predicates	orient3d_of_a_flat_triangle_is_orient2d
 native-only over 601	geom-num::predicates	orient3d_on_coplanar_points_and_one_step_off
+2	geom-num::predicates	the_slices_join_to_every_case_once
 3	geom-num::quadrature	a_relative_tolerance_is_honoured
 51	geom-num::quadrature	errors_are_reported_never_answered
 4	geom-num::quadrature	fixed_rules_integrate_polynomials_and_smooth_functions
@@ -2277,11 +3286,45 @@ native-only over 601	geom-num::verification	perturbed_ties_match_a_symbolic_orac
 23	geom-num::verification	ssi_orient2d_filter_boundary_crossed_both_ways
 3	geom-num::verification	the_matrix_reader_finds_methods_and_free_functions
 native-only over 601	geom-num::verification	the_matrix_refuses_a_test_that_does_not_reach_its_predicate
-517	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner
+125	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner::quarter_1
+133	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner::quarter_2
+133	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner::quarter_3
+130	geom-num::wide	extreme_corners::incircle_overflow_is_reported_exactly_at_every_corner::quarter_4
 native-only over 601	geom-num::wide	extreme_corners::orient3d_fits_wide2_at_every_corner
 5	geom-num::wide	extreme_corners::powers_of_the_extreme_coordinate
 native-only over 601	geom-num::wide	i256::add_at_the_limits
-native-only over 601	geom-num::wide	i256::add_matches_oracle
+69	geom-num::wide	i256::add_matches_oracle::part_01
+69	geom-num::wide	i256::add_matches_oracle::part_02
+69	geom-num::wide	i256::add_matches_oracle::part_03
+70	geom-num::wide	i256::add_matches_oracle::part_04
+46	geom-num::wide	i256::add_matches_oracle::part_05
+46	geom-num::wide	i256::add_matches_oracle::part_06
+46	geom-num::wide	i256::add_matches_oracle::part_07
+46	geom-num::wide	i256::add_matches_oracle::part_08
+32	geom-num::wide	i256::add_matches_oracle::part_09
+33	geom-num::wide	i256::add_matches_oracle::part_10
+32	geom-num::wide	i256::add_matches_oracle::part_11
+32	geom-num::wide	i256::add_matches_oracle::part_12
+43	geom-num::wide	i256::add_matches_oracle::part_13
+43	geom-num::wide	i256::add_matches_oracle::part_14
+43	geom-num::wide	i256::add_matches_oracle::part_15
+43	geom-num::wide	i256::add_matches_oracle::part_16
+29	geom-num::wide	i256::add_matches_oracle::part_17
+28	geom-num::wide	i256::add_matches_oracle::part_18
+29	geom-num::wide	i256::add_matches_oracle::part_19
+29	geom-num::wide	i256::add_matches_oracle::part_20
+71	geom-num::wide	i256::add_matches_oracle::part_21
+71	geom-num::wide	i256::add_matches_oracle::part_22
+70	geom-num::wide	i256::add_matches_oracle::part_23
+71	geom-num::wide	i256::add_matches_oracle::part_24
+33	geom-num::wide	i256::add_matches_oracle::part_25
+32	geom-num::wide	i256::add_matches_oracle::part_26
+33	geom-num::wide	i256::add_matches_oracle::part_27
+33	geom-num::wide	i256::add_matches_oracle::part_28
+69	geom-num::wide	i256::add_matches_oracle::part_29
+68	geom-num::wide	i256::add_matches_oracle::part_30
+68	geom-num::wide	i256::add_matches_oracle::part_31
+69	geom-num::wide	i256::add_matches_oracle::part_32
 3	geom-num::wide	i256::constants
 native-only over 601	geom-num::wide	i256::edge_values_exhaustively
 262	geom-num::wide	i256::exact_factorisations_of_the_largest_value
@@ -2293,21 +3336,238 @@ native-only over 601	geom-num::wide	i256::mul_at_the_overflow_threshold
 native-only over 601	geom-num::wide	i256::mul_matches_oracle
 native-only over 601	geom-num::wide	i256::mul_units
 native-only over 601	geom-num::wide	i256::neg_matches_oracle
-native-only over 601	geom-num::wide	i256::order_is_transitive
+72	geom-num::wide	i256::order_is_transitive::part_01
+71	geom-num::wide	i256::order_is_transitive::part_02
+71	geom-num::wide	i256::order_is_transitive::part_03
+72	geom-num::wide	i256::order_is_transitive::part_04
+102	geom-num::wide	i256::order_is_transitive::part_05
+101	geom-num::wide	i256::order_is_transitive::part_06
+101	geom-num::wide	i256::order_is_transitive::part_07
+101	geom-num::wide	i256::order_is_transitive::part_08
+89	geom-num::wide	i256::order_is_transitive::part_09
+89	geom-num::wide	i256::order_is_transitive::part_10
+90	geom-num::wide	i256::order_is_transitive::part_11
+92	geom-num::wide	i256::order_is_transitive::part_12
+85	geom-num::wide	i256::order_is_transitive::part_13
+84	geom-num::wide	i256::order_is_transitive::part_14
+84	geom-num::wide	i256::order_is_transitive::part_15
+84	geom-num::wide	i256::order_is_transitive::part_16
+103	geom-num::wide	i256::order_is_transitive::part_17
+104	geom-num::wide	i256::order_is_transitive::part_18
+103	geom-num::wide	i256::order_is_transitive::part_19
+104	geom-num::wide	i256::order_is_transitive::part_20
+75	geom-num::wide	i256::order_is_transitive::part_21
+74	geom-num::wide	i256::order_is_transitive::part_22
+75	geom-num::wide	i256::order_is_transitive::part_23
+75	geom-num::wide	i256::order_is_transitive::part_24
+49	geom-num::wide	i256::order_is_transitive::part_25
+49	geom-num::wide	i256::order_is_transitive::part_26
+49	geom-num::wide	i256::order_is_transitive::part_27
+48	geom-num::wide	i256::order_is_transitive::part_28
+72	geom-num::wide	i256::order_is_transitive::part_29
+71	geom-num::wide	i256::order_is_transitive::part_30
+71	geom-num::wide	i256::order_is_transitive::part_31
+72	geom-num::wide	i256::order_is_transitive::part_32
 native-only over 601	geom-num::wide	i256::order_matches_oracle
 native-only over 601	geom-num::wide	i256::order_of_close_values
 556	geom-num::wide	i256::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	i256::orient3d_at_extreme_coordinates
-native-only over 601	geom-num::wide	i256::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	i256::products_of_extreme_coordinates
+217	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_01
+218	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_02
+217	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_03
+217	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_04
+129	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_05
+129	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_06
+129	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_07
+129	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_08
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_09
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_10
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_11
+155	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_12
+132	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_13
+132	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_14
+132	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_15
+133	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_16
+212	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_17
+212	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_18
+211	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_19
+213	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_20
+143	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_21
+145	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_22
+144	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_23
+144	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_24
+152	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_25
+152	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_26
+152	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_27
+152	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_28
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_29
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_30
+155	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_31
+156	geom-num::wide	i256::orient3d_at_extreme_coordinates::part_32
+37	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_01
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_02
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_03
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_04
+36	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_05
+37	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_06
+37	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_07
+36	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_08
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_09
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_10
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_11
+38	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_12
+33	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_13
+33	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_14
+33	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_15
+33	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_16
+62	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_17
+62	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_18
+62	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_19
+62	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_20
+26	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_21
+26	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_22
+27	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_23
+26	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_24
+53	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_25
+53	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_26
+53	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_27
+53	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_28
+56	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_29
+56	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_30
+56	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_31
+55	geom-num::wide	i256::products_at_every_split_of_the_threshold::part_32
+117	geom-num::wide	i256::products_of_extreme_coordinates::part_01
+116	geom-num::wide	i256::products_of_extreme_coordinates::part_02
+117	geom-num::wide	i256::products_of_extreme_coordinates::part_03
+117	geom-num::wide	i256::products_of_extreme_coordinates::part_04
+120	geom-num::wide	i256::products_of_extreme_coordinates::part_05
+119	geom-num::wide	i256::products_of_extreme_coordinates::part_06
+122	geom-num::wide	i256::products_of_extreme_coordinates::part_07
+121	geom-num::wide	i256::products_of_extreme_coordinates::part_08
+85	geom-num::wide	i256::products_of_extreme_coordinates::part_09
+85	geom-num::wide	i256::products_of_extreme_coordinates::part_10
+85	geom-num::wide	i256::products_of_extreme_coordinates::part_11
+85	geom-num::wide	i256::products_of_extreme_coordinates::part_12
+93	geom-num::wide	i256::products_of_extreme_coordinates::part_13
+93	geom-num::wide	i256::products_of_extreme_coordinates::part_14
+92	geom-num::wide	i256::products_of_extreme_coordinates::part_15
+94	geom-num::wide	i256::products_of_extreme_coordinates::part_16
+95	geom-num::wide	i256::products_of_extreme_coordinates::part_17
+95	geom-num::wide	i256::products_of_extreme_coordinates::part_18
+95	geom-num::wide	i256::products_of_extreme_coordinates::part_19
+95	geom-num::wide	i256::products_of_extreme_coordinates::part_20
+96	geom-num::wide	i256::products_of_extreme_coordinates::part_21
+97	geom-num::wide	i256::products_of_extreme_coordinates::part_22
+96	geom-num::wide	i256::products_of_extreme_coordinates::part_23
+97	geom-num::wide	i256::products_of_extreme_coordinates::part_24
+66	geom-num::wide	i256::products_of_extreme_coordinates::part_25
+66	geom-num::wide	i256::products_of_extreme_coordinates::part_26
+66	geom-num::wide	i256::products_of_extreme_coordinates::part_27
+66	geom-num::wide	i256::products_of_extreme_coordinates::part_28
+139	geom-num::wide	i256::products_of_extreme_coordinates::part_29
+138	geom-num::wide	i256::products_of_extreme_coordinates::part_30
+139	geom-num::wide	i256::products_of_extreme_coordinates::part_31
+139	geom-num::wide	i256::products_of_extreme_coordinates::part_32
 native-only over 601	geom-num::wide	i256::resize_to_every_width
-native-only over 601	geom-num::wide	i256::ring_laws
+84	geom-num::wide	i256::ring_laws::part_01
+84	geom-num::wide	i256::ring_laws::part_02
+85	geom-num::wide	i256::ring_laws::part_03
+85	geom-num::wide	i256::ring_laws::part_04
+40	geom-num::wide	i256::ring_laws::part_05
+40	geom-num::wide	i256::ring_laws::part_06
+40	geom-num::wide	i256::ring_laws::part_07
+40	geom-num::wide	i256::ring_laws::part_08
+60	geom-num::wide	i256::ring_laws::part_09
+60	geom-num::wide	i256::ring_laws::part_10
+60	geom-num::wide	i256::ring_laws::part_11
+60	geom-num::wide	i256::ring_laws::part_12
+52	geom-num::wide	i256::ring_laws::part_13
+51	geom-num::wide	i256::ring_laws::part_14
+51	geom-num::wide	i256::ring_laws::part_15
+52	geom-num::wide	i256::ring_laws::part_16
+83	geom-num::wide	i256::ring_laws::part_17
+83	geom-num::wide	i256::ring_laws::part_18
+82	geom-num::wide	i256::ring_laws::part_19
+83	geom-num::wide	i256::ring_laws::part_20
+36	geom-num::wide	i256::ring_laws::part_21
+36	geom-num::wide	i256::ring_laws::part_22
+36	geom-num::wide	i256::ring_laws::part_23
+36	geom-num::wide	i256::ring_laws::part_24
+86	geom-num::wide	i256::ring_laws::part_25
+86	geom-num::wide	i256::ring_laws::part_26
+86	geom-num::wide	i256::ring_laws::part_27
+86	geom-num::wide	i256::ring_laws::part_28
+43	geom-num::wide	i256::ring_laws::part_29
+42	geom-num::wide	i256::ring_laws::part_30
+42	geom-num::wide	i256::ring_laws::part_31
+42	geom-num::wide	i256::ring_laws::part_32
 560	geom-num::wide	i256::signs_match_oracle
 native-only over 601	geom-num::wide	i256::sub_at_the_limits
-native-only over 601	geom-num::wide	i256::sub_matches_oracle
+29	geom-num::wide	i256::sub_matches_oracle::part_01
+30	geom-num::wide	i256::sub_matches_oracle::part_02
+29	geom-num::wide	i256::sub_matches_oracle::part_03
+29	geom-num::wide	i256::sub_matches_oracle::part_04
+64	geom-num::wide	i256::sub_matches_oracle::part_05
+65	geom-num::wide	i256::sub_matches_oracle::part_06
+65	geom-num::wide	i256::sub_matches_oracle::part_07
+64	geom-num::wide	i256::sub_matches_oracle::part_08
+50	geom-num::wide	i256::sub_matches_oracle::part_09
+50	geom-num::wide	i256::sub_matches_oracle::part_10
+50	geom-num::wide	i256::sub_matches_oracle::part_11
+50	geom-num::wide	i256::sub_matches_oracle::part_12
+68	geom-num::wide	i256::sub_matches_oracle::part_13
+67	geom-num::wide	i256::sub_matches_oracle::part_14
+67	geom-num::wide	i256::sub_matches_oracle::part_15
+68	geom-num::wide	i256::sub_matches_oracle::part_16
+28	geom-num::wide	i256::sub_matches_oracle::part_17
+28	geom-num::wide	i256::sub_matches_oracle::part_18
+28	geom-num::wide	i256::sub_matches_oracle::part_19
+28	geom-num::wide	i256::sub_matches_oracle::part_20
+46	geom-num::wide	i256::sub_matches_oracle::part_21
+46	geom-num::wide	i256::sub_matches_oracle::part_22
+47	geom-num::wide	i256::sub_matches_oracle::part_23
+47	geom-num::wide	i256::sub_matches_oracle::part_24
+69	geom-num::wide	i256::sub_matches_oracle::part_25
+68	geom-num::wide	i256::sub_matches_oracle::part_26
+69	geom-num::wide	i256::sub_matches_oracle::part_27
+69	geom-num::wide	i256::sub_matches_oracle::part_28
+59	geom-num::wide	i256::sub_matches_oracle::part_29
+58	geom-num::wide	i256::sub_matches_oracle::part_30
+59	geom-num::wide	i256::sub_matches_oracle::part_31
+58	geom-num::wide	i256::sub_matches_oracle::part_32
 native-only over 601	geom-num::wide	i256::to_i128_matches_oracle
 535	geom-num::wide	i320::add_at_the_limits
-native-only over 601	geom-num::wide	i320::add_matches_oracle
+35	geom-num::wide	i320::add_matches_oracle::part_01
+35	geom-num::wide	i320::add_matches_oracle::part_02
+35	geom-num::wide	i320::add_matches_oracle::part_03
+35	geom-num::wide	i320::add_matches_oracle::part_04
+78	geom-num::wide	i320::add_matches_oracle::part_05
+78	geom-num::wide	i320::add_matches_oracle::part_06
+79	geom-num::wide	i320::add_matches_oracle::part_07
+79	geom-num::wide	i320::add_matches_oracle::part_08
+52	geom-num::wide	i320::add_matches_oracle::part_09
+52	geom-num::wide	i320::add_matches_oracle::part_10
+52	geom-num::wide	i320::add_matches_oracle::part_11
+52	geom-num::wide	i320::add_matches_oracle::part_12
+77	geom-num::wide	i320::add_matches_oracle::part_13
+77	geom-num::wide	i320::add_matches_oracle::part_14
+77	geom-num::wide	i320::add_matches_oracle::part_15
+77	geom-num::wide	i320::add_matches_oracle::part_16
+77	geom-num::wide	i320::add_matches_oracle::part_17
+77	geom-num::wide	i320::add_matches_oracle::part_18
+77	geom-num::wide	i320::add_matches_oracle::part_19
+77	geom-num::wide	i320::add_matches_oracle::part_20
+55	geom-num::wide	i320::add_matches_oracle::part_21
+55	geom-num::wide	i320::add_matches_oracle::part_22
+55	geom-num::wide	i320::add_matches_oracle::part_23
+55	geom-num::wide	i320::add_matches_oracle::part_24
+31	geom-num::wide	i320::add_matches_oracle::part_25
+31	geom-num::wide	i320::add_matches_oracle::part_26
+31	geom-num::wide	i320::add_matches_oracle::part_27
+31	geom-num::wide	i320::add_matches_oracle::part_28
+78	geom-num::wide	i320::add_matches_oracle::part_29
+79	geom-num::wide	i320::add_matches_oracle::part_30
+78	geom-num::wide	i320::add_matches_oracle::part_31
+78	geom-num::wide	i320::add_matches_oracle::part_32
 3	geom-num::wide	i320::constants
 native-only over 601	geom-num::wide	i320::edge_values_exhaustively
 186	geom-num::wide	i320::exact_factorisations_of_the_largest_value
@@ -2319,21 +3579,238 @@ native-only over 601	geom-num::wide	i320::mul_at_the_overflow_threshold
 native-only over 601	geom-num::wide	i320::mul_matches_oracle
 native-only over 601	geom-num::wide	i320::mul_units
 548	geom-num::wide	i320::neg_matches_oracle
-native-only over 601	geom-num::wide	i320::order_is_transitive
+70	geom-num::wide	i320::order_is_transitive::part_01
+70	geom-num::wide	i320::order_is_transitive::part_02
+70	geom-num::wide	i320::order_is_transitive::part_03
+69	geom-num::wide	i320::order_is_transitive::part_04
+100	geom-num::wide	i320::order_is_transitive::part_05
+101	geom-num::wide	i320::order_is_transitive::part_06
+102	geom-num::wide	i320::order_is_transitive::part_07
+101	geom-num::wide	i320::order_is_transitive::part_08
+96	geom-num::wide	i320::order_is_transitive::part_09
+97	geom-num::wide	i320::order_is_transitive::part_10
+97	geom-num::wide	i320::order_is_transitive::part_11
+97	geom-num::wide	i320::order_is_transitive::part_12
+98	geom-num::wide	i320::order_is_transitive::part_13
+98	geom-num::wide	i320::order_is_transitive::part_14
+99	geom-num::wide	i320::order_is_transitive::part_15
+99	geom-num::wide	i320::order_is_transitive::part_16
+102	geom-num::wide	i320::order_is_transitive::part_17
+102	geom-num::wide	i320::order_is_transitive::part_18
+103	geom-num::wide	i320::order_is_transitive::part_19
+101	geom-num::wide	i320::order_is_transitive::part_20
+42	geom-num::wide	i320::order_is_transitive::part_21
+42	geom-num::wide	i320::order_is_transitive::part_22
+41	geom-num::wide	i320::order_is_transitive::part_23
+41	geom-num::wide	i320::order_is_transitive::part_24
+68	geom-num::wide	i320::order_is_transitive::part_25
+68	geom-num::wide	i320::order_is_transitive::part_26
+69	geom-num::wide	i320::order_is_transitive::part_27
+68	geom-num::wide	i320::order_is_transitive::part_28
+47	geom-num::wide	i320::order_is_transitive::part_29
+47	geom-num::wide	i320::order_is_transitive::part_30
+47	geom-num::wide	i320::order_is_transitive::part_31
+47	geom-num::wide	i320::order_is_transitive::part_32
 native-only over 601	geom-num::wide	i320::order_matches_oracle
 native-only over 601	geom-num::wide	i320::order_of_close_values
 431	geom-num::wide	i320::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	i320::orient3d_at_extreme_coordinates
-native-only over 601	geom-num::wide	i320::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	i320::products_of_extreme_coordinates
+157	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_01
+157	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_02
+158	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_03
+156	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_04
+221	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_05
+223	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_06
+222	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_07
+222	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_08
+225	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_09
+226	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_10
+225	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_11
+226	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_12
+220	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_13
+221	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_14
+221	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_15
+220	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_16
+225	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_17
+224	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_18
+224	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_19
+225	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_20
+191	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_21
+190	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_22
+191	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_23
+191	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_24
+149	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_25
+149	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_26
+148	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_27
+149	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_28
+162	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_29
+162	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_30
+163	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_31
+163	geom-num::wide	i320::orient3d_at_extreme_coordinates::part_32
+47	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_01
+48	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_02
+48	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_03
+48	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_04
+47	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_05
+47	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_06
+48	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_07
+49	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_08
+73	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_09
+73	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_10
+73	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_11
+73	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_12
+51	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_13
+51	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_14
+51	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_15
+50	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_16
+75	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_17
+75	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_18
+75	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_19
+74	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_20
+53	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_21
+53	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_22
+52	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_23
+53	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_24
+72	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_25
+71	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_26
+70	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_27
+71	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_28
+36	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_29
+36	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_30
+37	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_31
+36	geom-num::wide	i320::products_at_every_split_of_the_threshold::part_32
+141	geom-num::wide	i320::products_of_extreme_coordinates::part_01
+142	geom-num::wide	i320::products_of_extreme_coordinates::part_02
+141	geom-num::wide	i320::products_of_extreme_coordinates::part_03
+142	geom-num::wide	i320::products_of_extreme_coordinates::part_04
+140	geom-num::wide	i320::products_of_extreme_coordinates::part_05
+139	geom-num::wide	i320::products_of_extreme_coordinates::part_06
+141	geom-num::wide	i320::products_of_extreme_coordinates::part_07
+140	geom-num::wide	i320::products_of_extreme_coordinates::part_08
+142	geom-num::wide	i320::products_of_extreme_coordinates::part_09
+140	geom-num::wide	i320::products_of_extreme_coordinates::part_10
+141	geom-num::wide	i320::products_of_extreme_coordinates::part_11
+141	geom-num::wide	i320::products_of_extreme_coordinates::part_12
+99	geom-num::wide	i320::products_of_extreme_coordinates::part_13
+99	geom-num::wide	i320::products_of_extreme_coordinates::part_14
+98	geom-num::wide	i320::products_of_extreme_coordinates::part_15
+100	geom-num::wide	i320::products_of_extreme_coordinates::part_16
+138	geom-num::wide	i320::products_of_extreme_coordinates::part_17
+140	geom-num::wide	i320::products_of_extreme_coordinates::part_18
+139	geom-num::wide	i320::products_of_extreme_coordinates::part_19
+139	geom-num::wide	i320::products_of_extreme_coordinates::part_20
+121	geom-num::wide	i320::products_of_extreme_coordinates::part_21
+120	geom-num::wide	i320::products_of_extreme_coordinates::part_22
+121	geom-num::wide	i320::products_of_extreme_coordinates::part_23
+119	geom-num::wide	i320::products_of_extreme_coordinates::part_24
+97	geom-num::wide	i320::products_of_extreme_coordinates::part_25
+97	geom-num::wide	i320::products_of_extreme_coordinates::part_26
+97	geom-num::wide	i320::products_of_extreme_coordinates::part_27
+97	geom-num::wide	i320::products_of_extreme_coordinates::part_28
+58	geom-num::wide	i320::products_of_extreme_coordinates::part_29
+57	geom-num::wide	i320::products_of_extreme_coordinates::part_30
+57	geom-num::wide	i320::products_of_extreme_coordinates::part_31
+57	geom-num::wide	i320::products_of_extreme_coordinates::part_32
 native-only over 601	geom-num::wide	i320::resize_to_every_width
-native-only over 601	geom-num::wide	i320::ring_laws
+60	geom-num::wide	i320::ring_laws::part_01
+60	geom-num::wide	i320::ring_laws::part_02
+60	geom-num::wide	i320::ring_laws::part_03
+59	geom-num::wide	i320::ring_laws::part_04
+67	geom-num::wide	i320::ring_laws::part_05
+68	geom-num::wide	i320::ring_laws::part_06
+68	geom-num::wide	i320::ring_laws::part_07
+68	geom-num::wide	i320::ring_laws::part_08
+83	geom-num::wide	i320::ring_laws::part_09
+82	geom-num::wide	i320::ring_laws::part_10
+83	geom-num::wide	i320::ring_laws::part_11
+82	geom-num::wide	i320::ring_laws::part_12
+58	geom-num::wide	i320::ring_laws::part_13
+58	geom-num::wide	i320::ring_laws::part_14
+58	geom-num::wide	i320::ring_laws::part_15
+57	geom-num::wide	i320::ring_laws::part_16
+82	geom-num::wide	i320::ring_laws::part_17
+83	geom-num::wide	i320::ring_laws::part_18
+82	geom-num::wide	i320::ring_laws::part_19
+82	geom-num::wide	i320::ring_laws::part_20
+60	geom-num::wide	i320::ring_laws::part_21
+60	geom-num::wide	i320::ring_laws::part_22
+60	geom-num::wide	i320::ring_laws::part_23
+60	geom-num::wide	i320::ring_laws::part_24
+81	geom-num::wide	i320::ring_laws::part_25
+81	geom-num::wide	i320::ring_laws::part_26
+81	geom-num::wide	i320::ring_laws::part_27
+81	geom-num::wide	i320::ring_laws::part_28
+55	geom-num::wide	i320::ring_laws::part_29
+56	geom-num::wide	i320::ring_laws::part_30
+56	geom-num::wide	i320::ring_laws::part_31
+55	geom-num::wide	i320::ring_laws::part_32
 527	geom-num::wide	i320::signs_match_oracle
 native-only over 601	geom-num::wide	i320::sub_at_the_limits
-native-only over 601	geom-num::wide	i320::sub_matches_oracle
+67	geom-num::wide	i320::sub_matches_oracle::part_01
+66	geom-num::wide	i320::sub_matches_oracle::part_02
+66	geom-num::wide	i320::sub_matches_oracle::part_03
+66	geom-num::wide	i320::sub_matches_oracle::part_04
+71	geom-num::wide	i320::sub_matches_oracle::part_05
+72	geom-num::wide	i320::sub_matches_oracle::part_06
+72	geom-num::wide	i320::sub_matches_oracle::part_07
+72	geom-num::wide	i320::sub_matches_oracle::part_08
+68	geom-num::wide	i320::sub_matches_oracle::part_09
+69	geom-num::wide	i320::sub_matches_oracle::part_10
+68	geom-num::wide	i320::sub_matches_oracle::part_11
+67	geom-num::wide	i320::sub_matches_oracle::part_12
+76	geom-num::wide	i320::sub_matches_oracle::part_13
+77	geom-num::wide	i320::sub_matches_oracle::part_14
+76	geom-num::wide	i320::sub_matches_oracle::part_15
+76	geom-num::wide	i320::sub_matches_oracle::part_16
+36	geom-num::wide	i320::sub_matches_oracle::part_17
+36	geom-num::wide	i320::sub_matches_oracle::part_18
+36	geom-num::wide	i320::sub_matches_oracle::part_19
+36	geom-num::wide	i320::sub_matches_oracle::part_20
+53	geom-num::wide	i320::sub_matches_oracle::part_21
+53	geom-num::wide	i320::sub_matches_oracle::part_22
+54	geom-num::wide	i320::sub_matches_oracle::part_23
+53	geom-num::wide	i320::sub_matches_oracle::part_24
+37	geom-num::wide	i320::sub_matches_oracle::part_25
+37	geom-num::wide	i320::sub_matches_oracle::part_26
+37	geom-num::wide	i320::sub_matches_oracle::part_27
+37	geom-num::wide	i320::sub_matches_oracle::part_28
+37	geom-num::wide	i320::sub_matches_oracle::part_29
+37	geom-num::wide	i320::sub_matches_oracle::part_30
+37	geom-num::wide	i320::sub_matches_oracle::part_31
+37	geom-num::wide	i320::sub_matches_oracle::part_32
 597	geom-num::wide	i320::to_i128_matches_oracle
 native-only over 601	geom-num::wide	i384::add_at_the_limits
-native-only over 601	geom-num::wide	i384::add_matches_oracle
+51	geom-num::wide	i384::add_matches_oracle::part_01
+50	geom-num::wide	i384::add_matches_oracle::part_02
+51	geom-num::wide	i384::add_matches_oracle::part_03
+50	geom-num::wide	i384::add_matches_oracle::part_04
+105	geom-num::wide	i384::add_matches_oracle::part_05
+105	geom-num::wide	i384::add_matches_oracle::part_06
+105	geom-num::wide	i384::add_matches_oracle::part_07
+104	geom-num::wide	i384::add_matches_oracle::part_08
+43	geom-num::wide	i384::add_matches_oracle::part_09
+43	geom-num::wide	i384::add_matches_oracle::part_10
+43	geom-num::wide	i384::add_matches_oracle::part_11
+43	geom-num::wide	i384::add_matches_oracle::part_12
+63	geom-num::wide	i384::add_matches_oracle::part_13
+63	geom-num::wide	i384::add_matches_oracle::part_14
+63	geom-num::wide	i384::add_matches_oracle::part_15
+63	geom-num::wide	i384::add_matches_oracle::part_16
+102	geom-num::wide	i384::add_matches_oracle::part_17
+101	geom-num::wide	i384::add_matches_oracle::part_18
+101	geom-num::wide	i384::add_matches_oracle::part_19
+102	geom-num::wide	i384::add_matches_oracle::part_20
+105	geom-num::wide	i384::add_matches_oracle::part_21
+104	geom-num::wide	i384::add_matches_oracle::part_22
+104	geom-num::wide	i384::add_matches_oracle::part_23
+104	geom-num::wide	i384::add_matches_oracle::part_24
+71	geom-num::wide	i384::add_matches_oracle::part_25
+72	geom-num::wide	i384::add_matches_oracle::part_26
+71	geom-num::wide	i384::add_matches_oracle::part_27
+72	geom-num::wide	i384::add_matches_oracle::part_28
+103	geom-num::wide	i384::add_matches_oracle::part_29
+102	geom-num::wide	i384::add_matches_oracle::part_30
+104	geom-num::wide	i384::add_matches_oracle::part_31
+104	geom-num::wide	i384::add_matches_oracle::part_32
 2	geom-num::wide	i384::constants
 native-only over 601	geom-num::wide	i384::edge_values_exhaustively
 202	geom-num::wide	i384::exact_factorisations_of_the_largest_value
@@ -2345,21 +3822,238 @@ native-only over 601	geom-num::wide	i384::mul_at_the_overflow_threshold
 native-only over 601	geom-num::wide	i384::mul_matches_oracle
 native-only over 601	geom-num::wide	i384::mul_units
 native-only over 601	geom-num::wide	i384::neg_matches_oracle
-native-only over 601	geom-num::wide	i384::order_is_transitive
+86	geom-num::wide	i384::order_is_transitive::part_01
+86	geom-num::wide	i384::order_is_transitive::part_02
+86	geom-num::wide	i384::order_is_transitive::part_03
+86	geom-num::wide	i384::order_is_transitive::part_04
+52	geom-num::wide	i384::order_is_transitive::part_05
+53	geom-num::wide	i384::order_is_transitive::part_06
+52	geom-num::wide	i384::order_is_transitive::part_07
+53	geom-num::wide	i384::order_is_transitive::part_08
+86	geom-num::wide	i384::order_is_transitive::part_09
+85	geom-num::wide	i384::order_is_transitive::part_10
+84	geom-num::wide	i384::order_is_transitive::part_11
+86	geom-num::wide	i384::order_is_transitive::part_12
+79	geom-num::wide	i384::order_is_transitive::part_13
+80	geom-num::wide	i384::order_is_transitive::part_14
+80	geom-num::wide	i384::order_is_transitive::part_15
+80	geom-num::wide	i384::order_is_transitive::part_16
+51	geom-num::wide	i384::order_is_transitive::part_17
+52	geom-num::wide	i384::order_is_transitive::part_18
+52	geom-num::wide	i384::order_is_transitive::part_19
+52	geom-num::wide	i384::order_is_transitive::part_20
+118	geom-num::wide	i384::order_is_transitive::part_21
+117	geom-num::wide	i384::order_is_transitive::part_22
+117	geom-num::wide	i384::order_is_transitive::part_23
+116	geom-num::wide	i384::order_is_transitive::part_24
+118	geom-num::wide	i384::order_is_transitive::part_25
+119	geom-num::wide	i384::order_is_transitive::part_26
+119	geom-num::wide	i384::order_is_transitive::part_27
+119	geom-num::wide	i384::order_is_transitive::part_28
+80	geom-num::wide	i384::order_is_transitive::part_29
+79	geom-num::wide	i384::order_is_transitive::part_30
+80	geom-num::wide	i384::order_is_transitive::part_31
+80	geom-num::wide	i384::order_is_transitive::part_32
 native-only over 601	geom-num::wide	i384::order_matches_oracle
 native-only over 601	geom-num::wide	i384::order_of_close_values
 499	geom-num::wide	i384::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	i384::orient3d_at_extreme_coordinates
-native-only over 601	geom-num::wide	i384::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	i384::products_of_extreme_coordinates
+153	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_01
+153	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_02
+151	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_03
+152	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_04
+214	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_05
+215	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_06
+214	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_07
+215	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_08
+139	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_09
+139	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_10
+139	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_11
+139	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_12
+117	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_13
+117	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_14
+117	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_15
+117	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_16
+150	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_17
+151	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_18
+150	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_19
+150	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_20
+222	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_21
+224	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_22
+221	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_23
+223	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_24
+149	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_25
+147	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_26
+149	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_27
+148	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_28
+219	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_29
+219	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_30
+219	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_31
+220	geom-num::wide	i384::orient3d_at_extreme_coordinates::part_32
+65	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_01
+65	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_02
+66	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_03
+66	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_04
+62	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_05
+61	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_06
+64	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_07
+62	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_08
+65	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_09
+66	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_10
+65	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_11
+65	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_12
+43	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_13
+43	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_14
+43	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_15
+43	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_16
+91	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_17
+91	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_18
+92	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_19
+91	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_20
+67	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_21
+66	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_22
+66	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_23
+67	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_24
+93	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_25
+93	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_26
+91	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_27
+89	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_28
+59	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_29
+60	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_30
+59	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_31
+58	geom-num::wide	i384::products_at_every_split_of_the_threshold::part_32
+125	geom-num::wide	i384::products_of_extreme_coordinates::part_01
+127	geom-num::wide	i384::products_of_extreme_coordinates::part_02
+128	geom-num::wide	i384::products_of_extreme_coordinates::part_03
+127	geom-num::wide	i384::products_of_extreme_coordinates::part_04
+132	geom-num::wide	i384::products_of_extreme_coordinates::part_05
+131	geom-num::wide	i384::products_of_extreme_coordinates::part_06
+132	geom-num::wide	i384::products_of_extreme_coordinates::part_07
+131	geom-num::wide	i384::products_of_extreme_coordinates::part_08
+101	geom-num::wide	i384::products_of_extreme_coordinates::part_09
+101	geom-num::wide	i384::products_of_extreme_coordinates::part_10
+101	geom-num::wide	i384::products_of_extreme_coordinates::part_11
+101	geom-num::wide	i384::products_of_extreme_coordinates::part_12
+81	geom-num::wide	i384::products_of_extreme_coordinates::part_13
+81	geom-num::wide	i384::products_of_extreme_coordinates::part_14
+81	geom-num::wide	i384::products_of_extreme_coordinates::part_15
+81	geom-num::wide	i384::products_of_extreme_coordinates::part_16
+102	geom-num::wide	i384::products_of_extreme_coordinates::part_17
+102	geom-num::wide	i384::products_of_extreme_coordinates::part_18
+102	geom-num::wide	i384::products_of_extreme_coordinates::part_19
+103	geom-num::wide	i384::products_of_extreme_coordinates::part_20
+98	geom-num::wide	i384::products_of_extreme_coordinates::part_21
+98	geom-num::wide	i384::products_of_extreme_coordinates::part_22
+99	geom-num::wide	i384::products_of_extreme_coordinates::part_23
+98	geom-num::wide	i384::products_of_extreme_coordinates::part_24
+96	geom-num::wide	i384::products_of_extreme_coordinates::part_25
+95	geom-num::wide	i384::products_of_extreme_coordinates::part_26
+95	geom-num::wide	i384::products_of_extreme_coordinates::part_27
+95	geom-num::wide	i384::products_of_extreme_coordinates::part_28
+56	geom-num::wide	i384::products_of_extreme_coordinates::part_29
+56	geom-num::wide	i384::products_of_extreme_coordinates::part_30
+56	geom-num::wide	i384::products_of_extreme_coordinates::part_31
+56	geom-num::wide	i384::products_of_extreme_coordinates::part_32
 native-only over 601	geom-num::wide	i384::resize_to_every_width
-native-only over 601	geom-num::wide	i384::ring_laws
+58	geom-num::wide	i384::ring_laws::part_01
+58	geom-num::wide	i384::ring_laws::part_02
+58	geom-num::wide	i384::ring_laws::part_03
+58	geom-num::wide	i384::ring_laws::part_04
+58	geom-num::wide	i384::ring_laws::part_05
+57	geom-num::wide	i384::ring_laws::part_06
+58	geom-num::wide	i384::ring_laws::part_07
+58	geom-num::wide	i384::ring_laws::part_08
+82	geom-num::wide	i384::ring_laws::part_09
+83	geom-num::wide	i384::ring_laws::part_10
+82	geom-num::wide	i384::ring_laws::part_11
+83	geom-num::wide	i384::ring_laws::part_12
+60	geom-num::wide	i384::ring_laws::part_13
+60	geom-num::wide	i384::ring_laws::part_14
+60	geom-num::wide	i384::ring_laws::part_15
+61	geom-num::wide	i384::ring_laws::part_16
+38	geom-num::wide	i384::ring_laws::part_17
+39	geom-num::wide	i384::ring_laws::part_18
+38	geom-num::wide	i384::ring_laws::part_19
+38	geom-num::wide	i384::ring_laws::part_20
+36	geom-num::wide	i384::ring_laws::part_21
+37	geom-num::wide	i384::ring_laws::part_22
+37	geom-num::wide	i384::ring_laws::part_23
+37	geom-num::wide	i384::ring_laws::part_24
+53	geom-num::wide	i384::ring_laws::part_25
+52	geom-num::wide	i384::ring_laws::part_26
+52	geom-num::wide	i384::ring_laws::part_27
+53	geom-num::wide	i384::ring_laws::part_28
+56	geom-num::wide	i384::ring_laws::part_29
+57	geom-num::wide	i384::ring_laws::part_30
+57	geom-num::wide	i384::ring_laws::part_31
+58	geom-num::wide	i384::ring_laws::part_32
 native-only over 601	geom-num::wide	i384::signs_match_oracle
 native-only over 601	geom-num::wide	i384::sub_at_the_limits
-native-only over 601	geom-num::wide	i384::sub_matches_oracle
+102	geom-num::wide	i384::sub_matches_oracle::part_01
+101	geom-num::wide	i384::sub_matches_oracle::part_02
+102	geom-num::wide	i384::sub_matches_oracle::part_03
+101	geom-num::wide	i384::sub_matches_oracle::part_04
+74	geom-num::wide	i384::sub_matches_oracle::part_05
+75	geom-num::wide	i384::sub_matches_oracle::part_06
+74	geom-num::wide	i384::sub_matches_oracle::part_07
+75	geom-num::wide	i384::sub_matches_oracle::part_08
+71	geom-num::wide	i384::sub_matches_oracle::part_09
+71	geom-num::wide	i384::sub_matches_oracle::part_10
+70	geom-num::wide	i384::sub_matches_oracle::part_11
+72	geom-num::wide	i384::sub_matches_oracle::part_12
+70	geom-num::wide	i384::sub_matches_oracle::part_13
+69	geom-num::wide	i384::sub_matches_oracle::part_14
+70	geom-num::wide	i384::sub_matches_oracle::part_15
+70	geom-num::wide	i384::sub_matches_oracle::part_16
+72	geom-num::wide	i384::sub_matches_oracle::part_17
+71	geom-num::wide	i384::sub_matches_oracle::part_18
+72	geom-num::wide	i384::sub_matches_oracle::part_19
+72	geom-num::wide	i384::sub_matches_oracle::part_20
+68	geom-num::wide	i384::sub_matches_oracle::part_21
+67	geom-num::wide	i384::sub_matches_oracle::part_22
+68	geom-num::wide	i384::sub_matches_oracle::part_23
+68	geom-num::wide	i384::sub_matches_oracle::part_24
+90	geom-num::wide	i384::sub_matches_oracle::part_25
+90	geom-num::wide	i384::sub_matches_oracle::part_26
+90	geom-num::wide	i384::sub_matches_oracle::part_27
+90	geom-num::wide	i384::sub_matches_oracle::part_28
+102	geom-num::wide	i384::sub_matches_oracle::part_29
+102	geom-num::wide	i384::sub_matches_oracle::part_30
+101	geom-num::wide	i384::sub_matches_oracle::part_31
+102	geom-num::wide	i384::sub_matches_oracle::part_32
 583	geom-num::wide	i384::to_i128_matches_oracle
 native-only over 601	geom-num::wide	i512::add_at_the_limits
-native-only over 601	geom-num::wide	i512::add_matches_oracle
+89	geom-num::wide	i512::add_matches_oracle::part_01
+89	geom-num::wide	i512::add_matches_oracle::part_02
+89	geom-num::wide	i512::add_matches_oracle::part_03
+89	geom-num::wide	i512::add_matches_oracle::part_04
+101	geom-num::wide	i512::add_matches_oracle::part_05
+101	geom-num::wide	i512::add_matches_oracle::part_06
+100	geom-num::wide	i512::add_matches_oracle::part_07
+101	geom-num::wide	i512::add_matches_oracle::part_08
+69	geom-num::wide	i512::add_matches_oracle::part_09
+69	geom-num::wide	i512::add_matches_oracle::part_10
+69	geom-num::wide	i512::add_matches_oracle::part_11
+69	geom-num::wide	i512::add_matches_oracle::part_12
+42	geom-num::wide	i512::add_matches_oracle::part_13
+42	geom-num::wide	i512::add_matches_oracle::part_14
+42	geom-num::wide	i512::add_matches_oracle::part_15
+42	geom-num::wide	i512::add_matches_oracle::part_16
+68	geom-num::wide	i512::add_matches_oracle::part_17
+68	geom-num::wide	i512::add_matches_oracle::part_18
+68	geom-num::wide	i512::add_matches_oracle::part_19
+68	geom-num::wide	i512::add_matches_oracle::part_20
+70	geom-num::wide	i512::add_matches_oracle::part_21
+71	geom-num::wide	i512::add_matches_oracle::part_22
+71	geom-num::wide	i512::add_matches_oracle::part_23
+70	geom-num::wide	i512::add_matches_oracle::part_24
+70	geom-num::wide	i512::add_matches_oracle::part_25
+70	geom-num::wide	i512::add_matches_oracle::part_26
+71	geom-num::wide	i512::add_matches_oracle::part_27
+70	geom-num::wide	i512::add_matches_oracle::part_28
+88	geom-num::wide	i512::add_matches_oracle::part_29
+89	geom-num::wide	i512::add_matches_oracle::part_30
+89	geom-num::wide	i512::add_matches_oracle::part_31
+90	geom-num::wide	i512::add_matches_oracle::part_32
 2	geom-num::wide	i512::constants
 native-only over 601	geom-num::wide	i512::edge_values_exhaustively
 294	geom-num::wide	i512::exact_factorisations_of_the_largest_value
@@ -2371,26 +4065,244 @@ native-only over 601	geom-num::wide	i512::incircle_at_extreme_coordinates
 native-only over 601	geom-num::wide	i512::mul_matches_oracle
 572	geom-num::wide	i512::mul_units
 native-only over 601	geom-num::wide	i512::neg_matches_oracle
-native-only over 601	geom-num::wide	i512::order_is_transitive
+129	geom-num::wide	i512::order_is_transitive::part_01
+129	geom-num::wide	i512::order_is_transitive::part_02
+129	geom-num::wide	i512::order_is_transitive::part_03
+129	geom-num::wide	i512::order_is_transitive::part_04
+134	geom-num::wide	i512::order_is_transitive::part_05
+133	geom-num::wide	i512::order_is_transitive::part_06
+134	geom-num::wide	i512::order_is_transitive::part_07
+134	geom-num::wide	i512::order_is_transitive::part_08
+127	geom-num::wide	i512::order_is_transitive::part_09
+126	geom-num::wide	i512::order_is_transitive::part_10
+126	geom-num::wide	i512::order_is_transitive::part_11
+126	geom-num::wide	i512::order_is_transitive::part_12
+132	geom-num::wide	i512::order_is_transitive::part_13
+130	geom-num::wide	i512::order_is_transitive::part_14
+131	geom-num::wide	i512::order_is_transitive::part_15
+130	geom-num::wide	i512::order_is_transitive::part_16
+112	geom-num::wide	i512::order_is_transitive::part_17
+112	geom-num::wide	i512::order_is_transitive::part_18
+112	geom-num::wide	i512::order_is_transitive::part_19
+112	geom-num::wide	i512::order_is_transitive::part_20
+126	geom-num::wide	i512::order_is_transitive::part_21
+127	geom-num::wide	i512::order_is_transitive::part_22
+126	geom-num::wide	i512::order_is_transitive::part_23
+126	geom-num::wide	i512::order_is_transitive::part_24
+85	geom-num::wide	i512::order_is_transitive::part_25
+86	geom-num::wide	i512::order_is_transitive::part_26
+86	geom-num::wide	i512::order_is_transitive::part_27
+86	geom-num::wide	i512::order_is_transitive::part_28
+85	geom-num::wide	i512::order_is_transitive::part_29
+86	geom-num::wide	i512::order_is_transitive::part_30
+86	geom-num::wide	i512::order_is_transitive::part_31
+87	geom-num::wide	i512::order_is_transitive::part_32
 native-only over 601	geom-num::wide	i512::order_matches_oracle
 native-only over 601	geom-num::wide	i512::order_of_close_values
 583	geom-num::wide	i512::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	i512::orient3d_at_extreme_coordinates
-native-only over 601	geom-num::wide	i512::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	i512::products_of_extreme_coordinates
+152	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_01
+152	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_02
+150	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_03
+150	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_04
+98	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_05
+99	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_06
+99	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_07
+99	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_08
+109	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_09
+110	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_10
+109	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_11
+109	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_12
+103	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_13
+103	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_14
+103	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_15
+103	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_16
+227	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_17
+228	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_18
+227	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_19
+226	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_20
+222	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_21
+223	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_22
+222	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_23
+221	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_24
+150	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_25
+151	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_26
+149	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_27
+151	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_28
+112	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_29
+113	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_30
+113	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_31
+113	geom-num::wide	i512::orient3d_at_extreme_coordinates::part_32
+128	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_01
+129	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_02
+129	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_03
+129	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_04
+75	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_05
+74	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_06
+75	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_07
+74	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_08
+98	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_09
+97	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_10
+98	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_11
+97	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_12
+100	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_13
+100	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_14
+99	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_15
+99	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_16
+71	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_17
+71	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_18
+71	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_19
+71	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_20
+89	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_21
+89	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_22
+89	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_23
+89	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_24
+94	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_25
+94	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_26
+93	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_27
+95	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_28
+58	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_29
+59	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_30
+58	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_31
+58	geom-num::wide	i512::products_at_every_split_of_the_threshold::part_32
+69	geom-num::wide	i512::products_of_extreme_coordinates::part_01
+69	geom-num::wide	i512::products_of_extreme_coordinates::part_02
+69	geom-num::wide	i512::products_of_extreme_coordinates::part_03
+69	geom-num::wide	i512::products_of_extreme_coordinates::part_04
+101	geom-num::wide	i512::products_of_extreme_coordinates::part_05
+102	geom-num::wide	i512::products_of_extreme_coordinates::part_06
+100	geom-num::wide	i512::products_of_extreme_coordinates::part_07
+100	geom-num::wide	i512::products_of_extreme_coordinates::part_08
+99	geom-num::wide	i512::products_of_extreme_coordinates::part_09
+99	geom-num::wide	i512::products_of_extreme_coordinates::part_10
+101	geom-num::wide	i512::products_of_extreme_coordinates::part_11
+99	geom-num::wide	i512::products_of_extreme_coordinates::part_12
+122	geom-num::wide	i512::products_of_extreme_coordinates::part_13
+123	geom-num::wide	i512::products_of_extreme_coordinates::part_14
+122	geom-num::wide	i512::products_of_extreme_coordinates::part_15
+123	geom-num::wide	i512::products_of_extreme_coordinates::part_16
+124	geom-num::wide	i512::products_of_extreme_coordinates::part_17
+124	geom-num::wide	i512::products_of_extreme_coordinates::part_18
+123	geom-num::wide	i512::products_of_extreme_coordinates::part_19
+124	geom-num::wide	i512::products_of_extreme_coordinates::part_20
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_21
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_22
+60	geom-num::wide	i512::products_of_extreme_coordinates::part_23
+60	geom-num::wide	i512::products_of_extreme_coordinates::part_24
+68	geom-num::wide	i512::products_of_extreme_coordinates::part_25
+68	geom-num::wide	i512::products_of_extreme_coordinates::part_26
+68	geom-num::wide	i512::products_of_extreme_coordinates::part_27
+68	geom-num::wide	i512::products_of_extreme_coordinates::part_28
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_29
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_30
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_31
+59	geom-num::wide	i512::products_of_extreme_coordinates::part_32
 native-only over 601	geom-num::wide	i512::resize_to_every_width
-native-only over 601	geom-num::wide	i512::ring_laws
+97	geom-num::wide	i512::ring_laws::part_01
+97	geom-num::wide	i512::ring_laws::part_02
+97	geom-num::wide	i512::ring_laws::part_03
+97	geom-num::wide	i512::ring_laws::part_04
+73	geom-num::wide	i512::ring_laws::part_05
+73	geom-num::wide	i512::ring_laws::part_06
+73	geom-num::wide	i512::ring_laws::part_07
+73	geom-num::wide	i512::ring_laws::part_08
+101	geom-num::wide	i512::ring_laws::part_09
+102	geom-num::wide	i512::ring_laws::part_10
+102	geom-num::wide	i512::ring_laws::part_11
+102	geom-num::wide	i512::ring_laws::part_12
+46	geom-num::wide	i512::ring_laws::part_13
+45	geom-num::wide	i512::ring_laws::part_14
+46	geom-num::wide	i512::ring_laws::part_15
+46	geom-num::wide	i512::ring_laws::part_16
+45	geom-num::wide	i512::ring_laws::part_17
+45	geom-num::wide	i512::ring_laws::part_18
+45	geom-num::wide	i512::ring_laws::part_19
+46	geom-num::wide	i512::ring_laws::part_20
+101	geom-num::wide	i512::ring_laws::part_21
+101	geom-num::wide	i512::ring_laws::part_22
+101	geom-num::wide	i512::ring_laws::part_23
+102	geom-num::wide	i512::ring_laws::part_24
+102	geom-num::wide	i512::ring_laws::part_25
+102	geom-num::wide	i512::ring_laws::part_26
+102	geom-num::wide	i512::ring_laws::part_27
+101	geom-num::wide	i512::ring_laws::part_28
+99	geom-num::wide	i512::ring_laws::part_29
+100	geom-num::wide	i512::ring_laws::part_30
+99	geom-num::wide	i512::ring_laws::part_31
+100	geom-num::wide	i512::ring_laws::part_32
 native-only over 601	geom-num::wide	i512::signs_match_oracle
 native-only over 601	geom-num::wide	i512::sub_at_the_limits
-native-only over 601	geom-num::wide	i512::sub_matches_oracle
+75	geom-num::wide	i512::sub_matches_oracle::part_01
+74	geom-num::wide	i512::sub_matches_oracle::part_02
+73	geom-num::wide	i512::sub_matches_oracle::part_03
+74	geom-num::wide	i512::sub_matches_oracle::part_04
+72	geom-num::wide	i512::sub_matches_oracle::part_05
+72	geom-num::wide	i512::sub_matches_oracle::part_06
+72	geom-num::wide	i512::sub_matches_oracle::part_07
+72	geom-num::wide	i512::sub_matches_oracle::part_08
+71	geom-num::wide	i512::sub_matches_oracle::part_09
+72	geom-num::wide	i512::sub_matches_oracle::part_10
+72	geom-num::wide	i512::sub_matches_oracle::part_11
+72	geom-num::wide	i512::sub_matches_oracle::part_12
+72	geom-num::wide	i512::sub_matches_oracle::part_13
+72	geom-num::wide	i512::sub_matches_oracle::part_14
+71	geom-num::wide	i512::sub_matches_oracle::part_15
+72	geom-num::wide	i512::sub_matches_oracle::part_16
+76	geom-num::wide	i512::sub_matches_oracle::part_17
+74	geom-num::wide	i512::sub_matches_oracle::part_18
+74	geom-num::wide	i512::sub_matches_oracle::part_19
+75	geom-num::wide	i512::sub_matches_oracle::part_20
+68	geom-num::wide	i512::sub_matches_oracle::part_21
+69	geom-num::wide	i512::sub_matches_oracle::part_22
+69	geom-num::wide	i512::sub_matches_oracle::part_23
+68	geom-num::wide	i512::sub_matches_oracle::part_24
+68	geom-num::wide	i512::sub_matches_oracle::part_25
+69	geom-num::wide	i512::sub_matches_oracle::part_26
+69	geom-num::wide	i512::sub_matches_oracle::part_27
+68	geom-num::wide	i512::sub_matches_oracle::part_28
+70	geom-num::wide	i512::sub_matches_oracle::part_29
+71	geom-num::wide	i512::sub_matches_oracle::part_30
+69	geom-num::wide	i512::sub_matches_oracle::part_31
+71	geom-num::wide	i512::sub_matches_oracle::part_32
 351	geom-num::wide	i512::to_i128_matches_oracle
 226	geom-num::wide	oracle_self_test::agrees_with_i128_twos_complement
 3	geom-num::wide	oracle_self_test::ranges_match_the_widths
 423	geom-num::wide	oracle_self_test::reading_then_writing_limbs_round_trips
 3	geom-num::wide	oracle_self_test::reads_hand_written_limbs
 2	geom-num::wide	oracle_self_test::writes_hand_written_limbs
+2	geom-num::wide	the_slices_join_to_every_case_once
 463	geom-num::wide	wide2::add_at_the_limits
-449	geom-num::wide	wide2::add_matches_oracle
+62	geom-num::wide	wide2::add_matches_oracle::part_01
+63	geom-num::wide	wide2::add_matches_oracle::part_02
+62	geom-num::wide	wide2::add_matches_oracle::part_03
+63	geom-num::wide	wide2::add_matches_oracle::part_04
+62	geom-num::wide	wide2::add_matches_oracle::part_05
+62	geom-num::wide	wide2::add_matches_oracle::part_06
+62	geom-num::wide	wide2::add_matches_oracle::part_07
+62	geom-num::wide	wide2::add_matches_oracle::part_08
+55	geom-num::wide	wide2::add_matches_oracle::part_09
+55	geom-num::wide	wide2::add_matches_oracle::part_10
+55	geom-num::wide	wide2::add_matches_oracle::part_11
+55	geom-num::wide	wide2::add_matches_oracle::part_12
+33	geom-num::wide	wide2::add_matches_oracle::part_13
+33	geom-num::wide	wide2::add_matches_oracle::part_14
+33	geom-num::wide	wide2::add_matches_oracle::part_15
+33	geom-num::wide	wide2::add_matches_oracle::part_16
+52	geom-num::wide	wide2::add_matches_oracle::part_17
+53	geom-num::wide	wide2::add_matches_oracle::part_18
+53	geom-num::wide	wide2::add_matches_oracle::part_19
+53	geom-num::wide	wide2::add_matches_oracle::part_20
+61	geom-num::wide	wide2::add_matches_oracle::part_21
+61	geom-num::wide	wide2::add_matches_oracle::part_22
+61	geom-num::wide	wide2::add_matches_oracle::part_23
+61	geom-num::wide	wide2::add_matches_oracle::part_24
+30	geom-num::wide	wide2::add_matches_oracle::part_25
+31	geom-num::wide	wide2::add_matches_oracle::part_26
+31	geom-num::wide	wide2::add_matches_oracle::part_27
+30	geom-num::wide	wide2::add_matches_oracle::part_28
+61	geom-num::wide	wide2::add_matches_oracle::part_29
+61	geom-num::wide	wide2::add_matches_oracle::part_30
+61	geom-num::wide	wide2::add_matches_oracle::part_31
+61	geom-num::wide	wide2::add_matches_oracle::part_32
 3	geom-num::wide	wide2::constants
 native-only over 601	geom-num::wide	wide2::edge_values_exhaustively
 128	geom-num::wide	wide2::exact_factorisations_of_the_largest_value
@@ -2402,18 +4314,204 @@ native-only over 601	geom-num::wide	wide2::incircle_at_extreme_coordinates
 native-only over 601	geom-num::wide	wide2::mul_matches_oracle
 native-only over 601	geom-num::wide	wide2::mul_units
 native-only over 601	geom-num::wide	wide2::neg_matches_oracle
-native-only over 601	geom-num::wide	wide2::order_is_transitive
+54	geom-num::wide	wide2::order_is_transitive::part_01
+54	geom-num::wide	wide2::order_is_transitive::part_02
+53	geom-num::wide	wide2::order_is_transitive::part_03
+53	geom-num::wide	wide2::order_is_transitive::part_04
+67	geom-num::wide	wide2::order_is_transitive::part_05
+67	geom-num::wide	wide2::order_is_transitive::part_06
+66	geom-num::wide	wide2::order_is_transitive::part_07
+68	geom-num::wide	wide2::order_is_transitive::part_08
+41	geom-num::wide	wide2::order_is_transitive::part_09
+42	geom-num::wide	wide2::order_is_transitive::part_10
+41	geom-num::wide	wide2::order_is_transitive::part_11
+41	geom-num::wide	wide2::order_is_transitive::part_12
+66	geom-num::wide	wide2::order_is_transitive::part_13
+66	geom-num::wide	wide2::order_is_transitive::part_14
+66	geom-num::wide	wide2::order_is_transitive::part_15
+66	geom-num::wide	wide2::order_is_transitive::part_16
+34	geom-num::wide	wide2::order_is_transitive::part_17
+34	geom-num::wide	wide2::order_is_transitive::part_18
+34	geom-num::wide	wide2::order_is_transitive::part_19
+34	geom-num::wide	wide2::order_is_transitive::part_20
+35	geom-num::wide	wide2::order_is_transitive::part_21
+35	geom-num::wide	wide2::order_is_transitive::part_22
+35	geom-num::wide	wide2::order_is_transitive::part_23
+35	geom-num::wide	wide2::order_is_transitive::part_24
+51	geom-num::wide	wide2::order_is_transitive::part_25
+51	geom-num::wide	wide2::order_is_transitive::part_26
+52	geom-num::wide	wide2::order_is_transitive::part_27
+52	geom-num::wide	wide2::order_is_transitive::part_28
+55	geom-num::wide	wide2::order_is_transitive::part_29
+55	geom-num::wide	wide2::order_is_transitive::part_30
+55	geom-num::wide	wide2::order_is_transitive::part_31
+55	geom-num::wide	wide2::order_is_transitive::part_32
 native-only over 601	geom-num::wide	wide2::order_matches_oracle
 native-only over 601	geom-num::wide	wide2::order_of_close_values
 198	geom-num::wide	wide2::order_of_values_one_limb_apart
-native-only over 601	geom-num::wide	wide2::orient3d_at_extreme_coordinates
-499	geom-num::wide	wide2::products_at_every_split_of_the_threshold
-native-only over 601	geom-num::wide	wide2::products_of_extreme_coordinates
+141	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_01
+142	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_02
+141	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_03
+143	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_04
+142	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_05
+144	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_06
+144	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_07
+143	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_08
+205	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_09
+204	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_10
+204	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_11
+206	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_12
+141	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_13
+142	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_14
+141	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_15
+140	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_16
+120	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_17
+121	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_18
+121	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_19
+120	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_20
+139	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_21
+140	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_22
+138	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_23
+139	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_24
+94	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_25
+94	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_26
+94	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_27
+94	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_28
+197	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_29
+198	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_30
+199	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_31
+197	geom-num::wide	wide2::orient3d_at_extreme_coordinates::part_32
+10	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_01
+11	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_02
+11	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_03
+11	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_04
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_05
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_06
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_07
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_08
+26	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_09
+26	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_10
+26	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_11
+26	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_12
+21	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_13
+21	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_14
+21	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_15
+21	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_16
+20	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_17
+20	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_18
+20	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_19
+20	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_20
+23	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_21
+23	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_22
+23	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_23
+23	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_24
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_25
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_26
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_27
+19	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_28
+18	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_29
+18	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_30
+18	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_31
+17	geom-num::wide	wide2::products_at_every_split_of_the_threshold::part_32
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_01
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_02
+88	geom-num::wide	wide2::products_of_extreme_coordinates::part_03
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_04
+60	geom-num::wide	wide2::products_of_extreme_coordinates::part_05
+60	geom-num::wide	wide2::products_of_extreme_coordinates::part_06
+60	geom-num::wide	wide2::products_of_extreme_coordinates::part_07
+59	geom-num::wide	wide2::products_of_extreme_coordinates::part_08
+86	geom-num::wide	wide2::products_of_extreme_coordinates::part_09
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_10
+86	geom-num::wide	wide2::products_of_extreme_coordinates::part_11
+86	geom-num::wide	wide2::products_of_extreme_coordinates::part_12
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_13
+87	geom-num::wide	wide2::products_of_extreme_coordinates::part_14
+86	geom-num::wide	wide2::products_of_extreme_coordinates::part_15
+88	geom-num::wide	wide2::products_of_extreme_coordinates::part_16
+94	geom-num::wide	wide2::products_of_extreme_coordinates::part_17
+94	geom-num::wide	wide2::products_of_extreme_coordinates::part_18
+93	geom-num::wide	wide2::products_of_extreme_coordinates::part_19
+94	geom-num::wide	wide2::products_of_extreme_coordinates::part_20
+62	geom-num::wide	wide2::products_of_extreme_coordinates::part_21
+62	geom-num::wide	wide2::products_of_extreme_coordinates::part_22
+62	geom-num::wide	wide2::products_of_extreme_coordinates::part_23
+62	geom-num::wide	wide2::products_of_extreme_coordinates::part_24
+128	geom-num::wide	wide2::products_of_extreme_coordinates::part_25
+129	geom-num::wide	wide2::products_of_extreme_coordinates::part_26
+128	geom-num::wide	wide2::products_of_extreme_coordinates::part_27
+128	geom-num::wide	wide2::products_of_extreme_coordinates::part_28
+107	geom-num::wide	wide2::products_of_extreme_coordinates::part_29
+107	geom-num::wide	wide2::products_of_extreme_coordinates::part_30
+107	geom-num::wide	wide2::products_of_extreme_coordinates::part_31
+107	geom-num::wide	wide2::products_of_extreme_coordinates::part_32
 native-only over 601	geom-num::wide	wide2::resize_to_every_width
-native-only over 601	geom-num::wide	wide2::ring_laws
+45	geom-num::wide	wide2::ring_laws::part_01
+45	geom-num::wide	wide2::ring_laws::part_02
+45	geom-num::wide	wide2::ring_laws::part_03
+45	geom-num::wide	wide2::ring_laws::part_04
+63	geom-num::wide	wide2::ring_laws::part_05
+63	geom-num::wide	wide2::ring_laws::part_06
+63	geom-num::wide	wide2::ring_laws::part_07
+62	geom-num::wide	wide2::ring_laws::part_08
+60	geom-num::wide	wide2::ring_laws::part_09
+60	geom-num::wide	wide2::ring_laws::part_10
+60	geom-num::wide	wide2::ring_laws::part_11
+61	geom-num::wide	wide2::ring_laws::part_12
+60	geom-num::wide	wide2::ring_laws::part_13
+60	geom-num::wide	wide2::ring_laws::part_14
+60	geom-num::wide	wide2::ring_laws::part_15
+60	geom-num::wide	wide2::ring_laws::part_16
+40	geom-num::wide	wide2::ring_laws::part_17
+41	geom-num::wide	wide2::ring_laws::part_18
+41	geom-num::wide	wide2::ring_laws::part_19
+41	geom-num::wide	wide2::ring_laws::part_20
+57	geom-num::wide	wide2::ring_laws::part_21
+57	geom-num::wide	wide2::ring_laws::part_22
+58	geom-num::wide	wide2::ring_laws::part_23
+58	geom-num::wide	wide2::ring_laws::part_24
+42	geom-num::wide	wide2::ring_laws::part_25
+42	geom-num::wide	wide2::ring_laws::part_26
+41	geom-num::wide	wide2::ring_laws::part_27
+41	geom-num::wide	wide2::ring_laws::part_28
+53	geom-num::wide	wide2::ring_laws::part_29
+53	geom-num::wide	wide2::ring_laws::part_30
+53	geom-num::wide	wide2::ring_laws::part_31
+53	geom-num::wide	wide2::ring_laws::part_32
 native-only over 601	geom-num::wide	wide2::signs_match_oracle
 native-only over 601	geom-num::wide	wide2::sub_at_the_limits
-native-only over 601	geom-num::wide	wide2::sub_matches_oracle
+62	geom-num::wide	wide2::sub_matches_oracle::part_01
+62	geom-num::wide	wide2::sub_matches_oracle::part_02
+62	geom-num::wide	wide2::sub_matches_oracle::part_03
+61	geom-num::wide	wide2::sub_matches_oracle::part_04
+60	geom-num::wide	wide2::sub_matches_oracle::part_05
+60	geom-num::wide	wide2::sub_matches_oracle::part_06
+60	geom-num::wide	wide2::sub_matches_oracle::part_07
+60	geom-num::wide	wide2::sub_matches_oracle::part_08
+27	geom-num::wide	wide2::sub_matches_oracle::part_09
+28	geom-num::wide	wide2::sub_matches_oracle::part_10
+28	geom-num::wide	wide2::sub_matches_oracle::part_11
+27	geom-num::wide	wide2::sub_matches_oracle::part_12
+43	geom-num::wide	wide2::sub_matches_oracle::part_13
+43	geom-num::wide	wide2::sub_matches_oracle::part_14
+43	geom-num::wide	wide2::sub_matches_oracle::part_15
+43	geom-num::wide	wide2::sub_matches_oracle::part_16
+42	geom-num::wide	wide2::sub_matches_oracle::part_17
+43	geom-num::wide	wide2::sub_matches_oracle::part_18
+42	geom-num::wide	wide2::sub_matches_oracle::part_19
+42	geom-num::wide	wide2::sub_matches_oracle::part_20
+65	geom-num::wide	wide2::sub_matches_oracle::part_21
+65	geom-num::wide	wide2::sub_matches_oracle::part_22
+65	geom-num::wide	wide2::sub_matches_oracle::part_23
+65	geom-num::wide	wide2::sub_matches_oracle::part_24
+43	geom-num::wide	wide2::sub_matches_oracle::part_25
+44	geom-num::wide	wide2::sub_matches_oracle::part_26
+44	geom-num::wide	wide2::sub_matches_oracle::part_27
+43	geom-num::wide	wide2::sub_matches_oracle::part_28
+45	geom-num::wide	wide2::sub_matches_oracle::part_29
+46	geom-num::wide	wide2::sub_matches_oracle::part_30
+45	geom-num::wide	wide2::sub_matches_oracle::part_31
+45	geom-num::wide	wide2::sub_matches_oracle::part_32
 347	geom-num::wide	wide2::to_i128_matches_oracle
 2	geom-nurbs::attack_g56	a_candidate_weight_of_exactly_zero_is_refused
 2	geom-nurbs::attack_g56	a_rational_surface_is_the_weighted_average_of_its_points
@@ -2593,11 +4691,15 @@ native-only over 601	geom-op::attack_g86	refusals_slipped_into_a_run_change_noth
 2	geom-op::attack_g87	sets_and_lists_are_in_name_order_whatever_order_they_were_given_in
 2	geom-op::attack_g87	the_prefix_is_the_seventeen_bytes_and_a_zero
 2	geom-op::attack_g88	a_chain_break_says_where
-508	geom-op::attack_g88	a_deleted_input_that_passes_through_is_found
+119	geom-op::attack_g88	a_deleted_input_that_passes_through_is_found::quarter_1
+123	geom-op::attack_g88	a_deleted_input_that_passes_through_is_found::quarter_2
+122	geom-op::attack_g88	a_deleted_input_that_passes_through_is_found::quarter_3
+125	geom-op::attack_g88	a_deleted_input_that_passes_through_is_found::quarter_4
 native-only over 601	geom-op::attack_g88	a_record_naming_a_non_input_is_found
 native-only over 601	geom-op::attack_g88	every_generated_chain_keeps_the_laws_and_composes_either_way
 native-only over 601	geom-op::attack_g88	every_generated_step_keeps_the_laws
 native-only over 601	geom-op::attack_g88	the_order_records_are_given_in_never_matters
+2	geom-op::attack_g88	the_slices_join_to_every_case_once
 272	geom-op::batch	a_batch_equals_its_items_called_one_by_one
 3	geom-op::batch	a_batch_prints_what_it_is_never_where
 2	geom-op::batch	a_repeated_key_is_refused_before_any_item_runs
@@ -2927,7 +5029,11 @@ native-only over 601	geom-poly::merge	tilted_solids_near_the_edge_of_the_grid_me
 2	geom-poly::planes	a_plane_square_to_an_axis_reads_one_coordinate
 2	geom-poly::planes	a_row_past_the_table_is_none
 2	geom-poly::planes	a_table_error_says_what_was_wrong
-420	geom-poly::planes	a_table_gives_one_entry_to_one_plane
+243	geom-poly::planes	a_table_gives_one_entry_to_one_plane::quarter_1
+249	geom-poly::planes	a_table_gives_one_entry_to_one_plane::quarter_2
+188	geom-poly::planes	a_table_gives_one_entry_to_one_plane::quarter_3
+201	geom-poly::planes	a_table_gives_one_entry_to_one_plane::quarter_4
+2	geom-poly::planes	a_table_gives_one_entry_to_one_plane::the_quarters_join_to_every_case
 2	geom-poly::planes	a_table_holds_each_plane_once_at_its_narrowest
 1	geom-poly::planes	a_table_refuses_room_no_allocator_can_give
 1	geom-poly::planes	a_table_says_when_it_holds_something
@@ -2942,7 +5048,11 @@ native-only over 601	geom-poly::planes	determinants_agree_with_big_integers
 3	geom-poly::planes	one_point_made_two_ways_is_one_point
 2	geom-poly::planes	points_fall_in_order_along_an_axis
 2	geom-poly::planes	rays_turn_about_their_face
-555	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget
+163	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget::quarter_1
+126	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget::quarter_2
+215	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget::quarter_3
+159	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget::quarter_4
+77	geom-poly::planes	the_extremes_of_the_grid_stay_within_budget::the_quarters_join_to_every_comparison
 1	geom-poly::planes	the_first_non_zero_component_is_positive
 2	geom-poly::planes	the_offset_shares_the_divisor
 native-only over 601	geom-poly::planes	turns_agree_with_big_integers
@@ -3012,7 +5122,11 @@ native-only over 601	geom-poly::subdivide	twenty_cubes_on_one_top_and_bottom_sto
 71	geom-poly::trace	a_shared_face_disappears_in_a_union_and_is_counted_on_both_sides
 2	geom-poly::trace	a_small_budget_stops_the_trace
 2	geom-poly::trace	a_small_budget_stops_the_trace_to_a_point
-395	geom-poly::trace	every_box_agrees_with_the_blocks
+173	geom-poly::trace	every_box_agrees_with_the_blocks::quarter_1
+80	geom-poly::trace	every_box_agrees_with_the_blocks::quarter_2
+109	geom-poly::trace	every_box_agrees_with_the_blocks::quarter_3
+109	geom-poly::trace	every_box_agrees_with_the_blocks::quarter_4
+2	geom-poly::trace	every_box_agrees_with_the_blocks_at_its_recorded_failures
 native-only over 601	geom-poly::trace	every_piece_agrees_with_the_blocks
 native-only over 601	geom-poly::trace	every_tilted_box_agrees_with_the_solids
 native-only over 601	geom-poly::trace	every_tilted_piece_agrees_with_the_solids
@@ -3020,6 +5134,7 @@ native-only over 601	geom-poly::trace	every_tilted_piece_agrees_with_the_solids
 5	geom-poly::trace	one_block_is_inside_behind_and_outside_in_front
 native-only over 601	geom-poly::trace	polygons_inside_their_box_are_classified_by_each_path_s_first_leg
 31	geom-poly::trace	the_same_polygons_give_the_same_vectors
+2	geom-poly::trace	the_slices_join_to_every_case_once
 4	geom-poly::trace	the_vector_at_a_point_counts_the_blocks_around_it
 203	geom-poly::trace	tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls
 238	geom-poly::trace	two_overlapping_blocks_count_each_piece
@@ -3158,11 +5273,15 @@ native-only over 601	geom-run::helpers	sort_stable_gives_the_stable_sorted_order
 2	geom-run::plan	the_chunk_iterator_is_exact_and_fused
 2	geom-run::plan	the_empty_problem_has_no_chunks
 native-only over 601	geom-run::properties	count_then_fill_is_a_flatten_at_the_offsets
-482	geom-run::properties	filter_ordered_is_a_plain_filter
+131	geom-run::properties	filter_ordered_is_a_plain_filter::quarter_1
+165	geom-run::properties	filter_ordered_is_a_plain_filter::quarter_2
+135	geom-run::properties	filter_ordered_is_a_plain_filter::quarter_3
+155	geom-run::properties	filter_ordered_is_a_plain_filter::quarter_4
 286	geom-run::properties	find_first_is_the_first_match
 native-only over 601	geom-run::properties	map_each_follows_the_batch_rule
 native-only over 601	geom-run::properties	scan_exclusive_is_a_prefix_sum
 native-only over 601	geom-run::properties	sort_stable_is_a_stable_sort
+1	geom-run::properties	the_slices_join_to_every_case_once
 native-only over 601	geom-run::properties	try_map_follows_the_phase_rule
 2	geom-surface::analytic	a_sphere_or_torus_takes_an_axial_factor_of_one_or_minus_one_only
 native-only over 601	geom-surface::analytic	a_uniform_whole_scale_moves_every_round_kind_exactly
@@ -3171,12 +5290,15 @@ native-only over 601	geom-surface::analytic	every_analytic_kind_keeps_the_contra
 native-only over 601	geom-surface::analytic	spheres_keep_their_normals_at_the_poles_and_tori_their_forms
 12	geom-surface::analytic	split_and_reverse_are_exact_and_refusals_typed
 4	geom-surface::analytic	transforms_change_kinds_explicitly
-432	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond
+134	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_down
+142	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_up
+203	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::unmoved
 6	geom-surface::attack_g60	a_crease_is_approached_from_the_side_asked_for
 22	geom-surface::attack_g60	a_local_bound_or_a_derivative_bound_that_misses_is_caught
 native-only over 601	geom-surface::attack_g60	a_normal_bound_decides_a_sign_only_strictly
 2	geom-surface::attack_g60	each_missing_refusal_is_caught_alone
-456	geom-surface::attack_g60	evaluation_in_doubles_has_exactly_its_slack
+203	geom-surface::attack_g60	evaluation_in_doubles_has_exactly_its_slack::above
+214	geom-surface::attack_g60	evaluation_in_doubles_has_exactly_its_slack::below
 1	geom-surface::attack_g60	refusals_come_first
 8	geom-surface::attack_g60	regions_touching_a_knot_bound_what_they_cover
 65	geom-surface::attack_g60	the_probes_lie_outside_any_domain
@@ -3198,7 +5320,10 @@ native-only over 601	geom-surface::attack_g66	a_torn_offset_is_certified_honestl
 native-only over 601	geom-surface::attack_g66	an_offset_onto_a_cylinders_axis_decides_nothing_and_fails_nothing
 3	geom-surface::attack_g66	breaks_are_strictly_inside_and_follow_splits
 native-only over 601	geom-surface::attack_g66	every_kinds_higher_partials_are_the_derivatives_of_its_lower_ones
-556	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points
+148	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points::quarter_1
+224	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points::quarter_2
+216	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points::quarter_3
+214	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points::quarter_4
 native-only over 601	geom-surface::attack_g66	the_cache_certificate_holds_under_dense_sampling
 93	geom-surface::attack_g66	the_contract_catches_faulty_partials
 native-only over 601	geom-surface::attack_g67	every_analytic_surface_kind_holds_a_million_seeded_points
@@ -3413,7 +5538,11 @@ native-only over 601	geom-topo::model	publishing_arbitrary_arenas_never_panics_a
 2	geom-topo::name_order	a_permutation_of_no_rows_is_empty
 2	geom-topo::name_order	a_repeated_name_is_refused_not_ordered
 native-only over 601	geom-topo::name_order	any_order_of_the_same_names_publishes_the_same_rows
-434	geom-topo::name_order	the_permutation_and_its_inverse_agree
+236	geom-topo::name_order	the_permutation_and_its_inverse_agree::quarter_1
+235	geom-topo::name_order	the_permutation_and_its_inverse_agree::quarter_2
+237	geom-topo::name_order	the_permutation_and_its_inverse_agree::quarter_3
+112	geom-topo::name_order	the_permutation_and_its_inverse_agree::quarter_4
+1	geom-topo::name_order	the_slices_join_to_every_case_once
 2	geom-topo::placed	a_box_past_the_grid_is_refused
 2	geom-topo::placed	a_general_box_holds_the_exact_image_one_step_out
 3	geom-topo::placed	a_general_placement_answers_nothing_here
