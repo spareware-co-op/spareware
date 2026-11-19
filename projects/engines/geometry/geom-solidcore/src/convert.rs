@@ -293,6 +293,23 @@ fn curve(
     }
 }
 
+/// The record's closed curve the whole way round, for a closed edge left with no vertex (see
+/// `form`): the kernel's kind on its full turn, and the box that holds it (in steps).
+fn full(s: &Scale, k: &r::Curve) -> Result<(CurveKind<3>, [[f64; 3]; 2]), Unconverted> {
+    let bad = |_| no("a curve its kind refuses");
+    match k {
+        r::Curve::Circle { frame: f, radius } => {
+            let (c, rr) = (s.p(f.origin), s.len(*radius));
+            let circle = Circle::full(c, rr, frame(f)?).map_err(bad)?;
+            Ok((
+                CurveKind::Circle(circle),
+                [c.map(|x| x - rr), c.map(|x| x + rr)],
+            ))
+        }
+        _ => Err(no("an edge with one end left out")),
+    }
+}
+
 fn ix<K>(row: usize) -> Result<Ix<K>, Unconverted> {
     u32::try_from(row)
         .ok()
@@ -762,18 +779,10 @@ pub fn body_of(
         };
         let [a, b] = e.vertices;
         let ends = [row(a)?, row(b)?].map(|v| form.vertex[v]);
-        let (c, bx) = match (ends, &e.curve) {
-            // A circle left with no vertex (see `form`): the full turn.
-            ([None, None], r::Curve::Circle { frame: f, radius }) => {
-                let (c, rr) = (s.p(f.origin), s.len(*radius));
-                let circle =
-                    Circle::full(c, rr, frame(f)?).map_err(|_| no("a curve its kind refuses"))?;
-                (
-                    CurveKind::Circle(circle),
-                    [c.map(|x| x - rr), c.map(|x| x + rr)],
-                )
-            }
-            ([Some(_), Some(_)], _) => curve(&s, &e.curve, end(a)?, end(b)?, a == b)?,
+        let (c, bx) = match ends {
+            // A closed edge left with no vertex (see `form`): the full turn.
+            [None, None] => full(&s, &e.curve)?,
+            [Some(_), Some(_)] => curve(&s, &e.curve, end(a)?, end(b)?, a == b)?,
             _ => return Err(no("an edge with one end left out")),
         };
         curves.push(c);
@@ -1176,6 +1185,76 @@ mod tests {
         let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         let found = checked(body, exactness);
         assert!(found.is_ok(), "{found:?}");
+    }
+
+    /// WR-3: the record's ellipse, origin + radii[0] cos t x + radii[1] sin t y, is the kernel's
+    /// ellipse c + cos πt·(a·x̂) + sin πt·(b·ŷ) on the same frame, in steps, its t the record's
+    /// eccentric angle in half-turns: an arc runs between its two ends' parameters, a closed edge
+    /// one turn from its vertex, and a closed edge with no vertex is the full turn. No point moves:
+    /// each end of the arc is the record's own point there.
+    #[test]
+    fn an_ellipse_is_the_kernels_ellipse() {
+        use geom_curve::geom_nurbs::Limit;
+        use geom_curve::{Axes, ParamCurve};
+        let s = Scale(per_metre(GridStep::Q1));
+        let (x, y) = ([0.6, 0.0, 0.8], [0.0, 1.0, 0.0]);
+        let f = r::Frame {
+            origin: [1.0, 2.0, 3.0],
+            x_axis: x,
+            y_axis: y,
+        };
+        let k = r::Curve::Ellipse {
+            frame: f.clone(),
+            radii: [0.5, 0.25],
+        };
+        let at = |t: f64| {
+            let (c, si) = ((t * PI).cos(), (t * PI).sin());
+            core::array::from_fn(|i| f.origin[i] + 0.5 * c * x[i] + 0.25 * si * y[i])
+        };
+        let near = |p: [f64; 3], q: [f64; 3]| (0..3).all(|i| (p[i] - q[i]).abs() < 1e-6);
+        let (c, bx) = curve(&s, &k, at(0.25), at(1.5), false).expect("the ellipse");
+        let CurveKind::Ellipse(e) = &c else {
+            panic!("not the kernel's ellipse: {c:?}");
+        };
+        assert_eq!(e.center(), s.p(f.origin));
+        let Axes::Frame { frame: fr, a, b } = e.axes() else {
+            panic!("not on a frame: {:?}", e.axes());
+        };
+        assert_eq!((a, b), (s.len(0.5), s.len(0.25)));
+        assert_eq!(fr, frame(&f).expect("the frame"));
+        let (t0, t1) = c.domain();
+        assert!(
+            (t0 - 0.25).abs() < 1e-12 && (t1 - 1.5).abs() < 1e-12,
+            "{t0} {t1}"
+        );
+        let ends = [t0, t1].map(|t| c.point(t, Limit::FromRight).expect("a point"));
+        assert!(near(ends[0], s.p(at(0.25))) && near(ends[1], s.p(at(1.5))));
+        let reach = s.len(0.5);
+        assert_eq!(
+            bx,
+            [
+                s.p(f.origin).map(|v| v - reach),
+                s.p(f.origin).map(|v| v + reach)
+            ]
+        );
+        // An arc past the half-turn's wrap runs forward through it.
+        let (c, _) = curve(&s, &k, at(1.5), at(0.25), false).expect("the arc");
+        let (t0, t1) = c.domain();
+        assert!(
+            (t0 + 0.5).abs() < 1e-12 && (t1 - 0.25).abs() < 1e-12,
+            "{t0} {t1}"
+        );
+        // A closed edge is one turn from its vertex.
+        let (c, _) = curve(&s, &k, at(0.25), at(0.25), true).expect("the closed edge");
+        let (t0, t1) = c.domain();
+        assert!(
+            (t0 - 0.25).abs() < 1e-12 && (t1 - t0 - 2.0).abs() < 1e-12,
+            "{t0} {t1}"
+        );
+        // A closed edge left with no vertex is the full turn.
+        let (c, _) = full(&s, &k).expect("the full ellipse");
+        assert!(matches!(c, CurveKind::Ellipse(_)));
+        assert_eq!(c.domain(), (0.0, 2.0));
     }
 
     #[test]
