@@ -19,7 +19,6 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
-    clippy::float_cmp,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -27,6 +26,7 @@ use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_intersect::curve::curves;
 use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::result::{Intersection, Item, PointContact};
+use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cylinder, Sphere, SurfaceKind};
 
@@ -43,31 +43,31 @@ fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(16_000_000))
 }
 
-/// Each point's contact and the middle of its first parameter, sorted by that parameter.
-fn points(r: &Intersection) -> Vec<(f64, PointContact)> {
-    let mut out: Vec<(f64, PointContact)> = r
+/// Each point's enclosure of its first parameter and its contact, sorted by the enclosure's start.
+fn points(r: &Intersection) -> Vec<(Interval, PointContact)> {
+    let mut out: Vec<(Interval, PointContact)> = r
         .items()
         .iter()
         .map(|i| match i {
-            Item::Point { at, contact, .. } => {
-                let s = at.spans()[0];
-                (s.lo() * 0.5 + s.hi() * 0.5, *contact)
-            }
+            Item::Point { at, contact, .. } => (at.spans()[0], *contact),
             other => panic!("not a point: {other:?}"),
         })
         .collect();
-    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    out.sort_by(|a, b| a.0.lo().total_cmp(&b.0.lo()));
     out
 }
 
-/// Two crossings, at t = 0 and just short of t = 2, as the stored line meets the shape.
+/// Two crossings, apart, enclosing t = 0 and t = 2 / (1 + 2^-40), as the stored line meets the
+/// shape. The enclosures are up to about 2^-10 wide (the discriminant 2^-80 is enclosed against
+/// terms near 1), so the second root's double, within 2^-51 of it, stands well inside its own.
 fn crosses_twice(r: &Intersection) {
     let found = points(r);
     assert_eq!(found.len(), 2, "{found:?}");
     let [(first, a), (second, b)] = [found[0], found[1]];
     assert_eq!([a, b], [PointContact::Crossing; 2], "{found:?}");
-    assert!(first.abs() < 1e-9, "{found:?}");
-    assert!((second - 2.0).abs() < 1e-9, "{found:?}");
+    assert!(first.hi() < second.lo(), "{found:?}");
+    assert!(first.contains(0.0), "{found:?}");
+    assert!(second.contains(2.0 / (1.0 + TILT * TILT)), "{found:?}");
 }
 
 fn line_2d() -> CurveKind<2> {
