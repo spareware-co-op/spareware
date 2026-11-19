@@ -737,7 +737,8 @@ pub fn fit(
 }
 
 /// A point of the true curve near `guess`, in the plane halfway between the data points `x` and
-/// `y` across their chord, by Newton's method in doubles: fit data, which the bounds then judge.
+/// `y` across their chord, by Newton's method in doubles: fit data, which the bounds then judge;
+/// `None` where a step leaves either surface's domain or the slope cannot be inverted.
 fn settle_point(
     (first, second): (&SurfaceKind, &SurfaceKind),
     guess: [f64; 4],
@@ -760,8 +761,19 @@ fn settle_point(
         tangent,
         floor: steps_at(&point),
     };
+    // Each step is read only inside both domains: a step that leaves one gives no point, never
+    // the kinds' refusal of a parameter outside, since the branch and the surfaces are valid.
+    let ((u1, v1), (u2, v2)) = (first.domain(), second.domain());
+    let inside = |z: &[f64; 4]| {
+        let [a1, b1, a2, b2] = *z;
+        let ok = u1.0 <= a1 && a1 <= u1.1 && v1.0 <= b1 && b1 <= v1.1;
+        ok && u2.0 <= a2 && a2 <= u2.1 && v2.0 <= b2 && b2 <= v2.1
+    };
     let mut z = guess;
     for _ in 0..8 {
+        if !inside(&z) {
+            return Ok(None);
+        }
         meter.charge(1)?;
         let r = field.at(z, meter)?.map(mid);
         let Some(j) = field.slope(&exact(&z)?, meter)? else {
@@ -778,9 +790,5 @@ fn settle_point(
             *w -= s;
         }
     }
-    let ((u1, v1), (u2, v2)) = (first.domain(), second.domain());
-    let [a1, b1, a2, b2] = z;
-    let ok = u1.0 <= a1 && a1 <= u1.1 && v1.0 <= b1 && b1 <= v1.1;
-    let ok = ok && u2.0 <= a2 && a2 <= u2.1 && v2.0 <= b2 && b2 <= v2.1;
-    Ok(ok.then_some(z))
+    Ok(inside(&z).then_some(z))
 }
