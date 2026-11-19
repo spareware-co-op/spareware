@@ -1,13 +1,15 @@
 //! Attacks on piece G85's claims for group 3 (self-intersection): edges of a face that cross or
 //! touch, run back along each other or join the same two vertices are caught; faces that cross
 //! or touch away from shared edges and vertices are caught; faces whose planes cross but which do
-//! not meet pass; every pair no exact or certified test separates is reported, never passed; and
-//! group 3 runs only on a body groups 1 and 2 passed.
+//! not meet pass; two faces on spheres pass where the spheres are certainly apart, nested or each
+//! outside the other; every pair no exact or certified test separates is reported, never passed;
+//! and group 3 runs only on a body groups 1 and 2 passed.
 
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::arithmetic_side_effects,
     clippy::too_many_lines,
     reason = "test code: a failure should stop loudly"
@@ -16,11 +18,12 @@
 mod common;
 
 use common::{
-    CUBE, CUBE_FACES, Rows, annulus_sheet, certified, cube, cylinder, face_of, faces_into,
-    holed_sheet, ix, level, meter, parallel, report, round, round_cylinder, torus, torus_surface,
+    CUBE, CUBE_FACES, Rows, annulus_sheet, certified, cube, cylinder, disc_sheet, face_of,
+    faces_into, holed_sheet, ix, level, meter, parallel, polyhedron, report, round, round_cylinder,
+    torus, torus_surface,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
-use geom_curve::{Circle, CurveKind, Frame};
+use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame};
 use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
@@ -363,20 +366,22 @@ fn pairs_without_a_certified_test_are_reported_never_passed() {
         let r = sheets(&[&face[..], &crossing[..]]);
         assert_eq!(at(&r, BodyKind::General, 1), [], "{name}");
     }
-    let mut r = holed_sheet();
-    let s = r.shell(0);
-    for p in crossing {
-        r.vertex(p);
+    // A face holding a circle against a crossing plane: apart where the plane leaves its corners
+    // and its circle on one side (decision 32.96), and unchecked where it crosses the face.
+    let unchecked_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    for (x, faults) in [(20, &[][..]), (5, &unchecked_pair[..])] {
+        let mut r = holed_sheet();
+        let s = r.shell(0);
+        for [_, y, z] in crossing {
+            r.vertex([x, y, z]);
+        }
+        face_of(&mut r, s, &[&[4, 5, 6, 7]]);
+        assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
     }
-    face_of(&mut r, s, &[&[4, 5, 6, 7]]);
-    assert_eq!(
-        at(&r, BodyKind::General, 1),
-        [fault(
-            FaultKind::PairUnchecked,
-            Entity::Face(ix(0)),
-            Entity::Face(ix(1))
-        )]
-    );
     // A face with a hole against a crossing plane, listed after it.
     let mut r = sheets(&[&crossing[..]]);
     for p in [
@@ -559,8 +564,34 @@ fn segments_and_circles_of_one_face_are_separated_where_certified() {
     assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
 }
 
+#[test]
+fn a_segment_in_a_circles_plane_is_apart_only_on_the_lower_end_of_its_reach() {
+    // A triangle of corners (0, 5), (5, 0) and (5, 5) round a circle at the origin, on one plane:
+    // the side from (0, 5) to (5, 0) lies 5/√2 from the centre, which no double holds. The double
+    // nearest it, 3.5355339059327378, lies above it, so a circle of that radius crosses the side
+    // by less than a rounding: refused, as the side's reach from the centre is read on its lower
+    // end. A radius of 3.5 is certainly short of every side.
+    let disc = |radius: f64| {
+        let mut r = sheet(&[[0, 5, 0], [5, 0, 0], [5, 5, 0]], &[&[0, 1, 2]]);
+        let rim = r.edge(None);
+        r.curves[rim as usize] = parallel(0.0, radius);
+        add_loop(&mut r, 0, rim);
+        r.surfaces[0] = level(0.0);
+        r
+    };
+    let faults = at(&disc(3.535_533_905_932_737_8), BodyKind::Sheet, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert_eq!(at(&disc(3.5), BodyKind::Sheet, 1), []);
+}
+
 /// Adds closed edge `e` as a loop of its own to face `f`, after its other loops.
 fn add_loop(r: &mut Rows, f: u32, e: u32) {
+    add_loop_as(r, f, e, Sense::Reversed);
+}
+
+/// Adds closed edge `e`, which has no fins yet, as a loop of its own to face `f`, after its other
+/// loops, its fin running `sense`.
+fn add_loop_as(r: &mut Rows, f: u32, e: u32, sense: Sense) {
     let l = r.loops.len() as u32;
     let fin = r.fins.len() as u32;
     r.loops.push(geom_topo::Loop {
@@ -578,7 +609,7 @@ fn add_loop(r: &mut Rows, f: u32, e: u32) {
         next: ix(fin),
         prev: ix(fin),
         edge: ix(e),
-        sense: Sense::Reversed,
+        sense,
         radial: ix(fin),
         pcurve: None,
     });
@@ -605,6 +636,37 @@ fn circles_of_one_face_are_separated_where_certified() {
     // The hole moved across the rim.
     let faults = at(&ring([4.0, 0.0, 0.0]), BodyKind::Sheet, 1);
     assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+}
+
+#[test]
+fn a_circle_crossing_another_by_less_than_a_rounding_is_not_passed_as_inside() {
+    // A rim of radius 4 and a hole of radius 1 + 2^-52 whose centre lies 3 from the rim's, on one
+    // plane: 4 − (1 + 2^-52) = 3 − 2^-52 is not a double, so its enclosure reaches the step above
+    // 3, yet the hole reaches 2^-52 past the rim and the two circles cross (issue #1033). Read on
+    // that upper end of |r − s|, the hole was certified inside. Each loop listed first in turn.
+    let hole = 1.0 + f64::EPSILON;
+    let ring = |centre: [f64; 3], rim_first: bool| {
+        let mut r = Rows::empty();
+        let (rim, inner) = (r.edge(None), r.edge(None));
+        let s = r.shell(0);
+        let (outer, hollow): (&[_], &[_]) = (&[(rim, Sense::Forward)], &[(inner, Sense::Reversed)]);
+        if rim_first {
+            r.face(s, &[outer, hollow]);
+        } else {
+            r.face(s, &[hollow, outer]);
+        }
+        r.curves[rim as usize] = parallel(0.0, 4.0);
+        r.curves[inner as usize] = round(centre, hole, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+        r.surfaces[0] = level(0.0);
+        r
+    };
+    for rim_first in [true, false] {
+        let faults = at(&ring([3.0, 0.0, 0.0], rim_first), BodyKind::Sheet, 1);
+        assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+        // The same hole at the rim's centre lies certainly inside it, though 4 − s is not a
+        // double either.
+        assert_eq!(at(&ring([0.0; 3], rim_first), BodyKind::Sheet, 1), []);
+    }
 }
 
 #[test]
@@ -639,6 +701,44 @@ fn a_cone_listed_side_first_passes() {
     );
     r.surfaces[1] = level(0.0);
     assert_eq!(at(&r, BodyKind::Solid, 1), []);
+}
+
+#[test]
+fn a_seam_from_a_rim_vertex_off_the_rims_plane_is_not_passed() {
+    // A cone whose radius at height v is 6 − v, its apex at (0, 0, 6) and its rim the circle of
+    // radius 6 on z = 0. The rim's vertex (7, 0, −1) lies on the cone, a step below the rim's
+    // plane and √2 from the rim, within a bound of 2. The seam from it to the apex runs along the
+    // cone and crosses the rim's plane a second time, at (6, 0, 0), on the rim (issue #1036). Read
+    // only as leaving the plane from the shared vertex, it was passed.
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (base, apex) = (r.vertex([7, 0, -1]), r.vertex([0, 0, 6]));
+    let rim = r.edge(Some((base, base)));
+    let seam = r.edge(Some((apex, base)));
+    let s = r.shell(solid);
+    r.face(
+        s,
+        &[&[
+            (seam, Sense::Reversed),
+            (seam, Sense::Forward),
+            (rim, Sense::Reversed),
+        ]],
+    );
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.curves[rim as usize] = parallel(0.0, 6.0);
+    r.surfaces[0] = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            6.0,
+            -1.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-1.0, 6.0)),
+        )
+        .unwrap(),
+    );
+    r.surfaces[1] = level(0.0);
+    let faults = at(&r, BodyKind::Solid, 2);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
 }
 
 #[test]
@@ -681,4 +781,672 @@ fn group_3_runs_only_on_a_body_groups_1_and_2_passed() {
     assert_eq!(FaultKind::EdgesCross.group(), Group::SelfIntersection);
     assert_eq!(FaultKind::FacesCross.group(), Group::SelfIntersection);
     assert_eq!(FaultKind::PairUnchecked.group(), Group::SelfIntersection);
+}
+
+/// The cylinder of radius 4 about the vertical line through (`x`, `y`), for heights 0 to 10.
+fn shaft(x: f64, y: f64) -> SurfaceKind {
+    SurfaceKind::Cylinder(
+        Cylinder::new(
+            [x, y, 0.0],
+            4.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 10.0)),
+        )
+        .unwrap(),
+    )
+}
+
+/// The box round the shaft about (`x`, `y`).
+fn shaft_box(x: i64, y: i64) -> Box3 {
+    Box3::new(
+        P3::new(x - 4, y - 4, 0).unwrap(),
+        P3::new(x + 4, y + 4, 10).unwrap(),
+    )
+    .unwrap()
+}
+
+/// A wall 40 by 30 by 10 with a round opening of radius 4 through it about the vertical line
+/// through (`x`, `y`), as bldg-25 and bldg-26 are made: the box's six faces in `CUBE_FACES`' order,
+/// the bottom (face 0) and the top (face 1) each holding the opening's circle as a hole, and the
+/// opening's cylindrical face (face 6) between the two circles, facing its axis.
+fn wall_with_opening(x: i64, y: i64) -> Rows {
+    wall_of([40, 30, 10], ([x, y], 4), 10.0)
+}
+
+/// A wall of `size` with a round opening through it about the vertical line through `centre`,
+/// of `radius`, as [`wall_with_opening`] makes it, its top circle at the height `top`.
+fn wall_of(size: [i64; 3], opening: ([i64; 2], i64), top: f64) -> Rows {
+    slab_of(([0; 2], size), opening, (top, 1.0))
+}
+
+/// A slab of `size` from the corner (`from`, 0) with a round opening through it about the
+/// vertical line through `centre`, of `radius`, as [`wall_with_opening`] makes it: its top circle
+/// at the height `top`, and both circles' normals `up` along z (1 or −1).
+fn slab_of(
+    (from, size): ([i64; 2], [i64; 3]),
+    (centre, radius): ([i64; 2], i64),
+    (top, up): (f64, f64),
+) -> Rows {
+    let corners = CUBE.map(|[a, b, c]| {
+        [
+            from[0] + a / 10 * size[0],
+            from[1] + b / 10 * size[1],
+            c / 10 * size[2],
+        ]
+    });
+    let mut r = polyhedron(&corners, &CUBE_FACES);
+    let (low, high) = (r.edge(None), r.edge(None));
+    let [x, y] = centre;
+    let (cx, cy, rr) = (x as f64, y as f64, radius as f64);
+    r.curves[low as usize] = round([cx, cy, 0.0], rr, [1.0, 0.0, 0.0], [0.0, 0.0, up]);
+    r.curves[high as usize] = round([cx, cy, top], rr, [1.0, 0.0, 0.0], [0.0, 0.0, up]);
+    // Seen from outside, the bottom from below and the top from above, each runs round its hole
+    // clockwise.
+    let (way, back) = if up > 0.0 {
+        (Sense::Forward, Sense::Reversed)
+    } else {
+        (Sense::Reversed, Sense::Forward)
+    };
+    add_loop_as(&mut r, 0, low, way);
+    add_loop_as(&mut r, 1, high, back);
+    let shaft = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [cx, cy, 0.0],
+            rr,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, size[2] as f64)),
+        )
+        .unwrap(),
+    );
+    let around = Box3::new(
+        P3::new(x - radius, y - radius, 0).unwrap(),
+        P3::new(x + radius, y + radius, size[2]).unwrap(),
+    )
+    .unwrap();
+    let bore = r.face_with(0, &[&[(low, back)], &[(high, way)]], shaft, around);
+    r.faces[bore as usize].sense = Sense::Reversed;
+    r
+}
+
+/// The same wall with its opening through its ends instead, about the line y = 15, z = 5 along x:
+/// the faces holding the circles (4, x = 0, and 5, x = 40) come after the four they meet along
+/// the box's edges, and the cylinder (face 6) runs along all four of those faces' planes.
+fn wall_with_opening_along_x() -> Rows {
+    let corners = CUBE.map(|[a, b, c]| [a * 4, b * 3, c]);
+    let mut r = polyhedron(&corners, &CUBE_FACES);
+    let (near, far) = (r.edge(None), r.edge(None));
+    let (across, along) = ([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]);
+    r.curves[near as usize] = round([0.0, 15.0, 5.0], 4.0, across, along);
+    r.curves[far as usize] = round([40.0, 15.0, 5.0], 4.0, across, along);
+    add_loop_as(&mut r, 4, near, Sense::Forward);
+    add_loop_as(&mut r, 5, far, Sense::Reversed);
+    let surface = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0, 15.0, 5.0],
+            4.0,
+            Frame::new(across, along).unwrap(),
+            ((0.0, 2.0), (0.0, 40.0)),
+        )
+        .unwrap(),
+    );
+    let bound = Box3::new(P3::new(0, 11, 1).unwrap(), P3::new(40, 19, 9).unwrap()).unwrap();
+    let side = r.face_with(
+        0,
+        &[&[(near, Sense::Reversed)], &[(far, Sense::Forward)]],
+        surface,
+        bound,
+    );
+    r.faces[side as usize].sense = Sense::Reversed;
+    r
+}
+
+#[test]
+fn a_wall_with_a_round_opening_passes() {
+    // bldg-25's and bldg-26's shape: each face holding the circle lies on its plane exactly, and
+    // each side face crosses that plane only along the edge they share; the opening's cylinder is
+    // farther from each side's plane, which runs along its axis, than its radius.
+    assert_eq!(at(&wall_with_opening(20, 15), BodyKind::Solid, 1), []);
+    assert_eq!(at(&wall_with_opening(20, 15), BodyKind::Solid, 0), []);
+    // Two steps clear of the side x = 0, and of y = 0 and y = 30 in turn.
+    assert_eq!(at(&wall_with_opening(6, 15), BodyKind::Solid, 1), []);
+    assert_eq!(at(&wall_with_opening(20, 6), BodyKind::Solid, 1), []);
+    assert_eq!(at(&wall_with_opening(34, 24), BodyKind::Solid, 1), []);
+    // Through its ends: each face holding a circle listed after the sides it meets, and the
+    // cylinder 5 from the top and bottom and 15 from the front and back.
+    assert_eq!(at(&wall_with_opening_along_x(), BodyKind::Solid, 1), []);
+    // bldg-25's own numbers on its grid (1.6e8 steps to the metre): a wall 4 by 3 by 0.2 with an
+    // opening of radius 0.4, and its top circle's centre 7.5e-9 steps above the top's plane, as
+    // the conversion writes solidcore's 0.20000000000000004, within the body's bound of 3202
+    // steps. The top is not on its plane exactly, and each side, which it reaches only along
+    // their shared edge, is still apart from it.
+    let bldg_25 = wall_of(
+        [640_000_000, 480_000_000, 32_000_000],
+        ([320_000_000, 240_000_000], 64_000_000),
+        32_000_000.000_000_007,
+    );
+    assert_eq!(at(&bldg_25, BodyKind::Solid, 3202), []);
+    // bldg-47's solid made exact, as lane sc8-fork set every number of solidcore's record to its
+    // quarter-metre: the square of side 2 about the z axis with a round hole of radius 0.5 at its
+    // centre, extruded 3, on the same grid, the hole's circles on the frame x (1, 0, 0),
+    // y (0, -1, 0) the modeller writes, so their normals point down. Its caps and its hole's
+    // cylinder were refused against each of the four sides, 12 pairs, and pass.
+    let bldg_47 = slab_of(
+        ([-160_000_000; 2], [320_000_000, 320_000_000, 480_000_000]),
+        ([0, 0], 80_000_000),
+        (480_000_000.0, -1.0),
+    );
+    assert_eq!(at(&bldg_47, BodyKind::Solid, 3202), []);
+    assert_eq!(at(&bldg_47, BodyKind::Solid, 1), []);
+    // The opening touching the side x = 0: its cylinder and that side are not certified apart,
+    // nor the circles and the sides' edges they touch.
+    let faults = at(&wall_with_opening(4, 15), BodyKind::Solid, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(
+        faults.contains(&fault(
+            FaultKind::PairUnchecked,
+            Entity::Face(ix(4)),
+            Entity::Face(ix(6))
+        )),
+        "{faults:?}"
+    );
+    assert!(
+        !faults.iter().any(|f| f.at == Entity::Face(ix(0))),
+        "the bottom holds the circle on its plane and is apart from every side: {faults:?}"
+    );
+}
+
+/// The square of side 10 with a round hole of radius 2 at its centre, in z = 0, and a second
+/// sheet: a square in the plane x = 5 across it, from height `low` to `low` + 10.
+fn holed_beside(low: i64) -> Rows {
+    let mut r = holed_sheet();
+    for p in [
+        [5, 0, low],
+        [5, 10, low],
+        [5, 10, low + 10],
+        [5, 0, low + 10],
+    ] {
+        r.vertex(p);
+    }
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&[4, 5, 6, 7]]);
+    r
+}
+
+#[test]
+fn a_flat_face_holding_a_circle_is_apart_from_a_face_that_keeps_off_its_plane() {
+    let only_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    // A step above the holed square's plane, and a step below it: apart, exactly.
+    assert_eq!(at(&holed_beside(1), BodyKind::General, 1), []);
+    assert_eq!(at(&holed_beside(-11), BodyKind::General, 1), []);
+    assert_eq!(at(&holed_beside(1), BodyKind::General, 0), []);
+    // Standing on the plane, along a line the holed square holds but has no edge on, and through
+    // it: they meet, and nothing certifies them apart.
+    assert_eq!(at(&holed_beside(0), BodyKind::General, 1), only_pair);
+    assert_eq!(at(&holed_beside(-5), BodyKind::General, 1), only_pair);
+    // The hole lifted a step, within the bound of its plane but off it: the holed face is no
+    // longer on its plane exactly, and its circle reaches the square above, which it meets.
+    let mut r = holed_beside(1);
+    r.curves[4] = round([5.0, 5.0, 1.0], 2.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    assert_eq!(at(&r, BodyKind::General, 1), only_pair);
+    // Tilted by a step at its rim instead: off its plane again.
+    let mut r = holed_beside(1);
+    r.curves[4] = round([5.0, 5.0, 0.0], 2.0, [1.0, 0.0, 0.0], [0.0, 0.5, 1.0]);
+    assert_eq!(at(&r, BodyKind::General, 1), only_pair);
+}
+
+#[test]
+fn a_flat_face_holding_an_ellipse_rests_on_its_plane_only_where_group_2_holds_it_there() {
+    // The holed square of `holed_beside`, its hole an ellipse instead (decision 32.95): a face
+    // holding an ellipse rests on its plane only when group 2 holds the ellipse on it exactly, and
+    // `keeps_off` has no test of an ellipse. Group 3 has no shape for an ellipse, so its pairs
+    // with the square's sides are unchecked either way; the question is the pair of faces.
+    let faces = fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    );
+    let oval = |z: f64| {
+        let frame = Frame::standard().unwrap();
+        let axes = Axes::Frame {
+            frame,
+            a: 2.0,
+            b: 1.5,
+        };
+        CurveKind::Ellipse(Ellipse::new([5.0, 5.0, z], axes, (0.0, 2.0)).unwrap())
+    };
+    // In the plane z = 0 exactly, a step below the square above it: the faces are apart.
+    let mut r = holed_beside(1);
+    r.curves[4] = oval(0.0);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(!faults.contains(&faces), "{faults:?}");
+    // Lifted a step, within the bound but off the plane, it touches the square's foot: the faces
+    // are not settled.
+    let mut r = holed_beside(1);
+    r.curves[4] = oval(1.0);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(faults.contains(&faces), "{faults:?}");
+}
+
+/// The holed square ([`holed_sheet`]) and a second sheet, a quadrilateral whose corners are the
+/// holed square's vertices numbered in `shared` and new vertices at `points`, in that order.
+fn holed_with(shared: &[u32], points: &[[i64; 3]]) -> Rows {
+    let mut r = holed_sheet();
+    let mut ring = shared.to_vec();
+    for &p in points {
+        ring.push(r.vertex(p));
+    }
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&ring]);
+    r
+}
+
+#[test]
+fn a_flat_face_holding_a_circle_keeps_off_a_plane_only_where_certified() {
+    let only_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    // Beyond the holed square, a square on the plane x + y = 20 whose side passes through its
+    // corner (10, 10, 0), which it does not share: they touch there.
+    let touching = holed_with(&[], &[[10, 10, -5], [20, 0, -5], [20, 0, 5], [10, 10, 5]]);
+    assert_eq!(at(&touching, BodyKind::General, 1), only_pair);
+    // A step further out, x + y = 21: the holed square's corners and its circle all lie below.
+    let clear = holed_with(&[], &[[11, 10, -5], [21, 0, -5], [21, 0, 5], [11, 10, 5]]);
+    assert_eq!(at(&clear, BodyKind::General, 1), []);
+    // A square standing on the holed square's far side, x = 10, sharing its two vertices but not
+    // the edge between them: they meet along it, and neither test excuses that.
+    let standing = holed_with(&[1, 2], &[[10, 10, 10], [10, 0, 10]]);
+    assert_eq!(at(&standing, BodyKind::General, 1), only_pair);
+    // A notched face holding a circle, and a square on x + y = 10 sharing its corners (10, 0, 0)
+    // and (0, 10, 0), the side between them the square's alone, outside the notch: what the face
+    // has on the plane is two vertices and no side, so the segment between them is among the
+    // mixes of its boundary there, which the square need not share. Not settled.
+    let mut r = Rows::empty();
+    for p in [[0, 0, 0], [10, 0, 0], [5, 3, 0], [0, 10, 0]] {
+        r.vertex(p);
+    }
+    let sides: Vec<(u32, Sense)> = (0..4)
+        .map(|k| (r.edge(Some((k, (k + 1) % 4))), Sense::Forward))
+        .collect();
+    let hole = r.edge(None);
+    r.curves[hole as usize] = round([2.0, 2.0, 0.0], 1.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    let s = r.shell(0);
+    r.face(s, &[&sides, &[(hole, Sense::Reversed)]]);
+    let (over_x, over_y) = (r.vertex([10, 0, 10]), r.vertex([0, 10, 10]));
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&[1, 3, over_y, over_x]]);
+    assert_eq!(at(&r, BodyKind::General, 1), only_pair);
+    // A disc of radius 5 about the z axis, no corner at all, and a square across its plane on
+    // x = `x`: at its rim on either side it touches the circle, and a step beyond it is apart.
+    for (x, faults) in [
+        (5, &only_pair[..]),
+        (-5, &only_pair[..]),
+        (6, &[][..]),
+        (-6, &[][..]),
+    ] {
+        let mut r = disc_sheet();
+        r.curves[0] = parallel(0.0, 5.0);
+        r.surfaces[0] = level(0.0);
+        for p in [[x, -5, -5], [x, 5, -5], [x, 5, 5], [x, -5, 5]] {
+            r.vertex(p);
+        }
+        let s = r.shell(0);
+        face_of(&mut r, s, &[&[0, 1, 2, 3]]);
+        assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
+    }
+    // The square beyond it on x + y = 21 again, the hole now a line edge without vertices: an edge
+    // of another kind, which the test does not settle, so the pair is unchecked.
+    let mut r = holed_with(&[], &[[11, 10, -5], [21, 0, -5], [21, 0, 5], [11, 10, 5]]);
+    r.curves[4] = common::line([5, 5, 0], [6, 5, 0]);
+    let faults = at(&r, BodyKind::General, 1);
+    assert!(only(&faults, FaultKind::PairUnchecked), "{faults:?}");
+    assert!(faults.contains(&only_pair[0]), "{faults:?}");
+    // A holed face with a third corner in its side x = 10, and a square standing on that side
+    // sharing its two edges there. On its plane exactly, the holed face rests on the square's
+    // plane only along what they share, and passes; its hole lifted half a step, within the bound
+    // but off the plane, it no longer rests, and three corners on the square's plane are more than
+    // one side's ends, so it is not settled.
+    assert_eq!(at(&split_side_standing(0.0), BodyKind::General, 1), []);
+    assert_eq!(
+        at(&split_side_standing(0.5), BodyKind::General, 1),
+        only_pair
+    );
+}
+
+/// A square of side 10 in z = 0 with a third corner (10, 5, 0) on its side x = 10 and a round hole
+/// of radius 2 about (5, 5, `lift`), and a square standing on that side, on x = 10 up to z = 10,
+/// through the three corners on it and along the holed face's two edges between them.
+fn split_side_standing(lift: f64) -> Rows {
+    let mut r = Rows::empty();
+    for p in [[0, 0, 0], [10, 0, 0], [10, 5, 0], [10, 10, 0], [0, 10, 0]] {
+        r.vertex(p);
+    }
+    let sides: Vec<(u32, Sense)> = (0..5)
+        .map(|k| (r.edge(Some((k, (k + 1) % 5))), Sense::Forward))
+        .collect();
+    let hole = r.edge(None);
+    r.curves[hole as usize] = round([5.0, 5.0, lift], 2.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    let s = r.shell(0);
+    r.face(s, &[&sides, &[(hole, Sense::Reversed)]]);
+    r.surfaces[0] = level(0.0);
+    let (near, far) = (r.vertex([10, 0, 10]), r.vertex([10, 10, 10]));
+    let up = r.edge(Some((1, near)));
+    let over = r.edge(Some((near, far)));
+    let down = r.edge(Some((far, 3)));
+    let s = r.shell(0);
+    r.face(
+        s,
+        &[&[
+            (sides[2].0, Sense::Reversed),
+            (sides[1].0, Sense::Reversed),
+            (up, Sense::Forward),
+            (over, Sense::Forward),
+            (down, Sense::Forward),
+        ]],
+    );
+    r
+}
+
+/// A tube on `surface`, from its circle `low` to its circle `high`, and a square sheet with
+/// corners at `square` on the plane its corners fix: one general body of two sheets.
+fn tube_beside(
+    surface: SurfaceKind,
+    (low, high): (CurveKind<3>, CurveKind<3>),
+    square: [[i64; 3]; 4],
+) -> Rows {
+    let mut r = Rows::empty();
+    let (bottom, top) = (r.edge(None), r.edge(None));
+    r.curves[bottom as usize] = low;
+    r.curves[top as usize] = high;
+    let s = r.shell(0);
+    r.face_with(
+        s,
+        &[&[(bottom, Sense::Forward)], &[(top, Sense::Reversed)]],
+        surface,
+        shaft_box(0, 0),
+    );
+    for p in square {
+        r.vertex(p);
+    }
+    let s = r.shell(0);
+    face_of(&mut r, s, &[&[0, 1, 2, 3]]);
+    r
+}
+
+/// The shaft of radius 4 about the z axis beside the square in the plane x = `x`.
+fn shaft_beside(x: i64) -> Rows {
+    tube_beside(
+        shaft(0.0, 0.0),
+        (parallel(0.0, 4.0), parallel(10.0, 4.0)),
+        [[x, -10, 0], [x, 10, 0], [x, 10, 10], [x, -10, 10]],
+    )
+}
+
+#[test]
+fn a_cylinder_and_a_plane_along_its_axis_are_apart_only_beyond_its_radius() {
+    let only_pair = [fault(
+        FaultKind::PairUnchecked,
+        Entity::Face(ix(0)),
+        Entity::Face(ix(1)),
+    )];
+    // A step beyond the radius on either side, exactly; and across y.
+    assert_eq!(at(&shaft_beside(5), BodyKind::General, 1), []);
+    assert_eq!(at(&shaft_beside(-5), BodyKind::General, 1), []);
+    assert_eq!(at(&shaft_beside(5), BodyKind::General, 0), []);
+    let across = tube_beside(
+        shaft(0.0, 0.0),
+        (parallel(0.0, 4.0), parallel(10.0, 4.0)),
+        [[-10, 5, 0], [-10, 5, 10], [10, 5, 10], [10, 5, 0]],
+    );
+    assert_eq!(at(&across, BodyKind::General, 1), []);
+    // At the radius, touching along a line, and inside it, across the tube: not apart.
+    assert_eq!(at(&shaft_beside(4), BodyKind::General, 1), only_pair);
+    assert_eq!(at(&shaft_beside(3), BodyKind::General, 1), only_pair);
+    // A plane leaning a step over the height of 1000, which the tube's own height does not reach:
+    // not along the axis exactly, so it meets the cylinder somewhere, and nothing is certified.
+    let leaning = tube_beside(
+        shaft(0.0, 0.0),
+        (parallel(0.0, 4.0), parallel(10.0, 4.0)),
+        [[5, -10, 0], [5, 10, 0], [6, 10, 1000], [6, -10, 1000]],
+    );
+    assert_eq!(at(&leaning, BodyKind::General, 1), only_pair);
+    // A cone narrowing from radius 6 to 4 over heights 0 to 8, and a plane along its axis beyond
+    // both: the cone widens below and meets it.
+    let cone = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            6.0,
+            -0.25,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 8.0)),
+        )
+        .unwrap(),
+    );
+    let frustum = tube_beside(
+        cone,
+        (parallel(0.0, 6.0), parallel(8.0, 4.0)),
+        [[7, -10, 0], [7, 10, 0], [7, 10, 8], [7, -10, 8]],
+    );
+    assert_eq!(at(&frustum, BodyKind::General, 1), only_pair);
+    // A square written on x = 6 with a corner a step off it, within the bound of 1: it may stray
+    // a step, which still clears the radius; written on x = 5, it may reach the cylinder.
+    for (x, faults) in [(6, &[][..]), (5, &only_pair[..])] {
+        let mut r = tube_beside(
+            shaft(0.0, 0.0),
+            (parallel(0.0, 4.0), parallel(10.0, 4.0)),
+            [[x, -10, 0], [x, 10, 0], [x + 1, 10, 10], [x, -10, 10]],
+        );
+        r.surfaces[1] = plane_off_grid([x as f64, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
+        assert_eq!(at(&r, BodyKind::General, 1), faults, "{x}");
+    }
+}
+
+/// The whole sphere about `center` of `radius`.
+fn globe(center: [f64; 3], radius: f64) -> SurfaceKind {
+    SurfaceKind::Sphere(
+        Sphere::new(
+            center,
+            radius,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-0.5, 0.5)),
+        )
+        .unwrap(),
+    )
+}
+
+/// The box of the sphere about `center` of `radius`, rounded out to the grid.
+fn globe_box(center: [f64; 3], radius: f64) -> Box3 {
+    let corner = |by: f64, out: fn(f64) -> f64| {
+        let [x, y, z] = center.map(|c| out(c + by) as i64);
+        P3::new(x, y, z).unwrap()
+    };
+    Box3::new(corner(-radius, f64::floor), corner(radius, f64::ceil)).unwrap()
+}
+
+/// A solid of whole spheres as the kernel writes a ball, one face with no loops: a shell for each
+/// (centre, radius, sense), its face run the way the sense says (a cavity's reversed).
+fn globes(each: &[([f64; 3], f64, Sense)]) -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    for &(center, radius, sense) in each {
+        let s = r.shell(solid);
+        let f = r.face_with(s, &[], globe(center, radius), globe_box(center, radius));
+        r.faces[f as usize].sense = sense;
+    }
+    r
+}
+
+/// A ball about `outer`'s centre of its radius with a cavity, the sphere `inner`, the cavity's
+/// shell listed first when `cavity_first`.
+fn hollow(outer: ([f64; 3], f64), inner: ([f64; 3], f64), cavity_first: bool) -> Rows {
+    let (out, cavity) = (
+        (outer.0, outer.1, Sense::Forward),
+        (inner.0, inner.1, Sense::Reversed),
+    );
+    if cavity_first {
+        globes(&[cavity, out])
+    } else {
+        globes(&[out, cavity])
+    }
+}
+
+#[test]
+fn a_hollow_ball_passes() {
+    // bool-26 on its grid (radii 1 and 0.5 of 1.6e8 steps, about one centre) at the converted
+    // body's bound, and small ones, a step thick, at bounds of 0 and 1.
+    for (outer, inner, bound) in [
+        (160_000_000.0, 80_000_000.0, 3202),
+        (10.0, 5.0, 1),
+        (10.0, 9.0, 0),
+        (10.0, 9.0, 1),
+    ] {
+        for cavity_first in [false, true] {
+            let r = hollow(([0.0; 3], outer), ([0.0; 3], inner), cavity_first);
+            assert_eq!(
+                at(&r, BodyKind::Solid, bound),
+                [],
+                "{outer} {inner} {bound}"
+            );
+        }
+    }
+    // Off the centre, nearer the wall than the radii's difference: by 5 (3, 4, 0) inside a wall
+    // 6 thick, and by √0.3125 off the grid inside one 1 thick.
+    for inner in [([3.0, 4.0, 0.0], 4.0), ([0.5, 0.25, 0.0], 9.0)] {
+        for cavity_first in [false, true] {
+            let r = hollow(([0.0; 3], 10.0), inner, cavity_first);
+            assert_eq!(at(&r, BodyKind::Solid, 1), [], "{inner:?}");
+        }
+    }
+}
+
+#[test]
+fn two_balls_each_outside_the_other_pass() {
+    // A step apart along an axis, and a step apart along (3, 4, 0).
+    for (center, radius) in [([11.0, 0.0, 0.0], 5.0), ([6.0, 8.0, 0.0], 4.0)] {
+        let r = globes(&[
+            ([0.0; 3], 5.0, Sense::Forward),
+            (center, radius, Sense::Forward),
+        ]);
+        assert_eq!(at(&r, BodyKind::Solid, 1), [], "{center:?}");
+    }
+}
+
+#[test]
+fn two_spheres_that_touch_cross_or_coincide_stay_unchecked() {
+    let unchecked = |r: &Rows, what: &str| {
+        let faults = at(r, BodyKind::General, 1);
+        assert_eq!(
+            faults,
+            [fault(
+                FaultKind::PairUnchecked,
+                Entity::Face(ix(0)),
+                Entity::Face(ix(1))
+            )],
+            "{what}"
+        );
+    };
+    let pair = |first: ([f64; 3], f64), second: ([f64; 3], f64)| {
+        globes(&[
+            (first.0, first.1, Sense::Forward),
+            (second.0, second.1, Sense::Forward),
+        ])
+    };
+    // Touching from outside, along an axis and along (3, 4, 0): the distance is the radii's sum.
+    unchecked(&pair(([0.0; 3], 5.0), ([10.0, 0.0, 0.0], 5.0)), "touching");
+    unchecked(
+        &pair(([0.0; 3], 5.0), ([6.0, 8.0, 0.0], 5.0)),
+        "touching, slant",
+    );
+    // Touching from inside: the distance is the radii's difference.
+    unchecked(&pair(([0.0; 3], 10.0), ([5.0, 0.0, 0.0], 5.0)), "inside");
+    unchecked(
+        &pair(([0.0; 3], 10.0), ([3.0, 4.0, 0.0], 5.0)),
+        "inside, slant",
+    );
+    // Crossing, from outside and from inside.
+    unchecked(&pair(([0.0; 3], 5.0), ([6.0, 0.0, 0.0], 5.0)), "crossing");
+    unchecked(
+        &pair(([0.0; 3], 10.0), ([6.0, 0.0, 0.0], 5.0)),
+        "crossing inside",
+    );
+    // One sphere twice, about the origin and about a point off it.
+    unchecked(&pair(([0.0; 3], 5.0), ([0.0; 3], 5.0)), "equal");
+    unchecked(
+        &pair(([1.0, 2.0, 3.0], 7.0), ([1.0, 2.0, 3.0], 7.0)),
+        "equal, off",
+    );
+}
+
+/// A cap of the sphere of radius 10 about the origin, above a circle at z = 6 of radius `rim` (8
+/// is on the sphere, 8.5 lies about 0.4 off it), and the whole sphere `other`: two sheets of a
+/// general body.
+fn cap_and_globe(rim: f64, other: ([f64; 3], f64)) -> Rows {
+    let mut r = Rows::empty();
+    let edge = r.edge(None);
+    r.curves[edge as usize] = parallel(6.0, rim);
+    let s = r.shell(0);
+    let top = Box3::new(P3::new(-10, -10, 6).unwrap(), P3::new(10, 10, 10).unwrap()).unwrap();
+    r.face_with(s, &[&[(edge, Sense::Forward)]], globe([0.0; 3], 10.0), top);
+    let t = r.shell(0);
+    r.face_with(t, &[], globe(other.0, other.1), globe_box(other.0, other.1));
+    r
+}
+
+#[test]
+fn spheres_are_apart_only_beyond_what_their_faces_may_stray() {
+    let unchecked = |r: &Rows, what: &str| {
+        let faults = at(r, BodyKind::General, 1);
+        assert_eq!(
+            faults,
+            [fault(
+                FaultKind::PairUnchecked,
+                Entity::Face(ix(0)),
+                Entity::Face(ix(1))
+            )],
+            "{what}"
+        );
+    };
+    // The cap's rim on its sphere: it strays by nothing, so a sphere half a step inside, or a step
+    // outside, is apart.
+    assert_eq!(
+        at(&cap_and_globe(8.0, ([0.0; 3], 9.5)), BodyKind::General, 1),
+        []
+    );
+    assert_eq!(
+        at(
+            &cap_and_globe(8.0, ([21.0, 0.0, 0.0], 10.0)),
+            BodyKind::General,
+            1
+        ),
+        []
+    );
+    unchecked(&cap_and_globe(8.0, ([20.0, 0.0, 0.0], 10.0)), "touching");
+    // The rim 0.4 off it, within the bound of 1: the cap may lie a step off its sphere, so a
+    // sphere within a step of it, inside or outside, is not apart.
+    unchecked(&cap_and_globe(8.5, ([0.0; 3], 9.5)), "half a step inside");
+    unchecked(&cap_and_globe(8.5, ([0.0; 3], 9.0)), "a step inside");
+    unchecked(
+        &cap_and_globe(8.5, ([21.0, 0.0, 0.0], 10.0)),
+        "a step outside",
+    );
+    // Beyond the step, inside and outside, and beyond two steps.
+    for other in [
+        ([0.0; 3], 8.75),
+        ([0.0; 3], 7.5),
+        ([21.5, 0.0, 0.0], 10.0),
+        ([23.0, 0.0, 0.0], 10.0),
+    ] {
+        assert_eq!(
+            at(&cap_and_globe(8.5, other), BodyKind::General, 1),
+            [],
+            "{other:?}"
+        );
+    }
 }

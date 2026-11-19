@@ -2,7 +2,8 @@
 //! two faces cross except along shared edges.
 //!
 //! What it does: [`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane,
-//! cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.
+//! cylinder, cone, sphere or ring torus and every edge is a line, a circle or an ellipse on its
+//! faces.
 //!
 //! - **A face's surface is embedded by its kind.** Planes, cylinders, spheres and ring tori never
 //!   cross themselves; a cone crosses itself only at its apex, and group 2 has certified every
@@ -14,7 +15,8 @@
 //!   no vertex meet only if they are coplanar (`orient3d` is zero) and their projections meet in
 //!   each of the three coordinate planes (some projection is one to one on their plane, and none
 //!   misses a meeting point). A segment and a circle, and two circles, are separated by certified
-//!   closed forms (`crate::curved`); a pair none of these separates is reported unchecked.
+//!   closed forms (`crate::curved`); a pair none of these separates, and every pair with an
+//!   ellipse, is reported unchecked.
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
 //!   tested. Two faces exactly on integer planes, or on planes their grid corners fix, are tested
 //!   exactly by `crate::planar`, whatever their shape. Two integer planes are compared exactly, in
@@ -24,11 +26,23 @@
 //!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
 //!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's
 //!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a
-//!   full circle edge meet only along it. Any other pair is reported unchecked.
+//!   full circle edge meet only along it. A cylinder and a plane exactly along its axis cannot
+//!   meet when the plane is certainly farther from the axis than the radius and the two faces'
+//!   stray. A flat face that is not an outline, one with a circle among its edges, is apart from
+//!   a plain face that reaches its plane only at the vertices and edges the two share, when every
+//!   vertex and edge of it lies on that plane exactly and the plane is given by integers
+//!   (`crate::planar::rests_on_flat`); and from a plain face whose plane it reaches only along one
+//!   edge or at one vertex the two share, its corners decided exactly and its circles certainly
+//!   on one side (`crate::planar::keeps_off`): so a wall's face round a round opening and the
+//!   sides that cross its plane. Faces on two spheres cannot meet when the spheres, widened by
+//!   what the faces may stray, are certainly apart, one outside the other or inside its hollow (a
+//!   hollow ball), compared squared and exact on exact data; spheres that touch or cross, one
+//!   sphere twice and a gap within the stray are not apart. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
 //! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
 //!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
-//!   (11.7), and do not cross. No other pair of coincident faces has that excuse.
+//!   (11.7), and do not cross. No other pair of coincident faces has that excuse, nor two faces
+//!   with no edge at all, which share no edge to be a wall along.
 //!
 //! Guarantees:
 //!
@@ -63,6 +77,7 @@
 use alloc::vec::Vec;
 
 use geom_curve::{Circle, ParamCurve};
+use geom_num::plane::Plane;
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
 use geom_op::run::reserve;
@@ -133,6 +148,12 @@ pub(crate) fn check(
                 continue;
             }
             let found = match (read(f), read(g)) {
+                (Read::Bare, Read::Plain(q)) => {
+                    bare_meets_plain(a, f, (g, &q), (exact, reach), sink)?
+                }
+                (Read::Plain(p), Read::Bare) => {
+                    bare_meets_plain(a, g, (f, &p), (exact, reach), sink)?
+                }
                 (Read::Bare, _) | (_, Read::Bare) => other_faces_meet(a, f, g, exact, reach),
                 (Read::Plain(p), Read::Plain(q)) => {
                     match planar::look(a, (f, &p), (g, &q), sink)? {
@@ -201,10 +222,40 @@ fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
     out
 }
 
-/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way.
+/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way,
+/// and at least one of them. Two faces with no edge (two whole spheres) have no edge to be one
+/// wall along, so they are tested as any other pair: two such balls in a general body were once
+/// passed as one wall, crossing or not.
 fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
+    let own = runs(a, f);
     let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
-    runs(a, f) == turned
+    !own.is_empty() && own == turned
+}
+
+/// How face `bare`, which is not an outline, meets plain face `plain` (given with the plane its
+/// outline is on), for a body recorded `exact` with the bound `reach`: apart if `bare` lies on an
+/// integer plane exactly and `plain` reaches that plane only where the two share a vertex or an
+/// edge (`crate::planar::rests_on_flat`), or if `bare` is flat and reaches `plain`'s plane only
+/// along one edge or at one vertex the two share (`crate::planar::keeps_off`); so a flat face
+/// holding a circle against a side that crosses its plane, as a wall's face round a round
+/// opening. Otherwise as their carriers say.
+fn bare_meets_plain(
+    a: &Arenas,
+    bare: Ix<Face>,
+    plain: (Ix<Face>, &Plane),
+    (exact, reach): (bool, f64),
+    sink: &mut Sink<'_, '_>,
+) -> Result<Meet, Stopped> {
+    let (face, _) = plain;
+    Ok(
+        if planar::rests_on_flat(a, face, bare, exact, sink)?
+            || planar::keeps_off(a, bare, plain, exact, sink)?
+        {
+            Meet::Apart
+        } else {
+            other_faces_meet(a, bare, face, exact, reach)
+        },
+    )
 }
 
 /// How two faces meet that are not both outlines, as far as their carriers say of two faces that
@@ -216,10 +267,11 @@ fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
 /// neither face can stray, whatever the answer.
 ///
 /// The carriers are first asked for the most the two faces may stray, twice `reach`. Only two
-/// parallel planes read it, and planes that clear the most clear what the faces do stray, which
-/// is no more; every other answer but unknown does not depend on it. So the faces are asked
-/// whether they hold to their surfaces, a certified test of each of their edges, only where the
-/// most leaves the pair unknown, and the answer is the one their own stray gives.
+/// parallel planes, a cylinder and a plane along its axis, and two spheres read it, and carriers
+/// that clear the most clear what the faces do stray, which is no more; every other answer but
+/// unknown does not depend on it. So the faces are asked whether they hold to their surfaces, a
+/// certified test of each of their edges, only where the most leaves the pair unknown, and the
+/// answer is the one their own stray gives.
 fn other_faces_meet(a: &Arenas, f: Ix<Face>, g: Ix<Face>, exact: bool, reach: f64) -> Meet {
     let stray = |on: &Surface, face| {
         if on.holds_face(a, face) { 0.0 } else { reach }
@@ -297,7 +349,8 @@ enum Shape<'c> {
     Circle(&'c Circle<3>, Option<Ix<Vertex>>),
 }
 
-/// Edge `e` as a shape: `None` for a line edge without two grid vertices at distinct points.
+/// Edge `e` as a shape: `None` for a line edge without two grid vertices at distinct points, and
+/// for an ellipse.
 fn shape(a: &Arenas, e: Ix<Edge>) -> Option<Shape<'_>> {
     let start = a.edges.start.get(e).copied().flatten();
     let end = a.edges.end.get(e).copied().flatten();
@@ -312,6 +365,8 @@ fn shape(a: &Arenas, e: Ix<Edge>) -> Option<Shape<'_>> {
             (s.at != t.at).then_some(Shape::Segment(s, t))
         }
         Ends::Circle(circle) => Some(Shape::Circle(circle, start)),
+        // No test of group 3 separates an ellipse from another edge yet: its pairs are unchecked.
+        Ends::Ellipse(_) => None,
     }
 }
 

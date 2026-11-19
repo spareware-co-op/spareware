@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 
 /// Every source file of the crate, its tests and its benchmark: its path in the crate's folder,
 /// and its text, read when the test is built, so the check runs on every target.
-const SOURCES: [(&str, &str); 25] = [
+const SOURCES: [(&str, &str); 26] = [
     ("benches/helper.rs", include_str!("../benches/helper.rs")),
     ("src/batch.rs", include_str!("../src/batch.rs")),
     ("src/budget.rs", include_str!("../src/budget.rs")),
@@ -70,6 +70,7 @@ const SOURCES: [(&str, &str); 25] = [
     ("tests/kernel_rules.rs", include_str!("kernel_rules.rs")),
     ("tests/plan.rs", include_str!("plan.rs")),
     ("tests/properties.rs", include_str!("properties.rs")),
+    ("tests/slices/mod.rs", include_str!("slices/mod.rs")),
 ];
 
 /// The atomic integer types a counter would use: the six the crate's clippy.toml banned.

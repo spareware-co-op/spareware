@@ -1193,35 +1193,27 @@ mod tests {
         }
     }
 
-    /// The one cause of SC-5 (tests/named-faults.json): solidcore writes its cylinder's top cap
-    /// on a plane 2.1e-16 off square to the axis, which the checker's test of a plane and a
-    /// cylinder (they meet in one circle only when the plane is exactly square to the axis) cannot
-    /// certify, and so refuses. The same rows with that one plane written square to the axis, at
-    /// the height of the circle it holds, pass: nothing else in the body is in the way.
+    /// SC-5's cause at the cylinder of radius 0.5 and height 1 is gone at the pin: solidcore
+    /// writes both caps on planes exactly square to the axis, through z = 0 and z = 1 exactly (the
+    /// fork's flat face on loops at one height lies on that height), so the checker's test of a
+    /// plane and a cylinder meeting in one circle certifies each cap, and the body passes.
     #[test]
-    fn a_cylinder_fails_on_its_top_cap_alone() {
-        let (mut rec, order) = can();
-        let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
-        let found = checked(body, exactness);
-        assert!(
-            matches!(&found, Err(Refusal::Failed { first, .. })
-                if first.ends_with("no certified test of this pair exists yet (face 1)")),
-            "{found:?}"
-        );
-        let mut tilted = 0;
-        for f in &mut rec.faces {
-            if let r::Surface::Plane { v_axis, .. } = &f.surface
-                && v_axis[2] != 0.0
+    fn a_cylinder_has_its_caps_exact() {
+        let (rec, order) = can();
+        let mut heights = Vec::new();
+        for f in &rec.faces {
+            if let r::Surface::Plane {
+                origin,
+                u_axis,
+                v_axis,
+            } = &f.surface
             {
-                tilted += 1;
-                f.surface = r::Surface::Plane {
-                    origin: [0.0, 0.0, 1.0],
-                    u_axis: [0.0, 1.0, 0.0],
-                    v_axis: [-1.0, 0.0, 0.0],
-                };
+                assert_eq!((u_axis[2], v_axis[2]), (0.0, 0.0), "{:?}", f.surface);
+                heights.push(origin[2]);
             }
         }
-        assert_eq!(tilted, 1);
+        heights.sort_by(f64::total_cmp);
+        assert_eq!(heights, [0.0, 1.0]);
         let (body, exactness) = body_of(&rec, &order, GridStep::Q1).expect("the rows");
         let found = checked(body, exactness);
         assert!(found.is_ok(), "{found:?}");

@@ -7791,14 +7791,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace < with <= in edges",
-      "line_text": "if u1 - u0 < 2.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On a whole turn the mutant adds the seam's rulings as edges, which cut a curve only where it crosses the seam or runs along it, places on the surface either side: trimming joins stretches on both domains end to end into one run, so a cut where the curve stays on both changes no piece."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace == with != in apex_ends",
       "line_text": "let ends = [v0, v1].iter().filter(|v| r0 + k * **v == 0.0).count();",
       "occurrences": 1,

@@ -561,9 +561,32 @@ fn atan2_tiny_quotients_whose_residual_underflows() {
 
 /// `atan2` where its second fast path's error bound is only just wide enough: a smaller bound
 /// accepts a wrongly rounded angle on these pairs.
-#[test]
-fn atan2_hard_cases_at_the_fast_path_bound() {
-    check_atan2(&ATAN2_FAST_BOUND, true);
+///
+/// One test for each of the three pairs (decision 32.78: together they were too long for one
+/// Miri gate part), each with all its swaps and signs.
+mod atan2_hard_cases_at_the_fast_path_bound {
+    use super::{ATAN2_FAST_BOUND, check_atan2};
+
+    #[test]
+    fn pair_1() {
+        check_atan2(&ATAN2_FAST_BOUND[0..1], true);
+    }
+
+    #[test]
+    fn pair_2() {
+        check_atan2(&ATAN2_FAST_BOUND[1..2], true);
+    }
+
+    #[test]
+    fn pair_3() {
+        check_atan2(&ATAN2_FAST_BOUND[2..3], true);
+    }
+
+    /// The three tests hold every pair once.
+    #[test]
+    fn the_pairs_join_to_the_whole_list() {
+        assert_eq!(ATAN2_FAST_BOUND.len(), 3);
+    }
 }
 
 /// `sinpi` and `cospi` near their troughs, where the general path's result is −1 or the double

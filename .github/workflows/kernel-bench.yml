@@ -464,10 +464,15 @@ jobs:
           key: ${{ matrix.target }}-base-${{ needs.scope.outputs.base_toolchain }}
           cache-directories: ~/.gungraun-runner
 
+      # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
+      # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
+      # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
+      # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
       - name: Install Valgrind
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends valgrind
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
 
       - name: Install the Gungraun runner the merge base needs
@@ -522,11 +527,24 @@ jobs:
             if [ -n "$found" ]; then break; fi
           done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$name&per_page=30" \
             --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == .workflow_run.repository_id) | "\(.workflow_run.id) \(.workflow_run.head_branch) \(.workflow_run.head_sha)"' || true)
+          # GitHub's storage can refuse a download for a while (HTTP 503), so gh tries three times,
+          # 30 s apart; counts it cannot download are measured again.
           kept=false
-          if [ -n "$found" ] && gh run download "$found" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$RUNNER_TEMP/keep" \
-            && (cd "$RUNNER_TEMP/keep" && sha256sum --check --strict manifest.sha256); then
-            kept=true
-            echo "::notice::The merge base's counts on $TARGET, part $PART, come from run $found ($name); they are not measured again."
+          if [ -n "$found" ]; then
+            for try in 1 2 3; do
+              rm -rf "$RUNNER_TEMP/keep"
+              if gh run download "$found" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$RUNNER_TEMP/keep"; then
+                if (cd "$RUNNER_TEMP/keep" && sha256sum --check --strict manifest.sha256); then
+                  kept=true
+                  echo "::notice::The merge base's counts on $TARGET, part $PART, come from run $found ($name); they are not measured again."
+                fi
+                break
+              fi
+              if [ "$try" != 3 ]; then
+                echo "::warning::$name: download $try of 3 failed; trying again in 30 s."
+                sleep 30
+              fi
+            done
           fi
           echo "kept=$kept" >> "$GITHUB_OUTPUT"
 
@@ -670,10 +688,15 @@ jobs:
           key: ${{ matrix.target }}-head-${{ needs.scope.outputs.head_toolchain }}
           cache-directories: ~/.gungraun-runner
 
+      # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
+      # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
+      # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
+      # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
       - name: Install Valgrind
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends valgrind
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
 
       - name: Install the Gungraun runner the change needs
@@ -938,10 +961,15 @@ jobs:
             head -> ../target
           key: ${{ matrix.target }}-judge-${{ needs.scope.outputs.head_toolchain }}
 
+      # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
+      # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
+      # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
+      # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
       - name: Install Valgrind
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends valgrind
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
 
       # The golden digests (no benchmark may get faster by computing something else, and the
@@ -955,6 +983,8 @@ jobs:
       # lists was measured in exactly one part on each side (geom_bench::parts::check): a part
       # that dropped out has no folder, which the check refuses as a missing file. Only then are
       # the parts' Gungraun homes put together into one, as one run of the catalogue left it.
+      # GitHub's storage can refuse a download for a while (HTTP 503 on #1038's run 44502544074),
+      # so gh tries each part three times, 30 s apart, before the part is reported lost.
       - name: Gather every part's counts
         id: gather
         working-directory: head
@@ -971,9 +1001,19 @@ jobs:
           fi
           for side in $sides; do
             for k in $(seq 1 "$OF"); do
-              gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-                --name "count-$side-$TARGET-$k" --dir "$t/parts/$side/$k" \
-                || echo "::error::Part $k of $OF on $TARGET left no counts of the $side."
+              for try in 1 2 3; do
+                rm -rf "$t/parts/$side/$k"
+                if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                  --name "count-$side-$TARGET-$k" --dir "$t/parts/$side/$k"; then
+                  break
+                fi
+                if [ "$try" = 3 ]; then
+                  echo "::error::Part $k of $OF on $TARGET left no counts of the $side (three tries)."
+                else
+                  echo "::warning::count-$side-$TARGET-$k: download $try of 3 failed; trying again in 30 s."
+                  sleep 30
+                fi
+              done
               if [ -f "$t/parts/$side/$k/$side.tar" ] || [ -f "$t/parts/$side/$k/home.tar" ]; then
                 tar -tf "$t/parts/$side/$k/"*.tar > "$t/parts/$side/$k/home.list"
               fi

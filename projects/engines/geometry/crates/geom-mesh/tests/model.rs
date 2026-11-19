@@ -817,45 +817,64 @@ fn a_coarse_sheet_remeshes_toward_the_target_length() {
 /// A strip one cell wide, with a width the envelope would let a collapse pinch: every vertex is on
 /// the boundary, and joining two across the strip makes a vertex two fans meet at. The boundary
 /// rule refuses that, so the result stays a surface.
-#[test]
-fn a_narrow_strip_is_not_pinched() {
-    let mut points = Vec::new();
-    for i in 0..7 {
-        points.push(p(i * 10, 0, 0));
-        points.push(p(i * 10, 10, 0));
+/// A narrow strip is not pinched: decimated, and remeshed, one test each (decision 32.78: the
+/// two together were too long for one Miri gate part).
+mod a_narrow_strip_is_not_pinched {
+    use super::*;
+
+    /// The strip: two rows of seven points ten steps apart, twelve triangles.
+    fn strip() -> (Vec<P3>, Vec<[u32; 3]>) {
+        let mut points = Vec::new();
+        for i in 0..7 {
+            points.push(p(i * 10, 0, 0));
+            points.push(p(i * 10, 10, 0));
+        }
+        let mut triangles = Vec::new();
+        for i in 0..6_u32 {
+            let (a, b, c, d) = (2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1);
+            triangles.push([a, b, c]);
+            triangles.push([a, c, d]);
+        }
+        (points, triangles)
     }
-    let mut triangles = Vec::new();
-    for i in 0..6_u32 {
-        let (a, b, c, d) = (2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1);
-        triangles.push([a, b, c]);
-        triangles.push([a, c, d]);
-    }
-    let input = (points, triangles);
-    let epsilon = 14;
-    for out in [
-        decimate(
+
+    const EPSILON: u64 = 14;
+
+    #[test]
+    fn decimated() {
+        let input = strip();
+        let out = decimate(
             &input.0,
             &input.1,
-            Decimate { epsilon, target: 0 },
+            Decimate {
+                epsilon: EPSILON,
+                target: 0,
+            },
             &Exec::serial(),
             &mut budget(1 << 17),
         )
-        .unwrap(),
-        remesh(
+        .unwrap();
+        assert!(out.triangles().len() < input.1.len());
+        two_way(&input, &out, EPSILON);
+    }
+
+    #[test]
+    fn remeshed() {
+        let input = strip();
+        let out = remesh(
             &input.0,
             &input.1,
             Remesh {
-                epsilon,
+                epsilon: EPSILON,
                 length: 40,
                 iterations: 2,
             },
             &Exec::serial(),
             &mut budget(1 << 17),
         )
-        .unwrap(),
-    ] {
+        .unwrap();
         assert!(out.triangles().len() < input.1.len());
-        two_way(&input, &out, epsilon);
+        two_way(&input, &out, EPSILON);
     }
 }
 

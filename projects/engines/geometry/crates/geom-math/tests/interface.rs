@@ -169,13 +169,67 @@ fn check_irrational(dir: (i32, i32), scale: (u64, u64), o: i64, x: i64, y: i64) 
 /// A direction, a scale (num, den), an easting origin and a point (x, y).
 type Case = ((i32, i32), (u64, u64), i64, i64, i64);
 
-#[test]
-fn frame_to_map_rounds_values_just_past_a_midpoint() {
+/// `frame_to_map` rounds values just past a midpoint: in quarters of its twelve cases (decision
+/// 32.78: whole, it was too long for one Miri gate part). Each quarter pins how many of its values
+/// are negative and how many positive; the join test holds the shares to the whole's six and six.
+mod frame_to_map_rounds_values_just_past_a_midpoint {
+    /// For each quarter: its values (negative, positive).
+    const PINNED: [[u32; 2]; 4] = [[1, 2], [2, 1], [1, 2], [2, 1]];
+
+    fn quarter(part: usize) {
+        let cases = super::midpoint_cases();
+        let mut signs = [0; 2];
+        for &(dir, scale, o, x, y) in &cases[3 * part..3 * part + 3] {
+            let e = super::check_irrational(dir, scale, o, x, y);
+            signs[usize::from(e > 0.0)] += 1;
+            // Cancellation: a value of at most a thousandth of a metre, from an origin of 2^50
+            // steps or more.
+            assert!(e.abs() < 1e-3, "{e:e}");
+        }
+        assert_eq!(signs, PINNED[part], "quarter {}", part + 1);
+    }
+
+    #[test]
+    fn quarter_1() {
+        quarter(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        quarter(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        quarter(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        quarter(3);
+    }
+
+    /// The quarters hold the twelve cases once, and their values are six negative and six
+    /// positive, as the whole's were.
+    #[test]
+    fn the_quarters_join_to_the_whole() {
+        assert_eq!(super::midpoint_cases().len(), 12);
+        let mut signs = [0; 2];
+        for p in PINNED {
+            signs[0] += p[0];
+            signs[1] += p[1];
+        }
+        assert_eq!(signs, [6, 6]);
+    }
+}
+
+/// The twelve cases of `frame_to_map_rounds_values_just_past_a_midpoint`.
+fn midpoint_cases() -> [Case; 12] {
     // (direction, scale, easting origin, x, y). In each, the origin cancels all but about 2^−46 of
     // the rotated offset, so the double-double value's error is a sizeable fraction of an ulp, and
     // the exact value lies just past a midpoint between doubles from the double-double value:
     // above it in the first six, below it in the last six, for values of either sign.
-    let cases: [Case; 12] = [
+    [
         (
             (-1_216_370_114, -1_821_055_087),
             (813_335, 2),
@@ -260,16 +314,7 @@ fn frame_to_map_rounds_values_just_past_a_midpoint() {
             839_376_176,
             201_649_579_247,
         ),
-    ];
-    let mut signs = [0; 2];
-    for (dir, scale, o, x, y) in cases {
-        let e = check_irrational(dir, scale, o, x, y);
-        signs[usize::from(e > 0.0)] += 1;
-        // Cancellation: a value of at most a thousandth of a metre, from an origin of 2^50 steps
-        // or more.
-        assert!(e.abs() < 1e-3, "{e:e}");
-    }
-    assert_eq!(signs, [6, 6]);
+    ]
 }
 
 /// (u, v) with c·u − s·v = 1, for coprime c and s, by the extended Euclidean algorithm.

@@ -3859,17 +3859,17 @@
           "target": "lib"
         },
         {
-          "cost": "a few dozen interval operations per check; no loop. Recursion: none.",
+          "cost": "a few dozen interval operations per check (an ellipse about 40 on a plane, about 95 with three more square roots on a cylinder, about 30 with a certified sine and cosine at an end); no loop. Recursion: none.",
           "does": "[`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each check bounds a distance from above and compares it with the body's bound b. With w = p − c, h = w · n̂ (height along the axis) and ρ = |w × n̂| (distance from it), the distance of a point from each kind is:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
           "guarantees": [
             "**Upper bounds, certified.** Every distance is bounded from above in interval arithmetic that stays exact where the doubles are (`geom_curve::tight`), on the exact unit vectors' enclosures (`geom_curve::Frame::unit_vectors`) and certified sines and cosines of half-turns (`geom_num::Interval::{sinpi, cospi}`).",
-            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails. A circle's points come from `sinpi` and `cospi`, which widen by a step even where exact: its checks hold to that step.",
+            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails; so is an ellipse whose centre and vectors are exact doubles on such a plane or cylinder. A circle's and an ellipse's points come from `sinpi` and `cospi`, which widen by a step even where exact: their ends' checks hold to that step.",
             "**Fails closed.** A value that cannot be enclosed, a cone point whose radius may be negative, a torus that is not a ring, a surface kind without a closed form here: not certified, never passed.",
             "**Nothing allocates; nothing is sampled.**"
           ],
-          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, and how far a grid point lies from a circle's end. Never sampled.",
+          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, how far an ellipse can lie from a plane or cylinder, and how far a grid point lies from a circle's or an ellipse's end. Never sampled.",
           "method": {
             "links": [
               "https://doi.org/10.1137/1.9780898717716",
@@ -3929,14 +3929,14 @@
           "target": "lib"
         },
         {
-          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row; nothing allocated. Recursion: none.",
-          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
+          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row (an ellipse's place on a face and its two ends are each a closed form of at most about a hundred interval operations, `crate::curved`); nothing allocated. Recursion: none.",
+          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line, circle or ellipse on that surface; for each edge, its vertices must lie at its curve's ends. An edge on another kind of curve, an ellipse on a surface other than a plane or a cylinder, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
           "guarantees": [
             "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the same way, end by end: a segment is never farther from a plane than its farther end, and no double holds the squared normal of a long edge's plane, so an interval could not say 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
             "**Exact on plane-based bodies.** A vertex where three planes meet lies exactly on an integer plane or it is a fault, in every class: `geom_num::plane::Plane::side_of_tpi`, the sign of a determinant within 384 bits (6.3, 8.3). A line with such an end is only a shadow of the edge, which is the two planes it lies on: the vertices decide what the edge lies on, and the line's end must be within a step of the vertex rounded to the grid, or of the body's bound.",
-            "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
+            "**Certified on lines, conics and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails. An ellipse is bounded on a plane and on a cylinder in closed form, as a circle is, and its ends by certified sines and cosines; an ellipse on a cone, sphere or torus is `Unchecked` on that face, never passed and never called off it.",
             "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
             "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
           ],
@@ -4054,7 +4054,7 @@
           "target": "lib"
         },
         {
-          "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per vertex and one per edge), shared by every check.",
+          "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (the larger of three per vertex and one per edge, and two of each), shared by every check.",
           "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it (8.3; principle 4): at [`Level::of_build`] where the result passes groups 2 and 3 by construction, at [`Level::Full`] where it does not, so that no build answers differently from another (decision 32.48). An import, and any caller who asks, call it at [`Level::Full`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/run.rs",
@@ -4079,7 +4079,7 @@
         },
         {
           "cost": "one meter unit per face, per pair of a face's edges and per pair of faces, and `crate::planar`'s; quadratic in a face's edges and in the faces. Recursion: none.",
-          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.",
+          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line, a circle or an ellipse on its faces.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
           "guarantees": [
@@ -7270,7 +7270,7 @@
           "target": "lib"
         },
         {
-          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.",
+          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations. [`answer_of`] reads a case's answer and count, which the target's tests hold.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of five surfaces on small lattice sizes, and one of six functions on it. [`check`] traces the zero set and holds the answer to the laws below, with a dense grid of the function's own value as the oracle: the trace bounds and prunes, and the oracle only evaluates. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/level.rs",
@@ -8990,8 +8990,8 @@
           "target": "lib"
         },
         {
-          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
-          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
+          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. A cylinder's silhouette whose domain ends on a ruling takes one unit (decision 32.101). Recursion: none.",
+          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). A function with a closed form for the case answers by it ([`Level::closed`]: a cylinder's silhouette where a domain end is a ruling). Otherwise the domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
           "guarantees": [
@@ -9099,7 +9099,7 @@
             "**Exact type decisions on exact data.** Empty, touching or crossing, and which conic, are signs from `geom_num::quadric` on whole-number data, or from the stored doubles where the question is a sum of their products. Elsewhere an interval decides, and a pair it cannot tell is `None`.",
             "**Certified curves.** A result's data are the midpoints of enclosures of the exact conic, and its class carries how far those enclosures reach.",
             "**Tangency named.** A tangent line or circle is a curve of [`CurveContact::Tangent`] with no band, and a touch at one point a [`PointContact::IsolatedTangent`].",
-            "**Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other, and each stretch is kept if its middle lies on both.",
+            "**Trimmed to both domains.** Each curve is cut where the edges of either surface meet the other, and no edge cuts a stretch between cuts, or a curve with none, so each is decided by its middle: kept only where that middle is proven inside both domains, its box inside each range or reaching only a join, and nothing where that box is off one; where the box reaches an edge of a domain, the pair is `None`, the engine's (decision 32.94). A circle along a cylinder's end circle that exact signs place on the other surface (a column standing on a slab) is kept as that end circle, exactly, decided on its turn and the other domain; one a rounding off it stays the engine's.",
             "**A turn far from zero loses nothing.** A loop's parameter, or a round surface's, may start any number of turns out. A loop is cut and kept on its domain moved by whole turns, exactly, to within two turns of zero, and a surface's turn is read on its own domain the same way, so no cut and no point is lost to how far out a domain starts. An operand whose parameters start so far out that their doubles stand more than a step apart on it cannot hold its own points, or a cut, to a step: it is refused with `FrameRange`, as one outside the frame is."
           ],
           "job": "Where two natural quadrics meet, in closed form (chapter 12.7).",
