@@ -2,7 +2,8 @@
 //! face's plane, cylinder, sphere or torus, or off its edge's end, is caught exactly at the body's
 //! bound and never a step past it; an edge off its face is caught; a carrier with no certified
 //! check is reported, never passed; values out of range fail closed; group 2 runs only on a body
-//! group 1 passed; and it charges one unit per face, fin and edge.
+//! group 1 passed; and it charges one unit per face, fin and edge. An ellipse (issue #1023) is
+//! certified on a plane and a cylinder and at its ends the same way, and unchecked elsewhere.
 
 #![allow(
     clippy::unwrap_used,
@@ -26,7 +27,7 @@ use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::BudgetKind;
 use geom_surface::{Cone, Cylinder, ParamSurface};
 use geom_surface::{Extrusion, Plane, SurfaceKind, Torus};
-use geom_topo::BodyKind;
+use geom_topo::{BodyKind, RegionKind, Sense};
 
 fn certified(bound: u64) -> Exactness {
     Exactness::Certified {
@@ -328,6 +329,293 @@ fn an_edge_off_its_face_is_caught() {
     assert!(edge_off(&at(&r, 2), 1, 0));
 }
 
+/// The full ellipse about `center` on `axes`, its parameter from 0 to one turn.
+fn oval(center: [f64; 3], axes: Axes<3>) -> CurveKind<3> {
+    CurveKind::Ellipse(Ellipse::new(center, axes, (0.0, 2.0)).unwrap())
+}
+
+/// The ellipse c + cos πt·u + sin πt·v of the vectors themselves.
+fn conjugate(center: [f64; 3], u: [f64; 3], v: [f64; 3]) -> CurveKind<3> {
+    oval(center, Axes::Vectors { u, v })
+}
+
+/// A sheet on the plane z = 0 bounded by `curve`, closed at the one vertex (6, 0, 0): the
+/// ellipse of semi-axes 6 and 4 about the origin, starting on the x axis, lies on it.
+fn oval_sheet(curve: CurveKind<3>) -> Rows {
+    let mut r = Rows::empty();
+    let v = r.vertex([6, 0, 0]);
+    let e = r.edge(Some((v, v)));
+    let s = r.shell(0);
+    r.face(s, &[&[(e, Sense::Forward)]]);
+    r.curves[e as usize] = curve;
+    r.surfaces[0] = common::level(0.0);
+    r
+}
+
+/// The flat ellipse of [`oval_sheet`], 6 along x and 4 along y, on the axes of the grid.
+fn flat_oval() -> CurveKind<3> {
+    oval(
+        [0.0; 3],
+        Axes::Frame {
+            frame: Frame::standard().unwrap(),
+            a: 6.0,
+            b: 4.0,
+        },
+    )
+}
+
+/// The ellipse the plane through (0, 0, 5) of normal (−3, 0, 4) cuts from the cylinder of radius
+/// 4 about the z axis: semi-axes 5 along (4, 0, 3) / 5 and 4 along y, through (4, 0, 8).
+fn sloped_cut() -> Axes<3> {
+    Axes::Frame {
+        frame: Frame::new([4.0, 0.0, 3.0], [-3.0, 0.0, 4.0]).unwrap(),
+        a: 5.0,
+        b: 4.0,
+    }
+}
+
+/// A solid cylinder of radius 4 about the z axis, cut square at z = 0 and on the sloped plane
+/// through (0, 0, 5) of normal (−3, 0, 4) above: the bottom circle and the top ellipse (curve
+/// `top`) start and end at vertices 0, (4, 0, 0), and 1, (4, 0, 8), joined by a seam line on the
+/// side. Faces: the sloped top 0, the bottom 1, the side 2; edges: bottom 0, top 1, seam 2.
+fn sloped_cylinder(top: CurveKind<3>) -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (low, high) = (r.vertex([4, 0, 0]), r.vertex([4, 0, 8]));
+    let bottom = r.edge(Some((low, low)));
+    let rim = r.edge(Some((high, high)));
+    let seam = r.edge(Some((low, high)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(s, &[&[(bottom, Sense::Forward)]]);
+    r.face(
+        s,
+        &[&[
+            (bottom, Sense::Reversed),
+            (seam, Sense::Forward),
+            (rim, Sense::Reversed),
+            (seam, Sense::Reversed),
+        ]],
+    );
+    r.curves[bottom as usize] = common::parallel(0.0, 4.0);
+    r.curves[rim as usize] = top;
+    r.surfaces[0] = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 5.0],
+            [4.0, 0.0, 3.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    r.surfaces[1] = common::level(0.0);
+    r.surfaces[2] = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            4.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 10.0)),
+        )
+        .unwrap(),
+    );
+    r
+}
+
+/// Group 2's faults in a full check of the sheet `rows`, recorded certified to `bound`.
+fn sheet_at(rows: &Rows, bound: u64) -> Vec<Fault> {
+    report(rows, BodyKind::Sheet, certified(bound))
+        .faults()
+        .iter()
+        .filter(|f| f.kind.group() == Group::Geometric)
+        .copied()
+        .collect()
+}
+
+#[test]
+fn an_ellipse_on_a_plane_and_on_a_cylinder_passes_group_2() {
+    // On a frame, as the conversion writes a record's ellipse, and as the vectors themselves, as
+    // a transform that is not a similarity leaves one: u = (4, 0, 3) and v = (0, 4, 0).
+    for top in [
+        oval([0.0, 0.0, 5.0], sloped_cut()),
+        conjugate([0.0, 0.0, 5.0], [4.0, 0.0, 3.0], [0.0, 4.0, 0.0]),
+    ] {
+        let r = sloped_cylinder(top);
+        let faults = at(&r, 1);
+        assert_eq!(faults, [], "{faults:?}");
+    }
+    // Every number of the vectors' form is exact, so its place on both faces is certified at a
+    // bound of nothing (its ends come from certified sines and cosines, which widen by a step).
+    let r = sloped_cylinder(conjugate([0.0, 0.0, 5.0], [4.0, 0.0, 3.0], [0.0, 4.0, 0.0]));
+    let faults = at(&r, 0);
+    assert!(
+        faults.iter().all(|f| f.kind != FaultKind::EdgeOffSurface),
+        "{faults:?}"
+    );
+    // A flat ellipse on a flat sheet, both ways, at a bound of nothing for its place.
+    for curve in [
+        flat_oval(),
+        conjugate([0.0; 3], [6.0, 0.0, 0.0], [0.0, 4.0, 0.0]),
+    ] {
+        let r = oval_sheet(curve);
+        assert_eq!(sheet_at(&r, 1), []);
+        assert!(!edge_off(&sheet_at(&r, 0), 0, 0));
+    }
+}
+
+#[test]
+fn an_ellipse_a_step_off_its_surface_is_refused_with_its_group_and_fault() {
+    // Lifted one step off its plane: off at a bound of nothing, on at a bound of one.
+    let lifted = oval_sheet(oval(
+        [0.0, 0.0, 1.0],
+        Axes::Frame {
+            frame: Frame::standard().unwrap(),
+            a: 6.0,
+            b: 4.0,
+        },
+    ));
+    let zero = sheet_at(&lifted, 0);
+    assert!(edge_off(&zero, 0, 0), "{zero:?}");
+    let named = Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(ix(0))).with(Entity::Face(ix(0)));
+    assert_eq!(named.kind.group(), Group::Geometric);
+    assert_eq!(
+        named.to_string(),
+        "group 2, edge 0: the edge is not on the face's surface within the bound (face 0)"
+    );
+    assert!(!edge_off(&sheet_at(&lifted, 1), 0, 0));
+    // Tilted about its long axis so that its far side rises one step and its near side falls one:
+    // the centre and both ends on the plane, the sides off it.
+    let tilted = oval_sheet(conjugate([0.0; 3], [6.0, 0.0, 0.0], [0.0, 4.0, 1.0]));
+    let zero = sheet_at(&tilted, 0);
+    assert_eq!(
+        zero,
+        [Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(ix(0))).with(Entity::Face(ix(0)))]
+    );
+    assert_eq!(sheet_at(&tilted, 1), []);
+    // A semi-axis a step long across the cylinder: its sides a step outside it, on the top plane
+    // still. Exact in the vectors' form.
+    let wide = sloped_cylinder(conjugate([0.0, 0.0, 5.0], [4.0, 0.0, 3.0], [0.0, 5.0, 0.0]));
+    let zero = at(&wide, 0);
+    assert!(edge_off(&zero, 1, 2), "{zero:?}");
+    assert!(!edge_off(&zero, 1, 0), "{zero:?}");
+    assert!(!edge_off(&at(&wide, 1), 1, 2));
+    // The same a step short along the slope: (3.2, 0, 2.4) leaves the cylinder by 0.8 at its
+    // ends, which are then off their vertex too; and along it on a frame, 6 for 5 (the
+    // cylinder's 4.8 at its ends, 0.8 outside).
+    let short = sloped_cylinder(conjugate([0.0, 0.0, 5.0], [3.2, 0.0, 2.4], [0.0, 4.0, 0.0]));
+    assert!(edge_off(&at(&short, 0), 1, 2));
+    assert!(!edge_off(&at(&short, 1), 1, 2));
+    let long = sloped_cylinder(oval(
+        [0.0, 0.0, 5.0],
+        Axes::Frame {
+            frame: Frame::new([4.0, 0.0, 3.0], [-3.0, 0.0, 4.0]).unwrap(),
+            a: 6.0,
+            b: 4.0,
+        },
+    ));
+    assert!(edge_off(&at(&long, 0), 1, 2));
+    assert!(!edge_off(&at(&long, 1), 1, 2));
+    // Moved 5 steps up the cylinder's axis: 4 steps above the sloped plane and still on the
+    // cylinder.
+    let raised = sloped_cylinder(oval([0.0, 0.0, 10.0], sloped_cut()));
+    let three = at(&raised, 3);
+    assert!(edge_off(&three, 1, 0), "{three:?}");
+    assert!(!edge_off(&three, 1, 2), "{three:?}");
+    assert!(!edge_off(&at(&raised, 5), 1, 0));
+}
+
+#[test]
+fn an_ellipse_whose_ends_miss_its_vertices_is_refused() {
+    // The vertex moved 3 steps out along the long axis, on the plane still: off the ellipse's
+    // ends, and nowhere else.
+    let mut r = oval_sheet(flat_oval());
+    r.points[0] = P3::new(9, 0, 0).unwrap();
+    r.faces[0].bound = Box3::new(P3::new(9, 0, 0).unwrap(), P3::new(9, 0, 0).unwrap()).unwrap();
+    // Both ends of the closed edge are that vertex, and each misses it.
+    let missed =
+        Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(ix(0))).with(Entity::Edge(ix(0)));
+    let two = sheet_at(&r, 2);
+    assert_eq!(two, [missed, missed]);
+    assert_eq!(
+        two[0].to_string(),
+        "group 2, vertex 0: the vertex is not at the edge's curve end within the bound (edge 0)"
+    );
+    assert_eq!(sheet_at(&r, 4), []);
+    // The ellipse turned to start at its short axis's end, (0, 4, 0): its ends miss the vertex by
+    // √52 ≈ 7.2 steps, both of them.
+    let mut r = oval_sheet(flat_oval());
+    r.curves[0] = CurveKind::Ellipse(
+        Ellipse::new(
+            [0.0; 3],
+            Axes::Frame {
+                frame: Frame::standard().unwrap(),
+                a: 6.0,
+                b: 4.0,
+            },
+            (0.5, 2.5),
+        )
+        .unwrap(),
+    );
+    assert_eq!(sheet_at(&r, 7), [missed, missed]);
+    assert_eq!(sheet_at(&r, 8), []);
+    // On the cylinder: the top vertex moved a step down the seam, off the top ellipse's ends and
+    // the sloped plane, on the cylinder still.
+    let mut r = sloped_cylinder(oval([0.0, 0.0, 5.0], sloped_cut()));
+    r.points[1] = P3::new(4, 0, 7).unwrap();
+    let zero = at(&r, 0);
+    assert!(
+        zero.contains(
+            &Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(ix(1))).with(Entity::Edge(ix(1)))
+        ),
+        "{zero:?}"
+    );
+    assert!(!off(&zero, 1, 2), "{zero:?}");
+}
+
+#[test]
+fn an_ellipse_on_a_surface_without_its_check_is_unchecked_never_off_it() {
+    // A cone's base rim written as an ellipse of equal axes: its ends and its place on the base
+    // plane are certified, its place on the cone is not.
+    let mut r = cone();
+    r.curves[0] = oval(
+        [0.0; 3],
+        Axes::Frame {
+            frame: Frame::standard().unwrap(),
+            a: 6.0,
+            b: 6.0,
+        },
+    );
+    assert_eq!(
+        at(&r, 1),
+        [Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Face(ix(1)))]
+    );
+    // A torus's parallel seam the same way, once for each of its two fins on the torus.
+    let mut r = ring_torus();
+    r.curves[0] = oval(
+        [0.0; 3],
+        Axes::Frame {
+            frame: Frame::standard().unwrap(),
+            a: 13.0,
+            b: 13.0,
+        },
+    );
+    let unchecked = Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Face(ix(0)));
+    assert_eq!(at(&r, 1), [unchecked, unchecked]);
+    assert_eq!(
+        unchecked.to_string(),
+        "group 2, curve 0: no certified check of this carrier exists yet (face 0)"
+    );
+    // An ellipse whose numbers cannot be enclosed is no certified place on a plane or cylinder:
+    // a semi-axis so long its square overflows a double.
+    let r = oval_sheet(conjugate([0.0; 3], [6.0, 0.0, 0.0], [0.0, 1e300, 1e300]));
+    assert!(edge_off(&sheet_at(&r, 64), 0, 0));
+    let r = sloped_cylinder(conjugate(
+        [0.0, 0.0, 5.0],
+        [4.0, 0.0, 3.0],
+        [0.0, 1e300, 0.0],
+    ));
+    assert!(edge_off(&at(&r, 64), 1, 2));
+}
+
 /// The cube's corners, sheared and stretched to `w` along x with each corner's y and z leaning
 /// by `lean` along x: every face a plane through grid points, most of them slanted.
 fn long(w: i64, lean: i64) -> Vec<[i64; 3]> {
@@ -498,23 +786,20 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
         &r,
         Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Face(ix(0))),
     );
-    // An ellipse: its ends and its place on its faces are both unchecked, reported once.
-    let mut r = cube();
-    r.curves[0] = CurveKind::Ellipse(
-        Ellipse::new(
-            [0.0; 3],
-            Axes::Frame {
-                frame: Frame::standard().unwrap(),
-                a: 2.0,
-                b: 1.0,
-            },
-            (0.0, 2.0),
-        )
-        .unwrap(),
+    // An ellipse on a sphere: its ends are certified, its place on the dome is not, and it is
+    // reported unchecked there, never off it (the equator written as an ellipse of equal axes).
+    let mut r = hemisphere();
+    r.curves[0] = oval(
+        [0.0; 3],
+        Axes::Frame {
+            frame: Frame::standard().unwrap(),
+            a: 5.0,
+            b: 5.0,
+        },
     );
     only(
         &r,
-        Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Edge(ix(0))),
+        Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Face(ix(1))),
     );
     // Unchecked faults are group 2's and say why in words.
     assert_eq!(FaultKind::Unchecked.group(), Group::Geometric);
