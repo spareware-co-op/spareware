@@ -2810,8 +2810,8 @@ fn the_queue_and_the_pull_request_cover_every_leg() {
         ),
         // A test target of geom-num that two suite parts run: two shares that overlap.
         (
-            "crate: geom-num, targets: \"--test '[b-z]*'\"",
-            "crate: geom-num, targets: \"--test '[a-z]*'\"",
+            "crate: geom-num, targets: \"--test 'arc_*' --test '[b-z]*'\"",
+            "crate: geom-num, targets: \"--test 'arc_*' --test '[a-z]*'\"",
             "geom-num's tests/attack_plane.rs runs 2 times in `suite's geom-num parts`",
         ),
         // A share in a form the reading does not know is looked at, not passed.

@@ -519,7 +519,7 @@ jobs:
         run: cargo test -p geom-num --release --locked --no-fail-fast --test 'attack_[h-r]*'
       - name: geom-num's every test vector in release as shipped (part 6 of 6)
         if: ${{ !cancelled() && matrix.mode == 'release' && matrix.k == 29 }}
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'arc_*' --test '[b-z]*'
       - name: Show this machine's CPU features
         if: ${{ !cancelled() && matrix.mode == 'release' }}
         run: rustc -vV && rustc --print cfg -C target-cpu=native
@@ -634,7 +634,7 @@ jobs:
         env:
           RUSTFLAGS: -C overflow-checks=on -C target-cpu=native
           CARGO_TARGET_DIR: target-native
-        run: cargo test -p geom-num --release --locked --no-fail-fast --test '[b-z]*'
+        run: cargo test -p geom-num --release --locked --no-fail-fast --test 'arc_*' --test '[b-z]*'
       - name: Every golden in debug (part 1 of 4)
         if: ${{ !cancelled() && matrix.mode == 'debug' && matrix.k == 1 }}
         run: '"$GOLDEN" run --part 1/4'
@@ -935,10 +935,10 @@ jobs:
           - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
           - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
           - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
-          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test 'arc_*' --test '[b-z]*'" }
           - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
           - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
-          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test 'arc_*' --test '[c-k]*'" }
           - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
           - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
           - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
@@ -988,13 +988,13 @@ jobs:
             target: { name: macOS x86-64, os: macos-15-intel }
           - part: { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
-          - part: { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - part: { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test 'arc_*' --test '[b-z]*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
           - part: { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
           - part: { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
-          - part: { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - part: { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test 'arc_*' --test '[c-k]*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
           - part: { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
             target: { name: macOS x86-64, os: macos-15-intel }
@@ -1136,10 +1136,10 @@ jobs:
           - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
           - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
           - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
-          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test 'arc_*' --test '[b-z]*'" }
           - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
           - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
-          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test 'arc_*' --test '[c-k]*'" }
           - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
           - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
           - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }
@@ -1231,10 +1231,10 @@ jobs:
           - { mode: release, k: 10, n: 25, crate: geom-num, targets: "--test 'attack2_[e-i]*'" }
           - { mode: release, k: 11, n: 25, crate: geom-num, targets: "--test 'attack2_[p-z]*' --test 'attack_[s-z]*'" }
           - { mode: release, k: 12, n: 25, crate: geom-num, targets: "--test 'attack_[h-r]*'" }
-          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test '[b-z]*'" }
+          - { mode: release, k: 13, n: 25, crate: geom-num, targets: "--test 'arc_*' --test '[b-z]*'" }
           - { mode: release, k: 14, n: 25, doc: true, crate: geom-test, targets: "--lib --bins --test 'attack_g11*'" }
           - { mode: release, k: 15, n: 25, crate: geom-test, targets: "--test 'attack_g10*' --test 'attack_g13*' --test 'attack_g15*' --test 'attack_g16*' --test 'attack_g17*' --test 'attack_g19*' --test 'attack_g2*' --test 'attack_g4*'" }
-          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test '[c-k]*'" }
+          - { mode: release, k: 16, n: 25, crate: geom-test, targets: "--test 'arc_*' --test '[c-k]*'" }
           - { mode: release, k: 17, n: 25, crate: geom-test, targets: "--test 'l*'" }
           - { mode: release, k: 18, n: 25, crate: geom-test, targets: "--test '[m-r]*'" }
           - { mode: release, k: 19, n: 25, crate: geom-test, targets: "--test '[s-z]*'" }

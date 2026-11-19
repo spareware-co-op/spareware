@@ -868,9 +868,12 @@ mod tests {
     /// Every registered predicate: the run-time scale computes exactly the result's scale set
     /// without the monomials the rule leaves out, the last monomial is always kept, and at every
     /// choice of maxima from 0, 1, 2, 3 and 7 (zeros, ties and each group largest in turn) the
-    /// largest kept monomial is the largest of the whole set. Three filters have something to
-    /// leave out: the two cone filters, and `lpi_side`, whose x·y·n1·n2, x·z·n1·n2 and y·z·n1·n2
-    /// are each the average of two of x^2·n1·n2, y^2·n1·n2 and z^2·n1·n2.
+    /// largest kept monomial is the largest of the whole set. Nine filters have something to
+    /// leave out: the two cone filters; `lpi_side`, whose x·y·n1·n2, x·z·n1·n2 and y·z·n1·n2
+    /// are each the average of two of x^2·n1·n2, y^2·n1·n2 and z^2·n1·n2; and six of the 2D
+    /// filters, `circle_line`, `circle_side`, `ellipse_line`, `ellipse_side`, `round_line` and
+    /// `round_rational`, each of whose left-out monomials (named in its generated file) is the
+    /// average of others it keeps.
     #[test]
     fn the_run_time_scale_is_the_whole_sets_largest_value() {
         let mut pruned = Vec::new();
@@ -898,9 +901,15 @@ mod tests {
         assert_eq!(
             pruned,
             [
+                ("circle_line".to_owned(), 7, 4),
+                ("circle_side".to_owned(), 6, 4),
+                ("ellipse_line".to_owned(), 7, 4),
+                ("ellipse_side".to_owned(), 7, 4),
                 ("line_cone".to_owned(), 7, 6),
                 ("line_cone_lead".to_owned(), 6, 3),
-                ("lpi_side".to_owned(), 12, 9)
+                ("lpi_side".to_owned(), 12, 9),
+                ("round_line".to_owned(), 7, 4),
+                ("round_rational".to_owned(), 8, 6)
             ]
         );
     }
