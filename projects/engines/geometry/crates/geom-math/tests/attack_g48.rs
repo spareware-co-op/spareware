@@ -1104,8 +1104,39 @@ fn out_of_range_coordinates_carry_their_exact_value() {
     assert!(far > 50, "only {far} saturated values");
 }
 
-#[test]
-fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
+/// Values at the ends of i128 saturate exactly as documented: one test for the top, one for the
+/// bottom, and one for the frame's edge in each unit (decision 32.78: together they were too long
+/// for one Miri gate part).
+mod values_at_the_ends_of_i128_saturate_exactly_as_documented {
+    #[test]
+    fn at_the_top() {
+        super::ends_of_i128(0);
+    }
+
+    #[test]
+    fn at_the_bottom() {
+        super::ends_of_i128(1);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_metres() {
+        super::ends_of_i128(2);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_us_survey_feet() {
+        super::ends_of_i128(3);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_steps() {
+        super::ends_of_i128(4);
+    }
+}
+
+/// Part `part` of `values_at_the_ends_of_i128_saturate_exactly_as_documented`: 0 the top, 1 the
+/// bottom, 2 to 4 the frame's edge in metres, US survey feet and steps.
+fn ends_of_i128(part: usize) {
     // One unit is one step (1/6,400,000 m at q0), so x = k_d·E exactly in a Ground frame with no
     // rotation and k = 1/k_d. 2^128 − 3 = 76,439·4,451,685,225,093,714,772,084,598,273,548,427 puts
     // x on MAX − 1/2 for k_d = 76,439, whose even neighbour MAX − 1 is reported as it is; and
@@ -1133,7 +1164,7 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
     };
     let out = |value| Err(NumError::OutOfRange { value });
     let top = ground(76_439);
-    for (e, want) in [
+    let tops = [
         ("2225842612546857386042299136774213.5", out(i128::MAX - 1)),
         ("2225842612546857386042299136774213.6", out(i128::MAX)),
         (
@@ -1142,13 +1173,14 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
         ),
         ("2225842612546857386042299136774214", out(i128::MAX)),
         ("1e37", out(i128::MAX)),
-    ] {
+    ];
+    for (e, want) in tops.into_iter().filter(|_| part == 0) {
         let (g, w) = at(&top, e);
         assert_eq!(g, w, "{e}");
         assert_eq!(g, want, "{e}");
     }
     let bottom = ground(u64::MAX);
-    for (e, want) in [
+    let bottoms = [
         ("-9223372036854775808.5", out(i128::MIN)),
         // MAX + 1/2, a tie whose even neighbour MAX + 1 is beyond i128: saturated.
         ("9223372036854775808.5", out(i128::MAX)),
@@ -1158,13 +1190,15 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
         ),
         ("-9223372036854775809", out(i128::MIN)),
         ("1", out(i128::from(u64::MAX))),
-    ] {
+    ];
+    for (e, want) in bottoms.into_iter().filter(|_| part == 1) {
         let (g, w) = at(&bottom, e);
         assert_eq!(g, w, "{e}");
         assert_eq!(g, want, "{e}");
     }
     // One step from the frame's edge either way, in every unit.
-    for unit in [LinearUnit::METRE, LinearUnit::US_SURVEY_FOOT, one_step] {
+    let units = [LinearUnit::METRE, LinearUnit::US_SURVEY_FOOT, one_step];
+    for (_, unit) in units.into_iter().enumerate().filter(|(k, _)| part == 2 + k) {
         let g = FrameRecord::map(NZTM, GridStep::Q0, [5, -7, 11])
             .unwrap()
             .with_linear_unit(unit);

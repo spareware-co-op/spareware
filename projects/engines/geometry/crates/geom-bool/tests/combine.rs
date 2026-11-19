@@ -1142,39 +1142,62 @@ mod a_box_inside_another_unites_cuts_and_meets {
     }
 }
 
-#[test]
-fn three_boxes_whose_union_pinches_at_a_corner_give_a_general_body() {
-    // Each pair shares part of a face, and around (-1, 4, 0) the empty space is two opposite
-    // octants: the union's one shell pinches there, non-manifold (11.6), so it is a general body,
-    // which the checker passes (G130's 857ba44a). United at once or one after another, it is the
-    // same shape.
-    let boxes = [
-        ([-1, 1, -1], [1, 3, 2]),
-        ([-2, 4, -1], [2, 1, 1]),
-        ([-2, 0, 0], [1, 5, 1]),
-    ];
-    let bodies: Vec<Body> = boxes
+/// Each pair shares part of a face, and around (-1, 4, 0) the empty space is two opposite
+/// octants: the union's one shell pinches there, non-manifold (11.6), so it is a general body,
+/// which the checker passes (G130's 857ba44a). United at once or one after another, it is the
+/// same shape. One test each way (decision 32.78: together they were too long for one Miri gate
+/// part): the shape's counts are pinned, and each way is held to them, which is the whole's
+/// "united one after another, the counts of the union at once".
+mod three_boxes_whose_union_pinches_at_a_corner_give_a_general_body {
+    use super::*;
+
+    /// The union's counts, as `counted` gives them (measured from the union at once).
+    const COUNTS: [u32; 4] = [14, 35, 22, 1];
+
+    fn bodies() -> Vec<Body> {
+        [
+            ([-1, 1, -1], [1, 3, 2]),
+            ([-2, 4, -1], [2, 1, 1]),
+            ([-2, 0, 0], [1, 5, 1]),
+        ]
         .iter()
         .map(|(low, size)| cuboid(*low, *size))
-        .collect();
-    let operands: Vec<Operand<'_>> = bodies
-        .iter()
-        .enumerate()
-        .map(|(i, b)| solid(i as u8, b))
-        .collect();
-    let all = unite(&ctx(), &SERIAL, &operands).unwrap().result.body;
-    assert_eq!(
-        (all.kind(), all.arenas().shells.len()),
-        (BodyKind::General, 1)
-    );
-    checked(&all);
-    let two = unite(&ctx(), &SERIAL, &operands[..2]).unwrap().result.body;
-    assert_eq!(two.kind(), BodyKind::Solid);
-    let after = unite(&ctx(), &SERIAL, &[solid(0, &two), solid(2, &bodies[2])])
-        .unwrap()
-        .result
-        .body;
-    assert_eq!(counted(&after), counted(&all));
+        .collect()
+    }
+
+    #[test]
+    fn united_at_once() {
+        let bodies = bodies();
+        let operands: Vec<Operand<'_>> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| solid(i as u8, b))
+            .collect();
+        let all = unite(&ctx(), &SERIAL, &operands).unwrap().result.body;
+        assert_eq!(
+            (all.kind(), all.arenas().shells.len()),
+            (BodyKind::General, 1)
+        );
+        checked(&all);
+        assert_eq!(counted(&all), COUNTS);
+    }
+
+    #[test]
+    fn united_one_after_another() {
+        let bodies = bodies();
+        let operands: Vec<Operand<'_>> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| solid(i as u8, b))
+            .collect();
+        let two = unite(&ctx(), &SERIAL, &operands[..2]).unwrap().result.body;
+        assert_eq!(two.kind(), BodyKind::Solid);
+        let after = unite(&ctx(), &SERIAL, &[solid(0, &two), solid(2, &bodies[2])])
+            .unwrap()
+            .result
+            .body;
+        assert_eq!(counted(&after), COUNTS);
+    }
 }
 
 #[test]
