@@ -46,6 +46,7 @@ use geom_num::NumError;
 use geom_num::arc::Round;
 use geom_num::carrier::Rational2;
 use geom_num::grid::{P2, Steps};
+use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve, Limit, NurbsError};
 use geom_run::{Stopped, WorkMeter};
 
@@ -142,14 +143,15 @@ fn float_point(p: P2) -> Result<F2, FitError> {
     F2::new(coordinate(p.x.get()), coordinate(p.y.get())).map_err(|_| FitError::Numeric)
 }
 
-/// The whole number nearest `x`, ties to even (`geom-num`'s rounding), or `None` past 2^40.
+/// The whole number nearest `x`, ties to even (`geom-num`'s rounding), or `None` past the grid's
+/// largest coordinate, 2^40 - 1.
 #[allow(
     clippy::cast_possible_truncation,
     reason = "the rounded value is checked below 2^40 in size first, so the cast is exact"
 )]
 fn nearest(x: f64) -> Option<i64> {
     let r = geom_num::math::round_ties_even(x).ok()?.get();
-    if r.abs() < 1_099_511_627_776.0 {
+    if r.abs() <= 1_099_511_627_775.0 {
         Some(r as i64)
     } else {
         None
@@ -227,19 +229,23 @@ pub fn fit_spline(
             nearest(c[0]).ok_or(FitError::Range)?,
             nearest(c[1]).ok_or(FitError::Range)?,
         );
+        // Exact, by Sterbenz's lemma: x is the whole number nearest c[0], a double exactly (below
+        // 2^40), so either x is 0 and the difference is c[0] itself, or x has c[0]'s sign and, as
+        // |c[0] - x| <= 1/2 and |x| >= 1, |x| / 2 <= |c[0]| <= 2 |x|, where the difference of two
+        // doubles is exact. Likewise for y.
         let dx = c[0] - coordinate(x);
         let dy = c[1] - coordinate(y);
-        moved = larger(moved, geom_num::math::sqrt(dx * dx + dy * dy)?.get());
+        // The move's certified upper bound, from the enclosure of its length.
+        let length = Interval::norm(&[Interval::point(dx)?, Interval::point(dy)?])?;
+        moved = larger(moved, length.hi());
         control.push(P2::new(x, y)?);
     }
-    // The bound in whole steps: the move and the solve's certified error, rounded up.
-    let total = moved + solved.error;
-    let steps = nearest(total).ok_or(FitError::Range)?;
-    let steps = if coordinate(steps) < total {
-        steps.checked_add(1).ok_or(FitError::Range)?
-    } else {
-        steps
-    };
+    // The bound in whole steps: the move and the solve's certified error, summed with the sum's
+    // certified upper bound, then rounded up.
+    let total = Interval::point(moved)?
+        .add(Interval::point(solved.error)?)?
+        .hi();
+    let steps = nearest(geom_num::math::ceil(total)?.get()).ok_or(FitError::Range)?;
     let deviation = Steps(u64::try_from(steps).map_err(|_| FitError::Range)?);
     if deviation.0 > tolerance.0 {
         return Err(FitError::Tolerance { deviation });
@@ -567,5 +573,6 @@ fn distance_to(arc: &BiarcArc, q: [f64; 2]) -> f64 {
     let norm = |x: f64, y: f64| {
         geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, geom_num::Real::get)
     };
-    norm(qx, qy) - norm(rx, ry)
+    // A distance, so its size: a sample inside the circle is as far from it as one outside.
+    (norm(qx, qy) - norm(rx, ry)).abs()
 }
