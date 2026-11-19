@@ -102,7 +102,8 @@ fn a_line_across_a_torus_whose_axis_rounds_upright_crosses_it_twice() {
     assert_eq!([p, q], [PointContact::Crossing; 2], "{found:?}");
     assert!(first.hi() < second.lo(), "{found:?}");
     let shift = R * (1.0 - a());
-    let half = (256.0 - (40.0 - LIFT * a()).powi(2)).sqrt();
+    let above = 40.0 - LIFT * a();
+    let half = (256.0 - above * above).sqrt();
     assert!(first.contains(shift - half), "{found:?}");
     assert!(second.contains(shift + half), "{found:?}");
 }
