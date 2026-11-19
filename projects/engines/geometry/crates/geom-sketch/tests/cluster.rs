@@ -800,13 +800,14 @@ fn the_largest_flow_and_the_smallest_source_side_of_a_cheapest_cut() {
 
 #[test]
 fn a_flow_that_must_be_taken_back_along_an_arc_is_taken_back() {
-    // The shortest path s 1 2 t fills 2 t; the second unit goes s 3 2, back along 1 2, then 1 4 5 t.
+    // The search tries the arcs last added first, so the shortest path s 1 2 t fills 2 t; the second
+    // unit goes s 3 2, back along 1 2, then 1 4 5 t.
     // Afterwards 1 reaches 2 again through the arc emptied, and from 2 reaches 3 and s backwards.
     let mut n = network(
         7,
         &[
-            (0, 1, 1),
             (0, 3, 1),
+            (0, 1, 1),
             (1, 2, 1),
             (3, 2, 1),
             (2, 6, 1),
@@ -943,5 +944,41 @@ fn a_dense_set_found_around_a_seed_is_cut_down_to_a_minimal_one() {
         );
         assert_eq!(plan.clusters[0].links, [2], "{n}: {plan:?}");
         assert_eq!(plan.clusters[0].redundant, 0, "{n}: {plan:?}");
+    }
+}
+
+#[test]
+fn kabsch_centres_both_sets_before_it_correlates_them() {
+    // A quarter turn of four points with parts of 2^-13, once with the drawn set 10^12 away and once
+    // with the local one. Centred, every product of the correlation is exact and the turn comes
+    // back exactly; uncentred, each product of a coordinate near 2 10^12 rounds, and it would not.
+    let step = 1.0 / 8192.0;
+    let small = [
+        [0.0, 0.0],
+        [2.0 + step, 0.0],
+        [2.0, 1.0 + 3.0 * step],
+        [5.0 * step, 3.0],
+    ];
+    let turn = [[0.0, -1.0], [1.0, 0.0]];
+    let far = 1.0e12;
+    let near: Vec<[f64; 2]> = small.iter().map(|p| [-p[1], p[0]]).collect();
+    for (local, drawn) in [
+        (
+            small.to_vec(),
+            near.iter()
+                .map(|p| [p[0] + far, p[1] - far])
+                .collect::<Vec<_>>(),
+        ),
+        (
+            small.iter().map(|p| [p[0] + far, p[1] + far]).collect(),
+            near.clone(),
+        ),
+    ] {
+        let r = kabsch(&local, &drawn, &mut work()).unwrap();
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!((r.rotation[i][j] - turn[i][j]).abs() < 1e-12, "{r:?}");
+            }
+        }
     }
 }

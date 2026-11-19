@@ -665,18 +665,22 @@ fn tangency_scale_holds(s: &Sketch, x: &[f64], curves: [Curve; 2], point: ItemId
 #[test]
 fn a_tangency_is_scaled_by_its_normals_and_its_curvature_wherever_its_point_is() {
     // The ellipse about (0, 0), axis (10, 0) and minor radius 5, the circle of radius 3 about (0,
-    // 8) and the line from (-20, 5) to (20, 5), each pair tangent at the point 1.2, read with the
-    // point anywhere on a grid around them: the scale's power of two changes across the grid, so
-    // a wrong curvature or size shows somewhere.
-    let (ellipse, circle, line) = (
+    // 8) and the line from (-20, 5) to (20, 5), each pair tangent at the point 1.2; and the
+    // ellipse about (100, 0) with the tilted axis (6, 8) against the circle and the line at the
+    // point 1.6. Each is read with its point anywhere on a grid around it: the scale's power of
+    // two changes across the grid, so a wrong curvature or size shows somewhere.
+    let (ellipse, tilted, circle, line) = (
         Curve::Oval(id(1, 0), id(5, 0)),
+        Curve::Oval(id(1, 5), id(5, 1)),
         Curve::Round(id(1, 10)),
         Curve::Line(id(1, 3), id(1, 4)),
     );
-    for (rule, curves) in [
-        ("tangent-at-point 5.0 3.0 1.2", [ellipse, circle]),
-        ("tangent-at-point 2.0 5.0 1.2", [line, ellipse]),
-        ("tangent-at-point 2.0 3.0 1.2", [line, circle]),
+    for (rule, curves, point) in [
+        ("tangent-at-point 5.0 3.0 1.2", [ellipse, circle], id(1, 2)),
+        ("tangent-at-point 2.0 5.0 1.2", [line, ellipse], id(1, 2)),
+        ("tangent-at-point 2.0 3.0 1.2", [line, circle], id(1, 2)),
+        ("tangent-at-point 5.1 3.0 1.6", [tilted, circle], id(1, 6)),
+        ("tangent-at-point 2.0 5.1 1.6", [line, tilted], id(1, 6)),
     ] {
         let s = with(&[rule]).unwrap();
         let a = Assembly::new(&s).unwrap();
@@ -684,8 +688,8 @@ fn a_tangency_is_scaled_by_its_normals_and_its_curvature_wherever_its_point_is()
         for i in 0..30 {
             for j in 0..30 {
                 let (dx, dy) = (-14.3 + 0.97 * f64::from(i), -11.7 + 0.83 * f64::from(j));
-                let x = moved(&a, &[(id(1, 2), 0, dx), (id(1, 2), 1, dy)]);
-                if tangency_scale_holds(&s, &x, curves, id(1, 2)).is_some() {
+                let x = moved(&a, &[(point, 0, dx), (point, 1, dy)]);
+                if tangency_scale_holds(&s, &x, curves, point).is_some() {
                     read += 1;
                 }
             }
@@ -794,4 +798,24 @@ fn an_ellipse_whose_axis_is_its_minor_radius_has_no_axis_direction() {
             Some(EqualRadii)
         );
     }
+}
+
+#[test]
+fn an_ellipse_of_no_minor_radius_adds_no_curvature_to_a_tangencys_scale() {
+    // Rescaled where the ellipse has no minor radius, it bends nothing: the scale is |na| |nb| times
+    // the circle's curvature alone. At (1, 5) the flat ellipse's normal is (0, 50000) and the
+    // circle's (1, -3): 50000 sqrt(10) / sqrt(10), whose power of two is 32768.
+    let s = with(&["tangent-at-point 5.0 3.0 1.2"]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    let flat = moved(&a, &[(id(5, 0), 2, -5.0), (id(1, 2), 0, 1.0)]);
+    a.rescale(&flat).unwrap();
+    // Read at the same point with the minor radius back at 5, where the row has a value.
+    let x = moved(&a, &[(id(1, 2), 0, 1.0)]);
+    a.evaluate_at(&x).unwrap();
+    let p = [value_in(&a, &x, id(1, 2), 0), value_in(&a, &x, id(1, 2), 1)];
+    let (na, _, _) = curve_at(&a, &x, Curve::Oval(id(1, 0), id(5, 0)), p);
+    let (nb, _, _) = curve_at(&a, &x, Curve::Round(id(1, 10)), p);
+    let cross = na[0] * nb[1] - na[1] * nb[0];
+    let read = cross / *a.residuals().last().unwrap();
+    assert!((read / 32768.0 - 1.0).abs() < 1e-12, "{read}");
 }

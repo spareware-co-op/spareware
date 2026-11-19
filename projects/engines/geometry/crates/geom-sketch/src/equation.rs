@@ -1695,10 +1695,9 @@ fn shape_curvature(shape: Shape, p: [f64; 2], x: [f64; 5]) -> Result<f64, Sketch
     let (dx, dy) = (p[0] - x0, p[1] - x1);
     Ok(match shape {
         Shape::Line => 0.0,
-        Shape::Round => {
-            let r = root(dx * dx + dy * dy)?;
-            if r > 0.0 { 1.0 / r } else { 0.0 }
-        }
+        // At the centre this is infinite, and the scale's product of normals is 0 there, so the
+        // scale is not positive and is 1, as it would be with no curvature.
+        Shape::Round => 1.0 / root(dx * dx + dy * dy)?,
         Shape::Oval => {
             let a2 = x2 * x2 + x3 * x3;
             let a = root(a2)?;

@@ -158,18 +158,19 @@ pub fn kabsch<const N: usize>(
     let svd = Svd::jacobi(&Matrix::from_rows(N, N, &h)?, work)?;
     // R0 = V Uᵀ; its determinant decides the sign of the last column of V.
     let (u, v) = (svd.u(), svd.v());
-    let product = |flip: f64| -> Result<Vec<f64>, SketchError> {
+    // With `flip`, the last column of V, the smallest singular value's, is turned the other way.
+    let product = |flip: bool| -> Result<Vec<f64>, SketchError> {
         let mut r = alloc::vec![0.0; cells];
         for i in 0..N {
             for j in 0..N {
                 let mut sum = 0.0;
                 for k in 0..N {
-                    let scale = if k.checked_add(1) == Some(N) {
-                        flip
+                    let term = v.get(i, k)? * u.get(j, k)?;
+                    sum += if flip && k.checked_add(1) == Some(N) {
+                        -term
                     } else {
-                        1.0
+                        term
                     };
-                    sum += v.get(i, k)? * scale * u.get(j, k)?;
                 }
                 let at = i.checked_mul(N).and_then(|row| row.checked_add(j));
                 *at.and_then(|k| r.get_mut(k)).ok_or(SketchError::Internal)? = sum;
@@ -177,9 +178,9 @@ pub fn kabsch<const N: usize>(
         }
         Ok(r)
     };
-    let plain = product(1.0)?;
+    let plain = product(false)?;
     let r = if reflects::<N>(&plain, work)? {
-        product(-1.0)?
+        product(true)?
     } else {
         plain
     };
