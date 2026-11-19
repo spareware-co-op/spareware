@@ -1,6 +1,7 @@
 //! Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line
-//! segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, and how far a
-//! grid point lies from a circle's end. Never sampled.
+//! segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, how far an
+//! ellipse can lie from a plane or cylinder, and how far a grid point lies from a circle's or an
+//! ellipse's end. Never sampled.
 //!
 //! What it does: [`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each
 //! check bounds a distance from above and compares it with the body's bound b. With w = p − c,
@@ -44,6 +45,25 @@
 //! meridian's normal, which moves a unit vector at most 2·sin(β/2) ≤ 2·sin β. A torus takes the
 //! smaller of its two families' bounds, each valid for any circle.
 //!
+//! An ellipse p(t) = c + cos πt·u + sin πt·v (its semi-axes on a frame, u = a·x̂ and v = b·ŷ, or
+//! any conjugate pair) is bounded in closed form, with no ideal curve between:
+//!
+//! | Kind | Bound on every point's distance |
+//! | --- | --- |
+//! | plane | (\|(c − o) · n\| + √((u · n)² + (v · n)²)) / \|n\|, the largest of the affine distance (a circle's is the case u = r·x̂, v = r·ŷ) |
+//! | cylinder of radius R | δ + max(\|A − R\|, \|B − R\|), δ the centre's distance from the axis |
+//!
+//! On the cylinder, (p − C) × n̂ = (c − C) × n̂ + cos πt·X + sin πt·Y with X = u × n̂ and
+//! Y = v × n̂, so a point's distance from the axis is within δ of |cos πt·X + sin πt·Y|, the
+//! radius of the ellipse's shadow across the axis, which runs over [B, A] for its semi-axes
+//! A = √(m + s) and B = |X × Y| / A, where m = (|X|² + |Y|²) / 2 and
+//! s = √(((|X|² − |Y|²) / 2)² + (X · Y)²) (the extremes of |X|² cos² + |Y|² sin² + 2 X · Y cos sin,
+//! whose product is |X × Y|²). The distance from the cylinder is |ρ − R|, so every point lies
+//! within δ + max(|A − R|, |B − R|) of it: 0 exactly when the centre is on the axis and the
+//! shadow is the circle of radius R, as for every plane's cut of the cylinder. A cone (whose
+//! radius changes along the height the ellipse spans), a sphere and a torus have no such bound
+//! here: an ellipse on one is not certified, and group 2 says so, never that it is off.
+//!
 //! Guarantees:
 //!
 //! - **Upper bounds, certified.** Every distance is bounded from above in interval arithmetic that
@@ -52,8 +72,10 @@
 //!   (`geom_num::Interval::{sinpi, cospi}`).
 //! - **Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a
 //!   torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex
-//!   exactly at the bound passes and one a step beyond fails. A circle's points come from `sinpi`
-//!   and `cospi`, which widen by a step even where exact: its checks hold to that step.
+//!   exactly at the bound passes and one a step beyond fails; so is an ellipse whose centre and
+//!   vectors are exact doubles on such a plane or cylinder. A circle's and an ellipse's points
+//!   come from `sinpi` and `cospi`, which widen by a step even where exact: their ends' checks
+//!   hold to that step.
 //! - **Fails closed.** A value that cannot be enclosed, a cone point whose radius may be negative,
 //!   a torus that is not a ring, a surface kind without a closed form here: not certified, never
 //!   passed.
@@ -65,9 +87,11 @@
 //! <https://doi.org/10.1137/1.9780898717716>), for chapter 8.3's group 2
 //! (`projects/engines/geometry/architecture/08-topology.md`).
 //!
-//! Cost: a few dozen interval operations per check; no loop. Recursion: none.
+//! Cost: a few dozen interval operations per check (an ellipse about 40 on a plane, about 95 with
+//! three more square roots on a cylinder, about 30 with a certified sine and cosine at an end);
+//! no loop. Recursion: none.
 
-use geom_curve::{Circle, Frame, Line, ParamCurve, tight};
+use geom_curve::{Axes, Circle, Ellipse, Frame, Line, ParamCurve, tight};
 use geom_num::P3;
 use geom_num::interval::Interval;
 use geom_topo::SurfaceKind;
@@ -198,6 +222,21 @@ impl Carrier {
         self.circle_bound(circle).is_some_and(|d| d <= b)
     }
 
+    /// Whether every point of `ellipse` lies within `b` steps of the surface: `None` on a surface
+    /// that has no certified test of an ellipse (a cone, a sphere, a torus).
+    pub(crate) fn holds_ellipse(&self, ellipse: &Ellipse<3>, b: f64) -> Option<bool> {
+        let bound = match self {
+            Carrier::Flat { origin, normal } => {
+                Oval::of(ellipse).and_then(|e| e.flat(*origin, *normal))
+            }
+            Carrier::Round(cylinder) if tight::magnitude(cylinder.slope) == 0.0 => {
+                Oval::of(ellipse).and_then(|e| e.round(cylinder))
+            }
+            Carrier::Round(_) | Carrier::Ball { .. } | Carrier::Ring(_) => return None,
+        };
+        Some(bound.is_some_and(|d| d <= b))
+    }
+
     /// Whether the enclosed point `q` lies within `b` steps of the surface.
     fn holds(&self, q: V3, b: f64) -> bool {
         match self {
@@ -247,6 +286,86 @@ impl Carrier {
             },
         }
     }
+}
+
+/// An ellipse as group 2 measures it: its centre and the two vectors of its parameter,
+/// c + cos πt·u + sin πt·v, enclosed (module documentation).
+struct Oval {
+    center: V3,
+    u: V3,
+    v: V3,
+}
+
+impl Oval {
+    /// `ellipse`'s vectors: a·x̂ and b·ŷ on its frame's exact unit vectors, or the vectors stored.
+    fn of(ellipse: &Ellipse<3>) -> Option<Oval> {
+        let (first, second) = match ellipse.axes() {
+            Axes::Frame {
+                frame,
+                a: along,
+                b: across,
+            } => {
+                let (_, [x_hat, y_hat, _]) = frame.unit_vectors().ok()?;
+                (scale(at(along)?, x_hat)?, scale(at(across)?, y_hat)?)
+            }
+            Axes::Vectors {
+                u: first,
+                v: second,
+            } => (lift(first)?, lift(second)?),
+        };
+        Some(Oval {
+            center: lift(ellipse.center())?,
+            u: first,
+            v: second,
+        })
+    }
+
+    /// The enclosure of the point at parameter `t`, in half-turns.
+    fn point(&self, t: f64) -> Option<V3> {
+        let turn = at(t)?;
+        let along = scale(turn.cospi().ok()?, self.u)?;
+        let across = scale(turn.sinpi().ok()?, self.v)?;
+        add3(self.center, add3(along, across)?)
+    }
+
+    /// An upper bound on every point's distance from the plane through `origin` with `normal`:
+    /// (|(c − o) · n| + √((u · n)² + (v · n)²)) / |n|, the largest of the affine distance.
+    fn flat(&self, origin: V3, normal: V3) -> Option<f64> {
+        let off = dot(sub3(self.center, origin)?, normal)?;
+        let tilt = length([dot(self.u, normal)?, dot(self.v, normal)?, at(0.0)?])?;
+        let reach = plus(at(tight::magnitude(off))?, tilt)?;
+        Some(tight::magnitude(divide(reach, length(normal)?)?))
+    }
+
+    /// An upper bound on every point's distance from `cylinder`: δ + the larger of |A − R| and
+    /// |B − R|, A ≥ B the semi-axes of the ellipse's shadow across the axis (module
+    /// documentation).
+    fn round(&self, cylinder: &Cone) -> Option<f64> {
+        let (_, delta) = polar(cylinder.center, cylinder.axis, self.center)?;
+        let (x, y) = (cross(self.u, cylinder.axis)?, cross(self.v, cylinder.axis)?);
+        let (xx, yy, xy) = (dot(x, x)?, dot(y, y)?, dot(x, y)?);
+        let two = at(2.0)?;
+        let mean = divide(plus(xx, yy)?, two)?;
+        let half = divide(minus(xx, yy)?, two)?;
+        let spread = length([half, xy, at(0.0)?])?;
+        let long = tight::sqrt(plus(mean, spread)?).ok()?;
+        let short = divide(length(cross(x, y)?)?, long)?;
+        let r = at(cylinder.radius)?;
+        let off = tight::larger(
+            tight::magnitude(minus(long, r)?),
+            tight::magnitude(minus(short, r)?),
+        );
+        upper(&[delta, at(off)?])
+    }
+}
+
+/// Whether grid point `p` lies within `b` steps of `ellipse`'s point at parameter `t`.
+pub(crate) fn at_ellipse_end(ellipse: &Ellipse<3>, t: f64, p: P3, b: f64) -> bool {
+    Oval::of(ellipse)
+        .and_then(|e| e.point(t))
+        .zip(grid(p))
+        .and_then(|(q, v)| length(sub3(q, v)?))
+        .is_some_and(|d| fits(d, b))
 }
 
 /// Whether grid point `p` lies within `b` steps of `circle`'s point at parameter `t`.

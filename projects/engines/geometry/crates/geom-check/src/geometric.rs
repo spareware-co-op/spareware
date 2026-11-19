@@ -4,10 +4,11 @@
 //! What it does: [`check`] walks the faces, fins and edges in row order. A face's surface is a
 //! plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is
 //! reported as [`FaultKind::Unchecked`], never passed (8.3: "certified with bounds, not sampled").
-//! For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or
-//! circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An
-//! edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three
-//! planes meet must have three that do meet ([`FaultKind::MeetSingular`]).
+//! For each fin, the vertex it starts at must lie on its face's surface, and its edge's line,
+//! circle or ellipse on that surface; for each edge, its vertices must lie at its curve's ends. An
+//! edge on another kind of curve, an ellipse on a surface other than a plane or a cylinder, and a
+//! fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do
+//! meet ([`FaultKind::MeetSingular`]).
 //!
 //! The bound: the body's [`Exactness`] record, in the steps of its coordinates (a vertex is a whole
 //! number of grid steps, and the curves and surfaces are doubles in the same units, chapter 6.1):
@@ -28,10 +29,12 @@
 //!   determinant within 384 bits (6.3, 8.3). A line with such an end is only a shadow of the edge,
 //!   which is the two planes it lies on: the vertices decide what the edge lies on, and the line's
 //!   end must be within a step of the vertex rounded to the grid, or of the body's bound.
-//! - **Certified on lines and curved carriers.** Every other distance is a certified upper bound
-//!   (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the
-//!   doubles are), so a vertex exactly on the bound passes where the data are exact and one a step
-//!   beyond fails.
+//! - **Certified on lines, conics and curved carriers.** Every other distance is a certified upper
+//!   bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact
+//!   where the doubles are), so a vertex exactly on the bound passes where the data are exact and
+//!   one a step beyond fails. An ellipse is bounded on a plane and on a cylinder in closed form,
+//!   as a circle is, and its ends by certified sines and cosines; an ellipse on a cone, sphere or
+//!   torus is `Unchecked` on that face, never passed and never called off it.
 //! - **Fails closed.** Every comparison whose operands cannot be formed (a value out of its range,
 //!   an overflow, a cone past its apex) is a fault, never a pass.
 //! - **No sampling, nothing allocated.** Each check is an exact predicate or one interval
@@ -44,11 +47,12 @@
 //! M. J. Cloud, *Introduction to Interval Analysis*, SIAM 2009,
 //! <https://doi.org/10.1137/1.9780898717716>).
 //!
-//! Cost: linear in faces, fins and edges, one meter unit each; constant work per row; nothing
-//! allocated. Recursion: none.
+//! Cost: linear in faces, fins and edges, one meter unit each; constant work per row (an
+//! ellipse's place on a face and its two ends are each a closed form of at most about a hundred
+//! interval operations, `crate::curved`); nothing allocated. Recursion: none.
 
 use geom_curve::tight;
-use geom_curve::{Circle, Line, ParamCurve};
+use geom_curve::{Circle, Ellipse, Line, ParamCurve};
 use geom_num::interval::Interval;
 use geom_num::plane::{Plane as GridPlane, Tpi};
 use geom_num::wide::I320;
@@ -111,15 +115,24 @@ pub(crate) fn check(
                 Fault::at(FaultKind::VertexOffSurface, Entity::Vertex(v)).with(Entity::Face(face)),
             );
         }
-        // Every fin of a published body names its edge: the filter decides, not the lookup.
-        fin_edge(a, n)
-            .filter(|&e| !edge_on(a, e, &on, b, limit))
-            .into_iter()
-            .for_each(|e| {
-                sink.push(
+        // Every fin of a published body names its edge: the test decides, not the lookup.
+        if let Some(e) = fin_edge(a, n) {
+            match edge_on(a, e, &on, b, limit) {
+                Some(true) => {}
+                Some(false) => sink.push(
                     Fault::at(FaultKind::EdgeOffSurface, Entity::Edge(e)).with(Entity::Face(face)),
-                );
-            });
+                ),
+                None => {
+                    let curve = a
+                        .edges
+                        .curve
+                        .get(e)
+                        .copied()
+                        .map_or(Entity::Edge(e), Entity::Curve);
+                    sink.push(Fault::at(FaultKind::Unchecked, curve).with(Entity::Face(face)));
+                }
+            }
+        }
     }
     for e in rows::<Edge>(a.rows(Arena::Edge)) {
         sink.charge()?;
@@ -151,6 +164,7 @@ pub(crate) fn check(
 pub(crate) enum Ends<'c> {
     Line(&'c Line<3>),
     Circle(&'c Circle<3>),
+    Ellipse(&'c Ellipse<3>),
 }
 
 impl<'c> Ends<'c> {
@@ -159,6 +173,7 @@ impl<'c> Ends<'c> {
         match curve? {
             CurveKind::Line(line) => Some(Ends::Line(line)),
             CurveKind::Circle(circle) => Some(Ends::Circle(circle)),
+            CurveKind::Ellipse(ellipse) => Some(Ends::Ellipse(ellipse)),
             _ => None,
         }
     }
@@ -168,6 +183,7 @@ impl<'c> Ends<'c> {
         match self {
             Ends::Line(line) => line.domain(),
             Ends::Circle(circle) => circle.domain(),
+            Ends::Ellipse(ellipse) => ellipse.domain(),
         }
     }
 
@@ -176,6 +192,7 @@ impl<'c> Ends<'c> {
         match self {
             Ends::Line(line) => on_line(line.origin(), line.direction(), t, p, b),
             Ends::Circle(circle) => curved::at_circle_end(circle, t, p, limit),
+            Ends::Ellipse(ellipse) => curved::at_ellipse_end(ellipse, t, p, limit),
         }
     }
 
@@ -247,7 +264,8 @@ impl Surface {
     pub(crate) fn holds_face(&self, a: &Arenas, face: Ix<Face>) -> bool {
         face_fins(a, face).all(|n| {
             let vertex = fin_ends(a, n).is_none_or(|(v, _)| self.holds_vertex(a, v, 0, 0.0));
-            let edge = fin_edge(a, n).is_some_and(|e| edge_on(a, e, self, 0, 0.0));
+            let edge =
+                fin_edge(a, n).is_some_and(|e| matches!(edge_on(a, e, self, 0, 0.0), Some(true)));
             [vertex, edge] == [true; 2]
         })
     }
@@ -310,15 +328,17 @@ pub(crate) fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface
 }
 
 /// Whether edge `e`'s curve lies within `b` steps (`limit` as a double) of `on`: a line as
-/// [`Surface::holds_line`] says, a circle by its certified bound; any other curve is the edge rows'
-/// to report unchecked, so it is not reported again here. A straight edge with an end where three
-/// planes meet lies on a plane exactly when its ends do, and the fins' vertices are tested already.
-fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Surface, b: u64, limit: f64) -> bool {
+/// [`Surface::holds_line`] says, a circle and an ellipse by their certified bounds; `None` for an
+/// ellipse on a surface with no certified test of one. Any other curve is the edge rows' to report
+/// unchecked, so it is not reported again here. A straight edge with an end where three planes
+/// meet lies on a plane exactly when its ends do, and the fins' vertices are tested already.
+fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Surface, b: u64, limit: f64) -> Option<bool> {
     match Ends::of(a.edges.curve.get(e).and_then(|c| a.curves.get(*c))) {
-        Some(Ends::Line(_)) if implicit_end(a, e) => true,
-        Some(Ends::Line(line)) => on.holds_line(line, b, limit),
-        Some(Ends::Circle(circle)) => on.carrier.holds_circle(circle, limit),
-        None => true,
+        Some(Ends::Line(_)) if implicit_end(a, e) => Some(true),
+        Some(Ends::Line(line)) => Some(on.holds_line(line, b, limit)),
+        Some(Ends::Circle(circle)) => Some(on.carrier.holds_circle(circle, limit)),
+        Some(Ends::Ellipse(ellipse)) => on.carrier.holds_ellipse(ellipse, limit),
+        None => Some(true),
     }
 }
 
