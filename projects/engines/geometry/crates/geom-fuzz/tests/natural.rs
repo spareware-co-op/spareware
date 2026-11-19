@@ -26,9 +26,13 @@ mod common;
 
 use common::holds;
 
-use geom_fuzz::natural::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness, work_of};
+use geom_fuzz::natural::{
+    Case, Drawn, MAX_INPUT_BYTES, answer_of, check, decode, harness, work_of,
+};
 use geom_fuzz::seeded;
+use geom_intersect::Item;
 use geom_test::Seed;
+use geom_test::golden::{hex, sha256};
 
 /// Random byte strings per `cargo test` run of the bolero leg.
 const ITERATIONS: usize = 300;
@@ -116,15 +120,12 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
 /// - a sphere against a cylinder about a line through its centre, whose end circle is a great
 ///   circle of the sphere: no closed form places a circle on a sphere (19,090 of 19,133);
 /// - a cone against a plane that holds its axis, an edge of the plane passing through the apex,
-///   where the line meets the cone at one point that is no simple root (483,244 of 484,099);
-/// - two cones about one line on the axis off the grid, no edge of either on the other: an end
-///   circle in the plane of the other's apex is clear of that cone by 150, and the engine takes
-///   353,774 and 441,124 units to say so (800,571 in all).
+///   where the line meets the cone at one point that is no simple root (483,244 of 484,099).
 ///
 /// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
 /// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
 /// stop's count is the budget's own, which no test can hold tighter.
-const STILL_THE_ENGINES: [(&[u8], u128); 3] = [
+const STILL_THE_ENGINES: [(&[u8], u128); 2] = [
     (
         &[
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
@@ -136,12 +137,6 @@ const STILL_THE_ENGINES: [(&[u8], u128); 3] = [
             0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
         ],
         484_099,
-    ),
-    (
-        &[
-            0x03, 0x2d, 0x3c, 0x00, 0x09, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x09, 0x03, 0x00,
-        ],
-        800_571,
     ),
 ];
 
@@ -189,6 +184,128 @@ const AN_EDGE_IN_A_PLANE_OFF_THE_GRID: [(&[u8], u128); 1] = [(
     ],
     60,
 )];
+
+/// Issue 995's group 3, stored in the target's `crashes` folder: two cones of slope 2 on parallel,
+/// distinct axes along (0.6, 0.8, 0), each end circle of one (radius 344 to 856) taken against
+/// the other, with the work one call of `natural` takes on it now and the curves of its answer.
+/// The engine ran round each circle, 258,258 to 1,759,429 units a circle for nothing or two
+/// points: 4,151,095, 4,193,766, 3,736,405, 3,748,566 and 3,106,700 units a call. A circle across
+/// a parallel axis is now its plane past the domain, or two circles in one plane told apart or
+/// crossing by enclosures (decision 32.86): 1,377 units a call, and 3,984 where two circles each
+/// cross at two points (648 units a circle, its box in space for each point). Where nothing is
+/// found the answer is the same in every field but the work; where points are, each crossing's box
+/// lies inside the engine's, and the curves' ends, cut at those boxes' middles, move by under 4e-10.
+///
+/// The last is issue 974's input of two cones about one line on the axis off the grid, once on
+/// the engine's list: an end circle in the plane of the other's apex, clear of that cone by 150,
+/// took the engine 353,774 and 441,124 units (800,571 in all). The circle `quadrics::edges` builds
+/// stands a rounding off that plane, where the cut is a circle about the axis that an enclosure
+/// holds clear of zero, and two circles about one centre of radii apart meet nothing: 1,697.
+const ENDS_ACROSS_A_PARALLEL_CONE: [(&[u8], u128, usize); 6] = [
+    (
+        &[
+            0x33, 0x0b, 0x00, 0xfe, 0xff, 0xff, 0x0e, 0xff, 0xff, 0xff, 0xff, 0x00, 0x6b, 0xff,
+        ],
+        1_377,
+        1,
+    ),
+    (
+        &[
+            0x7f, 0x03, 0x00, 0x00, 0x80, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xba, 0x03, 0xff,
+        ],
+        1_377,
+        1,
+    ),
+    (
+        &[
+            0x2b, 0x03, 0xe6, 0xf6, 0xd8, 0x03, 0xf6, 0xe7, 0xe7, 0xe7, 0xe7, 0xe7, 0x03, 0xf6,
+            0xe7, 0xe7, 0xe7,
+        ],
+        1_377,
+        1,
+    ),
+    (
+        &[
+            0x93, 0x03, 0x00, 0x03, 0x02, 0xff, 0x2f, 0x4b, 0x41, 0xff, 0xfe, 0xff, 0xff, 0xf7,
+        ],
+        3_984,
+        2,
+    ),
+    (
+        &[
+            0x63, 0x33, 0xb7, 0x33, 0xb7, 0xff, 0xff, 0xff, 0x7f, 0xb7, 0xd4, 0xb4, 0x6b, 0xff,
+        ],
+        3_984,
+        2,
+    ),
+    (
+        &[
+            0x03, 0x2d, 0x3c, 0x00, 0x09, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x09, 0x03, 0x00,
+        ],
+        1_697,
+        1,
+    ),
+];
+
+#[test]
+fn an_end_circle_across_a_parallel_cone_costs_a_closed_form() {
+    for (data, most, curves) in ENDS_ACROSS_A_PARALLEL_CONE {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        assert!(work <= most, "{work} units, over {most}, on {data:02x?}");
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let items = answer.items();
+        assert!(
+            items.len() == curves && items.iter().all(|i| matches!(i, Item::Curve { .. })),
+            "{items:?} on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
+
+/// Issue 995's group R, stored in the target's `crashes` folder: two cones of slope 2 on parallel
+/// axes along (0.6, 0.8, 0), of start radius 224 and 0, whose centres differ by 8 square to the
+/// axis, so each end circle lies in the plane of an end of the other's domain. The other cone cuts
+/// that plane in a circle of radius 600, 8 from the end circle of radius 376 or 824: one inside the
+/// other, apart by 216. 32.86 left a plane whose enclosure reaches an end to the engine, which ran
+/// round each of the four circles for nothing: 460,442 to 942,607 units a circle, 2,756,742 a call.
+/// Two circles apart for every height the plane's enclosure holds now meet nothing at an end too:
+/// 1,377 units a call.
+///
+/// With it, the SHA-256 of the Debug text of the answer's items, coverage and diagnostics, every
+/// field but its work, taken on the engine's answer before that change: the answer is the same.
+const ENDS_IN_THE_PLANE_OF_AN_END: [(&[u8], u128, &str); 1] = [(
+    &[
+        0x73, 0xff, 0xff, 0xff, 0xdf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfd, 0xdf, 0x3f, 0xce,
+    ],
+    1_377,
+    "677f58ccfc1d3e64b339aba50ee9418553d9c0c7a233bd8d78ae9dab7e5b0ea6",
+)];
+
+#[test]
+fn an_end_circle_in_the_plane_of_the_others_end_costs_a_closed_form() {
+    for (data, most, digest) in ENDS_IN_THE_PLANE_OF_AN_END {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let text = format!(
+            "{:?} {:?} {:?}",
+            answer.items(),
+            answer.coverage(),
+            answer.diagnostics()
+        );
+        let said = hex(sha256(text.as_bytes()));
+        assert!(
+            work <= most && said == digest,
+            "{work} units (at most {most}), answer {said}, on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
 
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {

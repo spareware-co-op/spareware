@@ -43,7 +43,9 @@
 //! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840). An end circle
 //! about a line through a sphere's centre that stands off the sphere meets nothing by one exact
 //! sign (decision 32.74: 23 units a call where the engine took 782,683 for a gap of 0.002).
-//! Where the signs
+//! An end circle across the axis of another cylinder or cone parallel to its own meets it where
+//! it meets the circle that surface cuts in its plane (decision 32.86: 1,377 to 3,984 units a
+//! call where the engine took 3,106,700 to 4,193,766 for four such circles). Where the signs
 //! cannot place an edge (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
 //! sphere's latitude; a round domain short of a whole turn; a plane whose vectors run off the
 //! coordinate axes, or whose domain holds a lone point of the circle) it costs the

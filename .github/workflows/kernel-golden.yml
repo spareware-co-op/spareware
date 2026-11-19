@@ -134,9 +134,12 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
       - name: The store against the repository
         run: cargo run --locked -p geom-test --bin golden -- check
       - name: Every moved answer carries its record in the store
@@ -192,6 +195,8 @@ jobs:
           # Only main saves the cache, as in the job above: each pull request saved its own copy
           # (199 MB for pull request 980), in the repository's 10 GB with main's.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Named without the runner image's own compilers (decision 32.90).
+          add-rust-environment-hash-key: false
       - name: Every fixture holds its rules
         run: cargo run --locked -p geom-test --bin fixture -- check
       # The intersection harness (12.17; piece G160): the ceilings keep 12.17's rules, and every case

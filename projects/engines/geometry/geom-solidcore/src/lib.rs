@@ -9,50 +9,68 @@
 //! Invariants this crate keeps:
 //!
 //! - No solidcore type appears in this crate's public interface: a [`Solid`] holds solidcore's
-//!   body privately, and every answer is given in plain coordinates and numbers.
+//!   body privately and gives the kernel's own, a `geom_topo::Body`; operations take grid points
+//!   and lengths of the frame (`geom_num::P3`, `geom_num::Steps`) on the [`Modeller`]'s step.
 //! - Operands are never consumed or changed: solidcore's operations take their operands by value
 //!   and modify them, so each operation is handed copies made by solidcore's own `brep_copy`.
-//! - Every body that comes back is checked before it is returned, and a body that fails the check
-//!   is an [`Error::CheckFailed`], never a silent answer.
+//! - Every body that comes back is converted into `geom-topo`'s rows and checked by `geom-check`
+//!   at its full level before it is returned ([`convert`]); a body that fails the check, or that
+//!   holds what has no kernel kind, is an [`Error`], never an answer. solidcore's own validity
+//!   check (SMLib's `AssertValid`, at its first level) runs first, as before.
 //! - Flat-faced booleans stay on the kernel's exact `geom-bool`; nothing calls this crate in their
 //!   place (decision 32.70).
 //!
-//! Sections: 11, 12 and 29 of the kernel architecture, and decision 32.70
+//! Sections: 8, 11, 12 and 29 of the kernel architecture, and decision 32.70
 //! (`projects/engines/geometry/architecture/`).
 //!
-//! What it does: a [`Modeller`] owns one solidcore kernel. It makes the four primitives the stored
-//! cases need ([`Modeller::cuboid`], [`Modeller::sphere`], [`Modeller::cylinder`],
-//! [`Modeller::cone`]), the three booleans ([`Modeller::union`], [`Modeller::difference`],
-//! [`Modeller::intersection`]), a solid cut by a plane ([`Modeller::plane_section`]) and two
-//! solids met ([`Modeller::meet`]), and reads a solid's volume and face count.
+//! What it does: a [`Modeller`] owns one solidcore kernel and one grid step. It makes the four
+//! primitives the stored cases need ([`Modeller::cuboid`], [`Modeller::sphere`],
+//! [`Modeller::cylinder`], [`Modeller::cone`]), the extrusion of a plane profile with holes by a
+//! vector of whole steps ([`Modeller::extrude`], chapter 13.4's Extrude with distance ends and no
+//! taper), the three booleans ([`Modeller::union`],
+//! [`Modeller::difference`], [`Modeller::intersection`]), a solid cut by a plane
+//! ([`Modeller::plane_section`]) and two solids met ([`Modeller::meet`]), and reads a solid's
+//! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
+//! of whole steps becomes the f64 nearest its decimal value ([`convert::to_metres`]).
 //!
-//! The check today is solidcore's own validity check (SMLib's `AssertValid`, at its first level):
-//! the conversion of solidcore's bodies into `geom-topo`'s, so that `geom-check` can check them, is
-//! not built yet (decision 32.70, what is not yet shown).
+//! Not yet the kernel's: the meeting curves and plane sections are solidcore's curves, read by
+//! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
+//! role (chapter 20) yet.
 //!
 //! Method: solidcore at commit cb9bee4bb9f56880c9973a9f8e99c83fdec24ad3 of the project's fork of
-//! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's.
+//! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's. Its record of a body is written
+//! by its own `solidcore-convert` and read here.
 //!
-//! Cost: solidcore's, for each operation, plus one copy of each operand and one validity check of
-//! each result. Recursion: solidcore's own, bounded by its README's 8 MiB stack (the workspace's
-//! `.cargo/config.toml`).
+//! Cost: solidcore's, for each operation, plus one copy of each operand, one validity check, one
+//! record, one conversion and one full check of each result. Recursion: solidcore's own, bounded
+//! by its README's 8 MiB stack (the workspace's `.cargo/config.toml`).
 //!
 //! SPDX-License-Identifier: Apache-2.0
 
+pub mod convert;
+
 use std::fmt;
 
+use geom_num::{GridStep, P3, Steps};
+use geom_topo::Body;
 use solidcore::boolean::api_brep::{boolean_difference, boolean_intersection, boolean_union};
 use solidcore::curve::curve::Curve;
+use solidcore::geom::axis2_placement::Axis2Placement;
 use solidcore::intersect::api_intersectors::{
     BrepOperands, intersect_brep_with_plane, intersect_breps,
 };
 use solidcore::mass::integrator::properties::brep_volume_default;
+use solidcore::nurbs::b_spline_curve::p1::{BSplineCurve, NurbCircleParam};
+use solidcore::primitive::api_curves::create_line_segment;
 use solidcore::primitive::api_primitives::{
     create_box, create_cone, create_cylinder, create_sphere,
 };
+use solidcore::sweep::api_brep::create_linear_sweep;
 use solidcore::topology::brep::p3::brep_copy;
 use solidcore::topology::brep::validation::{CheckLevel, check_brep};
 use solidcore::{Brep, Kernel, KernelOptions, Point3, SolidError, Vec3};
+
+use crate::convert::{Refusal, metres, to_metres};
 
 /// The relative accuracy the volume integral is asked for: solidcore's integrator stops when its
 /// estimate is within this of the true volume.
@@ -68,12 +86,28 @@ pub enum Error {
         /// solidcore's message.
         reason: String,
     },
-    /// solidcore returned a body that fails the check this crate runs on every result.
+    /// solidcore returned a body that fails a check this crate runs on every result: its own
+    /// validity check, or the kernel's checker on the converted body.
     CheckFailed {
         /// The operation, by this crate's name for it.
         operation: &'static str,
         /// What the check reported.
         report: String,
+    },
+    /// solidcore returned a body that holds what has no row or kind in the kernel.
+    Unconverted {
+        /// The operation, by this crate's name for it.
+        operation: &'static str,
+        /// What has no row or kind, by name.
+        what: String,
+    },
+    /// The input is not one the operation takes, decided by this crate before solidcore is
+    /// reached.
+    Invalid {
+        /// The operation, by this crate's name for it.
+        operation: &'static str,
+        /// What is wrong with the input.
+        what: String,
     },
 }
 
@@ -86,16 +120,118 @@ impl fmt::Display for Error {
             Error::CheckFailed { operation, report } => {
                 write!(f, "{operation}: the result failed its check: {report}")
             }
+            Error::Unconverted { operation, what } => {
+                write!(
+                    f,
+                    "{operation}: the result holds {what}, which the kernel has no kind for"
+                )
+            }
+            Error::Invalid { operation, what } => {
+                write!(f, "{operation}: not an input it takes: {what}")
+            }
         }
     }
 }
 
 impl std::error::Error for Error {}
 
-/// A solid made by solidcore, held privately.
+/// A solid made by solidcore and checked as the kernel's body.
 #[derive(Debug)]
 pub struct Solid {
     brep: Brep,
+    body: Body,
+    /// The centre and radius the modeller made the solid with, when it is a ball.
+    ball: Option<(P3, Steps)>,
+}
+
+impl Solid {
+    /// The kernel's body of the solid, which `geom-check` passed.
+    #[must_use]
+    pub fn body(&self) -> &Body {
+        &self.body
+    }
+}
+
+/// Whether the balls of centre `a` and `b` and radius `ra` and `rb` (grid points and steps) have
+/// spheres that meet nowhere, decided exactly in whole numbers: the centres' squared distance is
+/// past the squared sum of the radii (apart), or short of the squared difference (one inside the
+/// other, concentric included). Touching, crossing and one sphere twice are not apart. Every
+/// coordinate is under 2^40 steps and a radius under 2^41, so each square and sum fits an i128;
+/// past that the answer is `false`, never a guess.
+fn spheres_apart((a, ra): (P3, Steps), (b, rb): (P3, Steps)) -> bool {
+    let apart = || -> Option<bool> {
+        let d = |p: geom_num::Coord, q: geom_num::Coord| {
+            let t = i128::from(p.get()).checked_sub(i128::from(q.get()))?;
+            t.checked_mul(t)
+        };
+        let dd = d(a.x, b.x)?
+            .checked_add(d(a.y, b.y)?)?
+            .checked_add(d(a.z, b.z)?)?;
+        let (ra, rb) = (i128::from(ra.0), i128::from(rb.0));
+        let sum = ra.checked_add(rb)?;
+        let diff = ra.checked_sub(rb)?;
+        Some(dd > sum.checked_mul(sum)? || dd < diff.checked_mul(diff)?)
+    };
+    apart().unwrap_or(false)
+}
+
+/// One hole of a [`Profile`], in the profile's plane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Hole {
+    /// A polygon of grid points, in order either way round.
+    Polygon(Vec<P3>),
+    /// The circle of `radius` about the grid point `centre`.
+    Circle {
+        /// The circle's centre.
+        centre: P3,
+        /// The circle's radius.
+        radius: Steps,
+    },
+}
+
+/// A plane region: an outer polygon of grid points, in order either way round, and the holes
+/// inside it, every one in the outer polygon's plane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Profile {
+    /// The outer polygon's corners.
+    pub outer: Vec<P3>,
+    /// The holes.
+    pub holes: Vec<Hole>,
+}
+
+/// `a - b` for grid points, as whole steps in i128 (each coordinate is an i64).
+fn diff(a: P3, b: P3) -> [i128; 3] {
+    let d = |p: geom_num::Coord, q: geom_num::Coord| i128::from(p.get()) - i128::from(q.get());
+    [d(a.x, b.x), d(a.y, b.y), d(a.z, b.z)]
+}
+
+/// `a . b`, or `None` past i128.
+fn dot_i(a: [i128; 3], b: [i128; 3]) -> Option<i128> {
+    a[0].checked_mul(b[0])?
+        .checked_add(a[1].checked_mul(b[1])?)?
+        .checked_add(a[2].checked_mul(b[2])?)
+}
+
+/// Twice the vector area of the polygon `ps` (its Newell normal), in whole squared steps, taken
+/// about its first corner; `None` past i128.
+fn newell(ps: &[P3]) -> Option<[i128; 3]> {
+    let o = *ps.first()?;
+    let mut n = [0_i128; 3];
+    for w in ps.windows(2).skip(1) {
+        let (a, b) = (diff(w[0], o), diff(w[1], o));
+        let c = [
+            a[1].checked_mul(b[2])?
+                .checked_sub(a[2].checked_mul(b[1])?)?,
+            a[2].checked_mul(b[0])?
+                .checked_sub(a[0].checked_mul(b[2])?)?,
+            a[0].checked_mul(b[1])?
+                .checked_sub(a[1].checked_mul(b[0])?)?,
+        ];
+        for (s, x) in n.iter_mut().zip(c) {
+            *s = s.checked_add(x)?;
+        }
+    }
+    Some(n)
 }
 
 /// One piece of a meeting curve, held privately, read by its parameter.
@@ -112,7 +248,7 @@ impl Piece {
         (iv.min(), iv.max())
     }
 
-    /// The point at parameter `t`.
+    /// The point at parameter `t`, in grid steps of the modeller's step.
     ///
     /// # Errors
     ///
@@ -122,7 +258,7 @@ impl Piece {
             .curve
             .evaluate_point(&modeller.kernel, t)
             .map_err(|e| refused("point_at", &e))?;
-        Ok([q.x, q.y, q.z])
+        Ok(modeller.in_steps(q))
     }
 }
 
@@ -131,24 +267,19 @@ impl Piece {
 pub struct Meeting {
     /// The meeting curves, each in one or more pieces.
     pub pieces: Vec<Piece>,
-    /// The points where the solids touch without crossing.
+    /// The points where the solids touch without crossing, in grid steps.
     pub points: Vec<[f64; 3]>,
 }
 
-/// One solidcore kernel, and every operation this crate gives.
+/// One solidcore kernel on one grid step, and every operation this crate gives.
 pub struct Modeller {
     kernel: Kernel,
+    step: GridStep,
 }
 
 impl fmt::Debug for Modeller {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Modeller")
-    }
-}
-
-impl Default for Modeller {
-    fn default() -> Self {
-        Modeller::new()
+        write!(f, "Modeller on {:?}", self.step)
     }
 }
 
@@ -159,17 +290,38 @@ fn refused(operation: &'static str, e: &SolidError) -> Error {
     }
 }
 
-fn point(p: [f64; 3]) -> Point3 {
-    Point3::new(p[0], p[1], p[2])
-}
-
 impl Modeller {
-    /// A modeller with solidcore's default options.
+    /// A modeller with solidcore's default options, on the grid step `step`.
     #[must_use]
-    pub fn new() -> Modeller {
+    pub fn new(step: GridStep) -> Modeller {
         Modeller {
             kernel: Kernel::new(&KernelOptions::default()),
+            step,
         }
+    }
+
+    /// The grid step every point and length is in.
+    #[must_use]
+    pub const fn step(&self) -> GridStep {
+        self.step
+    }
+
+    fn point(&self, p: P3) -> Point3 {
+        let m = |c: geom_num::Coord| to_metres(c.get(), self.step);
+        Point3::new(m(p.x), m(p.y), m(p.z))
+    }
+
+    #[allow(
+        clippy::cast_possible_wrap,
+        reason = "a length of the frame is at most 2^41 steps, far below i64's range"
+    )]
+    fn length(&self, l: Steps) -> f64 {
+        to_metres(l.0 as i64, self.step)
+    }
+
+    fn in_steps(&self, q: Point3) -> [f64; 3] {
+        let s = metres(self.step);
+        [q.x / s, q.y / s, q.z / s]
     }
 
     /// A copy of `s`, for an operation that consumes its operand.
@@ -177,31 +329,62 @@ impl Modeller {
         brep_copy(&mut self.kernel, &s.brep).map_err(|e| refused(operation, &e))
     }
 
-    /// Checks a body solidcore returned, and wraps it.
+    /// Checks a body solidcore returned with its own check, converts it into the kernel's body,
+    /// checks that with the kernel's checker, and wraps both.
     fn checked(&mut self, operation: &'static str, mut brep: Brep) -> Result<Solid, Error> {
         let report = check_brep(&mut self.kernel, &mut brep, CheckLevel::Level1)
             .map_err(|e| refused(operation, &e))?;
-        if report.assert_valid == Some(true) {
-            Ok(Solid { brep })
-        } else {
-            Err(Error::CheckFailed {
+        if report.assert_valid != Some(true) {
+            return Err(Error::CheckFailed {
                 operation,
                 report: format!(
-                    "pointers {} assert_valid {:?}",
+                    "solidcore's own check: pointers {} assert_valid {:?}",
                     report.pointers_status, report.assert_valid
                 ),
-            })
+            });
         }
+        let unconverted = |u: convert::Unconverted| Error::Unconverted {
+            operation,
+            what: u.0,
+        };
+        let body = if solidcore::topology::brep::p1::num_faces(&brep) == 0 {
+            convert::empty().map_err(unconverted)?
+        } else {
+            // The record is written from a copy: solidcore adds the pcurves it lacks to the body
+            // it writes, and the body returned stays as solidcore made it.
+            let mut c = brep_copy(&mut self.kernel, &brep).map_err(|e| refused(operation, &e))?;
+            let (record, order) = solidcore_convert::brep::to_record(&mut self.kernel, &mut c)
+                .map_err(|e| Error::Unconverted {
+                    operation,
+                    what: format!("what solidcore's record refuses ({e:?})"),
+                })?;
+            let (body, exactness) =
+                convert::body_of(&record, &order, self.step).map_err(unconverted)?;
+            convert::checked(body, exactness).map_err(|r| match r {
+                Refusal::Unconverted(u) => unconverted(u),
+                Refusal::Failed { first, faults } => Error::CheckFailed {
+                    operation,
+                    report: format!("geom-check found {faults} faults, the first: {first}"),
+                },
+            })?
+        };
+        Ok(Solid {
+            brep,
+            body,
+            ball: None,
+        })
     }
 
-    /// The box with one corner at `corner` and sides `size` along x, y and z.
+    /// The box with its least corner at `corner` and sides `size` along x, y and z.
     ///
     /// # Errors
     ///
-    /// [`Error::Refused`] for a side that is not positive; [`Error::CheckFailed`] as every result.
-    pub fn cuboid(&mut self, corner: [f64; 3], size: [f64; 3]) -> Result<Solid, Error> {
-        let b = create_box(&mut self.kernel, point(corner), size[0], size[1], size[2])
-            .map_err(|e| refused("cuboid", &e))?;
+    /// [`Error::Refused`] for a side that is not positive; [`Error::CheckFailed`] and
+    /// [`Error::Unconverted`] as every result.
+    pub fn cuboid(&mut self, corner: P3, size: [Steps; 3]) -> Result<Solid, Error> {
+        let [x, y, z] = size.map(|l| self.length(l));
+        let c = self.point(corner);
+        let b = create_box(&mut self.kernel, c, x, y, z).map_err(|e| refused("cuboid", &e))?;
         self.checked("cuboid", b)
     }
 
@@ -210,10 +393,11 @@ impl Modeller {
     /// # Errors
     ///
     /// As [`Modeller::cuboid`].
-    pub fn sphere(&mut self, centre: [f64; 3], radius: f64) -> Result<Solid, Error> {
-        let b = create_sphere(&mut self.kernel, point(centre), radius)
-            .map_err(|e| refused("sphere", &e))?;
-        self.checked("sphere", b)
+    pub fn sphere(&mut self, centre: P3, radius: Steps) -> Result<Solid, Error> {
+        let (c, r) = (self.point(centre), self.length(radius));
+        let b = create_sphere(&mut self.kernel, c, r).map_err(|e| refused("sphere", &e))?;
+        let ball = Some((centre, radius));
+        self.checked("sphere", b).map(|s| Solid { ball, ..s })
     }
 
     /// The solid cylinder of `radius` whose base circle is centred at `base`, rising `height`
@@ -222,9 +406,9 @@ impl Modeller {
     /// # Errors
     ///
     /// As [`Modeller::cuboid`].
-    pub fn cylinder(&mut self, base: [f64; 3], radius: f64, height: f64) -> Result<Solid, Error> {
-        let b = create_cylinder(&mut self.kernel, point(base), radius, height)
-            .map_err(|e| refused("cylinder", &e))?;
+    pub fn cylinder(&mut self, base: P3, radius: Steps, height: Steps) -> Result<Solid, Error> {
+        let (o, r, h) = (self.point(base), self.length(radius), self.length(height));
+        let b = create_cylinder(&mut self.kernel, o, r, h).map_err(|e| refused("cylinder", &e))?;
         self.checked("cylinder", b)
     }
 
@@ -236,27 +420,158 @@ impl Modeller {
     /// As [`Modeller::cuboid`].
     pub fn cone(
         &mut self,
-        base: [f64; 3],
-        base_radius: f64,
-        top_radius: f64,
-        height: f64,
+        base: P3,
+        base_radius: Steps,
+        top_radius: Steps,
+        height: Steps,
     ) -> Result<Solid, Error> {
-        let b = create_cone(
-            &mut self.kernel,
-            point(base),
-            base_radius,
-            top_radius,
-            height,
-        )
-        .map_err(|e| refused("cone", &e))?;
+        let (o, rb, rt, h) = (
+            self.point(base),
+            self.length(base_radius),
+            self.length(top_radius),
+            self.length(height),
+        );
+        let b = create_cone(&mut self.kernel, o, rb, rt, h).map_err(|e| refused("cone", &e))?;
         self.checked("cone", b)
+    }
+
+    /// The solid swept by the region `profile` along the vector `by` (whole steps along x, y and
+    /// z), capped at both ends: chapter 13.4's Extrude with distance ends and no taper, made by
+    /// solidcore's linear sweep. The loops' order of corners does not matter: the outer polygon is
+    /// handed to solidcore counter-clockwise about `by` and each hole clockwise, decided exactly
+    /// from the corners' whole steps.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Invalid`] for an outer polygon or hole of fewer than three corners, a loop with
+    /// no area, a corner or circle centre off the outer polygon's plane, a vector in that plane,
+    /// or a profile too large to decide that in i128; [`Error::Refused`] if solidcore refuses;
+    /// [`Error::CheckFailed`] and [`Error::Unconverted`] as every result.
+    pub fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Solid, Error> {
+        const OP: &str = "extrude";
+        let invalid = |what: &str| Error::Invalid {
+            operation: OP,
+            what: what.to_owned(),
+        };
+        let too_large = || invalid("a profile too large to decide exactly");
+        let outer = &profile.outer;
+        if outer.len() < 3 {
+            return Err(invalid("an outer polygon of fewer than three corners"));
+        }
+        let by_i = by.map(i128::from);
+        let n = newell(outer).ok_or_else(too_large)?;
+        if n == [0; 3] {
+            return Err(invalid("an outer polygon with no area"));
+        }
+        let along = dot_i(n, by_i).ok_or_else(too_large)?;
+        if along == 0 {
+            return Err(invalid("a vector in the profile's plane"));
+        }
+        let o = outer[0];
+        let off = |p: P3| dot_i(n, diff(p, o)).map(|d| d != 0).ok_or_else(too_large);
+        for &p in outer {
+            if off(p)? {
+                return Err(invalid("an outer corner off the polygon's plane"));
+            }
+        }
+        // The loops as solidcore takes them: the outer one turning positively about `by`, each
+        // hole negatively.
+        let ccw = |ps: &[P3], positive: bool| -> Result<Vec<P3>, Error> {
+            let few = || invalid("a hole of fewer than three corners or with no area");
+            if ps.len() < 3 {
+                return Err(few());
+            }
+            let turn = dot_i(newell(ps).ok_or_else(too_large)?, by_i).ok_or_else(too_large)?;
+            if turn == 0 {
+                return Err(few());
+            }
+            let mut q = ps.to_vec();
+            if (turn > 0) != positive {
+                q.reverse();
+            }
+            Ok(q)
+        };
+        let mut curves: Vec<Curve> = Vec::new();
+        let mut polygon = |m: &Modeller, ps: &[P3]| -> Result<(), Error> {
+            for (i, &a) in ps.iter().enumerate() {
+                let b = ps[(i + 1) % ps.len()];
+                let line =
+                    create_line_segment(m.point(a), m.point(b)).map_err(|e| refused(OP, &e))?;
+                curves.push(Curve::from(line));
+            }
+            Ok(())
+        };
+        let outer = ccw(outer, true)?;
+        polygon(self, &outer)?;
+        let mut circles = Vec::new();
+        for hole in &profile.holes {
+            match hole {
+                Hole::Polygon(ps) => {
+                    for &p in ps {
+                        if off(p)? {
+                            return Err(invalid("a hole's corner off the profile's plane"));
+                        }
+                    }
+                    let q = ccw(ps, false)?;
+                    polygon(self, &q)?;
+                }
+                Hole::Circle { centre, radius } => {
+                    if off(*centre)? {
+                        return Err(invalid("a circle's centre off the profile's plane"));
+                    }
+                    circles.push((*centre, *radius));
+                }
+            }
+        }
+        // A circle's frame: its x axis along the outer polygon's first edge, its y axis so that
+        // the circle turns negatively about `by`, both in the profile's plane.
+        let unit = |v: [f64; 3]| {
+            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            Vec3::new(v[0] / l, v[1] / l, v[2] / l)
+        };
+        let (p0, p1) = (self.point(outer[0]), self.point(outer[1]));
+        let xa = unit([p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "only the normal's direction is used, which the f64 keeps to rounding"
+        )]
+        let nu = {
+            let s = if along > 0 { 1.0 } else { -1.0 };
+            unit(n.map(|c| s * c as f64))
+        };
+        let ya = Vec3::new(
+            xa.y * nu.z - xa.z * nu.y,
+            xa.z * nu.x - xa.x * nu.z,
+            xa.x * nu.y - xa.y * nu.x,
+        );
+        for (centre, radius) in circles {
+            let frame = Axis2Placement::new(self.point(centre), xa, ya);
+            let arc = BSplineCurve::create_circle_segment(
+                3,
+                &frame,
+                self.length(radius),
+                0.0,
+                360.0,
+                NurbCircleParam::Quadratic,
+            )
+            .map_err(|e| refused(OP, &e))?;
+            curves.push(Curve::from(arc));
+        }
+        let v = by.map(|c| to_metres(c, self.step));
+        let dir = Vec3::new(v[0], v[1], v[2]);
+        let dist = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+        let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
+        let b = create_linear_sweep(&mut self.kernel, &refs, dir, dist, true)
+            .map_err(|e| refused(OP, &e))?;
+        self.checked(OP, b)
     }
 
     /// `a` united with `b`; neither is changed.
     ///
     /// # Errors
     ///
-    /// [`Error::Refused`] if solidcore refuses; [`Error::CheckFailed`] if its result fails the check.
+    /// [`Error::Refused`] if solidcore refuses; [`Error::CheckFailed`] and [`Error::Unconverted`]
+    /// as every result.
     pub fn union(&mut self, a: &Solid, b: &Solid) -> Result<Solid, Error> {
         let (x, y) = (self.copy("union", a)?, self.copy("union", b)?);
         let r = boolean_union(&mut self.kernel, x, y).map_err(|e| refused("union", &e))?;
@@ -287,22 +602,24 @@ impl Modeller {
         self.checked("intersection", r)
     }
 
-    /// The solid's volume; the solid is not changed (solidcore's integrator keeps caches in the
-    /// body it reads, so it reads a copy).
+    /// The solid's volume, in cubic grid steps; the solid is not changed (solidcore's integrator
+    /// keeps caches in the body it reads, so it reads a copy).
     ///
     /// # Errors
     ///
     /// [`Error::Refused`] if solidcore cannot integrate it.
     pub fn volume(&mut self, s: &Solid) -> Result<f64, Error> {
         let mut c = self.copy("volume", s)?;
-        brep_volume_default(&self.kernel, &mut c, VOLUME_ACCURACY)
-            .map_err(|e| refused("volume", &e))
+        let m3 = brep_volume_default(&self.kernel, &mut c, VOLUME_ACCURACY)
+            .map_err(|e| refused("volume", &e))?;
+        let step = metres(self.step);
+        Ok(m3 / step / step / step)
     }
 
-    /// How many faces the solid has.
+    /// How many faces the solid's body has.
     #[must_use]
-    pub fn face_count(&self, s: &Solid) -> usize {
-        solidcore::topology::brep::p1::num_faces(&s.brep)
+    pub fn face_count(&self, s: &Solid) -> u32 {
+        s.body.arenas().faces.len()
     }
 
     /// The curves where the plane through `at` with normal `normal` cuts `s`; `s` is not changed.
@@ -313,12 +630,12 @@ impl Modeller {
     pub fn plane_section(
         &mut self,
         s: &Solid,
-        at: [f64; 3],
+        at: P3,
         normal: [f64; 3],
     ) -> Result<Vec<Piece>, Error> {
         let mut c = self.copy("plane_section", s)?;
         let n = Vec3::new(normal[0], normal[1], normal[2]);
-        let curves = intersect_brep_with_plane(&self.kernel, &mut c, point(at), n)
+        let curves = intersect_brep_with_plane(&self.kernel, &mut c, self.point(at), n)
             .map_err(|e| refused("plane_section", &e))?;
         Ok(curves.into_iter().map(|curve| Piece { curve }).collect())
     }
@@ -328,12 +645,23 @@ impl Modeller {
     ///
     /// # Errors
     ///
-    /// [`Error::Refused`] if solidcore reports a failure, whatever it found before it.
+    /// [`Error::Refused`] if solidcore reports a failure, whatever it found before it, but for two
+    /// balls whose spheres the kernel's own exact decision finds apart (decision 32.71): solidcore
+    /// reports two solids that do not meet as a failure (SC-2), and for those the answer is that
+    /// they meet nowhere.
     pub fn meet(&mut self, a: &Solid, b: &Solid, with_points: bool) -> Result<Meeting, Error> {
         let (mut x, mut y) = (self.copy("meet", a)?, self.copy("meet", b)?);
         let (found, status) =
             intersect_breps(&self.kernel, BrepOperands::Two(&mut x, &mut y), with_points);
-        status.map_err(|e| refused("meet", &e))?;
+        if let Err(e) = status {
+            return match (a.ball, b.ball) {
+                (Some(p), Some(q)) if spheres_apart(p, q) => Ok(Meeting {
+                    pieces: Vec::new(),
+                    points: Vec::new(),
+                }),
+                _ => Err(refused("meet", &e)),
+            };
+        }
         Ok(Meeting {
             pieces: found
                 .curves
@@ -344,7 +672,7 @@ impl Modeller {
                 .points
                 .unwrap_or_default()
                 .into_iter()
-                .map(|p| [p.x, p.y, p.z])
+                .map(|p| self.in_steps(p))
                 .collect(),
         })
     }

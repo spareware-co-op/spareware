@@ -8,6 +8,10 @@
 //!   reads files outside its folder; a change to X's tests runs X's and the readers'.
 //! - `a_file_outside_every_crate_runs_everything`: a workflow, `Cargo.lock`, `.cargo/`, the toolchain
 //!   file and an architecture chapter each run every crate's tests, and so does no change list.
+//! - `a_file_no_crate_builds_runs_only_the_readers`: a file of geom-solidcore, the one folder the
+//!   root Cargo.toml excludes, runs only the crates that read outside their folder, and reaches
+//!   nothing `geom-bench` builds. Planted: no folder set apart (every crate runs), and an excluded
+//!   folder that holds a workspace crate (it is not set apart).
 //! - `a_crate_that_reads_outside_its_folder_is_found`: the words that mark a read outside a
 //!   crate's folder are found in planted sources, and the repository's readers include
 //!   `geom-test`.
@@ -57,7 +61,7 @@ use geom_test::coverage::plan_problems;
 use geom_test::deps::cargo_metadata;
 use geom_test::shared::{self, Changes, Reach};
 use geom_test::test_scope::{
-    SUITE_TIMES, Scope, Selection, WASM_DEV_CRATES, WASM_DEV_TIMES, text_reads_outside,
+    SUITE_TIMES, Scope, Selection, WASM_DEV_CRATES, WASM_DEV_TIMES, apart, text_reads_outside,
     wasm_dev_matrix, wasm_dev_parts, wasm_dev_units,
 };
 use serde_json::Value;
@@ -356,6 +360,39 @@ fn a_file_outside_every_crate_runs_everything() {
     ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
 )]
 #[test]
+fn a_file_no_crate_builds_runs_only_the_readers() {
+    let metadata = metadata();
+    let scope = Scope::read(&metadata).unwrap();
+    let all: BTreeSet<String> = members(&metadata).into_keys().collect();
+    let folder = "projects/engines/geometry/geom-solidcore/";
+    assert_eq!(scope.apart(), [folder.to_owned()]);
+    let file = [format!("{folder}tests/cases.rs")];
+    let readers: BTreeSet<String> = scope.readers().iter().cloned().collect();
+    assert!(
+        readers.contains("geom-test") && readers != all,
+        "{readers:?}"
+    );
+    assert_eq!(running(&scope.select(Some(&file))), readers);
+    assert!(scope.build_reached(Some(&file), "geom-bench").is_none());
+    // Planted: the same scope with no folder set apart runs every crate.
+    let unset = scope.clone().with_apart(Vec::new());
+    assert_eq!(running(&unset.select(Some(&file))), all);
+    // Planted: an excluded folder that holds a workspace crate is not apart.
+    let manifest = read("Cargo.toml");
+    let planted = manifest.replacen(
+        "exclude = [\"projects/engines/geometry/geom-solidcore\"]",
+        "exclude = [\"projects/engines/geometry/geom-solidcore\", \"projects/engines/geometry/crates/geom-num\"]",
+        1,
+    );
+    assert_ne!(planted, manifest, "the planted edit applies");
+    assert_eq!(apart(&planted, &metadata).unwrap(), [folder.to_owned()]);
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository and runs cargo metadata, which a WebAssembly test cannot"
+)]
+#[test]
 fn a_crate_that_reads_outside_its_folder_is_found() {
     for text in [
         "let p = Path::new(env!(\"CARGO_MANIFEST_DIR\")).join(\"../geom-num/src\");",
@@ -411,7 +448,15 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
     if text(&scope["outputs"]["crates"]) != "${{ steps.scope.outputs.crates }}" {
         found.push("kernel.yml's job scope does not hand on its crates".to_owned());
     }
-    for job in ["linux", "suite", "wasm-build", "wasm-suite"] {
+    for job in [
+        "linux",
+        "suite",
+        "suite-cross-build",
+        "suite-cross",
+        "suite-cross-doc",
+        "wasm-build",
+        "wasm-suite",
+    ] {
         let y = &k["jobs"][job];
         let needs: Vec<String> = y["needs"]
             .as_vec()
@@ -520,6 +565,18 @@ fn the_suites_run_the_selection() {
             "--base \"$merge_base\" --build-of geom-bench",
             "--base \"$merge_base\" --build-of geom-num",
             "reaches geom-bench's build",
+        ),
+        // The cross-built part's archive made with no crate selected (decision 32.82).
+        (
+            "        if: ${{ env.KERNEL_CRATES != '' }}\n        env:\n          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            "        env:\n          RUSTFLAGS: -C overflow-checks=on\n          CARGO_PROFILE_RELEASE_BUILD_OVERRIDE",
+            "suite-cross-build's step \"Build the suite's tests for macOS x86-64",
+        ),
+        // The cross-built part's run failing a part the selection left without a test.
+        (
+            "      NEXTEST_NO_TESTS: pass\n    defaults:\n      run:\n        shell: bash\n    steps:\n      # The checkout is the archive's",
+            "    defaults:\n      run:\n        shell: bash\n    steps:\n      # The checkout is the archive's",
+            "suite-cross fails a part the selection left",
         ),
     ] {
         let (k, b) = (kernel.replacen(from, to, 1), bench.replacen(from, to, 1));

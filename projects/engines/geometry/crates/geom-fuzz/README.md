@@ -224,11 +224,13 @@ seeded leg prints `seed: <hex>`; set `SPAREKIT_SEED=<hex>` to replay it.
 ```text
 cargo install kani-verifier --version 0.68.0 --locked
 cargo kani setup
-cargo kani --tests -p geom-fuzz --harness orient2d_proof_filter --exact
+cargo kani --tests -p geom-fuzz --harness orient2d_proof_exact_path --exact
 ```
 
-(and `orient2d_proof_exact_path`, and the predicate's claim in parts:
-`orient2d_proof_predicate_cover` and `orient2d_proof_predicate_part_0` to `_part_63`).
+(and the filter's claim in steps: `orient2d_proof_filter_exact_stand_in`,
+`orient2d_proof_filter_predicate_stand_in` and `orient2d_proof_filter_answer`; and the
+predicate's claim in parts: `orient2d_proof_predicate_cover` and
+`orient2d_proof_predicate_part_0` to `_part_63`).
 
 `cfg(kani)`, which marks the proof tests, is declared to the compiler by `build.rs`
 (`cargo::rustc-check-cfg`), not in the manifest's `[lints]` table, which repeats `geom-num`'s
@@ -261,6 +263,12 @@ with bound `PROOF_BOUND`. Kani proves the predicate's claim in 64 parts, one job
 (`orient2d_proof_predicate_part_<k>`: the draws whose six coordinates have the signs k names,
 `predicate_part`), with `orient2d_proof_predicate_cover` proving that every draw is in one of
 them; as one harness it took 35 to 46 minutes on the hosted runner, and a part takes 4 to 9.
+Kani proves the filter's claim one step of `check_with` at a time, one job each, after the one
+reference it takes first (`check_filter_step`): the exact path's stand-in
+(`orient2d_proof_filter_exact_stand_in`), the predicate's stand-in
+(`orient2d_proof_filter_predicate_stand_in`) and the filter's answer
+(`orient2d_proof_filter_answer`); as one harness it took 570 to 943 seconds on the hosted
+runner, most of it in holding the reference's three copies equal (decision 32.83).
 The domain:
 every one of the six coordinates within `PROOF_BOUND` grid steps of 0 or of an edge
 ±(2^40 − 1) of the frame, in any combination. Kani proves, for every such case, that orient2d
