@@ -1257,7 +1257,8 @@ const fn rank(s: &SurfaceKind) -> Option<u8> {
 /// The parameters of a surface's points in `at`, enclosed; a turn a box runs around is the domain's.
 /// Only the angles `read` names are worked out: one it leaves is the box of its whole range, which
 /// holds it, for a reader that needs nothing of it but that (an angle is a box's four corners'
-/// correctly rounded angles, the dearest part of the reading).
+/// correctly rounded angles, the dearest part of the reading). `None` for a kind with no parameters
+/// here, or a torus's tube turn that meets its domain at no turn.
 fn parameters(
     surface: &SurfaceKind,
     at: Vector,
@@ -1350,7 +1351,10 @@ fn parameters(
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
             let v = if read_v {
-                tube_turn(t, [x, y, z], v_range)?
+                let Some(v) = tube_turn(t, [x, y, z], v_range)? else {
+                    return Ok(None);
+                };
+                v
             } else {
                 all_v()?
             };
@@ -1368,7 +1372,11 @@ fn parameters(
 /// A torus's tube turn at the point `local` in its frame, on the tube's domain: `turn_of` reads it
 /// from −1/2 to 3/2 (a point inside the tube's centre circle from 1/2 to 3/2, as its opposite's turn
 /// and a half-turn on), and a box across that circle down to −1, and [`to_domain`] moves it there.
-fn tube_turn(t: &Torus, local: Vector, domain: (f64, f64)) -> Result<Interval, IntersectError> {
+fn tube_turn(
+    t: &Torus,
+    local: Vector,
+    domain: (f64, f64),
+) -> Result<Option<Interval>, IntersectError> {
     let [x, y, z] = local;
     let (major, _) = t.radii();
     let out = tight::norm(&[x, y])?.sub(point(major)?)?;
@@ -1377,7 +1385,8 @@ fn tube_turn(t: &Torus, local: Vector, domain: (f64, f64)) -> Result<Interval, I
 
 /// `turn`, as [`turn_of`] reads it (from −1 to 3/2), moved by whole turns to the domain `(lo, hi)`
 /// of at most a turn, which may start any number of turns out: the box of every turn of it that
-/// meets the domain, or, where none does, the box as it is, off it.
+/// meets the domain, or `None` where none does. The domain is decided here alone: a box handed on
+/// off it could be read by its caller as meeting it at an end.
 ///
 /// First the turns to the domain's window: `m − m % 2` is a multiple of two, exactly, for every
 /// double m (`%` is exact), and for m the sum lo + 1/2, however it rounds, it leaves the start
@@ -1405,7 +1414,7 @@ fn tube_turn(t: &Torus, local: Vector, domain: (f64, f64)) -> Result<Interval, I
 /// stand under two apart), and added to the box once. A domain that starts from about −5/2 to 3/2
 /// has no turns to its window and is not widened by adding none, so its box is the one of before:
 /// the boundary tests' domains start there, and their boxes are the ones they were.
-fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Interval, IntersectError> {
+fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, IntersectError> {
     let by = |turns: f64| -> Result<Interval, IntersectError> {
         if turns == 0.0 {
             Ok(turn)
@@ -1427,7 +1436,7 @@ fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Interval, Intersect
             None => moved,
         });
     }
-    Ok(met.unwrap_or(turn))
+    Ok(met)
 }
 
 /// `x`, held to `domain` when it meets it.
@@ -1842,7 +1851,14 @@ fn cut_at(
     // turns from there: the box is moved by whole turns to it, as a tube's turn is. A box across
     // the arc's gap meets it at both ends, and the hull of the two is no cut ([`to_domain`]).
     let arc = matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && !closed(curve);
-    let s = if arc { to_domain(s, (lo, hi))? } else { s };
+    let s = if arc {
+        let Some(s) = to_domain(s, (lo, hi))? else {
+            return Ok(None);
+        };
+        s
+    } else {
+        s
+    };
     let mut t = tight::middle(s);
     // On a loop the turns wrap. The count, not t, ends the loop, and [`WRAPS`] periods bring the
     // angle into every loop's domain, which [`nearer`] has moved to within two turns of zero. Both
