@@ -338,7 +338,8 @@ fn a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell() {
     ]);
     let s = shape(&arr, &r);
     assert_eq!(s.len(), 2, "{s:?}");
-    assert_eq!(s.iter().map(|(a, _)| a).sum::<i128>(), 20_000, "{s:?}");
+    // The small triangle (twice 800) and the square less it, neither with a hole.
+    assert_eq!(s, [(800, vec![]), (19_200, vec![])]);
 }
 
 #[test]

@@ -10,6 +10,7 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
     clippy::many_single_char_names,
     reason = "tests, written as the definitions read; the rules are for kernel code"
 )]
@@ -216,7 +217,7 @@ fn ends(a: Pt2, b: Pt2) -> Shape {
 }
 
 #[test]
-fn a_line_without_ends_and_a_disc_circle_get_the_whole_frame() {
+fn a_line_without_ends_and_a_ray_get_the_whole_frame() {
     let c = Carriers::new();
     let infinite = Shape::Line {
         carrier: Carrier::new(1, 2, 3).unwrap(),
@@ -395,7 +396,7 @@ fn a_splines_box_is_its_control_points_box() {
 fn an_index_error_reads_as_its_cause() {
     let e = IndexError::Num(NumError::Degenerate);
     assert_eq!(e.to_string(), NumError::Degenerate.to_string());
-    assert!(!e.to_string().is_empty());
+    assert_ne!(e.to_string(), "");
 }
 
 #[test]
