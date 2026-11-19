@@ -653,3 +653,10 @@ fn an_elliptic_arc_ends_are_parameters_not_angles() {
     assert_ne!(far, at);
     assert_eq!(at, Param::At(frac(-2, 4)));
 }
+
+#[test]
+fn a_fraction_is_negative_only_below_zero() {
+    assert!(frac(-1, 2).is_negative());
+    assert!(!frac(0, 1).is_negative());
+    assert!(!frac(3, 4).is_negative());
+}

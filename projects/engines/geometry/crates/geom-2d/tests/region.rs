@@ -25,7 +25,7 @@
 )]
 
 use geom_2d::arrange::{Arrangement, arrange};
-use geom_2d::region::{Area, Boundary, Gap, IslandRule, Located, Regions, polygonize};
+use geom_2d::region::{Area, Boundary, Gap, IslandRule, Located, RegionError, Regions, polygonize};
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -271,6 +271,82 @@ fn an_open_room_shows_its_gaps_and_a_bridge_closes_it() {
             .unwrap(),
         Boundary::On
     ));
+}
+
+#[test]
+fn a_gap_of_exactly_the_bridging_size_is_bridged_and_each_free_end_only_once() {
+    // Three stubs whose near ends lie on a line: (0, 0), (5, 0) and (-7, 0), 25 and 49 apart
+    // squared from the first, 144 from each other.
+    let walls: &[&[(i64, i64)]] = &[
+        &[(0, 0), (0, 100)],
+        &[(5, 0), (5, -100)],
+        &[(-7, 0), (-7, -100)],
+    ];
+    let (arr, r) = built(walls);
+    let sizes: Vec<_> = r
+        .bridges(&arr, 100)
+        .unwrap()
+        .iter()
+        .map(|g| g.squared)
+        .collect();
+    // The nearest pair takes (0, 0), so the next nearest, which needs it too, is passed over.
+    assert_eq!(sizes, [Some(25)]);
+    // A gap exactly the size allowed is bridged.
+    assert_eq!(r.bridges(&arr, 25).unwrap().len(), 1);
+    assert_eq!(r.bridges(&arr, 24).unwrap().len(), 0);
+}
+
+#[test]
+fn a_shell_is_found_wherever_the_cut_edge_to_its_hole_is_tied() {
+    // A square of 100 holding a square of 20, tied to it by a cut edge from each corner of the
+    // outer square in turn, and from the middle of its top and bottom: whichever ring the face's
+    // cycle meets first, the outer one is the shell and the inner one its hole.
+    for tie in [
+        [(0, 0), (40, 40)],
+        [(100, 0), (60, 40)],
+        [(100, 100), (60, 60)],
+        [(0, 100), (40, 60)],
+        [(50, 0), (50, 40)],
+        [(50, 100), (50, 60)],
+    ] {
+        let (arr, r) = built(&[
+            &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+            &[(40, 40), (60, 40), (60, 60), (40, 60), (40, 40)],
+            &tie,
+        ]);
+        assert_eq!(r.cut_edges().len(), 1, "tied at {tie:?}");
+        assert_eq!(
+            shape(&arr, &r),
+            [(800, vec![]), (20_000, vec![-800])],
+            "tied at {tie:?}"
+        );
+    }
+}
+
+#[test]
+fn a_hole_touching_its_shell_at_the_lowest_point_is_part_of_the_shell() {
+    // testPolygonWithTouchingHole upside down: the triangles meet at their lowest vertex.
+    let (arr, r) = built(&[
+        &[(100, 20), (160, 180), (20, 180), (100, 20)],
+        &[(100, 20), (120, 140), (80, 140), (100, 20)],
+    ]);
+    assert_eq!(shape(&arr, &r), [(4_800, vec![]), (17_600, vec![])]);
+    // And with the hole touching at its own lowest vertex the shell's lowest-leftmost side.
+    let (arr, r) = built(&[
+        &[(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)],
+        &[(0, 0), (30, 10), (10, 30), (0, 0)],
+    ]);
+    let s = shape(&arr, &r);
+    assert_eq!(s.len(), 2, "{s:?}");
+    assert_eq!(s.iter().map(|(a, _)| a).sum::<i128>(), 20_000, "{s:?}");
+}
+
+#[test]
+fn a_region_error_reads_as_what_went_wrong() {
+    assert_eq!(
+        RegionError::Malformed.to_string(),
+        "the arrangement is not one the sweep built"
+    );
 }
 
 #[test]
