@@ -644,8 +644,16 @@ fn a_rigid_motion_turns_a_point_and_then_moves_it() {
 #[test]
 fn kabsch_recovers_every_rotation_and_shift_in_the_plane_and_in_space() {
     let plane = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 3.0]];
-    for degrees in [0.0_f64, 30.0, 90.0, 180.0, 250.0, 300.0] {
-        let (s, c) = degrees.to_radians().sin_cos();
+    // The cosine and sine of 0, 30, 90, 180, 250 and 300 degrees, written out (the platform's
+    // trigonometry is not for tests of the kernel either).
+    for (c, s) in [
+        (1.0, 0.0),
+        (0.866_025_403_784_438_6, 0.5),
+        (0.0, 1.0),
+        (-1.0, 0.0),
+        (-0.342_020_143_325_668_7, -0.939_692_620_785_908_4),
+        (0.5, -0.866_025_403_784_438_6),
+    ] {
         assert_recovered(&plane, [[c, -s], [s, c]], [5.0, -2.0]);
     }
     let space = [
@@ -656,7 +664,8 @@ fn kabsch_recovers_every_rotation_and_shift_in_the_plane_and_in_space() {
     ];
     // A half turn about z, a quarter turn about x, a third of a turn about (1, 1, 1) (the cycle of
     // the axes), and a turn about z then x.
-    let (s, c) = 40.0_f64.to_radians().sin_cos();
+    // 40 degrees.
+    let (c, s) = (0.766_044_443_118_978, 0.642_787_609_686_539_3);
     let about_z = [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]];
     let about_x = [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]];
     let mut both = [[0.0; 3]; 3];
@@ -902,7 +911,11 @@ fn the_first_cluster_of_a_braced_square_is_its_first_bar() {
         keys_under(&plan, plan.top[0]),
         BTreeSet::from([100, 101, 102, 103])
     );
-    assert_eq!(plan.clusters.iter().map(|c| c.redundant).sum::<u64>(), 1);
+    let mut redundant = 0;
+    for c in &plan.clusters {
+        redundant += c.redundant;
+    }
+    assert_eq!(redundant, 1);
 }
 
 #[test]

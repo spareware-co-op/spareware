@@ -554,6 +554,11 @@ fn an_elliptical_arcs_length_is_its_quadrature() {
     ));
 }
 
+/// The larger of two sizes, as the kernel's `span` takes it.
+fn larger(a: f64, b: f64) -> f64 {
+    if a > b { a } else { b }
+}
+
 /// The value of `owner`'s variable `slot` in `x`.
 fn value_in(a: &Assembly, x: &[f64], owner: ItemId, slot: u8) -> f64 {
     let place = a
@@ -588,7 +593,7 @@ enum Curve {
 /// The curve's normal at `p` (unscaled, as the row takes it), its curvature there, and its size.
 fn curve_at(a: &Assembly, x: &[f64], curve: Curve, p: [f64; 2]) -> ([f64; 2], f64, f64) {
     let point = |id: ItemId| [value_in(a, x, id, 0), value_in(a, x, id, 1)];
-    let span = |u: [f64; 2]| u[0].abs().max(u[1].abs());
+    let span = |u: [f64; 2]| larger(u[0].abs(), u[1].abs());
     match curve {
         Curve::Line(s, e) => {
             let (s, e) = (point(s), point(e));
@@ -643,7 +648,7 @@ fn tangency_scale_holds(s: &Sketch, x: &[f64], curves: [Curve; 2], point: ItemId
     let size = if bend > 0.0 {
         product * bend
     } else {
-        let most = sa.max(sb);
+        let most = larger(sa, sb);
         product / if most > 0.0 { power_of_two(most) } else { 1.0 }
     };
     a.rescale(x).unwrap();
@@ -765,14 +770,13 @@ fn a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radiu
             );
             let d = [6.0, 4.0];
             let a2 = ax * ax + ay * ay;
-            let row = (d[0] * ax + d[1] * ay).powi(2) * b * b
-                + (d[0] * ay - d[1] * ax).powi(2) * a2
-                - a2 * a2 * b * b;
+            let (along, across) = (d[0] * ax + d[1] * ay, d[0] * ay - d[1] * ax);
+            let row = along * along * b * b + across * across * a2 - a2 * a2 * b * b;
             let got = *a.residuals().last().unwrap();
             if row.abs() < 1e-6 || got == 0.0 {
                 continue;
             }
-            let big = ax.abs().max(ay.abs());
+            let big = larger(ax.abs(), ay.abs());
             let size = 2.0 * big * big * big * (big * b).sqrt() * b;
             assert!(scale_is(row / got, size), "{} for {size}", row / got);
             read += 1;
