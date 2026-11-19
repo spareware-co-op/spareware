@@ -21,7 +21,7 @@ use common::{
     seamed_cylinder,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
-use geom_curve::{Axes, Basis, CurveKind, Ellipse, Frame, Line, Trimmed};
+use geom_curve::{Axes, Basis, CurveKind, Ellipse, Frame, Helix, HelixAxes, Line, Trimmed};
 use geom_math::{Box3, RationalTransform, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::BudgetKind;
@@ -806,6 +806,48 @@ fn carriers_without_a_certified_check_are_reported_never_passed() {
     assert_eq!(FaultKind::VertexOffSurface.group(), Group::Geometric);
     assert_eq!(FaultKind::VertexOffCurve.group(), Group::Geometric);
     assert_eq!(FaultKind::EdgeOffSurface.group(), Group::Geometric);
+}
+
+#[test]
+fn an_edge_on_a_curve_of_a_kind_without_a_check_is_unchecked_never_passed() {
+    // Group 2 certifies lines, circles and ellipses only. An edge on any other kind of curve is
+    // reported unchecked once, at its curve with the edge, for its place at its ends; its fins
+    // report nothing more on their faces, and the body is never passed, nor called wrong: the
+    // check claims nothing about the edge either way.
+    let unchecked = Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Edge(ix(0)));
+    let judged = |r: &Rows| {
+        for bound in [0, 64] {
+            let faults = at(r, bound);
+            assert_eq!(faults, [unchecked], "{faults:?}");
+            let full = report(r, BodyKind::Solid, certified(bound));
+            assert!(!full.passed());
+            assert!(full.uncertified());
+        }
+    };
+    // The cube's edge 0 on its own segment, from (0, 0, 0) to (0, 10, 0), as a trimmed line: the
+    // right curve, still of a kind with no certified check.
+    let mut r = cube();
+    let segment = Line::new([0.0; 3], [0.0, 10.0, 0.0], (0.0, 1.0)).unwrap();
+    assert_eq!(r.curves[0], CurveKind::Line(segment.clone()));
+    assert_eq!(at(&r, 0), []);
+    r.curves[0] = CurveKind::Trimmed(Trimmed::new(Basis::Line(segment), (0.0, 1.0)).unwrap());
+    judged(&r);
+    // The same edge on a helix about the cube's axis, far from its ends and its two faces: not
+    // called off either, since nothing about it is certified.
+    let mut r = cube();
+    r.curves[0] = CurveKind::Helix(
+        Helix::new(
+            [5.0, 5.0, 0.0],
+            HelixAxes::Frame {
+                frame: Frame::standard().unwrap(),
+                radius: 3.0,
+                pitch: 2.0,
+            },
+            (0.0, 2.0),
+        )
+        .unwrap(),
+    );
+    judged(&r);
 }
 
 #[test]
