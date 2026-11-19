@@ -26,7 +26,7 @@ mod common;
 
 use common::holds;
 
-use geom_fuzz::natural::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness};
+use geom_fuzz::natural::{Case, Drawn, MAX_INPUT_BYTES, check, decode, harness, work_of};
 use geom_fuzz::seeded;
 use geom_test::Seed;
 
@@ -84,6 +84,110 @@ fn the_input_bound_is_reached_and_never_passed() {
     let (empty, read) = decode(&[]);
     assert_eq!(read, 0);
     holds(check(&empty));
+}
+
+/// Issue 974's four inputs, stored in the target's `crashes` folder, each with the most work one
+/// call of `natural` may take on it. In all four the circle where the surfaces meet is an end
+/// circle of one of them, so that edge lies wholly on the other surface. Before the closed form for
+/// such a circle the engine bisected round all of it: over 4,194,304 units (the budget's stop),
+/// 1,376,154, 1,287,083 and 1,164,683. Now 46, 2,524, 38 and 38: the second still runs its other
+/// edges, which cross the other surface, through the engine.
+const EDGES_ON_THE_OTHER: [(&[u8], u128); 4] = [
+    (&[0x7e, 0x00, 0x00, 0x00, 0x95, 0x08, 0x08, 0xf7], 64),
+    (&[0x7e, 0x00, 0x00, 0x40, 0x95, 0x08, 0x08, 0xf7], 4_096),
+    (&[0x93, 0x03, 0x02, 0x4b, 0x00, 0x00, 0x03], 64),
+    (&[0x3e, 0x00, 0x00, 0xb5, 0xce], 64),
+];
+
+#[test]
+fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
+    for (data, most) in EDGES_ON_THE_OTHER {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        assert!(work <= most, "{work} units, over {most}, on {data:02x?}");
+        holds(harness(data));
+    }
+}
+
+/// Issue 974's inputs that the closed form does not take, stored in the target's `crashes` folder,
+/// each with the work one call of `natural` takes on it today: a count held from above, so that it
+/// can only get cheaper. Each still pays the engine for an edge, whose own work is given first:
+///
+/// - a sphere against a cylinder about a line through its centre, whose end circle is a great
+///   circle of the sphere: no closed form places a circle on a sphere (19,090 of 19,133);
+/// - a cone against a plane that holds its axis, an edge of the plane passing through the apex,
+///   where the line meets the cone at one point that is no simple root (483,244 of 484,099);
+/// - two cones about one line on the axis off the grid, no edge of either on the other: an end
+///   circle in the plane of the other's apex is clear of that cone by 150, and the engine takes
+///   353,774 and 441,124 units to say so (800,571 in all).
+///
+/// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
+/// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
+/// stop's count is the budget's own, which no test can hold tighter.
+const STILL_THE_ENGINES: [(&[u8], u128); 3] = [
+    (
+        &[
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
+        ],
+        19_133,
+    ),
+    (
+        &[
+            0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ],
+        484_099,
+    ),
+    (
+        &[
+            0x03, 0x2d, 0x3c, 0x00, 0x09, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x09, 0x03, 0x00,
+        ],
+        800_571,
+    ),
+];
+
+/// The issue's fifth input, stored in the target's `crashes` folder, with the work one call of
+/// `natural` takes on it now: a sphere of radius 256 against a cylinder of radius 1 about a line
+/// through its centre, whose end circle stands 0.002 outside the sphere all the way round. The
+/// engine took 782,639 units to say so (782,683 in all, three such calls for one run of the
+/// target, which stopped a search on its slow-input line). A circle about a line through a
+/// sphere's centre is now on the sphere or clear of it by one exact sign (decision 32.74), and
+/// the answer is the same in every field but the work it records.
+const AN_END_CIRCLE_OFF_A_SPHERE: [(&[u8], u128); 1] =
+    [(&[0xfd, 0xde, 0x00, 0xf5, 0xff, 0xc2, 0x25, 0x02, 0xde], 23)];
+
+/// Issue 974's inputs whose end circle lies in a plane whose domain holds a part of it, stored
+/// in the target's `crashes` folder, each with the work one call of `natural` takes on it now
+/// that the arcs the domain holds have a closed form (decision 32.69): a cylinder's end circle
+/// of radius 5, half held (136,758 units before); a cone's of radius 600, the cheapest of the
+/// eleven a search of this target found in 55 minutes (1,252,098 before); and a cone's of
+/// radius 856, the dearest of them (3,046,840 before).
+const ARCS_A_PLANE_HOLDS: [(&[u8], u128); 3] = [
+    (
+        &[
+            0x02, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+        70,
+    ),
+    (&[0xf7, 0xff, 0x83, 0xb5, 0x06, 0x60, 0xce, 0x60], 62),
+    (
+        &[
+            0x63, 0x33, 0xb7, 0xb4, 0xff, 0xb4, 0xff, 0xfc, 0xfc, 0x6b, 0xff,
+        ],
+        62,
+    ),
+];
+
+#[test]
+fn what_the_closed_form_leaves_costs_no_more_than_today() {
+    let held = STILL_THE_ENGINES
+        .into_iter()
+        .chain(ARCS_A_PLANE_HOLDS)
+        .chain(AN_END_CIRCLE_OFF_A_SPHERE);
+    for (data, most) in held {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        assert!(work <= most, "{work} units, over {most}, on {data:02x?}");
+    }
 }
 
 #[test]

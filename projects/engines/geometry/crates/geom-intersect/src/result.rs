@@ -114,7 +114,7 @@ impl ParamBox {
     }
 
     /// Whether the two boxes share a point: in every unknown their intervals meet.
-    fn meets(&self, other: &ParamBox) -> bool {
+    pub(crate) fn meets(&self, other: &ParamBox) -> bool {
         self.spans()
             .iter()
             .zip(other.spans())

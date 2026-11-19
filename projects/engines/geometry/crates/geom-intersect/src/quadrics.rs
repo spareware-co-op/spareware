@@ -33,7 +33,19 @@
 //! (√l·Q − √k·P)(√l·Q + √k·P), two planes.
 //!
 //! Cost: a few predicates and square roots for a pair, and a curve-surface pair for each edge that a
-//! trimmed domain has. Recursion: none.
+//! trimmed domain has, once a call whatever the count of its pieces. An edge that crosses the
+//! other surface costs the engine 13 to 2,481 work units in the stored cases. An edge that lies on
+//! the other surface is a closed form, a few predicates, where exact signs place it (decision
+//! 32.64), and so is each arc of an end circle that a plane's domain holds a part of (decision
+//! 32.69: 62 to 105 units a call where the engine took 1,252,098 to 3,046,840). An end circle
+//! about a line through a sphere's centre that stands off the sphere meets nothing by one exact
+//! sign (decision 32.74: 23 units a call where the engine took 782,683 for a gap of 0.002).
+//! Where the signs
+//! cannot place an edge (an end circle whose centre the frame rounds, as on an axis off the coordinate axes; a
+//! sphere's latitude; a round domain short of a whole turn; a plane whose vectors run off the
+//! coordinate axes, or whose domain holds a lone point of the circle) it costs the
+//! engine boxes all along it, about a million units for a circle of radius 200, bounded by the work
+//! budget (issue 974). Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -57,7 +69,9 @@ use geom_run::WorkMeter;
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
 use crate::closed::{self, Natural, Position};
-use crate::curve::{exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole};
+use crate::curve::{
+    enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
+};
 use crate::curve_surface::{cross, curve_surface, dot, lift, minus, sides};
 use crate::error::IntersectError;
 use crate::reduced;
@@ -302,7 +316,7 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
 
 /// Which of the two sides of a sum of products of doubles, exactly: (p − c) × e, for whether `p` lies
 /// on the line through `c` along `e`.
-fn off_line(p: [f64; 3], c: [f64; 3], e: [f64; 3]) -> bool {
+pub(crate) fn off_line(p: [f64; 3], c: [f64; 3], e: [f64; 3]) -> bool {
     let [p0, p1, p2] = p;
     let [c0, c1, c2] = c;
     let [e0, e1, e2] = e;
@@ -826,6 +840,16 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
     let run = minus(w, scale(first.along, dot(w, first.along)?)?)?;
     let [p, u, v] = run;
     let d = tight::norm(&[p, u, v])?;
+    // On axes a hair apart, rounding on numbers the size of the centres swallows
+    // the offset, whose enclosure then holds zero: it is taken from its exact sums instead.
+    let lost = d.lo() <= 0.0;
+    let (run, d) = if lost {
+        let run = exact_run(a, b)?;
+        let [p, u, v] = run;
+        (run, tight::norm(&[p, u, v])?)
+    } else {
+        (run, d)
+    };
     let (one, two) = (point(r)?, point(q)?);
     let sum = one.add(two)?;
     let gap = one.sub(two)?;
@@ -835,10 +859,17 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
         return Ok(Vec::new());
     }
     let along = unit(run)?;
-    let foot = one
-        .square()?
-        .add(d.sub(two)?.mul(d.add(two)?)?)?
-        .div(d.mul(point(2.0)?)?)?;
+    let twice = d.mul(point(2.0)?)?;
+    // The foot (r² + d² − q²)/2d: over an offset that small, r² − q² rounded at the size of r²
+    // would swamp d², so the exact route takes r² − q² exactly too.
+    let foot = if lost {
+        let squares = enclosed_sum(&[(r, r), (-q, q)])?;
+        d.div(point(2.0)?)?.add(squares.div(twice)?)?
+    } else {
+        one.square()?
+            .add(d.sub(two)?.mul(d.add(two)?)?)?
+            .div(twice)?
+    };
     let at = plus(first.at, scale(along, foot)?)?;
     if outer == Some(Sign::Zero) || inner == Some(Sign::Zero) {
         return Ok(alloc::vec![line(at, first.along, true)?]);
@@ -854,6 +885,26 @@ fn parallel_cylinders(a: &Cylinder, b: &Cylinder) -> Result<Vec<Piece>, Intersec
         line(plus(at, side)?, first.along, false)?,
         line(minus(at, side)?, first.along, false)?,
     ])
+}
+
+/// The offset, square to the axes, from the axis of `a` to the parallel axis of `b`, from exact
+/// sums: n = (b's centre − a's centre) × e is a sum of products of the stored doubles, so each of
+/// its parts is enclosed to a step of its exact value however small, and the offset is e × n over
+/// e · e.
+fn exact_run(a: &Cylinder, b: &Cylinder) -> Result<Vector, IntersectError> {
+    let [p0, p1, p2] = b.center();
+    let [c0, c1, c2] = a.center();
+    let e = a.frame().normal();
+    let [e0, e1, e2] = e;
+    let n = [
+        enclosed_sum(&[(p1, e2), (-c1, e2), (-p2, e1), (c2, e1)])?,
+        enclosed_sum(&[(p2, e0), (-c2, e0), (-p0, e2), (c0, e2)])?,
+        enclosed_sum(&[(p0, e1), (-c0, e1), (-p1, e0), (c1, e0)])?,
+    ];
+    let e = lift(e)?;
+    let size = dot(e, e)?;
+    let [x, y, z] = cross(e, n)?;
+    Ok([x.div(size)?, y.div(size)?, z.div(size)?])
 }
 
 /// A surface of revolution with a sphere tangent about the meeting of two axes.
@@ -1555,8 +1606,9 @@ fn at_parameter(
     t: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vector, IntersectError> {
-    let list = curve.enclose(t, Limit::FromRight, 0, meter)?;
-    list.first().copied().ok_or(IntersectError::Internal)
+    curve
+        .enclose_point(t, Limit::FromRight, meter)?
+        .ok_or(IntersectError::Internal)
 }
 
 /// Whether the point at `t` lies on both surfaces.
@@ -1627,14 +1679,15 @@ fn apex_ends(surface: &SurfaceKind) -> Result<Vec<Vector>, IntersectError> {
     })
 }
 
-/// Where the curve's stretches on both domains end: the parameters at which an edge of either surface
-/// meets the other, sorted.
-fn cuts(
-    curve: &CurveKind<3>,
+/// What can cut a piece of the pair: the box of each edge of either surface where it meets the
+/// other, and each apex a domain ends at (a curve through one leaves the domain there). They hang
+/// on the two surfaces alone, so a call finds them once, whatever the count of its pieces: before,
+/// every piece ran every edge against the other surface again.
+fn marks(
     a: &SurfaceKind,
     b: &SurfaceKind,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<f64>, IntersectError> {
+) -> Result<Vec<Vector>, IntersectError> {
     let mut out = Vec::new();
     for (surface, other) in [(a, b), (b, a)] {
         for edge in edges(surface)? {
@@ -1643,17 +1696,25 @@ fn cuts(
                 let [t, ..] = item.at().spans() else {
                     continue;
                 };
-                let box_of = edge.bound((t.lo(), t.hi()), meter)?;
-                if let Some(t) = cut_at(curve, sides(&box_of)?, meter)? {
-                    out.push(t);
-                }
+                out.push(sides(&edge.bound((t.lo(), t.hi()), meter)?)?);
             }
         }
-        // A curve through an apex the domain ends at leaves the domain there.
-        for at in apex_ends(surface)? {
-            if let Some(t) = cut_at(curve, at, meter)? {
-                out.push(t);
-            }
+        out.extend(apex_ends(surface)?);
+    }
+    Ok(out)
+}
+
+/// Where the curve's stretches on both domains end: the parameters at which a mark of the pair
+/// (an edge of either surface meeting the other, or an apex) lies on the curve, sorted.
+fn cuts(
+    curve: &CurveKind<3>,
+    marks: &[Vector],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<f64>, IntersectError> {
+    let mut out = Vec::new();
+    for at in marks {
+        if let Some(t) = cut_at(curve, *at, meter)? {
+            out.push(t);
         }
     }
     out.sort_unstable_by(f64::total_cmp);
@@ -1674,12 +1735,12 @@ enum Part {
 /// be a stretch, a point.
 fn trimmed(
     curve: &CurveKind<3>,
-    a: &SurfaceKind,
-    b: &SurfaceKind,
+    (a, b): (&SurfaceKind, &SurfaceKind),
+    marks: &[Vector],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Part>, IntersectError> {
     let (lo, hi) = crate::curve::finite(curve)?;
-    let cut = cuts(curve, a, b, meter)?;
+    let cut = cuts(curve, marks, meter)?;
     let loops = closed(curve);
     if cut.is_empty() {
         let inside = on_both(curve, lo * 0.5 + hi * 0.5, a, b, meter)?;
@@ -1877,6 +1938,8 @@ fn items_of(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Item>, IntersectError> {
     let mut items = Vec::new();
+    // The pair's marks, found on the first piece that is a curve and kept for the rest.
+    let mut found_marks: Option<Vec<Vector>> = None;
     for piece in found {
         match piece {
             Piece::Same => {
@@ -1910,7 +1973,13 @@ fn items_of(
                 tangent,
                 reach,
             } => {
-                for kept in trimmed(&nearer(*curve)?, a, b, meter)? {
+                let marks = match found_marks.take() {
+                    Some(list) => list,
+                    None => marks(a, b, meter)?,
+                };
+                let parts = trimmed(&nearer(*curve)?, (a, b), &marks, meter)?;
+                found_marks = Some(marks);
+                for kept in parts {
                     let (part, ends) = match kept {
                         Part::Curve(part, ends) => (*part, ends),
                         Part::Point { at, width } => {
@@ -2033,4 +2102,123 @@ pub fn natural(
     let items = items_of(found, x, y, meter)?;
     let answer = Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)?;
     Ok(Some(if turned { answer.swapped(2) } else { answer }))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use super::*;
+
+    /// The frame of an axis along (0.6, 0.8, 0): neither number is a double, so a centre 300
+    /// along it in decimals, (180, 240, 0), stands a hair (about 1.3e-14) off the stored axis.
+    fn slanted() -> Frame<3> {
+        Frame::new([0.0, 0.0, 1.0], [0.6, 0.8, 0.0]).unwrap()
+    }
+
+    fn tube_at(centre: [f64; 3], radius: f64) -> Cylinder {
+        Cylinder::new(centre, radius, slanted(), ((0.0, 2.0), (-300.0, 300.0))).unwrap()
+    }
+
+    /// How far `p` stands from the axis of `c`, in doubles.
+    fn off_axis(p: [f64; 3], c: &Cylinder) -> f64 {
+        let [x, y, z] = c.frame().normal();
+        let size = (x * x + y * y + z * z).sqrt();
+        let [a, b, e] = c.center();
+        let w = [p[0] - a, p[1] - b, p[2] - e];
+        let n = [
+            (w[1] * z - w[2] * y) / size,
+            (w[2] * x - w[0] * z) / size,
+            (w[0] * y - w[1] * x) / size,
+        ];
+        (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+    }
+
+    /// The lines `pieces` holds, each checked to lie along the axes and on both cylinders.
+    fn lines_on_both(pieces: &[Piece], a: &Cylinder, b: &Cylinder) -> Vec<[f64; 3]> {
+        let mut at = Vec::new();
+        for piece in pieces {
+            let Piece::Curve {
+                curve,
+                tangent,
+                reach,
+            } = piece
+            else {
+                panic!("not a curve");
+            };
+            let CurveKind::Line(l) = curve.as_ref() else {
+                panic!("not a line");
+            };
+            assert!(!tangent);
+            assert!(*reach < 1e-12, "an enclosure {reach} wide");
+            let [p, q, r] = l.direction();
+            let [x, y, z] = a.frame().normal();
+            let skew = (q * z - r * y).abs() + (r * x - p * z).abs() + (p * y - q * x).abs();
+            assert!(skew < 1e-12, "{skew}");
+            for c in [a, b] {
+                let off = off_axis(l.origin(), c) - c.radius();
+                assert!(
+                    off.abs() < 1e-9,
+                    "{off} off a cylinder of radius {}",
+                    c.radius()
+                );
+            }
+            at.push(l.origin());
+        }
+        at
+    }
+
+    /// The search's input `022d3c0009030002000000090305` (natural target): two cylinders of radius
+    /// 10 on parallel axes a hair apart meet in two lines, one each side of the plane of the axes.
+    #[test]
+    fn equal_cylinders_on_parallel_axes_a_hair_apart_meet_in_two_lines() {
+        let (a, b) = (tube_at([180.0, 240.0, 0.0], 10.0), tube_at([0.0; 3], 10.0));
+        assert!(parallel(a.frame().normal(), b.frame().normal()));
+        assert!(!same_line(
+            a.center(),
+            a.frame().normal(),
+            b.center(),
+            b.frame().normal()
+        ));
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            let found = parallel_cylinders(p, q).unwrap();
+            assert_eq!(found.len(), 2);
+            let at = lines_on_both(&found, p, q);
+            // About 20 apart: one each side.
+            let [x, y, z] = [0, 1, 2].map(|i| at[0][i] - at[1][i]);
+            let gap = (x * x + y * y + z * z).sqrt();
+            assert!(gap > 19.0 && gap < 21.0, "{gap}");
+        }
+    }
+
+    /// The same axes, with radii two steps apart at 10: less than the hair between the axes, so
+    /// neither cylinder lies inside the other and they still cross in two lines.
+    #[test]
+    fn cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines() {
+        let smaller = 10.0_f64.next_down().next_down();
+        let (a, b) = (
+            tube_at([180.0, 240.0, 0.0], 10.0),
+            tube_at([0.0; 3], smaller),
+        );
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            let found = parallel_cylinders(p, q).unwrap();
+            assert_eq!(found.len(), 2);
+            lines_on_both(&found, p, q);
+        }
+    }
+
+    /// The same axes, with radii 10 and 5: one inside the other, so they meet nowhere.
+    #[test]
+    fn unequal_cylinders_on_parallel_axes_a_hair_apart_meet_nowhere() {
+        let (a, b) = (tube_at([180.0, 240.0, 0.0], 10.0), tube_at([0.0; 3], 5.0));
+        for (p, q) in [(&a, &b), (&b, &a)] {
+            assert!(parallel_cylinders(p, q).unwrap().is_empty());
+        }
+    }
 }

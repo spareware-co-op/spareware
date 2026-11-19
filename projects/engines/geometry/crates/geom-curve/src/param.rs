@@ -149,6 +149,26 @@ pub trait ParamCurve<const D: usize> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; D]>, CurveError>;
 
+    /// An enclosure of the exact point at `t`: item 0 of [`ParamCurve::enclose`] at order 0, with
+    /// the same work charged, and `None` where that list does not hold exactly one value. A kind
+    /// that encloses its point directly makes no list for it, so the engine's evaluation of a
+    /// point allocates nothing whatever the optimiser inlines.
+    ///
+    /// # Errors
+    ///
+    /// As [`ParamCurve::enclose`].
+    fn enclose_point(
+        &self,
+        t: f64,
+        side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        Ok(match self.enclose(t, side, 0, meter)?.as_slice() {
+            [p] => Some(*p),
+            _ => None,
+        })
+    }
+
     /// A box holding the curve at every parameter of `span`, inside the domain; over a span of
     /// one parameter, the point from both sides where the curve parts there (the trait's rule
     /// for spans).
@@ -379,6 +399,32 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::OnSurface(c) => c.enclose(t, side, order, meter),
             CurveKind::Intersection(c) => c.enclose(t, side, order, meter),
             CurveKind::Transition(c) => c.enclose(t, side, order, meter),
+        }
+    }
+
+    fn enclose_point(
+        &self,
+        t: f64,
+        side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        match self {
+            CurveKind::Circle(c) => c.enclose_point(t, side, meter),
+            CurveKind::Ellipse(c) => c.enclose_point(t, side, meter),
+            CurveKind::Hyperbola(c) => c.enclose_point(t, side, meter),
+            CurveKind::Parabola(c) => c.enclose_point(t, side, meter),
+            CurveKind::Nurbs(c) => c.enclose_point(t, side, meter),
+            CurveKind::Line(c) => c.enclose_point(t, side, meter),
+            CurveKind::Helix(c) => c.enclose_point(t, side, meter),
+            CurveKind::Polynomial(c) => c.enclose_point(t, side, meter),
+            CurveKind::Involute(c) => c.enclose_point(t, side, meter),
+            CurveKind::Bulge(c) => c.enclose_point(t, side, meter),
+            CurveKind::Trimmed(c) => c.enclose_point(t, side, meter),
+            CurveKind::Composite(c) => c.enclose_point(t, side, meter),
+            CurveKind::Offset(c) => c.enclose_point(t, side, meter),
+            CurveKind::OnSurface(c) => c.enclose_point(t, side, meter),
+            CurveKind::Intersection(c) => c.enclose_point(t, side, meter),
+            CurveKind::Transition(c) => c.enclose_point(t, side, meter),
         }
     }
 
