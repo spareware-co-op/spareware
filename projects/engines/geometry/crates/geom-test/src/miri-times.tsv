@@ -21,6 +21,8 @@
 # GitHub measuring run 44459740315 (miri_measure=new on fix/line-plane-exact at 1e1292dfd).
 # GitHub measuring run 44486343425 (miri_measure=new on fix/trimmed-proven at 27115e329).
 # GitHub measuring run 44459010430 (miri_measure=new on fix/cone-start-radius-exact at 6d5517af1).
+# GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
+# GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1212,6 +1214,7 @@ native-only over 601	geom-intersect::attack_g165	a_cone_on_a_coaxial_cylinder_is
 native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends_far_down_its_branch
 26	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
 11	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
+338	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_read_where_the_meeting_may_lie
 17	geom-intersect::attack_g165	a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept
 11	geom-intersect::attack_g165	a_pipe_tee_is_two_ellipses
 91	geom-intersect::attack_g165	a_plane_cuts_a_cone_in_each_conic
@@ -1260,6 +1263,7 @@ native-only over 601	geom-intersect::attack_g167	a_plane_along_an_extrusion_cuts
 native-only over 601	geom-intersect::attack_g167	a_plane_through_a_revolution_s_axis_cuts_two_copies
 13	geom-intersect::attack_g167	a_plane_through_a_torus_s_axis
 111	geom-intersect::attack_g167	a_quadric_about_a_revolution
+13	geom-intersect::attack_g167	a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on
 native-only over 601	geom-intersect::attack_g167	every_reduction_makes_what_it_made
 95	geom-intersect::attack_g167	quadrics_about_a_torus_s_axis
 native-only over 601	geom-intersect::attack_g167	two_sweeps_of_one_direction_meet_in_lines
@@ -1556,6 +1560,11 @@ native-only over 601	geom-intersect::selfcross_seams	a_tube_closed_on_itself_is_
 2	geom-intersect::shared_carrier	nothing_is_claimed_where_two_patches_reach_the_same_pole_apart
 2	geom-intersect::shared_carrier	patches_of_one_carrier_share_the_common_parameters
 510	geom-intersect::side_at_the_bottom	a_side_a_step_above_the_lowest_point_is_the_engines
+60	geom-intersect::silhouette_rulings	a_ruling_inside_the_domain_stays_with_the_search
+8	geom-intersect::silhouette_rulings	every_eighth_of_a_turn_is_decided_exactly
+4	geom-intersect::silhouette_rulings	every_ruling_is_an_end_ruling_plus_whole_half_turns
+4	geom-intersect::silhouette_rulings	the_level_targets_silhouette_along_its_domain_end_is_one_ruling
+589	geom-intersect::silhouette_rulings	what_the_closed_form_cannot_decide_stays_with_the_search
 native-only over 601	geom-intersect::singular_on_a_seam	two_cylinders_meet_at_two_singular_points_of_four_half_branches
 2	geom-intersect::strictly_inside	an_image_clear_of_all_four_ends_is_inside
 2	geom-intersect::strictly_inside	an_image_on_any_one_end_is_within_but_not_inside
