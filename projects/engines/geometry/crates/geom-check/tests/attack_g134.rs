@@ -2024,7 +2024,7 @@ fn the_faces_of_a_convex_body_are_told_apart_by_their_corners_alone() {
         cost(&polyhedron(&ELL_POINTS, &ell).body(BodyKind::Solid)),
         cost(&tilted(ELL, &still).body(BodyKind::Solid)),
     ];
-    assert_eq!(got, [(602, 0), (731, 23_184), (947, 0), (1_152, 34_656)]);
+    assert_eq!(got, [(570, 0), (699, 23_184), (899, 0), (1_104, 34_656)]);
 }
 
 #[test]
@@ -2061,7 +2061,7 @@ fn a_body_of_many_faces_reserves_their_reads() {
     let mut faces: Vec<&[u32]> = vec![&bottom, &top];
     faces.extend(walls.iter().map(Vec::as_slice));
     let prism = polyhedron(&points, &faces);
-    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_996, 18 * 80));
+    assert_eq!(cost(&prism.body(BodyKind::Solid)), (2_868, 18 * 80));
 }
 
 #[test]

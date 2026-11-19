@@ -452,18 +452,18 @@ fn the_full_set_on_a_result_less_than_exact_costs_what_the_record_says() {
     }
     // Thirty bodies: twelve round primitives moved and all eighteen primitives scaled by 3/2.
     let expected: BTreeMap<String, (u128, u128)> = [
-        ("box", (283, 578)),
-        ("cone", (31, 50)),
-        ("cylinder", (56, 88)),
-        ("prism", (283, 578)),
+        ("box", (251, 546)),
+        ("cone", (29, 48)),
+        ("cylinder", (52, 84)),
+        ("prism", (251, 546)),
         ("sphere", (6, 12)),
-        ("torus", (49, 63)),
+        ("torus", (44, 58)),
     ]
     .into_iter()
     .map(|(kind, units)| (kind.to_owned(), units))
     .collect();
     assert_eq!(by_kind, expected);
-    assert_eq!((bodies, cheap, full), (30, 2550, 4737));
+    assert_eq!((bodies, cheap, full), (30, 2292, 4479));
 }
 
 #[test]
