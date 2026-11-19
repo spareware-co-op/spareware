@@ -453,6 +453,7 @@ fn workflow_problems(kernel: &str, bench: &str) -> Vec<String> {
         "suite",
         "suite-cross-build",
         "suite-cross",
+        "suite-cross-doc",
         "wasm-build",
         "wasm-suite",
     ] {
