@@ -568,6 +568,119 @@ fn a_domain_trims_what_it_cuts() {
     assert_eq!(meet(&level(20.0), &short).items().len(), 0);
 }
 
+/// Issue 1018: a piece no edge cuts was kept whole on its middle point alone, wherever that point's
+/// box reached the domains, inside them or not. A sphere of radius 2 about the origin meets the
+/// cylinder of radius 1 about z in the circles at heights ±√3, and the closed form stores the upper
+/// one at a height h that is √3 rounded down (h² < 3, read exactly from h·h and its error). A
+/// cylinder whose domain ends at h holds no point of either circle. Its end circle stands inside
+/// the sphere by an exact sign (32.74), so no edge cuts the upper circle, and that circle's
+/// middle has a box that reaches the domain's end h but is not inside it. Before, the circle
+/// was kept whole, a curve past the cylinder's domain all the way round; now a cut-free piece is
+/// kept only where its middle is proven inside both domains, and this pair is the engine's. So is
+/// its mirror, the domain from −h, which the lower circle's box reaches; and a domain to 1.75, or
+/// from −1.75, holds its circle with room, its end circle outside the sphere, and keeps it.
+#[test]
+fn a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside() {
+    let s = sphere([0.0; 3], 2.0);
+    let tall = meet(&s, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 1.0));
+    let h = curves(&tall)
+        .iter()
+        .map(|c| mid(c)[2])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let (square, error) = geom_num::eft::two_prod(h, h);
+    assert!(square < 3.0 || (square == 3.0 && error < 0.0), "{h}");
+    let tube = |height: (f64, f64)| {
+        SurfaceKind::Cylinder(
+            Cylinder::new([0.0; 3], 1.0, frame_along([0.0, 0.0, 1.0]), (ROUND, height)).unwrap(),
+        )
+    };
+    for short in [tube((-1.0, h)), tube((-h, 1.0))] {
+        for (a, b) in [(&s, &short), (&short, &s)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{h}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    for long in [tube((-1.0, 1.75)), tube((-1.75, 1.0))] {
+        let r = meet(&s, &long);
+        assert_eq!(curves(&r).len(), 1, "{h}: {:?}", r.items());
+    }
+}
+
+/// The ends of a whole turn are its join, and a sphere's pole is a point of it: a piece no edge
+/// cuts whose middle lies there is kept (32.94). The circle at √3 on a cylinder whose turn runs
+/// from −1 to 1 has its middle, along −x, on that join; the great circle in the plane x = y has its
+/// middle at the sphere's south pole; and the plane of a torus's equator meets it in two circles,
+/// the inner one on the join of a tube turn that runs from −1 to 1.
+#[test]
+fn a_piece_whose_middle_lies_on_a_join_or_a_pole_is_kept() {
+    let seam = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            1.0,
+            frame_along([0.0, 0.0, 1.0]),
+            ((-1.0, 1.0), TALL),
+        )
+        .unwrap(),
+    );
+    let r = meet(&sphere([0.0; 3], 2.0), &seam);
+    assert_eq!(curves(&r).len(), 2, "{:?}", r.items());
+    let r = meet(
+        &plane([0.0; 3], [1.0, -1.0, 0.0], [0.0, 0.0, 1.0]),
+        &sphere([0.0; 3], 5.0),
+    );
+    assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
+    let ring = SurfaceKind::Torus(
+        geom_surface::Torus::new(
+            [0.0; 3],
+            9.0,
+            2.0,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, (-1.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let r = meet(&level(0.0), &ring);
+    assert_eq!(curves(&r).len(), 2, "{:?}", r.items());
+}
+
+/// A piece no edge cuts whose middle is off a domain is nothing, and one whose middle reaches an
+/// end that is an edge is the engine's (32.94). The unit ball's equator lies in z = 0 but off a
+/// plane whose domain runs from 10 to 20 along x, or from −20 to −10, and no edge of it comes near
+/// the ball. A torus's tube turn from 1 to 2 ends at its inner equator and at its outer one, so
+/// the plane of its equator meets it in two circles whose middles reach the tube's ends.
+#[test]
+fn a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge() {
+    let ball = sphere([0.0; 3], 1.0);
+    for along in [(10.0, 20.0), (-20.0, -10.0)] {
+        let strip = SurfaceKind::Plane(
+            Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                (along, (-5.0, 5.0)),
+            )
+            .unwrap(),
+        );
+        assert_eq!(meet(&strip, &ball).items().len(), 0);
+        assert_eq!(meet(&ball, &strip).items().len(), 0);
+    }
+    let ring = SurfaceKind::Torus(
+        geom_surface::Torus::new(
+            [0.0; 3],
+            9.0,
+            2.0,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, (1.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    assert!(natural(&level(0.0), &ring, &mut meter()).unwrap().is_none());
+}
+
 #[test]
 fn either_order_gives_the_same_items_swapped() {
     let (a, b) = (level(3.0), sphere([0.0; 3], 5.0));
