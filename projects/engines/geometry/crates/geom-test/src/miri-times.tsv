@@ -15,6 +15,7 @@
 # GitHub measuring run 44412249410 (miri_measure=new on test/miri-slices-2 at 7667269d6), in its own seconds, stopped at 600 s; listing: its own listing.
 # GitHub measuring runs 44429236632 (geom-num attack_wide_tests, geom-op hash) and 44446255855 (geom-num wide), miri_measure=new on test/miri-slices-2 at 436772b7f, in their own seconds, stopped at 600 s; listing: the run's listing with #1011's 22 cut tests put back whole.
 # GitHub measuring runs 44429236632 (geom-num attack_wide_tests, geom-op hash) and 44446255855 (geom-num wide), miri_measure=new on test/miri-slices-2 at 436772b7f, in their own seconds, stopped at 600 s; listing: its own listing.
+# GitHub measuring run 44491760631 (miri_measure=new on land/ci-5 at 08161d1f8).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -224,6 +225,8 @@ native-only over 601	geom-bvh::tree_determinism	tree_golden_hash_is_the_same_on_
 2	geom-check	curved::tests::planes_with_different_normals_are_not_apart
 2	geom-check	curved::tests::planes_with_uncertain_normals_certify_nothing
 2	geom-check	orientation::tests::a_volume_no_enclosure_can_sign_is_a_fault_never_a_pass
+21	geom-check	orientation::tests::lumps_that_share_a_meeting_are_judged_by_their_other_corners
+44	geom-check	orientation::tests::shells_with_no_corner_to_decide_by_fail_closed
 2	geom-check	planar::tests::a_hub_is_the_mean_of_its_ring_exactly
 2	geom-check	planar::tests::a_line_holds_only_what_lies_on_both_planes
 2	geom-check	planar::tests::a_line_runs_the_way_its_two_planes_turn
@@ -379,6 +382,7 @@ native-only over 601	geom-check::attack_g134	the_planes_through_the_grid_points_
 native-only over 601	geom-check::faults	a_fault_counted_past_the_cap_still_says_whether_something_is_wrong
 2	geom-check::faults	a_fault_written_to_a_failing_writer_reports_the_failure
 4	geom-check::faults	a_fin_off_its_edges_ring
+12	geom-check::faults	a_fin_on_a_closed_edge_without_vertices_has_no_corner_to_judge
 4	geom-check::faults	a_fin_on_another_edges_ring
 3	geom-check::faults	a_fin_that_is_not_its_next_fins_previous
 4	geom-check::faults	a_list_that_comes_back_on_itself
@@ -388,11 +392,14 @@ native-only over 601	geom-check::faults	a_fault_counted_past_the_cap_still_says_
 33	geom-check::faults	a_report_tells_not_certified_from_wrong
 9	geom-check::faults	a_ring_of_fins_that_does_not_close
 6	geom-check::faults	a_shell_in_pieces
+250	geom-check::faults	a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids
+53	geom-check::faults	a_vertex_two_shells_share_is_not_a_solids
 4	geom-check::faults	an_edge_with_one_end
 31	geom-check::faults	an_exact_record_on_curved_geometry
 7	geom-check::faults	edges_with_the_wrong_number_of_fins
 3	geom-check::faults	every_fault_says_what_is_wrong_in_its_group
 20	geom-check::faults	every_list_is_walked_the_same_way
+native-only over 601	geom-check::faults	fans_are_all_that_is_wrong_with_a_shell_pinched_twice
 7	geom-check::faults	faults_past_the_cap_are_counted
 1	geom-check::faults	only_the_two_unchecked_kinds_say_nothing_is_wrong
 5	geom-check::faults	partners_in_different_shells
@@ -5129,6 +5136,7 @@ native-only over 601	geom-poly::planes	turns_agree_with_big_integers
 2	geom-poly::publish	errors_say_what_was_wrong
 51	geom-poly::publish	fins_run_their_rings
 20	geom-poly::publish	names_put_a_published_body_in_their_order
+30	geom-poly::publish	solids_that_share_only_a_corner_make_a_general_body
 38	geom-poly::publish	solids_that_share_only_an_edge_make_a_general_body
 native-only over 601	geom-poly::recursion	the_kept_tree_clones_compares_prints_and_drops_a_hundred_levels_deep
 370	geom-poly::subdivide	a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps
