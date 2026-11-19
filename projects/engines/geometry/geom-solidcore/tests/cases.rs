@@ -89,16 +89,46 @@ fn text(v: &Value) -> String {
     }
 }
 
-/// Every length of `v`: each number under it, but a plane's normal, which is a direction.
+/// Every length of `v`: each number under it, but a plane's normal and a wall's turn, which are
+/// directions, and a mitred wall's index.
 fn lengths(v: &Value, out: &mut Vec<String>) {
     match v {
         Value::Number(_) => out.push(text(v)),
         Value::Array(xs) => xs.iter().for_each(|x| lengths(x, out)),
         Value::Object(o) => o
             .iter()
-            .filter(|(k, _)| k.as_str() != "normal")
+            .filter(|(k, _)| !["normal", "turn", "wall"].contains(&k.as_str()))
             .for_each(|(_, x)| lengths(x, out)),
         _ => {}
+    }
+}
+
+/// The profile of one wall of a mitred corner, by what the building program means (decision
+/// 32.96), each corner the exact fraction of steps of `step` it is, `(numerators, denominator)`,
+/// nothing rounded: two walls of `length` and `thickness` from the shared inner corner at the
+/// origin, wall 0 along x with its thickness below it, wall 1 turned by the rational turn whose
+/// half-angle has the tangent `n / m` (`turn.tan_half`), its thickness on its outer side, both
+/// mitred on the bisector. So with `h = m^2 + n^2`, `c = (m^2 - n^2) / h` and `s = 2 m n / h` the
+/// turn's cosine and sine, the mitre's outer corner is `(-t m / n, -t)` and wall 1's far corners
+/// are `L (c, s) + t (-s, c)` and `L (c, s)`, each a fraction of whole numbers.
+fn mitred_wall(v: &Value, step: GridStep) -> Vec<([i128; 3], i128)> {
+    let len = |k: &str| i128::from(steps(&text(&v[k]), step));
+    let (l, t) = (len("length"), len("thickness"));
+    let tan = &v["turn"]["tan_half"];
+    let whole = |x: &Value| i128::from(x.as_i64().expect("a whole number"));
+    let (n, m) = (whole(&tan[0]), whole(&tan[1]));
+    let (h, c, s) = (m * m + n * n, m * m - n * n, 2 * m * n);
+    let inner = ([0, 0, 0], 1);
+    let mitre = ([-t * m, -t * n, 0], n);
+    match v["wall"].as_i64() {
+        Some(0) => vec![inner, mitre, ([l, -t, 0], 1), ([l, 0, 0], 1)],
+        Some(1) => vec![
+            inner,
+            mitre,
+            ([l * c - t * s, l * s + t * c, 0], h),
+            ([l * c, l * s, 0], h),
+        ],
+        w => panic!("no mitred wall {w:?}"),
     }
 }
 
@@ -191,6 +221,24 @@ fn solid(m: &mut Modeller, v: &Value) -> Result<Solid, Error> {
                 holes,
             };
             m.extrude(&profile, [0, 1, 2].map(|i| steps(&text(&by[i]), g)))
+        }
+        "mitred_wall" => {
+            let on_grid = |(num, den): ([i128; 3], i128)| {
+                let k = num.map(|x| {
+                    (x % den == 0)
+                        .then(|| i64::try_from(x / den).ok())
+                        .flatten()
+                });
+                match k {
+                    [Some(x), Some(y), Some(z)] => P3::new(x, y, z).expect("a point of the grid"),
+                    _ => panic!("the corner {num:?} / {den} steps is not a point of {g:?}"),
+                }
+            };
+            let profile = Profile {
+                outer: mitred_wall(v, g).into_iter().map(on_grid).collect(),
+                holes: Vec::new(),
+            };
+            m.extrude(&profile, [0, 0, steps(&text(&v["height"]), g)])
         }
         s => panic!("unknown shape {s}"),
     }
@@ -571,6 +619,49 @@ fn diagonal_planes_hold_no_point_of_any_grid() {
         );
         assert!(GRIDS.iter().all(|&g| whole(&a, g).is_none()), "{id}");
     }
+}
+
+/// The turn each mitred wall is given is within its stated angle of the angle it names, by exact
+/// arithmetic on the table's whole numbers and decimals (decision 32.96). `tan(phi / 2)` is the one
+/// root in (0, 1) of the quadratic `a x^2 + b x + c` the table gives (`2 - sqrt 3`, `sqrt 2 - 1` and
+/// `1 / sqrt 3` for 30, 45 and 60 degrees: the quadratic has opposite signs at 0 and 1), and the
+/// quadratic has opposite signs at `n / m - w / 2` and `n / m + w / 2`, both in (0, 1): so the
+/// turn's half-angle tangent `n / m` is within `w / 2` of `tan(phi / 2)` and, atan being
+/// 1-Lipschitz, the turn within `w` radians of `phi`. That the root is the tangent of the angle
+/// named is tied in f64 alone. Both walls of a case have the one turn.
+#[test]
+fn mitre_turns_are_within_their_angle() {
+    let dec = |v: &Value| BigDecimal::from_str(&text(v)).expect("a decimal");
+    let mut walls = 0;
+    for c in table()["cases"].as_array().expect("cases") {
+        let ops = c["operands"].as_array().expect("operands");
+        if ops[0]["shape"] != "mitred_wall" {
+            continue;
+        }
+        let turn = &ops[0]["turn"];
+        let id = &c["id"];
+        let [n, m] = [0, 1].map(|i| dec(&turn["tan_half"][i]));
+        let [a, b, k] = [0, 1, 2].map(|i| dec(&turn["tan_half_root_of"][i]));
+        let w = dec(&turn["radians_within"]);
+        // m^2 times the quadratic at x / m.
+        let at = |x: &BigDecimal| &a * x * x + &b * x * &m + &k * &m * &m;
+        let half = &w * &m / BigDecimal::from(2);
+        let (lo, hi) = (&n - &half, &n + &half);
+        assert!(lo.is_positive() && hi < m, "{id}");
+        assert!((at(&lo) * at(&hi)).is_negative(), "{id}");
+        assert!((&k * (&a + &b + &k)).is_negative(), "{id}");
+        let degrees = turn["degrees"].as_f64().expect("degrees");
+        let ratio = n.to_f64().expect("n") / m.to_f64().expect("m");
+        assert!(
+            (ratio - (degrees.to_radians() / 2.0).tan()).abs() < 1e-15,
+            "{id}"
+        );
+        for op in ops {
+            assert_eq!(&op["turn"], turn, "{id}");
+            walls += 1;
+        }
+    }
+    assert_eq!(walls, 6);
 }
 
 /// Every case of the table has its test below, under its own name, and no test names a case the
