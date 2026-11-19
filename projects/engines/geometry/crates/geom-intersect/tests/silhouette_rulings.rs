@@ -43,12 +43,15 @@ fn standard() -> Frame<3> {
 }
 
 /// The silhouette along `d` on `surface`, and the work it took, under [`BUDGET`].
-fn outline(
-    surface: &SurfaceKind,
-    d: [f64; 3],
-) -> (Result<LevelCurves, IntersectError>, u128) {
+fn outline(surface: &SurfaceKind, d: [f64; 3]) -> (Result<LevelCurves, IntersectError>, u128) {
     let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
-    let found = trace(surface, &Silhouette { direction: d }, FLOOR, CEILING, &mut meter);
+    let found = trace(
+        surface,
+        &Silhouette { direction: d },
+        FLOOR,
+        CEILING,
+        &mut meter,
+    );
     (found, meter.used().work)
 }
 
@@ -158,7 +161,10 @@ fn a_ruling_inside_the_domain_stays_with_the_search() {
         let ends = [-0.5, 0.5].map(|w| [u, Interval::point(w).unwrap()]);
         assert_eq!(branch.vertices, ends, "{d:?}");
         assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
-        assert!(u.lo() - 1e-15 <= exact && exact <= u.hi() + 1e-15, "{u:?} {exact}");
+        assert!(
+            u.lo() - 1e-15 <= exact && exact <= u.hi() + 1e-15,
+            "{u:?} {exact}"
+        );
         // Within the floor in space: the speed across u is the radius times pi.
         assert!((u.hi() - u.lo()) * core::f64::consts::PI <= FLOOR, "{u:?}");
         counts.push(used);
