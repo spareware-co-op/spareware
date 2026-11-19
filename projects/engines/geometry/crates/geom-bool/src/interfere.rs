@@ -71,7 +71,7 @@ use geom_bvh::{Aabb, Entry};
 use geom_intersect::curve::curves;
 use geom_intersect::project::{Projection, project_curve};
 use geom_intersect::solve::Reason;
-use geom_intersect::{IntersectError, Item, ParamBox, Unresolved};
+use geom_intersect::{IntersectError, Item, ParamBox, Seam, Unresolved};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, P3};
@@ -84,7 +84,7 @@ use crate::common::{CommonBlock, common_blocks};
 use crate::distance::{Carriers, floor_at};
 use crate::face::{self, FaceInfo, SectionEdge};
 use crate::merge::merge_clusters;
-use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, split};
+use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, order_on, split};
 use crate::rule::{
     CoincidenceChain, Contact, ContactError, EPS_FIT, NearContact, REFINEMENTS, Verdict, decide,
     greater, judge,
@@ -472,12 +472,17 @@ struct Deferred {
 /// reaches into one of the edge's pieces at least, and every piece it reaches into belongs to a
 /// common block that holds a piece of the other edge too. So a region an overlap of the two edges
 /// makes is covered however many vertices cut the overlap into blocks.
-fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> bool {
+fn covered(
+    region: &Deferred,
+    (sa, sb): (Seam, Seam),
+    splits: &[SplitEdge],
+    common: &[CommonBlock],
+) -> bool {
     let (a, b) = region.edges;
     let (Some(s), Some(t)) = (region.at.spans().first(), region.at.spans().get(1)) else {
         return false;
     };
-    held(*s, (a, b), splits, common) && held(*t, (b, a), splits, common)
+    held((*s, sa), (a, b), splits, common) && held((*t, sb), (b, a), splits, common)
 }
 
 /// [`covered`] on one edge: whether the span `t` of `edge` reaches into a piece of it, past the
@@ -485,9 +490,12 @@ fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> b
 /// Only a common block's members are counted. A piece runs forward from its first pave to its
 /// last, or, round a closed edge's seam, from its last pave to the domain's end and on from the
 /// start to its first: the span reaches into it past the one pave or before the other. A piece
-/// with no paves, a whole closed edge, is in no block and holds nothing.
+/// with no paves, a whole closed edge, is in no block and holds nothing. On a whole turn the span
+/// and the last pave may run past the end (decision 32.104): the span is asked stretch by stretch
+/// of the domain it covers, and a last pave past the end leaves the piece round the join only the
+/// room from where it ends, read modulo the turn, to the first pave.
 fn held(
-    t: Interval,
+    (t, seam): (Interval, Seam),
     (edge, other): (usize, usize),
     splits: &[SplitEdge],
     common: &[CommonBlock],
@@ -513,14 +521,19 @@ fn held(
         let (Some(from), Some(to)) = (piece.block.from, piece.block.to) else {
             continue;
         };
-        // The span ends past where the piece starts, and starts before where it ends.
-        let past_start = before(from.t.hi(), t.hi());
-        let before_end = before(t.lo(), to.t.lo());
-        let reaches = if piece.block.wraps {
-            past_start || before_end
-        } else {
-            past_start && before_end
-        };
+        let (_, end) = seam.domain();
+        let reaches = seam.spans(t).into_iter().flatten().any(|(lo, hi)| {
+            // The stretch ends past where the piece starts, and starts before where it ends.
+            let past_start = before(from.t.hi(), hi);
+            let before_end = before(lo, to.t.lo());
+            if !piece.block.wraps {
+                past_start && before_end
+            } else if from.t.hi() > end {
+                before(seam.wrapped(from.t.hi()), hi) && before_end
+            } else {
+                past_start || before_end
+            }
+        });
         if !reaches {
             continue;
         }
@@ -679,6 +692,15 @@ fn curve_of(arr: &Arrangement, e: usize) -> Result<CurveIx, BuildError> {
         .get(e)
         .ok_or(BuildError::Missing(Entity::Edge(e)))?
         .curve)
+}
+
+/// The seam edge `e`'s parameter is written on: its curve's, a whole turn's join no end.
+fn seam_of(arr: &Arrangement, e: usize) -> Result<Seam, BuildError> {
+    let curve = arr
+        .carriers
+        .curve(curve_of(arr, e)?)
+        .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+    Ok(Seam::of_curve(curve))
 }
 
 /// The parameter of vertex `v`, at grid point `p`, on edge `e`: the enclosure of its nearest
@@ -1071,7 +1093,16 @@ fn finish(
 ) -> Result<Interfered, BuildError> {
     let mut ordered = Vec::with_capacity(st.paves.len());
     for (e, list) in st.paves.into_iter().enumerate() {
-        ordered.push(order(e, list)?);
+        // A closed edge is read on its curve's seam, so a vertex on its join, found once each side
+        // of it, is one pave (decision 32.104). An edge with its own ends stops at them, wherever
+        // they stand on its curve: one that leaves a vertex on a whole circle's join and comes back
+        // to it keeps a pave at each end, so it is read on an open domain.
+        let own = st.ends.get(e).is_some_and(Option::is_some);
+        ordered.push(if own {
+            order(e, list)?
+        } else {
+            order_on(e, list, seam_of(arr, e)?)?
+        });
     }
     let mut splits = Vec::new();
     for (edge, (list, own)) in ordered.iter().zip(&st.ends).enumerate() {
@@ -1102,7 +1133,8 @@ fn finish(
                 });
             }
         }
-        if corners.is_empty() && !covered(region, &splits, &common) {
+        let seams = (seam_of(arr, a)?, seam_of(arr, b)?);
+        if corners.is_empty() && !covered(region, seams, &splits, &common) {
             return Err(BuildError::Unresolved {
                 first: Entity::Edge(a),
                 second: Entity::Edge(b),

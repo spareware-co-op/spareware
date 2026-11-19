@@ -327,3 +327,59 @@ impl std::error::Error for Finding {}
 
 /// A harness: a plain function from a fuzzer's bytes to a verdict, the shape every engine drives.
 pub type Harness = fn(&[u8]) -> Result<(), Finding>;
+
+/// The finding that a point's box could not be bounded over the domain it covers.
+fn outside(e: impl fmt::Debug) -> Finding {
+    Finding::new("a point's box is in the domain", || format!("{e:?}"))
+}
+
+/// A box around `curve` over `span`, a span an answer writes on `seam`, the curve's
+/// ([`geom_intersect::Seam::of_curve`]). On a whole turn it starts in the window and may run past
+/// the end (decision 32.104), so each stretch of the domain it covers is bounded and the boxes
+/// joined.
+pub(crate) fn curve_box<C: geom_curve::ParamCurve<D>, const D: usize>(
+    curve: &C,
+    seam: geom_intersect::Seam,
+    span: geom_num::interval::Interval,
+    meter: &mut geom_run::WorkMeter<'_>,
+) -> Result<geom_nurbs::Bounds<D>, Finding> {
+    let (first, second) = pieces(seam, span);
+    let mut out = curve.bound(first, meter).map_err(outside)?;
+    if let Some(part) = second {
+        let more = curve.bound(part, meter).map_err(outside)?;
+        out = out.union(&more).map_err(outside)?;
+    }
+    Ok(out)
+}
+
+/// The stretches of the domain `span` covers on `seam`: the first always, and a second round a
+/// whole turn's join.
+fn pieces(
+    seam: geom_intersect::Seam,
+    span: geom_num::interval::Interval,
+) -> ((f64, f64), Option<(f64, f64)>) {
+    let [first, second] = seam.spans(span);
+    (first.unwrap_or((span.lo(), span.hi())), second)
+}
+
+/// A box around `surface` over the spans `u` and `v` an answer writes on its seams
+/// ([`geom_intersect::Seam::of_surface`]): each pair of the stretches of the domain they cover,
+/// up to two each round a whole turn (decision 32.104), bounded and the boxes joined.
+pub(crate) fn surface_box(
+    surface: &geom_surface::SurfaceKind,
+    (u, v): (geom_num::interval::Interval, geom_num::interval::Interval),
+    meter: &mut geom_run::WorkMeter<'_>,
+) -> Result<geom_nurbs::Bounds<3>, Finding> {
+    use geom_surface::ParamSurface;
+    let [su, sv] = geom_intersect::Seam::of_surface(surface);
+    let ((u0, u1), (v0, v1)) = (pieces(su, u), pieces(sv, v));
+    let mut out = surface.bound((u0, v0), meter).map_err(outside)?;
+    for pair in [u1.map(|p| (p, v0)), v1.map(|p| (u0, p)), u1.zip(v1)]
+        .into_iter()
+        .flatten()
+    {
+        let more = surface.bound(pair, meter).map_err(outside)?;
+        out = out.union(&more).map_err(outside)?;
+    }
+    Ok(out)
+}

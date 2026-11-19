@@ -30,12 +30,13 @@
 use geom_curve::tight::larger;
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Line, ParamCurve};
 use geom_intersect::curve::{curves, self_crossings};
-use geom_intersect::{IntersectError, Intersection, Item};
+use geom_intersect::{IntersectError, Intersection, Item, Seam};
+use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Curve};
 use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
 
-use crate::Finding;
+use crate::{Finding, curve_box};
 
 /// The work a case may take: a near-coincident pair walks its whole length at the floor, and a stop
 /// there is an answer the laws accept.
@@ -194,9 +195,9 @@ fn apart(a: &Bounds<2>, b: &Bounds<2>) -> f64 {
 }
 
 /// The first two spans of `item`'s box.
-fn spans(item: &Item) -> Result<(f64, f64, f64, f64), Finding> {
+fn spans(item: &Item) -> Result<(Interval, Interval), Finding> {
     match item.at().spans() {
-        [s, t, ..] => Ok((s.lo(), s.hi(), t.lo(), t.hi())),
+        [s, t, ..] => Ok((*s, *t)),
         _ => Err(Finding::new("a curve pair's box has two unknowns", || {
             format!("{item:?}")
         })),
@@ -214,16 +215,10 @@ fn points_are_meetings(
         if !matches!(item, Item::Point { .. }) {
             continue;
         }
-        let (s0, s1, t0, t1) = spans(item)?;
+        let (s, t) = spans(item)?;
         let mut work = meter();
-        let x = must(
-            a.bound((s0, s1), &mut work),
-            "a point's box is in the domain",
-        )?;
-        let y = must(
-            b.bound((t0, t1), &mut work),
-            "a point's box is in the domain",
-        )?;
+        let x = curve_box(a, Seam::of_curve(a), s, &mut work)?;
+        let y = curve_box(b, Seam::of_curve(b), t, &mut work)?;
         let gap = apart(&x, &y);
         if gap > SLACK {
             return Err(Finding::new("a point lies on both curves", || {
@@ -247,6 +242,9 @@ fn no_side_change_is_lost(case: &Case, found: &Intersection) -> Result<(), Findi
         return Ok(());
     }
     let (p, q) = (heights(first), heights(second));
+    // The first curve's span is read on its seam, as every reader of an answer's span is
+    // (decision 32.104).
+    let seam = Seam::of_curve(&curve(first)?);
     let at = |k: u32| f64::from(k) / f64::from(SAMPLES);
     let gap = |t: f64| height(p, t) - height(q, t);
     for k in 0..SAMPLES {
@@ -255,10 +253,11 @@ fn no_side_change_is_lost(case: &Case, found: &Intersection) -> Result<(), Findi
         if gap(t0) * gap(t1) >= 0.0 || gap(t0).abs() < 1e-3 || gap(t1).abs() < 1e-3 {
             continue;
         }
+        let between = must(Interval::new(t0, t1), "a sample's stretch is an interval")?;
         let mut seen = false;
         for item in found.items() {
-            let (s0, s1, ..) = spans(item)?;
-            seen = seen || (s0 <= t1 && t0 <= s1);
+            let (s, _) = spans(item)?;
+            seen = seen || must(seam.meets(s, between), "a span meets a stretch")?;
         }
         if !seen {
             return Err(Finding::new("a change of sides has an item", || {

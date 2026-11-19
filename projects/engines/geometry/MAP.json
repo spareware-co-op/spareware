@@ -2517,6 +2517,7 @@
           "guarantees": [
             "**An order is proven or refused.** Neighbouring paves of different vertices are kept only when the first enclosure ends strictly before the second begins; otherwise the edge fails with [`OrderError::Undecided`], naming both vertices and their enclosures. No two parameters are compared within a tolerance.",
             "**One vertex is one pave where it touches the edge once.** Paves of one vertex whose enclosures meet become one, whose enclosure is the meet of theirs; a vertex met twice at enclosures proven apart (an edge that leaves a vertex and comes back to it) keeps both.",
+            "**A closed curve's join is no end.** [`order_on`] reads the paves on the edge's curve's seam (`geom_intersect::Seam`): on a whole turn an enclosure starts in the window and may run past its end, read modulo the turn (decision 32.104), so the last pave is also tried against the first, and a vertex on the join found once each side of it is one pave.",
             "**The blocks cover the edge.** Each block runs from a pave to the next; an open edge's blocks run from its first pave to its last, and a closed edge's from each pave round to the next.",
             "**Deterministic.** Paves are sorted by the lower end of their enclosure, then its upper end, then the vertex index, so the result does not depend on the order they were found in."
           ],

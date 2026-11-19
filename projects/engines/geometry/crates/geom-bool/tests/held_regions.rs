@@ -369,18 +369,20 @@ fn a_copy_of_the_half_across_a_circle_s_seam_is_one_block_with_it() {
 /// quarter from there to (0, 1105), of another operand: the copy's ends cut the circle into that
 /// quarter, one block with the copy, and the rest, which runs from (0, 1105) round to the seam and
 /// is in no block. The region where the circle and the copy overlap starts at the seam, where the
-/// rest ends, and stops short of the pave at (0, 1105), so it reaches into the quarter alone and
-/// stands: a region that starts where a piece ends does not reach into the piece.
+/// rest ends, and stops short of the pave at (0, 1105). Its span on the circle is kept whole
+/// across the join (decision 32.104): it starts in the window a little before the end, short of
+/// the seam pave's enclosure, so its first stretch lies in the rest, which no block covers, and it
+/// is refused. Before 32.104 the span was cut to the window's start, the seam pave's own start,
+/// and the region stood.
 #[test]
-fn a_region_from_the_seam_stays_out_of_the_piece_that_ends_there() {
+fn a_region_from_the_seam_whose_span_runs_back_past_the_join_is_refused() {
     let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let quarter = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 0.5)).unwrap();
     between(&mut arr, copy(&quarter), [[1105, 0], [0, 1105]], 1);
-    let out = run(&arr).unwrap();
-    assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
-    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
-    assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+    let (a, b, why) = refused(run(&arr));
+    assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
+    assert_eq!(why, Unresolved::HigherOrderContact);
 }
 
 /// The first circle whole and a NURBS copy of its upper half, from (1105, 0) to (−1105, 0): the

@@ -43,8 +43,8 @@
 
 use alloc::vec::Vec;
 
-use geom_intersect::IntersectError;
 use geom_intersect::project::{Projection, project_curve_over};
+use geom_intersect::{IntersectError, Seam};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, Sign};
@@ -165,9 +165,13 @@ fn span_of<'a>(
         (greater(from.t.lo(), a), lesser(to.t.hi(), b))
     };
     // Each stretch runs forward: an edge's paves are in proven order, each enclosure ending before
-    // the next begins (`crate::pave::order`), and a block runs between two neighbours, or from the
-    // last round to the first.
-    let stretches = if block.wraps {
+    // the next begins (`crate::pave::order_on`), and a block runs between two neighbours, or from
+    // the last round to the first. Inside the paves, a last pave whose enclosure runs past the end
+    // leaves nothing before the join, and the stretch after it starts where that enclosure ends,
+    // read modulo the turn (decision 32.104).
+    let stretches = if block.wraps && inner && from.t.hi() > b {
+        alloc::vec![(Seam::of_curve(curve).wrapped(from.t.hi()), end)]
+    } else if block.wraps {
         alloc::vec![(start, b), (a, end)]
     } else {
         alloc::vec![(start, end)]
