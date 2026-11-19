@@ -7,8 +7,11 @@
 //! overlap, and so is each arc of a circle lying in a plane that the plane's domain holds, and a
 //! circle about the axis of a cylinder or cone at its radius there. A circle about a line through
 //! a sphere's centre that stands off the sphere meets nothing, by one exact sign (decision
-//! 32.74). Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected
-//! Polyhedron step narrowing the boxes of NURBS pieces.
+//! 32.74). A circle across the axis of a cylinder or cone, its normal parallel to the axis, meets
+//! nothing where its plane is past the domain, and otherwise meets it where it meets the circle the
+//! surface cuts in that plane: nothing, two crossings or one touch, told by enclosures and, on a
+//! coordinate axis, by exact signs (decision 32.86). Every other pair runs [`crate::solve`] on
+//! C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
 //!
@@ -40,6 +43,13 @@
 //!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
 //!   circle whose stretches would meet, as where a side stands within a rounding of touching it
 //!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
+//! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
+//!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
+//!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
+//!   plane whose enclosure reaches an end of the domain meets nothing where the two circles are
+//!   proven apart for every height it holds, and is the engine's where they are not. A touch off
+//!   the coordinate axes, a plane through a cone's apex, and a domain short of a whole turn are
+//!   the engine's (decision 32.86).
 //! - **A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's
 //!   v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a
 //!   [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands
@@ -64,7 +74,10 @@
 //! variables. A segment lying in a plane whose vectors hold a half ran the engine past 2^20 units,
 //! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
 //! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
-//! where an enclosure of the same value holds zero. Recursion: none.
+//! where an enclosure of the same value holds zero.
+//! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
+//! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
+//! now a few predicates, and a box of the circle for each point. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -95,11 +108,12 @@ use geom_surface::{
 
 use crate::closed::{self, Meeting};
 use crate::curve::{
-    Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line, grid_point, held,
-    onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole, widest,
+    Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
+    grid_point, held, onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole,
+    widest,
 };
 use crate::error::IntersectError;
-use crate::quadrics::{off_line, same_line};
+use crate::quadrics::{off_line, parallel, plus, same_line, scale};
 use crate::result::{
     Coincidence, Coverage, Degeneracy, Intersection, Item, OverlapRegion, ParamBox, PointContact,
     StepsInterval, Test, Unresolved,
@@ -2005,9 +2019,7 @@ fn arcs_in_plane(
 /// engine's, where the domain is short of a whole turn (it may hold a part of the circle) or an
 /// enclosure cannot place v against an end and the axis is off the coordinate axes.
 ///
-/// The point at v stands s·v along the unit axis, so the circle's v is its height over the centre
-/// divided by s, and v against an end `e` of the domain is the sign of (height − s·e) with the
-/// sign of s: exact where [`height_terms`] has the height.
+/// The circle's v is placed by [`height_across`].
 fn ring_overlap(
     curve: &CurveKind<3>,
     at: [f64; 3],
@@ -2018,11 +2030,47 @@ fn ring_overlap(
     if du.1 - du.0 < 2.0 {
         return Ok(None);
     }
+    let v = match height_across(at, (center, frame, factor), dv)? {
+        Across::Past => return proven(Vec::new(), meter).map(Some),
+        Across::Within(v) | Across::Reaching(v) => v,
+        Across::Unplaced(_) => return Ok(None),
+    };
+    lying(curve, Interval::new(du.0, du.1)?, held(v, dv)?, meter).map(Some)
+}
+
+/// Where the plane across a round kind's axis through a point stands against its domain in v.
+enum Across {
+    /// Past an end of the domain, by an enclosure or an exact sign: the plane meets none of it.
+    Past,
+    /// The plane's v, an enclosure inside the domain.
+    Within(Interval),
+    /// The plane's v, an enclosure that reaches an end, held to the domain: an exact sign says
+    /// it is not past that end.
+    Reaching(Interval),
+    /// The plane's v, an enclosure that reaches an end, held to the domain: no exact sign places
+    /// it, so the plane may be past that end, on it or inside it.
+    Unplaced(Interval),
+}
+
+/// Where the plane across the axis of the round kind `(center, frame, factor)` through `at`
+/// stands against the domain `dv` in v.
+///
+/// The point at v stands s·v along the unit axis, so the plane's v is the height of `at` over the
+/// centre divided by s, and v against an end `e` of the domain is the sign of (height − s·e) with
+/// the sign of s: exact where [`height_terms`] has the height.
+fn height_across(
+    at: [f64; 3],
+    (center, frame, factor): ([f64; 3], Frame<3>, f64),
+    dv: (f64, f64),
+) -> Result<Across, IntersectError> {
     let (_, [_, _, n]) = frame.unit_vectors()?;
     let height = dot(minus(lift(at)?, lift(center)?)?, n)?;
     let v = height.div(Interval::point(factor)?)?;
     if v.hi() < dv.0 || v.lo() > dv.1 {
-        return proven(Vec::new(), meter).map(Some);
+        return Ok(Across::Past);
+    }
+    if v.lo() >= dv.0 && v.hi() <= dv.1 {
+        return Ok(Across::Within(v));
     }
     let exact = height_terms(frame.normal(), at, center);
     for (end, inside, outward) in [
@@ -2033,7 +2081,7 @@ fn ring_overlap(
             continue;
         }
         let Some((_, [p, q])) = exact else {
-            return Ok(None);
+            return Ok(Across::Unplaced(held(v, dv)?));
         };
         let side = sign_of(&[p, q, (-factor, end)]);
         // `factor` is the kind's axial sign, 1 or -1.
@@ -2043,10 +2091,10 @@ fn ring_overlap(
             side.negate()
         };
         if side == outward {
-            return proven(Vec::new(), meter).map(Some);
+            return Ok(Across::Past);
         }
     }
-    lying(curve, Interval::new(du.0, du.1)?, held(v, dv)?, meter).map(Some)
+    Ok(Across::Reaching(held(v, dv)?))
 }
 
 /// A circle lying on a cylinder.
@@ -2123,6 +2171,241 @@ fn circle_on_cone(
         ParamSurface::domain(cone),
         meter,
     )
+}
+
+/// A cylinder or a cone, as [`circle_across`] reads it: its centre, frame and axial factor, its
+/// radius at v = 0 and its slope (a cylinder's is zero), its domain and its seams.
+struct RoundKind {
+    center: [f64; 3],
+    frame: Frame<3>,
+    factor: f64,
+    radius: f64,
+    slope: f64,
+    domain: ((f64, f64), (f64, f64)),
+    seams: [Seam; 2],
+}
+
+impl RoundKind {
+    fn cylinder(c: &Cylinder, seams: [Seam; 2]) -> RoundKind {
+        RoundKind {
+            center: c.center(),
+            frame: c.frame(),
+            factor: c.axial_sign(),
+            radius: c.radius(),
+            slope: 0.0,
+            domain: ParamSurface::domain(c),
+            seams,
+        }
+    }
+
+    fn cone(c: &Cone, seams: [Seam; 2]) -> RoundKind {
+        let (radius, slope) = c.radius_and_slope();
+        RoundKind {
+            center: c.center(),
+            frame: c.frame(),
+            factor: c.axial_sign(),
+            radius,
+            slope,
+            domain: ParamSurface::domain(c),
+            seams,
+        }
+    }
+}
+
+/// How two circles in one plane stand.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Meet {
+    /// Apart, one beside the other or inside it.
+    Apart,
+    /// Crossing, at two points.
+    Cross,
+    /// Touching, at one.
+    Touch,
+}
+
+/// A circle across the axis of a cylinder or cone, its normal parallel to that axis (decision
+/// 32.86): nothing where its plane is past the domain, and otherwise the points where it meets
+/// the circle the surface cuts in its plane. `None`, the engine's, where either domain is short of
+/// a whole turn, the plane holds a cone's apex, neither the enclosures nor exact signs tell how the
+/// two circles stand, the plane's enclosure reaches an end of the domain and the circles are not
+/// apart, or their two crossings are not apart.
+///
+/// Theorem. A plane square to the axis of a right circular cylinder or cone cuts it in the circle
+/// about the axis of the radius at that height, |r₀ + k·v|, or at a cone's apex in that point. A
+/// circle in that plane meets the surface where it meets that circle, and two circles in one plane
+/// whose centres are D apart, of radii r and ρ, cross at two points where (r − ρ)² < D² < (r + ρ)²,
+/// touch at one where D² is either end and D is not zero, and are apart where D² is past both. The
+/// normal parallel to the axis is an exact sign ([`parallel`]); D² and the radii are enclosed, and
+/// where the axis runs along a coordinate axis D² − (r ± ρ)², times s², is the sign of a sum of
+/// products of stored doubles ([`exactly`]).
+fn circle_across(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    round: &RoundKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let ((du, dv), (lo, hi)) = (round.domain, curve.domain());
+    if du.1 - du.0 < 2.0 || hi - lo < 2.0 {
+        return Ok(None);
+    }
+    if !parallel(round.frame.normal(), circle.frame().normal()) {
+        return Ok(None);
+    }
+    let q = circle.center();
+    // A plane whose enclosure reaches an end may be on it, inside or past it. Every point of the
+    // surface in the plane is on the cut circle wherever the end lies, so two circles apart for
+    // every v of the enclosure held to the domain meet nothing; points there are the engine's.
+    let (v, inside) = match height_across(q, (round.center, round.frame, round.factor), dv)? {
+        Across::Past => return proven(Vec::new(), meter).map(Some),
+        Across::Within(v) => (v, true),
+        Across::Reaching(v) | Across::Unplaced(v) => (v, false),
+    };
+    // The cut's radius, signed: past a cone's apex it is negative, and the point at u is half a
+    // turn round.
+    let rho = Interval::point(round.radius)?.add(Interval::point(round.slope)?.mul(v)?)?;
+    let (big, sense) = match rho.certain_sign() {
+        Some(Sign::Positive) => (rho, 1.0),
+        Some(Sign::Negative) => (rho.neg(), -1.0),
+        _ => return Ok(None),
+    };
+    // The circle's centre in the frame's x̂ and ŷ, from the axis.
+    let (_, [x, y, _]) = round.frame.unit_vectors()?;
+    let w = minus(lift(q)?, lift(round.center)?)?;
+    let off = [dot(w, x)?, dot(w, y)?];
+    let r = Interval::point(circle.radius())?;
+    let [ox, oy] = off;
+    let far = ox.square()?.add(oy.square()?)?;
+    // D² against (r + ρ)² and (r − ρ)², each sign where its enclosure holds it from zero.
+    let beyond = far.sub(r.add(big)?.square()?)?.certain_sign();
+    let within = far.sub(r.sub(big)?.square()?)?.certain_sign();
+    let meet = match (beyond, within) {
+        (Some(Sign::Positive), _) | (_, Some(Sign::Negative)) => Meet::Apart,
+        (Some(Sign::Negative), Some(Sign::Positive)) => Meet::Cross,
+        _ => {
+            let Some(meet) = exactly(circle, round) else {
+                return Ok(None);
+            };
+            meet
+        }
+    };
+    if meet == Meet::Apart {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    if !inside {
+        return Ok(None);
+    }
+    let tangent = meet == Meet::Touch;
+    // Measured from the axis, across the line to the circle's centre.
+    let cut = Crossing::between(off, big, r, tangent)?;
+    let heights = [Some(cut.height), (!tangent).then_some(cut.height.neg())];
+    let (_, [cx, cy, _]) = circle.frame().unit_vectors()?;
+    let sense = Interval::point(sense)?;
+    let mut found: [Option<Item>; 2] = [None, None];
+    for (slot, h) in found.iter_mut().zip(heights) {
+        let Some(h) = h else {
+            continue;
+        };
+        let ([ax, ay], [ex, ey]) = cut.point(h)?;
+        let e = plus(scale(x, ex)?, scale(y, ey)?)?;
+        let t = onto(turn_of(dot(e, cx)?, dot(e, cy)?)?, (lo, hi))?;
+        let u = around(ax.mul(sense)?, ay.mul(sense)?, du)?;
+        let (Some(t), Some(u)) = (t, u) else {
+            return Ok(None);
+        };
+        let [on_u, on_v] = surface_ends(round.seams, u, v);
+        *slot = Some(Item::Point {
+            at: ParamBox::new(&[t, u, v])?,
+            xyz: grid_box(&curve.bound(span(t), meter)?)?,
+            contact: standing(tangent, [false, on_u, on_v]),
+            class: certified(),
+        });
+    }
+    // Two crossings whose boxes meet are not told apart: the engine's.
+    if let [Some(a), Some(b)] = &found
+        && a.at().meets(b.at())
+    {
+        return Ok(None);
+    }
+    proven(found.into_iter().flatten().collect(), meter).map(Some)
+}
+
+/// How a circle and the circle `round` cuts in its plane stand, by exact signs, where the axis runs
+/// along a coordinate axis: there the height is a difference of two stored doubles
+/// ([`height_terms`]) and the centres' distance squared a sum of their products, so s²·(D² − (r ±
+/// ρ)²) is a sum of products of doubles, each factor written as a double and its error. `None` on
+/// any other axis, where a product would not be exact, and where the centres are one: a touch
+/// there is the circle lying on the surface, [`ring_overlap`]'s.
+fn exactly(circle: &Circle<3>, round: &RoundKind) -> Option<Meet> {
+    let n = round.frame.normal();
+    let (q, c) = (circle.center(), round.center);
+    let (up, [(_, p), (_, from)]) = height_terms(n, q, c)?;
+    let k = axis_of(n)?;
+    let (s, r, r0) = (round.factor, circle.radius(), round.radius);
+    let rise = if up { round.slope } else { -round.slope };
+    // s times each offset across the axis, and s·(r ± ρ) = r·s ± (r₀·s + k·h), as doubles whose sum
+    // is each exactly.
+    let others = match k {
+        0 => [1, 2],
+        1 => [2, 0],
+        _ => [0, 1],
+    };
+    let mut offsets = [[0.0; 4]; 2];
+    for (out, i) in offsets.iter_mut().zip(others) {
+        split(&[(s, pick(q, i)), (-s, pick(c, i))], out);
+    }
+    let sums = [1.0, -1.0].map(|way| {
+        let mut out = [0.0; 8];
+        split(
+            &[(r, s), (way * r0, s), (way * rise, p), (-way * rise, from)],
+            &mut out,
+        );
+        out
+    });
+    let factors = [s, r, r0, rise, p, from].into_iter().chain(q).chain(c);
+    let parts = offsets.iter().flatten().chain(sums.iter().flatten());
+    if !factors.chain(parts.copied()).all(tame) {
+        return None;
+    }
+    let [outer, inner] = sums.map(|sum| squares_less(&offsets, &sum));
+    match (outer, inner) {
+        (Sign::Zero, _) | (_, Sign::Zero) => {
+            (squares_less(&offsets, &[0.0; 8]) == Sign::Positive).then_some(Meet::Touch)
+        }
+        (a, b) if a == b => Some(Meet::Apart),
+        _ => Some(Meet::Cross),
+    }
+}
+
+/// Each product of `products` as a double and its error, in `out` in turn: their sum is the sum of
+/// the products, exactly.
+fn split(products: &[(f64, f64)], out: &mut [f64]) {
+    let parts = products.iter().flat_map(|&(a, b)| {
+        let (p, e) = two_prod(a, b);
+        [p, e]
+    });
+    for (slot, x) in out.iter_mut().zip(parts) {
+        *slot = x;
+    }
+}
+
+/// The sign of Σ (Σ y)² over the two `offsets`, less (Σ x)² over `sum`, exactly: every term a
+/// product of two of the doubles, held on the stack.
+fn squares_less(offsets: &[[f64; 4]; 2], sum: &[f64; 8]) -> Sign {
+    let mut terms = [(0.0, 0.0); 96];
+    let pairs = offsets
+        .iter()
+        .flat_map(|y| pairs_of(y, 1.0))
+        .chain(pairs_of(sum, -1.0));
+    for (slot, pair) in terms.iter_mut().zip(pairs) {
+        *slot = pair;
+    }
+    sign_of(&terms)
+}
+
+/// Every product of two of `v`'s doubles, the first taken with the sign of `way`.
+fn pairs_of(v: &[f64], way: f64) -> impl Iterator<Item = (f64, f64)> + '_ {
+    v.iter()
+        .flat_map(move |&a| v.iter().map(move |&b| (way * a, b)))
 }
 
 /// A circle about a line through a sphere's centre that stands off the sphere: nothing (decision
@@ -2238,8 +2521,16 @@ fn closed_form(
         (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
         (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
-        (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => circle_on_cylinder(curve, k, c, meter),
-        (CurveKind::Circle(k), SurfaceKind::Cone(c)) => circle_on_cone(curve, k, c, meter),
+        (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => {
+            match circle_on_cylinder(curve, k, c, meter)? {
+                None => circle_across(curve, k, &RoundKind::cylinder(c, seams), meter),
+                found => Ok(found),
+            }
+        }
+        (CurveKind::Circle(k), SurfaceKind::Cone(c)) => match circle_on_cone(curve, k, c, meter)? {
+            None => circle_across(curve, k, &RoundKind::cone(c, seams), meter),
+            found => Ok(found),
+        },
         (CurveKind::Circle(k), SurfaceKind::Sphere(s)) => circle_about_sphere(k, s, meter),
         (_, SurfaceKind::Cylinder(c)) => helix_on_cylinder(curve, c, meter),
         _ => Ok(None),

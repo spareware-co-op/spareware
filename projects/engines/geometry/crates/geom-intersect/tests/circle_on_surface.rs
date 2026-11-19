@@ -4,7 +4,11 @@
 //! branch of that closed form: the surface's kind, lying on it and not, coaxial and not, every end
 //! of a domain either way, and the cases the signs cannot place, which stay the engine's. A circle
 //! about a line through a sphere's centre that stands off the sphere meets nothing, by one exact
-//! sign (decision 32.74); on the sphere, or about another line, it is the engine's.
+//! sign (decision 32.74); on the sphere, or about another line, it is the engine's. A circle
+//! across the axis of a cylinder or cone, its normal parallel to that axis, meets the surface where
+//! it meets the circle that the surface cuts in its plane (decision 32.86): nothing past the
+//! domain, nothing for two circles apart, two points for two that cross and one where they touch,
+//! decided by enclosures and, on a coordinate axis, by exact signs; where neither tells, the engine.
 //!
 //! A closed form's answer is told from the engine's two ways: by what it says (one overlap, proven
 //! identical, with no flag) and by its work, held to a count. A circle of radius 5 lying on a
@@ -20,9 +24,9 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_curve::{Circle, CurveKind, Frame};
+use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame};
 use geom_intersect::curve_surface::curve_surface;
-use geom_intersect::result::{Coincidence, Item};
+use geom_intersect::result::{Coincidence, Item, PointContact};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
@@ -34,6 +38,10 @@ const Z: [f64; 3] = [0.0, 0.0, 1.0];
 
 /// The most work a closed form takes here.
 const FEW: u128 = 200;
+
+/// The most work a closed form takes here that answers points: it bounds the circle over each
+/// point's span for the point's box in space, a few hundred units a point.
+const FEW_POINTS: u128 = 1_000;
 
 /// What `curve_surface` says of a pair, reduced to what the tests hold.
 #[derive(Debug, PartialEq)]
@@ -222,7 +230,8 @@ fn a_circle_on_a_coaxial_cylinder_is_an_overlap() {
 #[test]
 fn a_circle_off_a_cylinder_is_the_engines() {
     let tube = SurfaceKind::Cylinder(cylinder([1.0, 2.0, 3.0], 5.0, X, Z));
-    // A larger and a smaller radius about the axis; a centre off the axis; a normal off it.
+    // A larger and a smaller radius about the axis; a centre off the axis; a normal off it. None
+    // lies on the cylinder; the first three are now decided across the axis (decision 32.86).
     assert_eq!(
         engine(&circle([1.0, 2.0, 10.0], 6.0, X, Z), &tube),
         Said::Nothing
@@ -360,7 +369,8 @@ fn a_circle_on_a_coaxial_cone_is_an_overlap() {
 fn a_circle_off_a_cone_is_the_engines() {
     let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
     // Another radius at that height, either way; the radius of the other side of the apex; a
-    // centre off the axis; a normal off it.
+    // centre off the axis; a normal off it. None lies on the cone; the four across the axis of z
+    // are now decided there (decision 32.86).
     assert_eq!(
         engine(&circle([0.0, 0.0, 14.0], 5.0, X, Z), &funnel),
         Said::Nothing
@@ -519,4 +529,376 @@ fn a_height_off_the_coordinate_axes_is_placed_only_where_its_enclosure_is_clear_
     // against that end, and off the coordinate axes no exact sign does.
     undecided(&ring, &tube((v.1, 300.0)));
     undecided(&ring, &tube((-300.0, v.0)));
+}
+
+/// A point of an answer: its spans in t, u and v, and how it stands.
+type Spot = ([(f64, f64); 3], PointContact);
+
+/// The points of the pair's answer, which holds nothing else, and the work it took.
+fn points_of(curve: &CurveKind<3>, surface: &SurfaceKind) -> (Vec<Spot>, u128) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let spots = found
+        .items()
+        .iter()
+        .map(|item| match item {
+            Item::Point { at, contact, .. } => {
+                let s = at.spans();
+                ([0, 1, 2].map(|k| (s[k].lo(), s[k].hi())), *contact)
+            }
+            other => panic!("not a point: {other:?}"),
+        })
+        .collect();
+    (spots, meter.used().work)
+}
+
+/// The pair meets by the closed form at one point near each of `expected`, a (t, u, v), standing
+/// as `contact`, each span narrow.
+fn meets_at(
+    curve: &CurveKind<3>,
+    surface: &SurfaceKind,
+    expected: &[[f64; 3]],
+    contact: PointContact,
+) {
+    let (spots, work) = points_of(curve, surface);
+    assert!(work <= FEW_POINTS, "{work} units");
+    assert_eq!(spots.len(), expected.len(), "{spots:?}");
+    for e in expected {
+        let near = |(spans, c): &Spot| {
+            *c == contact
+                && spans
+                    .iter()
+                    .zip(e)
+                    .all(|((lo, hi), x)| lo - 1e-12 <= *x && *x <= hi + 1e-12 && hi - lo < 1e-6)
+        };
+        assert!(spots.iter().any(near), "{e:?} not in {spots:?}");
+    }
+}
+
+/// The circle about `center`, drawn as an ellipse of equal axes on the same frame and domain: the
+/// same points at the same parameters, which no closed form takes.
+fn as_ellipse(center: [f64; 3], radius: f64, x: [f64; 3], n: [f64; 3]) -> CurveKind<3> {
+    let axes = Axes::Frame {
+        frame: Frame::new(x, n).unwrap(),
+        a: radius,
+        b: radius,
+    };
+    CurveKind::Ellipse(Ellipse::new(center, axes, ROUND).unwrap())
+}
+
+/// The closed form's points are the engine's: as many, standing the same, each box meeting one of
+/// the engine's, for a few units where the engine takes more.
+fn as_the_engine_finds(center: [f64; 3], radius: f64, x: [f64; 3], n: [f64; 3], s: &SurfaceKind) {
+    let (ours, few) = points_of(&circle(center, radius, x, n), s);
+    let (theirs, more) = points_of(&as_ellipse(center, radius, x, n), s);
+    assert!(
+        few <= FEW_POINTS && more > FEW_POINTS,
+        "{few} and {more} units"
+    );
+    assert_eq!(ours.len(), theirs.len(), "{ours:?} and {theirs:?}");
+    for (spans, contact) in &ours {
+        let found = theirs.iter().any(|(other, c)| {
+            c == contact
+                && spans
+                    .iter()
+                    .zip(other)
+                    .all(|(a, b)| a.0 <= b.1 && b.0 <= a.1)
+        });
+        assert!(found, "{spans:?} not among {theirs:?}");
+    }
+}
+
+/// The axis off the coordinate axes; the frames about it take z for x̂.
+const LEAN: [f64; 3] = [0.6, 0.8, 0.0];
+
+#[test]
+fn a_circle_across_a_round_axis_whose_plane_is_past_the_domain_misses_it() {
+    // The cylinder of radius 5 about z over v in [-300, 300], and the cone of radius 1 + 0.75·v
+    // about z from (0, 0, 10), over z in [-290, 310]: circles across the axis past either end,
+    // however they lie in their planes.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    misses(&circle([1.0, 0.0, 400.0], 50.0, X, Z), &tube);
+    misses(&circle([1.0, 0.0, -301.0], 3.0, X, [0.0, 0.0, -1.0]), &tube);
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    misses(&circle([0.0, 0.0, 311.0], 3.0, X, Z), &funnel);
+    misses(&circle([9.0, 9.0, -291.0], 500.0, Y, Z), &funnel);
+    // On the axis off the coordinate axes, by the enclosure of the height.
+    let leaning = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, Z, LEAN));
+    misses(&circle([240.0, 320.0, 0.0], 3.0, Z, LEAN), &leaning);
+}
+
+#[test]
+fn circles_apart_in_one_plane_meet_nothing() {
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    // Beside the cut circle, inside it, round it, and about its centre larger and smaller.
+    for (center, radius) in [
+        ([20.0, 0.0, 10.0], 3.0),
+        ([1.0, 0.0, 10.0], 1.0),
+        ([1.0, 0.0, 10.0], 20.0),
+        ([0.0, 0.0, 10.0], 6.0),
+        ([0.0, 0.0, 10.0], 4.0),
+    ] {
+        misses(&circle(center, radius, X, Z), &tube);
+    }
+    // The cone's cut at z = 14 has radius 4, and past the apex at z = 6 radius 2.
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    misses(&circle([20.0, 0.0, 14.0], 3.0, X, Z), &funnel);
+    misses(&circle([0.5, 0.0, 14.0], 1.0, Y, [0.0, 0.0, -2.0]), &funnel);
+    misses(&circle([10.0, 0.0, 6.0], 3.0, X, Z), &funnel);
+    // A cylinder along x, and one on the axis off the coordinate axes.
+    let along = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, Y, X));
+    misses(&circle([7.0, 0.0, 20.0], 3.0, Y, X), &along);
+    let leaning = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, Z, LEAN));
+    misses(&circle([2.4, 3.2, 20.0], 3.0, Z, LEAN), &leaning);
+    misses(&circle([2.4, 3.2, 1.0], 1.0, Z, LEAN), &leaning);
+}
+
+#[test]
+fn a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis() {
+    // The crossings at a third and two thirds of a turn round the circle, a sixth either side of
+    // the join round the axis, all inside domains of 1.9 half-turns from 0.05: each may hold only
+    // part of the other, so the pair is the engine's.
+    let part = (0.05, 1.95);
+    let short = Cylinder::new([0.0; 3], 5.0, Frame::new(X, Z).unwrap(), (part, SIDE)).unwrap();
+    let (what, work) = said(
+        &circle([5.0, 0.0, 10.0], 5.0, X, Z),
+        &SurfaceKind::Cylinder(short),
+    );
+    assert!(
+        what == Said::Other && work > FEW_POINTS,
+        "{what:?}, {work} units"
+    );
+    let arc = CurveKind::Circle(
+        Circle::new([5.0, 0.0, 10.0], 5.0, Frame::new(X, Z).unwrap(), part).unwrap(),
+    );
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    let (what, work) = said(&arc, &tube);
+    assert!(
+        what == Said::Other && work > FEW_POINTS,
+        "{what:?}, {work} units"
+    );
+}
+
+#[test]
+fn circles_crossing_in_one_plane_meet_at_two_points_as_the_engine_finds() {
+    // Each circle passes through the centre of the cut circle, of its own radius: the crossings
+    // a third and two thirds of a turn round the circle, a sixth either side of the join round
+    // the axis.
+    let third = 1.0 / 3.0;
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    let across = [[2.0 * third, third, 10.0], [4.0 * third, 5.0 * third, 10.0]];
+    meets_at(
+        &circle([5.0, 0.0, 10.0], 5.0, X, Z),
+        &tube,
+        &across,
+        PointContact::Crossing,
+    );
+    as_the_engine_finds([5.0, 0.0, 10.0], 5.0, X, Z, &tube);
+    // The cone's cut of radius 4 at z = 14, v = 4.
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    meets_at(
+        &circle([4.0, 0.0, 14.0], 4.0, X, Z),
+        &funnel,
+        &[[2.0 * third, third, 4.0], [4.0 * third, 5.0 * third, 4.0]],
+        PointContact::Crossing,
+    );
+    as_the_engine_finds([4.0, 0.0, 14.0], 4.0, X, Z, &funnel);
+    // Past the apex, v = -4 and the radius -2: the point at u is half a turn round.
+    meets_at(
+        &circle([2.0, 0.0, 6.0], 2.0, X, Z),
+        &funnel,
+        &[
+            [2.0 * third, 4.0 * third, -4.0],
+            [4.0 * third, 2.0 * third, -4.0],
+        ],
+        PointContact::Crossing,
+    );
+    as_the_engine_finds([2.0, 0.0, 6.0], 2.0, X, Z, &funnel);
+    // On the axis off the coordinate axes, about 4·(0.6, 0.8, 0) + 5·z: by enclosures alone.
+    let leaning = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, Z, LEAN));
+    meets_at(
+        &circle([2.4, 3.2, 5.0], 5.0, Z, LEAN),
+        &leaning,
+        &[[2.0 * third, third, 4.0], [4.0 * third, 5.0 * third, 4.0]],
+        PointContact::Crossing,
+    );
+    as_the_engine_finds([2.4, 3.2, 5.0], 5.0, Z, LEAN, &leaning);
+    // Coaxial and of the cut's radius, the circle still lies on the surface: one overlap.
+    lies(&circle([0.0, 0.0, 14.0], 4.0, X, Z), &funnel, 1.0, 4.0);
+}
+
+#[test]
+fn circles_touching_on_a_coordinate_axis_meet_at_one_tangent_point() {
+    // Outside the cut circle and inside it, each touching it at (0, 5, 10), a quarter turn round
+    // the axis: no enclosure tells a touch, and the exact signs do.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    let touch = PointContact::IsolatedTangent;
+    meets_at(
+        &circle([0.0, 8.0, 10.0], 3.0, X, Z),
+        &tube,
+        &[[1.5, 0.5, 10.0]],
+        touch,
+    );
+    meets_at(
+        &circle([0.0, 2.0, 10.0], 3.0, X, Z),
+        &tube,
+        &[[0.5, 0.5, 10.0]],
+        touch,
+    );
+    // Beside and round the cone's cut of radius 4 at z = 14.
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    meets_at(
+        &circle([0.0, 7.0, 14.0], 3.0, X, Z),
+        &funnel,
+        &[[1.5, 0.5, 4.0]],
+        touch,
+    );
+    meets_at(
+        &circle([0.0, -3.0, 14.0], 7.0, X, Z),
+        &funnel,
+        &[[0.5, 0.5, 4.0]],
+        touch,
+    );
+    // The same cone turned over, v the height negated: the cut of radius 4 at z = 6.
+    let turned = cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z)
+        .flipped_axially()
+        .unwrap();
+    meets_at(
+        &circle([0.0, 7.0, 6.0], 3.0, X, Z),
+        &SurfaceKind::Cone(turned),
+        &[[1.5, 0.5, 4.0]],
+        touch,
+    );
+    // About -z, where x̂ × n̂ turns u the other way: the touch at (0, 4, 6) is at u = 1.5.
+    let down = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, [0.0, 0.0, -1.0]));
+    meets_at(
+        &circle([0.0, 7.0, 6.0], 3.0, X, Z),
+        &down,
+        &[[1.5, 1.5, 4.0]],
+        touch,
+    );
+    // About x, and about y from a centre off the origin: the other coordinates are the plane's.
+    let along = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, Y, X));
+    meets_at(
+        &circle([7.0, 0.0, 8.0], 3.0, Y, X),
+        &along,
+        &[[1.5, 0.5, 7.0]],
+        touch,
+    );
+    let aside = SurfaceKind::Cylinder(cylinder([1.0, 0.0, 2.0], 5.0, Z, Y));
+    meets_at(
+        &circle([9.0, 4.0, 2.0], 3.0, Z, Y),
+        &aside,
+        &[[1.5, 0.5, 4.0]],
+        touch,
+    );
+}
+
+#[test]
+fn circles_a_hair_apart_on_a_coordinate_axis_are_told_apart_exactly() {
+    // The cylinder of radius 1.5 and a circle about (3, 3, 10), √18 from the axis, of the radius
+    // r nearest √18 − 1.5 below it: r + 1.5 falls short of √18 by under a step of 18 in the
+    // squares, where their enclosures meet. The exact signs say apart.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 1.5, X, Z));
+    let short = 2.742_640_687_119_284_8;
+    misses(&circle([3.0, 3.0, 10.0], short, X, Z), &tube);
+    // A double larger, the two cross by a hair: two crossings no enclosures hold apart, the
+    // engine's.
+    undecided(&circle([3.0, 3.0, 10.0], short.next_up(), X, Z), &tube);
+}
+
+#[test]
+fn circles_touching_off_the_coordinate_axes_are_the_engines() {
+    // About the axis (0.6, 0.8, 0) at height 4, circles whose centres stand off the axis along z
+    // touch the cut, outside it and inside it: no enclosure tells, and no sum of products of
+    // stored doubles is the height.
+    let leaning = SurfaceKind::Cylinder(cylinder([0.0; 3], 0.5, Z, LEAN));
+    undecided(&circle([2.4, 3.2, 0.75], 0.25, Z, LEAN), &leaning);
+    let funnel = SurfaceKind::Cone(cone([0.0; 3], 0.5, 0.0625, Z, LEAN));
+    undecided(&circle([2.4, 3.2, 0.5], 0.25, Z, LEAN), &funnel);
+}
+
+#[test]
+fn a_circle_in_the_apex_plane_is_the_engines() {
+    // The cone of radius v about z from the origin cuts its apex's plane in one point, no circle
+    // to meet, so the closed form leaves it.
+    let funnel = SurfaceKind::Cone(cone([0.0; 3], 0.0, 1.0, X, Z));
+    let (spots, work) = points_of(&circle([3.0, 0.0, 0.0], 0.5, X, Z), &funnel);
+    assert!(spots.is_empty() && work > FEW, "{spots:?}, {work} units");
+}
+
+/// A cylinder of radius 5 about the axis off the coordinate axes, over `v`.
+fn leaning_tube(v: (f64, f64)) -> SurfaceKind {
+    let frame = Frame::new(Z, LEAN).unwrap();
+    SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 5.0, frame, (ROUND, v)).unwrap())
+}
+
+#[test]
+fn circles_apart_at_an_end_of_the_domain_meet_nothing() {
+    // Each circle's plane is an end of the domain: on a coordinate axis an exact sign says it is on
+    // the end, not past it, and off them its enclosure reaches the end. The surface's points in that
+    // plane are the cut circle's, on the end or past it, so two circles apart there meet nothing
+    // wherever the end lies (issue 995, group R). Inside the cut circle, round it, and beside it with
+    // their boxes meeting, at each end.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    for z in [300.0, -300.0] {
+        for (center, radius) in [([1.0, 0.0], 1.0), ([1.0, 0.0], 20.0), ([7.0, 7.0], 4.5)] {
+            misses(&circle([center[0], center[1], z], radius, X, Z), &tube);
+        }
+    }
+    // The cone's cut at z = 310, v = 300, has radius 226, and past the apex at z = -290, v = -300,
+    // radius 224: circles about 8 from the axis inside and round it, as in the stored input, and
+    // one beside it.
+    let funnel = SurfaceKind::Cone(cone([0.0, 0.0, 10.0], 1.0, 0.75, X, Z));
+    for z in [310.0, -290.0] {
+        for (center, radius) in [
+            ([8.0, 0.0], 100.0),
+            ([0.0, 8.0], 400.0),
+            ([200.0, 200.0], 50.0),
+        ] {
+            misses(&circle([center[0], center[1], z], radius, X, Z), &funnel);
+        }
+    }
+    // Off the coordinate axes, about 4·(0.6, 0.8, 0), on a domain that ends there either way: by
+    // enclosures alone.
+    for ends in [(-300.0, 4.0), (4.0, 300.0)] {
+        let leaning = leaning_tube(ends);
+        misses(&circle([2.4, 3.2, 1.0], 1.0, Z, LEAN), &leaning);
+        misses(&circle([2.4, 3.2, 1.0], 20.0, Z, LEAN), &leaning);
+        misses(&circle([-3.2, 7.4, 7.0], 4.5, Z, LEAN), &leaning);
+        // The cone of radius 0.5 + 0.75·v about that axis, of radius 3.5 at v = 4.
+        let frame = Frame::new(Z, LEAN).unwrap();
+        let funnel = Cone::new([0.0; 3], 0.5, 0.75, frame, (ROUND, ends)).unwrap();
+        misses(
+            &circle([2.4, 3.2, 0.5], 1.0, Z, LEAN),
+            &SurfaceKind::Cone(funnel),
+        );
+    }
+}
+
+/// The pair is the engine's: what it finds at the end of the domain it flags at its floor, where a
+/// closed form would have proven points.
+fn the_engines(curve: &CurveKind<3>, surface: &SurfaceKind) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let items = found.items();
+    assert!(
+        items.iter().any(|i| matches!(i, Item::Flagged { .. }))
+            && items.iter().all(|i| !matches!(i, Item::Overlap { .. })),
+        "{items:?}"
+    );
+}
+
+#[test]
+fn circles_crossing_or_touching_at_an_end_of_the_domain_are_the_engines() {
+    // At an end the closed form places no points (decision 32.86): crossing the cut circle and
+    // touching it, at each end of a cylinder about z, and crossing it off the coordinate axes.
+    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    for z in [300.0, -300.0] {
+        the_engines(&circle([5.0, 0.0, z], 5.0, X, Z), &tube);
+        the_engines(&circle([0.0, 8.0, z], 3.0, X, Z), &tube);
+    }
+    for ends in [(-300.0, 4.0), (4.0, 300.0)] {
+        the_engines(&circle([2.4, 3.2, 5.0], 5.0, Z, LEAN), &leaning_tube(ends));
+    }
 }
