@@ -263,10 +263,10 @@ impl Carrier {
         }
     }
 
-    /// Whether every point of `circle` lies within `b` steps of the surface, `None` where its
-    /// bound cannot be formed: on a plane, its largest distance times |n| against b · |n|
-    /// ([`on_flat`]); on a curved surface, an upper bound on its distance against b.
-    fn circle_fits(&self, circle: &Circle<3>, b: f64) -> Option<bool> {
+    /// Whether every point of `circle` lies within `limit` steps of the surface, `None` where its
+    /// bound cannot be formed: on a plane, its largest distance times |n| against the limit times
+    /// |n| ([`on_flat`]); on a curved surface, an upper bound on its distance against the limit.
+    fn circle_fits(&self, circle: &Circle<3>, limit: f64) -> Option<bool> {
         let (_, [_, _, own]) = circle.frame().unit_vectors().ok()?;
         let c = lift(circle.center())?;
         let r = at(circle.radius())?;
@@ -275,7 +275,7 @@ impl Carrier {
                 let off = dot(sub3(c, *origin)?, *normal)?;
                 let tilt = length(cross(own, *normal)?)?;
                 let reach = plus(at(tight::magnitude(off))?, times(r, tilt)?)?;
-                return on_flat(reach, *normal, b);
+                return on_flat(reach, *normal, limit);
             }
             Carrier::Round(cone) => {
                 let (h, delta) = polar(cone.center, cone.axis, c)?;
@@ -296,7 +296,7 @@ impl Carrier {
                 (near, far) => near.or(far)?,
             },
         };
-        Some(bound <= b)
+        Some(bound <= limit)
     }
 }
 
