@@ -2440,6 +2440,73 @@ fn circle_about_sphere(
     proven(Vec::new(), meter).map(Some)
 }
 
+/// Whether the whole circle about `centre` of radius `r` across the stored direction `normal`
+/// lies on `surface`, by exact signs of sums of products of the stored doubles, never an
+/// enclosure: in a plane as [`circle_in_plane`] decides it, on a sphere by
+/// [`circle_about_sphere`]'s theorem, and on a torus about the circle's own axis. Any other kind,
+/// a torus about another axis or one off the coordinate axes, and a sphere or torus whose products
+/// would not be exact, are `false` (decision 32.94).
+///
+/// Theorem (torus). A torus of radii R and r holds the point at distance ρ from its axis and
+/// height h along it over its centre if and only if (ρ − R)² + h² = r². Every point of a circle of
+/// radius ρ about that axis, in a plane across it at height h, stands at that distance and height,
+/// so the circle lies on the torus if and only if its normal is parallel to the axis, its centre is
+/// on it, and (ρ − R)² + h² − r² = 0. With the axis along a coordinate axis h is a difference of
+/// two stored doubles ([`height_terms`]), and the equation is the sign of a sum of their products.
+pub(crate) fn circle_lies_on(
+    centre: [f64; 3],
+    r: f64,
+    normal: [f64; 3],
+    surface: &SurfaceKind,
+) -> bool {
+    let zero = [0.0; 3];
+    match surface {
+        SurfaceKind::Plane(p) => {
+            let (c, a, b) = p.vectors();
+            [
+                side_of(a, zero, normal),
+                side_of(b, zero, normal),
+                side_of(centre, c, normal),
+            ]
+            .iter()
+            .all(|s| *s == Sign::Zero)
+        }
+        SurfaceKind::Sphere(s) => {
+            let (q, big) = (s.center(), s.radius());
+            // r² − R² + |centre − q|², a product at a time.
+            let mut terms = alloc::vec![(r, r), (-big, big)];
+            for (x, y) in centre.into_iter().zip(q) {
+                terms.extend([(x, x), (y, y), (-x, y), (-y, x)]);
+            }
+            let exact = [r, big].iter().chain(&centre).chain(&q).all(|x| tame(*x));
+            exact && !off_line(q, centre, normal) && sign_of(&terms) == Sign::Zero
+        }
+        SurfaceKind::Torus(t) => {
+            let (q, axis) = (t.center(), t.frame().normal());
+            let (big, small) = t.radii();
+            // The height is p − c, the centres' coordinates along the axis.
+            let Some((_, [(_, p), (_, c)])) = height_terms(axis, centre, q) else {
+                return false;
+            };
+            // (r − R)² + (p − c)² − small², a product at a time.
+            let terms = [
+                (r, r),
+                (-r, big),
+                (-r, big),
+                (big, big),
+                (p, p),
+                (-p, c),
+                (-c, p),
+                (c, c),
+                (-small, small),
+            ];
+            let exact = [r, big, small, p, c].iter().all(|x| tame(*x));
+            exact && same_line(q, axis, centre, normal) && sign_of(&terms) == Sign::Zero
+        }
+        _ => false,
+    }
+}
+
 /// The closed form for the pair, if one decides.
 fn closed_form(
     curve: &CurveKind<3>,

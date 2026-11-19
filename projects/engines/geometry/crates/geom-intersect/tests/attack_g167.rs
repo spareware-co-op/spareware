@@ -505,6 +505,38 @@ fn two_tori_about_one_axis() {
     ));
 }
 
+/// Issue 1044: a cylinder that ends exactly on a torus about its axis meets it in its end circle,
+/// an edge of its domain, which #1043 left to the engine. The cylinder of radius 3 from z = 0 to
+/// 3 meets the torus of radii 3 and 1 about (0, 0, 2) at z = 1 and at its end, z = 3, where
+/// (3 − 3)² + (3 − 2)² = 1²: that circle is the end circle itself, its centre exactly the
+/// cylinder's end. A torus about (0, 0, 0.1) and a cylinder ending at 1.1 miss each other's circle
+/// by a rounding (the doubles 1.1 and 0.1 differ by more than 1), so that pair stays the engine's.
+#[test]
+fn a_cylinder_ending_on_a_torus_meets_it_in_its_end_circle() {
+    let ring =
+        SurfaceKind::Torus(Torus::new([0.0, 0.0, 2.0], 3.0, 1.0, up(), (ROUND, ROUND)).unwrap());
+    let pipe = tube([0.0; 3], 3.0, up(), ROUND, (0.0, 3.0));
+    for (a, b) in [(&ring, &pipe), (&pipe, &ring)] {
+        let r = meet(a, b);
+        rings_are(&r, &[(3.0, 1.0), (3.0, 3.0)]);
+        let ends: Vec<[f64; 3]> = curves(&r)
+            .iter()
+            .filter_map(|c| match c {
+                CurveKind::Circle(c) if c.center()[2] > 2.0 => Some(c.center()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ends, [[0.0, 0.0, 3.0]]);
+    }
+    let low =
+        SurfaceKind::Torus(Torus::new([0.0, 0.0, 0.1], 3.0, 1.0, up(), (ROUND, ROUND)).unwrap());
+    let short = tube([0.0; 3], 3.0, up(), ROUND, (-5.0, 1.1));
+    for (a, b) in [(&low, &short), (&short, &low)] {
+        let r = natural(a, b, &mut meter()).unwrap();
+        assert!(r.is_none(), "{:?}", r.map(|x| format!("{:?}", x.items())));
+    }
+}
+
 fn trimmed(c: CurveKind<3>) -> Trimmed<3> {
     let (lo, hi) = c.domain();
     Trimmed::new(Basis::try_from(c).unwrap(), (lo, hi)).unwrap()
