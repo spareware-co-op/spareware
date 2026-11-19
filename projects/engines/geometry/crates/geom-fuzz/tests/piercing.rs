@@ -91,16 +91,18 @@ fn the_input_bound_is_reached_and_never_passed() {
 /// An input, the (u, v) enclosures of the overlap it answers (`None` for no item), and its count.
 type Pinned = (&'static [u8], Option<[(f64, f64); 2]>, u128);
 
-/// The inputs of issue 995 stored in the target's `crashes` folder, each with the answer one call
-/// of `curve_surface` gives and the work it takes: a segment along y lying in, or parallel to, a
-/// plane whose first vector holds a half. The first three are the timeouts of the 14 November
+/// The inputs of issue 995's group P stored in the target's `crashes` folder, each with the answer
+/// one call of `curve_surface` gives and the work it takes: a segment along y lying in, or parallel
+/// to, a plane whose first vector holds a half. The first three are the timeouts of the 14 November
 /// campaign, which ran the engine to the budget (1,048,577 units each); the next three are slow
 /// units of a search on the Phase 5 train, parallel and 0.48, 8.3 and 3.97 off the plane (913,098,
-/// 720,686 and 919,038 units to say nothing); the last lies in its plane (1,017,940 units for one
-/// flagged item). Lying in a plane and running along it are exact signs now (decision 32.85): a
-/// segment in its plane is one overlap by identity over all of it, t in [0, 1], at the enclosures
-/// of (u, v) given, and one along it off the plane is nothing.
-const LINES_ALONG_PLANES: [Pinned; 7] = [
+/// 720,686 and 919,038 units to say nothing); the seventh lies in its plane (1,017,940 units for one
+/// flagged item); the eighth, (0, 0, 0) to (0, 140, 0) in the plane on (64, 0, -10.5) and
+/// (0, 1, 0), is the timeout of Phase 6's run on the Phase 5 train (pull request 866), on a commit
+/// before 32.85, when this target's budget was 2^24. Lying in a plane and running along it are
+/// exact signs now (decision 32.85): a segment in its plane is one overlap by identity over all of
+/// it, t in [0, 1], at the enclosures of (u, v) given, and one along it off the plane is nothing.
+const LINES_ALONG_PLANES: [Pinned; 8] = [
     (
         &[
             0x00, 0x00, 0x20, 0x00, 0x00, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xa9, 0x00,
@@ -165,6 +167,13 @@ const LINES_ALONG_PLANES: [Pinned; 7] = [
             (-1.67e-321, 1.67e-321),
             (63.999_999_999_999_81, 82.000_000_000_000_24),
         ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xeb, 0x00,
+        ],
+        Some([(-5e-324, 5e-324), (-4.4e-323, 140.000_000_000_000_5)]),
         1,
     ),
 ];

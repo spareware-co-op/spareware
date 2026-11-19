@@ -28,7 +28,9 @@ mod common;
 use common::holds;
 
 use geom_curve::Frame;
-use geom_fuzz::level::{Case, MAX_INPUT_BYTES, Outcome, check, decode, harness, judge, surface};
+use geom_fuzz::level::{
+    Case, MAX_INPUT_BYTES, Outcome, answer_of, check, decode, harness, judge, surface,
+};
 use geom_fuzz::seeded;
 use geom_intersect::{Branch, LevelCurves, OnImplicit, trace};
 use geom_num::interval::Interval;
@@ -116,6 +118,38 @@ fn the_cases_reach_every_surface_function_and_answer() {
     assert!(levels.iter().all(|&n| n > 3));
     assert!(open > 5, "{open}");
     assert!(empty > 0, "{empty}");
+}
+
+/// The inputs stored in the target's `crashes` folder, each with the work one trace of its
+/// function takes at the target's budget: a cylinder kept from 1/16 to 1/4 of a half-turn, of
+/// radius 4.5, 1.5 and 1, seen along (4, -4, -4), whose silhouette is the ruling at the domain's
+/// end u = 1/4. The first two are the timeouts of the 14 November campaign, the third the timeout
+/// of Phase 6's run on the Phase 5 train (pull request 866): each ran to the budget, 1,048,577
+/// units, and to 2^24 alike. A cylinder's silhouette is a closed form now (decision 32.101): that
+/// ruling, decided exactly, in one unit.
+const SILHOUETTES_ALONG_AN_END: [(&[u8], u128); 3] = [
+    (&[0x2f, 0x17, 0xa4, 0xa4], 1),
+    (&[0xca, 0x01, 0x20, 0x20], 1),
+    (&[0x66, 0xe0, 0x2c, 0x20], 1),
+];
+
+#[test]
+fn a_cylinders_silhouette_along_its_domain_end_is_a_closed_form() {
+    for (data, work) in SILHOUETTES_ALONG_AN_END {
+        let (case, _) = decode(data);
+        let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        assert_eq!(used, work, "{data:02x?}");
+        let found = found.unwrap_or_else(|e| panic!("{e:?}: {data:02x?}"));
+        assert!(found.flagged.is_empty(), "{found:?}");
+        let [branch] = &found.branches[..] else {
+            panic!("{found:?}");
+        };
+        let quarter = Interval::point(0.25).unwrap();
+        let ends = [-0.5, 0.5].map(|v| [quarter, Interval::point(v).unwrap()]);
+        assert_eq!(branch.vertices, ends, "{data:02x?}");
+        assert_eq!(branch.deviation.to_bits(), 0, "{data:02x?}");
+        assert_eq!(check(&case), Ok(Outcome::Open), "{data:02x?}");
+    }
 }
 
 /// A sphere cutting the plane patch in a circle, and the true answer.
