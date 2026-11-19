@@ -339,10 +339,13 @@ impl Surface {
         check_surface(triangles, &around, meter)?;
         let input = Envelope::new(&source, epsilon, exec, meter)?;
         let h = half_side(epsilon);
+        // The shell starts as the input's own bodies, the same triangles round the same cube, so
+        // each is copied from the envelope just made rather than made again: making the bodies
+        // twice was a third of a small decimation's time under Miri.
         let mut shell = Vec::with_capacity(source.len());
-        for t in &source {
+        for body in input.bodies() {
             meter.charge(1)?;
-            shell.push(Some(TriangleEnvelope::new(*t, h)?));
+            shell.push(Some(body.clone()));
         }
         Ok(Self {
             points: points.to_vec(),
@@ -931,6 +934,18 @@ mod tests {
         }
         let mut meter = WorkMeter::new(Budget::of_work(1 << 30));
         Surface::new(&points, &triangles, 4, &Exec::serial(), &mut meter).unwrap()
+    }
+
+    #[test]
+    fn a_new_surfaces_shell_is_each_triangles_own_body() {
+        let s = sheet();
+        assert_eq!(s.shell.len(), s.source.len());
+        for (body, t) in s.shell.iter().zip(&s.source) {
+            let made = TriangleEnvelope::new(*t, s.h).unwrap();
+            let body = body.as_ref().unwrap();
+            assert_eq!(*body, made);
+            assert_eq!(body.planes(), made.planes());
+        }
     }
 
     /// Everything a patch may change.
