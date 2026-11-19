@@ -8,7 +8,7 @@
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and the cases reach every kind of surface.
 //! - Issue 995's segments along planes off the grid are answered by the closed form, each held to
-//!   its answer and its count.
+//!   its answer and its count, and so are its segments touching a cone's start circle (group Q).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -189,6 +189,92 @@ fn a_segment_along_a_plane_off_the_grid_is_a_closed_form() {
         let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
         let found = found.unwrap_or_else(|| panic!("stopped on the budget: {data:02x?}"));
         assert_eq!(format!("{:?}", found.items()), along(uv), "{data:02x?}");
+        assert_eq!(used, work, "{data:02x?}");
+        holds(check(&case));
+    }
+}
+
+/// Issue 995's group Q, stored in the target's `crashes` folder (the first five; a sixth input
+/// of the search reads the same 16 bytes as the first): the segment (−4, −4, −4) to (−3, −4, −4)
+/// against the cone about the z axis through (−4, −260, −4) of start radius 256 and slope 7/16
+/// (the first four) or 9/16 (the fifth). The segment's start is exactly 256 from the axis, in the
+/// plane of the start circle, so it touches the cone there: one tangent point at t = 0. The apex
+/// is 4096/7 or 4096/9 below the centre, off the grid, and the engine bisected round the touch
+/// for 387,549 and 597,383 units to one flagged item over t from 0 to about 0.6; the exact sign of
+/// a cone of any start radius (decision 32.88) makes it a closed form. The last, of slope 1/8, has
+/// its apex on the grid and was a closed form already (decision 32.87): it is held unchanged.
+/// Each with the upper bound of its point's enclosure of t, and its count.
+const A_SEGMENT_TOUCHING_A_START_CIRCLE: [(&[u8], f64, u128); 6] = [
+    (
+        &[
+            0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0xff, 0xc1,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x03, 0xff, 0x03, 0x00,
+        ],
+        1.018e-320,
+        4,
+    ),
+    (
+        &[
+            0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0xff, 0xff,
+            0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x25,
+        ],
+        1.018e-320,
+        4,
+    ),
+    (
+        &[
+            0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0xff, 0xff,
+            0xe7, 0x00, 0x00, 0x00, 0x25,
+        ],
+        1.018e-320,
+        4,
+    ),
+    (
+        &[
+            0x8a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0xff, 0xff,
+            0xe7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x25,
+        ],
+        1.018e-320,
+        4,
+    ),
+    (
+        &[
+            0xdc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0x01, 0x00,
+            0x00, 0xfe, 0xff, 0xfd,
+        ],
+        1.1443e-320,
+        4,
+    ),
+    (
+        &[
+            0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xff, 0xfa, 0xff,
+            0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x25,
+        ],
+        8.913e-321,
+        4,
+    ),
+];
+
+/// The answer's items as `Debug` prints them: the one tangent point at the segment's start, at
+/// the start circle's u = 0.5, with t from 0 to `t`.
+fn touching(t: f64) -> String {
+    format!(
+        "[Point {{ at: ParamBox {{ spans: [Interval {{ lo: 0.0, hi: {t:?} }}, Interval {{ lo: \
+         0.4999999999999997, hi: 0.5000000000000003 }}, Interval {{ lo: -4.4e-323, hi: 4.4e-323 \
+         }}, Interval {{ lo: 0.0, hi: 0.0 }}], unknowns: 3 }}, xyz: Box3 {{ min: P3 {{ x: \
+         Coord(-5), y: Coord(-4), z: Coord(-4) }}, max: P3 {{ x: Coord(-3), y: Coord(-4), z: \
+         Coord(-4) }} }}, contact: IsolatedTangent, class: Certified {{ bound: Steps(1), step: Q0 \
+         }} }}]"
+    )
+}
+
+#[test]
+fn a_segment_touching_a_start_circle_is_one_point_in_closed_form() {
+    for (data, t, work) in A_SEGMENT_TOUCHING_A_START_CIRCLE {
+        let (case, _) = decode(data);
+        let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let found = found.unwrap_or_else(|| panic!("stopped on the budget: {data:02x?}"));
+        assert_eq!(format!("{:?}", found.items()), touching(t), "{data:02x?}");
         assert_eq!(used, work, "{data:02x?}");
         holds(check(&case));
     }

@@ -194,12 +194,13 @@ const AN_EDGE_IN_A_PLANE_OFF_THE_GRID: [(&[u8], u128); 1] = [(
 ///   now run to the apex, where before they stopped 0.157 and 0.031 short of it, at the flagged
 ///   box;
 /// - the edge tangent to a cylinder of radius 232 on the frame off the grid: 3,322,070; the
-///   answer is the same in every field but the work.
-///
-/// Not stored: the same input's edge tangent to a cone off the grid (`00deffceffffffffff030463ffff`,
-/// 3,843,784 units), which the exact sums do not take (decision 32.87): its cone's radius at
-/// v = 0 is not zero.
-const AN_EDGE_THROUGH_AN_APEX_OR_TANGENT: [(&[u8], u128); 6] = [
+///   answer is the same in every field but the work;
+/// - the edge beside a cone of start radius 100 on the frame off the grid (issue 1016), which
+///   misses it: the edge stands exactly 84 from the axis and the cone's radius there is 84 less
+///   about 8.5e-15. 3,843,784 units before, the engine bisecting round a near touch that is not
+///   there; now the sign of P + Q·√N is exact (decision 32.88): 18,911, and the answer, the
+///   plane's circle on the cone, is the same in every field but the work.
+const AN_EDGE_THROUGH_AN_APEX_OR_TANGENT: [(&[u8], u128); 7] = [
     (
         &[
             0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -230,6 +231,12 @@ const AN_EDGE_THROUGH_AN_APEX_OR_TANGENT: [(&[u8], u128); 6] = [
             0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x2a, 0x00, 0xff, 0xef, 0xe7, 0x03, 0x3a,
         ],
         20_937,
+    ),
+    (
+        &[
+            0x00, 0xde, 0xff, 0xce, 0xff, 0xff, 0xff, 0xff, 0xff, 0x03, 0x04, 0x63, 0xff, 0xff,
+        ],
+        18_911,
     ),
 ];
 

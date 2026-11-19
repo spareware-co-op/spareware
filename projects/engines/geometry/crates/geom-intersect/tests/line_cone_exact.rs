@@ -4,7 +4,10 @@
 //! doubles by a sum of products of six (a cylinder) or eight (a cone whose radius at v = 0 is zero)
 //! of them. A line through the apex, or tangent, is one point; one a step inside is two; one a
 //! step outside is none. Before, the engine bisected round the touching point to the floor: one
-//! flagged item for 0.48 to 4.15 million units.
+//! flagged item for 0.48 to 4.15 million units. A cone of any other start radius (decision 32.88,
+//! issue 1016 and issue 995's group Q) is decided by the exact sign of P + Q·√N in whole numbers
+//! of the stored doubles: the issue's edge beside one misses it, a tangent is one point, and a
+//! step either side two or none.
 
 #![allow(
     clippy::unwrap_used,
@@ -359,5 +362,222 @@ fn a_crossing_the_enclosures_count_keeps_its_answer() {
         .collect();
     for (got, (_, _, held)) in got.iter().zip(&pairs) {
         assert_eq!(got, held);
+    }
+}
+
+/// The cone about [`APEX`] on the z axis of radius `r0` at v = 0 and slope `k`, and the line along
+/// y at height 1 that touches it for r0 = 0.5 and k = 1, at x = 2, t = 3 (its apex at z = −0.375
+/// is off the grid).
+fn tangent_to_a_started_cone(r0: f64, k: f64) -> Pair {
+    (
+        line([2.0, 0.25 - 3.0, 1.125], [0.0, 1.0, 0.0]),
+        cone(APEX, r0, k, ON_Z),
+    )
+}
+
+/// The same cone's start circle, of radius `r0` at v = 0, and the line along y in its plane that
+/// touches it for r0 = 0.5, at t = 3.
+fn tangent_to_a_start_circle(r0: f64) -> Pair {
+    (
+        line([1.0, 0.25 - 3.0, 0.125], [0.0, 1.0, 0.0]),
+        cone(APEX, r0, 1.0, ON_Z),
+    )
+}
+
+/// The issue's cone input with its radius `r0` at v = 0 (decision 32.88, issue 1016): the edge
+/// (−136, −4, 100) + t·(0.8, −0.6, 0) of the natural target's `00deffceffffffffff030463ffff`, and
+/// the cone about (−4, 12, 16) of slope 2 on the frame off the grid. Worked in exact rationals the
+/// edge stands exactly 84 from the axis, nearest it at t = 96, and for r0 = 100 the cone's radius
+/// there is 84 less about 8.5e-15.
+fn the_issue_cone(r0: f64) -> Pair {
+    (
+        line([-136.0, -4.0, 100.0], [0.8, -0.6, 0.0]),
+        cone([-4.0, 12.0, 16.0], r0, 2.0, OFF),
+    )
+}
+
+#[test]
+fn the_issue_cone_edge_misses_in_closed_form() {
+    // Before decision 32.88 the engine bisected round the near touch and flagged it, 3,843,784
+    // units for one call of the natural target.
+    let (edge, surface) = the_issue_cone(100.0);
+    let (found, work) = meet(&edge, &surface);
+    assert!(found.items().is_empty(), "{:?}", found.items());
+    assert_eq!(work, 0);
+}
+
+#[test]
+fn a_tangent_to_a_cone_with_a_start_radius_is_one_exact_point() {
+    // On halves about the z axis, the line touching a circle above the start circle, and the
+    // start circle itself; on the slant axis, a line along the circle through (2.5, 2.75, 1.125),
+    // three up the axis where the radius is 0.75 + 3·0.25, and one across it in the tangent plane
+    // there, so every product counts.
+    let (above, cone_above) = tangent_to_a_started_cone(0.5, 1.0);
+    let (start, cone_start) = tangent_to_a_start_circle(0.5);
+    let slant = cone(APEX, 0.75, 0.25, SLANT);
+    for (edge, surface, t) in [
+        (above, cone_above, 3.0),
+        (start, cone_start, 3.0),
+        (
+            line([4.5, 0.75, 2.125], [-2.0, 2.0, -1.0]),
+            slant.clone(),
+            1.0,
+        ),
+        (line([2.5, -2.25, 0.125], [0.0, 5.0, 1.0]), slant, 1.0),
+    ] {
+        let (found, _) = meet(&edge, &surface);
+        one_touch(&found, t);
+    }
+}
+
+#[test]
+fn a_step_from_a_tangent_to_a_cone_with_a_start_radius_is_two_points_or_none() {
+    // A step of the start radius or the slope out from the line crosses it twice, a step in
+    // misses; on the issue's cone the radius there is |r0 + 2z| with z near −92, past the apex, so
+    // a step down of r0 crosses and a step up misses. Each crossing's enclosure holds the double
+    // nearest its true t, worked to 80 digits from the stored doubles' exact values.
+    let outward: [(Pair, f64, [f64; 2]); 4] = [
+        (
+            tangent_to_a_started_cone(0.5_f64.next_up(), 1.0),
+            3.0,
+            [2.999_999_981_749_879, 3.000_000_018_250_121],
+        ),
+        (
+            tangent_to_a_started_cone(0.5, 1.0_f64.next_up()),
+            3.0,
+            [2.999_999_974_190_431_7, 3.000_000_025_809_568_3],
+        ),
+        (
+            tangent_to_a_start_circle(0.5_f64.next_up()),
+            3.0,
+            [2.999_999_989_463_288, 3.000_000_010_536_712],
+        ),
+        (
+            the_issue_cone(100.0_f64.next_down()),
+            96.0,
+            [95.999_999_022_774_63, 96.000_000_977_225_38],
+        ),
+    ];
+    for ((edge, surface), t, held) in outward {
+        let (found, _) = meet(&edge, &surface);
+        two_crossings(&found, t);
+        for (item, at) in found.items().iter().zip(held) {
+            let (lo, hi) = t_of(item);
+            assert!(lo <= at && at <= hi, "{lo} {hi} against {at}");
+        }
+    }
+    let inward = [
+        tangent_to_a_started_cone(0.5_f64.next_down(), 1.0),
+        tangent_to_a_started_cone(0.5, 1.0_f64.next_down()),
+        tangent_to_a_start_circle(0.5_f64.next_down()),
+        the_issue_cone(100.0_f64.next_up()),
+    ];
+    for (edge, surface) in inward {
+        let (found, _) = meet(&edge, &surface);
+        assert!(found.items().is_empty(), "{:?}", found.items());
+    }
+}
+
+/// Two crossings of cones with a start radius that the enclosures already counted, off the grid
+/// and on it, each with its t's enclosure as it was before decision 32.88: the exact sign is taken
+/// only where the enclosure of the discriminant reaches zero, so these answers keep every bit.
+#[test]
+fn a_crossing_of_a_cone_with_a_start_radius_keeps_its_answer() {
+    let pairs = [
+        (
+            line([1.5, 0.25 - 3.0, 1.125], [0.0, 1.0, 0.0]),
+            cone(APEX, 0.5, 1.0, ON_Z),
+            vec![
+                (1.881_966_011_250_068, 1.881_966_011_250_139_7),
+                (4.118_033_988_749_854, 4.118_033_988_749_935),
+            ],
+        ),
+        (
+            line([3.0, -3.0, 0.0], [0.0, 1.0, 0.0]),
+            cone([0.0; 3], 5.0, 1.0, ON_Z),
+            vec![
+                (-1.000_000_000_000_018, -0.999_999_999_999_982_7),
+                (6.999_999_999_999_97, 7.000_000_000_000_027),
+            ],
+        ),
+    ];
+    let got: Vec<Vec<(f64, f64)>> = pairs
+        .iter()
+        .map(|(edge, surface, _)| meet(edge, surface).0.items().iter().map(t_of).collect())
+        .collect();
+    let held: Vec<Vec<(f64, f64)>> = pairs.iter().map(|(_, _, held)| held.clone()).collect();
+    assert_eq!(got, held);
+}
+
+#[test]
+fn a_tangent_to_a_started_cone_whose_data_span_too_far_is_the_engines() {
+    // The same line with its origin at y = 1e-30 rather than −2.75: the stored lengths as whole
+    // numbers would need more than 127 bits, so no exact sign is taken, and the engine flags the
+    // touching point or stops on the budget.
+    let (_, surface) = tangent_to_a_started_cone(0.5, 1.0);
+    let far = line([2.0, 1e-30, 1.125], [0.0, 1.0, 0.0]);
+    let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
+    match curve_surface(&far, &surface, &mut meter) {
+        Err(IntersectError::BudgetExceeded) => {}
+        Ok(found) => assert!(
+            found
+                .items()
+                .iter()
+                .all(|i| matches!(i, Item::Flagged { .. })),
+            "{:?}",
+            found.items()
+        ),
+        Err(other) => panic!("{other:?}"),
+    }
+}
+
+/// Issue 995's group Q: the cone about the z axis through (−4, −260, −4) of start radius 256 and
+/// slope `k`, as the piercing target draws it, and the line along x through (−4, `y`, −4), which
+/// touches its start circle for y = −4, at t = 0.
+fn group_q(y: f64, k: f64) -> Pair {
+    (
+        line([-4.0, y, -4.0], [1.0, 0.0, 0.0]),
+        cone([-4.0, -260.0, -4.0], 256.0, k, ON_Z),
+    )
+}
+
+/// The piercing target's slopes of group Q, 7/16 and 9/16 (apex 4096/7 and 4096/9 below the
+/// centre, off the grid), and 1/8 (apex on the grid).
+const SLOPES_Q: [f64; 3] = [0.4375, 0.5625, 0.125];
+
+#[test]
+fn a_segment_touching_a_start_circle_at_its_end_is_one_point() {
+    // The piercing target's segment (−4, −4, −4) to (−3, −4, −4), t from 0 to 1, touches at its
+    // start: before decision 32.88 the engine spent 387,549 and 597,383 units on slopes 7/16 and
+    // 9/16 for one flagged item; slope 1/8 was a closed form already. Now 4 units each.
+    for k in SLOPES_Q {
+        let (_, surface) = group_q(-4.0, k);
+        let segment = CurveKind::Line(Line::segment([-4.0; 3], [-3.0, -4.0, -4.0]).unwrap().value);
+        let (found, work) = meet(&segment, &surface);
+        one_touch(&found, 0.0);
+        let (lo, _) = t_of(&found.items()[0]);
+        assert_eq!((lo, work), (0.0, 4), "{k}");
+    }
+}
+
+#[test]
+fn a_step_from_group_q_s_touch_is_two_points_or_none() {
+    // One step of y nearer the axis, the line crosses the start circle twice, at t = ±6.74e-7
+    // (worked to 80 digits from the stored doubles' exact values); one step farther it misses.
+    for k in SLOPES_Q {
+        let (edge, surface) = group_q((-4.0_f64).next_down(), k);
+        let (found, _) = meet(&edge, &surface);
+        two_crossings(&found, 0.0);
+        for (item, at) in found
+            .items()
+            .iter()
+            .zip([-6.743_495_761_743_046e-7, 6.743_495_761_743_046e-7])
+        {
+            let (lo, hi) = t_of(item);
+            assert!(lo <= at && at <= hi, "{lo} {hi} against {at}");
+        }
+        let (edge, surface) = group_q((-4.0_f64).next_up(), k);
+        let (found, _) = meet(&edge, &surface);
+        assert!(found.items().is_empty(), "{:?}", found.items());
     }
 }

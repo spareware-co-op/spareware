@@ -21,8 +21,10 @@
 //!   cylinder, or a cone whose radius at v = 0 is zero, reaches zero, its sign is exact on any
 //!   stored doubles whose products of eight are exact, and the discriminant is then enclosed
 //!   from its exact sum: a line through the apex or tangent is one point, and one a step either
-//!   side two or none (decision 32.87). Elsewhere an interval decides, and what it cannot tell
-//!   goes to the engine.
+//!   side two or none (decision 32.87). For a cone of any other start radius the discriminant is
+//!   P + Q·√N, and its sign is exact in whole numbers of the stored doubles of at most 768 bits,
+//!   with P² against Q²·N in 1,536 where the signs of P and Q differ (decision 32.88). Elsewhere
+//!   an interval decides, and what it cannot tell goes to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
@@ -71,7 +73,10 @@
 //! edge through a cone's apex, or tangent to a cylinder off the grid, cost the engine 483,244 to
 //! 4,147,759 units before decision 32.87; now 4, and where the enclosure of the discriminant
 //! reaches zero, one exact sum of at most 432 products of six or eight doubles, each at most 128
-//! doubles on the stack. Recursion: none.
+//! doubles on the stack. A plane's edge beside a cone of start radius 100 off the grid cost the
+//! engine 3,824,869 units, and a segment touching a start circle 387,503 to 597,337, before
+//! decision 32.88; now at most 4, and where the enclosure reaches zero 50 products of 768-bit
+//! integers and three of 1,536-bit ones, on the stack. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -93,6 +98,7 @@ use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::sturm::Roots;
+use geom_num::wide::Wide;
 use geom_num::{math, predicate, quadric};
 use geom_nurbs::{BernsteinCurve, BernsteinPatch, Bounds, Direction, Limit, NurbsError};
 use geom_run::WorkMeter;
@@ -773,6 +779,7 @@ fn line_cone(
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
     let (r0, k) = cone.radius_and_slope();
+    let started = r0 != 0.0;
     // k/s and z/s, not k·s and z·s: the two agree only for s = ±1, as built, and a similarity
     // scales the axial factor.
     let factor = Interval::point(cone.axial_sign())?;
@@ -804,9 +811,13 @@ fn line_cone(
     let known = match exact {
         Some(_) => (exact, None),
         None if straddles(terms)? => {
-            let n = lift(cone.frame().normal())?;
-            let by = dot(n, n)?.mul(factor.square()?)?;
-            stored_count(cone_excess(line, cone), by)?
+            if started {
+                started_count(line, cone)
+            } else {
+                let n = lift(cone.frame().normal())?;
+                let by = dot(n, n)?.mul(factor.square()?)?;
+                stored_count(cone_excess(line, cone), by)?
+            }
         }
         None => (None, None),
     };
@@ -837,13 +848,10 @@ fn cross_parts_from(o: [f64; 3], c: [f64; 3], d: [f64; 3]) -> [[[f64; 2]; 4]; 3]
 /// rulings, touches it along one, or holds the apex alone as k²·N·|m|² is above, equal to or
 /// below (s² + k²)·(m·n)²: s²·N·Δ is their difference, a sum of products of eight stored
 /// doubles. A line through the apex has m = 0, so Δ = 0: it meets the cone there alone, or lies
-/// along a ruling. `None` for a cone of another start radius, or where a product would not be
-/// exact.
+/// along a ruling. For a cone whose radius at v = 0 is zero only (a cone of another start radius
+/// is [`started_count`]'s); `None` where a product would not be exact.
 fn cone_excess(line: &Line<3>, cone: &Cone) -> Option<f64> {
-    let (r0, k) = cone.radius_and_slope();
-    if r0 != 0.0 {
-        return None;
-    }
+    let (_, k) = cone.radius_and_slope();
     let (o, d) = (line.origin(), line.direction());
     let (c, n, s) = (cone.center(), cone.frame().normal(), cone.axial_sign());
     let mut sum = ExactSum::new();
@@ -857,6 +865,234 @@ fn cone_excess(line: &Line<3>, cone: &Cone) -> Option<f64> {
     add_square(&mut sum, &skew, &[k, k], true)?;
     let e = sum.round_ieee();
     e.is_finite().then_some(e)
+}
+
+/// The width of the whole numbers of [`started_count`]: 768 bits. Each factor there is below
+/// 2^127 ([`whole_numbers`]), and P and Q, sums of products of eight and seven, fit it while each
+/// kind's whole numbers stay below about 2^90; past that a step is `None` (the engine's).
+type Part = Wide<12>;
+
+/// The width of P² − Q²·N: 1,536 bits, twice [`Part`]'s.
+type Square = Wide<24>;
+
+/// The fraction field of a double's bits: the low 52 bits.
+const FRACTION: u64 = (1 << 52) - 1;
+
+/// A normal double's hidden bit, above its 52 fraction bits.
+const HIDDEN: i64 = 1 << 52;
+
+/// 2^32, the place of the upper half of a 64-bit limb.
+const TWO_POW_32: f64 = 4_294_967_296.0;
+
+/// A finite double as m·2^e exactly, m odd and below 2^53 in size, or (0, 0) for a zero: the
+/// significand with its hidden bit and the exponent less the bias and the 52 fraction bits (IEEE
+/// 754-2019, section 3.3; the subnormals have no hidden bit and the exponent of the least normal
+/// one). `None` for an infinity or NaN. (The same as `geom_math`'s `exact::dyadic`, which that
+/// crate keeps to itself.)
+fn dyadic(x: f64) -> Option<(i64, i32)> {
+    if !x.is_finite() {
+        return None;
+    }
+    let bits = x.to_bits();
+    let fraction = i64::try_from(bits & FRACTION).ok()?;
+    let field = i32::try_from((bits >> 52) & 0x7ff).ok()?;
+    // A subnormal, of field 0, has no hidden bit and the exponent of the least normal double.
+    let m = if field == 0 {
+        fraction
+    } else {
+        fraction.checked_add(HIDDEN)?
+    };
+    let e = field.max(1).checked_sub(1075)?;
+    if m == 0 {
+        return Some((0, 0));
+    }
+    // m ≠ 0 and below 2^53, so it has at most 52 trailing zeros.
+    let zeros = m.trailing_zeros();
+    let m = m.checked_shr(zeros)?;
+    let m = if x.is_sign_negative() {
+        m.checked_neg()?
+    } else {
+        m
+    };
+    Some((m, e.checked_add(i32::try_from(zeros).ok()?)?))
+}
+
+/// Stored doubles of one kind as whole numbers, exactly: each times 2^−e, with e the exponent of
+/// the least last place among them, and e. `None` where one would reach 2^127 (they span more
+/// than about 127 bits) or is not finite.
+fn whole_numbers<const K: usize>(xs: [f64; K]) -> Option<([Part; K], i32)> {
+    let mut parts = [(0, 0); K];
+    for (slot, x) in parts.iter_mut().zip(xs) {
+        *slot = dyadic(x)?;
+    }
+    let least = parts
+        .iter()
+        .filter(|(m, _)| *m != 0)
+        .map(|&(_, e)| e)
+        .min()
+        .unwrap_or(0);
+    let mut whole = [Part::ZERO; K];
+    for (slot, (m, e)) in whole.iter_mut().zip(parts) {
+        if m != 0 {
+            let shift = u32::try_from(e.checked_sub(least)?).ok()?;
+            *slot = Part::from_i128(i128::from(m).checked_mul(2_i128.checked_pow(shift)?)?);
+        }
+    }
+    Some((whole, least))
+}
+
+/// a·b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_dot(a: &[Part; 3], b: &[Part; 3]) -> Option<Part> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    a0.checked_mul(b0)?
+        .checked_add(&a1.checked_mul(b1)?)?
+        .checked_add(&a2.checked_mul(b2)?)
+}
+
+/// a × b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_cross(a: &[Part; 3], b: &[Part; 3]) -> Option<[Part; 3]> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    let minus = |p: &Part, q: &Part, r: &Part, s: &Part| -> Option<Part> {
+        p.checked_mul(q)?.checked_sub(&r.checked_mul(s)?)
+    };
+    Some([
+        minus(a1, b2, a2, b1)?,
+        minus(a2, b0, a0, b2)?,
+        minus(a0, b1, a1, b0)?,
+    ])
+}
+
+/// 2^e as a double, for the normal powers of two only (e from −1022 to 1023), from its bits.
+fn pow2(e: i32) -> Option<f64> {
+    let field = u64::try_from(e.checked_add(1023)?).ok()?;
+    (1..=2046)
+        .contains(&field)
+        .then(|| f64::from_bits(field << 52))
+}
+
+/// A whole number enclosed: its limbs' halves summed exactly and rounded once to nearest, then
+/// widened a step either way. `None` where it does not fit a double.
+fn enclose<const L: usize>(w: &Wide<L>) -> Option<Interval> {
+    let negative = w.is_negative();
+    let magnitude = if negative { w.checked_neg()? } else { *w };
+    let mut sum = ExactSum::new();
+    let mut place = 1.0;
+    for limb in magnitude.to_le_limbs() {
+        for half in [limb & 0xffff_ffff, limb >> 32] {
+            if half != 0 {
+                sum.add(f64::from(u32::try_from(half).ok()?) * place);
+            }
+            place *= TWO_POW_32;
+        }
+    }
+    let r = sum.round_ieee();
+    let r = if negative { -r } else { r };
+    if !r.is_finite() {
+        return None;
+    }
+    Interval::new(r.next_down(), r.next_up()).ok()
+}
+
+/// The count of a line on a cone of any start radius r₀, from the exact sign of its
+/// discriminant, and an enclosure of the discriminant (or `None` where its doubles cannot hold
+/// it). `(None, None)` where a whole number does not fit.
+///
+/// With W = o − c, m = W × d, N = n·n, s the axial factor and k the slope, Δ is
+/// (P + Q·√N) / (s²·N), where P = k²·N·|m|² − (s² + k²)·(m·n)² + r₀²·s²·|d × n|², a sum of
+/// products of eight stored doubles, and Q = 2·r₀·k·s·((d·d)(W·n) − (W·d)(d·n)), of seven. (For
+/// r₀ = 0 it is [`cone_excess`]'s.) Where P and Q do not have opposite signs, Δ has the sign of
+/// P + Q; where they do, P + Q·√N has P's sign times that of P² − Q²·N, which is then also
+/// (P² − Q²·N) / (P − Q·√N) with no cancellation in either part.
+///
+/// Each stored double is m·2^e exactly, so each of the four kinds of data (o, c and r₀; d; n;
+/// k and s) times one power of two is a whole number, and P and Q·√N are homogeneous in each kind
+/// (of degrees two, two, two and two), so the scaling keeps the sign, and Δ only gains the power
+/// of two of the first two kinds, squared. P, Q and N are then whole numbers of at most 768 bits
+/// and P² − Q²·N of at most 1,536 ([`Part`], [`Square`]).
+///
+/// Cost: four conversions of at most seven doubles, 50 products and 30 sums or differences of
+/// 768-bit integers, three products and a difference of 1,536-bit ones where the signs differ, and
+/// the enclosure's four or five conversions and a few interval steps. No allocation: every number
+/// is on the stack.
+fn started_count(line: &Line<3>, cone: &Cone) -> (Option<Meeting>, Option<Interval>) {
+    match started_sign(line, cone) {
+        Some((Sign::Positive, known)) => (Some(Meeting::Twice), known),
+        Some((Sign::Negative, known)) => (Some(Meeting::Nowhere), known),
+        Some((Sign::Zero, known)) => (Some(Meeting::Tangent), known),
+        None => (None, None),
+    }
+}
+
+/// The sign of Δ for [`started_count`], and its enclosure where the doubles hold it.
+fn started_sign(line: &Line<3>, cone: &Cone) -> Option<(Sign, Option<Interval>)> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cone.center());
+    let (r0, k) = cone.radius_and_slope();
+    let ([o0, o1, o2, c0, c1, c2, r0], lengths) = whole_numbers([o0, o1, o2, c0, c1, c2, r0])?;
+    let (d, along) = whole_numbers(line.direction())?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let (m, dn) = (wide_cross(&w, &d)?, wide_cross(&d, &n)?);
+    let (big_n, mn) = (wide_dot(&n, &n)?, wide_dot(&m, &n)?);
+    let (kk, ss) = (k.checked_mul(&k)?, s.checked_mul(&s)?);
+    let p = kk
+        .checked_mul(&big_n)?
+        .checked_mul(&wide_dot(&m, &m)?)?
+        .checked_sub(&ss.checked_add(&kk)?.checked_mul(&mn.checked_mul(&mn)?)?)?
+        .checked_add(
+            &r0.checked_mul(&r0)?
+                .checked_mul(&ss)?
+                .checked_mul(&wide_dot(&dn, &dn)?)?,
+        )?;
+    let q = wide_dot(&d, &d)?
+        .checked_mul(&wide_dot(&w, &n)?)?
+        .checked_sub(&wide_dot(&w, &d)?.checked_mul(&wide_dot(&d, &n)?)?)?
+        .checked_mul(&r0.checked_mul(&k)?.checked_mul(&s)?)?;
+    let q = q.checked_add(&q)?;
+    let opposite = matches!(
+        (p.signum(), q.signum()),
+        (Sign::Positive, Sign::Negative) | (Sign::Negative, Sign::Positive)
+    );
+    let gap = if opposite {
+        let (p2, q2) = (p.resize::<24>()?, q.resize::<24>()?);
+        let n2: Square = big_n.resize()?;
+        Some(
+            p2.checked_mul(&p2)?
+                .checked_sub(&q2.checked_mul(&q2)?.checked_mul(&n2)?)?,
+        )
+    } else {
+        None
+    };
+    let sign = match &gap {
+        Some(e) => p.signum().mul(e.signum()),
+        None => p.checked_add(&q)?.signum(),
+    };
+    let scale = lengths.checked_add(along)?.checked_mul(2)?;
+    Some((
+        sign,
+        started_delta([&p, &q, &big_n, &ss], gap.as_ref(), scale),
+    ))
+}
+
+/// Δ = (P + Q·√N) / (s²·N) · 2^`scale` enclosed, through (P² − Q²·N) / (P − Q·√N) where `gap`
+/// holds P² − Q²·N; `None` where a step leaves the doubles.
+fn started_delta(
+    [p, q, big_n, ss]: [&Part; 4],
+    gap: Option<&Square>,
+    scale: i32,
+) -> Option<Interval> {
+    let (p, q, big_n, ss) = (enclose(p)?, enclose(q)?, enclose(big_n)?, enclose(ss)?);
+    let q_root = q.mul(big_n.sqrt().ok()?).ok()?;
+    let top = match gap {
+        Some(e) => enclose(e)?.div(p.sub(q_root).ok()?).ok()?,
+        None => p.add(q_root).ok()?,
+    };
+    let unit = Interval::point(pow2(scale)?).ok()?;
+    top.div(ss.mul(big_n).ok()?).ok()?.mul(unit).ok()
 }
 
 /// What an exact chain says of a line and a torus, on whole-number data.
