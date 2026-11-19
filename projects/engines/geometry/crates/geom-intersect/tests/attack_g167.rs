@@ -441,6 +441,63 @@ fn a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on() {
     assert_eq!(centre_turn(&horn((hi.next_up(), 1.5))), None);
 }
 
+/// The ring torus of radii 3 and 1 about the z axis on tube turns `tube`.
+fn ring(tube: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Torus(Torus::new([0.0; 3], 3.0, 1.0, up(), (ROUND, tube)).unwrap())
+}
+
+/// The radius of each circle the plane z = -1/2 meets `ring(tube)` in, with its tube turn's box,
+/// sorted.
+fn circles_below(tube: (f64, f64)) -> Vec<(f64, (f64, f64))> {
+    let r = meet(&level(-0.5), &ring(tube));
+    let mut out: Vec<(f64, (f64, f64))> = r
+        .items()
+        .iter()
+        .map(|i| match i {
+            Item::Curve { at, curve, .. } => match &**curve {
+                CurveKind::Circle(c) => (c.radius(), (at.spans()[3].lo(), at.spans()[3].hi())),
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    out
+}
+
+#[test]
+fn a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back() {
+    // The plane z = -1/2 meets the ring torus of radii 3 and 1 in two circles: radius 3 - √3/2 at
+    // the tube turn -5/6 (inside the tube's centre circle, read as 7/6) and 3 + √3/2 at -1/6. On a
+    // part of the tube each side of where the reading starts again, both lie on it, each at its
+    // turn there: a turn read past the domain's end is a turn back, as one read before its start
+    // is a turn on.
+    let half = 3f64.sqrt() / 2.0;
+    for (tube, inner, outer) in [
+        ((-0.9, -0.1), -5.0 / 6.0, -1.0 / 6.0),
+        ((-1.9, -0.1), -5.0 / 6.0, -1.0 / 6.0),
+        ((1.1, 1.9), 7.0 / 6.0, 11.0 / 6.0),
+        ((0.1, 1.9), 7.0 / 6.0, 11.0 / 6.0),
+    ] {
+        let got = circles_below(tube);
+        assert_eq!(got.len(), 2, "{tube:?}: {got:?}");
+        for ((radius, (lo, hi)), (want, turn)) in
+            got.iter().zip([(3.0 - half, inner), (3.0 + half, outer)])
+        {
+            assert!((radius - want).abs() < 1e-12, "{tube:?}: {got:?}");
+            assert!((*lo..=*hi).contains(&turn), "{tube:?}: {got:?}");
+            assert!(tube.0 <= *lo && *hi <= tube.1, "{tube:?}: {got:?}");
+        }
+    }
+    // A box that starts on the domain's end meets it there and is held to it, not moved a turn
+    // back (before the domain's start, where the point would be lost); from the next double down
+    // it lies past the end, and a turn back is before the start.
+    let (lo, hi) = centre_turn(&horn(ROUND)).unwrap();
+    assert!((lo..=hi).contains(&1.0) && lo > 0.5, "{lo}, {hi}");
+    assert_eq!(centre_turn(&horn((0.5, lo))), Some((lo, lo)));
+    assert_eq!(centre_turn(&horn((0.5, lo.next_down()))), None);
+}
+
 #[test]
 fn a_plane_through_a_torus_s_axis() {
     let t = torus(0.0, 5.0, 1.0);

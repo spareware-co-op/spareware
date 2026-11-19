@@ -1350,7 +1350,7 @@ fn parameters(
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
             let v = if read_v {
-                tube_turn(t, [x, y, z], v_range.0)?
+                tube_turn(t, [x, y, z], v_range)?
             } else {
                 all_v()?
             };
@@ -1365,15 +1365,20 @@ fn parameters(
     }))
 }
 
-/// A torus's tube turn at the point `local` in its frame: read from −1 to 1, and moved a turn on
-/// where that ends before the domain's start `v0`.
-fn tube_turn(t: &Torus, local: Vector, v0: f64) -> Result<Interval, IntersectError> {
+/// A torus's tube turn at the point `local` in its frame, on the tube's domain `(v0, v1)`. `turn_of`
+/// reads it from −1/2 to 3/2 (a point inside the tube's centre circle from 1/2 to 3/2, as its
+/// opposite's turn and a half-turn on), and a box across that circle down to −1. A box that ends
+/// before the domain's start is moved a turn on, and one that starts past its end a turn back; one
+/// that meets the domain is not moved, as [`on`] keeps it.
+fn tube_turn(t: &Torus, local: Vector, (v0, v1): (f64, f64)) -> Result<Interval, IntersectError> {
     let [x, y, z] = local;
     let (major, _) = t.radii();
     let out = tight::norm(&[x, y])?.sub(point(major)?)?;
     let turn = turn_of(out, z.mul(point(t.axial_sign())?)?)?;
     if turn.hi() < v0 {
         Ok(turn.add(point(2.0)?)?)
+    } else if turn.lo() > v1 {
+        Ok(turn.sub(point(2.0)?)?)
     } else {
         Ok(turn)
     }
