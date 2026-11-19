@@ -796,6 +796,38 @@ fn a_plane_across_an_extrusion_cuts_a_copy_of_the_profile() {
 }
 
 #[test]
+fn an_arc_any_number_of_turns_out_is_cut_where_an_edge_crosses_it() {
+    // The plane z = 5 up to x = 3 meets a quarter of the circle of radius 5 about z, pushed along
+    // z, in the arc from (3, 4, 5) to (0, 5, 5): the plane's edge x = 3 cuts the profile's copy
+    // there. On a profile domain whole turns from where the cut's turn is read, the cut is moved
+    // to it by those turns, so the arc is kept from it, not lost with the rest of the copy.
+    let short = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 5.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-1000.0, 3.0), WIDE),
+        )
+        .unwrap(),
+    );
+    for turns in [(0.0, 0.5), (4.0, 4.5), (-2.0, -1.5), (1000.0, 1000.5)] {
+        let arc = Circle::new([0.0; 3], 5.0, up(), turns).unwrap();
+        let wall = pushed(CurveKind::Circle(arc), [0.0, 0.0, 1.0], (0.0, 10.0));
+        let r = meet(&short, &wall);
+        let c = curves(&r);
+        assert_eq!(c.len(), 1, "{turns:?}: {:?}", r.items());
+        let (lo, hi) = c[0].domain();
+        let (from, to) = (
+            c[0].point(lo, Limit::FromRight).unwrap(),
+            c[0].point(hi, Limit::FromRight).unwrap(),
+        );
+        for (got, want) in [(from, [3.0, 4.0, 5.0]), (to, [0.0, 5.0, 5.0])] {
+            assert!(length(sub(got, want)) < 1e-6, "{turns:?}: {got:?}");
+        }
+    }
+}
+
+#[test]
 fn two_sweeps_of_one_direction_meet_in_lines() {
     let a = wall([0.0, -5.0, 0.0], [0.0, 5.0, 0.0]);
     let b = wall([-5.0, 1.0, 0.0], [5.0, 1.0, 0.0]);

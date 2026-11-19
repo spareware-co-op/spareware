@@ -1818,6 +1818,10 @@ fn cut_at(
         return Ok(None);
     };
     let (lo, hi) = crate::curve::finite(curve)?;
+    // An arc's turn is read as a loop's is, from −1 to 3/2, and its domain may start any number of
+    // turns from there: the box is moved by whole turns to it, as a tube's turn is.
+    let arc = matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && !closed(curve);
+    let s = if arc { to_domain(s, (lo, hi))? } else { s };
     let mut t = tight::middle(s);
     // On a loop the turns wrap. The count, not t, ends the loop, and [`WRAPS`] periods bring the
     // angle into every loop's domain, which [`nearer`] has moved to within two turns of zero. Both
