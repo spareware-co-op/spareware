@@ -21,6 +21,7 @@ use geom_intersect::quadrics::natural;
 use geom_intersect::result::{
     Coincidence, CurveContact, CurveEnd, Intersection, Item, PointContact,
 };
+use geom_num::interval::Interval;
 use geom_nurbs::Limit;
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind};
@@ -679,6 +680,62 @@ fn a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge() {
         .unwrap(),
     );
     assert!(natural(&level(0.0), &ring, &mut meter()).unwrap().is_none());
+}
+
+/// A box that ends exactly at an end of a domain that is an edge reaches that end, from outside the
+/// domain or from inside it: it is off the domain only when it is wholly past the end (32.94). The
+/// circle where a sphere of radius 2 meets the cylinder of radius 1 about z stands at a height near
+/// √3, and the closed form reads the height of its middle as that point's offset from the centre
+/// along the axis's unit vector, enclosed (`quadrics::parameters`), a box from l to h a few steps
+/// wide; it is read here the same way. A cylinder whose domain starts at h, or ends at l, has its end
+/// circle there off the sphere (h² and l² are not 3) and the circle near −√3 off its domain, so
+/// nothing cuts the circle near √3, and that circle's box ends exactly at the domain's end. It may
+/// stand on the end circle's height, so the pair is the engine's, never nothing.
+#[test]
+fn a_box_that_ends_exactly_at_an_edge_reaches_it() {
+    let s = sphere([0.0; 3], 2.0);
+    let axis = frame_along([0.0, 0.0, 1.0]);
+    let tall = meet(&s, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 1.0));
+    let upper = curves(&tall)
+        .into_iter()
+        .max_by(|p, q| mid(p)[2].total_cmp(&mid(q)[2]))
+        .unwrap();
+    let (lo, hi) = upper.domain();
+    let at = upper
+        .enclose_point(lo * 0.5 + hi * 0.5, Limit::FromRight, &mut meter())
+        .unwrap()
+        .unwrap();
+    let (_, [_, _, n]) = axis.unit_vectors().unwrap();
+    let zero = Interval::point(0.0).unwrap();
+    let w = at.map(|c| c.sub(zero).unwrap());
+    let height = w[0]
+        .mul(n[0])
+        .unwrap()
+        .add(w[1].mul(n[1]).unwrap())
+        .unwrap()
+        .add(w[2].mul(n[2]).unwrap())
+        .unwrap()
+        .div(Interval::point(1.0).unwrap())
+        .unwrap();
+    let (l, h) = (height.lo(), height.hi());
+    assert!(1.7 < l && l < h && h < 1.8, "{height:?}");
+    let tube = |ends: (f64, f64)| {
+        SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 1.0, axis, (ROUND, ends)).unwrap())
+    };
+    for short in [tube((h, 1.9)), tube((-1.0, l))] {
+        for (a, b) in [(&s, &short), (&short, &s)] {
+            let r = natural(a, b, &mut meter()).unwrap();
+            assert!(
+                r.is_none(),
+                "{height:?}: {:?}",
+                r.map(|x| format!("{:?}", x.items()))
+            );
+        }
+    }
+    // A step further out each way, the box is wholly past the end, and the pair is nothing.
+    for short in [tube((h.next_up(), 1.9)), tube((-1.0, l.next_down()))] {
+        assert_eq!(meet(&s, &short).items().len(), 0, "{height:?}");
+    }
 }
 
 #[test]

@@ -1392,16 +1392,17 @@ fn short_of_pole(v: f64) -> bool {
     v.abs() < 0.5
 }
 
-/// Which ends of each parameter's range of a round kind are edges of the domain, as [`edges`] and
-/// [`apex_ends`] list them: its turn's short of a whole one; a cylinder's or cone's height either
-/// way (an end circle, or a cone's apex); a sphere's latitude short of a pole; a torus's tube turn
-/// short of a whole one. A whole turn's ends are its join and a pole is a point of the sphere, so
-/// neither is an edge. A revolution's or extrusion's box is its whole domain by construction
-/// ([`parameters`]), so it names none.
+/// Which ends of each parameter's range are edges of the domain, as [`edges`] and [`apex_ends`]
+/// list them: every end of a plane's; a round kind's turn short of a whole one; a cylinder's or
+/// cone's height either way (an end circle, or a cone's apex); a sphere's latitude short of a
+/// pole; a torus's tube turn short of a whole one. A whole turn's ends are its join and a pole is a
+/// point of the sphere, so neither is an edge. A revolution's or extrusion's box is its whole
+/// domain by construction ([`parameters`]), so it names none.
 fn rims(surface: &SurfaceKind) -> [[bool; 2]; 2] {
     let ((u0, u1), (v0, v1)) = ParamSurface::domain(surface);
     let turn = [part_turn(u0, u1); 2];
     match surface {
+        SurfaceKind::Plane(_) => [[true; 2]; 2],
         SurfaceKind::Sphere(_) => [turn, [short_of_pole(v0), short_of_pole(v1)]],
         SurfaceKind::Torus(_) => [turn, [part_turn(v0, v1); 2]],
         SurfaceKind::Revolution(_) | SurfaceKind::Extrusion(_) => [[false; 2]; 2],
@@ -1455,11 +1456,13 @@ fn on_plane(plane: &Plane, at: Vector) -> Result<Standing, IntersectError> {
     Ok(out)
 }
 
-/// Where the point in `at` stands on `surface`'s domain, by the box of its parameters.
+/// Where the point in `at` stands on `surface`'s domain, by the box of its parameters. A plane's
+/// box that reaches an end is read again from the domain's corners ([`on_plane`]), whose offsets
+/// can be closer than the box; its other answers stand as they are, since both read the one
+/// parameter and each holds it, so a box inside the range or past an end is proven so either way.
+/// The corners cost six exact sums, and most pieces are far from every end of a plane's domain, so
+/// they are read only where the plain box cannot tell (decision 32.94).
 fn standing(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectError> {
-    if let SurfaceKind::Plane(p) = surface {
-        return on_plane(p, at);
-    }
     let Some([u, v]) = parameters(surface, at)? else {
         return Ok(Standing::Off);
     };
@@ -1473,6 +1476,11 @@ fn standing(surface: &SurfaceKind, at: Vector) -> Result<Standing, IntersectErro
         if (at_lo && x.lo() <= lo) || (at_hi && x.hi() >= hi) {
             out = Standing::Reaching;
         }
+    }
+    if out == Standing::Reaching
+        && let SurfaceKind::Plane(p) = surface
+    {
+        return on_plane(p, at);
     }
     Ok(out)
 }
