@@ -864,6 +864,62 @@ fn a_window_across_a_cylinder_s_seam_is_cut_out() {
     assert!(rest[0].cuts[0].iter().all(|u| source(u) == short));
 }
 
+/// The window above, a step to the unit (issue 1108): the side's radius is 50 steps, so each rim
+/// lies within the contact radius of each edge of the window and of the short ruling, and the
+/// broad phase pairs them. Each such pair lies apart only along the axis, and seen down it the two
+/// share a whole stretch: an arc lies on the rim, and a ruling is one point of it. The boxes about
+/// the two are apart along the axis, which settles each pair at once, so the side splits as it
+/// does at full size and the interference takes 2,911 units of work, where it took 348,029 while
+/// the engine covered what each of those ten pairs shares down to its floor.
+#[test]
+fn a_window_across_a_cylinder_s_seam_a_step_to_the_unit_is_cut_out_without_a_search() {
+    let at = |x: i64, y: i64, z: i64| P3::new(x, y, z).unwrap();
+    let mut b = Build::default();
+    let axis = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let rim = |b: &mut Build, z: f64| {
+        let circle = Circle::new([0.0, 0.0, z], 50.0, axis, (0.0, 2.0)).unwrap();
+        b.edge(CurveKind::Circle(circle), None, 0)
+    };
+    let (near, far) = (rim(&mut b, 0.0), rim(&mut b, 100.0));
+    let cylinder = || {
+        let c = Cylinder::new([0.0; 3], 50.0, axis, ((0.0, 2.0), (0.0, 100.0))).unwrap();
+        SurfaceKind::Cylinder(c)
+    };
+    let ix = b.surface(cylinder());
+    let side = b.face_with(ix, vec![vec![ahead(near)], vec![back(far)]], 0);
+    let frame = Frame::new([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let corners = [
+        b.vertex(at(0, -50, 30), 1),
+        b.vertex(at(0, 50, 30), 1),
+        b.vertex(at(0, 50, 70), 1),
+        b.vertex(at(0, -50, 70), 1),
+    ];
+    let arc = |b: &mut Build, z: f64, ends: [usize; 2]| {
+        let circle = Circle::new([0.0, 0.0, z], 50.0, frame, (0.0, 1.0)).unwrap();
+        b.edge(CurveKind::Circle(circle), Some(ends), 1)
+    };
+    let low = arc(&mut b, 30.0, [corners[0], corners[1]]);
+    let up = b.line(corners[1], corners[2], 1);
+    let high = arc(&mut b, 70.0, [corners[3], corners[2]]);
+    let down = b.line(corners[3], corners[0], 1);
+    let ix = b.surface(cylinder());
+    let window = b.face(ix, &[vec![low, up, high, down]], 1);
+    let (from, to) = (b.vertex(at(-50, 0, 30), 2), b.vertex(at(-50, 0, 70), 2));
+    b.line(from, to, 2);
+    let mut work = meter();
+    let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut work).unwrap();
+    assert!(work.used().work < 10_000, "{:?}", work.used());
+    let splitting = split(&b.arr, &out, &mut meter()).unwrap();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    assert_eq!(out.faces[side].same_carrier, vec![window]);
+    assert_eq!(out.faces[side].in_blocks.len(), 5, "{:?}", out.faces[side]);
+    let parts = of_face(&splitting, side);
+    assert_eq!(parts.len(), 2, "{parts:?}");
+    let outer: Vec<usize> = parts.iter().map(|s| s.outer.len()).collect();
+    assert!(outer.contains(&1) && outer.contains(&4), "{parts:?}");
+    assert_eq!(of_face(&splitting, window).len(), 1);
+}
+
 /// A cone opening upwards from its apex to its rim at height 100, closed by its cap, and a plane
 /// parallel to its axis, 30 from it: the plane cuts the cone in a hyperbola's branch from one
 /// crossing of the rim to the other (G165), and the cap in a line between the same two. On the

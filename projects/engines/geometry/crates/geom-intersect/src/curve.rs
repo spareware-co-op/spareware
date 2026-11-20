@@ -4,10 +4,13 @@
 //! conic have closed forms, in the plane; two lines also in space. Every other pair runs
 //! [`crate::solve`] on A(s) − B(t) in two coordinates, with Bézier clipping narrowing the boxes of
 //! NURBS pieces. In 3D the coordinate left out decides: a meeting is reported only where it is proven,
-//! and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. Two conics that
-//! are not both circles run the engine too: their exact counts are the fixed-integer predicates of
-//! chapter 14's piece G190. [`curves_over`] answers a box inside the two domains, by a closed form
-//! or the engine run from that box, so a caller can decide one part of a flagged region again.
+//! and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. A pair whose
+//! boxes are apart in a coordinate meets nowhere, and no engine runs: seen without that
+//! coordinate, the two may share a whole stretch, as a cylinder's rim and a ruling of its side do,
+//! which the engine would cover to its floor. Two conics that are not both circles run the engine
+//! too: their exact counts are the fixed-integer predicates of chapter 14's piece G190.
+//! [`curves_over`] answers a box inside the two domains, by a closed form or the engine run from
+//! that box, so a caller can decide one part of a flagged region again.
 //! [`self_crossings`] runs the same engine on a curve and itself, above the diagonal, dropping
 //! every span whose tangents stay in one half-plane, since such a span cannot cross itself.
 //! [`Seam`] is how any crate reads a span an answer gives on a whole turn (decision 32.104): it
@@ -1852,23 +1855,30 @@ pub(crate) fn finite<const D: usize>(curve: &CurveKind<D>) -> Result<(f64, f64),
     }
 }
 
-/// The two coordinates to solve in: in 3D, the two that spread the pair most.
+/// The two coordinates to solve in: in 3D, the two that spread the pair most. `None` in 3D where
+/// the boxes around the two are apart in a coordinate: each box holds all of its curve, so the two
+/// share no point. The engine, in two coordinates, would not see it where that is the one it leaves
+/// out.
 fn plane<const D: usize>(
     a: &CurveKind<D>,
     b: &CurveKind<D>,
     (s, t): ((f64, f64), (f64, f64)),
     meter: &mut WorkMeter<'_>,
-) -> Result<[usize; 2], IntersectError> {
+) -> Result<Option<[usize; 2]>, IntersectError> {
     if D < 3 {
-        return Ok([0, 1]);
+        return Ok(Some([0, 1]));
     }
     let (x, y) = (a.bound(s, meter)?, b.bound(t, meter)?);
+    let below = |p: &Bounds<D>, q: &Bounds<D>| p.hi.iter().zip(&q.lo).any(|(h, l)| h < l);
+    if below(&x, &y) || below(&y, &x) {
+        return Ok(None);
+    }
     let hull = x.union(&y).map_err(CurveError::from)?;
     let mut widths = [0.0; 3];
     for (slot, (lo, hi)) in widths.iter_mut().zip(hull.lo.iter().zip(&hull.hi)) {
         *slot = hi - lo;
     }
-    Ok(across(widths.map(|w| 1.0 / (1.0 + w))))
+    Ok(Some(across(widths.map(|w| 1.0 / (1.0 + w)))))
 }
 
 /// Where `a` and `b` meet (12.5).
@@ -1901,17 +1911,28 @@ pub fn curves<const D: usize>(
             Closed::Absent => {}
         }
     }
+    let route = if routed {
+        alloc::vec![Diag { code: ROUTE.into() }]
+    } else {
+        Vec::new()
+    };
     let (s, t) = (finite(a)?, finite(b)?);
     let shared = if D == 3 { shared_plane(a, b) } else { None };
     let seams = [seam_of(a, s), seam_of(b, t)];
+    let axes = match shared {
+        Some(n) => across(n),
+        None => match plane(a, b, (s, t), meter)? {
+            Some(axes) => axes,
+            None => {
+                return Intersection::new(Vec::new(), Coverage::TopologyCertified, route, meter);
+            }
+        },
+    };
     let gap = Gap {
         a,
         b,
         seams,
-        axes: match shared {
-            Some(n) => across(n),
-            None => plane(a, b, (s, t), meter)?,
-        },
+        axes,
         coplanar: shared.is_some(),
         pieces_a: pieces(a, meter)?,
         pieces_b: pieces(b, meter)?,
@@ -1919,11 +1940,6 @@ pub fn curves<const D: usize>(
     let [first, second] = seams;
     let domain = [first.side()?, second.side()?];
     let solved = solve(&gap, domain, domain, |_, _| Ok(true), meter)?;
-    let route = if routed {
-        alloc::vec![Diag { code: ROUTE.into() }]
-    } else {
-        Vec::new()
-    };
     finished(&gap, solved, route, meter)
 }
 
@@ -1984,14 +2000,26 @@ pub fn curves_over<const D: usize>(
     // The pair as `curves` sets it up, so the box is searched as it is inside the whole.
     let whole = (finite(a)?, finite(b)?);
     let shared = if D == 3 { shared_plane(a, b) } else { None };
+    // Two curves `curves` finds apart meet nowhere, so in no box.
+    let axes = match shared {
+        Some(n) => across(n),
+        None => match plane(a, b, whole, meter)? {
+            Some(axes) => axes,
+            None => {
+                return Intersection::new(
+                    Vec::new(),
+                    Coverage::TopologyCertified,
+                    Vec::new(),
+                    meter,
+                );
+            }
+        },
+    };
     let gap = Gap {
         a,
         b,
         seams: [seam_of(a, whole.0), seam_of(b, whole.1)],
-        axes: match shared {
-            Some(n) => across(n),
-            None => plane(a, b, whole, meter)?,
-        },
+        axes,
         coplanar: shared.is_some(),
         pieces_a: pieces(a, meter)?,
         pieces_b: pieces(b, meter)?,
@@ -2063,7 +2091,8 @@ pub fn self_crossings<const D: usize>(
         a: curve,
         b: curve,
         seams: [Seam::open((lo, hi)); 2],
-        axes: plane(curve, curve, ((lo, hi), (lo, hi)), meter)?,
+        // A curve's box is never apart from itself.
+        axes: plane(curve, curve, ((lo, hi), (lo, hi)), meter)?.ok_or(IntersectError::Internal)?,
         coplanar: false,
         pieces_a: Vec::new(),
         pieces_b: Vec::new(),

@@ -2559,3 +2559,62 @@ fn the_engine_answers_a_box_in_the_plane_a_pair_shares() {
         assert_eq!(crossings(&over), 1);
     }
 }
+
+/// A cylinder's rim, the circle of radius 50 about the z axis at height 0, against a half-turn arc
+/// of the cylinder at height 30 and a ruling of it from height 30 to 70: a window on the side, a
+/// step to the unit (issue 1108). Seen down z, which the engine leaves out as the coordinate that
+/// spreads each pair least, the arc lies on the rim and the ruling is one point of it, so the
+/// engine covered the whole of each to its floor and threw every box out on z at the end: 40,217,
+/// 63,349, 23,052 and 46,120 units of work, in the order below. The boxes around the two curves
+/// are apart in z, so each pair meets nowhere, proven, either way round and over a box of the two
+/// domains, for the work of those two boxes.
+#[test]
+fn a_rim_and_an_arc_or_a_ruling_above_it_meet_nowhere_for_the_work_of_their_boxes() {
+    let ring = |z: f64, x: [f64; 3], domain: (f64, f64)| {
+        let frame = Frame::new(x, [0.0, 0.0, 1.0]).unwrap();
+        CurveKind::Circle(Circle::new([0.0, 0.0, z], 50.0, frame, domain).unwrap())
+    };
+    let rim = ring(0.0, [1.0, 0.0, 0.0], (0.0, 2.0));
+    let arc = ring(30.0, [0.0, -1.0, 0.0], (0.0, 1.0));
+    let ruling = segment([0.0, 50.0, 30.0], [0.0, 50.0, 70.0]);
+    let work = |a: &CurveKind<3>, b: &CurveKind<3>| {
+        let mut m = meter();
+        is_empty(&curves(a, b, &mut m).unwrap());
+        m.used().work
+    };
+    let got = [
+        work(&rim, &arc),
+        work(&arc, &rim),
+        work(&rim, &ruling),
+        work(&ruling, &rim),
+    ];
+    assert_eq!(got, [6, 6, 6, 6]);
+    for (a, b) in [(&rim, &arc), (&rim, &ruling), (&ruling, &rim)] {
+        let over = curves_over(a, (0.25, 0.75), b, (0.25, 0.75), &mut meter()).unwrap();
+        is_empty(&over);
+    }
+}
+
+/// Two quadratic arcs built to cross at the middle of each, (0.5, 3.5, w / 4), in a box 0.75 wide
+/// in x, 10 in y and w in z, where w is the double after 0.75. The engine leaves out the
+/// coordinate whose width w makes 1 / (1 + w) largest. One more than 0.75 and one more than w
+/// round to the same double, so x and z tie, and a tie leaves out z: the pair is solved in x and
+/// y. The crossing is flagged, as a crossing in space is never proven (12.5), for 2,942 and 3,668
+/// units of work either way round, where solving in y and z would cost 1,758 and 1,638.
+#[test]
+fn arcs_as_wide_in_x_as_in_z_but_for_its_last_bit_are_solved_leaving_out_z() {
+    let w = 0.75 + two_to(-53);
+    let a = bezier(&[[0.0, 0.0, 0.0], [0.75, 2.0, 0.0], [0.5, 10.0, w]]);
+    let b = bezier(&[[0.5, 8.0, 0.0], [0.625, 3.0, w * 0.5], [0.25, 0.0, 0.0]]);
+    let work = |p: &CurveKind<3>, q: &CurveKind<3>| {
+        let mut m = meter();
+        let r = curves(p, q, &mut m).unwrap();
+        let at = match r.items() {
+            [Item::Flagged { at, .. }] => at.spans(),
+            other => panic!("{other:?}"),
+        };
+        assert!(at[0].contains(0.5) && at[1].contains(0.5), "{at:?}");
+        m.used().work
+    };
+    assert_eq!([work(&a, &b), work(&b, &a)], [2942, 3668]);
+}
