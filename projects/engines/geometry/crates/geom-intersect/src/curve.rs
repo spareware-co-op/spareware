@@ -1046,7 +1046,7 @@ fn one_circle<const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Intersection, IntersectError> {
     let (s, t) = (ParamCurve::domain(a), ParamCurve::domain(b));
-    if s.1 - s.0 >= 2.0 && t.1 - t.0 >= 2.0 {
+    if crate::seam::turn(s) && crate::seam::turn(t) {
         return whole_overlap(s, t, meter);
     }
     let i = Interval::point;

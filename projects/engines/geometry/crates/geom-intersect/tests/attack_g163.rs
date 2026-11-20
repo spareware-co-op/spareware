@@ -341,6 +341,66 @@ fn arcs_of_one_circle_overlap_where_they_share_turns() {
     );
 }
 
+/// A domain whose length only rounds to a whole turn is an arc short of one: from −2⁻⁵³ to
+/// 2 − 2⁻⁵² is 2 − 2⁻⁵³ half-turns, and the circle's turns from 2 − 2⁻⁵² to 2 − 2⁻⁵³ are not on
+/// it. With the whole circle it is not the whole overlap, exact, but what the arc's own turns give:
+/// its start touching the circle's join, and the run from there, each within its bound.
+#[test]
+fn an_arc_that_only_rounds_to_a_turn_is_not_the_whole_circle() {
+    let short = (-two_to(-53), 2.0 - two_to(-52));
+    assert_eq!(short.1 - short.0, 2.0);
+    let (a, whole) = (arc([0.0, 0.0], 5.0, short), circle([0.0, 0.0], 5.0));
+    for r in [meet(&a, &whole), meet(&whole, &a)] {
+        assert_eq!(
+            contacts(&r),
+            [PointContact::BoundaryTouch],
+            "{:?}",
+            r.items()
+        );
+        assert!(
+            matches!(
+                r.items(),
+                [
+                    _,
+                    Item::Overlap {
+                        proof: Coincidence::Identical,
+                        class: geom_num::Exactness::Certified { .. },
+                        ..
+                    }
+                ]
+            ),
+            "{:?}",
+            r.items()
+        );
+    }
+}
+
+/// Domains of exactly two half-turns are the whole circle wherever they start: two of them are the
+/// whole overlap, exact, over both domains.
+#[test]
+fn whole_turns_from_anywhere_are_the_whole_overlap() {
+    let turns = [(0.0, 2.0), (1.0, 3.0), (-3.0, -1.0)];
+    for s in turns {
+        for t in turns.into_iter().filter(|t| *t != s) {
+            let r = meet(&arc([0.0, 0.0], 5.0, s), &arc([0.0, 0.0], 5.0, t));
+            let [
+                Item::Overlap {
+                    at,
+                    proof: Coincidence::Identical,
+                    class: geom_num::Exactness::Exact,
+                    ..
+                },
+            ] = r.items()
+            else {
+                panic!("{s:?} with {t:?}: {:?}", r.items());
+            };
+            let spans = at.spans();
+            assert_eq!((spans[0].lo(), spans[0].hi()), s);
+            assert_eq!((spans[1].lo(), spans[1].hi()), t);
+        }
+    }
+}
+
 #[test]
 fn arcs_keep_only_the_crossings_on_them() {
     let a = circle([0.0, 0.0], 5.0);
