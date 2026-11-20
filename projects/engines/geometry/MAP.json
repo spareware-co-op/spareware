@@ -2175,7 +2175,7 @@
           "file": "projects/engines/geometry/crates/geom-bool/src/common.rs",
           "guarantees": [
             "**Exact within one analytic kind on grid data.** Two lines whose origins and directions are whole numbers of steps are one or not by an exact test in 128-bit integers, with no enclosure; the common block says [`Proof::Exact`].",
-            "**The contact rule across kinds.** Any other pair is one only when every piece of each is proven within the contact radius of the other at the finest refinement, and is apart as soon as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with [`crate::rule::NearContact`]. Never a sampled check.",
+            "**The contact rule across kinds.** Any other pair is one only when every piece of each is proven within the contact radius of the other at the finest refinement, and is apart as soon as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with [`crate::rule::NearContact`]. A piece whose distance the search leaves undecided is neither, and is cut again; one still so at the deepest cut has no enclosure to report and fails with `NumError::NotFinite`. Never a sampled check.",
             "**Blocks of one operand are never common.** An operand's own edges meet only at their vertices, so only blocks of different operands are compared.",
             "**Deterministic.** Groups are taken in the order of their end vertices, blocks within a group in edge order, and each common block lists its members in that order."
           ],

@@ -23,7 +23,9 @@
 //! - **The contact rule across kinds.** Any other pair is one only when every piece of each is
 //!   proven within the contact radius of the other at the finest refinement, and is apart as soon
 //!   as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with
-//!   [`crate::rule::NearContact`]. Never a sampled check.
+//!   [`crate::rule::NearContact`]. A piece whose distance the search leaves undecided is neither,
+//!   and is cut again; one still so at the deepest cut has no enclosure to report and fails with
+//!   `NumError::NotFinite`. Never a sampled check.
 //! - **Blocks of one operand are never common.** An operand's own edges meet only at their
 //!   vertices, so only blocks of different operands are compared.
 //! - **Deterministic.** Groups are taken in the order of their end vertices, blocks within a group
@@ -195,15 +197,18 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
 
 /// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
 /// on its own, so a nearest point of the curve outside the block is never taken for one of the
-/// block's. The upper end is infinite where a search is left undecided.
+/// block's. A stretch whose search is left undecided (`NonIsolated`) gives no upper end and holds
+/// the lower one at zero at most, so the distance is `None`, undecided, when no stretch's search is
+/// decided.
 fn from_block(
     far_side: &Span<'_>,
     centre: &[f64; 3],
     floor: f64,
     meter: &mut WorkMeter<'_>,
-) -> Result<Interval, BuildError> {
+) -> Result<Option<Interval>, BuildError> {
     let (curve, stretches) = far_side;
-    let (mut lo, mut hi) = (f64::INFINITY, f64::INFINITY);
+    let mut lo = f64::INFINITY;
+    let mut hi: Option<f64> = None;
     for &stretch in stretches {
         let d = match project_curve_over(curve, stretch, centre, floor, meter)? {
             // The nearest point found: of those whose distance starts lowest, the first.
@@ -213,12 +218,18 @@ fn from_block(
                 .min_by(|x, y| x.lo().total_cmp(&y.lo()))
                 .ok_or(IntersectError::Internal)?,
             Projection::Set { distance, .. } => distance,
-            Projection::NonIsolated { .. } => Interval::new(0.0, f64::INFINITY)?,
+            Projection::NonIsolated { .. } => {
+                lo = lesser(lo, 0.0);
+                continue;
+            }
         };
         lo = lesser(lo, d.lo());
-        hi = lesser(hi, d.hi());
+        hi = Some(hi.map_or(d.hi(), |h| lesser(h, d.hi())));
     }
-    Ok(Interval::new(lo, hi)?)
+    Ok(match hi {
+        Some(hi) => Some(Interval::new(lo, hi)?),
+        None => None,
+    })
 }
 
 /// The one-sided distance of block `a` (its inner stretches) from block `b` (its outer ones), held
@@ -238,29 +249,36 @@ fn one_side(
             .bound((lo, hi), meter)
             .map_err(IntersectError::from)?;
         let (centre, reach) = ball(bounds.lo, bounds.hi)?;
-        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
         // The distance of every point of the piece from the other block: at least the centre's
         // distance from the block less the radius, and at most that distance plus the radius. It
         // is read by the contact rule: above zero is apart, and at the finest refinement, holding
         // zero within `ε_fit` touches (the enclosure's upper end is then its largest size, since
-        // the lower is above minus the radius).
-        let floor = near.lo() - reach;
-        let ceiling = near.hi() + reach;
-        let enclosure = Interval::new(floor, ceiling)?;
-        let verdict = judge(enclosure);
-        if verdict == Verdict::Decided(Sign::Positive) {
-            return Ok(Side::Apart);
-        }
-        if depth >= REFINEMENTS && verdict == Verdict::Touch {
-            widest = Some(match widest {
-                Some(w) if w.hi() >= ceiling => w,
-                _ => enclosure,
-            });
-            continue;
-        }
+        // the lower is above minus the radius). A distance left undecided is neither: the piece is
+        // cut again with the finer floor, as an undecided enclosure is.
+        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
+        let enclosure = match near {
+            Some(near) => {
+                let enclosure = Interval::new(near.lo() - reach, near.hi() + reach)?;
+                let verdict = judge(enclosure);
+                if verdict == Verdict::Decided(Sign::Positive) {
+                    return Ok(Side::Apart);
+                }
+                if depth >= REFINEMENTS && verdict == Verdict::Touch {
+                    widest = Some(match widest {
+                        Some(w) if w.hi() >= enclosure.hi() => w,
+                        _ => enclosure,
+                    });
+                    continue;
+                }
+                Some(enclosure)
+            }
+            None => None,
+        };
         if depth >= DEEPEST {
+            // Still undecided at the deepest cut: the contact rule's refusal, with the finest
+            // enclosure reached; a distance with no upper end has none, and is not finite.
             return Err(ContactError::NearContact(NearContact {
-                enclosure,
+                enclosure: enclosure.ok_or(NumError::NotFinite)?,
                 refinement: depth,
             })
             .into());
