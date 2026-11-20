@@ -1,7 +1,9 @@
 //! What the subdivision of two surfaces decides at its limits, each held to its exact answer (12.8):
 //! patches of one carrier that wrap or touch a turn round, a patch one double wide that no cut can
 //! halve, start points on the end of a cone's height (over part of a turn and over a whole one),
-//! and a start point on the end of a sphere's longitude, where a sphere has no room past its end.
+//! a start point on the end of a sphere's longitude, where a sphere has no room past its end, and
+//! an edge a hair inside that end, which is not taken as a start on it, and an edge that meets
+//! both ends of a sphere's longitude in one pair.
 //!
 //! Run at the scale of the SSI corpus (1024 steps to the unit, floor 8) where a case has a scale,
 //! and in both orders of the pair.
@@ -301,4 +303,75 @@ fn the_ends_of_domains_charge_their_recorded_work() {
         (33907, 6, 12, 0),
     ];
     assert_eq!(seen, want);
+}
+
+/// The sphere and plane of `sphere_and_lid`, the sphere's longitude from 0 to 3/4 of a half-turn
+/// and the plane's y from 2^−70 of a unit to one unit, so its edge runs a hair inside the sphere's
+/// end u = 0, far below a step of the corpus. The interior system can neither prove nor exclude that
+/// meeting so near the end, and on the end itself two of the edge's rows have a zero whose third,
+/// the edge's y less the end's, is the hair and holds no zero: it is not taken as a start on the
+/// end, and the pair there is left flagged as undecided at the floor, in both orders, with the work
+/// its search charges, as recorded.
+#[test]
+fn an_edge_a_hair_inside_the_end_of_a_spheres_longitude_is_left_flagged() {
+    let (sphere, lid) = sphere_and_lid((0.0, 0.75), (2.0_f64.powi(-70), 1.0));
+    let seen: Vec<_> = [(&lid, &sphere), (&sphere, &lid)]
+        .into_iter()
+        .map(|(a, b)| {
+            let mut m = meter(1 << 24);
+            let found = subdivide(a, b, FLOOR, &mut m).unwrap();
+            let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+            let whys: Vec<_> = found.flagged.iter().map(|f| f.why).collect();
+            (m.used().work, found.settled.len(), starts, whys)
+        })
+        .collect();
+    let floor = Unresolved::UndecidedAtFloor {
+        test: Test::Exclusion,
+    };
+    // (work, settled pairs, start points, why each pair is flagged), in the order above.
+    let want = [(7363, 2, 4, vec![floor]), (11468, 3, 6, vec![floor])];
+    assert_eq!(seen, want);
+}
+
+/// A sphere of radius 5/4 unit about the origin, its longitude u from 0 to 0.2951672353008666, the
+/// half-turns of atan2(4/5, 3/5) to within a few doubles, and its latitude v from −0.3 to 0.4; and
+/// the plane z = 3/4 unit, its edge v = 0 the line 2x + y = 1 unit, a chord of the circle of radius
+/// one unit where they meet, over u from −0.5 to 1.5 and v from 0 to 1, swept outward. The chord
+/// meets the sphere's end u = 0 exactly at (1, 0, 3/4) units and, within rounding, its other end at
+/// (0.6, 0.8, 3/4): one patch pair, whose edge system has flagged boxes on both ends at the same
+/// latitude. The zero proven on one end replaces only the flagged boxes it meets, so the other end
+/// is solved too; the pair is settled with its two start points and nothing flagged, in both
+/// orders, with the work its search charges, as recorded.
+#[test]
+fn a_chord_meets_both_ends_of_a_spheres_longitude_in_one_pair() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let end = 0.295_167_235_300_866_6;
+    let ball = SurfaceKind::Sphere(
+        Sphere::new([0.0; 3], 1.25 * UNIT, frame, ((0.0, end), (-0.3, 0.4))).unwrap(),
+    );
+    let chord = SurfaceKind::Plane(
+        Plane::new(
+            [UNIT, 0.0, 0.75 * UNIT],
+            [-0.5 * UNIT, UNIT, 0.0],
+            [0.5 * UNIT, 0.25 * UNIT, 0.0],
+            ((-0.5, 1.5), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let seen: Vec<_> = [(&chord, &ball), (&ball, &chord)]
+        .into_iter()
+        .map(|(a, b)| {
+            let mut m = meter(1 << 24);
+            let found = subdivide(a, b, FLOOR, &mut m).unwrap();
+            let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+            (
+                m.used().work,
+                found.settled.len(),
+                starts,
+                found.flagged.len(),
+            )
+        })
+        .collect();
+    // (work, settled pairs, start points, flagged pairs), in the order above.
+    assert_eq!(seen, [(7762, 1, 2, 0), (7762, 1, 2, 0)]);
 }
