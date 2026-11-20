@@ -1046,7 +1046,7 @@ fn one_circle<const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Intersection, IntersectError> {
     let (s, t) = (ParamCurve::domain(a), ParamCurve::domain(b));
-    if s.1 - s.0 >= 2.0 && t.1 - t.0 >= 2.0 {
+    if crate::seam::turn(s) && crate::seam::turn(t) {
         return whole_overlap(s, t, meter);
     }
     let i = Interval::point;
@@ -1073,6 +1073,7 @@ fn one_circle<const D: usize>(
     };
     let mut turns = math::floor((s.0 - high.hi()) / 2.0)?.get();
     let mut items = Vec::new();
+    let mut runs = Vec::new();
     for _ in 0..3 {
         let shift = i(2.0 * turns)?;
         turns += 1.0;
@@ -1086,28 +1087,63 @@ fn one_circle<const D: usize>(
         }
         let part = Interval::new(start, end)?;
         let on_b = i(sign)?.mul(part.sub(phi.add(shift)?)?)?;
-        let at = ParamBox::new(&[part, held(on_b, t)?])?;
+        let at = [part, held(on_b, t)?];
         let touch = hi.contains(s.0) || lo.contains(s.1);
         let box_of = a.bound(span(part), meter)?;
-        items.push(if touch {
-            Item::Point {
-                at,
+        if touch {
+            items.push(Item::Point {
+                at: ParamBox::new(&at)?,
                 xyz: grid_box(&box_of)?,
                 contact: PointContact::BoundaryTouch,
                 class: certified(),
-            }
+            });
         } else {
-            Item::Overlap {
-                at,
-                region: OverlapRegion {
-                    boundary: Vec::new(),
-                },
-                proof: Coincidence::Identical,
-                class: certified(),
-            }
+            runs.push(at);
+        }
+    }
+    // Two runs whose boxes meet are one item over their hull, since items must stand apart: the
+    // engine joins its boxes so (`solve::runs`). Beside a whole turn they are one run that its join
+    // cuts, meeting at the join on the other's domain and apart on the whole turn's only by the
+    // other's shortfall from a turn, which φ's enclosure can cover. Between two arcs short of a
+    // turn they are two runs, each gap a shortfall, that the boxes cannot tell apart: the hull is
+    // flagged, as `circle_circle` flags two crossings the doubles cannot hold apart.
+    let mut coverage = Coverage::TopologyCertified;
+    if let [[p, q], [u, v]] = runs[..]
+        && ParamBox::new(&[p, q])?.meets(&ParamBox::new(&[u, v])?)
+    {
+        let join = |x: Interval, y: Interval| {
+            Interval::new(
+                tight::smaller(x.lo(), y.lo()),
+                tight::larger(x.hi(), y.hi()),
+            )
+        };
+        let hull = [join(p, u)?, join(q, v)?];
+        if crate::seam::turn(s) || crate::seam::turn(t) {
+            runs = alloc::vec![hull];
+        } else {
+            runs.clear();
+            let gap = crate::result::StepsInterval::new(Steps(0), Steps(1))
+                .ok_or(IntersectError::Internal)?;
+            let [part, _] = hull;
+            items.push(Item::Flagged {
+                at: ParamBox::new(&hull)?,
+                xyz: grid_box(&a.bound(span(part), meter)?)?,
+                why: Unresolved::NearCoincident { gap },
+            });
+            coverage = Coverage::CompleteOutsideFlagged;
+        }
+    }
+    for at in runs {
+        items.push(Item::Overlap {
+            at: ParamBox::new(&at)?,
+            region: OverlapRegion {
+                boundary: Vec::new(),
+            },
+            proof: Coincidence::Identical,
+            class: certified(),
         });
     }
-    proven(items, meter)
+    Intersection::new(items, coverage, Vec::new(), meter)
 }
 
 /// `v` as a grid coordinate, if it is a whole number in reach.
