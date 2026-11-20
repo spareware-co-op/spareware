@@ -1738,14 +1738,28 @@ mod tests {
     fn the_kept_tree_compares_as_the_derived_form_does() {
         let mut list = Vec::new();
         block([0; 3], [4; 3], 0, &mut list);
-        block([2; 3], [6; 3], 1, &mut list);
         let mut moved = Vec::new();
         block([0; 3], [4; 3], 0, &mut moved);
-        block([2; 3], [7, 6, 6], 1, &mut moved);
+        // Under Miri a smaller input (decision 32.68): the first block and the second's face at
+        // x = 2, in the moved form a face that reaches further, and leaves of three for the deeper
+        // tree. The trees still split, drop and differ as the full ones do, and their making
+        // enters every kernel function the full size does (measured natively under Callgrind).
+        let deeper = if cfg!(miri) {
+            let (mut second, mut further) = (Vec::new(), Vec::new());
+            block([2; 3], [6; 3], 1, &mut second);
+            block([2; 3], [6, 6, 7], 1, &mut further);
+            list.push(second.swap_remove(1));
+            moved.push(further.swap_remove(1));
+            3
+        } else {
+            block([2; 3], [6; 3], 1, &mut list);
+            block([2; 3], [7, 6, 6], 1, &mut moved);
+            2
+        };
         let trees = [
             kept(&list, 4, &[]),
             kept(&list, 4, &[]),
-            kept(&list, 2, &[]),
+            kept(&list, deeper, &[]),
             kept(&list, 64, &[]),
             kept(&list, 4, &[WindingTest::intersect(2)]),
             kept(&moved, 4, &[]),

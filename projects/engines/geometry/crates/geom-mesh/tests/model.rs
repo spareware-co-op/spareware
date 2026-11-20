@@ -1287,8 +1287,12 @@ fn errors_say_what_went_wrong() {
 
 #[test]
 fn a_budget_ends_the_run_with_an_error() {
-    let input = ball(4, 300.0);
-    let mut small = WorkMeter::new(Budget::of_work(20_000));
+    // Under Miri a smaller ball and budget (decision 32.68): the budget still runs out among the
+    // collapses, after the envelope is made, and the run enters every kernel function the full
+    // size does (measured natively under Callgrind).
+    let (n, work) = if cfg!(miri) { (3, 2_000) } else { (4, 20_000) };
+    let input = ball(n, 300.0);
+    let mut small = WorkMeter::new(Budget::of_work(work));
     let r = decimate(
         &input.0,
         &input.1,
