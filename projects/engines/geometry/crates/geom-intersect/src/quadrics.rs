@@ -1398,9 +1398,9 @@ fn tube_turn(
 /// meeting lies within the box's width of an end, where a cut cuts nothing while that width is
 /// under the room [`trimmed`] leaves at an end (10^−9 of a half-turn and more).
 ///
-/// On a whole turn the end is the start's join, so a box that starts on the end meets the domain
-/// only at its start, where the box a turn back, always among the four, meets it too: it is no
-/// second meeting, and a box from 0 at the start of (0, 2) is kept, not widened to the whole turn.
+/// On a whole turn the end is the start's join, and the copy a turn on of a box that starts at the
+/// start meets the domain at the end too: the move widens it by a step (from 0 on (0, 2) the copy
+/// starts at the double under 2), so the hull of the two spans the whole turn, which holds the box.
 ///
 /// A far domain costs one widening, as one move did before: the turns are summed exactly, in a
 /// double (even numbers under 2^53, as a domain of a turn or less starts only where its doubles
@@ -1417,11 +1417,10 @@ fn to_domain(turn: Interval, (lo, hi): (f64, f64)) -> Result<Option<Interval>, I
     };
     let above = lo + 0.5;
     let window = above - above % 2.0;
-    let joined = !part_turn(lo, hi);
     let mut met: Option<Interval> = None;
     for turns in [window - 2.0, window, window + 2.0, window + 4.0] {
         let moved = by(turns)?;
-        if moved.hi() < lo || moved.lo() > hi || (joined && moved.lo() == hi) {
+        if moved.hi() < lo || moved.lo() > hi {
             continue;
         }
         met = Some(match met {
