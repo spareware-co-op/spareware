@@ -1,6 +1,7 @@
 //! What the subdivision of two surfaces decides at its limits, each held to its exact answer (12.8):
 //! patches of one carrier that wrap or touch a turn round, a patch one double wide that no cut can
-//! halve, and start points on the end of a cone's height.
+//! halve, start points on the end of a cone's height (over part of a turn and over a whole one),
+//! and a start point on the end of a sphere's longitude, where a sphere has no room past its end.
 //!
 //! Run at the scale of the SSI corpus (1024 steps to the unit, floor 8) where a case has a scale,
 //! and in both orders of the pair.
@@ -19,8 +20,9 @@ use geom_intersect::IntersectError;
 use geom_intersect::general::{Subdivided, subdivide};
 use geom_intersect::result::{StepsInterval, Test, Unresolved};
 use geom_num::grid::Steps;
+use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
 const UNIT: f64 = 1024.0;
 const FLOOR: f64 = 8.0;
@@ -135,5 +137,81 @@ fn a_plane_meets_a_cone_on_the_end_of_its_height() {
         let found = subdivide(a, b, FLOOR, &mut meter(1 << 24)).unwrap();
         assert!(found.flagged.is_empty(), "{found:#?}");
         assert!(!found.settled.is_empty(), "{found:#?}");
+    }
+}
+
+/// The cone and plane above, the cone now over a whole turn, from 0.25 half-turns to 2.25. The arm
+/// at +y meets the plane's top edge at about 2.238 half-turns, in the patch that ends the cone's
+/// turn: that patch has room past the end of the cone's height but none round its turn, which is
+/// already whole, and the start point there is proven in the room as before. The pair is settled
+/// with nothing flagged, in both orders.
+#[test]
+fn a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let cone = SurfaceKind::Cone(
+        Cone::new([0.0; 3], UNIT, 0.5, frame, ((0.25, 2.25), (0.0, UNIT))).unwrap(),
+    );
+    let wall = SurfaceKind::Plane(
+        Plane::new(
+            [1.1 * UNIT, 0.0, 0.0],
+            [0.0, UNIT, 0.0],
+            [0.0, 0.0, UNIT],
+            ((-2.0, 2.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    for (a, b) in [(&cone, &wall), (&wall, &cone)] {
+        let found = subdivide(a, b, FLOOR, &mut meter(1 << 24)).unwrap();
+        assert!(found.flagged.is_empty(), "{found:#?}");
+        assert!(!found.settled.is_empty(), "{found:#?}");
+    }
+}
+
+/// A sphere of radius one unit about the origin, its longitude u from 0 to 3/4 of a half-turn
+/// (counted from x towards y) and its latitude v from −0.3 to 0.4; and the plane z = 1/2 unit over
+/// x from −1 to 1.5 units and y from 0 to one unit. They meet in the circle of radius √3/2 at
+/// latitude 1/6, from where the plane's edge y = 0 crosses the sphere's end u = 0, at
+/// (√3/2, 0, 1/2) units, round to the sphere's end u = 3/4 inside the plane. The first of those
+/// two start points stands exactly on the end of the sphere's domain, where a sphere has no room
+/// past it: the plane edge's system is solved on that end, proven there, and the pair is settled
+/// with nothing flagged, in both orders, with a start holding the plane's (√3/2, 0) and the
+/// sphere's (0, 1/6).
+#[test]
+fn a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let sphere = SurfaceKind::Sphere(
+        Sphere::new([0.0; 3], UNIT, frame, ((0.0, 0.75), (-0.3, 0.4))).unwrap(),
+    );
+    let lid = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 0.5 * UNIT],
+            [UNIT, 0.0, 0.0],
+            [0.0, UNIT, 0.0],
+            ((-1.0, 1.5), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    // The start on both ends, as (the plane's x, y, the sphere's u, v), each the nearest double.
+    let (x, v) = (0.75_f64.sqrt(), 1.0 / 6.0);
+    for (swapped, (a, b)) in [(false, (&lid, &sphere)), (true, (&sphere, &lid))] {
+        let found = subdivide(a, b, FLOOR, &mut meter(1 << 24)).unwrap();
+        assert!(found.flagged.is_empty(), "{found:#?}");
+        let starts: Vec<_> = found
+            .settled
+            .iter()
+            .flat_map(|p| p.starts.clone())
+            .collect();
+        assert_eq!(starts.len() % 2, 0, "{found:#?}");
+        let want = if swapped {
+            [0.0, v, x, 0.0]
+        } else {
+            [x, 0.0, 0.0, v]
+        };
+        let holds = |s: &[_; 4]| {
+            s.iter()
+                .zip(want)
+                .all(|(i, w): (&Interval, f64)| i.lo() <= w && w <= i.hi())
+        };
+        assert!(starts.iter().any(holds), "{found:#?}");
     }
 }
