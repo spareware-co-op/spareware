@@ -47,6 +47,7 @@
 # GitHub measuring runs 44673967082 (miri_measure=all on train/phase5-1 at 23769d611, miri_measure_tests naming 92 test binaries) and 44678997145 (miri_measure=new on train/phase5-1 at 64f3cee90), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: 44678997145's own listing.
 # GitHub measuring run 44716062116 (miri_measure=all on rows/phase5-yardstick at 7c1686e39, miri_measure_tests naming the 47 tests the cut pull requests #1100, #1101, #1105, #1106 and #1107 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44788995881 (miri_measure=new on rows/phase5-yardstick at 9ec97365f, miri_measure_tests naming the 198 tests that #1111, #1113, #1114, #1119 and #1124 changed, sped up or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -401,7 +402,7 @@ native-only over 568	geom-bool::split_round	a_cylinder_on_a_tilted_axis_is_one_f
 80	geom-bool::split_round	a_plane_across_a_sphere_cuts_it_in_a_circle
 174	geom-bool::split_round	a_plane_across_a_torus_s_band_cuts_it_in_two_circles
 191	geom-bool::split_round	a_plane_along_a_cone_cuts_it_in_a_hyperbola
-390	geom-bool::split_round	a_plane_along_a_cylinder_cuts_it_in_two_rulings
+97	geom-bool::split_round	a_plane_along_a_cylinder_cuts_it_in_two_rulings
 291	geom-bool::split_round	a_plane_along_a_ruling_of_a_cone_cuts_it_in_a_parabola
 159	geom-bool::split_round	a_plane_crossing_its_axis_at_the_grid_s_edge_is_met
 16	geom-bool::split_round	a_plane_no_surface_holds_exactly_waits
@@ -415,7 +416,7 @@ native-only over 748	geom-bool::split_round	a_plane_through_a_cone_s_apex_cuts_i
 native-only over 748	geom-bool::split_round	a_section_is_kept_only_where_it_is_inside_both_faces
 46	geom-bool::split_round	a_sphere_s_face_round_all_but_a_step_of_a_pole_waits
 189	geom-bool::split_round	a_sphere_s_loop_says_which_side_is_the_face
-451	geom-bool::split_round	a_steep_plane_s_ellipse_cut_by_a_cylinder_s_ends_is_one_whole_curve
+219	geom-bool::split_round	a_steep_plane_s_ellipse_cut_by_a_cylinder_s_ends_is_one_whole_curve
 7	geom-bool::split_round	a_thin_cylinder_with_no_grid_point_inside_waits
 128	geom-bool::split_round	a_tilted_plane_cuts_a_cylinder_in_an_ellipse
 27	geom-bool::split_round	a_torus_on_a_tilted_axis_or_reaching_its_axis_waits
@@ -1347,7 +1348,7 @@ native-only over 570	geom-intersect::attack_g165	trimming_keeps_exactly_what_lie
 5	geom-intersect::attack_g165	what_is_not_natural_is_left_alone
 143	geom-intersect::attack_g166	a_budget_stops_the_walk
 359	geom-intersect::attack_g166	a_cone_and_a_cylinder
-539	geom-intersect::attack_g166	a_cone_and_a_sphere_off_its_axis
+192	geom-intersect::attack_g166	a_cone_and_a_sphere_off_its_axis
 native-only over 570	geom-intersect::attack_g166	a_cubic_and_its_line_are_walked_too
 42	geom-intersect::attack_g166	a_cylinder_across_a_sphere_s_edge_leaves_one
 111	geom-intersect::attack_g166	a_slanted_pipe_through_a_sphere_leaves_two_bounded_loops
@@ -8776,7 +8777,7 @@ native-only over 564	geom-run::properties	try_map_follows_the_phase_rule
 5	geom-surface::analytic	a_scaled_cones_equation_takes_its_slope_per_unit_of_height
 3	geom-surface::analytic	a_sphere_or_torus_takes_an_axial_factor_of_one_or_minus_one_only
 native-only over 563	geom-surface::analytic	a_uniform_whole_scale_moves_every_round_kind_exactly
-400	geom-surface::analytic	a_whole_cylinder_converts_exactly
+209	geom-surface::analytic	a_whole_cylinder_converts_exactly
 172	geom-surface::analytic	each_kinds_hessian_holds_its_gradients_change
 native-only over 563	geom-surface::analytic	every_analytic_kind_keeps_the_contract
 native-only over 563	geom-surface::analytic	spheres_keep_their_normals_at_the_poles_and_tori_their_forms
@@ -8819,7 +8820,7 @@ native-only over 639	geom-surface::attack_g66	every_kinds_higher_partials_are_th
 native-only over 639	geom-surface::attack_g66	the_cache_certificate_holds_under_dense_sampling
 98	geom-surface::attack_g66	the_contract_catches_faulty_partials
 4	geom-surface::attack_g67	a_cylinders_bound_over_a_box_of_one_line_holds_the_whole_line
-579	geom-surface::attack_g67	a_cylinders_partials_are_the_generic_routes_at_the_same_work
+native-only over 569	geom-surface::attack_g67	a_cylinders_partials_are_the_generic_routes_at_the_same_work
 native-only over 1085	geom-surface::attack_g67	every_analytic_surface_kind_holds_a_million_seeded_points
 6	geom-surface::attack_g67	only_angles_are_cut_into_pieces
 5	geom-surface::attack_g67	planes_points_and_lines_are_exact
@@ -8868,7 +8869,7 @@ native-only over 763	geom-surface::class_a_bounds	a_curved_pcurve_s_centred_encl
 2	geom-surface::class_a_bounds	a_side_s_range_is_its_pcurve_s_domain
 native-only over 763	geom-surface::class_a_bounds	across_a_corner_or_a_crease_the_enclosure_holds_both_sides
 143	geom-surface::class_a_bounds	narrow_spans_on_a_knotted_patch_are_tight
-447	geom-surface::class_a_bounds	the_centred_form_is_used_wherever_the_parts_are_smooth
+306	geom-surface::class_a_bounds	the_centred_form_is_used_wherever_the_parts_are_smooth
 266	geom-surface::class_a_bounds	the_remainder_s_box_stays_on_its_piece_and_holds_the_values
 118	geom-surface::class_a_kinds	an_offset_split_at_its_base_s_crease_is_read_from_inside
 138	geom-surface::class_a_kinds	narrow_spans_next_to_a_knot_are_tight
