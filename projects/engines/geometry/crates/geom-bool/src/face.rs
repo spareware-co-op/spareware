@@ -938,11 +938,11 @@ pub(crate) fn edge_face(
 }
 
 /// A parameter strictly inside a block of `curve`, between its paves' enclosures, or `None` when
-/// the enclosures leave no room. Round a closed curve's join the room is one gap, from the last
-/// pave's end round the join to the first pave's start, read modulo the turn (decision 32.104):
-/// the room before the end, none where a last pave's enclosure runs past it, then the room after
-/// the join, which starts where that enclosure ends. Its middle is the middle of the whole gap, so
-/// a short room on one side of the join never puts it by a pave.
+/// an open block's enclosures leave no room. Round a closed curve's join the room is one gap, from
+/// the last pave's end round the join to the first pave's start, read modulo the turn (decision
+/// 32.104): the room before the end, none where a last pave's enclosure runs past it, then the room
+/// after the join, which starts where that enclosure ends. Its middle is the middle of the whole
+/// gap, so a short room on one side of the join never puts it by a pave.
 fn middle_of(curve: &CurveKind<3>, block: &PaveBlock) -> Option<f64> {
     let (a, b) = curve.domain();
     let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);
@@ -960,12 +960,20 @@ fn middle_of(curve: &CurveKind<3>, block: &PaveBlock) -> Option<f64> {
             // Half the gap on from the last pave's end where the room before the end is the
             // longer, else half the gap back from the first pave's start: half the gap is at most
             // the longer room, so the middle never passes that room's far end.
-            (half > 0.0).then(|| {
-                if before >= after {
-                    from.t.hi() + half
-                } else {
-                    to.t.lo() - half
-                }
+            //
+            // Neither room is negative, so no test of half is needed. `before` is at least 0. The
+            // first pave starts in the window (32.104), so at or after a; where the last pave runs
+            // past the end, the seam is a whole turn (`Seam::turns`, exactly), and the last pave's
+            // end lies before the first's start a turn on: order_on proved the two do not meet
+            // modulo the turn, or, for one pave, its span is narrower than a turn (`Seam::onto`
+            // writes a wider one as the whole domain, which does not run past the end). So that end
+            // less the turn is below `to.t.lo()`, and `start`, its rounded value, is at most it:
+            // rounding keeps order. Half is 0 only where both rooms round away, and the middle is
+            // then a pave's end, as `between` gives one of two neighbouring doubles.
+            Some(if before >= after {
+                from.t.hi() + half
+            } else {
+                to.t.lo() - half
             })
         }
         _ => between(a, b),

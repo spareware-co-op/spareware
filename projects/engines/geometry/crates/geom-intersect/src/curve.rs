@@ -46,7 +46,7 @@ use geom_curve::{
     Axes, Circle, CurveError, CurveKind, DerivativeBound, Frame, Line, ParamCurve, tight,
 };
 use geom_math::Box3;
-use geom_num::eft::two_prod;
+use geom_num::eft::{two_prod, two_sum};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{COORD_MAX, GridStep, P3, Steps};
 use geom_num::interval::Interval;
@@ -234,12 +234,16 @@ impl Seam {
         }
     }
 
-    /// A domain in half-turns, closed if it is a whole turn.
+    /// A domain in half-turns, closed if it is exactly a whole turn: b − a is 2 half-turns, decided
+    /// by an error-free sum, as the seam charts decide a surface's (12.10). A domain whose length
+    /// only rounds to 2 is an arc short of a turn: its ends are not one point, and a turn on from
+    /// its start is not its end, so nothing read modulo the turn would hold on it.
     #[must_use]
     pub fn turns(domain: (f64, f64)) -> Seam {
+        let (s, e) = two_sum(domain.1, -domain.0);
         Seam {
             domain,
-            closed: domain.1 - domain.0 >= 2.0,
+            closed: s == 2.0 && e == 0.0,
         }
     }
 

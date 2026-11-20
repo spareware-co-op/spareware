@@ -2287,3 +2287,27 @@ fn a_seam_is_read_from_the_operand_the_answer_was_written_on() {
     assert_eq!(closed(&torus), [true, true]);
     assert_eq!(closed(&plane), [false, false]);
 }
+
+/// A domain whose length only rounds to a whole turn is an arc short of one, not a closed turn:
+/// from −1.25 + 2⁻⁵² to 0.75 + 2⁻⁵³ is 2 − 2⁻⁵³ half-turns, which a circle takes as an arc of at
+/// most one turn, and a turn on from its start lands a double's step past its end. A domain of
+/// exactly two half-turns is closed wherever it starts.
+#[test]
+fn a_domain_that_only_rounds_to_a_turn_is_not_closed() {
+    let short = (-1.25 + two_to(-52), 0.75 + two_to(-53));
+    assert_eq!(short.1 - short.0, 2.0);
+    assert!(!Seam::turns(short).closed());
+    assert!(!Seam::of_curve(&arc([0.0, 0.0], 1.0, short)).closed());
+    for whole in [
+        (0.0, 2.0),
+        (1.0, 3.0),
+        (-3.0, -1.0),
+        (-1.25 + two_to(-52), 0.75 + two_to(-52)),
+    ] {
+        assert!(Seam::turns(whole).closed(), "{whole:?}");
+        assert!(
+            Seam::of_curve(&arc([0.0, 0.0], 1.0, whole)).closed(),
+            "{whole:?}"
+        );
+    }
+}

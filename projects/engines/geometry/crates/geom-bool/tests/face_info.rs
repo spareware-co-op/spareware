@@ -678,3 +678,30 @@ fn a_circle_s_arc_from_a_pave_a_step_before_its_join_is_in_the_face() {
     assert_eq!(arc.len(), 1, "{:?}", out.splits);
     assert_eq!(out.faces[face].in_blocks, arc);
 }
+
+/// A whole circle of radius 100 about the origin whose domain starts half a turn round, from 1 to
+/// 3, so its join is at (−100, 0), lying on a flat face whose right side, at x = 10, crosses it
+/// near t = 1.53 and t = 2.47. The arc from the upper crossing round the join to the lower one
+/// lies in the face; the arc through (100, 0) does not. The room after the join starts at the
+/// domain's start, 1: read from 0, that room would be a half-turn longer, and the middle of the gap
+/// would fall back to about 0, outside the domain, where no point of the circle can be placed.
+#[test]
+fn a_circle_s_arc_across_a_join_away_from_zero_is_in_the_face() {
+    let r = 100_i64;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], (r * S) as f64, frame, (1.0, 3.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let corners: Vec<usize> = [[-2 * r, -2 * r], [10, -2 * r], [10, 2 * r], [-2 * r, 2 * r]]
+        .iter()
+        .map(|&[x, y]| b.vertex(p(x, y, 0), 1))
+        .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = b.run().unwrap();
+    assert_eq!(out.paves[round].len(), 2, "{:?}", out.paves[round]);
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}
