@@ -163,7 +163,7 @@ const HAND_OVERS: [HandOver; 5] = [
         workflow: "kernel-quality.yml",
         job: "miri-plan",
         name: "miri-plan",
-        readers: &["miri", "miri-pool"],
+        readers: &["miri", "miri-2", "miri-pool"],
         read_as: "miri-plan",
     },
     HandOver {
@@ -2355,12 +2355,12 @@ fn an_in_run_hand_over_is_kept_a_day_and_read_in_its_run() {
         (
             "          name: miri-pool\n",
             "          name: miri-pool\n          retention-days: 1\n",
-            "miri-pool's step 9 uploads miri-pool for one day",
+            "miri-pool's step 11 uploads miri-pool for one day",
         ),
         // Another job downloading the plan.
         (
-            "          name: miri-measure-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
-            "          name: miri-plan\n          path: ${{ runner.temp }}/measure\n      - name: Measure",
+            "          name: miri-measure-plan\n          path: ${{ runner.temp }}/measure\n      # The yardstick",
+            "          name: miri-plan\n          path: ${{ runner.temp }}/measure\n      # The yardstick",
             "downloads miri-plan, which is not handed to it",
         ),
     ] {

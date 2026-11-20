@@ -15,8 +15,9 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
-use geom_curve::{CurveKind, Frame, ParamCurve};
+use geom_curve::{Circle, CurveKind, Frame, ParamCurve};
 use geom_intersect::IntersectError;
+use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{
     Coincidence, CurveContact, CurveEnd, Intersection, Item, PointContact,
@@ -2165,5 +2166,142 @@ fn operands_past_the_frame_s_range_are_refused() {
     ] {
         let r = meet(&a, &b);
         assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
+    }
+}
+
+/// A plane that runs on without end, `c + u·a + v·b` for every u and v.
+fn endless(c: [f64; 3], a: [f64; 3], b: [f64; 3]) -> SurfaceKind {
+    let open = (f64::NEG_INFINITY, f64::INFINITY);
+    SurfaceKind::Plane(Plane::new(c, a, b, (open, open)).unwrap())
+}
+
+/// The plane x = 0 through the axis of the double cone about z with slope 1 (its domain 500 each
+/// way of the apex) holds the cone's points with |y| = |z|: the rulings y = z and y = −z, each
+/// through the apex at the origin and ending on the cone's end circles at z = ±500. With no ends
+/// to the plane, the cone's end circles are cut against it as against a plane with ends (issue
+/// 1071: they were refused as invalid input).
+#[test]
+fn an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex() {
+    let c = cone([0.0; 3], [0.0, 0.0, 1.0], 1.0);
+    let r = meet(&endless([0.0; 3], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
+    let found = curves(&r);
+    assert_eq!(found.len(), 2, "{:?}", r.items());
+    let mut slopes = Vec::new();
+    for curve in found {
+        assert!(matches!(curve, CurveKind::Line(_)), "{curve:?}");
+        let (lo, hi) = curve.domain();
+        let ends = [
+            curve.point(lo, Limit::FromRight).unwrap(),
+            curve.point(hi, Limit::FromLeft).unwrap(),
+        ];
+        for p in ends {
+            near(p[0], 0.0);
+            near(p[2].abs(), 500.0);
+            near(p[1].abs(), 500.0);
+        }
+        // Through the apex: its ends stand opposite each other about the origin.
+        near(ends[0][1] + ends[1][1], 0.0);
+        near(ends[0][2] + ends[1][2], 0.0);
+        slopes.push((ends[1][1] - ends[0][1]) / (ends[1][2] - ends[0][2]));
+    }
+    slopes.sort_by(f64::total_cmp);
+    near(slopes[0], -1.0);
+    near(slopes[1], 1.0);
+}
+
+/// The plane z = 4 with no ends, square to the axis of that cone, cuts it in the circle of radius
+/// 4 about (0, 0, 4), whole.
+#[test]
+fn an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle() {
+    let c = cone([0.0; 3], [0.0, 0.0, 1.0], 1.0);
+    let r = meet(
+        &endless([0.0, 0.0, 4.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+        &c,
+    );
+    let found = curves(&r);
+    assert_eq!(found.len(), 1, "{:?}", r.items());
+    let CurveKind::Circle(circle) = found[0] else {
+        panic!("{:?}", r.items());
+    };
+    near(circle.radius(), 4.0);
+    let [x, y, z] = circle.center();
+    near(x, 0.0);
+    near(y, 0.0);
+    near(z, 4.0);
+    let (lo, hi) = found[0].domain();
+    near(hi - lo, 2.0);
+}
+
+/// The half plane z = 4 for x ≥ 0, running on without end, cuts the cylinder of radius 5 about z
+/// in the half of its circle at that height with x ≥ 0: from (0, −5, 4) round (5, 0, 4) to
+/// (0, 5, 4), half a turn.
+#[test]
+fn an_endless_half_plane_cuts_a_cylinder_in_a_half_circle() {
+    let open = (f64::NEG_INFINITY, f64::INFINITY);
+    let half = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 4.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, f64::INFINITY), open),
+        )
+        .unwrap(),
+    );
+    let r = meet(&half, &cylinder([0.0; 3], [0.0, 0.0, 1.0], 5.0));
+    let found = curves(&r);
+    assert_eq!(found.len(), 1, "{:?}", r.items());
+    let (lo, hi) = found[0].domain();
+    near(hi - lo, 1.0);
+    let p = mid(found[0]);
+    near(p[0], 5.0);
+    near(p[1], 0.0);
+    near(p[2], 4.0);
+    for (t, side) in [(lo, Limit::FromRight), (hi, Limit::FromLeft)] {
+        let q = found[0].point(t, side).unwrap();
+        near(q[0], 0.0);
+        near(q[1].abs(), 5.0);
+        near(q[2], 4.0);
+    }
+}
+
+/// The circle of radius 500 about the origin in the plane x = 0 crosses the endless plane z = 0
+/// at (0, −500, 0) and (0, 500, 0): two proven crossings, nothing flagged and nothing touched,
+/// for the plane has no end. Both points stand on the circle's own box read in the plane's
+/// parameters (u = x is 0 all round, v = y is −500 and 500 there), so the ends the plane is held
+/// to on the engine's path must stand well past that box: held a rounding past it, the engine has
+/// no room past either point in u or v to prove it alone, and flags both as undecided at the floor.
+#[test]
+fn an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings() {
+    let circle = CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            500.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    );
+    let flat = endless([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let r = curve_surface(&circle, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<(Interval, PointContact)> = r
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Point { at, contact, .. } => {
+                let [_, u, v] = at.spans() else {
+                    panic!("{at:?}");
+                };
+                assert!(u.contains(0.0), "{u:?}");
+                Some((*v, *contact))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(found.len(), 2, "{:?}", r.items());
+    found.sort_by(|a, b| a.0.lo().total_cmp(&b.0.lo()));
+    assert!(found[0].0.contains(-500.0), "{:?}", r.items());
+    assert!(found[1].0.contains(500.0), "{:?}", r.items());
+    for (_, contact) in found {
+        assert_eq!(contact, PointContact::Crossing, "{:?}", r.items());
     }
 }

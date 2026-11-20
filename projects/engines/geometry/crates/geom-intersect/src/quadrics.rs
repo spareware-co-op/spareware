@@ -216,18 +216,27 @@ pub(crate) struct Sheet {
     pub(crate) exact: Option<quadric::Plane>,
 }
 
+/// The point `c + v`, if `c` and `v` are both on the grid and their sum is in reach. The sum is
+/// made in integers, not doubles (#1067): near 2^39 a double holds only 2^-13, so a stored
+/// vector's fraction under half of that rounds away in `c + v`, the sum lands on the grid, and the
+/// closed forms would be handed another plane or axis from the stored one.
+fn grid_sum(c: &[f64; 3], v: &[f64; 3]) -> Option<P3> {
+    let (c, v) = (grid_point(c)?, grid_point(v)?);
+    P3::new(
+        c.x.get().checked_add(v.x.get())?,
+        c.y.get().checked_add(v.y.get())?,
+        c.z.get().checked_add(v.z.get())?,
+    )
+    .ok()
+}
+
 pub(crate) fn sheet(plane: &Plane) -> Result<Sheet, IntersectError> {
     let (c, a, b) = plane.vectors();
-    let far = |v: [f64; 3]| {
-        let [p, q, r] = c;
-        let [x, y, z] = v;
-        grid_point(&[p + x, q + y, r + z])
-    };
     let exact = (|| {
         Some(quadric::Plane {
             a: grid_point(&c)?,
-            b: far(a)?,
-            c: far(b)?,
+            b: grid_sum(&c, &a)?,
+            c: grid_sum(&c, &b)?,
         })
     })();
     Ok(Sheet {
@@ -247,10 +256,7 @@ pub(crate) struct Axis {
 
 pub(crate) fn axis(center: [f64; 3], frame: &Frame<3>, sign: f64) -> Result<Axis, IntersectError> {
     let (_, [_, _, n]) = frame.unit_vectors()?;
-    let stored = frame.normal();
-    let [a, b, c] = center;
-    let [p, q, r] = stored;
-    let exact = (|| Some((grid_point(&center)?, grid_point(&[a + p, b + q, c + r])?)))();
+    let exact = (|| Some((grid_point(&center)?, grid_sum(&center, &frame.normal())?)))();
     let sign = tight::point(sign)?;
     let [x, y, z] = n;
     Ok(Axis {
@@ -304,11 +310,9 @@ pub(crate) fn funnel(cone: &Cone) -> Result<Funnel, IntersectError> {
             return None;
         }
         let centre = middle(apex);
-        let [a, b, c] = centre;
-        let [p, q, r] = cone.frame().normal();
         Some(quadric::Cone {
             apex: grid_point(&centre)?,
-            along: grid_point(&[a + p, b + q, c + r])?,
+            along: grid_sum(&centre, &cone.frame().normal())?,
             slope: quadric::Slope {
                 rise: u64::try_from(whole(slope.lo() * 1_048_576.0)?).ok()?,
                 run: 1 << 20,
@@ -360,19 +364,14 @@ pub(crate) fn same_line(a: [f64; 3], e: [f64; 3], b: [f64; 3], f: [f64; 3]) -> b
 fn plane_plane(a: &Plane, b: &Plane) -> Result<Option<Vec<Piece>>, IntersectError> {
     let (p, q) = (sheet(a)?, sheet(b)?);
     let d = cross(p.normal, q.normal)?;
-    let (o, u, v) = b.vectors();
-    let far = |w: [f64; 3]| {
-        let [x, y, z] = o;
-        let [e, f, g] = w;
-        grid_point(&[x + e, y + f, z + g])
-    };
-    let exact = match (p.exact, grid_point(&o), far(u), far(v)) {
-        (Some(s), Some(g), Some(h), Some(k)) => {
-            let parallel = quadric::plane_along(&s, g, h)? == Sign::Zero
-                && quadric::plane_along(&s, g, k)? == Sign::Zero;
+    // The second plane's three grid points are its sheet's, its far points summed exactly.
+    let exact = match (p.exact, q.exact) {
+        (Some(s), Some(t)) => {
+            let parallel = quadric::plane_along(&s, t.a, t.b)? == Sign::Zero
+                && quadric::plane_along(&s, t.a, t.c)? == Sign::Zero;
             Some((
                 parallel,
-                predicate::orient3d(s.a, s.b, s.c, g)? == Sign::Zero,
+                predicate::orient3d(s.a, s.b, s.c, t.a)? == Sign::Zero,
             ))
         }
         _ => None,

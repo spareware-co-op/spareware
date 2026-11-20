@@ -1,0 +1,84 @@
+# The Miri tests a gate job may see stopped at the 600 s budget with no verdict (decision 32.68):
+# every finishing row of Miri's table (miri-times.tsv) over 375 s, 600 s over the 1.6 times slower
+# runner the plan allows, whose test such a runner can take to the stop. Written by
+# `kernel-quality miri-may-stop` (and `miri-times`) from the table, never by hand. A test on it that
+# is stopped is named in its job's summary as stopped, not passed; any other test stopped fails its
+# job. It may only shrink (`geom_test::miri::MAY_STOP_MOST`): each test on it is to be resized under
+# cfg(miri), the same law on a smaller input, until Miri finishes it within 375 s.
+# `seconds<TAB>binary<TAB>test`, the longest first.
+594	geom-poly::merge	points_whose_first_coordinates_agree_past_32_binary_places_keep_their_order_at_any_width
+594	geom-poly::subdivide	a_small_leaf_gives_the_vectors_a_large_one_does
+592	geom-bvh::attack_smlib1	ub_221_the_box_tree_never_has_links_that_disagree::many_identical_boxes
+584	geom-bool::combine	a_walls_end_on_anothers_side_follows_the_shared_face_table
+574	geom-num::attack_predicate	incircle_obeys_every_symmetry
+570	geom-check::attack_g134	a_tooth_through_a_window_and_a_tooth_into_the_wall_differ
+568	geom-check::attack_g134	every_face_pair_is_charged_and_a_stop_is_a_stop
+563	geom-nurbs::attack_g58	the_work_each_fit_charges_is_pinned
+561	geom-num::plane	far_points_report_their_rounded_coordinate
+552	geom-surface::offset_work	an_order_the_jets_cannot_hold_is_refused_before_any_work::over_a_box
+535	geom-bool::combine	two_boxes_unite_cut_and_meet
+534	geom-num::attack_g25	adv_exact_sum_ties_and_overflow_at_the_top
+530	geom-name::prune_determinism	prune_golden_hash_is_the_same_on_every_target
+528	geom-mesh::boolean	ties_on_a_small_lattice_hold_up
+514	geom-bool::names	a_vertex_a_wedge_makes_where_three_planes_meet_keeps_its_name_through_a_later_cut
+511	geom-bool::names	a_vertex_where_three_planes_meet_keeps_its_name_through_a_later_cut
+507	geom-poly::subdivide	a_cache_from_other_inputs_changes_nothing
+506	geom-check::attack_g134	the_same_body_gives_the_same_report
+505	geom-surface::contract	without_conversions_a_broken_kind_is_caught_as_check_catches_it
+505	geom-surface::frame_rule	a_closed_paths_twist_is_spread_or_refused
+503	geom-poly::subdivide	a_split_with_an_empty_half_pays_and_is_taken
+493	geom-num	plane::tests::lpi_classify_is_exact_in_both_widths_at_the_extremes_of_i128
+490	geom-mesh::model	a_narrow_strip_is_not_pinched::remeshed
+484	geom-bool::names	two_doors_of_one_type_differ_and_a_third_renames_nothing
+483	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_half_space
+478	geom-run::attack_g04	thread_counts_are_bounded_by_the_pool_and_by_the_chunk_count
+476	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_box
+476	geom-curve::attack_g64	a_reversed_curve_is_the_transition_built_from_the_end
+475	geom-num::steps	every_step_of_a_plane_gives_the_exact_sign
+470	geom-make::attack_g101	transforms_keep_names_and_pass_the_checker
+465	geom-num::attack_g52	interval_jacobians_enclose_point_jacobians
+464	geom-format::cbor2	every_verdict_and_text_matches_cbor2
+458	geom-num::rng_properties	philox4x32_10_is_a_bijection_on_counters
+457	geom-num::rng_properties	range_inclusive_is_low_plus_below
+453	geom-num::rng_properties	next_u64_and_next_f64_follow_their_definitions
+450	geom-format::record_determinism	golden_hash_is_the_same_on_every_target
+449	geom-bool::names	a_new_vertex_a_wedge_makes_half_a_step_from_old_ones_takes_a_name_of_its_own
+448	geom-bool::combine	one_arrangement_gives_every_selection
+447	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_2
+447	geom-num::rng_properties	a_stream_is_its_blocks_in_order
+447	geom-surface::class_a_bounds	the_centred_form_is_used_wherever_the_parts_are_smooth
+446	geom-bool::names	a_new_vertex_half_a_step_from_an_old_one_takes_a_name_of_its_own
+446	geom-linalg::dense	kahan_matrix_shows_the_limit_of_column_pivoting
+445	geom-bool::attack_g144	a_blind_plug_closes_the_top_hole_alone
+444	geom-curve::attack_g69	the_contract_kit_steps_past_huge_domain_ends
+443	geom-num::attack2_interval	zeros_and_signs::division_by_intervals_touching_zero
+440	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_4
+438	geom-bool::cells	a_wall_makes_two_rooms_each_named_by_its_seed
+436	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge::its_curvature
+436	geom-run::properties	find_first_is_the_first_match
+433	geom-analysis::rounds	a_round_runs_only_if_its_halves_fit_under_the_cap
+421	geom-bool::combine	a_result_less_exact_than_the_caller_takes_is_refused
+414	geom-check::faults	a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids
+411	geom-num::coverage_implicit	the_crossing_weight_is_exact_and_its_filter_never_guesses
+410	geom-mesh::boolean	two_faces_of_one_sheet_meet_at_a_point_on_an_edge
+410	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_1
+405	geom-poly::subdivide	a_test_that_is_settled_drops_its_box_and_nothing_it_keeps
+403	geom-mesh::boolean	the_threads_and_the_order_do_not_show::the_threads
+402	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::three_doors
+402	geom-bool::names	two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners
+402	geom-num::attack_g05	sinpi_and_cospi_hard_cases_of_the_port_and_their_neighbours
+401	geom-bool::combine	the_order_of_the_operands_does_not_count
+400	geom-op::attack_g82	paths_order_by_operation_then_labels
+396	geom-curve::compound	composites_join_exactly_and_convert_to_one_curve
+394	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::two_doors
+394	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_3
+393	geom-nurbs::restrict	a_curve_value_encloses_the_exact_value
+390	geom-curve::attack_g64	a_mirrored_law_turns_the_other_way
+389	geom-bool::cells	a_leak_is_reported_where_it_is_narrowest
+389	geom-mesh::model	a_narrow_strip_is_not_pinched::decimated
+386	geom-bool::attack_g144	a_plug_closes_a_hole
+384	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_one_after_another
+381	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_at_once
+378	geom-surface::frame_rule	the_frame_meets_its_stations_bit_for_bit_and_is_c1_between_them
+377	geom-mesh::slice	the_threads_do_not_show
+377	geom-surface::analytic	a_whole_cylinder_converts_exactly
