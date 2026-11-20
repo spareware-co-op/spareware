@@ -1104,23 +1104,8 @@ macro_rules! width_suite {
                 #![proptest_config(config())]
 
                 #[test]
-                fn from_i128_is_exact(v in any::<i128>()) {
-                    checks::from_i128::<L>(v)?;
-                }
-
-                #[test]
                 fn from_i64_is_exact(v in any::<i64>()) {
                     checks::from_i64::<L>(v)?;
-                }
-
-                #[test]
-                fn limbs_round_trip(raw in prop::array::uniform::<_, L>(any::<u64>())) {
-                    checks::limbs::<L>(raw)?;
-                }
-
-                #[test]
-                fn add_at_the_limits((a, b) in s::sum_at_limit(L)) {
-                    checks::add::<L>(&a, &b)?;
                 }
 
                 #[test]
@@ -1129,28 +1114,8 @@ macro_rules! width_suite {
                 }
 
                 #[test]
-                fn neg_matches_oracle(a in s::value(L)) {
-                    checks::neg::<L>(&a)?;
-                }
-
-                #[test]
                 fn mul_matches_oracle(a in s::value(L), b in s::value(L)) {
                     checks::mul::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn mul_at_the_overflow_threshold((a, b) in s::product_at_limit(L)) {
-                    checks::mul::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn mul_units(a in s::value(L)) {
-                    checks::mul_units::<L>(&a)?;
-                }
-
-                #[test]
-                fn signs_match_oracle(a in s::value(L)) {
-                    checks::signs::<L>(&a)?;
                 }
 
                 #[test]
@@ -1161,16 +1126,6 @@ macro_rules! width_suite {
                 #[test]
                 fn order_of_close_values((a, b) in s::close_pair(L)) {
                     checks::order::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn order_of_values_one_limb_apart((a, b) in s::one_limb_apart(L)) {
-                    checks::order::<L>(&a, &b)?;
-                }
-
-                #[test]
-                fn to_i128_matches_oracle(a in s::near_i128_limits(L)) {
-                    checks::to_i128::<L>(&a)?;
                 }
 
                 #[test]
@@ -1191,6 +1146,46 @@ macro_rules! width_suite {
 
             // The longest properties under Miri, each cut into slices of its one stream of
             // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(from_i128_is_exact, (any::<i128>(),), |(v,)| {
+                checks::from_i128::<L>(v)
+            });
+
+            sliced!(
+                limbs_round_trip,
+                (prop::array::uniform::<_, L>(any::<u64>()),),
+                |(raw,)| checks::limbs::<L>(raw)
+            );
+
+            sliced!(add_at_the_limits, (s::sum_at_limit(L),), |((a, b),)| {
+                checks::add::<L>(&a, &b)
+            });
+
+            sliced!(neg_matches_oracle, (s::value(L),), |(a,)| {
+                checks::neg::<L>(&a)
+            });
+
+            sliced!(
+                mul_at_the_overflow_threshold,
+                (s::product_at_limit(L),),
+                |((a, b),)| checks::mul::<L>(&a, &b)
+            );
+
+            sliced!(mul_units, (s::value(L),), |(a,)| checks::mul_units::<L>(&a));
+
+            sliced!(signs_match_oracle, (s::value(L),), |(a,)| {
+                checks::signs::<L>(&a)
+            });
+
+            sliced!(
+                order_of_values_one_limb_apart,
+                (s::one_limb_apart(L),),
+                |((a, b),)| checks::order::<L>(&a, &b)
+            );
+
+            sliced!(to_i128_matches_oracle, (s::near_i128_limits(L),), |(a,)| {
+                checks::to_i128::<L>(&a)
+            });
+
             sliced!(add_matches_oracle, (s::value(L), s::value(L)), |(a, b)| {
                 checks::add::<L>(&a, &b)
             });
@@ -1333,12 +1328,20 @@ mod oracle_self_test {
             prop_assert_eq!(oracle::limbs::<2>(&BigInt::from(v)), Some(expected));
             prop_assert_eq!(oracle::signed(&expected), BigInt::from(v));
         }
-
-        #[test]
-        fn reading_then_writing_limbs_round_trips(raw in vec(any::<u64>(), 8)) {
-            prop_assert_eq!(oracle::limbs::<8>(&oracle::signed(&raw)).map(Vec::from), Some(raw));
-        }
     }
+
+    // The longest of the oracle's properties under Miri, cut into slices (`sliced!`).
+    sliced!(
+        reading_then_writing_limbs_round_trips,
+        (vec(any::<u64>(), 8),),
+        |(raw,)| {
+            prop_assert_eq!(
+                oracle::limbs::<8>(&oracle::signed(&raw)).map(Vec::from),
+                Some(raw)
+            );
+            Ok(())
+        }
+    );
 }
 
 /// Exhaustive extreme corners: every point at (±(2^40 − 1), …), in the narrowest width.

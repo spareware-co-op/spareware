@@ -21,6 +21,18 @@ fail-fast = false
 [profile.default-miri.junit]
 path = "junit.xml"
 
+# The yardstick (32.78): one fixed small test (`geom_test::miri::YARDSTICK`) that every Miri gate
+# job runs alone before its own tests, so its time over its row in Miri's table is the job's scale,
+# the speed of the runner it got. It has a report of its own, which the tests' report never
+# overwrites; a yardstick stopped at the budget is counted as timed out, not passed, and
+# `kernel-quality miri-scale` refuses it: a missing time is an error, never a default.
+[profile.miri-yardstick]
+slow-timeout = { period = "300s", terminate-after = 2 }
+fail-fast = false
+
+[profile.miri-yardstick.junit]
+path = "junit.xml"
+
 # The same run at a budget of one minute a test, for a pull request that changes how Miri runs: it
 # proves the run works without spending the weekly run's hours.
 [profile.miri-smoke]

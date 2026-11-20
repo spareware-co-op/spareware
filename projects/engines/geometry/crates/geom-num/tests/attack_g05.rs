@@ -1127,15 +1127,27 @@ fn exp_threshold_inputs() -> Vec<f64> {
     xs
 }
 
-// exp at its thresholds, in quarters of its inputs (decision 32.78, `slices`).
-quarters!(exp_thresholds, |part| {
+/// Checks slice `part` of quarter `quarter` of `exp_thresholds`' inputs, in their order.
+fn exp_thresholds_slice(quarter: u32, part: u32) {
     let xs = exp_threshold_inputs();
+    let quarter = &xs[slices::range_usize(xs.len(), quarter)];
     let mut r = Report::new("exp, thresholds");
-    for &x in &xs[slices::range_usize(xs.len(), part)] {
+    for &x in &quarter[slices::range_usize(quarter.len(), part)] {
         r.exp(x);
     }
     r.finish();
-});
+}
+
+/// exp at its thresholds, in quarters of its inputs and each quarter in quarters again (decision
+/// 32.78, `slices`): run 44598759458 measured its last quarter at 640 yardstick seconds.
+mod exp_thresholds {
+    use super::*;
+
+    quarters!(quarter_1, |part| exp_thresholds_slice(0, part));
+    quarters!(quarter_2, |part| exp_thresholds_slice(1, part));
+    quarters!(quarter_3, |part| exp_thresholds_slice(2, part));
+    quarters!(quarter_4, |part| exp_thresholds_slice(3, part));
+}
 
 /// Every input `ln_boundaries_powers_of_two_and_subnormals` checks, in its order: every power of
 /// two, then around each boundary.
@@ -1179,7 +1191,15 @@ quarters!(ln_boundaries_powers_of_two_and_subnormals, |part| {
 #[test]
 fn the_slices_join_to_every_case_once() {
     let n = |xs: Vec<f64>| u32::try_from(xs.len()).unwrap();
-    slices::assert_joins(n(exp_threshold_inputs()), "exp_thresholds' inputs");
+    let xs = exp_threshold_inputs();
+    slices::assert_joins(u32::try_from(xs.len()).unwrap(), "exp_thresholds' inputs");
+    for quarter in 0..slices::SLICES {
+        let q = slices::range_usize(xs.len(), quarter);
+        slices::assert_joins(
+            u32::try_from(q.len()).unwrap(),
+            "a quarter of exp_thresholds' inputs",
+        );
+    }
     slices::assert_joins(n(ln_boundary_inputs()), "ln_boundaries' inputs");
 }
 
