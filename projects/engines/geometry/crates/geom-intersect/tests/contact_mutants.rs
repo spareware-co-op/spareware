@@ -15,11 +15,12 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::contact::analyse;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::subdivide;
+use geom_intersect::result::PointContact;
 use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 25))
@@ -523,5 +524,59 @@ fn a_saddle_on_a_plane_whose_branches_are_not_its_zeros_is_undecided() {
                  why: HigherOrderContact }]",
             ),
         ],
+    );
+}
+
+/// `attack_g171.rs`'s torus and cylinder whose curvatures agree in one direction: the contact
+/// cannot be isolated, so it is read from its cluster as a singular point with the two
+/// half-branches that leave it, its gap the cluster's reach on both sides of zero. Subdivision
+/// takes about 20 million units here, so it is read in one order only.
+#[test]
+fn a_cusp_on_a_torus_reads_its_gap_on_both_sides_of_zero() {
+    let unit = 1024.0;
+    let (major, minor) = (3.0 * unit, unit);
+    let (cos, sin) = (0.5f64, 3.0f64.sqrt() / 2.0);
+    let torus = SurfaceKind::Torus(
+        Torus::new(
+            [0.0, 0.0, 0.0],
+            major,
+            minor,
+            Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap(),
+            ((-0.25, 0.25), (1.0 / 3.0 - 0.25, 1.0 / 3.0 + 0.25)),
+        )
+        .unwrap(),
+    );
+    let at = [major + minor * cos, 0.0, minor * sin];
+    let n = [cos, 0.0, sin];
+    let half = 0.5f64.sqrt();
+    let w = [-half * sin, -half, half * cos];
+    let radius = 4.0 * unit;
+    let centre: [f64; 3] = core::array::from_fn(|i| at[i] - radius * n[i]);
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new(
+            centre,
+            radius,
+            Frame::new(n, w).unwrap(),
+            ((-0.2, 0.2), (-1.5 * unit, 1.5 * unit)),
+        )
+        .unwrap(),
+    );
+    let found = subdivide(&torus, &cylinder, 8.0, &mut meter()).unwrap();
+    let read = analyse(&torus, &cylinder, &found, 8.0, unit, &mut meter()).unwrap();
+    let gaps: Vec<_> = read
+        .iter()
+        .filter_map(|r| match r {
+            Reading::Point {
+                contact: PointContact::Singular { branches: 2 },
+                gap,
+                ..
+            } => Some(*gap),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(gaps.len(), 1, "{read:?}");
+    assert!(
+        gaps[0].hi() > 0.0 && gaps[0].lo() == -gaps[0].hi(),
+        "{read:?}"
     );
 }
