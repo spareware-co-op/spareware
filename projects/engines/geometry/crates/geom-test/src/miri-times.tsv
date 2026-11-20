@@ -48,6 +48,8 @@
 # GitHub measuring run 44716062116 (miri_measure=all on rows/phase5-yardstick at 7c1686e39, miri_measure_tests naming the 47 tests the cut pull requests #1100, #1101, #1105, #1106 and #1107 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44788995881 (miri_measure=new on rows/phase5-yardstick at 9ec97365f, miri_measure_tests naming the 198 tests that #1111, #1113, #1114, #1119 and #1124 changed, sped up or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1234,7 +1236,11 @@ native-only over 561	geom-intersect::attack_g163	a_near_copy_is_flagged_and_neve
 29	geom-intersect::attack_g163	a_touch_at_a_shared_level_is_kept
 7	geom-intersect::attack_g163	a_whole_circle_and_an_arc_of_it_share_only_the_arc
 native-only over 1069	geom-intersect::attack_g163	a_whole_circle_s_search_takes_only_its_work
+5	geom-intersect::attack_g163	an_arc_a_step_short_of_a_turn_meets_the_whole_circle_in_one_overlap
+6	geom-intersect::attack_g163	an_arc_from_minus_one_a_step_short_of_a_turn_meets_the_whole_circle_in_one_overlap
 11	geom-intersect::attack_g163	an_arc_of_one_circle_is_placed_by_its_turn_and_its_normal
+6	geom-intersect::attack_g163	an_arc_that_only_rounds_to_a_turn_is_not_the_whole_circle
+5	geom-intersect::attack_g163	an_arc_that_only_rounds_to_a_turn_meets_the_whole_circle_in_one_overlap
 3	geom-intersect::attack_g163	an_end_on_the_other_segment_is_a_boundary_touch_within_both_domains
 15	geom-intersect::attack_g163	an_infinite_line_cuts_a_curve_wherever_it_starts
 101	geom-intersect::attack_g163	an_inflection_on_a_line_is_of_higher_order
@@ -1265,10 +1271,12 @@ native-only over 1069	geom-intersect::attack_g163	no_crossing_is_missed_on_10_00
 37	geom-intersect::attack_g163	the_engine_answers_a_box_in_the_plane_a_pair_shares
 152	geom-intersect::attack_g163	the_engine_takes_only_its_work
 5	geom-intersect::attack_g163	the_least_gap_in_space_is_a_gap
+4	geom-intersect::attack_g163	two_arcs_a_step_short_of_a_turn_are_flagged_where_the_boxes_cannot_tell_their_runs_apart
 8	geom-intersect::attack_g163	two_circles_cross_touch_or_miss
 54	geom-intersect::attack_g163	two_ellipses_meet_four_times
 3	geom-intersect::attack_g163	two_infinite_lines_overlap_as_far_as_the_grid_reaches
 3	geom-intersect::attack_g163	two_segments_cross
+4	geom-intersect::attack_g163	whole_turns_from_anywhere_are_the_whole_overlap
 4	geom-intersect::attack_g164	a_bound_on_a_domain_end_is_past_it
 native-only over 1069	geom-intersect::attack_g164	a_crossing_before_a_graze_is_kept
 70	geom-intersect::attack_g164	a_curve_goes_through_a_patch_once_or_twice
@@ -1359,6 +1367,8 @@ native-only over 570	geom-intersect::attack_g166	a_cubic_and_its_line_are_walked
 235	geom-intersect::attack_g166	two_cones_apart
 319	geom-intersect::attack_g166	viviani_s_window_crosses_itself
 native-only over 570	geom-intersect::attack_g167	a_climbing_profile_sweeps_from_each_crossing
+13	geom-intersect::attack_g167	a_copy_of_a_profile_that_only_rounds_to_a_turn_is_an_arc
+native-only over 558	geom-intersect::attack_g167	a_copy_of_a_whole_turn_profile_starting_anywhere_is_a_loop
 native-only over 560	geom-intersect::attack_g167	a_cylinder_ending_on_a_torus_meets_it_in_its_end_circle
 5	geom-intersect::attack_g167	a_part_of_a_turn_is_left_to_the_general_paths
 native-only over 560	geom-intersect::attack_g167	a_plane_across_an_extrusion_cuts_a_copy_of_the_profile
@@ -1368,6 +1378,7 @@ native-only over 560	geom-intersect::attack_g167	a_plane_along_an_extrusion_cuts
 native-only over 560	geom-intersect::attack_g167	a_plane_through_a_revolution_s_axis_cuts_two_copies
 21	geom-intersect::attack_g167	a_plane_through_a_torus_s_axis
 281	geom-intersect::attack_g167	a_quadric_about_a_revolution
+17	geom-intersect::attack_g167	a_ring_in_the_gap_of_a_tube_turn_that_only_rounds_to_whole_is_not_met
 48	geom-intersect::attack_g167	a_tube_turn_box_meeting_the_domain_at_two_turns_holds_the_circle_s_turn
 48	geom-intersect::attack_g167	a_tube_turn_box_rounded_onto_the_domain_s_start_two_turns_back_is_not_held_there
 20	geom-intersect::attack_g167	a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on
@@ -1376,6 +1387,7 @@ native-only over 560	geom-intersect::attack_g167	a_plane_through_a_revolution_s_
 7	geom-intersect::attack_g167	a_turn_that_only_rounds_to_whole_is_left_to_the_general_paths
 29	geom-intersect::attack_g167	a_whole_turn_starting_anywhere_is_reduced
 native-only over 635	geom-intersect::attack_g167	an_arc_any_number_of_turns_out_is_cut_where_an_edge_crosses_it
+18	geom-intersect::attack_g167	both_rings_of_a_whole_tube_turn_are_met
 native-only over 635	geom-intersect::attack_g167	every_reduction_makes_what_it_made
 182	geom-intersect::attack_g167	quadrics_about_a_torus_s_axis
 native-only over 635	geom-intersect::attack_g167	two_sweeps_of_one_direction_meet_in_lines
@@ -1552,6 +1564,7 @@ native-only over 1019	geom-intersect::circle_on_surface	a_height_off_the_coordin
 237	geom-intersect::circle_on_surface	a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis::a_circle_short_of_a_turn
 174	geom-intersect::circle_on_surface	a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis::a_round_domain_short_of_a_turn
 42	geom-intersect::circle_on_surface	a_round_domain_short_of_a_turn_is_the_engines_wherever_it_starts
+67	geom-intersect::circle_on_surface	an_arc_in_the_gap_of_a_cylinder_turn_that_only_rounds_to_whole_does_not_lie_on_it
 native-only over 1019	geom-intersect::circle_on_surface	an_axis_off_the_coordinate_axes_is_placed_by_enclosures_alone
 7	geom-intersect::circle_on_surface	an_enclosure_clear_of_the_planes_domain_misses_it_on_each_side
 5	geom-intersect::circle_on_surface	an_enclosure_that_fills_the_planes_domain_exactly_is_wholly_held
@@ -1561,12 +1574,14 @@ native-only over 1019	geom-intersect::circle_on_surface	an_enclosure_that_reache
 12	geom-intersect::circle_on_surface	circles_apart_in_one_plane_meet_nothing
 native-only over 744	geom-intersect::circle_on_surface	circles_crossing_in_one_plane_meet_at_two_points_as_the_engine_finds
 native-only over 744	geom-intersect::circle_on_surface	circles_crossing_or_touching_at_an_end_of_the_domain_are_the_engines
+native-only over 561	geom-intersect::circle_on_surface	circles_crossing_where_a_turn_only_rounds_to_whole_are_the_engines
 native-only over 744	geom-intersect::circle_on_surface	circles_touching_off_the_coordinate_axes_are_the_engines
 42	geom-intersect::circle_on_surface	circles_touching_on_a_coordinate_axis_meet_at_one_tangent_point
 19	geom-intersect::circle_part_in_plane	a_centre_on_a_corner_of_the_domain_gives_the_quarter_circle_between_exact_quarter_turns
 22	geom-intersect::circle_part_in_plane	a_centre_on_a_side_of_the_domain_gives_the_half_circle_between_exact_quarter_turns
 6	geom-intersect::circle_part_in_plane	a_circle_round_the_whole_domain_misses_it
 10	geom-intersect::circle_part_in_plane	a_circle_through_all_four_sides_is_four_arcs
+483	geom-intersect::circle_part_in_plane	a_circle_whose_turn_only_rounds_to_whole_is_the_engines
 native-only over 744	geom-intersect::circle_part_in_plane	a_corner_touched_from_outside_is_the_engines
 native-only over 583	geom-intersect::circle_part_in_plane	a_frame_off_the_planes_axes_is_placed_away_from_the_join_and_the_engines_on_it
 7	geom-intersect::circle_part_in_plane	a_frame_turning_the_other_way_runs_the_arc_backwards
