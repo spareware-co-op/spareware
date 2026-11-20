@@ -50,6 +50,7 @@
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1542,6 +1543,8 @@ native-only over 745	geom-intersect::boundary_mutants	an_edge_along_a_plane_whos
 native-only over 745	geom-intersect::boundary_mutants	an_edge_along_a_plane_whose_rows_tie_again_meets_in_the_recorded_boxes
 native-only over 745	geom-intersect::boundary_mutants	an_edge_along_a_plane_with_tied_rows_meets_in_the_recorded_boxes
 native-only over 755	geom-intersect::boundary_mutants	an_edge_along_a_tilted_plane_meets_in_the_recorded_boxes
+18	geom-intersect::boundary_mutants	two_starts_a_hair_apart_far_from_zero_are_joined_along_their_edge
+2	geom-intersect::boundary_mutants	two_starts_past_the_end_of_an_edge_have_no_run_between_them
 native-only over 755	geom-intersect::boundary_units	a_planes_edge_along_a_cylinders_line_is_proven_in_pieces_of_half_a_unit
 native-only over 571	geom-intersect::boundary_units	a_strip_has_the_same_branch_however_its_parameters_are_written
 native-only over 571	geom-intersect::boundary_units	an_edge_along_a_plane_whose_vectors_lean_is_proven_where_it_lies
