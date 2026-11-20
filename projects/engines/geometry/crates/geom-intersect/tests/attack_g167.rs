@@ -995,6 +995,50 @@ fn a_whole_turn_starting_anywhere_is_reduced() {
     }
 }
 
+/// A plane across an extrusion cuts a copy of the profile on the profile's own domain, and the copy
+/// is a loop only where that domain is exactly a whole turn, as the seam charts decide one (12.10;
+/// issue 1104). The circle of radius 5 about z on −1.25 + 2⁻⁵² to 0.75 + 2⁻⁵³, 2 − 2⁻⁵³ half-turns
+/// whose difference rounds to 2, pushed along z: the plane z = 5 cuts it in one arc over that
+/// domain, which ends where the profile ends, on the extrusion's edges, never in a loop.
+#[test]
+fn a_copy_of_a_profile_that_only_rounds_to_a_turn_is_an_arc() {
+    let short = (-1.25 + f64::EPSILON, 0.75 + f64::EPSILON / 2.0);
+    assert_eq!(
+        short.1 - short.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    let arc = Circle::new([0.0; 3], 5.0, up(), short).unwrap();
+    let wall = pushed(CurveKind::Circle(arc), [0.0, 0.0, 1.0], (0.0, 10.0));
+    for (a, b) in [(&level(5.0), &wall), (&wall, &level(5.0))] {
+        let r = natural(a, b, &mut meter()).unwrap().unwrap();
+        let [Item::Curve { curve, ends, .. }] = r.items() else {
+            panic!("{:?}", r.items());
+        };
+        assert_eq!(curve.domain(), short, "{curve:?}");
+        assert_eq!(*ends, [CurveEnd::Boundary; 2], "{curve:?}");
+    }
+}
+
+/// A copy of a profile that is a whole turn, starting anywhere, is a loop. The circle of radius 5
+/// about z on 0 to 2, 1 to 3 or −3 to −1, each exactly two half-turns, pushed along z: the plane
+/// z = 5 cuts it in one circle over the profile's domain, closed at both ends.
+#[test]
+fn a_copy_of_a_whole_turn_profile_starting_anywhere_is_a_loop() {
+    for turn in [(0.0, 2.0), (1.0, 3.0), (-3.0, -1.0)] {
+        let circle = Circle::new([0.0; 3], 5.0, up(), turn).unwrap();
+        let wall = pushed(CurveKind::Circle(circle), [0.0, 0.0, 1.0], (0.0, 10.0));
+        for (a, b) in [(&level(5.0), &wall), (&wall, &level(5.0))] {
+            let r = meet(a, b);
+            let [Item::Curve { curve, ends, .. }] = r.items() else {
+                panic!("{turn:?}: {:?}", r.items());
+            };
+            assert_eq!(curve.domain(), turn, "{curve:?}");
+            assert_eq!(*ends, [CurveEnd::Closed; 2], "{turn:?}");
+        }
+    }
+}
+
 /// The segment from `a` to `b`.
 fn segment(a: [f64; 3], b: [f64; 3]) -> CurveKind<3> {
     CurveKind::Line(Line::segment(a, b).unwrap().value)
