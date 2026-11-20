@@ -312,16 +312,18 @@ pub(crate) enum Unpassed {
     /// A defect, whatever the report holds: the body is a primitive as written, or its data are
     /// exact, and the checker follows both in full.
     Defect,
-    /// The body's data were less than exact before this operation, which moved them exactly: an
-    /// earlier transform rounded its corners or moved its curved geometry by a deviation, or it
-    /// is a round primitive. A report that found nothing wrong and could not certify the body
-    /// (`geom_check::Report::uncertified`) waits for `piece`; a report that found something
-    /// wrong is a defect, since an exact move of a body that passed breaks nothing.
+    /// The body's data were less than exact before this operation, which moved them exactly and
+    /// kept every angle: an earlier transform rounded its corners or moved its curved geometry by
+    /// a deviation, or it is a round primitive. A report that found nothing wrong and could not
+    /// certify the body (`geom_check::Report::uncertified`) waits for `piece`; a report that
+    /// found something wrong is a defect, since an exact move of a body that passed breaks
+    /// nothing.
     Inherited {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,
     },
-    /// This operation rounded a corner or moved curved geometry by a deviation: any report
+    /// This operation rounded a corner or moved curved geometry by a deviation, or stretched data
+    /// already less than exact (a scale with unequal factors, which keeps no angle): any report
     /// waits for `piece`.
     Rounded {
         /// The piece that widens what the checker certifies, by its board number.

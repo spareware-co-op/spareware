@@ -84,6 +84,11 @@ fn run(result: TestResult) {
 /// quarters at its 600 s stop.
 const SLICES: u32 = 32;
 
+/// The ranges the split exponents of `constants_and_threshold_splits` are cut into: four times
+/// [`SLICES`] (`quarter_1` to `quarter_4`, each `part_01` to `part_32`), since run 44598759458
+/// measured `Wide<16>`'s 32 parts at 382 to 548 yardstick seconds and stopped three of them.
+const SPLIT_SLICES: u32 = 4 * SLICES;
+
 /// The share of the `CASES` cases slice `k` of [`SLICES`] runs.
 fn slice(k: u32) -> std::ops::Range<u32> {
     let each = CASES / SLICES;
@@ -198,7 +203,7 @@ fn the_slices_join_to_every_case_once() {
     // The split exponents of every width the file attacks, 0 to 64L − 1, each once.
     for l in [2, 3, 4, 7, 16] {
         let mut next = 0;
-        for part in 0..SLICES {
+        for part in 0..SPLIT_SLICES {
             let ks = split_exponents(l, part);
             assert_eq!(
                 ks.start,
@@ -590,15 +595,16 @@ fn widen<const L: usize, const M: usize>(x: Wide<L>, y: Wide<L>) -> TestResult {
     Ok(())
 }
 
-/// The split exponents `k` of [`constants`]' products, 0 to 64L − 1, cut into [`SLICES`] ranges:
-/// slice `part` of them. The ranges join to every exponent once (`the_slices_join_to_every_case_once`).
+/// The split exponents `k` of [`constants`]' products, 0 to 64L − 1, cut into [`SPLIT_SLICES`]
+/// ranges: slice `part` of them. The ranges join to every exponent once
+/// (`the_slices_join_to_every_case_once`).
 fn split_exponents(l: usize, part: u32) -> std::ops::Range<u32> {
     let all = u32::try_from(top(l)).unwrap() + 1;
-    let at = |k: u32| all * k / SLICES;
+    let at = |k: u32| all * k / SPLIT_SLICES;
     at(part)..at(part + 1)
 }
 
-/// Part `part` of [`SLICES`] of the constants' check: the constants and the asymmetric limits in
+/// Part `part` of [`SPLIT_SLICES`] of the constants' check: the constants and the asymmetric limits in
 /// the first, and in each its range of the split exponents ([`split_exponents`]).
 fn constants_part<const L: usize>(part: u32) -> TestResult {
     if part == 0 {
@@ -779,29 +785,33 @@ macro_rules! width_attack {
                 #![proptest_config(cfg())]
 
                 #[test]
-                fn products_at_the_threshold((x, y) in product_pair::<L>()) {
-                    binary::<L>(x, y)?;
-                }
-
-                #[test]
-                fn sums_and_differences_at_the_limits((x, y) in limit_pair::<L>()) {
-                    binary::<L>(x, y)?;
-                }
-
-                #[test]
                 fn small_operand_laws(x in any::<i64>(), y in any::<i64>(), z in -1000i64..=1000) {
                     laws::<L>(Wide::from_i64(x), Wide::from_i64(y), Wide::from_i64(z))?;
-                }
-
-                #[test]
-                fn multiplication_is_repeated_addition(x in wide::<L>(), k in -9i64..=9) {
-                    repeated::<L>(x, k)?;
                 }
 
             }
 
             // The longest properties under Miri, each cut into slices of its one stream of
             // cases (`sliced!`): the same cases, from the same strategies, drawn in the same order.
+            sliced!(products_at_the_threshold, (product_pair::<L>(),), |((
+                x,
+                y,
+            ),)| {
+                binary::<L>(x, y)
+            });
+
+            sliced!(
+                sums_and_differences_at_the_limits,
+                (limit_pair::<L>(),),
+                |((x, y),)| binary::<L>(x, y)
+            );
+
+            sliced!(
+                multiplication_is_repeated_addition,
+                (wide::<L>(), -9i64..=9),
+                |(x, k)| repeated::<L>(x, k)
+            );
+
             sliced!(unary_matches_oracle, (wide::<L>(),), |(x,)| unary::<L>(x));
 
             sliced!(binary_matches_oracle, (wide::<L>(), wide::<L>()), |(
@@ -835,11 +845,33 @@ macro_rules! width_attack {
             );
 
             /// The constants and every split of the threshold product, in slices of the split
-            /// exponents (`split_exponents`).
+            /// exponents (`split_exponents`): four quarters of [`SLICES`] parts each.
             mod constants_and_threshold_splits {
                 use super::*;
 
-                parts!(|part| run(constants_part::<L>(part)));
+                mod quarter_1 {
+                    use super::*;
+
+                    parts!(|part| run(constants_part::<L>(part)));
+                }
+
+                mod quarter_2 {
+                    use super::*;
+
+                    parts!(|part| run(constants_part::<L>(SLICES + part)));
+                }
+
+                mod quarter_3 {
+                    use super::*;
+
+                    parts!(|part| run(constants_part::<L>(2 * SLICES + part)));
+                }
+
+                mod quarter_4 {
+                    use super::*;
+
+                    parts!(|part| run(constants_part::<L>(3 * SLICES + part)));
+                }
             }
         }
     };
@@ -977,11 +1009,6 @@ mod native_i128 {
         }
 
         #[test]
-        fn raw_limbs_match_i128(x in prop::array::uniform2(limb()), y in prop::array::uniform2(limb())) {
-            check(of_limbs(x), of_limbs(y))?;
-        }
-
-        #[test]
         fn products_at_the_i128_threshold(a in any::<i128>(), d in -2i128..=2, toward_min in any::<bool>()) {
             prop_assume!(a != 0);
             let limit = if toward_min { i128::MIN } else { i128::MAX };
@@ -990,6 +1017,13 @@ mod native_i128 {
             check(a, q.saturating_add(d))?;
         }
     }
+
+    // The longest of these properties under Miri, cut into slices (`sliced!`).
+    sliced!(
+        raw_limbs_match_i128,
+        (prop::array::uniform2(limb()), prop::array::uniform2(limb())),
+        |(x, y)| check(of_limbs(x), of_limbs(y))
+    );
 }
 
 // ---------------------------------------------------------------------------------------------

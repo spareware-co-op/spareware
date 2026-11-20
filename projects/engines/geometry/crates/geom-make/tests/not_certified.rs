@@ -253,28 +253,43 @@ fn the_fuzzers_triangle_scaled_unevenly_then_by_three_is_certified() {
     valid("the scale by whole numbers", second.unwrap());
 }
 
-/// A fault that says something is wrong stays a defect on a body that is less than exact: an
-/// exact move of a body that passed breaks nothing, so only a body that was broken gives one.
+/// A fault that says something is wrong stays a defect on a body that is less than exact when the
+/// exact transform keeps angles: an exact move of a body that passed breaks nothing, so only a
+/// body that was broken gives one. A stretch keeps no angle, and a body that passed can come out
+/// of one wrong (`inherited_wait.rs`, issue #1073), so there the same fault waits.
 #[test]
 fn a_wrong_body_moved_exactly_is_still_a_defect_when_it_is_less_than_exact() {
     let (broken, record) = a_broken_rounded_box();
     let c = ctx();
     let input = moved(&broken, record);
-    let by_three = [s(3, 1), s(1, 1), s(1, 1)];
-    let stretch = RationalTransform::new([[3, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap();
-    let instance = Instance {
-        key: [1; 16],
-        transform: TypedTransform::from(stretch),
+    let copy = |transform: RationalTransform| {
+        [Instance {
+            key: [1; 16],
+            transform: TypedTransform::from(transform),
+        }]
     };
+    let doubled = RationalTransform::uniform_scale(s(2, 1)).unwrap();
     for e in [
         move_by(&c, input, [1, 0, 0]).unwrap_err(),
-        scale(&c, input, by_three, p(0, 0, 0)).unwrap_err(),
-        pattern(&c, input, &[instance]).unwrap_err(),
+        scale(&c, input, [s(2, 1); 3], p(0, 0, 0)).unwrap_err(),
+        pattern(&c, input, &copy(doubled)).unwrap_err(),
     ] {
         assert_eq!(*e.detail(), OpErrorDetail::Make(MakeDetail::ResultInvalid));
         assert_eq!(e.kind(), ErrorKind::Internal);
         assert_eq!(e.remedies(), [Remedy::Report]);
     }
+    let by_three = [s(3, 1), s(1, 1), s(1, 1)];
+    let stretch = RationalTransform::new([[3, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap();
+    waits(
+        "stretch",
+        &scale(&c, input, by_three, p(0, 0, 0)).unwrap_err(),
+        "G417",
+    );
+    waits(
+        "pattern of a stretch",
+        &pattern(&c, input, &copy(stretch)).unwrap_err(),
+        "G417",
+    );
 }
 
 /// The rounded box with one fin turned the other way: a body broken by hand, which the checker

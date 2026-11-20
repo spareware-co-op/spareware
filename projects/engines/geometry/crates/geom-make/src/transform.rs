@@ -43,7 +43,9 @@
 //!   planes not given by integers depend on the size of the numbers, so a whole-number scale of
 //!   a body it passed can leave a pair of parallel faces it cannot tell apart. A fault that says
 //!   something is wrong there is still a defect: an exact move of a body that passed breaks
-//!   nothing.
+//!   nothing. An exact stretch (a scale with unequal factors) of such a body keeps no angle, so a
+//!   loop whose corners lie off its plane can come to run the wrong way round it: there, as for a
+//!   rounded result, whatever the checker finds waits.
 //! - **Refused the same in every build.** Those refusals are groups 2 and 3's to give, so a
 //!   result that rounded, or whose input was less than exact, is checked with every group in a
 //!   shipped build too; only a result recorded Exact is checked at the build's level
@@ -533,13 +535,20 @@ pub(crate) fn moved_copy(
     // the body's kind of geometry. From G134 a rounded flat face stands for the star of triangles
     // from the mean of its corners, so what still waits is a flat face no star can stand for: one
     // with a hole, or with an edge the mean does not see from inside.
+    // An exact transform of a body less than exact carries the checker's pass over only if it
+    // keeps angles: a stretch moves a loop's area vector and its plane's normal each by its
+    // cofactors, so a loop whose corners lie off its plane, and whose area vector is therefore off
+    // the normal, can come to run the wrong way round it (issue #1073). Its result, as a rounded
+    // one, has no proof from the input.
     let piece = if curved(input.body) { "G177" } else { "G417" };
     let unpassed = if rounded || committed || deviation > 0.0 {
         Unpassed::Rounded { piece }
     } else if matches!(exactness, Exactness::Exact) {
         Unpassed::Defect
-    } else {
+    } else if class.keeps_circles() {
         Unpassed::Inherited { piece }
+    } else {
+        Unpassed::Rounded { piece }
     };
     // Rows: copied, each pointing at its moved geometry; a mirror reverses faces and loops.
     let flip = |s: Sense| match s {
