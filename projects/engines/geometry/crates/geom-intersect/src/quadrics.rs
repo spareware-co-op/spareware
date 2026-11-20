@@ -1624,6 +1624,9 @@ fn edges(surface: &SurfaceKind) -> Result<Vec<CurveKind<3>>, IntersectError> {
         SurfaceKind::Cylinder(c) => {
             let ((u0, u1), (v0, v1)) = ParamSurface::domain(c);
             let on = axis(c.center(), &c.frame(), c.axial_sign())?;
+            // Its two end circles, and its two rulings on a part of a turn, reserved exactly: grown
+            // from empty, the vector would hold four.
+            out.reserve_exact(if part_turn(u0, u1) { 4 } else { 2 });
             for v in [v0, v1] {
                 let at = plus(on.at, scale(on.along, point(v)?)?)?;
                 let curve = Circle::new(middle(at), c.radius(), c.frame(), (u0, u1))?;
