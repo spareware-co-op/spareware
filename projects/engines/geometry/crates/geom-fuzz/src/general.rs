@@ -424,15 +424,26 @@ pub fn judge_march(
     Ok(())
 }
 
-/// How far apart a parameter box's two surface points are, at the middle of each.
+/// How far apart a parameter box's two surface points are, at the middle of each. A contact on a
+/// seam is read in a chart that does not cut it, and its box may reach past the domain's end
+/// (G173), where it is the same points as the domain's start: so the middle of a parameter that
+/// closes ([`charts`], an exact whole turn) is read modulo the turn, inside the domain.
 fn apart_at(
     first: &SurfaceKind,
     second: &SurfaceKind,
     [a, b, c, d]: &[Interval; 4],
 ) -> Result<f64, Finding> {
     let mid = |x: &Interval| x.lo() / 2.0 + x.hi() / 2.0;
-    let p = on(first, mid(a), mid(b))?;
-    let q = on(second, mid(c), mid(d))?;
+    let turned = |t: f64, ((lo, _), closes): ((f64, f64), bool)| {
+        if closes {
+            lo + (t - lo).rem_euclid(TURN)
+        } else {
+            t
+        }
+    };
+    let [lu, lv, ls, lr] = lines([first, second], &[charts(first), charts(second)]);
+    let p = on(first, turned(mid(a), lu), turned(mid(b), lv))?;
+    let q = on(second, turned(mid(c), ls), turned(mid(d), lr))?;
     Ok(p.iter()
         .zip(&q)
         .fold(0.0, |sum, (x, y)| sum + (x - y) * (x - y))
