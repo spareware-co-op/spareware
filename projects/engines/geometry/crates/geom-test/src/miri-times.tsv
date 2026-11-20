@@ -46,6 +46,7 @@
 # GitHub measuring run 44660253302 (miri_measure=new on ci/miri-stop at 32b82ca1d), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: the run's own listing.
 # GitHub measuring runs 44673967082 (miri_measure=all on train/phase5-1 at 23769d611, miri_measure_tests naming 92 test binaries) and 44678997145 (miri_measure=new on train/phase5-1 at 64f3cee90), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: 44678997145's own listing.
 # GitHub measuring run 44716062116 (miri_measure=all on rows/phase5-yardstick at 7c1686e39, miri_measure_tests naming the 47 tests the cut pull requests #1100, #1101, #1105, #1106 and #1107 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44788995881 (miri_measure=new on rows/phase5-yardstick at 9ec97365f, miri_measure_tests naming the 198 tests that #1111, #1113, #1114, #1119 and #1124 changed, sped up or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -282,9 +283,12 @@ native-only over 550	geom-bool::held_regions	a_band_between_two_blocks_of_other_
 native-only over 550	geom-bool::held_regions	a_band_needs_a_block_on_both_its_edges
 native-only over 550	geom-bool::held_regions	a_band_stands_only_at_a_vertex_both_circles_pass_through
 native-only over 745	geom-bool::held_regions	a_copy_of_the_half_across_a_circle_s_seam_is_one_block_with_it
+native-only over 564	geom-bool::held_regions	a_region_ending_in_a_box_past_the_pave_of_a_piece_that_runs_to_the_seam_stands
 native-only over 745	geom-bool::held_regions	a_region_from_the_seam_stays_out_of_the_piece_that_ends_there
-native-only over 745	geom-bool::held_regions	a_region_reaching_into_a_piece_that_runs_to_the_seam_is_refused
-native-only over 745	geom-bool::held_regions	a_region_reaching_past_an_overlap_into_a_piece_of_no_block_is_refused
+native-only over 564	geom-bool::held_regions	a_region_over_the_whole_of_a_short_piece_before_an_overlap_s_start_is_refused
+native-only over 564	geom-bool::held_regions	a_region_over_the_whole_of_a_short_piece_past_an_overlap_s_end_is_refused
+native-only over 564	geom-bool::held_regions	a_region_overlapping_past_a_pave_into_a_piece_of_no_block_is_refused
+native-only over 587	geom-bool::held_regions	a_region_straddling_the_pave_at_an_overlap_s_end_stands
 native-only over 567	geom-bool::held_regions	an_overlap_cut_into_two_blocks_by_a_vertex_stands
 native-only over 567	geom-bool::held_regions	sides_leaving_a_touch_of_two_other_edges_go_by_their_tangents
 2	geom-bool::interfere	a_closed_edge_wraps_round_and_keeps_its_history
@@ -623,6 +627,8 @@ native-only over 839	geom-check::attack_g134	the_planes_through_the_grid_points_
 14	geom-check::attack_g85_group3	a_hollow_ball_passes
 6	geom-check::attack_g85_group3	a_seam_from_a_rim_vertex_off_the_rims_plane_is_not_passed
 10	geom-check::attack_g85_group3	a_segment_in_a_circles_plane_is_apart_only_on_the_lower_end_of_its_reach
+11	geom-check::attack_g85_group3	a_shared_circle_a_whole_turn_from_anywhere_passes
+7	geom-check::attack_g85_group3	a_shared_circle_whose_turn_only_rounds_to_whole_is_not_passed
 41	geom-check::attack_g85_group3	a_wall_on_its_grid_with_its_circles_on_their_planes_passes_at_a_bound_of_nothing
 303	geom-check::attack_g85_group3	a_wall_with_a_round_opening_passes
 10	geom-check::attack_g85_group3	circles_of_one_face_are_separated_where_certified
@@ -1154,6 +1160,10 @@ native-only over 693	geom-intersect	boundary::tests::a_curved_edge_is_halved_dow
 2	geom-intersect::attack_g159	an_edge_collapses_only_to_one_point
 2	geom-intersect::attack_g159	every_decision_holds_at_the_far_corners
 4	geom-intersect::attack_g159	the_special_positions_are_each_found
+5	geom-intersect::attack_g162	a_circles_foot_is_its_turn_on_any_domain_that_holds_it
+4	geom-intersect::attack_g162	a_circles_foot_past_a_half_turn_is_found_turns_along
+315	geom-intersect::attack_g162	a_circles_foot_whose_enclosure_meets_an_end_of_the_span_is_searched
+298	geom-intersect::attack_g162	a_circles_foot_wider_than_the_floor_is_searched
 native-only over 693	geom-intersect::attack_g162	a_continuum_along_a_surfaces_second_parameter_is_undecided
 20	geom-intersect::attack_g162	a_continuum_no_kind_names_is_undecided_not_a_foot
 201	geom-intersect::attack_g162	a_floor_below_the_doubles_still_ends
@@ -1185,6 +1195,7 @@ native-only over 752	geom-intersect::attack_g162	zero_wrong_answers_on_surfaces_
 287	geom-intersect::attack_g163	a_closed_curve_crossing_itself_away_from_its_join_is_found
 89	geom-intersect::attack_g163	a_closed_curve_is_not_crossed_at_its_join
 17	geom-intersect::attack_g163	a_closed_curve_s_join_is_no_boundary_and_an_open_end_is
+7	geom-intersect::attack_g163	a_closed_form_answers_a_box_with_the_meetings_in_it
 native-only over 561	geom-intersect::attack_g163	a_closed_form_that_cannot_decide_says_so
 3	geom-intersect::attack_g163	a_collinear_overlap_is_cut_to_both_domains
 31	geom-intersect::attack_g163	a_conic_in_the_plane_z_equals_y_meets_a_line_in_it_as_crossings
@@ -1250,6 +1261,7 @@ native-only over 1069	geom-intersect::attack_g163	no_crossing_is_missed_on_10_00
 3	geom-intersect::attack_g163	segments_that_end_on_each_other_touch
 3	geom-intersect::attack_g163	segments_that_stop_short_do_not_meet
 320	geom-intersect::attack_g163	self_crossings_take_only_their_work
+37	geom-intersect::attack_g163	the_engine_answers_a_box_in_the_plane_a_pair_shares
 152	geom-intersect::attack_g163	the_engine_takes_only_its_work
 5	geom-intersect::attack_g163	the_least_gap_in_space_is_a_gap
 8	geom-intersect::attack_g163	two_circles_cross_touch_or_miss
@@ -1286,12 +1298,15 @@ native-only over 1129	geom-intersect::attack_g164	no_root_is_lost_on_10_000_curv
 native-only over 1129	geom-intersect::attack_g165	a_column_on_a_slab_or_a_dome_meets_it_in_its_end_circle
 249	geom-intersect::attack_g165	a_cone_ending_at_its_apex_is_cut_there
 15	geom-intersect::attack_g165	a_cone_on_a_coaxial_cylinder_is_a_circle_on_each_nappe
+14	geom-intersect::attack_g165	a_crossing_past_an_end_of_a_planes_domain_is_left_out
+198	geom-intersect::attack_g165	a_crossing_whose_box_reaches_an_end_of_a_planes_domain_is_the_engines
 24	geom-intersect::attack_g165	a_cylinder_and_cone_about_one_sphere_are_two_conics
 27	geom-intersect::attack_g165	a_cylinder_ending_a_rounding_off_a_surface_is_the_engines
 87	geom-intersect::attack_g165	a_domain_trims_what_it_cuts
 84	geom-intersect::attack_g165	a_far_plane_reads_a_piece_past_an_end_from_its_corner
 17	geom-intersect::attack_g165	a_half_plane_keeps_the_half_circle_on_it
 261	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends_far_down_its_branch
+22	geom-intersect::attack_g165	a_piece_across_the_join_at_the_domains_end_is_held_in_the_whole_turn
 48	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_kept_only_where_its_middle_is_proven_inside
 17	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_nothing_off_a_domain_and_the_engines_at_its_edge
 253	geom-intersect::attack_g165	a_piece_no_edge_cuts_is_read_where_the_meeting_may_lie
@@ -1305,8 +1320,11 @@ native-only over 1129	geom-intersect::attack_g165	a_column_on_a_slab_or_a_dome_m
 27	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cylinder_is_two_circles
 3	geom-intersect::attack_g165	a_stop_stops
 66	geom-intersect::attack_g165	a_stretch_between_cuts_is_kept_only_where_its_middle_is_proven_inside
+356	geom-intersect::attack_g165	a_whole_circle_across_a_plane_is_its_crossings_for_the_work_of_their_boxes
+124	geom-intersect::attack_g165	a_whole_circle_crossed_at_its_join_is_the_engines
 20	geom-intersect::attack_g165	an_endless_half_plane_cuts_a_cylinder_in_a_half_circle
 47	geom-intersect::attack_g165	an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings
+27	geom-intersect::attack_g165	an_endless_plane_crossed_where_an_arcs_box_ends_is_two_proven_crossings
 14	geom-intersect::attack_g165	an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle
 108	geom-intersect::attack_g165	an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex
 203	geom-intersect::attack_g165	an_offset_from_a_corner_that_ends_at_zero_reaches_it
@@ -1354,6 +1372,8 @@ native-only over 560	geom-intersect::attack_g167	a_plane_through_a_revolution_s_
 20	geom-intersect::attack_g167	a_tube_turn_ending_on_the_domain_s_start_is_not_moved_a_turn_on
 80	geom-intersect::attack_g167	a_tube_turn_is_moved_by_whole_turns_to_a_domain_far_out
 91	geom-intersect::attack_g167	a_tube_turn_past_the_domain_s_end_is_moved_a_turn_back
+7	geom-intersect::attack_g167	a_turn_that_only_rounds_to_whole_is_left_to_the_general_paths
+29	geom-intersect::attack_g167	a_whole_turn_starting_anywhere_is_reduced
 native-only over 635	geom-intersect::attack_g167	an_arc_any_number_of_turns_out_is_cut_where_an_edge_crosses_it
 native-only over 635	geom-intersect::attack_g167	every_reduction_makes_what_it_made
 182	geom-intersect::attack_g167	quadrics_about_a_torus_s_axis
@@ -1487,6 +1507,7 @@ native-only over 567	geom-intersect::attack_g176	the_extrusion_kind_is_caught_th
 7	geom-intersect::attack_smlib_g162	hang_50_huge_weights_on_a_tiny_net_end_with_the_right_distance_or_a_refusal
 123	geom-intersect::attack_smlib_g162	ub_169_a_gap_whose_square_overflows_gives_the_distance_or_a_refusal
 native-only over 567	geom-intersect::attack_smlib_g162	wr_444_a_point_on_a_stacked_rational_run_is_found_on_that_run
+6	geom-intersect::attack_smlib_g162	wr_740_a_circles_foot_near_its_centre_is_its_closed_form_at_the_same_work
 67	geom-intersect::attack_smlib_g162	wr_740_a_foot_at_the_middle_of_a_rational_spline_arc_is_one_point
 46	geom-intersect::attack_smlib_g162	wr_740_a_foot_on_a_cut_of_a_parabola_spline_is_one_point
 67	geom-intersect::attack_smlib_g162	wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_budget
@@ -2750,6 +2771,7 @@ native-only over 567	geom-num::attack_g166	the_filter_answers_on_well_parted_roo
 4	geom-num::attack_g166	the_filter_gives_way_when_its_walk_cannot_part_the_roots
 306	geom-num::attack_g166	the_filter_gives_way_when_two_roots_are_too_close_for_every_walk
 9	geom-num::attack_g166	the_filter_reads_a_root_just_before_the_walk_s_start
+native-only over 721	geom-num::attack_g166	the_loops_over_limbs_stop_at_the_top_limb_and_give_the_same_answers
 4	geom-num::attack_g166	the_slices_join_to_every_case_once
 native-only over 567	geom-num::attack_g166	two_cylinders
 native-only over 567	geom-num::attack_g166	two_double_roots_of_rank_three
@@ -8796,6 +8818,8 @@ native-only over 639	geom-surface::attack_g66	every_kinds_higher_partials_are_th
 155	geom-surface::attack_g66	nurbs_partials_along_a_line_hold_its_points::quarter_4
 native-only over 639	geom-surface::attack_g66	the_cache_certificate_holds_under_dense_sampling
 98	geom-surface::attack_g66	the_contract_catches_faulty_partials
+4	geom-surface::attack_g67	a_cylinders_bound_over_a_box_of_one_line_holds_the_whole_line
+579	geom-surface::attack_g67	a_cylinders_partials_are_the_generic_routes_at_the_same_work
 native-only over 1085	geom-surface::attack_g67	every_analytic_surface_kind_holds_a_million_seeded_points
 6	geom-surface::attack_g67	only_angles_are_cut_into_pieces
 5	geom-surface::attack_g67	planes_points_and_lines_are_exact

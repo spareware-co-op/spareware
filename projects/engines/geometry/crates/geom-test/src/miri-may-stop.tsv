@@ -10,6 +10,7 @@
 594	geom-poly::subdivide	a_small_leaf_gives_the_vectors_a_large_one_does
 592	geom-bvh::attack_smlib1	ub_221_the_box_tree_never_has_links_that_disagree::many_identical_boxes
 584	geom-bool::combine	a_walls_end_on_anothers_side_follows_the_shared_face_table
+579	geom-surface::attack_g67	a_cylinders_partials_are_the_generic_routes_at_the_same_work
 574	geom-num::attack_predicate	incircle_obeys_every_symmetry
 570	geom-check::attack_g134	a_tooth_through_a_window_and_a_tooth_into_the_wall_differ
 568	geom-check::attack_g134	every_face_pair_is_charged_and_a_stop_is_a_stop
