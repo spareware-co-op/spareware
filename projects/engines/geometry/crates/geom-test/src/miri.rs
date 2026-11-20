@@ -51,7 +51,9 @@
 //!   [`BUDGET`], fits one alone with its listing, so none is left out for want of a partition.
 //!   geom-pool's finishing tests, which run under Tree
 //!   Borrows, are one part of their own, held to the same rule. `kernel_quality_workflow.rs` holds
-//!   the table's plan to all of it.
+//!   the table's plan to all of it. The partitions run in the workflow's two partition jobs, one
+//!   GitHub Actions matrix each, `miri` 1 to 256 and `miri-2` 257 on ([`gate_matrix`]), so a plan
+//!   of more than [`crate::mutants::MAX_SHARDS`] is refused, as the mutants' shards are (32.105).
 //! - **A test nobody saw finish is not a pass (32.68).** The gate's profiles count a test nextest
 //!   stops at [`BUDGET`] as passing, so [`stops`] reads each gate job's report for the tests
 //!   stopped there and the job names them in its summary as stopped with no verdict. Only a test
@@ -1324,9 +1326,10 @@ pub struct GatePlan {
 /// # Errors
 ///
 /// When a test fits no partition (a finishing row at or over [`BUDGET`], which [`parse_table`]
-/// refuses), when the partitions are more than one matrix of GitHub Actions holds
-/// ([`crate::mutants::MATRIX_JOBS`]), or when [`TREE_BORROWS_CRATE`]'s finishing tests do not fit
-/// their one job.
+/// refuses), when the partitions are more than the gate's two partition jobs hold (`miri` and
+/// `miri-2`, one GitHub Actions matrix of [`crate::mutants::MATRIX_JOBS`] each, so
+/// [`crate::mutants::MAX_SHARDS`] in all, as the mutants' shard jobs; 32.105), or when
+/// [`TREE_BORROWS_CRATE`]'s finishing tests do not fit their one job.
 pub fn gate_plan(rows: &[Row]) -> Result<GatePlan, String> {
     let (pool, rest): (Vec<Timed>, Vec<Timed>) = finishing(rows)
         .into_iter()
@@ -1334,10 +1337,10 @@ pub fn gate_plan(rows: &[Row]) -> Result<GatePlan, String> {
     let parts = pack(&rest, Rule::Job).ok_or_else(|| {
         format!("a finishing test takes {BUDGET} s or longer, which no partition can hold")
     })?;
-    let most = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
+    let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap_or(usize::MAX);
     if parts.len() > most {
         return Err(format!(
-            "{} partitions, more than the {most} one matrix holds",
+            "{} partitions, more than the {most} the two matrices of the partition jobs hold",
             parts.len()
         ));
     }
@@ -1445,11 +1448,7 @@ pub fn measure_plan(tests: &[Timed]) -> Result<Plan, String> {
 /// runs a job only when its count is not 0. `count` is 0 when there is no test to measure.
 #[must_use]
 pub fn measure_matrix(tests: usize, count: usize) -> String {
-    let jobs = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
-    let first: Vec<usize> = (1..=count.clamp(1, jobs)).collect();
-    let count_2 = count.saturating_sub(jobs);
-    let second: Vec<usize> =
-        (jobs.saturating_add(1)..=jobs.saturating_add(count_2.max(1))).collect();
+    let (first, count_2, second) = two_matrices(count);
     serde_json::json!({
         "tests": tests,
         "count": count,
@@ -1458,6 +1457,37 @@ pub fn measure_matrix(tests: usize, count: usize) -> String {
         "parts_2": second,
     })
     .to_string()
+}
+
+/// The gate's partitions as JSON for the workflow (`kernel-quality miri-plan`): `{"count": n,
+/// "parts": [...], "count_2": m, "parts_2": [...], "tests": t, "pool": p}`, numbered from 1, as
+/// [`measure_matrix`] numbers a measuring run's parts: `parts` lists the job `miri`'s, 1 to
+/// `min(n, 256)`, and `parts_2` the job `miri-2`'s, 257 to `n`, `m` of them (32.105). A matrix
+/// may not be empty, so `miri-2` lists 257 when it has none and the workflow runs it only when
+/// `count_2` is not 0. `tests` counts the partitions' tests and `pool` geom-pool's.
+#[must_use]
+pub fn gate_matrix(count: usize, tests: usize, pool: usize) -> String {
+    let (first, count_2, second) = two_matrices(count);
+    serde_json::json!({
+        "count": count,
+        "parts": first,
+        "count_2": count_2,
+        "parts_2": second,
+        "tests": tests,
+        "pool": pool,
+    })
+    .to_string()
+}
+
+/// `count` parts numbered from 1 in two matrices of at most [`crate::mutants::MATRIX_JOBS`]: the
+/// first's list (1 at least), how many the second runs, and its list (257 at least).
+fn two_matrices(count: usize) -> (Vec<usize>, usize, Vec<usize>) {
+    let jobs = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
+    let first: Vec<usize> = (1..=count.clamp(1, jobs)).collect();
+    let count_2 = count.saturating_sub(jobs);
+    let second: Vec<usize> =
+        (jobs.saturating_add(1)..=jobs.saturating_add(count_2.max(1))).collect();
+    (first, count_2, second)
 }
 
 impl Plan {
@@ -2108,13 +2138,47 @@ mod tests {
             .collect();
         assert!(gate_plan(&crowded).is_err_and(|e| e.contains("geom-pool")));
         assert!(gate_plan(&crowded[..4]).is_ok());
-        // More partitions than one matrix holds are refused: tests of 599 s, four a partition.
-        let most = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap();
+        // More partitions than the two matrices hold are refused (32.105): tests of 599 s, four
+        // a partition. One more than one matrix holds is planned, for `miri-2`.
+        let one = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap();
+        let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap();
+        assert_eq!(most, 2 * one);
         let wide: Vec<Row> = (0..=4 * most)
             .map(|i| row("geom-num", &format!("t{i}"), State::Finishes(599)))
             .collect();
-        assert!(gate_plan(&wide).is_err_and(|e| e.contains("matrix")));
+        assert!(gate_plan(&wide).is_err_and(|e| e.contains("two matrices")));
         assert_eq!(gate_plan(&wide[..4 * most]).unwrap().parts.len(), most);
+        assert_eq!(gate_plan(&wide[..=4 * one]).unwrap().parts.len(), one + 1);
+        assert_eq!(gate_plan(&wide[..4 * one]).unwrap().parts.len(), one);
+    }
+
+    #[test]
+    fn the_gates_partitions_are_numbered_from_one_in_two_jobs() {
+        let read = |s: String| serde_json::from_str::<Value>(&s).unwrap();
+        // One partition: `miri` runs it, `miri-2` none (its matrix still lists 257).
+        let m = read(gate_matrix(1, 7, 2));
+        assert_eq!(m["count"], 1);
+        assert_eq!(m["parts"], serde_json::json!([1]));
+        assert_eq!(m["count_2"], 0);
+        assert_eq!(m["parts_2"], serde_json::json!([257]));
+        assert_eq!(m["tests"], 7);
+        assert_eq!(m["pool"], 2);
+        // 256: all in `miri`.
+        let m = read(gate_matrix(256, 0, 0));
+        let first: Vec<u64> = (1..=256).collect();
+        assert_eq!(m["parts"], serde_json::json!(first));
+        assert_eq!(m["count_2"], 0);
+        assert_eq!(m["parts_2"], serde_json::json!([257]));
+        // 257 to 512: the rest in `miri-2`, each matrix at most 256.
+        let m = read(gate_matrix(264, 0, 0));
+        assert_eq!(m["parts"], serde_json::json!(first));
+        assert_eq!(m["count_2"], 8);
+        let second: Vec<u64> = (257..=264).collect();
+        assert_eq!(m["parts_2"], serde_json::json!(second));
+        let m = read(gate_matrix(512, 0, 0));
+        assert_eq!(m["count_2"], 256);
+        let second: Vec<u64> = (257..=512).collect();
+        assert_eq!(m["parts_2"], serde_json::json!(second));
     }
 
     #[test]

@@ -26,7 +26,7 @@
 //!   run's nextest listing that Miri's table has no row for ([`geom_test::miri::unlisted`]),
 //!   writes each partition's nextest filterset, its finishing tests balanced by their recorded
 //!   times, and geom-pool's ([`geom_test::miri::gate_plan`]), and prints the partitions as JSON for
-//!   the workflow's matrix.
+//!   the workflow's two partition matrices.
 //! - `miri-times` writes Miri's table from a measuring run's nextest reports (`junit.xml`)
 //!   ([`geom_test::miri::write_table`]), the only way its rows change (32.58); with `--dry-run`
 //!   it writes nothing and only says what the reports measured, failing on a test that failed.
@@ -236,7 +236,8 @@ enum Command {
     },
     /// Plans the Miri gate (`geom_test::miri::gate_plan`): writes partition k's nextest filterset
     /// to `OUT/part-<k>.txt` and geom-pool's to `OUT/pool.txt`, and prints `{"count": n, "parts":
-    /// [1, ..., n], "tests": t, "pool": p}`.
+    /// [1, ..., 256], "count_2": m, "parts_2": [257, ..., n], "tests": t, "pool": p}`, the
+    /// partitions of the jobs `miri` and `miri-2` (`geom_test::miri::gate_matrix`).
     MiriPlan {
         /// The run's tests, `cargo miri nextest list --message-format json`: every one must have
         /// a row in the table.
@@ -922,11 +923,7 @@ fn run(cli: Cli) -> Result<bool, String> {
                 geom_test::miri::TREE_BORROWS_CRATE,
                 gate.pool.part_seconds(1)
             );
-            let parts: Vec<usize> = (1..=count).collect();
-            println!(
-                "{}",
-                serde_json::json!({"count": count, "parts": parts, "tests": tests, "pool": pool})
-            );
+            println!("{}", geom_test::miri::gate_matrix(count, tests, pool));
             Ok(true)
         }
         Command::MiriTimes {

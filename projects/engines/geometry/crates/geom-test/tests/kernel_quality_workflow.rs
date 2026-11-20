@@ -24,7 +24,9 @@
 //!   `--locked`, and nothing installed another way.
 //! - **Shards and partitions.** The mutation shards come from the plan, in as many jobs as
 //!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs `--shard k/n`
-//!   with the plan's count of the whole run; Miri's partitions are its plan's.
+//!   with the plan's count of the whole run; Miri's partitions are its plan's, in two jobs as the
+//!   shards are, `miri` and `miri-2`, the second the first word for word but for its matrix and
+//!   condition (32.105), shown by planted changes to it alone.
 //! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
 //!   on unless it is one the judge decides (2, survivors; 3, timeouts); coverage keeps each run's
 //!   log for the judge.
@@ -282,7 +284,7 @@ fn the_coverage_judge_reads_every_part() {
 }
 
 /// The workflow's jobs, in file order.
-const JOBS: [&str; 17] = [
+const JOBS: [&str; 18] = [
     "when",
     "cheap",
     "mutants-plan",
@@ -295,6 +297,7 @@ const JOBS: [&str; 17] = [
     "gates-seeded",
     "miri-plan",
     "miri",
+    "miri-2",
     "miri-pool",
     "miri-measure-plan",
     "miri-measure",
@@ -335,6 +338,13 @@ fn each_job_runs_on_the_events_its_gate_names() {
     assert_eq!(
         text(&jobs["mutants-2"]["if"]),
         "needs.mutants-plan.outputs.count_2 != '0'"
+    );
+    // Miri's partitions 257 on: only when the plan gives them, and never on a pull request, which
+    // runs partition 1 alone (32.105).
+    assert_eq!(
+        text(&jobs["miri-2"]["if"]),
+        "needs.when.outputs.miri == 'true' && github.event_name != 'pull_request' && \
+         needs.miri-plan.outputs.count_2 != '0'"
     );
     assert_eq!(
         text(&jobs["mutants-judge"]["if"]),
@@ -1023,7 +1033,10 @@ fn only_geom_pool_runs_under_tree_borrows_and_only_while_crossbeam_needs_it() {
     // In the gate's jobs one run is Tree Borrows, geom-pool's job's, of that crate alone; in each
     // measuring part job one, the same. Every other nextest run leaves the crate out.
     for (jobs, want) in [
-        (vec!["miri-plan", "miri", "miri-pool"], "miri-pool"),
+        (
+            vec!["miri-plan", "miri", "miri-2", "miri-pool"],
+            "miri-pool",
+        ),
         (vec!["miri-measure"], "miri-measure"),
         (vec!["miri-measure-2"], "miri-measure-2"),
     ] {
@@ -1091,7 +1104,7 @@ const HANDOVER_CHECK: &str =
     "cargo nextest --version | grep -qxF \"release: $CARGO_NEXTEST_VERSION\"";
 
 /// The Miri jobs that run from the plan's hand-over.
-const FROM_THE_PLAN: [&str; 2] = ["miri", "miri-pool"];
+const FROM_THE_PLAN: [&str; 3] = ["miri", "miri-2", "miri-pool"];
 
 /// What is wrong with Miri's plan and the jobs that run from it, given the workflow's text: one plan
 /// lists the tests and builds the tools, and hands them on for a day; the partitions are its own,
@@ -1159,6 +1172,7 @@ fn miri_plan_problems(text: &str) -> Vec<String> {
     {
         found.push("miri does not run the plan's partitions".to_owned());
     }
+    found.extend(second_matrix_problems(&w));
     let partition = joined(&runs(&w, "miri")).join("\n");
     if !partition.contains(
         "cargo miri nextest run --locked $PACKAGES \"${profile[@]}\" -E \"not package(geom-pool) \
@@ -1172,6 +1186,66 @@ fn miri_plan_problems(text: &str) -> Vec<String> {
          ($(cat \"$RUNNER_TEMP/miri-plan/pool.txt\"))\"",
     ) {
         found.push("geom-pool's job does not run the table's finishing tests".to_owned());
+    }
+    found
+}
+
+/// What is wrong with the second partition job, `miri-2` (32.105): it runs the plan's partitions
+/// from 257 on, only when the plan gives it some and never on a pull request, is `miri` word for
+/// word but for its matrix and condition, the plan hands on its list, and `done` requires it
+/// whenever the plan gave it partitions.
+fn second_matrix_problems(w: &Yaml) -> Vec<String> {
+    // Partitions 257 on, in the job `miri-2`: the plan's second list, only when it gives one and
+    // never on a pull request, and `miri` word for word but for its matrix and condition (32.105).
+    let jobs = &w["jobs"];
+    let (miri, plan, second) = (&jobs["miri"], &jobs["miri-plan"], &jobs["miri-2"]);
+    let plan_runs = joined(&runs(w, "miri-plan")).join("\n");
+    let mut found = Vec::new();
+    if second["strategy"]["matrix"]["partition"].as_str()
+        != Some("${{ fromJSON(needs.miri-plan.outputs.parts_2) }}")
+        || second["strategy"]["fail-fast"].as_bool() != Some(false)
+        || second["if"].as_str()
+            != Some(
+                "needs.when.outputs.miri == 'true' && github.event_name != 'pull_request' && \
+                 needs.miri-plan.outputs.count_2 != '0'",
+            )
+    {
+        found.push("miri-2 does not run the plan's partitions from 257 on".to_owned());
+    }
+    for key in [
+        "name",
+        "needs",
+        "runs-on",
+        "timeout-minutes",
+        "env",
+        "defaults",
+        "steps",
+    ] {
+        if second[key] != miri[key] {
+            found.push(format!("miri-2's {key} is not miri's"));
+        }
+    }
+    for (output, how) in [("count_2", "-r"), ("parts_2", "-c")] {
+        let handed = plan["outputs"][output].as_str()
+            == Some(format!("${{{{ steps.plan.outputs.{output} }}}}").as_str())
+            && plan_runs.contains(&format!(
+                "echo \"{output}=$(jq {how} .{output} <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\""
+            ));
+        if !handed {
+            found.push(format!("miri-plan does not hand on its {output}"));
+        }
+    }
+    // The last job requires `miri-2` whenever the plan gave it partitions to run.
+    let done = joined(&runs(w, "done"));
+    let requires = |line: &str| done.iter().any(|c| c == line);
+    if !requires(
+        "if [ \"$MIRI\" = true ] && [ \"$GITHUB_EVENT_NAME\" != pull_request ] && [ \"$MIRI_2\" \
+         != 0 ]; then",
+    ) || !requires("must=\"$must miri-2\"")
+        || jobs["done"]["steps"][0]["env"]["MIRI_2"].as_str()
+            != Some("${{ needs.miri-plan.outputs.count_2 }}")
+    {
+        found.push("done does not require miri-2 when the plan gives it partitions".to_owned());
     }
     found
 }
@@ -1329,6 +1403,85 @@ fn miris_jobs_run_from_one_plan_each_within_fifteen_minutes() {
         let planted = text.replacen(from, to, 1);
         assert_ne!(planted, text, "the planted edit {from:?} applies");
         let found = miri_plan_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn miris_second_matrix_runs_the_plans_partitions_from_257_on() {
+    let text = read(".github/workflows/kernel-quality.yml").replace("\r\n", "\n");
+    let second_problems =
+        |t: &str| second_matrix_problems(&YamlLoader::load_from_str(t).unwrap().remove(0));
+    let found = second_problems(&text);
+    assert!(found.is_empty(), "{found:#?}");
+    // Seeded violations of the second partition job (32.105), each planted in it alone: its
+    // matrix the first's, run on a pull request or with no partition, a step or limit not the
+    // first's.
+    let at = text.find("\n  miri-2:\n").unwrap();
+    for (from, to, said) in [
+        (
+            "needs.miri-plan.outputs.parts_2) }}",
+            "needs.miri-plan.outputs.parts) }}",
+            "miri-2 does not run the plan's partitions from 257 on",
+        ),
+        (
+            " && github.event_name != 'pull_request'",
+            "",
+            "miri-2 does not run the plan's partitions from 257 on",
+        ),
+        (
+            " && needs.miri-plan.outputs.count_2 != '0'",
+            "",
+            "miri-2 does not run the plan's partitions from 257 on",
+        ),
+        (
+            "timeout --signal=TERM --kill-after=30 1380 \\\n            ",
+            "",
+            "miri-2's steps is not miri's",
+        ),
+        (
+            "    timeout-minutes: 30\n",
+            "    timeout-minutes: 45\n",
+            "miri-2's timeout-minutes is not miri's",
+        ),
+    ] {
+        let planted = format!("{}{}", &text[..at], text[at..].replacen(from, to, 1));
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = second_problems(&planted);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
+    }
+    // The plan's second list not handed on, and the last job not requiring its job.
+    for (from, to, said) in [
+        (
+            "      parts_2: ${{ steps.plan.outputs.parts_2 }}\n    env:\n      # A push to main's crates",
+            "    env:\n      # A push to main's crates",
+            "miri-plan does not hand on its parts_2",
+        ),
+        (
+            "          echo \"count_2=$(jq -r .count_2 <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"\n          \
+             echo \"parts_2=$(jq -c .parts_2 <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"\n          \
+             echo \"Miri's plan:",
+            "          echo \"Miri's plan:",
+            "miri-plan does not hand on its count_2",
+        ),
+        (
+            "            must=\"$must miri-2\"\n",
+            "            must=\"$must\"\n",
+            "done does not require miri-2",
+        ),
+        (
+            "          MIRI_2: ${{ needs.miri-plan.outputs.count_2 }}\n",
+            "",
+            "done does not require miri-2",
+        ),
+    ] {
+        let planted = text.replacen(from, to, 1);
+        assert_ne!(planted, text, "the planted edit {from:?} applies");
+        let found = second_problems(&planted);
         assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
 }
@@ -2508,8 +2661,9 @@ const TOOL_INSTALL: &str =
     "install -m 755 \"$RUNNER_TEMP/miri-plan/kernel-quality\" \"$HOME/.cargo/bin/kernel-quality\"";
 
 /// Each Miri gate job and the command of its tests' step.
-const STOPPED_JOBS: [(&str, &str); 2] = [
+const STOPPED_JOBS: [(&str, &str); 3] = [
     ("miri", "cargo miri nextest run --locked $PACKAGES"),
+    ("miri-2", "cargo miri nextest run --locked $PACKAGES"),
     ("miri-pool", "cargo miri nextest run --locked -p geom-pool"),
 ];
 
@@ -3219,7 +3373,7 @@ fn yardstick_faults_in(job: &str, runs: &[String]) -> Vec<String> {
 #[test]
 fn every_miri_gate_job_prints_its_processor_and_judges_each_test_at_its_scale() {
     let w = workflow();
-    for job in ["miri", "miri-pool"] {
+    for job in ["miri", "miri-2", "miri-pool"] {
         assert_eq!(yardstick_faults(&w, job), Vec::<String>::new());
     }
     // The yardstick's profile reports to its own file and counts a stopped yardstick as timed out.

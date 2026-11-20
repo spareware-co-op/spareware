@@ -163,7 +163,7 @@ const HAND_OVERS: [HandOver; 5] = [
         workflow: "kernel-quality.yml",
         job: "miri-plan",
         name: "miri-plan",
-        readers: &["miri", "miri-pool"],
+        readers: &["miri", "miri-2", "miri-pool"],
         read_as: "miri-plan",
     },
     HandOver {
