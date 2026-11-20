@@ -48,9 +48,11 @@
 //!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
 //!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
 //!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
-//!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
-//!   circle whose stretches would meet, as where a side stands within a rounding of touching it
-//!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's. Where a side
+//!   stands within a rounding of touching the circle, the square of its half-chord is enclosed
+//!   from its exact sum, so its two crossings are held apart (decision 32.108). A circle whose
+//!   stretches would still meet, two crossings closer than a step of their angle, is the
+//!   engine's (decision 32.80).
 //! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
 //!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
 //!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
@@ -83,6 +85,9 @@
 //! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
 //! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
 //! where an enclosure of the same value holds zero.
+//! A unit circle in a plane whose domain's side stands a step inside touching it cost 5,097
+//! units before decision 32.108, nearly all of it the engine's; now 11, and one exact sum of 17
+//! products for each crossing, formed only where the enclosure of its square holds zero.
 //! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
 //! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
 //! now a few predicates, and a box of the circle for each point. A plane's edge through a cone's
@@ -124,9 +129,9 @@ use geom_surface::{
 
 use crate::closed::{self, Meeting};
 use crate::curve::{
-    Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
-    grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span, turn_of,
-    whole, widest,
+    Crossing, Seam, bound_over, certified, cut, enclosed_sum, exact_steps, finite, grid_box,
+    grid_line, grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span,
+    turn_of, whole, widest,
 };
 use crate::error::IntersectError;
 use crate::quadrics::{off_line, parallel, plus, same_line, scale};
@@ -2099,8 +2104,18 @@ fn across(b: &Coord, r: f64, sign: Sign) -> Result<Coord, IntersectError> {
     square.extend(b.square.iter().map(|&(x, y)| (-x, y)));
     let r = Interval::point(r)?;
     let d = r.mul(r)?.sub(b.near.mul(b.near)?)?;
-    // The square is positive where this is called; its enclosure may reach below zero.
-    let root = Interval::new(larger(d.lo(), 0.0), larger(d.hi(), 0.0))?.sqrt()?;
+    // The square is positive where this is called (the line crosses the circle, by exact signs),
+    // but where the line stands within a rounding of touching the circle this enclosure reaches
+    // zero, and so would both crossings' coordinates (issue 1003). Then the square's exact sum,
+    // two steps wide, encloses it away from zero: a sum of products of tame doubles is a whole
+    // multiple of 2^-604, so a positive one rounds to a normal double. Only there, so every
+    // other answer keeps its boxes (decision 32.108).
+    let d = if d.contains(0.0) {
+        enclosed_sum(&square)?
+    } else {
+        d
+    };
+    let root = d.sqrt()?;
     let near = if sign == Sign::Negative {
         root.neg()
     } else {
