@@ -1465,9 +1465,11 @@ enum Standing {
 }
 
 /// Whether a turn from `lo` to `hi` stops short of a whole one, so that its ends are edges of the
-/// domain, not its join: [`edges`] and [`rims`] read it alike.
+/// domain, not its join: [`edges`] and [`rims`] read it alike. A whole turn is exactly two
+/// half-turns, decided by an error-free sum, as the seam charts and [`closed`] decide it (12.10):
+/// a turn whose difference only rounds to 2 stops short.
 fn part_turn(lo: f64, hi: f64) -> bool {
-    hi - lo < 2.0
+    !crate::seam::turn((lo, hi))
 }
 
 /// Whether a sphere's latitude `v` stops short of a pole, so that a domain ending there has an edge
@@ -1759,11 +1761,13 @@ fn along_curve(curve: &CurveKind<3>, at: Vector) -> Result<Option<Interval>, Int
     }))
 }
 
-/// Whether a kind's domain is a closed loop: a circle or an ellipse over a whole turn. An arc, as a
-/// plane across an extrusion cuts from a profile that is one, is open.
+/// Whether a kind's domain is a closed loop: a circle or an ellipse over a whole turn, exactly two
+/// half-turns, decided by an error-free sum, as the seam charts decide it (12.10). An arc, as a
+/// plane across an extrusion cuts from a profile that is one, is open, and so is one whose
+/// difference only rounds to 2.
 fn closed(curve: &CurveKind<3>) -> bool {
-    let (lo, hi) = curve.domain();
-    matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_)) && hi - lo >= 2.0
+    matches!(curve, CurveKind::Circle(_) | CurveKind::Ellipse(_))
+        && crate::seam::turn(curve.domain())
 }
 
 /// `curve`, and a loop on its domain moved by whole turns to within two turns of zero: the same

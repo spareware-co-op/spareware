@@ -26,7 +26,7 @@
 
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame};
 use geom_intersect::curve_surface::curve_surface;
-use geom_intersect::result::{Coincidence, Item, PointContact};
+use geom_intersect::result::{Coincidence, Item, PointContact, Test, Unresolved};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
@@ -930,5 +930,120 @@ fn circles_crossing_or_touching_at_an_end_of_the_domain_are_the_engines() {
     }
     for ends in [(-300.0, 4.0), (4.0, 300.0)] {
         the_engines(&circle([2.4, 3.2, 5.0], 5.0, Z, LEAN), &leaning_tube(ends));
+    }
+}
+
+/// From −1 + 2⁻⁵³ to 1 is 2 − 2⁻⁵³ half-turns, and the difference rounds to 2: by an error-free
+/// sum a domain short of a turn (issue 1104), its gap from 1 to 1 + 2⁻⁵³.
+const SHORT: (f64, f64) = (-1.0 + f64::EPSILON / 2.0, 1.0);
+
+/// A frame's x̂ a little under the x axis, at −2⁻⁵² radians, about −7·10⁻¹⁷ half-turns: the point
+/// half a turn round is at 1 + 7·10⁻¹⁷, in [`SHORT`]'s gap.
+const TILT: [f64; 3] = [1.0, -f64::EPSILON, 0.0];
+
+#[test]
+fn an_arc_in_the_gap_of_a_cylinder_turn_that_only_rounds_to_whole_does_not_lie_on_it() {
+    assert_eq!(
+        SHORT.1 - SHORT.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    // About z at radius 5, from x̂ at 2⁻⁵⁴ radians past half a turn, for 2⁻⁵⁶ half-turns: every
+    // point of it is at an angle from 1 + 1.7·10⁻¹⁷ to 1 + 3.2·10⁻¹⁷ half-turns.
+    let x = [-1.0, -f64::EPSILON / 4.0, 0.0];
+    let frame = Frame::new(x, Z).unwrap();
+    let arc = CurveKind::Circle(
+        Circle::new([0.0, 0.0, 7.0], 5.0, frame, (0.0, f64::EPSILON / 16.0)).unwrap(),
+    );
+    // It lies on the whole cylinder of radius 5 about z, by the closed form.
+    let whole = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+    let (what, work) = said(&arc, &whole);
+    assert!(
+        matches!(what, Said::Lying(_)) && work <= FEW,
+        "{what:?}, {work} units"
+    );
+    // On the cylinder over the short turn it is in the gap, off the domain: no identity is proven.
+    let short = Cylinder::new([0.0; 3], 5.0, Frame::new(X, Z).unwrap(), (SHORT, SIDE)).unwrap();
+    engine(&arc, &SurfaceKind::Cylinder(short));
+}
+
+/// The pair's points and other items, and the work it took.
+fn crossings(curve: &CurveKind<3>, surface: &SurfaceKind) -> (usize, usize, u128) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let items = found.items();
+    let points = items
+        .iter()
+        .filter(|i| matches!(i, Item::Point { .. }))
+        .count();
+    (points, items.len() - points, meter.used().work)
+}
+
+/// The pair's points; for each flag undecided at the floor, whether its span in parameter `k`, the
+/// one over [`SHORT`], starts at the short turn's start and whether it ends at its end; the work.
+fn at_the_ends(
+    curve: &CurveKind<3>,
+    surface: &SurfaceKind,
+    k: usize,
+) -> (usize, Vec<(bool, bool)>, u128) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let (mut points, mut ends) = (0, Vec::new());
+    for item in found.items() {
+        match item {
+            Item::Point { .. } => points += 1,
+            Item::Flagged {
+                at,
+                why:
+                    Unresolved::UndecidedAtFloor {
+                        test: Test::Uniqueness,
+                    },
+                ..
+            } => {
+                let span = &at.spans()[k];
+                ends.push((span.lo() == SHORT.0, span.hi() == SHORT.1));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    ends.sort_unstable();
+    (points, ends, meter.used().work)
+}
+
+#[test]
+fn circles_crossing_where_a_turn_only_rounds_to_whole_are_the_engines() {
+    // The closed form across the axis answers whole turns (decision 32.86), and a turn short by
+    // 2⁻⁵³ half-turns is not one (issue 1104). Each whole pair crosses at two points, one of them
+    // where only the whole turn runs: (−5, 0) on a circle of radius 5 about the origin with x̂ at
+    // [`TILT`], and (0, 5) on a cylinder about (5, 5) with x̂ there. On the short turn that point
+    // is at 1 + 7·10⁻¹⁷ half-turns, which is −1 + 7·10⁻¹⁷ a turn back, in [`SHORT`]'s gap from 1
+    // to −1 + 1.1·10⁻¹⁶: no root of the short pair lies there. The engine answers it with the
+    // other point and, at each end of the short turn, where the gap starts and where it ends, a
+    // flag undecided at the floor; it certifies no point in the gap. The work tells the closed
+    // form from the engine.
+    let tilted = Frame::new(TILT, Z).unwrap();
+    let on = |turn| CurveKind::Circle(Circle::new([0.0; 3], 5.0, tilted, turn).unwrap());
+    let beside = SurfaceKind::Cylinder(cylinder([-5.0, 5.0, 0.0], 5.0, X, Z));
+    let over = |turn| {
+        let c = Cylinder::new([5.0, 5.0, 0.0], 5.0, tilted, (turn, SIDE)).unwrap();
+        SurfaceKind::Cylinder(c)
+    };
+    let ring = circle([0.0; 3], 5.0, X, Z);
+    let (turned, near) = (on((-1.0, 1.0)), on(SHORT));
+    let (round, gapped) = (over((-1.0, 1.0)), over(SHORT));
+    for (k, (whole, short)) in [
+        (0, ((&turned, &beside), (&near, &beside))),
+        (1, ((&ring, &round), (&ring, &gapped))),
+    ] {
+        let (points, others, work) = crossings(whole.0, whole.1);
+        assert!(
+            points == 2 && others == 0 && work <= FEW_POINTS,
+            "whole: {work} units"
+        );
+        let (points, ends, work) = at_the_ends(short.0, short.1, k);
+        assert!(
+            points == 1 && ends == [(false, true), (true, false)] && work > FEW_POINTS,
+            "short: {points} points, flags at the ends {ends:?}, {work} units"
+        );
     }
 }
