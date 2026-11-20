@@ -1304,12 +1304,8 @@ fn line_torus(
         ],
         speed: a.sqrt()?.hi(),
     };
-    let solved = solve(
-        &quartic,
-        [Interval::new(stretch.0, stretch.1)?],
-        |_, _| Ok(true),
-        meter,
-    )?;
+    let side = [Interval::new(stretch.0, stretch.1)?];
+    let solved = solve(&quartic, side, side, |_, _| Ok(true), meter)?;
     let domain = ParamSurface::domain(torus);
     let sign = Interval::point(torus.axial_sign())?;
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
@@ -3140,7 +3136,7 @@ pub fn curve_surface(
         patches: patches(surface, meter)?,
     };
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
-    let solved = solve(&field, domain, |_, _| Ok(true), meter)?;
+    let solved = solve(&field, domain, domain, |_, _| Ok(true), meter)?;
     finished(&field, solved, meter)
 }
 

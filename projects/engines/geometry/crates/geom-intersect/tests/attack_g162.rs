@@ -416,6 +416,33 @@ fn a_foot_on_an_end_is_a_foot() {
     assert!(foot.distance.contains(3.0), "{foot:?}");
 }
 
+/// A circle's foot is its closed form, moved by whole turns onto whatever turn its domain is: from
+/// (7, 10), 10 from the centre, the foot is at atan2(4, 3)/π, 5 away, on each of these domains.
+#[test]
+fn a_circles_foot_is_its_turn_on_any_domain_that_holds_it() {
+    let turn = 4.0_f64.atan2(3.0) / core::f64::consts::PI;
+    for (domain, at) in [
+        ((0.0, 1.5), turn),
+        ((0.5, 2.5), turn + TURN),
+        ((-2.0, -0.5), turn - TURN),
+    ] {
+        let arc = circle(5.0, domain);
+        let found = project_curve(&arc, &[7.0, 10.0], FLOOR, &mut meter()).unwrap();
+        assert!(!found.tie_broken(), "{domain:?}: {found:?}");
+        let foot = found.first().unwrap();
+        assert_eq!(foot.place, Place::Foot, "{domain:?}: {found:?}");
+        assert!(
+            foot.at[0].lo() - 1e-12 <= at && at <= foot.at[0].hi() + 1e-12,
+            "{domain:?}: {foot:?}"
+        );
+        assert!(foot.distance.contains(5.0), "{domain:?}: {foot:?}");
+        assert!(
+            foot.point[0].contains(4.0) && foot.point[1].contains(6.0),
+            "{foot:?}"
+        );
+    }
+}
+
 /// y = x² from the centre of curvature at its vertex: the distance grows only with t⁴, so no test
 /// can settle the vertex, and what the floor leaves is one point.
 #[test]
@@ -619,7 +646,9 @@ fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
 /// what is pruned, which no answer shows. The pinned numbers move only with the search itself, or
 /// with what the kinds charge: the torus's moved from 59,498 to 275,498 when its partials began to
 /// pay for the arctangent's 192-bit corners (issue #765), with the same steps and the same answer
-/// (the old number comes back with `FAR_CORNER` set to 0).
+/// (the old number comes back with `FAR_CORNER` set to 0). The arc's from (4, 6) moved from 165 to
+/// 6 when a circle's foot became its closed form (issue #1102): its two ends and one bound. From
+/// (9, 2) the foot is the arc's start, which the closed form leaves to the search, at its old cost.
 #[test]
 fn each_search_takes_the_work_it_always_took() {
     let frame = Frame::standard().unwrap();
@@ -643,7 +672,7 @@ fn each_search_takes_the_work_it_always_took() {
         .unwrap(),
     );
     let curves: [(&CurveKind<2>, [f64; 2], u64); 3] = [
-        (&arc, [4.0, 6.0], 165),
+        (&arc, [4.0, 6.0], 6),
         (&arc, [9.0, 2.0], 165),
         (&ellipse, [1.0, 2.0], 191),
     ];
@@ -806,4 +835,95 @@ fn a_part_of_a_curve_is_projected_with_its_own_ends() {
     assert!(end.point[0].contains(7.5), "{end:?}");
     assert_eq!(end.place, Place::Boundary);
     assert!(project_curve_over(&c, (1.5, 2.5), &[20.0, 2.0], FLOOR, &mut meter()).is_err());
+}
+
+/// The same arc as an ellipse of two equal axes: the same form, so the same bounds and the same
+/// search, which the ellipse kind takes where the circle kind has its closed form.
+fn searched(radius: f64, domain: (f64, f64)) -> CurveKind<2> {
+    let axes = Axes::Frame {
+        frame: Frame::standard().unwrap(),
+        a: radius,
+        b: radius,
+    };
+    CurveKind::Ellipse(Ellipse::new([1.0, 2.0], axes, domain).unwrap())
+}
+
+/// Where the foot's enclosure only meets an end of the span, the closed form does not decide it,
+/// and the circle is searched as an ellipse of equal axes is: the same answer, at no less work.
+/// From (7, 10) the foot's enclosure is first found strictly inside [0, 1]; the four spans then end
+/// exactly at one end of it, outside it or inside it, at either end of the span.
+#[test]
+fn a_circles_foot_whose_enclosure_meets_an_end_of_the_span_is_searched() {
+    use geom_intersect::project_curve_over;
+    let p = [7.0, 10.0];
+    let (arc, ellipse) = (circle(5.0, (-1.0, 1.0)), searched(5.0, (-1.0, 1.0)));
+    let found = project_curve_over(&arc, (0.0, 1.0), &p, FLOOR, &mut meter()).unwrap();
+    let foot = found.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{found:?}");
+    let [t] = foot.at;
+    for span in [
+        (t.hi(), t.hi() + 0.5),
+        (t.lo() - 0.5, t.lo()),
+        (t.lo(), t.lo() + 0.5),
+        (t.hi() - 0.5, t.hi()),
+    ] {
+        let answer = |curve: &CurveKind<2>| {
+            project_curve_over(curve, span, &p, FLOOR, &mut meter()).unwrap()
+        };
+        assert_eq!(answer(&arc), answer(&ellipse), "{span:?}");
+        let work = |curve: &CurveKind<2>| {
+            least_work(&|m: &mut WorkMeter<'_>| {
+                project_curve_over(curve, span, &p, FLOOR, m).is_ok()
+            })
+        };
+        assert!(work(&arc) >= work(&ellipse), "{span:?}");
+    }
+}
+
+/// A foot whose turn is past a half-turn, moved four turns on: from (-2, -1) the centre (1, 2) is
+/// 3√2 away at 225°, so the foot's turn is 1.25, and on [9, 9.5] it is 9.25.
+#[test]
+fn a_circles_foot_past_a_half_turn_is_found_turns_along() {
+    use geom_intersect::project_curve_over;
+    let arc = circle(5.0, (8.0, 10.0));
+    let found = project_curve_over(&arc, (9.0, 9.5), &[-2.0, -1.0], FLOOR, &mut meter()).unwrap();
+    let foot = found.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{found:?}");
+    assert!(foot.at[0].contains(9.25), "{found:?}");
+    let gap = 5.0 - 18.0_f64.sqrt();
+    assert!(
+        foot.distance.lo() - 1e-12 <= gap && gap <= foot.distance.hi() + 1e-12,
+        "{found:?}"
+    );
+}
+
+/// The closed form keeps its foot only where the foot's bound is no wider than the floor: at a
+/// floor of exactly that width it gives the same answer at the same work, and at half of it the
+/// circle is searched as an ellipse of equal axes is.
+#[test]
+fn a_circles_foot_wider_than_the_floor_is_searched() {
+    let p = [7.0, 10.0];
+    let (arc, ellipse) = (circle(5.0, (0.0, 1.5)), searched(5.0, (0.0, 1.5)));
+    let closed = project_curve(&arc, &p, FLOOR, &mut meter()).unwrap();
+    let foot = closed.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{closed:?}");
+    let width = foot
+        .point
+        .iter()
+        .map(|x| x.hi() - x.lo())
+        .fold(0.0, f64::max);
+    let work = |curve: &CurveKind<2>, floor: f64| {
+        least_work(&|m: &mut WorkMeter<'_>| project_curve(curve, &p, floor, m).is_ok())
+    };
+    assert_eq!(
+        project_curve(&arc, &p, width, &mut meter()).unwrap(),
+        closed
+    );
+    assert_eq!(work(&arc, width), work(&arc, FLOOR));
+    let half = width / 2.0;
+    assert_eq!(
+        project_curve(&arc, &p, half, &mut meter()).unwrap(),
+        project_curve(&ellipse, &p, half, &mut meter()).unwrap()
+    );
+    assert!(work(&arc, half) >= work(&ellipse, half));
 }

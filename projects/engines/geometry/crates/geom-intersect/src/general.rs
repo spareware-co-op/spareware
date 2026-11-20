@@ -428,7 +428,7 @@ pub(crate) fn starts_of(
                     ..edge
                 };
                 let domain = [span(search)?, span(room.0)?, span(room.1)?];
-                let mut found = solve(&edge, domain, |_, _| Ok(true), meter)?;
+                let mut found = solve(&edge, domain, domain, |_, _| Ok(true), meter)?;
                 // A zero is the patches' if its enclosure meets them both: it is cut to them, and
                 // one wholly in the room past an end is another patch's or none.
                 found
@@ -751,7 +751,7 @@ fn at_the_ends(
                     free,
                     rows,
                 };
-                let solved = solve(&line, [*along, *across], &keep, meter)?;
+                let solved = solve(&line, [*along, *across], [*along, *across], &keep, meter)?;
                 for zero in solved.zeros {
                     let whole = line.whole(zero.enclosure, point(value)?);
                     let Some(all) = edge.over(&whole, meter)? else {
