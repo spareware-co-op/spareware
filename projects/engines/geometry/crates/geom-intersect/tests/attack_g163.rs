@@ -18,9 +18,9 @@
 
 mod miri;
 
-use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola};
+use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, ParamCurve};
 use geom_intersect::IntersectError;
-use geom_intersect::curve::{curves, self_crossings};
+use geom_intersect::curve::{curves, curves_over, self_crossings};
 use geom_intersect::result::{Coincidence, Coverage, Intersection, Item, PointContact, Unresolved};
 use geom_intersect::solve::{Field, solve};
 use geom_num::interval::Interval;
@@ -2035,7 +2035,14 @@ impl Field<2> for Bent {
 #[test]
 fn a_field_without_clipping_keeps_its_zero() {
     let side = Interval::new(0.0, 1.0).unwrap();
-    let solved = solve(&Bent, [side, side], |_, _| Ok(true), &mut meter()).unwrap();
+    let solved = solve(
+        &Bent,
+        [side, side],
+        [side, side],
+        |_, _| Ok(true),
+        &mut meter(),
+    )
+    .unwrap();
     assert_eq!(solved.zeros.len(), 1);
     let [x, y] = solved.zeros[0].enclosure;
     assert!(x.contains(0.3) && y.contains(0.7), "{x:?} {y:?}");
@@ -2061,4 +2068,76 @@ fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
         "{:?}",
         r.items()
     );
+}
+
+/// A box about an item's enclosure, a hundredth wider at each end but inside the two domains.
+fn about<const D: usize>(item: &Item, a: &CurveKind<D>, b: &CurveKind<D>) -> [(f64, f64); 2] {
+    let [s, t, ..] = item.at().spans() else {
+        panic!("{item:?}");
+    };
+    let near =
+        |x: &Interval, (lo, hi): (f64, f64)| ((x.lo() - 0.01).max(lo), (x.hi() + 0.01).min(hi));
+    [near(s, a.domain()), near(t, b.domain())]
+}
+
+/// Over a box of the two domains, a pair with a closed form is answered by it, keeping the items
+/// that meet the box on both unknowns: two circles crossing twice, and a circle with a line taken
+/// second, whose closed form takes the line first.
+#[test]
+fn a_closed_form_answers_a_box_with_the_meetings_in_it() {
+    let a = circle([0.0, 0.0], 5.0);
+    for b in [circle([6.0, 0.0], 5.0), segment([-10.0, 3.0], [10.0, 3.0])] {
+        let whole = meet(&a, &b);
+        let items = whole.items();
+        assert_eq!(items.len(), 2, "{items:?}");
+        for (k, item) in items.iter().enumerate() {
+            let [s, t] = about(item, &a, &b);
+            let over = curves_over(&a, s, &b, t, &mut meter()).unwrap();
+            assert_eq!(over.items(), &items[k..=k], "{b:?}");
+        }
+        // The first crossing's s with the second's t: a box neither crossing is in.
+        let ([s, _], [_, t]) = (about(&items[0], &a, &b), about(&items[1], &a, &b));
+        let over = curves_over(&a, s, &b, t, &mut meter()).unwrap();
+        assert!(over.items().is_empty(), "{:?}", over.items());
+    }
+}
+
+/// A pair with no closed form runs the engine from the box, in the plane the pair is proven to
+/// share: an ellipse in the plane z = x and a curve in it cross at the turns 0 and 1, and a box
+/// about the second, away from the ring's seam, holds that crossing, a crossing and never a near
+/// miss. (A box ending at the seam would hold the first on its edge.)
+#[test]
+fn the_engine_answers_a_box_in_the_plane_a_pair_shares() {
+    let axes = Axes::Vectors {
+        u: [2.0, 0.0, 2.0],
+        v: [0.0, 1.0, 0.0],
+    };
+    let ring = CurveKind::Ellipse(Ellipse::new([1.0, 2.0, 1.0], axes, (0.0, 2.0)).unwrap());
+    let across = bezier(&[[-3.0, 2.0, -3.0], [1.0, 2.0, 1.0], [5.0, 2.0, 5.0]]);
+    let crossings = |r: &Intersection| {
+        assert!(
+            r.items().iter().all(|i| matches!(
+                i,
+                Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }
+            )),
+            "{:?}",
+            r.items()
+        );
+        r.items().len()
+    };
+    let half = curves_over(&ring, (0.5, 1.5), &across, across.domain(), &mut meter()).unwrap();
+    assert_eq!(crossings(&half), 1);
+    let whole = meet(&ring, &across);
+    let inner = whole
+        .items()
+        .iter()
+        .filter(|i| i.at().spans()[0].lo() > 0.5);
+    for item in inner {
+        let [s, t] = about(item, &ring, &across);
+        let over = curves_over(&ring, s, &across, t, &mut meter()).unwrap();
+        assert_eq!(crossings(&over), 1);
+    }
 }
