@@ -1256,11 +1256,13 @@ const fn rank(s: &SurfaceKind) -> Option<u8> {
     }
 }
 
-/// The parameters of a surface's points in `at`, enclosed; a turn a box runs around is the domain's.
-/// Only the angles `read` names are worked out: one it leaves is the box of its whole range, which
-/// holds it, for a reader that needs nothing of it but that (an angle is a box's four corners'
-/// correctly rounded angles, the dearest part of the reading). `None` for a kind with no parameters
-/// here, or a torus's tube turn that meets its domain at no turn.
+/// The parameters of a surface's points in `at`, enclosed; a turn a box runs around is the domain's,
+/// and any other turn is moved to the domain by [`to_domain`], the box of every turn of it that
+/// meets the domain (a box across a whole turn's join meets it at both ends, and its span is the
+/// whole turn). Only the angles `read` names are worked out: one it leaves is the box of its whole
+/// range, which holds it, for a reader that needs nothing of it but that (an angle is a box's four
+/// corners' correctly rounded angles, the dearest part of the reading). `None` for a kind with no
+/// parameters here, or a turn or a torus's tube turn that meets its domain at no turn.
 fn parameters(
     surface: &SurfaceKind,
     at: Vector,
@@ -1268,42 +1270,18 @@ fn parameters(
 ) -> Result<Option<[Interval; 2]>, IntersectError> {
     let (u, v_range) = ParamSurface::domain(surface);
     let [read_u, read_v] = read;
-    let whole_turn = |x: Interval, y: Interval| -> Result<Interval, IntersectError> {
+    let whole_turn = |x: Interval, y: Interval| -> Result<Option<Interval>, IntersectError> {
         if x.contains(0.0) && y.contains(0.0) {
-            Ok(Interval::new(u.0, u.1)?)
+            Ok(Some(Interval::new(u.0, u.1)?))
         } else {
-            let t = turn_of(x, y)?;
-            let two = point(2.0)?;
-            // Whole turns to the domain's start first: `%` is exact, so this is a multiple of two
-            // half-turns within a turn of the start, and the angle lands within two periods of the
-            // domain however many turns out it starts. A domain within a turn of zero needs none,
-            // and its angle is not widened by adding it.
-            let shift = u.0 - u.0 % 2.0;
-            let mut moved = if shift == 0.0 {
-                t
-            } else {
-                t.add(point(shift)?)?
-            };
-            for _ in 0..8 {
-                if moved.hi() >= u.0 {
-                    break;
-                }
-                moved = moved.add(two)?;
-            }
-            for _ in 0..8 {
-                if moved.lo() <= u.1 {
-                    break;
-                }
-                moved = moved.sub(two)?;
-            }
-            Ok(moved)
+            to_domain(turn_of(x, y)?, u)
         }
     };
-    let whole_turn = |x: Interval, y: Interval| -> Result<Interval, IntersectError> {
+    let whole_turn = |x: Interval, y: Interval| -> Result<Option<Interval>, IntersectError> {
         if read_u {
             whole_turn(x, y)
         } else {
-            Ok(Interval::new(u.0, u.1)?)
+            Ok(Some(Interval::new(u.0, u.1)?))
         }
     };
     let all_v = || -> Result<Interval, IntersectError> { Ok(Interval::new(v_range.0, v_range.1)?) };
@@ -1329,7 +1307,10 @@ fn parameters(
         // axial factor s is ±1 as built, where z/s is z·s, but a similarity scales it.
         SurfaceKind::Cylinder(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
-            [whole_turn(x, y)?, z.div(point(c.axial_sign())?)?]
+            let Some(u) = whole_turn(x, y)? else {
+                return Ok(None);
+            };
+            [u, z.div(point(c.axial_sign())?)?]
         }
         SurfaceKind::Cone(c) => {
             let [x, y, z] = local(&c.frame(), c.center())?;
@@ -1338,7 +1319,10 @@ fn parameters(
             let rho = point(r0)?.add(point(k)?.mul(v)?)?;
             let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };
             let flip = point(flip)?;
-            [whole_turn(x.mul(flip)?, y.mul(flip)?)?, v]
+            let Some(u) = whole_turn(x.mul(flip)?, y.mul(flip)?)? else {
+                return Ok(None);
+            };
+            [u, v]
         }
         SurfaceKind::Sphere(s) => {
             let [x, y, z] = local(&s.frame(), s.center())?;
@@ -1348,7 +1332,10 @@ fn parameters(
             } else {
                 all_v()?
             };
-            [whole_turn(x, y)?, latitude]
+            let Some(u) = whole_turn(x, y)? else {
+                return Ok(None);
+            };
+            [u, latitude]
         }
         SurfaceKind::Torus(t) => {
             let [x, y, z] = local(&t.frame(), t.center())?;
@@ -1360,7 +1347,10 @@ fn parameters(
             } else {
                 all_v()?
             };
-            [whole_turn(x, y)?, v]
+            let Some(u) = whole_turn(x, y)? else {
+                return Ok(None);
+            };
+            [u, v]
         }
         // Each piece of these is built on them: a box of the domain is true, and all they need.
         SurfaceKind::Revolution(_) | SurfaceKind::Extrusion(_) => {
