@@ -20,6 +20,15 @@
 //! term. [`factored`] takes that form from the kind's own data: G's extent [G₋, G₊] in u, then the
 //! extent in v of G₋·P(v) + Q(v) and G₊·P(v) + Q(v), hulled.
 //!
+//! A cylinder's grids, c + r·e(u) + s·v·n̂ and every partial of it, have no cos πv or sin πv: its
+//! terms' functions of v are 1 and v, and so are their derivatives. So [`cylinder`] reads only the
+//! columns of 1 and v, and takes the first route for each grid without the generic one's reading
+//! of its shape: the extent in u at each end of the v-span, from those two columns there, hulled,
+//! with no sine or cosine of v evaluated; a box of one point is the terms' enclosure there, as in
+//! [`terms`]. It is for a cylinder's grids alone: every other grid, a cone's, a sphere's, a
+//! torus's and every affine image's, goes through [`terms`] or [`factored`], which read the
+//! columns of cos πv and sin πv.
+//!
 //! Guarantees:
 //!
 //! - **Certified.** Every route holds every value of the coordinate over the box: the extents in
@@ -27,10 +36,17 @@
 //!   the reals: a function affine in a parameter takes its extremes over a span at the span's
 //!   ends; a function affine in G takes them over [G₋, G₊] at its ends, and [G₋, G₊] holds G's
 //!   values; on a piece, Taylor's theorem with the remainder ½δ²·`S_vv`(u, ξ) for some ξ in it.
+//!   The cylinder's route holds them for a grid with no cos πv or sin πv, which every cylinder's
+//!   is: such a grid is affine in v, the first route's case.
 //! - **The kinds' own extents.** Every route but the last gives the coordinate's extent over the
 //!   box up to rounding; the last within ½r² times the second v-derivative's size, about 10⁻³ of
-//!   it on pieces of a thirty-second of a half-turn.
-//! - **Deterministic.** The same terms and box give the same bits on every target.
+//!   it on pieces of a thirty-second of a half-turn. The cylinder's route gives the first route's
+//!   enclosures bit for bit: the same sums of the same coefficients (the columns it does not read
+//!   hold none) and the same extents in u.
+//! - **Deterministic.** The same terms and box give the same bits on every target, and the
+//!   cylinder's route the same charges to the meter as the first route, in the same order: the
+//!   charge schedule is part of an operation's version, and with it where a cancellation is read
+//!   (chapter 23.10).
 //!
 //! Method: separation of the parameters by linearity (a bilinear or affine function's extremes on
 //! a box lie on its edges), then `geom-curve`'s closed-form extents in one parameter
@@ -38,7 +54,7 @@
 //! *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>).
 //!
 //! Cost: at most three extents in one parameter per coordinate, or one per piece (at most 64) on
-//! the last route.
+//! the last route; on the cylinder's, two per coordinate, as on the first.
 
 #![allow(
     clippy::many_single_char_names,
@@ -198,9 +214,9 @@ fn basis(t: Interval) -> Result<Wave, CurveError> {
     Ok([point(1.0)?, t, t.cospi()?, t.sinpi()?])
 }
 
-/// The sum along each row of its coefficients times `values`: the coefficients in u at fixed
-/// values of v's functions.
-fn rows(grid: &Grid, values: &Wave) -> Result<Wave, CurveError> {
+/// The sum along each row of its coefficients times `values`, column by column from the first:
+/// the coefficients in u at fixed values of v's functions (a column past the last value unread).
+fn rows(grid: &Grid, values: &[Interval]) -> Result<Wave, CurveError> {
     let mut out = [point(0.0)?; 4];
     for (o, row) in out.iter_mut().zip(grid) {
         for (&m, &x) in row.iter().zip(values) {
@@ -406,6 +422,51 @@ pub(crate) fn terms(
                 .ok_or(CurveError::Defect)?;
             second_order(grid, vv, ((u0, u1), (v0, v1)), meter)?
         };
+    }
+    Ok(out)
+}
+
+/// One coordinate's grid as a function of u at v, from its columns of 1 and v: all a cylinder's
+/// grid holds (module documentation).
+fn wave_at(grid: &Grid, v: f64) -> Result<Wave, CurveError> {
+    rows(grid, &[point(1.0)?, point(v)?])
+}
+
+/// The extent of one coordinate's grid over the box by the cylinder's route (module
+/// documentation): the extent in u at each end of the v-span, hulled, taken and charged in the
+/// first route's order.
+fn affine_extent(
+    grid: &Grid,
+    ((u0, u1), (v0, v1)): ParamBox,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Interval, CurveError> {
+    let low = extent(&wave(wave_at(grid, v0)?), (u0, u1), meter)?;
+    join(
+        Some(low),
+        extent(&wave(wave_at(grid, v1)?), (u0, u1), meter)?,
+    )
+}
+
+/// The extent of ∂^{i+j}S/∂u^i∂v^j over the region for a cylinder, coordinate by coordinate, from
+/// its terms (module documentation): [`terms`]' first route without its reading of the grids'
+/// shapes; over a region of one point, the terms' enclosure there.
+///
+/// # Errors
+///
+/// As [`terms`].
+pub(crate) fn cylinder(
+    t: &Terms,
+    ((u0, u1), (v0, v1)): ParamBox,
+    order: (usize, usize),
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], CurveError> {
+    if u0 == u1 && v0 == v1 {
+        // One point: the terms' own enclosure there, as in `terms`.
+        return t.enclose(point(u0)?, point(v0)?, order);
+    }
+    let mut out = [point(0.0)?; 3];
+    for (o, grid) in out.iter_mut().zip(&grids(t, order)?) {
+        *o = affine_extent(grid, ((u0, u1), (v0, v1)), meter)?;
     }
     Ok(out)
 }

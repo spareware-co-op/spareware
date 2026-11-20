@@ -125,7 +125,7 @@ pub struct Charts {
 }
 
 /// Whether `(a, b)` is exactly one turn: b − a = 2 half-turns, decided by an error-free sum.
-fn turn((a, b): (f64, f64)) -> bool {
+pub(crate) fn turn((a, b): (f64, f64)) -> bool {
     let (s, e) = two_sum(b, -a);
     s == 2.0 && e == 0.0
 }
@@ -638,7 +638,8 @@ fn read_pole(
             normal: normals(other, (ends(s), ends(r)), meter)?,
             floor,
         };
-        let found = solve(&toward, [span(whole)?], |_, _| Ok(true), meter)?;
+        let all = [span(whole)?];
+        let found = solve(&toward, all, all, |_, _| Ok(true), meter)?;
         if !found.flagged.is_empty() {
             return Ok(Read::Undecided);
         }

@@ -235,9 +235,12 @@ fn a_block_from_a_seam_pave_past_the_end_is_one_stretch_inside_its_paves() {
         let members: Vec<Vec<usize>> = found.iter().map(|c| c.members.clone()).collect();
         (members, m.used().work)
     };
+    // Two savings that add: the one stretch from where the seam pave ends modulo the turn
+    // (decision 32.104) saves 443,095 where the pave runs past the end, and a circle's foot by its
+    // closed form (project_curve_over, issue 1102) saves 66,955 at both.
     assert_eq!(
         [common(2.0 + 1.0 / 64.0), common(2.0)],
-        [(vec![vec![0, 1]], 532_573), (vec![vec![0, 1]], 975_668)]
+        [(vec![vec![0, 1]], 465_618), (vec![vec![0, 1]], 908_713)]
     );
 }
 

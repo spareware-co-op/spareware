@@ -305,12 +305,18 @@
             },
             {
               "sha256": "ea0e61d4b4b86a448a9e44396f0c607c445b0814ccbb4debd40b65c363a4f74e",
+              "kind": "improvement",
+              "piece": "issues 1102, 1103 and 1116",
+              "why": "A circle's foot is now its closed form wherever its enclosures decide it (geom-intersect's project_curve_over, issue 1102), so intersect/project_arc/typical's result digest moved; its input digest and every other row are unchanged. 41 of its 64 inputs answer differently and 23 the same (feet at or off an end of the span, still searched). Each changed answer is still one point, a foot on both sides, its enclosures overlapping the old ones: the parameter's width falls from about 1e-8 to 2e-8 to under 1e-15, the distance's from about 1e-4 to about 1e-9. Then a whole circle across a plane is now its crossings by a closed form (geom-intersect's circle_across_plane, issue 1103), so intersect/natural_plane/typical's result digest moved; its input digest and every other row are unchanged. Its 64 answers are the same to the character but for their recorded work, 243 units a case before and 17 after: each case's tilted plane crosses both end circles of its cylinder, and natural's marks now takes those crossings by the closed form. Then a turn box across a whole turn's join is now held in the whole turn (geom-intersect's quadrics::parameters, issue 1116), so intersect/natural_spheres/typical's result digest moved; its input digest and every other row are unchanged. Each of its 64 answers has one span that moves, a sphere's turn span across its join, from (0, about 1/3) to the whole turn (0, 2); nothing else in any answer changes"
+            },
+            {
+              "sha256": "a2d58c837d35b71323391674e6c8c00ef012a7e0f39752f4451cc76fa6f536e5",
               "kind": "corpus",
               "piece": "issue 1068 (decision 32.104)",
               "why": "intersect/surface_torus/typical's results only (inputs unchanged): line_tori's lines run along x through each torus's centre, so each meets its torus in four points, the two on one side of the axis at u = 0, the torus's join, and the two outer ones at v = 0, the tube's join (of the 256 items, 128 have u on a join, 128 v, 64 both). The box of such a coordinate starts a hair before the join and ends a hair after it. Under decision 32.104 it is moved by the turn to start in the window and kept whole, ending past the window's end by at most 4.4e-16 (the move by the turn rounds out to the doubles beside the end), read modulo the turn; before, it was cut to the window at the join, from 0 to its tiny far end. So 192 items' u or v spans moved, each new span holding the old one modulo the turn. Every other part of every result is the same text before and after: each item's t span, box in space, contact and class, and each result's coverage, diagnostics and work count; no point added or lost"
             }
           ],
-          "sha256": "27a77e58b21ed366eecf946b3e08038bcb5b4ea118441408b3a9cf7d2118f0e8"
+          "sha256": "430061f804ffa12b7d5044738a5ea8a75baa8517f83253518dc77c6d4606f222"
         },
         {
           "id": "geom-nurbs/operations",

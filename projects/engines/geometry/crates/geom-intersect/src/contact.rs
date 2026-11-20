@@ -885,7 +885,7 @@ fn look(
             &normals(second, (ends(u2), ends(v2)), meter)?,
         )?)
     };
-    let solved = solve(system, domain, keep, meter)?;
+    let solved = solve(system, domain, domain, keep, meter)?;
     if !solved.flagged.is_empty() || !solved.zeros.is_empty() {
         return Ok(Look::Contact(cluster, solved));
     }

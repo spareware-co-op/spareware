@@ -2,13 +2,14 @@
 //!
 //! What it does: [`project_curve`] and [`project_surface`] find every nearest point of a kind to a
 //! point, and [`project_curve_over`] those of a part of a curve's domain, whose ends it takes as
-//! the curve's own. A line's foot and a plane's are closed forms. Everything else takes Ma and
-//! Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box
-//! around it lies further than the best distance so far, or once its distance's derivative cannot
-//! vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum
-//! on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters
-//! of a point known to lie on a kind. A point on a round kind's axis, or on the axis of a surface of revolution
-//! that has only been moved, has a continuum of nearest points, returned as a typed [`Continuum`]
+//! the curve's own. A line's foot and a plane's are closed forms, and so is a circle's wherever its
+//! enclosures decide it. Everything else takes Ma and Hewitt's pruning, made certified: a work list
+//! of parameter spans, each dropped once a box around it lies further than the best distance so
+//! far, or once its distance's derivative cannot vanish, and the ends of a curve and the edges of a
+//! surface added as candidates, since a minimum on the boundary need not be a foot.
+//! [`invert_curve`] and [`invert_surface`] find the parameters of a point known to lie on a kind.
+//! A point on a round kind's axis, or on the axis of a surface of revolution that has only been
+//! moved, has a continuum of nearest points, returned as a typed [`Continuum`]
 //! rather than found by search. A closed direction's two ends are one seam: boxes undecided at
 //! both ends of it hold one point, reported once from each side.
 //!
@@ -16,6 +17,16 @@
 //!
 //! - **The minimum is proven.** Every span dropped has a lower bound above the reported distance,
 //!   or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.
+//! - **A circle's foot is its closed form where its enclosures decide it.** Off the axis, with
+//!   g = p − c, ρ the length of g's part in the circle's plane and φ that part's turn (its
+//!   `Interval::atan2` over π), the squared distance at the turn θ is |g|² + R² − 2Rρ·cos π(θ − φ):
+//!   least at φ, and growing with the turn away from it up to the opposite point. So where φ's
+//!   enclosure, moved by whole turns, lies strictly inside the span, the nearest point is the foot,
+//!   enclosed by the circle's bound over that enclosure; where no move of it meets the span, the
+//!   nearest points are among the span's ends. The ends are taken as the search takes them, and
+//!   kept beside the foot when they tie with it. The search decides the rest: an enclosure of φ
+//!   that reaches an end of the span, and a foot whose bound is wider than the floor (near the
+//!   axis, where φ cannot be held narrowly).
 //! - **A foot on a cut is not lost.** Where the slope at a span's end cannot be told from zero, as
 //!   when the foot is exactly the midpoint the search cuts at, the span whose other end has a sign
 //!   is refined as a foot like any other, from both sides of the cut; the two enclosures touch and
@@ -36,12 +47,17 @@
 //! pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4
 //! (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the
 //! sign of the second derivative of half the squared distance, an interval of the kind's certified
-//! derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles,
-//! spheres, cylinders, cones and tori go through the same search: their certified bounds are their
-//! own closed forms, and the search adds what a closed form alone lacks, a trimmed domain.
+//! derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Spheres,
+//! cylinders, cones and tori, and a circle its closed form does not decide, go through the same
+//! search: their certified bounds are their own closed forms, and the search adds what a closed
+//! form alone lacks, a trimmed domain. A circle's foot is the point of the circle in the direction
+//! of the point's offset from the centre in its plane, moved onto the domain by whole turns as
+//! `crate::curve`'s own circle methods move a turn.
 //!
-//! Cost: spans are halved, so a curve takes O(log(length/floor)) spans per foot, plus those near
-//! the distance's other turning points, each a bound on the point and two derivatives. A surface
+//! Cost: a circle its closed form decides takes constant work: the frame's unit vectors, one
+//! certified arctangent, its two ends and one bound. Otherwise spans are halved, so a curve takes
+//! O(log(length/floor)) spans per foot, plus those near the distance's other turning points, each
+//! a bound on the point and two derivatives. A surface
 //! takes four such curves for its edges, then boxes in the same way, each a set of partials to the
 //! second order. All of it is charged to the meter. Recursion: none.
 
@@ -54,13 +70,14 @@ use alloc::vec::Vec;
 
 use geom_curve::tight::{larger, smaller};
 use geom_curve::{CurveError, CurveKind, DerivativeBound, ParamCurve};
-use geom_num::NumError;
 use geom_num::interval::Interval;
+use geom_num::{NumError, math};
 use geom_nurbs::{Bounds, Limit};
 use geom_run::WorkMeter;
 use geom_surface::{ParamBox, ParamSurface, SurfaceKind, partial_index};
 
 use crate::IntersectError;
+use crate::curve::turn_of;
 
 /// What a span or box of the search costs the meter, besides the kind's own charges.
 const STEP: u64 = 1;
@@ -702,7 +719,8 @@ pub fn project_curve_over<const D: usize>(
         let (_, unit) = circle.frame().unit_vectors()?;
         let gap = padded(&minus(&exact(&circle.center())?, p)?)?;
         let [x, y, n] = unit;
-        if dot(&gap, &x)?.contains(0.0) && dot(&gap, &y)?.contains(0.0) {
+        let (along_x, along_y) = (dot(&gap, &x)?, dot(&gap, &y)?);
+        if along_x.contains(0.0) && along_y.contains(0.0) {
             let height = dot(&gap, &n)?;
             let radius = Interval::point(circle.radius())?;
             return Ok(Projection::Set {
@@ -710,8 +728,90 @@ pub fn project_curve_over<const D: usize>(
                 distance: radius.square()?.add(height.square()?)?.sqrt()?,
             });
         }
+        // Off the axis the whole circle's foot is at the turn of p − c in its plane (`gap` is
+        // c − p).
+        let foot = turn_of(along_x.neg(), along_y.neg())?;
+        if let Some(found) = circle_points(&over, foot, p, floor, meter)? {
+            return Ok(found);
+        }
     }
     settled(&over, p, floor, meter)
+}
+
+/// Where a circle's foot lies on a span of its domain.
+#[derive(Clone, Copy, Debug)]
+enum Lies {
+    /// Strictly inside it, at this enclosure of its parameter.
+    Inside(Interval),
+    /// Nowhere on it.
+    Off,
+}
+
+/// Where `foot`, a turn in half-turns, lies on `span` once moved by whole turns, as
+/// `crate::curve::onto` moves a turn onto a domain; `None` where a move of its enclosure reaches
+/// an end of the span, which only the search decides. A span is at most a turn long, so only the
+/// move that ends at or before its start and the two after that can meet it.
+fn lies(foot: Interval, (a, b): (f64, f64)) -> Result<Option<Lies>, IntersectError> {
+    let Ok(start) = math::floor((a - foot.hi()) / 2.0) else {
+        // A start that is not a number: the search refuses the span as it always has.
+        return Ok(None);
+    };
+    let mut turns = start.get();
+    let mut found = Lies::Off;
+    for _ in 0..3 {
+        let moved = foot.add(Interval::point(2.0 * turns)?)?;
+        turns += 1.0;
+        if moved.hi() < a || moved.lo() > b {
+            continue;
+        }
+        if a < moved.lo() && moved.hi() < b && matches!(found, Lies::Off) {
+            found = Lies::Inside(moved);
+        } else {
+            return Ok(None);
+        }
+    }
+    Ok(Some(found))
+}
+
+/// A circle's nearest points over `over`'s span by its closed form, `foot` the turn of the whole
+/// circle's nearest point: the span's two ends, taken as the search takes them, and the foot where
+/// it lies strictly inside the span, enclosed as the search encloses a foot it has refined. `None`
+/// where the closed form does not decide: a move of the foot's enclosure that reaches an end of
+/// the span, decided before anything is charged, so the search then costs what it always did; or
+/// a foot whose bound is wider than the floor.
+fn circle_points<const D: usize>(
+    over: &Over<'_, D>,
+    foot: Interval,
+    p: &[f64; D],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Projection<1, D>>, IntersectError> {
+    let Some(lies) = lies(foot, over.span)? else {
+        return Ok(None);
+    };
+    let (a, b) = over.span;
+    let mut points = Vec::with_capacity(3);
+    let mut upper = f64::INFINITY;
+    for (t, side) in [(a, Limit::FromRight), (b, Limit::FromLeft)] {
+        let (point, _) = over.at(t, side, meter)?;
+        let distance = Interval::norm(&minus(&point, p)?)?;
+        upper = smaller(upper, distance.hi());
+        points.push(Nearest {
+            at: [Interval::point(t)?],
+            point,
+            distance,
+            place: Place::Boundary,
+        });
+    }
+    if let Lies::Inside(t) = lies {
+        let found = nearest(over, p, (t.lo(), t.hi()), Place::Foot, meter)?;
+        if image(&found.point) > floor {
+            return Ok(None);
+        }
+        upper = smaller(upper, found.distance.hi());
+        points.push(found);
+    }
+    Ok(Some(Projection::Points(settle(points, upper)?)))
 }
 
 /// One path's search, and its answer.

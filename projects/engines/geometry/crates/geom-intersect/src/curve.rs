@@ -6,11 +6,13 @@
 //! NURBS pieces. In 3D the coordinate left out decides: a meeting is reported only where it is proven,
 //! and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. Two conics that
 //! are not both circles run the engine too: their exact counts are the fixed-integer predicates of
-//! chapter 14's piece G190. [`self_crossings`] runs the same engine on a curve and
-//! itself, above the diagonal, dropping every span whose tangents stay in one half-plane, since such a
-//! span cannot cross itself. [`Seam`] is how any crate reads a span an answer gives on a whole turn
-//! (decision 32.104): it starts in the window and may run past its end by less than a turn, and
-//! [`Seam::meets`], [`Seam::hull`], [`Seam::wrapped`] and [`Seam::spans`] read it modulo the turn.
+//! chapter 14's piece G190. [`curves_over`] answers a box inside the two domains, by a closed form
+//! or the engine run from that box, so a caller can decide one part of a flagged region again.
+//! [`self_crossings`] runs the same engine on a curve and itself, above the diagonal, dropping
+//! every span whose tangents stay in one half-plane, since such a span cannot cross itself.
+//! [`Seam`] is how any crate reads a span an answer gives on a whole turn (decision 32.104): it
+//! starts in the window and may run past its end by less than a turn, and [`Seam::meets`],
+//! [`Seam::hull`], [`Seam::wrapped`] and [`Seam::spans`] read it modulo the turn.
 //!
 //! Guarantees:
 //!
@@ -1212,7 +1214,7 @@ fn one_circle<const D: usize>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Intersection, IntersectError> {
     let (s, t) = (ParamCurve::domain(a), ParamCurve::domain(b));
-    if s.1 - s.0 >= 2.0 && t.1 - t.0 >= 2.0 {
+    if crate::seam::turn(s) && crate::seam::turn(t) {
         return whole_overlap(s, t, meter);
     }
     let i = Interval::point;
@@ -1239,6 +1241,7 @@ fn one_circle<const D: usize>(
     };
     let mut turns = math::floor((s.0 - high.hi()) / 2.0)?.get();
     let mut items = Vec::new();
+    let mut runs = Vec::new();
     for _ in 0..3 {
         let shift = i(2.0 * turns)?;
         turns += 1.0;
@@ -1252,28 +1255,63 @@ fn one_circle<const D: usize>(
         }
         let part = Interval::new(start, end)?;
         let on_b = i(sign)?.mul(part.sub(phi.add(shift)?)?)?;
-        let at = ParamBox::new(&[part, held(on_b, t)?])?;
+        let at = [part, held(on_b, t)?];
         let touch = hi.contains(s.0) || lo.contains(s.1);
         let box_of = a.bound(span(part), meter)?;
-        items.push(if touch {
-            Item::Point {
-                at,
+        if touch {
+            items.push(Item::Point {
+                at: ParamBox::new(&at)?,
                 xyz: grid_box(&box_of)?,
                 contact: PointContact::BoundaryTouch,
                 class: certified(),
-            }
+            });
         } else {
-            Item::Overlap {
-                at,
-                region: OverlapRegion {
-                    boundary: Vec::new(),
-                },
-                proof: Coincidence::Identical,
-                class: certified(),
-            }
+            runs.push(at);
+        }
+    }
+    // Two runs whose boxes meet are one item over their hull, since items must stand apart: the
+    // engine joins its boxes so (`solve::runs`). Beside a whole turn they are one run that its join
+    // cuts, meeting at the join on the other's domain and apart on the whole turn's only by the
+    // other's shortfall from a turn, which φ's enclosure can cover. Between two arcs short of a
+    // turn they are two runs, each gap a shortfall, that the boxes cannot tell apart: the hull is
+    // flagged, as `circle_circle` flags two crossings the doubles cannot hold apart.
+    let mut coverage = Coverage::TopologyCertified;
+    if let [[p, q], [u, v]] = runs[..]
+        && ParamBox::new(&[p, q])?.meets(&ParamBox::new(&[u, v])?)
+    {
+        let join = |x: Interval, y: Interval| {
+            Interval::new(
+                tight::smaller(x.lo(), y.lo()),
+                tight::larger(x.hi(), y.hi()),
+            )
+        };
+        let hull = [join(p, u)?, join(q, v)?];
+        if crate::seam::turn(s) || crate::seam::turn(t) {
+            runs = alloc::vec![hull];
+        } else {
+            runs.clear();
+            let gap = crate::result::StepsInterval::new(Steps(0), Steps(1))
+                .ok_or(IntersectError::Internal)?;
+            let [part, _] = hull;
+            items.push(Item::Flagged {
+                at: ParamBox::new(&hull)?,
+                xyz: grid_box(&a.bound(span(part), meter)?)?,
+                why: Unresolved::NearCoincident { gap },
+            });
+            coverage = Coverage::CompleteOutsideFlagged;
+        }
+    }
+    for at in runs {
+        items.push(Item::Overlap {
+            at: ParamBox::new(&at)?,
+            region: OverlapRegion {
+                boundary: Vec::new(),
+            },
+            proof: Coincidence::Identical,
+            class: certified(),
         });
     }
-    proven(items, meter)
+    Intersection::new(items, coverage, Vec::new(), meter)
 }
 
 /// `v` as a grid coordinate, if it is a whole number in reach.
@@ -1880,13 +1918,89 @@ pub fn curves<const D: usize>(
     };
     let [first, second] = seams;
     let domain = [first.side()?, second.side()?];
-    let solved = solve(&gap, domain, |_, _| Ok(true), meter)?;
+    let solved = solve(&gap, domain, domain, |_, _| Ok(true), meter)?;
     let route = if routed {
         alloc::vec![Diag { code: ROUTE.into() }]
     } else {
         Vec::new()
     };
     finished(&gap, solved, route, meter)
+}
+
+/// Where `a` over `s` and `b` over `t` meet. A pair with a closed form is answered by it, as
+/// [`curves`] answers it, kept to the items that meet that box. Any other pair runs [`curves`]'
+/// engine started from that box inside the two whole domains, so it is split and grown as the
+/// whole search splits and grows it, at the same floor. A caller decides so one part of a region
+/// the whole pair left undecided, as the part of it past a vertex.
+///
+/// # Errors
+///
+/// As [`curves`], and [`IntersectError::Internal`] for a stretch that does not run forward.
+pub fn curves_over<const D: usize>(
+    a: &CurveKind<D>,
+    s: (f64, f64),
+    b: &CurveKind<D>,
+    t: (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Intersection, IntersectError> {
+    meter.poll()?;
+    // A pair `curves` answers in closed form is answered so here: what meets the box is the box's
+    // answer, since nothing outside the items is a meeting.
+    let closed = if a == b {
+        Some(whole_overlap(a.domain(), b.domain(), meter)?)
+    } else if let Closed::Decided(answer) = closed_form(a, b, meter)? {
+        Some(answer)
+    } else if let CurveKind::Line(_) = b {
+        // A closed form takes a line first, so a line second is taken as (b, a), the answer
+        // swapped back. Two lines have their closed form in the order given. Patterns, not a
+        // test of two kinds joined: turning any other pair as well would change no answer (two
+        // circles are answered alike either way round, and no other pair without a line has a
+        // closed form), so a joined test would leave mutants no test can tell apart.
+        if let CurveKind::Line(_) = a {
+            None
+        } else {
+            match closed_form(b, a, meter)? {
+                Closed::Decided(answer) => Some(answer.swapped(1)),
+                Closed::Undecided | Closed::Absent => None,
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(answer) = closed {
+        let within = |x: &Interval, (lo, hi): (f64, f64)| x.lo() <= hi && lo <= x.hi();
+        let items: Vec<Item> = answer
+            .items()
+            .iter()
+            .filter(|i| match i.at().spans() {
+                [x, y, ..] => within(x, s) && within(y, t),
+                _ => true,
+            })
+            .cloned()
+            .collect();
+        let diagnostics = answer.diagnostics().to_vec();
+        return Intersection::new(items, answer.coverage(), diagnostics, meter);
+    }
+    // The pair as `curves` sets it up, so the box is searched as it is inside the whole.
+    let whole = (finite(a)?, finite(b)?);
+    let shared = if D == 3 { shared_plane(a, b) } else { None };
+    let gap = Gap {
+        a,
+        b,
+        seams: [seam_of(a, whole.0), seam_of(b, whole.1)],
+        axes: match shared {
+            Some(n) => across(n),
+            None => plane(a, b, whole, meter)?,
+        },
+        coplanar: shared.is_some(),
+        pieces_a: pieces(a, meter)?,
+        pieces_b: pieces(b, meter)?,
+    };
+    let [first, second] = gap.seams;
+    let domain = [first.side()?, second.side()?];
+    let start = [Interval::new(s.0, s.1)?, Interval::new(t.0, t.1)?];
+    let solved = solve(&gap, domain, start, |_, _| Ok(true), meter)?;
+    finished(&gap, solved, Vec::new(), meter)
 }
 
 /// The answer from what the engine found.
@@ -1978,7 +2092,7 @@ pub fn self_crossings<const D: usize>(
         }
         Ok(true)
     };
-    let mut solved = solve(&gap, [side, side], keep, meter)?;
+    let mut solved = solve(&gap, [side, side], [side, side], keep, meter)?;
     // The join of a closed curve, and any zero of the diagonal itself, are no crossing.
     solved.zeros.retain(|z| {
         let [s, t] = z.enclosure;

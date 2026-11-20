@@ -179,10 +179,12 @@ fn square_to(plane: &Plane, e: [f64; 3]) -> bool {
     sign_along(u, e) == Sign::Zero && sign_along(v, e) == Sign::Zero
 }
 
-/// Whether the surface turns all the way round its own axis.
+/// Whether the surface turns all the way round its own axis: its u span is exactly two half-turns,
+/// decided by an error-free sum, as the seam charts decide it (12.10). A span whose difference only
+/// rounds to 2 is a part of a turn.
 fn whole_turn(s: &SurfaceKind) -> bool {
     let ((u0, u1), _) = ParamSurface::domain(s);
-    u1 - u0 >= 2.0
+    crate::seam::turn((u0, u1))
 }
 
 /// A torus's whole tube.
