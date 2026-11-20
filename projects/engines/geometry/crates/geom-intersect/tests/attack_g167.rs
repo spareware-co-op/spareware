@@ -1039,6 +1039,59 @@ fn a_copy_of_a_whole_turn_profile_starting_anywhere_is_a_loop() {
     }
 }
 
+/// The ends of a turn are edges of its domain unless the turn is exactly whole, as the seam charts
+/// decide it (12.10; issue 1104). The torus of radii 5 and 1 about z, on a whole turn about its
+/// axis and on v from −1 + 2⁻⁵³ to 1 round its tube, 2 − 2⁻⁵³ half-turns whose difference rounds
+/// to 2: its tube ends at the inner equator, z = 0 at v = 1, and starts again a sliver below it,
+/// at z = −sin(2⁻⁵³π) at v = −1 + 2⁻⁵³. The plane z = −2⁻⁵² passes inside that sliver, so its
+/// inner ring, of radius 4, is off the torus's domain, though its outer ring, of radius 6, is on
+/// it. The box of the inner ring reaches the tube's ends, edges of the domain, so the closed form
+/// cannot place it, and the pair is left to the general paths, never met in two rings.
+#[test]
+fn a_ring_in_the_gap_of_a_tube_turn_that_only_rounds_to_whole_is_not_met() {
+    let short = (-1.0 + f64::EPSILON / 2.0, 1.0);
+    assert_eq!(
+        short.1 - short.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    let ring = SurfaceKind::Torus(Torus::new([0.0; 3], 5.0, 1.0, up(), (ROUND, short)).unwrap());
+    assert_eq!(charts(&ring).closes, [true, false]);
+    let sides = (Limit::FromRight, Limit::FromRight);
+    let z = |v: f64| ring.point(0.0, v, sides).unwrap()[2];
+    let low = -f64::EPSILON;
+    assert!(
+        z(short.1) > low && z(short.0) < low,
+        "{} {}",
+        z(short.1),
+        z(short.0)
+    );
+    for (a, b) in [(&level(low), &ring), (&ring, &level(low))] {
+        let found = natural(a, b, &mut meter()).unwrap();
+        assert!(found.is_none(), "{:?}", found.map(|r| r.items().to_vec()));
+    }
+}
+
+/// On a whole tube turn the tube's ends are its join: the torus on v from −1 to 1 meets the same
+/// plane in both rings, of radii 4 and 6, each closed.
+#[test]
+fn both_rings_of_a_whole_tube_turn_are_met() {
+    let whole = (-1.0, 1.0);
+    let ring = SurfaceKind::Torus(Torus::new([0.0; 3], 5.0, 1.0, up(), (ROUND, whole)).unwrap());
+    assert_eq!(charts(&ring).closes, [true, true]);
+    let low = level(-f64::EPSILON);
+    for (a, b) in [(&low, &ring), (&ring, &low)] {
+        let r = meet(a, b);
+        rings_are(&r, &[(4.0, 0.0), (6.0, 0.0)]);
+        for item in r.items() {
+            let Item::Curve { ends, .. } = item else {
+                panic!("{item:?}");
+            };
+            assert_eq!(*ends, [CurveEnd::Closed; 2]);
+        }
+    }
+}
+
 /// The segment from `a` to `b`.
 fn segment(a: [f64; 3], b: [f64; 3]) -> CurveKind<3> {
     CurveKind::Line(Line::segment(a, b).unwrap().value)

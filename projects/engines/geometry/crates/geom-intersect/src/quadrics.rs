@@ -1465,9 +1465,11 @@ enum Standing {
 }
 
 /// Whether a turn from `lo` to `hi` stops short of a whole one, so that its ends are edges of the
-/// domain, not its join: [`edges`] and [`rims`] read it alike.
+/// domain, not its join: [`edges`] and [`rims`] read it alike. A whole turn is exactly two
+/// half-turns, decided by an error-free sum, as the seam charts and [`closed`] decide it (12.10):
+/// a turn whose difference only rounds to 2 stops short.
 fn part_turn(lo: f64, hi: f64) -> bool {
-    hi - lo < 2.0
+    !crate::seam::turn((lo, hi))
 }
 
 /// Whether a sphere's latitude `v` stops short of a pole, so that a domain ending there has an edge
