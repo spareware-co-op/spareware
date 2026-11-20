@@ -50,6 +50,7 @@
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1611,6 +1612,17 @@ native-only over 736	geom-intersect::contact_mutants	a_turned_bowl_over_the_side
 native-only over 736	geom-intersect::contact_mutants	ridges_too_close_to_part_overlap_where_each_reaches_one_side_alone
 216	geom-intersect::edge_end	a_zero_inside_the_other_patch_is_proven_as_before
 native-only over 738	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch_is_proven_there
+18	geom-intersect::fit_mutants	a_ceiling_that_is_not_positive_or_a_branch_of_one_vertex_is_refused
+native-only over 1045	geom-intersect::fit_mutants	a_cubic_patch_against_a_plane_is_a_curve_or_out_of_rounds
+native-only over 1045	geom-intersect::fit_mutants	a_refinement_near_the_edge_starts_from_the_middle_of_its_data
+native-only over 1045	geom-intersect::fit_mutants	a_settled_point_outside_the_first_domain_is_never_fit_data
+native-only over 1045	geom-intersect::fit_mutants	a_surface_that_moves_fast_is_still_bounded
+197	geom-intersect::fit_mutants	a_trough_side_a_few_steps_wide_is_widened_by_half_the_widest_side
+102	geom-intersect::fit_mutants	a_trough_side_exactly_a_step_wide_is_not_widened
+149	geom-intersect::fit_mutants	a_true_point_in_a_wide_box_is_still_proven
+native-only over 1042	geom-intersect::fit_mutants	the_sheet_and_plane_bounds_are_the_recorded_ones
+native-only over 1042	geom-intersect::fit_mutants	the_true_point_on_a_circle_is_the_near_one_of_two
+231	geom-intersect::fit_mutants	two_planes_meeting_in_a_line_have_the_recorded_bounds
 native-only over 737	geom-intersect::fit_refined	a_closed_loop_of_three_vertices_is_refined_and_closes
 native-only over 738	geom-intersect::fit_refined	a_two_vertex_branch_is_refined_into_a_certified_curve
 native-only over 738	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plane_first_is_refined_too
