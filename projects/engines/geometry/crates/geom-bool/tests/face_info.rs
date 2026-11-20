@@ -638,3 +638,43 @@ fn a_circle_s_arc_from_a_pave_ending_on_its_join_is_in_the_face() {
     assert_eq!(arc.len(), 1, "{:?}", out.splits);
     assert_eq!(out.faces[face].in_blocks, arc);
 }
+
+/// A whole circle of radius 1105 steps about the origin, from (1105, 0), lying on a flat face whose
+/// bottom side is level a step below the circle's join, at y = −1, and runs on well past the circle
+/// at both ends. The side crosses the circle a step of arc before its join and again near
+/// (−1105, −1), so the circle's last pave ends a step of arc short of the domain's end, 2. The arc
+/// from that pave round the join and over the top to the other crossing lies in the face; the arc
+/// below the side does not (issue #1094). The room the last pave leaves before the join is a step
+/// of arc long, so a point taken in it lies within a step of the side, and would place the arc On
+/// the side. The side between the crossings and the circle's arcs share their two vertices, so
+/// they are also asked whether they are one stretch of curve, and the circle's few steps before
+/// the join are near-level seen from the side's middle.
+#[test]
+fn a_circle_s_arc_from_a_pave_a_step_before_its_join_is_in_the_face() {
+    let r = 1105_i64;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], r as f64, frame, (0.0, 2.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let corners: Vec<usize> = [
+        [-2 * r, -1],
+        [r + 1000, -1],
+        [r + 1000, 2 * r],
+        [-2 * r, 2 * r],
+    ]
+    .iter()
+    .map(|&[x, y]| b.vertex(raw(x, y, 0), 1))
+    .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = b.run().unwrap();
+    let last = out.paves[round]
+        .iter()
+        .map(|p| p.t.hi())
+        .fold(0.0_f64, f64::max);
+    assert!(1.999 < last && last < 2.0, "{:?}", out.paves[round]);
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}
