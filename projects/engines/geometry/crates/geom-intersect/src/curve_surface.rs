@@ -2433,7 +2433,9 @@ fn stretches_of(
 /// enclosures; which arcs there are is exact, and so is each arc's place against the join: an arc
 /// that starts on the join starts at the domain's first end exactly, one that ends on it ends at
 /// the domain's last end exactly, and there is a stretch past the join only where the arc passes
-/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn.)
+/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn: two
+/// half-turns, decided by an error-free sum, as the seam charts decide it (12.10). A domain whose
+/// difference only rounds to 2 is short of a turn.)
 fn arcs_in_plane(
     curve: &CurveKind<3>,
     circle: &Circle<3>,
@@ -2446,7 +2448,7 @@ fn arcs_in_plane(
     };
     let (lo, hi) = curve.domain();
     let (q, r) = (circle.center(), circle.radius());
-    if hi - lo < 2.0 || !tame(r) {
+    if !crate::seam::turn((lo, hi)) || !tame(r) {
         return Ok(None);
     }
     let (du, dv) = ParamSurface::domain(plane);
@@ -2545,7 +2547,9 @@ fn arcs_in_plane(
 /// A circle about a round kind's axis and of its radius there: an overlap at the v of its height,
 /// over every u, where the domain holds that v; nothing where it does not; and `None`, the
 /// engine's, where the domain is short of a whole turn (it may hold a part of the circle) or an
-/// enclosure cannot place v against an end and the axis is off the coordinate axes.
+/// enclosure cannot place v against an end and the axis is off the coordinate axes. A whole turn
+/// is exactly two half-turns, decided by an error-free sum, as the seam charts decide it (12.10):
+/// a domain whose difference only rounds to 2 is short.
 ///
 /// The circle's v is placed by [`height_across`].
 fn ring_overlap(
@@ -2555,7 +2559,7 @@ fn ring_overlap(
     (du, dv): ((f64, f64), (f64, f64)),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    if du.1 - du.0 < 2.0 {
+    if !crate::seam::turn(du) {
         return Ok(None);
     }
     let v = match height_across(at, (center, frame, factor), dv)? {
@@ -2756,7 +2760,9 @@ enum Meet {
 /// the circle the surface cuts in its plane. `None`, the engine's, where either domain is short of
 /// a whole turn, the plane holds a cone's apex, neither the enclosures nor exact signs tell how the
 /// two circles stand, the plane's enclosure reaches an end of the domain and the circles are not
-/// apart, or their two crossings are not apart.
+/// apart, or their two crossings are not apart. A whole turn is exactly two half-turns, decided by
+/// an error-free sum, as the seam charts decide it (12.10): a domain whose difference only rounds
+/// to 2 is short.
 ///
 /// Theorem. A plane square to the axis of a right circular cylinder or cone cuts it in the circle
 /// about the axis of the radius at that height, |r₀ + k·v|, or at a cone's apex in that point. A
@@ -2773,7 +2779,7 @@ fn circle_across(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let ((du, dv), (lo, hi)) = (round.domain, curve.domain());
-    if du.1 - du.0 < 2.0 || hi - lo < 2.0 {
+    if !crate::seam::turn(du) || !crate::seam::turn((lo, hi)) {
         return Ok(None);
     }
     if !parallel(round.frame.normal(), circle.frame().normal()) {

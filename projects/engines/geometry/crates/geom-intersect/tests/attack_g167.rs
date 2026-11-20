@@ -173,6 +173,8 @@ fn on_revolution(x: &Revolution, p: [f64; 3]) -> (f64, [f64; 2]) {
 
 /// Whether `p`, landing at `at`, lies within `reach` of an edge of `s`'s domain (`seam` false) or
 /// of the seam of a whole turn: the surface's point on that edge level with `at`, measured in space.
+/// A whole turn is exactly two half-turns, by an error-free sum: one that only rounds to 2 has
+/// edges.
 fn on_edge(s: &SurfaceKind, at: [f64; 2], seam: bool, p: [f64; 3], reach: f64) -> bool {
     let turns = match s {
         SurfaceKind::Torus(_) => [true, true],
@@ -188,7 +190,7 @@ fn on_edge(s: &SurfaceKind, at: [f64; 2], seam: bool, p: [f64; 3], reach: f64) -
         .into_iter()
         .zip(turns)
         .any(|((k, (lo, hi)), turn)| {
-            (turn && hi - lo >= 2.0) == seam
+            (turn && geom_num::eft::two_sum(hi, -lo) == (2.0, 0.0)) == seam
                 && [lo, hi].into_iter().filter(|e| e.is_finite()).any(|e| {
                     let mut there = at;
                     there[k] = e;
