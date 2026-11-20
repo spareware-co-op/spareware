@@ -4,9 +4,10 @@
 //! starts from the middle of its data; a true point is proven in a wide box, and on a circle it is
 //! the near one of two; a cubic patch against a plane, whose pcurve is 0 across, is a curve or out
 //! of rounds, never refused; a pcurve's side a few steps of the double wide on a surface curved
-//! across it is widened by half the widest side; and the bounds and true points of two planes (near
-//! the origin and far out), of the sheet and plane of `fit_refined` and of that thin side are the
-//! recorded bits, so any change to their arithmetic is seen.
+//! across it is widened by half the widest side, and one exactly a step wide is not, as the work
+//! shows; and the bounds and true points of two planes (near the origin and far out), of the sheet
+//! and plane of `fit_refined` and of those thin sides are the recorded bits, so any change to their
+//! arithmetic is seen.
 
 #![allow(
     clippy::unwrap_used,
@@ -415,6 +416,37 @@ fn a_trough_side_a_few_steps_wide_is_widened_by_half_the_widest_side() {
     assert!(curve.error() <= CEILING, "{}", curve.error());
     recorded("TROUGH_THIN", &bits(&top, &low, &curve), TROUGH_THIN);
 }
+
+#[test]
+fn a_trough_side_exactly_a_step_wide_is_not_widened() {
+    // The same ridge and trough with the trough's u from 3 − 2⁻⁴⁸ to 3: over the whole span the
+    // pcurve's box is its two held ends, so that side is exactly 4ε·(1 + 3) wide, a full step, and
+    // is kept as it is. Over so thin a box the trough's normal cannot be bounded away from 0, so the
+    // first round's whole-span piece stops there; widened, it would read the surface over a wide box
+    // and stop later, at the angle, for more work. The work is the recorded count.
+    let line = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let (top, low) = (ridge(line, &[0.0, 1.0]), trough());
+    let lo = 3.0 - 16.0 * f64::EPSILON;
+    assert_eq!(3.0 - lo, 4.0 * f64::EPSILON * (1.0 + 3.0));
+    let two = branch(vec![[0.25, 0.0, lo, 0.25], [0.75, 0.0, 3.0, 0.75]]);
+    let mut m = meter();
+    let curve = fit((&top, &low), REFS, &two, CEILING, &mut m).unwrap();
+    assert_eq!(m.used().work, 4379);
+    assert!(curve.error() <= CEILING, "{}", curve.error());
+    recorded("TROUGH_STEP", &bits(&top, &low, &curve), TROUGH_STEP);
+}
+
+/// The recorded bits of `bits` for the ridge and the trough exactly a step wide.
+const TROUGH_STEP: &[u64] = &[
+    0x0000_0000_0000_0000,
+    0x3ff0_0000_0000_0000,
+    0x3d2e_07d0_c2ce_5d31,
+    0x3d0c_9a30_a407_90d4,
+    0x3d25_fb16_64f1_8991,
+    0x0000_0000_0000_0000,
+    0x0000_0000_0000_0000,
+    0x0000_0000_0000_0000,
+];
 
 /// The recorded bits of `bits` for the ridge and the trough a few steps wide.
 const TROUGH_THIN: &[u64] = &[
