@@ -34,6 +34,7 @@
 # GitHub measuring run 44608532867 (miri_measure=new on land5/fixes-1 at d9b546470).
 # GitHub measuring run 44641793671 (miri_measure=new on train/phase5-1 at def0aa3b8, miri_measure_tests binary_id(geom-intersect::selfcross_mutants)).
 # GitHub measuring run 44636356667 (miri_measure=new on test/phase5-intersect-mutants-b at 44b58664b).
+# GitHub measuring run 44641548878 (miri_measure=new on land5/fixes-2 at 0a1c36808).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1291,6 +1292,10 @@ native-only over 601	geom-intersect::attack_g165	a_hyperbola_is_cut_at_both_ends
 26	geom-intersect::attack_g165	a_sphere_on_a_coaxial_cylinder_is_two_circles
 3	geom-intersect::attack_g165	a_stop_stops
 59	geom-intersect::attack_g165	a_stretch_between_cuts_is_kept_only_where_its_middle_is_proven_inside
+19	geom-intersect::attack_g165	an_endless_half_plane_cuts_a_cylinder_in_a_half_circle
+41	geom-intersect::attack_g165	an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings
+15	geom-intersect::attack_g165	an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle
+74	geom-intersect::attack_g165	an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex
 240	geom-intersect::attack_g165	an_offset_from_a_corner_that_ends_at_zero_reaches_it
 native-only over 601	geom-intersect::attack_g165	coaxial_cones_are_circles_or_one
 7	geom-intersect::attack_g165	coaxial_cylinders_are_one_or_none
@@ -1609,6 +1614,10 @@ native-only over 601	geom-intersect::pole_contact	a_sphere_hanging_from_a_plane_
 52	geom-intersect::pole_on_an_axis	a_cone_apex_on_a_wide_cylinders_axis_is_apart_from_it
 native-only over 601	geom-intersect::project_torus_seam	a_point_beside_the_first_meridian_has_one_foot_on_the_u_seam
 native-only over 601	geom-intersect::project_torus_seam	a_point_beside_the_outer_equator_has_one_foot_on_the_v_seam
+native-only over 601	geom-intersect::quadric_sums_exact	a_plane_through_the_apex_of_a_cone_whose_axis_rounds_upright_cuts_it_in_two_lines
+11	geom-intersect::quadric_sums_exact	a_plane_whose_vector_rounds_onto_another_plane_crosses_it_in_a_line
+5	geom-intersect::quadric_sums_exact	a_plane_whose_vector_rounds_onto_the_grid_cuts_a_sphere_in_a_circle
+35	geom-intersect::quadric_sums_exact	cylinders_on_axes_that_round_upright_cross_in_two_lines
 6	geom-intersect::range_screen	where_it_does_not_the_extents_decide
 35	geom-intersect::range_screen	where_twice_the_ceiling_holds_a_step_no_extent_is_taken
 2	geom-intersect::recursion	charts_at_their_bound
