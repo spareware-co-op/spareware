@@ -597,3 +597,44 @@ fn a_point_whose_every_ray_passes_within_a_step_of_a_corner_is_refused() {
     let placed = flat.place(&b.arr.carriers, raw(-500, 0, 0), Bound::ZERO, m);
     assert_eq!(placed.unwrap(), Place::In);
 }
+
+/// A whole circle of radius R = 2^38 about the origin, from (R, 0), lying on a flat face whose
+/// bottom side runs from (R + 1 − kq, −k) to (R + 1 + q, 1), q = 7000: the side crosses the circle
+/// at y = −1/q, less than a double's step before the circle's join, and its pave there ends
+/// exactly on the domain's end, 2 (decision 32.104). The arc from that pave round the join and
+/// over the top to the side's other crossing lies in the face. It is placed by the middle of the
+/// stretch from the domain's start to the far pave, since the pave leaves no room before the join;
+/// taking that empty room for a point would place the join itself, on the side, and the arc would
+/// not be In.
+#[test]
+fn a_circle_s_arc_from_a_pave_ending_on_its_join_is_in_the_face() {
+    let (r, q) = (1_i64 << 38, 7000_i64);
+    let k = (2 * r + 20) / q + 1;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], r as f64, frame, (0.0, 2.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let (left, right) = (r + 1 - k * q, r + 1 + q);
+    let corners: Vec<usize> = [[left, -k], [right, 1], [right, r + 10], [left, r + 10]]
+        .iter()
+        .map(|&[x, y]| b.vertex(raw(x, y, 0), 1))
+        .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = interfere(
+        &b.arr,
+        default_remaining(),
+        &Exec::serial(),
+        &mut WorkMeter::new(Budget::of_work(1 << 40)),
+    )
+    .unwrap();
+    assert!(
+        out.paves[round].iter().any(|p| p.t.hi() == 2.0),
+        "{:?}",
+        out.paves[round]
+    );
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}

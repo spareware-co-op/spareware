@@ -8861,14 +8861,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
-      "mutant": "replace < with <= in middle_of",
-      "line_text": "let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only where lo == hi. A block's paves are in proven order (pave::order keeps one after another only when last.t.hi() < pave.t.lo()), and a domain has a < b, so that happens only for a block round a closed curve's seam whose last pave's enclosure ends exactly at the domain's end. The stages give a seam point the parameter at the domain's start, an enclosure from a (the projection's, in the vertex stage), and flag a crossing at the seam rather than enclose it, so no pave ends at b; were one to, the mutant would place the seam point, a point of the block, in place of the middle of the stretch after it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
       "mutant": "replace > with == in middle_of",
       "line_text": "let start = if from.t.hi() > b {",
       "occurrences": 1,
