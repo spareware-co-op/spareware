@@ -1187,3 +1187,95 @@ pub fn interfere(
     face::settle(arr, &mut out, faces, &pairs.faces, remaining, meter)?;
     Ok(out)
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "test code: a failure should stop loudly"
+)]
+mod tests {
+    use super::*;
+    use crate::common::Proof;
+    use crate::pave::History;
+
+    /// A whole turn in half-turns: a circle's domain, closed at its join.
+    fn turn() -> Seam {
+        Seam::turns((0.0, 2.0))
+    }
+
+    fn iv(lo: f64, hi: f64) -> Interval {
+        Interval::new(lo, hi).unwrap()
+    }
+
+    /// A piece of edge `source` from the pave enclosed by `from` to the one enclosed by `to`.
+    fn piece(source: usize, from: (f64, f64), to: (f64, f64), wraps: bool) -> SplitEdge {
+        let pave = |(lo, hi): (f64, f64)| Pave {
+            vertex: 0,
+            t: iv(lo, hi),
+        };
+        SplitEdge {
+            block: PaveBlock {
+                edge: source,
+                from: Some(pave(from)),
+                to: Some(pave(to)),
+                wraps,
+            },
+            source,
+            history: History::Split,
+        }
+    }
+
+    fn block(members: &[usize]) -> CommonBlock {
+        CommonBlock {
+            members: members.to_vec(),
+            proof: Proof::Exact,
+        }
+    }
+
+    #[test]
+    fn a_last_pave_ending_on_the_join_leaves_the_piece_round_it_from_the_start() {
+        // Edge 0 is cut at 0.5 and by a pave whose enclosure ends exactly on the domain's end; the
+        // piece round the join, from that pave to 0.5, is one block with edge 1's piece. A span
+        // after the join and short of 0.5 reaches into that piece only.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.75, 2.0), false),
+            piece(0, (1.75, 2.0), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[1, 2])];
+        assert!(held((iv(0.25, 0.375), turn()), (0, 1), &splits, &common));
+    }
+
+    #[test]
+    fn a_span_inside_a_last_pave_past_the_join_reaches_no_piece() {
+        // The last pave's enclosure runs a quarter past the end, so the piece round the join starts
+        // at 0.25. A span across the join that ends before 0.25 lies inside the pave and reaches no
+        // piece, even the paired one round the join.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.75, 2.25), false),
+            piece(0, (1.75, 2.25), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[1, 2])];
+        assert!(!held((iv(1.875, 2.125), turn()), (0, 1), &splits, &common));
+    }
+
+    #[test]
+    fn a_span_short_of_the_join_does_not_reach_the_piece_round_it() {
+        // Edge 0 is cut at 0.5, 1 and by a pave past the end; only the piece from 0.5 to 1 is one
+        // block with edge 1, and the piece round the join is in none. A span inside that piece is
+        // held: it starts past where the piece round the join ends, so does not reach it.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.0, 1.0), false),
+            piece(0, (1.0, 1.0), (1.75, 2.25), false),
+            piece(0, (1.75, 2.25), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[0, 3])];
+        assert!(held((iv(0.625, 0.875), turn()), (0, 1), &splits, &common));
+    }
+}
