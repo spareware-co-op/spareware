@@ -24,8 +24,9 @@
 //!   proven within the contact radius of the other at the finest refinement, and is apart as soon
 //!   as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with
 //!   [`crate::rule::NearContact`]. A piece whose distance the search leaves undecided is neither,
-//!   and is cut again; one still so at the deepest cut has no enclosure to report and fails with
-//!   `NumError::NotFinite`. Never a sampled check.
+//!   and is cut again; one still so at the deepest cut fails with `NearContact` too, its enclosure
+//!   from zero to the largest distance between its box and the other block's box. Never a sampled
+//!   check.
 //! - **Blocks of one operand are never common.** An operand's own edges meet only at their
 //!   vertices, so only blocks of different operands are compared.
 //! - **Deterministic.** Groups are taken in the order of their end vertices, blocks within a group
@@ -195,6 +196,38 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
     Ok((centre, radius))
 }
 
+/// A box, as its lowest and highest corners.
+type Corners = ([f64; 3], [f64; 3]);
+
+/// The box of a block: on each axis, the least low and the greatest high of its stretches' boxes.
+fn box_of(side: &Span<'_>, meter: &mut WorkMeter<'_>) -> Result<Corners, BuildError> {
+    let (curve, stretches) = side;
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for &stretch in stretches {
+        let bounds = curve.bound(stretch, meter).map_err(IntersectError::from)?;
+        for (l, &x) in lo.iter_mut().zip(&bounds.lo) {
+            *l = lesser(*l, x);
+        }
+        for (h, &x) in hi.iter_mut().zip(&bounds.hi) {
+            *h = greater(*h, x);
+        }
+    }
+    Ok((lo, hi))
+}
+
+/// The largest distance between a point of box `a` and a point of box `b`: on each axis the
+/// greater of the two ends' gaps, each difference and product rounded up, so it is at least the
+/// true one.
+fn farthest(a: &Corners, b: &Corners) -> Result<f64, NumError> {
+    let ((a_lo, a_hi), (b_lo, b_hi)) = (a, b);
+    let mut sum = 0.0_f64;
+    for (((&p, &q), &r), &s) in a_lo.iter().zip(a_hi).zip(b_lo).zip(b_hi) {
+        let gap = greater(s - p, q - r).next_up();
+        sum = ((gap * gap).next_up() + sum).next_up();
+    }
+    Ok(Interval::point(sum)?.sqrt()?.hi())
+}
+
 /// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
 /// on its own, so a nearest point of the curve outside the block is never taken for one of the
 /// block's. A stretch whose search is left undecided (`NonIsolated`) gives no upper end and holds
@@ -276,9 +309,19 @@ fn one_side(
         };
         if depth >= DEEPEST {
             // Still undecided at the deepest cut: the contact rule's refusal, with the finest
-            // enclosure reached; a distance with no upper end has none, and is not finite.
+            // enclosure reached. A distance the search left undecided has no upper end of its
+            // own; every point of the piece lies in its box and every point of the other block in
+            // that block's box, so the largest distance between the two boxes is one, and a
+            // distance is never below zero.
+            let enclosure = match enclosure {
+                Some(enclosure) => enclosure,
+                None => Interval::new(
+                    0.0,
+                    farthest(&(bounds.lo, bounds.hi), &box_of(far_side, meter)?)?,
+                )?,
+            };
             return Err(ContactError::NearContact(NearContact {
-                enclosure: enclosure.ok_or(NumError::NotFinite)?,
+                enclosure,
                 refinement: depth,
             })
             .into());

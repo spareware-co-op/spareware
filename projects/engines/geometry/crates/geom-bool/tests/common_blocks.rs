@@ -17,10 +17,11 @@
 )]
 
 use geom_bool::carrier::PointGeom;
-use geom_bool::common::{Proof, common_blocks};
-use geom_bool::interfere::{Arrangement, EdgeIn, Interfered, VertexIn, interfere};
+use geom_bool::common::{DEEPEST, Proof, common_blocks};
+use geom_bool::interfere::{Arrangement, BuildError, EdgeIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
 use geom_bool::pave::{Pave, PaveBlock};
+use geom_bool::rule::{ContactError, NearContact};
 use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
 use geom_num::P3;
 use geom_num::interval::Interval;
@@ -237,5 +238,75 @@ fn a_block_from_a_seam_pave_past_the_end_is_one_stretch_inside_its_paves() {
     assert_eq!(
         [common(2.0 + 1.0 / 64.0), common(2.0)],
         [(vec![vec![0, 1]], 532_573), (vec![vec![0, 1]], 975_668)]
+    );
+}
+
+/// A line of half a step from (0.25, 0.25) to (−0.25, 0.25), and a NURBS copy of the half circle
+/// of 8 steps about the origin from (8, 0) to (−8, 0), of two operands, each one block between the
+/// same two vertices (given by hand: the contact rule reads only the blocks' curves and paves).
+/// Every piece of the line lies within a quarter step of the origin on each axis, so its ball is
+/// centred on the origin, from which every point of the copy is as far: the search on the copy is
+/// left undecided (`NonIsolated`) at every cut, and the first piece, at (0.25, 0.25), reaches the
+/// deepest cut with no decided distance. It fails with `NearContact`, and its enclosure is finite
+/// and true: from zero to the largest distance between the piece's box and the copy's, from the
+/// piece to the copy's box's corner at (−8, 8), a little over 11.319 steps (8.25 across, the low
+/// side's gap, and 7.75 up, the high side's), holding the piece's distance from the copy, about
+/// 7.65 steps. Not `NotFinite`, which names no number that failed.
+#[test]
+fn a_piece_with_no_decided_distance_at_the_deepest_cut_is_a_finite_near_contact() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let half = Circle::new([0.0, 0.0, 0.0], 8.0, frame, (0.0, 1.0)).unwrap();
+    let copy = CurveKind::Circle(half)
+        .to_nurbs(&mut meter())
+        .unwrap()
+        .value
+        .curve;
+    let (s0, s1) = copy.domain();
+    let line = Line::new([0.25, 0.25, 0.0], [-0.5, 0.0, 0.0], (0.0, 1.0)).unwrap();
+    let mut arr = Arrangement::default();
+    for (operand, curve) in [(0, CurveKind::Line(line)), (1, CurveKind::Nurbs(copy))] {
+        let curve = arr.carriers.add_curve(curve).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: None,
+            operand,
+        });
+    }
+    for x in [8, -8] {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, 0, 0).unwrap()),
+            operand: 2,
+        });
+    }
+    let at = |t: f64| Interval::new(t, t).unwrap();
+    let block = |edge: usize, (t0, t1): (f64, f64)| PaveBlock {
+        edge,
+        from: Some(Pave {
+            vertex: 0,
+            t: at(t0),
+        }),
+        to: Some(Pave {
+            vertex: 1,
+            t: at(t1),
+        }),
+        wraps: false,
+    };
+    let blocks = [block(0, (0.0, 1.0)), block(1, (s0, s1))];
+    let found = common_blocks(&arr, &blocks, &mut meter());
+    let Err(BuildError::Contact(ContactError::NearContact(NearContact {
+        enclosure,
+        refinement,
+    }))) = found
+    else {
+        panic!("{found:?}");
+    };
+    assert_eq!(refinement, DEEPEST);
+    assert!(
+        enclosure.lo() <= 7.6 && 7.7 <= enclosure.hi(),
+        "{enclosure:?}"
+    );
+    assert!(
+        11.319 < enclosure.hi() && enclosure.hi() < 11.32,
+        "{enclosure:?}"
     );
 }
