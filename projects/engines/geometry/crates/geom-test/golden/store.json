@@ -308,9 +308,15 @@
               "kind": "improvement",
               "piece": "issue 1102",
               "why": "A circle's foot is now its closed form wherever its enclosures decide it (geom-intersect's project_curve_over, issue 1102), so intersect/project_arc/typical's result digest moved; its input digest and every other row are unchanged. 41 of its 64 inputs answer differently and 23 the same (feet at or off an end of the span, still searched). Each changed answer is still one point, a foot on both sides, its enclosures overlapping the old ones: the parameter's width falls from about 1e-8 to 2e-8 to under 1e-15, the distance's from about 1e-4 to about 1e-9"
+            },
+            {
+              "sha256": "78888030f8c9f5f583c673f1a51f521a3db68c50e8cefde1c161708e6db39d6c",
+              "kind": "improvement",
+              "piece": "issue 1103",
+              "why": "A whole circle across a plane is now its crossings by a closed form (geom-intersect's circle_across_plane, issue 1103), so intersect/natural_plane/typical's result digest moved; its input digest and every other row are unchanged. Its 64 answers are the same to the character but for their recorded work, 243 units a case before and 17 after: each case's tilted plane crosses both end circles of its cylinder, and natural's marks now takes those crossings by the closed form"
             }
           ],
-          "sha256": "78888030f8c9f5f583c673f1a51f521a3db68c50e8cefde1c161708e6db39d6c"
+          "sha256": "028bc7a942d11be8f1cf9e89ef411d00b2e9254aaabcba16d2c0eaa61803215a"
         },
         {
           "id": "geom-nurbs/operations",

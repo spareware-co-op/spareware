@@ -125,7 +125,7 @@ pub struct Charts {
 }
 
 /// Whether `(a, b)` is exactly one turn: b − a = 2 half-turns, decided by an error-free sum.
-fn turn((a, b): (f64, f64)) -> bool {
+pub(crate) fn turn((a, b): (f64, f64)) -> bool {
     let (s, e) = two_sum(b, -a);
     s == 2.0 && e == 0.0
 }
