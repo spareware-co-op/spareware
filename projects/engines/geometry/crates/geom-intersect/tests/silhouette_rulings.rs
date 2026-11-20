@@ -18,6 +18,8 @@
     reason = "test code: a failure should stop loudly, and the expected rulings are exact doubles"
 )]
 
+mod miri;
+
 use geom_curve::Frame;
 use geom_intersect::result::CurveEnd;
 use geom_intersect::{Branch, IntersectError, LevelCurves, Silhouette, trace};
@@ -42,9 +44,24 @@ fn standard() -> Frame<3> {
     Frame::standard().unwrap()
 }
 
+/// Under Miri, the budget of [`what_the_closed_form_cannot_decide_stays_with_the_search`]: still
+/// far past what a closed form spends, and past the whole search for a ruling inside the domain
+/// (308 and 384 units), so a case stopped here is one the closed form left to the search. Each
+/// case's cost is the search up to its budget.
+const MIRI_BUDGET: u64 = 1 << 9;
+
 /// The silhouette along `d` on `surface`, and the work it took, under [`BUDGET`].
 fn outline(surface: &SurfaceKind, d: [f64; 3]) -> (Result<LevelCurves, IntersectError>, u128) {
-    let mut meter = WorkMeter::new(Budget::of_work(BUDGET));
+    outline_within(surface, d, BUDGET)
+}
+
+/// The silhouette along `d` on `surface`, and the work it took, under `budget`.
+fn outline_within(
+    surface: &SurfaceKind,
+    d: [f64; 3],
+    budget: u64,
+) -> (Result<LevelCurves, IntersectError>, u128) {
+    let mut meter = WorkMeter::new(Budget::of_work(budget));
     let found = trace(
         surface,
         &Silhouette { direction: d },
@@ -176,6 +193,8 @@ fn a_ruling_inside_the_domain_stays_with_the_search() {
 fn what_the_closed_form_cannot_decide_stays_with_the_search() {
     let v = (-0.5, 0.5);
     let end = (0.0625, 0.25);
+    let budget = miri::case(BUDGET, MIRI_BUDGET);
+    let outline = |surface: &SurfaceKind, d: [f64; 3]| outline_within(surface, d, budget);
     // A view along the axis: g vanishes everywhere.
     let along = outline(&cylinder(1.0, standard(), end, v), [0.0, 0.0, 5.0]);
     // A factor too small for exact products, on the axis where it changes nothing.
@@ -211,6 +230,6 @@ fn what_the_closed_form_cannot_decide_stays_with_the_search() {
         ("ends", ends),
     ] {
         assert_eq!(found, Err(IntersectError::BudgetExceeded), "{name}");
-        assert!(used > u128::from(BUDGET), "{name}: {used}");
+        assert!(used > u128::from(budget), "{name}: {used}");
     }
 }

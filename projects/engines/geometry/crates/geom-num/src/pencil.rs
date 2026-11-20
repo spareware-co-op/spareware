@@ -1723,7 +1723,9 @@ mod tests {
         ));
     }
 
-    /// The pencil t·I + `diagonal`, in the exact arithmetic.
+    /// The pencil t·I + `diagonal`, in the exact arithmetic. Under Miri only its sums of minors and
+    /// its degree, all of it that `Exact::full_at` reads: the chain `Exact::set` also fills was
+    /// about four fifths of each case's time there, and the four cases took 505 yardstick seconds.
     fn exact_of(diagonal: [i64; 4]) -> Box<Exact> {
         let (mut unit, mut form) = ([[Entry::ZERO; 4]; 4], [[Entry::ZERO; 4]; 4]);
         for (i, v) in diagonal.into_iter().enumerate() {
@@ -1731,7 +1733,12 @@ mod tests {
             form[i][i] = Entry::from_i64(v);
         }
         let mut pencil = Box::new(Exact::EMPTY);
-        pencil.set(&unit, &form, 4).unwrap();
+        if cfg!(miri) {
+            pencil.minors = minors(&unit, &form).unwrap();
+            pencil.degree = 4;
+        } else {
+            pencil.set(&unit, &form, 4).unwrap();
+        }
         pencil
     }
 
