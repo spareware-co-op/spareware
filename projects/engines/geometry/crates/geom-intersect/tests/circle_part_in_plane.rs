@@ -558,3 +558,24 @@ fn an_end_whose_enclosure_reaches_a_join_that_no_sign_places_is_the_engines() {
     engine(&on((upper - 2.0, upper)), &far);
     engine(&on((lower - 2.0, lower)), &far);
 }
+
+#[test]
+fn a_circle_whose_turn_only_rounds_to_whole_is_the_engines() {
+    // The closed form answers whole turns, and from −1 to 1 − 2⁻⁵³ is 2 − 2⁻⁵³ half-turns, whose
+    // difference rounds to 2: by an error-free sum a turn short of whole (issue 1104). Held to
+    // y ≥ 0, the whole circle of radius 5 about the origin is its upper half, one overlap. The short
+    // one is that half to its own end and a lone point at its start, (−5, 0), under 2·10⁻¹⁵ from
+    // the half's end: inside a step, so one overlap would be right at the resolution too, and the
+    // short turn is left to the engine.
+    let frame = Frame::new(X, Z).unwrap();
+    let on = |turn| CurveKind::Circle(Circle::new(ORIGIN, 5.0, frame, turn).unwrap());
+    let over = plane(ORIGIN, X, Y, (-10.0, 10.0), (0.0, 10.0));
+    arcs(&on((-1.0, 1.0)), &over, &[(0.0, 1.0)]);
+    let short = (-1.0, 1.0 - f64::EPSILON / 2.0);
+    assert_eq!(
+        short.1 - short.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    engine(&on(short), &over);
+}

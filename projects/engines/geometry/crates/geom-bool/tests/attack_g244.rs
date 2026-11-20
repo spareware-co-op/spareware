@@ -383,7 +383,15 @@ fn a_hole_goes_to_the_smallest_face_holding_it() {
 /// with the same areas.
 #[test]
 fn a_face_splits_the_same_whichever_way_its_edges_run() {
-    for reversed in 0..16_u32 {
+    // Under Miri four of the sixteen: none reversed, all, and every other edge either way, so each
+    // edge runs both ways and each corner joins its two edges in all four ways.
+    let every: Vec<u32> = (0..16).collect();
+    let choices: &[u32] = if cfg!(miri) {
+        &[0b0000, 0b1111, 0b0101, 0b1010]
+    } else {
+        &every
+    };
+    for &reversed in choices {
         let mut b = Build::default();
         let c: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
             .iter()
@@ -564,7 +572,14 @@ fn a_hole_whose_ray_crosses_a_section_goes_to_its_own_part() {
 /// above and below the hole, whichever way the circle runs.
 #[test]
 fn a_plate_through_a_round_hole_s_top_and_bottom_splits_the_face() {
-    for normal in [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]] {
+    // Under Miri, where each way takes minutes, the circle runs one way: about +z, its hole run
+    // backward.
+    let normals: &[[f64; 3]] = if cfg!(miri) {
+        &[[0.0, 0.0, 1.0]]
+    } else {
+        &[[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]
+    };
+    for &normal in normals {
         let mut b = Build::default();
         let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
             .iter()
