@@ -358,6 +358,31 @@ fn a_region_straddling_the_pave_at_an_overlap_s_end_stands() {
     assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
 }
 
+/// The arc and its copy of three quarters above, with a fourth operand's vertex at (−663, 884) on
+/// the copy past the arc's end: it cuts the copy's second piece in two, and the piece from it on
+/// is in no block either. The region ends in the box that straddles the pave at the arc's end,
+/// well short of the vertex, so it lies wholly before that piece, reaches no part of it, and
+/// stands as without the cut.
+#[test]
+fn a_region_straddling_the_pave_at_an_overlap_s_end_stands_before_a_later_cut() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.5)), [[0, -1105], [-1105, 0]], 2);
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Grid(P3::new(-663, 884, 0).unwrap()),
+        operand: 3,
+    });
+    let out = run(&arr).unwrap();
+    assert_eq!(out.splits.len(), 4, "{:?}", out.splits);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
+}
+
 /// The first circle's upper half, from (1105, 0) to (−1105, 0), and a NURBS curve that follows it
 /// from (1105, 0) to (0, 1105) and runs on straight along its tangent there to (−600, 1105), of two
 /// operands, with a third operand's vertex at (663, 884) on both. The vertex cuts both, and their

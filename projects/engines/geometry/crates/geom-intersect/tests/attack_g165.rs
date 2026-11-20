@@ -2590,6 +2590,23 @@ fn a_whole_circle_crossed_at_its_join_is_the_engines() {
     assert_eq!(work, 8);
 }
 
+/// A whole circle's crossing whose parameter's box ends exactly on the domain's end, or starts
+/// exactly on its start, is the engine's (decision 32.106): the box reaches the join. The plane
+/// y = 3·10^-13 crosses the circle `upright` 1.9·10^-16 of a half-turn short of its end, and the
+/// box, read near 0 and moved a turn on, is [2 − 2^-51, 2]. The plane y = −8000·2^-1074 crosses it
+/// 5·2^-1074 of a half-turn past its start, and the box is [0, 10·2^-1074]. The engine answers each
+/// for over 1,500 units, where the closed form takes 8.
+#[test]
+fn a_whole_circle_crossing_whose_box_ends_on_its_join_is_the_engines() {
+    let circle = upright();
+    let (x, z) = ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    for s in [3e-13, -f64::from_bits(8000)] {
+        let (r, points, work) = met(&circle, &endless([0.0, s, 0.0], x, z));
+        assert!(points.len() >= 2, "{:?}", r.items());
+        assert!(work > 1_500, "{work}");
+    }
+}
+
 /// A crossing whose (u, v) box stands past an end of the plane's domain is left out, each end in
 /// turn, and the other crossing is the closed form's, for 7 units. The circle `upright` crosses
 /// the plane z = 0 at (0, −500, 0) and (0, 500, 0): read with u along y, a domain of u from 0 to
