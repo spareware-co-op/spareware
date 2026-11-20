@@ -433,3 +433,50 @@ fn a_cylinder_on_a_plane_is_a_band_of_its_recorded_width() {
         ],
     );
 }
+
+/// A cylinder of radius 4 about the axis a = (0, 1, 1)/√2, and a plane through its line at
+/// u = 1/2 sunk 1/16 into it, spanned by x and a tilted 1/1024 toward that line's normal e₂: the
+/// plane's normal is never at right angles to a, so no normal of the cylinder is parallel to it
+/// and there is no contact. The axis is tilted, so the box of a patch's normals is wider than the
+/// normals: at a floor of 1 subdivision cannot part them near the line, and solve parts them below
+/// the floor. With the cylinder first, the look then settles every pair of that cluster, none of
+/// which holds a branch's start, so nothing is left to read.
+#[test]
+fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
+    let s = core::f64::consts::FRAC_1_SQRT_2;
+    let r = 4.0;
+    let h = 1.0 / 16.0;
+    let tilt = 1.0 / 1024.0;
+    let tube = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            r,
+            Frame::new([1.0, 0.0, 0.0], [0.0, s, s]).unwrap(),
+            ((0.1, 0.9), (-2.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    let e2 = [0.0, s, -s];
+    let shallow = SurfaceKind::Plane(
+        Plane::new(
+            e2.map(|t| (r - h) * t),
+            [1.0, 0.0, 0.0],
+            [0.0, s + tilt * e2[1], s + tilt * e2[2]],
+            ((-3.0, 3.0), (-3.0, 3.0)),
+        )
+        .unwrap(),
+    );
+    holds_to(
+        (&tube, &shallow),
+        (1.0, 1.0 / 16.0),
+        [
+            (144_813, "[]"),
+            (
+                704_500,
+                "[Undecided { first: ((-3.0, 1.1015625), (-3.0, 3.0)), \
+                 second: ((0.46602401733398435, 0.9), (-2.0, 2.0)), \
+                 why: TangentBand { width: Steps(8) } }]",
+            ),
+        ],
+    );
+}
