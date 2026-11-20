@@ -19,6 +19,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_curve::{Basis, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve, Trimmed};
 use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::quadrics::natural;
@@ -27,6 +29,7 @@ use geom_math::{RationalTransform, TypedTransform};
 use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Extrusion, ParamSurface, Plane, SurfaceKind, Torus};
+use miri::rounds;
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const WIDE: (f64, f64) = (-1000.0, 1000.0);
@@ -233,8 +236,14 @@ fn curves_hold(r: &Intersection, a: &SurfaceKind, b: &SurfaceKind, what: &str) {
     for item in r.items() {
         if let Item::Curve { curve, .. } = item {
             let (lo, hi) = curve.domain();
-            for i in 0..=8 {
-                let t = lo + (hi - lo) * f64::from(i) / 8.0;
+            // Nine samples across the domain, and the end itself: lo + (hi - lo) rounds to either
+            // side of hi, below it leaving the end unchecked, past it no point of the curve. Every
+            // sample on the domain is kept.
+            let samples = (0..=8)
+                .map(|i| lo + (hi - lo) * f64::from(i) / 8.0)
+                .filter(|t| *t <= hi)
+                .chain([hi]);
+            for t in samples {
                 let p = curve.point(t, Limit::FromRight).unwrap();
                 for s in [a, b] {
                     let gap = off(s, p);
@@ -266,10 +275,20 @@ fn same_on_curve(curve: &CurveKind<3>, surface: &SurfaceKind, count: usize) {
 /// `a` with `b`, built and moved by each of [`MOVES`]: `count` items each time, at the same
 /// parameters, each curve on both moved surfaces.
 fn same_pair(a: &SurfaceKind, b: &SurfaceKind, count: usize) {
+    same_pair_moved_by(a, b, count, &MOVES);
+}
+
+/// [`same_pair`], moved by each of `moves`, some of [`MOVES`].
+fn same_pair_moved_by(
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+    count: usize,
+    moves: &[([[i64; 3]; 3], f64)],
+) {
     let base = natural(a, b, &mut meter()).unwrap().unwrap();
     assert_eq!(base.items().len(), count, "{:?}", base.items());
     curves_hold(&base, a, b, "as built");
-    for (m, by) in MOVES {
+    for &(m, by) in moves {
         let (x, y) = (moved_surface(a, m, by), moved_surface(b, m, by));
         let r = natural(&x, &y, &mut meter()).unwrap().unwrap();
         let what = format!("{} with {} moved by {m:?}", short(a), short(b));
@@ -317,6 +336,12 @@ fn a_helix_on_a_moved_cylinder_lies_in_it_over_the_same_parameters() {
 
 #[test]
 fn a_plane_cuts_a_moved_cylinder_or_cone_at_the_same_parameters() {
+    // Under Miri, each pair moved by x ↦ (3x, 3y, −3z) alone, factor −3: a scale other than 1 and
+    // a mirror of the axis at once, which z·s and k·s read wrong as they do 2 and −2. Each move is
+    // one meeting, and the same claims hold for each.
+    let moves = rounds(&MOVES, &MOVES[2..]);
+    let same_pair =
+        |a: &SurfaceKind, b: &SurfaceKind, count| same_pair_moved_by(a, b, count, moves);
     // `parameters` reads v = z/s on both kinds: the circle at height 80 on the doubled cylinder
     // stood at v = 160 with z·s, off its domain, so it was dropped.
     same_pair(&level(40.0), &cylinder(5.0), 1);

@@ -20,6 +20,9 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_num::NumError;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
@@ -29,7 +32,7 @@ use geom_num::pencil::{
 };
 use geom_num::quadric::{self, Ring, Slope};
 use geom_num::sign::Sign;
-use geom_num::sturm::{gcd, gcd_with_steps, square_root};
+use geom_num::sturm::{div_exact, gcd, gcd_with_steps, square_root};
 use geom_num::wide::Wide;
 
 const NONE: Topology = Topology {
@@ -892,17 +895,36 @@ fn cones_with_other_quadrics() {
     assert_eq!(coaxial.topology, Topology { conics: 2, ..NONE });
 }
 
-#[test]
-fn two_spheres() {
-    let a = sphere([0, 0, 0], 5);
-    // They share the circle at infinity, which has no real point, and their real circle.
-    let met = on(&a, &sphere([6, 0, 0], 5));
-    assert_eq!(met.segre, Segre::Pair);
-    assert_eq!(met.topology, Topology { conics: 1, ..NONE });
-    assert_eq!(on(&a, &sphere([20, 0, 0], 5)).topology, NONE);
-    assert_eq!(on(&a, &sphere([0, 0, 0], 4)).topology, NONE);
-    assert_eq!(on(&a, &a).topology, NONE.same_as());
+/// The spheres `two_spheres` meets with the sphere of radius 5 about the origin, each with the
+/// pencil's type where the test reads it and what the two share: crossing, apart, inside, and the
+/// same sphere.
+fn two_spheres_cases() -> Vec<(Form<Entry>, Option<Segre>, Topology)> {
+    vec![
+        // They share the circle at infinity, which has no real point, and their real circle.
+        (
+            sphere([6, 0, 0], 5),
+            Some(Segre::Pair),
+            Topology { conics: 1, ..NONE },
+        ),
+        (sphere([20, 0, 0], 5), None, NONE),
+        (sphere([0, 0, 0], 4), None, NONE),
+        (sphere([0, 0, 0], 5), None, NONE.same_as()),
+    ]
 }
+
+// Two spheres, one case to a quarter (decision 32.78, `slices`): each case is one classification,
+// and the four together ran past 680 yardstick seconds under Miri.
+quarters!(two_spheres, |part| {
+    let a = sphere([0, 0, 0], 5);
+    let cases = two_spheres_cases();
+    for (b, segre, topology) in &cases[slices::range_usize(cases.len(), part)] {
+        let met = on(&a, b);
+        if let Some(segre) = segre {
+            assert_eq!(&met.segre, segre);
+        }
+        assert_eq!(&met.topology, topology);
+    }
+});
 
 trait Whole {
     fn same_as(self) -> Topology;
@@ -914,19 +936,40 @@ impl Whole for Topology {
     }
 }
 
-#[test]
-fn the_filter_agrees_where_it_answers() {
+/// The pairs `the_filter_agrees_where_it_answers` hands the filter, a sphere about the origin and a
+/// tube along z, each with what the filter answers.
+fn filter_cases() -> Vec<(Form<Interval>, Form<Interval>, Option<Topology>)> {
     let i = |v: i64| Interval::of(v).unwrap();
     let form = |c: [i64; 3], d: [i64; 3], alpha: i64, beta: i64, gamma: i64| {
         revolution(c.map(i), d.map(i), i(alpha), i(beta), i(gamma)).unwrap()
     };
     let sphere_i = |r: i64| form([0, 0, 0], [0, 0, 0], 1, 0, r * r);
     let tube = |x: i64, r: i64| form([x, 0, 0], Z, 1, 1, r * r);
-    assert_eq!(filtered(&sphere_i(5), &tube(1, 1)), Some(smooth(2)));
-    assert_eq!(filtered(&sphere_i(5), &tube(5, 1)), Some(smooth(1)));
-    assert_eq!(filtered(&sphere_i(5), &tube(10, 1)), Some(NONE));
-    // Tangent: no interval excludes the double root.
-    assert_eq!(filtered(&sphere_i(2), &tube(1, 1)), None);
+    vec![
+        (sphere_i(5), tube(1, 1), Some(smooth(2))),
+        (sphere_i(5), tube(5, 1), Some(smooth(1))),
+        (sphere_i(5), tube(10, 1), Some(NONE)),
+        // Tangent: no interval excludes the double root.
+        (sphere_i(2), tube(1, 1), None),
+    ]
+}
+
+// The filter, one case to a quarter (decision 32.78, `slices`): each case is one filtered reading,
+// and the four together took 447 yardstick seconds under Miri.
+quarters!(the_filter_agrees_where_it_answers, |part| {
+    let cases = filter_cases();
+    for (a, b, want) in &cases[slices::range_usize(cases.len(), part)] {
+        assert_eq!(&filtered(a, b), want);
+    }
+});
+
+/// The slices' shares add up exactly to the whole's count, each once: a list of cases is one
+/// stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    let n = |len: usize| u32::try_from(len).unwrap();
+    slices::assert_joins(n(two_spheres_cases().len()), "two_spheres' cases");
+    slices::assert_joins(n(filter_cases().len()), "the filter's cases");
 }
 
 #[test]
@@ -1172,6 +1215,326 @@ fn whole_numbers_divide_down() {
     assert_eq!(square_root(&huge), Some(w(1 << 62)));
 }
 
+/// The exact division, binary gcd and square root as they were before their loops stopped at the
+/// value's top limb (#1109), every loop over every limb: the shipped ones must give the same
+/// answers, `None` included.
+mod full_width {
+    use geom_num::wide::Wide;
+
+    fn shifted<const L: usize>(limbs: &[u64; L], bits: usize) -> [u64; L] {
+        let (limb, part) = (bits / 64, bits % 64);
+        let mut out = [0_u64; L];
+        for (i, slot) in out.iter_mut().enumerate() {
+            let at = |k: usize| limbs.get(i + k).copied().unwrap_or(0);
+            let (low, high) = (at(limb), at(limb + 1));
+            *slot = if part == 0 {
+                low
+            } else {
+                (low >> part) | (high << (64 - part))
+            };
+        }
+        out
+    }
+
+    fn magnitude<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
+        if v.is_negative() {
+            v.checked_neg()
+        } else {
+            Some(*v)
+        }
+    }
+
+    fn zeros<const L: usize>(v: &[u64; L]) -> usize {
+        let whole = v.iter().take_while(|l| **l == 0).count();
+        whole * 64 + v.get(whole).map_or(0, |l| l.trailing_zeros() as usize)
+    }
+
+    pub fn div_exact<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<Wide<L>> {
+        let top = magnitude(n)?.to_le_limbs();
+        let bottom = magnitude(d)?.to_le_limbs();
+        bottom.iter().find(|l| **l != 0)?;
+        let at = zeros(&bottom);
+        let mut rest = shifted(&top, at);
+        let odd = shifted(&bottom, at);
+        let x = odd[0];
+        let once = |y: u64| y.wrapping_mul(2_u64.wrapping_sub(x.wrapping_mul(y)));
+        let inverse = once(once(once(once(once(x)))));
+        let mut quotient = [0_u64; L];
+        for (i, slot) in quotient.iter_mut().enumerate() {
+            let digit = rest[i].wrapping_mul(inverse);
+            *slot = digit;
+            let (mut carry, mut borrow) = (0_u64, false);
+            for (slot, &y) in rest.iter_mut().skip(i).zip(&odd) {
+                let wide = u128::from(digit) * u128::from(y) + u128::from(carry);
+                let (first, b1) = slot.overflowing_sub(wide as u64);
+                let (second, b2) = first.overflowing_sub(u64::from(borrow));
+                *slot = second;
+                borrow = b1 || b2;
+                carry = (wide >> 64) as u64;
+            }
+        }
+        let q = Wide::<L>::from_le_limbs(quotient);
+        let answer = if n.is_negative() == d.is_negative() {
+            q
+        } else {
+            q.checked_neg()?
+        };
+        (answer.checked_mul(d)? == *n).then_some(answer)
+    }
+
+    pub fn gcd_with_steps<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<(Wide<L>, usize)> {
+        let (mut x, mut y) = (magnitude(a)?.to_le_limbs(), magnitude(b)?.to_le_limbs());
+        if x.iter().all(|l| *l == 0) {
+            return Some((Wide::from_le_limbs(y), 0));
+        }
+        if y.iter().all(|l| *l == 0) {
+            return Some((Wide::from_le_limbs(x), 0));
+        }
+        let (from_x, from_y) = (zeros(&x), zeros(&y));
+        let common = from_x.min(from_y);
+        x = shifted(&x, from_x);
+        y = shifted(&y, from_y);
+        let allowed = L * 128;
+        let mut left = allowed;
+        loop {
+            let (wide_x, wide_y) = (Wide::<L>::from_le_limbs(x), Wide::<L>::from_le_limbs(y));
+            let difference = wide_x.checked_sub(&wide_y)?;
+            if difference.is_zero() {
+                let mut out = wide_x;
+                let two = Wide::<L>::from_i64(2);
+                for _ in 0..common {
+                    out = out.checked_mul(&two)?;
+                }
+                return Some((out, allowed - left));
+            }
+            left = left.checked_sub(1)?;
+            let (rest, keep_y) = if difference.is_negative() {
+                (difference.checked_neg()?, true)
+            } else {
+                (difference, false)
+            };
+            let limbs = rest.to_le_limbs();
+            let odd = shifted(&limbs, zeros(&limbs));
+            if keep_y {
+                y = odd;
+            } else {
+                x = odd;
+            }
+        }
+    }
+
+    fn divided<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<(Wide<L>, Wide<L>)> {
+        let limbs = n.to_le_limbs();
+        let (mut quotient, mut rest) = ([0_u64; L], Wide::<L>::ZERO);
+        let two = Wide::<L>::from_i64(2);
+        for bit in (0..L * 64).rev() {
+            let set = (limbs[bit / 64] >> (bit % 64)) & 1;
+            rest = rest
+                .checked_mul(&two)?
+                .checked_add(&Wide::from_i64(set as i64))?;
+            let less = rest.checked_sub(d)?;
+            if !less.is_negative() {
+                rest = less;
+                quotient[bit / 64] |= 1 << (bit % 64);
+            }
+        }
+        Some((Wide::from_le_limbs(quotient), rest))
+    }
+
+    pub fn square_root<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
+        if v.is_negative() {
+            return None;
+        }
+        if v.is_zero() {
+            return Some(*v);
+        }
+        let limbs = v.to_le_limbs();
+        let used = limbs.iter().rposition(|l| *l != 0)?;
+        let bits = used * 64 + 64 - limbs[used].leading_zeros() as usize;
+        let two = Wide::<L>::from_i64(2);
+        let mut guess = Wide::<L>::one();
+        for _ in 0..bits.div_ceil(2) {
+            guess = guess.checked_mul(&two)?;
+        }
+        for _ in 0..bits {
+            let (quotient, _) = divided(v, &guess)?;
+            let sum = guess.checked_add(&quotient)?;
+            let (next, _) = divided(&sum, &two)?;
+            if !next.checked_sub(&guess)?.is_negative() {
+                break;
+            }
+            guess = next;
+        }
+        (guess.checked_mul(&guess)? == *v).then_some(guess)
+    }
+}
+
+/// `SplitMix64` (Steele, Lea and Flood, 2014), as `geom-num`'s own tests of `Wide` use it.
+struct Mix(u64);
+
+impl Mix {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    /// A value of a random length up to `bits` bits (below the width's sign bit) and a random sign,
+    /// or zero, the largest or the smallest.
+    fn wide<const L: usize>(&mut self, bits: usize) -> Wide<L> {
+        match self.next() % 16 {
+            0 => return Wide::max_value(),
+            1 => return Wide::min_value(),
+            2 => return Wide::ZERO,
+            _ => {}
+        }
+        let keep = (self.next() % (bits as u64 + 1)) as usize;
+        let mut limbs = [0_u64; L];
+        for (k, limb) in limbs.iter_mut().enumerate() {
+            let low = 64 * k;
+            *limb = if keep <= low {
+                0
+            } else if keep >= low + 64 {
+                self.next()
+            } else {
+                self.next() >> (64 - (keep - low))
+            };
+        }
+        let v = Wide::from_le_limbs(limbs);
+        if self.next() % 2 == 0 {
+            v
+        } else {
+            v.checked_neg().unwrap()
+        }
+    }
+
+    /// `v` times 2^k for a random k below `most`, or `v` where that does not fit.
+    fn shifted<const L: usize>(&mut self, v: Wide<L>, most: u64) -> Wide<L> {
+        let k = (self.next() % most) as usize;
+        if k + 1 >= 64 * L {
+            return v;
+        }
+        let mut limbs = [0_u64; L];
+        limbs[k / 64] = 1 << (k % 64);
+        v.checked_mul(&Wide::from_le_limbs(limbs)).unwrap_or(v)
+    }
+}
+
+/// The shipped exact division, gcd and square root against the full-width ones above, on random
+/// values of every length up to the width: exact quotients and not, common powers of two past a
+/// limb, squares and their neighbours.
+fn agree_at<const L: usize>(mix: &mut Mix, rounds: usize) {
+    let top = 64 * L - 1;
+    for _ in 0..rounds {
+        // Exact division: n = q · d, with d's zeros crossing limbs, and n, d unrelated.
+        let d = mix.wide::<L>(top / 2);
+        let d = mix.shifted(d, 3 * 64);
+        let q = mix.wide::<L>(top);
+        let n = q.checked_mul(&d).unwrap_or(q);
+        assert_eq!(
+            div_exact(&n, &d),
+            full_width::div_exact(&n, &d),
+            "{n:?} / {d:?}"
+        );
+        assert_eq!(
+            div_exact(&q, &d),
+            full_width::div_exact(&q, &d),
+            "{q:?} / {d:?}"
+        );
+        // The gcd: two values sharing a factor and a power of two.
+        let g = mix.wide::<L>(top / 3);
+        let g = mix.shifted(g, 2 * 64);
+        let (u, v) = (mix.wide::<L>(top / 2), mix.wide::<L>(top / 2));
+        let (a, b) = (
+            u.checked_mul(&g).unwrap_or(u),
+            v.checked_mul(&g).unwrap_or(v),
+        );
+        assert_eq!(
+            gcd_with_steps(&a, &b),
+            full_width::gcd_with_steps(&a, &b),
+            "gcd {a:?} {b:?}"
+        );
+    }
+    for _ in 0..rounds / 8 {
+        // Square roots: a square, its neighbour, and any value.
+        let r = mix.wide::<L>(top / 2);
+        let square = r.checked_mul(&r).unwrap_or(r);
+        for v in [
+            square,
+            square.checked_add(&Wide::one()).unwrap_or(square),
+            r,
+        ] {
+            assert_eq!(square_root(&v), full_width::square_root(&v), "root {v:?}");
+        }
+    }
+}
+
+#[test]
+fn the_loops_over_limbs_stop_at_the_top_limb_and_give_the_same_answers() {
+    // At the edges: a zero numerator, a numerator and a quotient whose top limb is the width's last,
+    // a divisor shifted past every limb the numerator uses, and the extremes.
+    type W = Wide<4>;
+    let w = |v: i128| W::from_i128(v);
+    let (max, min) = (W::max_value(), W::min_value());
+    let wide_d = w((1 << 60) + 3);
+    let wide_q = w((1 << 126) + 5).checked_mul(&w(1 << 60)).unwrap();
+    let wide_n = wide_q.checked_mul(&wide_d).unwrap();
+    assert_ne!(wide_n.to_le_limbs()[3], 0);
+    let past = W::from_le_limbs([0, 0, 1 << 12, 0]);
+    let cases = [
+        (W::ZERO, w(7)),
+        (wide_n, wide_d),
+        (wide_n, wide_q),
+        (wide_n.checked_neg().unwrap(), wide_d),
+        (wide_n, w(3)),
+        (max, max),
+        (max, w(1)),
+        (max, w(-1)),
+        (min, w(1)),
+        (w(3 << 70), past),
+        (w(7), w(3)),
+        (w(7), W::ZERO),
+    ];
+    for (n, d) in cases {
+        assert_eq!(
+            div_exact(&n, &d),
+            full_width::div_exact(&n, &d),
+            "{n:?} / {d:?}"
+        );
+    }
+    assert_eq!(div_exact(&wide_n, &wide_d), Some(wide_q));
+    assert_eq!(div_exact(&max, &w(1)), Some(max));
+    assert_eq!(div_exact(&w(3 << 70), &past), None);
+    // The gcd's common power of two past a limb, and at the width's top limb.
+    let gcds = [
+        (w(3 << 70), w(5 << 72), w(1 << 70)),
+        (
+            W::from_le_limbs([0, 0, 0, 1 << 62]),
+            W::from_le_limbs([0, 0, 0, 3 << 61]),
+            W::from_le_limbs([0, 0, 0, 1 << 61]),
+        ),
+        (max, max, max),
+        (W::ZERO, max, max),
+    ];
+    for (a, b, g) in gcds {
+        assert_eq!(gcd(&a, &b), Some(g));
+        assert_eq!(gcd_with_steps(&a, &b), full_width::gcd_with_steps(&a, &b));
+    }
+    // A square root whose value's top limb is the last, and one of a value in the low limb only.
+    let r = w((1 << 126) + 12_345);
+    for v in [r.checked_mul(&r).unwrap(), w(144), w(145), max] {
+        assert_eq!(square_root(&v), full_width::square_root(&v), "root {v:?}");
+    }
+    // Random values at several widths.
+    let mut mix = Mix(0x1109_0000_0000_0001);
+    agree_at::<2>(&mut mix, 400);
+    agree_at::<3>(&mut mix, 400);
+    agree_at::<4>(&mut mix, 400);
+    agree_at::<8>(&mut mix, 200);
+}
+
 #[test]
 fn a_root_beside_the_basis_run_stays_off_its_ends() {
     // Concentric spheres of radii one and two: (t + 1)(x² + y² + z²) − (t + 4)w², a triple root of
@@ -1202,28 +1565,47 @@ fn a_definite_member_at_the_basis_s_lower_end_is_found() {
     check("[1111] definite at C − S", pair, Segre::Simple, NONE);
 }
 
-#[test]
-fn parallel_axes_in_any_direction_meet_at_their_point_at_infinity() {
-    // The shared kernel is the axes' direction at infinity: (1, 0, 0, 0) along x and (1, 1, 0, 0)
-    // along x + y, whose last part that is not zero is their first and second. Each pair is the
-    // pair along z turned, so it meets as that one does: two lines through the point at infinity.
-    let upright = on(&cylinder([0, 0, 0], Z, 5), &cylinder([6, 0, 0], Z, 5));
-    assert_eq!(upright.segre, Segre::OneApex);
+/// Two cylinders of radius 5 along `d`, one about the origin's axis and one about `offset`'s, meet
+/// as the pair along z does: two lines through the point at infinity.
+fn parallel_axes_meet_at_their_point_at_infinity(d: [i64; 3], offset: [i64; 3]) {
+    let pair = on(&cylinder([0, 0, 0], d, 5), &cylinder(offset, d, 5));
     assert_eq!(
-        upright.topology,
-        Topology {
-            lines: 2,
-            meets: 1,
-            ..NONE
-        }
+        (pair.segre, pair.topology),
+        (
+            Segre::OneApex,
+            Topology {
+                lines: 2,
+                meets: 1,
+                ..NONE
+            }
+        ),
+        "{d:?}"
     );
-    for (d, offset) in [(X, [0, 6, 0]), ([1, 1, 0], [0, 0, 6])] {
-        let turned = on(&cylinder([0, 0, 0], d, 5), &cylinder(offset, d, 5));
-        assert_eq!(
-            (turned.segre, turned.topology),
-            (upright.segre, upright.topology),
-            "{d:?}"
-        );
+}
+
+/// Parallel axes along z, x and x + y, one direction to a test: each is one classification, and
+/// the three together took 572 yardstick seconds under Miri (decision 32.78). Three cases do not
+/// fill the four slices of `slices`, so each has a test of its own.
+///
+/// The shared kernel is the axes' direction at infinity: (1, 0, 0, 0) along x and (1, 1, 0, 0)
+/// along x + y, whose last part that is not zero is their first and second. Each pair is the pair
+/// along z turned, so it meets as that one does: two lines through the point at infinity.
+mod parallel_axes_in_any_direction_meet_at_their_point_at_infinity {
+    use super::*;
+
+    #[test]
+    fn along_z() {
+        parallel_axes_meet_at_their_point_at_infinity(Z, [6, 0, 0]);
+    }
+
+    #[test]
+    fn along_x() {
+        parallel_axes_meet_at_their_point_at_infinity(X, [0, 6, 0]);
+    }
+
+    #[test]
+    fn along_x_and_y() {
+        parallel_axes_meet_at_their_point_at_infinity([1, 1, 0], [0, 0, 6]);
     }
 }
 

@@ -526,6 +526,45 @@ fn loose_seams() -> Rows {
     r
 }
 
+/// The solid cylinder with its top cap's circle, the cap's one edge with the side, over `turn`.
+fn capped_over(turn: (f64, f64)) -> Rows {
+    let mut r = round_cylinder();
+    r.curves[0] = CurveKind::Circle(
+        Circle::new([0.0, 0.0, 10.0], 5.0, Frame::standard().unwrap(), turn).unwrap(),
+    );
+    r
+}
+
+/// A cap and a side share a full circle only when its domain is exactly a turn, two half-turns by
+/// an error-free sum (issue 1104). From −1.25 + 2⁻⁵² to 0.75 + 2⁻⁵³ is 2 − 2⁻⁵³ half-turns, and the
+/// difference rounds to 2: the edge is an arc short of a turn, the plane and the cylinder meet
+/// where it does not run, and the pair is reported, never passed.
+#[test]
+fn a_shared_circle_whose_turn_only_rounds_to_whole_is_not_passed() {
+    let short = (-1.25 + f64::EPSILON, 0.75 + f64::EPSILON / 2.0);
+    assert_eq!(
+        short.1 - short.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    assert_eq!(
+        at(&capped_over(short), BodyKind::Solid, 1),
+        [fault(
+            FaultKind::PairUnchecked,
+            Entity::Face(ix(0)),
+            Entity::Face(ix(2))
+        )]
+    );
+}
+
+/// A shared circle a whole turn long passes wherever its domain starts: from 0, 1 or −3.
+#[test]
+fn a_shared_circle_a_whole_turn_from_anywhere_passes() {
+    for turn in [(0.0, 2.0), (1.0, 3.0), (-3.0, -1.0)] {
+        assert_eq!(at(&capped_over(turn), BodyKind::Solid, 1), [], "{turn:?}");
+    }
+}
+
 #[test]
 fn segments_and_circles_of_one_face_are_separated_where_certified() {
     // A square with a circle loop lifted 3 steps off it, on one plane within a bound of 5: every
@@ -952,6 +991,36 @@ fn a_wall_with_a_round_opening_passes() {
     assert!(
         !faults.iter().any(|f| f.at == Entity::Face(ix(0))),
         "the bottom holds the circle on its plane and is apart from every side: {faults:?}"
+    );
+}
+
+#[test]
+fn a_wall_on_its_grid_with_its_circles_on_their_planes_passes_at_a_bound_of_nothing() {
+    // Issue #1028: bldg-25's wall on its grid with both circles of the opening exactly on their
+    // planes, as its bottom circle is. The faces' spanning vectors, of up to 6.4e8 steps, make
+    // |n| no double, and group 2 divided a circle's bound on a plane by it, so the exact 0
+    // widened to a subnormal and each circle was off its face at a bound of nothing.
+    let wall = |top: f64| {
+        wall_of(
+            [640_000_000, 480_000_000, 32_000_000],
+            ([320_000_000, 240_000_000], 64_000_000),
+            top,
+        )
+    };
+    assert_eq!(at(&wall(32_000_000.0), BodyKind::Solid, 0), []);
+    // The top circle a step above its plane is off the top at a bound of nothing, and only there.
+    let faults = at(&wall(32_000_001.0), BodyKind::Solid, 0);
+    assert!(
+        faults.iter().all(|f| f.kind == FaultKind::EdgeOffSurface),
+        "{faults:?}"
+    );
+    assert!(
+        faults.iter().any(|f| f.with == Some(Entity::Face(ix(1)))),
+        "{faults:?}"
+    );
+    assert!(
+        !faults.iter().any(|f| f.with == Some(Entity::Face(ix(0)))),
+        "{faults:?}"
     );
 }
 

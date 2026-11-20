@@ -88,7 +88,7 @@
       "test": "bool_23_box_minus_cylinder_whose_axis_lies_in_a_face",
       "ours": true,
       "fault": "CK-3 (ours: geom-check, not solidcore), arcs of circles: the cylinder passes now, and the difference is refused at a pair group 3 of the kernel's checker has no certified test of: two half-circles of one circle (radius 0.5 about (0, 1), z = 0) meeting at their two shared vertices, where the box's face along the axis cuts the circle of the groove",
-      "solidcore_gives": "the box less the cylinder, refused by the kernel's checker: 27 faults, the first \"group 3, edge 11: no certified test of this pair exists yet (edge 12)\"",
+      "solidcore_gives": "the box less the cylinder, refused by the kernel's checker: 23 faults, the first \"group 3, edge 11: no certified test of this pair exists yet (edge 12)\"",
       "expected": "one solid of volume 8 - pi 0.25, passed by the checker",
       "blocks": "solids with arcs of circles meeting at vertices, until group 3 certifies such pairs"
     },
