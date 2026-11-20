@@ -31,6 +31,7 @@
 490	geom-mesh::model	a_narrow_strip_is_not_pinched::remeshed
 484	geom-bool::names	two_doors_of_one_type_differ_and_a_third_renames_nothing
 483	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_half_space
+483	geom-intersect::circle_part_in_plane	a_circle_whose_turn_only_rounds_to_whole_is_the_engines
 478	geom-run::attack_g04	thread_counts_are_bounded_by_the_pool_and_by_the_chunk_count
 476	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_box
 476	geom-curve::attack_g64	a_reversed_curve_is_the_transition_built_from_the_end
