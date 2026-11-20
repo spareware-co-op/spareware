@@ -8132,6 +8132,102 @@
       "reason": "They differ only where the stretch's start s and end e have s.hi == e.lo along the parameter. A stretch holds at least two vertices (k to k + 2 of the curve's), so the loop over its windows always runs. The original then reads the stretch as decreasing and needs each window strictly decreasing, so e.hi < s.lo; but s.lo <= s.hi = e.lo <= e.hi. The mutant reads it as increasing and needs each window strictly increasing, so s.hi < e.lo; but they are equal. Either way a window fails and tangent_cell gives None, for every input."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/march.rs",
+      "mutant": "replace * with / in walk",
+      "line_text": "let signed = rates.map(|r| r * way);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "walk is private and its one caller, the march, passes way only from `for way in [1.0, -1.0]`; walk never changes it. Multiplying or dividing a double by 1 gives the double itself, and by -1 gives its negation, exactly in IEEE arithmetic (zeros, infinities and every finite value alike), and a NaN stays a NaN either way, which around_step and signed_to only add, multiply and compare, never reading its sign. So signed holds the same four values, and every step, box, answer and charge of the meter is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/march.rs",
+      "mutant": "replace > with >= in along_an_edge",
+      "line_text": "if ta > tb {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only where ta == tb. tb at this line is the one kept in best, and best is set only where gap = |tb - ta| > 0. Where ta == tb and both are finite the gap is 0; where both are the same infinity it is NaN; a NaN in either gives NaN; and none of these is above 0. So every ta and tb that reach the line differ, `>` and `>=` agree, and the piece's inner vertices are reversed in the same cases."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
+      "mutant": "replace * with / in torus_poles",
+      "line_text": "if exact_cospi(v).is_some_and(|c| big == -(small * c)) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "exact_cospi gives only Some(1.0), Some(-1.0), Some(0.0) or None. small / 1 is small and small / -1 is -small exactly, as are small * 1 and small * -1. The one caller passes a geom-surface Torus's radii, and every Torus is made through its build, which runs Round::check: both lengths finite and above 0. So for c = 0 the original asks big == -0, which is false for big > 0, and the mutant asks big == -(small / 0) = -infinity, false for a finite big. The same poles are pushed for every torus."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
+      "mutant": "replace > with >= in charts",
+      "line_text": "bu.is_clamped() && rows > 1 && rows_one,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where rows, the u basis's count, is exactly 1. A Basis is made only by Basis::new (its fields are private and nothing else builds or changes one), which refuses degree 0 and fewer than 2(p + 1) knots, so count = knots - p - 1 is at least p + 1, at least 2. So rows > 1 and rows >= 1 are both true for every NURBS surface, and closes is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
+      "mutant": "replace > with >= in charts",
+      "line_text": "bv.is_clamped() && cols > 1 && cols_one,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where cols, the v basis's count, is exactly 1. A Basis is made only by Basis::new (its fields are private and nothing else builds or changes one), which refuses degree 0 and fewer than 2(p + 1) knots, so count = knots - p - 1 is at least p + 1, at least 2. So cols > 1 and cols >= 1 are both true for every NURBS surface, and closes is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+      "mutant": "replace < with <= in turned",
+      "line_text": "if sphere.axial_sign() < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where the axial sign is 0. axial_sign returns the sphere's stored sign, and every geom-surface Sphere is made through its build (new, with_domain, with_axial_sign, flipped_axially, reversal and motion all call it), which runs Round::check: a sphere's sign must be exactly +1 or -1, or it is refused. So the sign is never 0, and turned returns None for the same spheres."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+      "mutant": "replace > with >= in turned",
+      "line_text": "let toward = if pole > 0.0 { n } else { n.map(|t| -t) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where pole is 0. turned is private and its one caller, turned_at_pole, passes pole only as 0.5 or -0.5, set just before from the cluster's hull, so the turned frame points the same way for every call."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+      "mutant": "replace > with >= in turned_at_pole",
+      "line_text": "let reach = 2.0 * if pole > 0.0 { 0.5 - c } else { d + 0.5 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where pole is 0. pole is set two lines above to 0.5 or -0.5, or the loop continues before this line, so the same side's reach is taken for every cluster."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+      "mutant": "replace > with >= in turned_at_pole",
+      "line_text": "if !(reach > 0.0 && reach <= CAP) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where reach is exactly 0 (a NaN fails both). There the original continues to the next side at once, and the mutant calls turned with reach 0, whose cap is (-0, 0) in u and in v: Sphere::new runs Round::check, whose check_turn refuses a u span with no width (b - a is 0, not above 0), so turned gives None and the loop continues just the same. turned takes no meter and changes nothing, so no answer and no work moves."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace || with && in grid_origin",
+      "line_text": "if x.lo() != x.hi() || y.lo() != y.hi() || z.lo() != z.hi() {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either change alters grid_origin's answer only where some coordinate of the origin is not a single point. The origin is reference(a) in meet, the only place surface (and so grid_origin) is reached. For a sphere or a cylinder it is the centre lifted with tight::point, three points, so the answer is the same. For a cone it is funnel's apex, and funnel gives exact = None whenever wide(apex) > 0, that is whenever a coordinate is not a point, so the first surface's exact form is None without grid_origin being called. meet reads the exact forms only as a pair, (Some, Some), so the second's form, whatever the mutant makes it, is never read. The forms are pure and take no meter: no answer and no work moves."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/bound.rs",
+      "mutant": "replace - with + in count",
+      "line_text": "Interval::new(near * (1.0 - f64::EPSILON), near * (1.0 + f64::EPSILON))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Only count's low end changes, to its high end, so Interval::new still succeeds and the high end is the same; near is a count, never negative. count is read in two places. In moved, for near 0 both are [0, 0]; otherwise e is positive, and with s = [sine, sine] above 0 and 2 kappa's upper end above 0, the upper ends of 2e / s and of room, and so left's lower end, come from upper ends only (the corner rules of Interval::mul, div and sub on these signs), as does the upper end of e / left with left above 0. settle reads only by.hi() and the upper end of count(own).add(by), again from upper ends only. Lower ends stay finite and below upper ones, so no error moves either: the same bound, flag and work for every item."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace grid_signs -> Result<Option<(Sign, Sign)>, IntersectError> with Ok(None)",
+      "line_text": "let (c, a, b) = plane.vectors();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_signs never fails: P3::new(0, 0, 0) is in range and orient3d on grid points never runs out of budget (its contract). Where it gives None, the mutant's path is the original's. Where it gives Some, c, a, b, the line's origin o and direction d are whole numbers below 2^40 in size, so c + a and c + b are exact and its two signs are those of d . (a x b) and (o - c) . (a x b), up to orient3d's orientation. The fallback, stored_signs, then has every factor 0 or in [1, 2^40), all tame, so it returns Some with the true signs of d . (a x b) and (c - o) . (a x b) (the enclosure's where it excludes zero, else the exact sum). Each pair of signs is zero in the same places, and the one caller, line_plane, reads only whether each is Zero. Neither path takes the meter, so no answer and no work moves."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
       "mutant": "replace > with >= in BernsteinCurve<D>::clip",
       "line_text": "if t0 > t1 {",
