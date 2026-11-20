@@ -23,6 +23,7 @@
 # GitHub measuring run 44491760631 (miri_measure=new on land/ci-5 at 08161d1f8).
 # GitHub measuring run 44598759458 (miri_measure=all on ci/miri-stop at 05bc01f38), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring runs 44636651888 (geom-num wide) and 44636658654 (geom-num attack_wide_tests and attack_g05), miri_measure=new on ci/miri-stop at 12e15747d, every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: the runs' own listing.
+# GitHub measuring run 44660253302 (miri_measure=new on ci/miri-stop at 32b82ca1d), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: the run's own listing.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -356,6 +357,7 @@ native-only over 839	geom-check::attack_g134	the_planes_through_the_grid_points_
 8	geom-check::attack_g137	a_wall_of_a_general_body_is_two_faces_that_do_not_cross
 12	geom-check::attack_g137	only_a_general_body_has_walls
 12	geom-check::attack_g137	two_faces_run_the_same_way_cross
+37	geom-check::attack_g85	a_curve_exactly_on_a_plane_with_long_spanning_vectors_is_on_it_at_a_bound_of_nothing
 44	geom-check::attack_g85	a_diagonal_move_is_judged_by_its_true_distance
 21	geom-check::attack_g85	a_line_whose_end_cannot_be_enclosed_fails_closed
 37	geom-check::attack_g85	a_line_with_ends_off_the_grid_stays_certified_on_an_integer_plane
@@ -384,6 +386,7 @@ native-only over 839	geom-check::attack_g134	the_planes_through_the_grid_points_
 14	geom-check::attack_g85_group3	a_hollow_ball_passes
 6	geom-check::attack_g85_group3	a_seam_from_a_rim_vertex_off_the_rims_plane_is_not_passed
 10	geom-check::attack_g85_group3	a_segment_in_a_circles_plane_is_apart_only_on_the_lower_end_of_its_reach
+41	geom-check::attack_g85_group3	a_wall_on_its_grid_with_its_circles_on_their_planes_passes_at_a_bound_of_nothing
 303	geom-check::attack_g85_group3	a_wall_with_a_round_opening_passes
 10	geom-check::attack_g85_group3	circles_of_one_face_are_separated_where_certified
 11	geom-check::attack_g85_group3	edges_of_a_face_that_cross_touch_or_run_back_are_caught
@@ -956,6 +959,7 @@ native-only over 646	geom-make::attack_g101	every_budget_passes_or_stops_cleanly
 native-only over 646	geom-make::attack_g101	random_primitives_pass_all_four_groups
 15	geom-make::attack_g101	the_class_never_rises_and_a_more_exact_result_needs_no_acceptance
 470	geom-make::attack_g101	transforms_keep_names_and_pass_the_checker
+74	geom-make::inherited_wait	an_exact_stretch_of_a_body_less_than_exact_waits_whatever_the_checker_finds
 117	geom-make::inherited_wait	an_exact_transform_the_checker_cannot_certify_waits_when_the_record_was_not_exact
 8	geom-make::memory	a_refused_allocation_is_out_of_memory
 216	geom-make::not_certified	a_move_of_the_body_the_checker_could_not_certify_is_certified
