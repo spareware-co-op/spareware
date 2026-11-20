@@ -7708,22 +7708,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace - with + in trimmed",
-      "line_text": "if *t > last + room && *t < stop - room {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant also keeps cuts within room before the stop (and none past it, cuts lying in the domain): the last stretch, from such a cut to the stop, a billionth of the parameter, is no wider than two steps on any curve the grid holds and is dropped as no stretch: the piece before ends room short of the stop at most."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace - with / in trimmed",
-      "line_text": "if *t > last + room && *t < stop - room {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "stop / room is far past the stop (stop > 0 here: a loop's runs past its first cut, an open piece's span reaches past 0), so the mutant also keeps cuts within room before the stop; cuts lie in the domain, none past it. The last stretch, a billionth of the parameter, is dropped as no stretch: the piece before ends room short of the stop at most."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace < with <= in cut_cone",
       "line_text": "let (lead, side) = if c.hi() < 0.0 {",
       "occurrences": 1,
@@ -9274,6 +9258,14 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "crosses only prunes facets. With == it also keeps a facet whose plane holds the whole triangle (every corner on it): an edge in that plane has both ends on it, so its crossing is skipped, and the plane meets the triangle's own plane in no line, so every meeting with it is Degenerate and gives no point. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/known.rs",
+      "mutant": "replace < with <= in tangent_cell",
+      "line_text": "let increasing = pick(start, along).hi() < pick(end, along).lo();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where the stretch's start s and end e have s.hi == e.lo along the parameter. A stretch holds at least two vertices (k to k + 2 of the curve's), so the loop over its windows always runs. The original then reads the stretch as decreasing and needs each window strictly decreasing, so e.hi < s.lo; but s.lo <= s.hi = e.lo <= e.hi. The mutant reads it as increasing and needs each window strictly increasing, so s.hi < e.lo; but they are equal. Either way a window fails and tangent_cell gives None, for every input."
     }
   ],
   "coverage_off": [

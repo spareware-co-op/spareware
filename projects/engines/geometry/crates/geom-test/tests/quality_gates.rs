@@ -18,7 +18,8 @@
 //! - **Miri's plan.** `miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan`
 //!   packs drawn sets of tests for Miri's gate jobs and holds every part, in every order an oracle
 //!   written here starts its tests, within 15 minutes on a runner 1.6 times slower, each test
-//!   stopped at the budget, and runs `kernel-quality miri-plan` on the real table, which fails on
+//!   stopped at the budget, and runs `kernel-quality miri-plan` on the real table, whose
+//!   partitions it holds to the two matrices of the jobs `miri` and `miri-2`, and which fails on
 //!   a test with no row.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
@@ -2381,7 +2382,8 @@ fn list_schedule(seconds: &[u64], order: &[usize]) -> u64 {
 /// and each part's set-up (120 s), listing (a second a binary) and tests, in every order the
 /// oracle tries, within 15 minutes on a runner 1.6 times slower, where each test takes 1.6 times
 /// its seconds or runs to nextest's 600 s stop, whichever is less; and the binary's plan of the
-/// real table, which fails on a test with no row.
+/// real table, its partitions printed in the two matrices of the jobs `miri` and `miri-2`
+/// (32.105), which fails on a test with no row.
 #[cfg_attr(
     target_family = "wasm",
     ignore = "runs the binary as a child process and writes files, which a WebAssembly test run cannot"
@@ -2489,10 +2491,15 @@ fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan()
     assert_eq!(code, 0, "{text}");
     let gate = miri::gate_plan(&rows).unwrap();
     let printed: Value = serde_json::from_str(stdout.trim()).unwrap();
-    assert_eq!(printed["count"], json!(gate.parts.len()), "{text}");
+    miri_matrices_hold(&printed, gate.parts.len(), &text);
+    let in_parts: usize = (1..=gate.parts.len())
+        .map(|k| gate.parts.tests_of(k).len())
+        .sum();
+    assert_eq!(printed["tests"], json!(in_parts), "{text}");
     assert_eq!(
-        printed["parts"],
-        json!((1..=gate.parts.len()).collect::<Vec<_>>())
+        printed["pool"],
+        json!(gate.pool.tests_of(1).len()),
+        "{text}"
     );
     for k in 1..=gate.parts.len() {
         let file = std::fs::read_to_string(out_dir.join(format!("part-{k}.txt"))).unwrap();
@@ -2520,4 +2527,67 @@ fn miri_partitions_end_within_their_jobs_and_an_unmeasured_test_fails_the_plan()
     assert!(!out_dir.join("part-1.txt").exists());
     let (code, _, text, _) = run(&json!({"not": "a listing"}));
     assert_eq!(code, 2, "{text}");
+
+    // The two matrices for plans built here, whatever the real table's size: one partition (all
+    // in `miri`), one matrix full, one partition over it (the first in `miri-2`), and both full.
+    let one = mutants::MATRIX_JOBS as usize;
+    for (tests, parts) in [
+        (4, 1),
+        (4 * one, one),
+        (4 * one + 1, one + 1),
+        (8 * one, 2 * one),
+    ] {
+        // Tests of 599 s, four a partition.
+        let built: Vec<miri::Row> = (0..tests)
+            .map(|i| miri::Row {
+                binary: "geom-num".to_owned(),
+                test: format!("t{i}"),
+                state: miri::State::Finishes(599),
+            })
+            .collect();
+        let gate = miri::gate_plan(&built).unwrap();
+        assert_eq!(gate.parts.len(), parts, "{tests} tests");
+        let printed: Value = serde_json::from_str(&miri::gate_matrix(parts, tests, 0)).unwrap();
+        miri_matrices_hold(&printed, parts, &format!("{tests} tests"));
+    }
+}
+
+/// The Miri plan's two matrices (32.105) for a gate of `n` partitions, as the workflow reads them:
+/// `count` is `n` and `count_2` the partitions over one matrix's 256; `miri` runs `parts` and
+/// `miri-2` runs `parts_2` only when `count_2` is not 0 (a matrix may not be empty, so it lists
+/// 257 with none), and the two run 1 to `n` once each, in order, neither over 256.
+fn miri_matrices_hold(printed: &Value, n: usize, why: &str) {
+    let one = mutants::MATRIX_JOBS as usize;
+    let list = |key: &str| -> Vec<usize> {
+        printed[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("{key} is not a list: {printed} ({why})"))
+            .iter()
+            .map(|v| v.as_u64().unwrap() as usize)
+            .collect()
+    };
+    let (first, second) = (list("parts"), list("parts_2"));
+    let count_2 = n.saturating_sub(one);
+    assert_eq!(printed["count"], json!(n), "{why}");
+    assert_eq!(printed["count_2"], json!(count_2), "{why}");
+    assert!(
+        first.len() <= one && second.len() <= one,
+        "a matrix over {one}: {printed} ({why})"
+    );
+    assert_eq!(first.len() + count_2, n, "{printed} ({why})");
+    if count_2 == 0 {
+        assert_eq!(second, [one + 1], "miri-2 runs nothing: {printed} ({why})");
+    }
+    let mut run: Vec<usize> = Vec::new();
+    if n > 0 {
+        run.extend(&first);
+    }
+    if count_2 > 0 {
+        run.extend(&second);
+    }
+    assert_eq!(
+        run,
+        (1..=n).collect::<Vec<_>>(),
+        "a partition left out, run twice or out of order: {printed} ({why})"
+    );
 }
