@@ -489,20 +489,21 @@ fn covered(
     let (Some(s), Some(t)) = (region.at.spans().first(), region.at.spans().get(1)) else {
         return Ok(false);
     };
+    let (s, t): (Interval, Interval) = (*s, *t);
     let curve = |e: usize| {
         arr.carriers
             .curve(curve_of(arr, e)?)
             .ok_or(BuildError::Missing(Entity::Edge(e)))
     };
     let (curve_a, curve_b) = (curve(a)?, curve(b)?);
-    let on_a = held(*s, (a, b), splits, common, |part| {
+    let on_a = held(s, (a, b), splits, common, |part| {
         let met = curves_over(curve_a, part, curve_b, (t.lo(), t.hi()), meter)?;
         Ok(!met.items().is_empty())
     })?;
     if !on_a {
         return Ok(false);
     }
-    held(*t, (b, a), splits, common, |part| {
+    held(t, (b, a), splits, common, |part| {
         let met = curves_over(curve_b, part, curve_a, (s.lo(), s.hi()), meter)?;
         Ok(!met.items().is_empty())
     })

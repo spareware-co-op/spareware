@@ -836,3 +836,94 @@ fn a_part_of_a_curve_is_projected_with_its_own_ends() {
     assert_eq!(end.place, Place::Boundary);
     assert!(project_curve_over(&c, (1.5, 2.5), &[20.0, 2.0], FLOOR, &mut meter()).is_err());
 }
+
+/// The same arc as an ellipse of two equal axes: the same form, so the same bounds and the same
+/// search, which the ellipse kind takes where the circle kind has its closed form.
+fn searched(radius: f64, domain: (f64, f64)) -> CurveKind<2> {
+    let axes = Axes::Frame {
+        frame: Frame::standard().unwrap(),
+        a: radius,
+        b: radius,
+    };
+    CurveKind::Ellipse(Ellipse::new([1.0, 2.0], axes, domain).unwrap())
+}
+
+/// Where the foot's enclosure only meets an end of the span, the closed form does not decide it,
+/// and the circle is searched as an ellipse of equal axes is: the same answer, at no less work.
+/// From (7, 10) the foot's enclosure is first found strictly inside [0, 1]; the four spans then end
+/// exactly at one end of it, outside it or inside it, at either end of the span.
+#[test]
+fn a_circles_foot_whose_enclosure_meets_an_end_of_the_span_is_searched() {
+    use geom_intersect::project_curve_over;
+    let p = [7.0, 10.0];
+    let (arc, ellipse) = (circle(5.0, (-1.0, 1.0)), searched(5.0, (-1.0, 1.0)));
+    let found = project_curve_over(&arc, (0.0, 1.0), &p, FLOOR, &mut meter()).unwrap();
+    let foot = found.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{found:?}");
+    let [t] = foot.at;
+    for span in [
+        (t.hi(), t.hi() + 0.5),
+        (t.lo() - 0.5, t.lo()),
+        (t.lo(), t.lo() + 0.5),
+        (t.hi() - 0.5, t.hi()),
+    ] {
+        let answer = |curve: &CurveKind<2>| {
+            project_curve_over(curve, span, &p, FLOOR, &mut meter()).unwrap()
+        };
+        assert_eq!(answer(&arc), answer(&ellipse), "{span:?}");
+        let work = |curve: &CurveKind<2>| {
+            least_work(&|m: &mut WorkMeter<'_>| {
+                project_curve_over(curve, span, &p, FLOOR, m).is_ok()
+            })
+        };
+        assert!(work(&arc) >= work(&ellipse), "{span:?}");
+    }
+}
+
+/// A foot whose turn is past a half-turn, moved four turns on: from (-2, -1) the centre (1, 2) is
+/// 3√2 away at 225°, so the foot's turn is 1.25, and on [9, 9.5] it is 9.25.
+#[test]
+fn a_circles_foot_past_a_half_turn_is_found_turns_along() {
+    use geom_intersect::project_curve_over;
+    let arc = circle(5.0, (8.0, 10.0));
+    let found = project_curve_over(&arc, (9.0, 9.5), &[-2.0, -1.0], FLOOR, &mut meter()).unwrap();
+    let foot = found.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{found:?}");
+    assert!(foot.at[0].contains(9.25), "{found:?}");
+    let gap = 5.0 - 18.0_f64.sqrt();
+    assert!(
+        foot.distance.lo() - 1e-12 <= gap && gap <= foot.distance.hi() + 1e-12,
+        "{found:?}"
+    );
+}
+
+/// The closed form keeps its foot only where the foot's bound is no wider than the floor: at a
+/// floor of exactly that width it gives the same answer at the same work, and at half of it the
+/// circle is searched as an ellipse of equal axes is.
+#[test]
+fn a_circles_foot_wider_than_the_floor_is_searched() {
+    let p = [7.0, 10.0];
+    let (arc, ellipse) = (circle(5.0, (0.0, 1.5)), searched(5.0, (0.0, 1.5)));
+    let closed = project_curve(&arc, &p, FLOOR, &mut meter()).unwrap();
+    let foot = closed.first().unwrap();
+    assert_eq!(foot.place, Place::Foot, "{closed:?}");
+    let width = foot
+        .point
+        .iter()
+        .map(|x| x.hi() - x.lo())
+        .fold(0.0, f64::max);
+    let work = |curve: &CurveKind<2>, floor: f64| {
+        least_work(&|m: &mut WorkMeter<'_>| project_curve(curve, &p, floor, m).is_ok())
+    };
+    assert_eq!(
+        project_curve(&arc, &p, width, &mut meter()).unwrap(),
+        closed
+    );
+    assert_eq!(work(&arc, width), work(&arc, FLOOR));
+    let half = width / 2.0;
+    assert_eq!(
+        project_curve(&arc, &p, half, &mut meter()).unwrap(),
+        project_curve(&ellipse, &p, half, &mut meter()).unwrap()
+    );
+    assert!(work(&arc, half) >= work(&ellipse, half));
+}

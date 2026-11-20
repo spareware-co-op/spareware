@@ -1748,10 +1748,19 @@ pub fn curves_over<const D: usize>(
         Some(whole_overlap(a.domain(), b.domain(), meter)?)
     } else if let Closed::Decided(answer) = closed_form(a, b, meter)? {
         Some(answer)
-    } else if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {
-        match closed_form(b, a, meter)? {
-            Closed::Decided(answer) => Some(answer.swapped(1)),
-            Closed::Undecided | Closed::Absent => None,
+    } else if let CurveKind::Line(_) = b {
+        // A closed form takes a line first, so a line second is taken as (b, a), the answer
+        // swapped back. Two lines have their closed form in the order given. Patterns, not a
+        // test of two kinds joined: turning any other pair as well would change no answer (two
+        // circles are answered alike either way round, and no other pair without a line has a
+        // closed form), so a joined test would leave mutants no test can tell apart.
+        if let CurveKind::Line(_) = a {
+            None
+        } else {
+            match closed_form(b, a, meter)? {
+                Closed::Decided(answer) => Some(answer.swapped(1)),
+                Closed::Undecided | Closed::Absent => None,
+            }
         }
     } else {
         None
