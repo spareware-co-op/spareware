@@ -36,7 +36,8 @@ use geom_nurbs::{Basis, Bounds, Curve};
 use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
 
-use crate::{Finding, curve_box};
+use crate::Finding;
+use crate::seams::curve_box;
 
 /// The work a case may take: a near-coincident pair walks its whole length at the floor, and a stop
 /// there is an answer the laws accept.

@@ -6847,6 +6847,27 @@
           "target": "lib"
         },
         {
+          "cost": "at most two bounds of a curve and four of a surface, each as its kind bounds one span.",
+          "does": "an answer writes a span on the seam of its curve or surface ([`geom_intersect::Seam`]): on a whole turn it starts in the window and may run past the end (decision 32.104). [`curve_box`] and [`surface_box`] cut such a span into the stretches of the domain it covers, bound the shape over each and join the boxes, so a target can ask whether a point's boxes on two shapes meet. The helpers live in a module of their own, named only by the targets that use them, so every other target's build stays without the crates they name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/seams.rs",
+          "guarantees": [
+            "**Every stretch is bounded.** A span across a whole turn's join is two stretches, one each side of it, and both are in the box; a surface's spans give up to two stretches each, and every pair is bounded.",
+            "**A typed finding, never a panic.** A stretch the shape cannot bound, or boxes that cannot be joined, is the finding \"a point's box is in the domain\"."
+          ],
+          "job": "Boxes around a curve or a surface over a span an answer writes on its seam, for the targets that hold an answer's points to the shapes they lie on (crossings, natural, piercing).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "decision 32.104 (`projects/engines/geometry/architecture/32-decisions.md`), a span on a whole turn read modulo the turn: [`geom_intersect::Seam::spans`] for the stretches, each shape's own `bound` over them, and the boxes' union."
+          },
+          "path": "geom_fuzz::seams",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and a few words per case.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them. Every second case is hostile instead ([`Hostile`], in turn): words at the ends of their domains ([`HOSTILE_WORDS`] and solidcore's [`HOSTILE_F64`]: NaN, infinities, zeros, subnormals, huge and tiny values), a run of bytes repeated (so a decoder reads the same value, point or record again: coincident points, zero lengths and areas), the same with one bit flipped in every second copy (near-coincident points, a sliver), evenly spaced words (collinear and coplanar points, a value at a domain's end after a step), and one byte throughout (all zero, all ones, the sign boundaries). Each starts with a few random bytes, so the words fall on every alignment of the harness's own fields, and is cut to the case's length, so every hostile kind also comes short. The test's count is sized for an optimised build (about two seconds, at most ten for the slowest harnesses); an unoptimised build runs the first tenth of the cases ([`DEBUG_SHARE`]), the same cases, so the debug legs take about as long.",
           "family": [],

@@ -2157,6 +2157,33 @@ fn a_seam_joins_two_spans_across_a_whole_turn_s_join() {
 }
 
 #[test]
+fn a_seam_keeps_a_span_that_starts_in_the_window_and_writes_one_a_turn_outside_as_the_turn() {
+    // Decision 32.104: a span is written from a start in the window, and a span it cannot so
+    // write is the whole turn. Each pair below meets, so the hull is their plain join.
+    let turn = Seam::turns((0.0, 2.0));
+    let ends = |a: f64, b: f64, c: f64| {
+        let s = turn.hull(span_of(a, b), span_of(b, c)).unwrap();
+        (s.lo(), s.hi())
+    };
+    // A span from the window's start starts in the window, not a turn before it.
+    assert_eq!(ends(0.0, 0.25, 0.5), (0.0, 0.5));
+    // A short span is no turn wide, however far its ends are apart as a ratio.
+    assert_eq!(ends(0.25, 0.5, 0.75), (0.25, 0.75));
+    // A span more than a turn before the window or past its end still lies outside it once
+    // moved by a turn: it is written as the whole turn.
+    assert_eq!(ends(-2.5, -2.45, -2.4), (0.0, 2.0));
+    assert_eq!(ends(4.5, 4.55, 4.6), (0.0, 2.0));
+}
+
+#[test]
+fn an_open_seam_joins_spans_at_its_two_ends_across_the_domain_never_round_it() {
+    // An open domain's ends are no join: spans at its two ends are not moved to meet.
+    let open = Seam::open((0.0, 2.0));
+    let joined = open.hull(span_of(0.0, 0.5), span_of(1.5, 2.0)).unwrap();
+    assert_eq!((joined.lo(), joined.hi()), (0.0, 2.0));
+}
+
+#[test]
 fn a_seam_wraps_a_value_into_its_window() {
     let turn = Seam::turns((0.0, 2.0));
     assert_eq!(turn.wrapped(2.25), 0.25);

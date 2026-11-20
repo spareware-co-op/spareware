@@ -39,7 +39,8 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::{ByteSource, Entropy};
 
-use crate::{Finding, curve_box, surface_box};
+use crate::Finding;
+use crate::seams::{curve_box, surface_box};
 
 /// The work a case may take: a curve lying near a surface walks its length at the floor, and a stop
 /// there is an answer the laws accept.

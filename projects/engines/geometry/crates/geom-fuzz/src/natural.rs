@@ -44,7 +44,8 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 use geom_test::{ByteSource, Entropy};
 
-use crate::{Finding, surface_box};
+use crate::Finding;
+use crate::seams::surface_box;
 
 /// The work a case may take: an edge of a surface against the other, and a stop there is an answer
 /// the laws accept.
