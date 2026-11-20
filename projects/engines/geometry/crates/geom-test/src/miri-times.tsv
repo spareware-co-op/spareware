@@ -32,6 +32,8 @@
 # GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
 # GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 # GitHub measuring run 44608532867 (miri_measure=new on land5/fixes-1 at d9b546470).
+# GitHub measuring run 44650323096 (miri_measure=new on test/phase5-intersect-mutants-e at 96976b359).
+# GitHub measuring run 44655667572 (miri_measure=new on test/phase5-intersect-mutants-e at c317be385, miri_measure_tests binary_id(geom-intersect::general_mutants) & (test(a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude) | test(a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height))).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1539,6 +1541,12 @@ native-only over 601	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch
 native-only over 601	geom-intersect::fit_refined	a_closed_loop_of_three_vertices_is_refined_and_closes
 native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_is_refined_into_a_certified_curve
 native-only over 601	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plane_first_is_refined_too
+51	geom-intersect::general_mutants	a_patch_one_double_wide_is_flagged_whole
+319	geom-intersect::general_mutants	a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude
+195	geom-intersect::general_mutants	a_plane_meets_a_cone_on_the_end_of_its_height
+333	geom-intersect::general_mutants	a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height
+3	geom-intersect::general_mutants	turns_that_share_twice_a_turn_round_are_not_one_region
+3	geom-intersect::general_mutants	turns_that_touch_a_turn_round_share_one_region
 2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_circle_twice
 2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_cylinder_twice
 2	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_sphere_twice
