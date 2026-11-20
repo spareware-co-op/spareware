@@ -436,14 +436,12 @@ fn a_cylinder_on_a_plane_is_a_band_of_its_recorded_width() {
 }
 
 /// A cylinder of radius 4 about the axis a = (0, 1, 1)/√2, and a plane through its line at
-/// u = 1/2 sunk 1/16 into it, spanned by x and a tilted 1/1024 toward that line's normal e₂: the
-/// plane's normal is never at right angles to a, so no normal of the cylinder is parallel to it
-/// and there is no contact. The axis is tilted, so the box of a patch's normals is wider than the
-/// normals: at a floor of 1 subdivision cannot part them near the line, and solve parts them below
-/// the floor. With the cylinder first, the look then settles every pair of that cluster, none of
-/// which holds a branch's start, so nothing is left to read.
-#[test]
-fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
+/// u = 1/2 sunk 1/16 into it, spanned by x and a tilted 1/1024 toward that line's normal e₂, over
+/// `domain`: the plane's normal is never at right angles to a, so no normal of the cylinder is
+/// parallel to it and there is no contact. The axis is tilted, so the box of a patch's normals is
+/// wider than the normals: at a floor of 1 subdivision cannot part them near the line, and solve
+/// parts them below the floor.
+fn tube_under_a_shallow_plane(domain: ((f64, f64), (f64, f64))) -> (SurfaceKind, SurfaceKind) {
     let s = core::f64::consts::FRAC_1_SQRT_2;
     let r = 4.0;
     let h = 1.0 / 16.0;
@@ -463,10 +461,19 @@ fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
             e2.map(|t| (r - h) * t),
             [1.0, 0.0, 0.0],
             [0.0, s + tilt * e2[1], s + tilt * e2[2]],
-            ((-3.0, 3.0), (-3.0, 3.0)),
+            domain,
         )
         .unwrap(),
     );
+    (tube, shallow)
+}
+
+/// The cylinder and the shallow plane over [−3, 3]²: with the cylinder first, the look settles
+/// every pair of the cluster near the line, none of which holds a branch's start, so nothing is
+/// left to read.
+#[test]
+fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
+    let (tube, shallow) = tube_under_a_shallow_plane(((-3.0, 3.0), (-3.0, 3.0)));
     holds_to(
         (&tube, &shallow),
         (1.0, 1.0 / 16.0),
@@ -477,6 +484,42 @@ fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
                 "[Undecided { first: ((-3.0, 1.1015625), (-3.0, 3.0)), \
                  second: ((0.46602401733398435, 0.9), (-2.0, 2.0)), \
                  why: TangentBand { width: Steps(8) } }]",
+            ),
+        ],
+    );
+}
+
+/// The same pair with the plane cut to [−x, x] × [−3, 0], x = √127/16. A point (p, q) of the plane
+/// is on the cylinder where p² + (63/16 + q/1024)² = 16, so at q = 0 the two crossings pass through
+/// the plane's top corners (±x, 0), and below it they lie wider than x: the cylinder meets the
+/// plane's domain at those two corners alone. Each corner is an end of two of the plane's edges, and
+/// the plane goes on past both, so both edges prove the corner and it is one start. A pair holding
+/// one corner then has one start, which no settled pair can have (its starts pair off): with the
+/// cylinder first, the look leaves that cluster undecided at the floor, never a crossing.
+#[test]
+fn a_plane_that_meets_a_cylinder_at_its_corners_alone_is_not_settled() {
+    let x = 127f64.sqrt() / 16.0;
+    let (tube, shallow) = tube_under_a_shallow_plane(((-x, x), (-3.0, 0.0)));
+    let plane = format!("(({}, {x}), (-3.0, 0.0))", -x);
+    holds_to(
+        (&tube, &shallow),
+        (1.0, 1.0 / 16.0),
+        [
+            (
+                60_555,
+                &format!(
+                    "[Undecided {{ first: ((0.1, 0.45000000000000007), (-2.0, 2.0)), \
+                     second: {plane}, why: UndecidedAtFloor {{ test: Exclusion }} }}, \
+                     Undecided {{ first: ((0.4876831054687501, 0.6468750000000001), (-2.0, 2.0)), \
+                     second: {plane}, why: UndecidedAtFloor {{ test: LoopFreedom }} }}]"
+                ),
+            ),
+            (
+                471_656,
+                &format!(
+                    "[Undecided {{ first: {plane}, second: ((0.44063720703125, 0.9), (-2.0, 2.0)), \
+                     why: TangentBand {{ width: Steps(8) }} }}]"
+                ),
             ),
         ],
     );
