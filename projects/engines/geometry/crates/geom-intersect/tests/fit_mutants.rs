@@ -2,7 +2,8 @@
 //! and a branch of one vertex are refused before any work; a surface that moves fast is still
 //! bounded; a settled point outside a surface's domain is never fit data; a refinement near an edge
 //! starts from the middle of its data; a true point is proven in a wide box, and on a circle it is
-//! the near one of two; and the bounds and true points of two planes (near the origin and far out)
+//! the near one of two; a cubic patch against a plane, whose pcurve is 0 across, is a curve or out
+//! of rounds, never refused; and the bounds and true points of two planes (near the origin and far out)
 //! and of the sheet and plane of `fit_refined` are the recorded bits, so any change to their
 //! arithmetic is seen.
 
@@ -331,6 +332,44 @@ fn the_true_point_on_a_circle_is_the_near_one_of_two() {
         let d = ((m[0] - p[0]) * (m[0] - p[0]) + (m[1] - p[1]) * (m[1] - p[1])).sqrt();
         assert!(d <= 2.0 * CEILING, "{t}: {x:?} {p:?}");
     }
+}
+
+/// (u³, v, 0) over [1/4, 1] × [−1, 1], as a cubic NURBS: its Bézier points along u are the blossom
+/// of u³ at the ends, 1/64, 1/16, 1/4 and 1, all exact.
+fn cubic() -> SurfaceKind {
+    let along = Basis::new(3, vec![0.25, 0.25, 0.25, 0.25, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for x in [1.0 / 64.0, 1.0 / 16.0, 0.25, 1.0] {
+        for y in [-1.0, 1.0] {
+            net.push([x, y, 0.0]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(along, across, &net).unwrap())
+}
+
+#[test]
+fn a_cubic_patch_against_a_plane_is_a_curve_or_out_of_rounds() {
+    // The cubic patch (u³, v, 0) meets the plane y = 0 along v = 0, from u = 0.5 to 0.8: both
+    // vertices lie on both surfaces and inside both domains, so the branch is valid (#1083: it was
+    // refused as InvalidInput). The pcurve's v is 0 over every span, and its bound over a half
+    // span is a few subnormals wide, a box the patch's partials cannot be read over.
+    let (patch, (_, across)) = (cubic(), crossing_planes());
+    let at = |u: f64| [u, 0.0, u * u * u, 0.0];
+    let two = || branch(vec![at(0.5), at(0.8)]);
+    let coarse = 1.0 / 64.0;
+    let curve = fit((&patch, &across), REFS, &two(), coarse, &mut meter()).unwrap();
+    assert!(curve.error() <= coarse, "{}", curve.error());
+    for s in curve.spans() {
+        assert!(s.curve <= coarse, "{s:?}");
+    }
+    // The curve is a straight segment, so the cache keeps one span however much data refinement
+    // adds, and one cubic span of the pcurve u = x^(1/3) is not within 1/256 of it: the fit is
+    // out of rounds, as its errors say, never a refusal of the input.
+    assert_eq!(
+        fit((&patch, &across), REFS, &two(), CEILING, &mut meter()).err(),
+        Some(IntersectError::BudgetExceeded)
+    );
 }
 
 /// Every bound and true point of a fitted curve as bits: each span's ends and bounds, then the

@@ -204,6 +204,28 @@ fn smaller(a: f64, b: f64) -> f64 {
     geom_curve::tight::smaller(a, b)
 }
 
+/// `b` with every side that is thinner than a step of the double, yet not a point, widened by half
+/// the width of its widest side, kept inside `domain`. A pcurve that is 0 along a span has a bound
+/// over part of it a few subnormals wide, as every interval operation rounds outward (#1083); the
+/// kinds read partials over a box by cutting the patch to it and scaling by its degree over the
+/// box's width, which there is past the doubles, and over a box a step or so wide the cut keeps
+/// only rounding. A side of no width is a line, which the kinds read as one. The wider box holds
+/// every point of `b`, so its bounds hold over `b` too.
+fn thick(b: Region, domain: Region) -> Region {
+    let ((a, c), (d, e)) = b;
+    let wide = larger(c - a, e - d) / 2.0;
+    let side = |(lo, hi): (f64, f64)| {
+        let step = 4.0 * f64::EPSILON * (1.0 + larger(lo.abs(), hi.abs()));
+        if lo < hi && hi - lo < step {
+            (lo - wide, hi + wide)
+        } else {
+            (lo, hi)
+        }
+    };
+    let (u, v) = b;
+    widened((side(u), side(v)), 0.0, domain)
+}
+
 /// Whether `b` lies inside `domain`.
 fn inside(((a, c), (d, e)): Region, ((u0, u1), (v0, v1)): Region) -> bool {
     u0 <= a && c <= u1 && v0 <= d && e <= v1
@@ -235,6 +257,7 @@ fn gap(
     if !inside(here, domain) || !inside(over, domain) {
         return Ok(None);
     }
+    let over = thick(over, domain);
     let Some(sm) = partials(surface, here, 0, meter)? else {
         return Ok(None);
     };
