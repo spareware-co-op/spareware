@@ -309,3 +309,102 @@ fn an_arc_in_a_plane_is_proven_in_pieces_within_the_ceiling() {
         );
     }
 }
+
+/// The other plane's two vectors for a tie: whole numbers, none zero, whose three determinants of
+/// pairs of rows are all −7. The rows solved are the first pair of a tie, x and y, and z is left
+/// over; the normal equations of the middle's Gauss-Newton have every product counting
+/// (`[[26, 23], [23, 26]]`).
+const TIED_A: [f64; 3] = [-4.0, -1.0, 3.0];
+const TIED_B: [f64; 3] = [-3.0, 1.0, 4.0];
+
+/// The places of the branch's vertices along the edge, and the bits of the first and last cut's
+/// `(s, r)`, with the standing plane first, and second.
+const TIED_BITS: [(usize, [u64; 4], [u64; 4]); 2] = [
+    (
+        129,
+        [
+            0x40d5_0007_ffff_fffd,
+            0x40d5_0008_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+        [
+            0x40d5_03f7_ffff_fffd,
+            0x40d5_03f8_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+    ),
+    (
+        129,
+        [
+            0x40d5_0007_ffff_fff9,
+            0x40d5_0008_0000_0008,
+            0x40d5_fffb_6db6_db67,
+            0x40d6_0004_9249_2499,
+        ],
+        [
+            0x40d5_03f7_ffff_fff8,
+            0x40d5_03f8_0000_0007,
+            0x40d5_fffb_6db6_db67,
+            0x40d6_0004_9249_249a,
+        ],
+    ),
+];
+
+/// An edge a sixty-fourth of a unit long, from v = 10 to 10 + 1/64, of a plane standing on the
+/// other plane along A × B: the line s = (v + 11) units, r = 22 units, from one end of the other
+/// plane's s to the other. Short, so that the left-over row, whose coefficients are whole numbers
+/// and not a tilt, is held within the floor's eighth: the run takes 128 pieces, an eighth of a
+/// step each.
+#[test]
+fn an_edge_along_a_plane_with_tied_rows_meets_in_the_recorded_boxes() {
+    let length = 1.0 / 64.0;
+    let other = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            TIED_A,
+            TIED_B,
+            (
+                (21.0 * UNIT, (21.0 + length) * UNIT),
+                (21.75 * UNIT, 22.25 * UNIT),
+            ),
+        )
+        .unwrap(),
+    );
+    let origin = [0, 1, 2].map(|k| UNIT * (11.0 * TIED_A[k] + 22.0 * TIED_B[k]));
+    let own = SurfaceKind::Plane(
+        Plane::new(
+            origin,
+            [-UNIT, UNIT, -UNIT],
+            TIED_A.map(|c| c * UNIT),
+            ((0.0, 1.0), (10.0, 10.0 + length)),
+        )
+        .unwrap(),
+    );
+    let mut got = Vec::new();
+    for own_first in [true, false] {
+        let (found, [u, t, s, r]) = if own_first {
+            (branch(&own, &other), [0, 1, 2, 3])
+        } else {
+            (branch(&other, &own), [2, 3, 0, 1])
+        };
+        assert_eq!(found.deviation.to_bits(), 0, "{}", found.deviation);
+        let vertices = in_order(&found, t);
+        for v in &vertices {
+            let at = mid(v[t]);
+            let near = |x: Interval, at: f64| x.lo() - 1e-6 <= at && at <= x.hi() + 1e-6;
+            assert!(holds(v[u], 0.0), "{v:?}");
+            assert!(
+                near(v[s], (at + 11.0) * UNIT) && near(v[r], 22.0 * UNIT),
+                "{v:?}"
+            );
+        }
+        let bits = inner_bits(&vertices, [s, r]);
+        let (Some(first), Some(last)) = (bits.first(), bits.last()) else {
+            panic!("{vertices:?}");
+        };
+        got.push((vertices.len(), *first, *last));
+    }
+    assert_eq!(got, TIED_BITS, "{got:#x?}");
+}
