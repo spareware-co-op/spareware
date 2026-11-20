@@ -94,6 +94,19 @@ fn a_second_crossing_past_a_plane_patch_is_not_a_crossing() {
     holds(harness(&[0x0a, 0x33, 0x23, 0x32]));
 }
 
+/// libFuzzer's find on #1133's head (`0a 65 b5 03 29`, #1136): a cone with its apex on its domain's
+/// edge against a plane patch, and nothing returned, which is the true answer. A point of the plane
+/// stands at height -2 + r/2 at r along its second direction, and the cone's at its v, so the cone
+/// crosses the plane at r = 2v + 4, and it meets the plane's equation no lower than v = 2.527: every
+/// crossing stands past the patch's 9. The grid's sign change between (0.646, 2.5) and the point a
+/// cell above it was asked of the grid point, which stands over the patch at r = 8.80; the crossing
+/// between them stands at r = 9.32. A crossing is now asked where it crosses.
+#[test]
+fn a_crossing_is_asked_where_it_crosses_not_at_its_grid_point() {
+    let (case, _) = decode(&[0x0a, 0x65, 0xb5, 0x03, 0x29]);
+    holds(check(case).map(|outcome| assert_eq!(outcome, Outcome::Empty)));
+}
+
 #[test]
 fn general_seeded() -> Result<(), seeded::Failure> {
     seeded::run(
