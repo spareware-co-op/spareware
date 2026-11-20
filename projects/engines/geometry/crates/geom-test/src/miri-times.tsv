@@ -32,6 +32,7 @@
 # GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
 # GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 # GitHub measuring run 44608532867 (miri_measure=new on land5/fixes-1 at d9b546470).
+# GitHub measuring run 44655677525 (miri_measure=new on test/phase5-intersect-mutants-g at 9421c7eb7).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1625,6 +1626,10 @@ native-only over 601	geom-intersect::seam_contacts	a_ball_touching_a_cylinder_a_
 native-only over 601	geom-intersect::seam_contacts	a_ball_touching_a_cylinder_on_its_seam_has_one_tangent_point
 native-only over 601	geom-intersect::seam_contacts	a_ball_touching_a_torus_on_its_seam_has_one_tangent_point
 native-only over 601	geom-intersect::seam_contacts_two	a_rim_touching_a_cylinder_on_its_seam_and_on_the_turned_cut_has_two_tangent_points
+native-only over 601	geom-intersect::seam_mutants	a_double_cones_apex_second_in_the_pair_ends_four_half_branches_there
+3	geom-intersect::seam_mutants	a_horn_torus_has_a_pole_at_each_whole_turn_of_its_tube_on_the_axis_and_once
+native-only over 601	geom-intersect::seam_mutants	a_spheres_poles_on_a_cylinders_axis_are_proven_apart_from_it
+2	geom-intersect::seam_mutants	an_affine_image_closes_only_on_an_angular_side_a_whole_turn_long
 native-only over 601	geom-intersect::selfcross_seams	a_pyramid_closed_round_and_pinched_at_its_apex_is_clean
 native-only over 601	geom-intersect::selfcross_seams	a_spindle_pinched_at_its_tips_is_clean_either_way_round
 native-only over 601	geom-intersect::selfcross_seams	a_tube_closed_on_itself_is_clean_either_way_round
