@@ -33,7 +33,7 @@ use geom_fuzz::general::{
     surface,
 };
 use geom_fuzz::seeded;
-use geom_intersect::contact::Reading;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::{Settled, Subdivided, subdivide};
 use geom_intersect::march::{Branch, march};
 use geom_intersect::result::{
@@ -43,7 +43,7 @@ use geom_intersect::seam::Passing;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{ImplicitBound, ParamSurface, Sphere, SurfaceKind};
+use geom_surface::{Cylinder, ImplicitBound, ParamSurface, Sphere, SurfaceKind};
 use geom_test::{Seed, SplitMix64};
 
 /// Random byte strings per `cargo test` run of the bolero leg. A subdivision takes tens of
@@ -92,6 +92,19 @@ fn a_crossing_of_a_planes_equation_past_the_patch_is_not_a_crossing() {
 #[test]
 fn a_second_crossing_past_a_plane_patch_is_not_a_crossing() {
     holds(harness(&[0x0a, 0x33, 0x23, 0x32]));
+}
+
+/// libFuzzer's find on #1133's head (`0a 65 b5 03 29`, #1136): a cone with its apex on its domain's
+/// edge against a plane patch, and nothing returned, which is the true answer. A point of the plane
+/// stands at height -2 + r/2 at r along its second direction, and the cone's at its v, so the cone
+/// crosses the plane at r = 2v + 4, and it meets the plane's equation no lower than v = 2.527: every
+/// crossing stands past the patch's 9. The grid's sign change between (0.646, 2.5) and the point a
+/// cell above it was asked of the grid point, which stands over the patch at r = 8.80; the crossing
+/// between them stands at r = 9.32. A crossing is now asked where it crosses.
+#[test]
+fn a_crossing_is_asked_where_it_crosses_not_at_its_grid_point() {
+    let (case, _) = decode(&[0x0a, 0x65, 0xb5, 0x03, 0x29]);
+    holds(check(case).map(|outcome| assert_eq!(outcome, Outcome::Empty)));
 }
 
 #[test]
@@ -353,4 +366,40 @@ fn an_analysis_is_held_to_its_laws() {
     for reading in broken {
         assert!(judged(reading).is_err());
     }
+}
+
+/// The seeded leg's find from seeds 727d548b8fa945c5, a0a815ca88921e97 and b7bd766a05068b00, one
+/// case (#1132): a cylinder of radius 4 on a whole turn touching a sphere of radius 2.5 at
+/// (4, 0, -0.25), on both seams. The contact is read in a chart that does not cut it (G173), so its
+/// box runs from just under 2 to just past it in both turns, and its middle stood past the domains'
+/// end, where neither kind evaluates. It is read modulo the turn, at the seam, where the two touch.
+#[test]
+fn a_contact_on_both_seams_is_read_modulo_the_turn() {
+    holds(harness(&[0xdd, 0x26, 0x22, 0xb8, 0xf6, 0xb1, 0xde]));
+}
+
+/// The same contact on a cylinder whose whole turn runs from 1/2 to 5/2: it stands at u = 2, inside
+/// that domain, and is read there, a turn from the domain's start, not from zero.
+#[test]
+fn a_contact_on_a_whole_turn_from_a_half_is_read_from_its_start() {
+    let frame = Frame::standard().unwrap();
+    let cylinder = Cylinder::new([0.0; 3], 4.0, frame, ((0.5, 2.5), (-4.0, 4.0))).unwrap();
+    let frame = Frame::standard().unwrap();
+    let sphere = Sphere::new([1.5, 0.0, -0.25], 2.5, frame, ((0.0, 2.0), (-0.45, 0.45))).unwrap();
+    let (first, second) = (SurfaceKind::Cylinder(cylinder), SurfaceKind::Sphere(sphere));
+    let mut meter = WorkMeter::new(Budget::of_work(1 << 21));
+    let found = subdivide(&first, &second, 1e-2, &mut meter).unwrap();
+    let mut meter = WorkMeter::new(Budget::of_work(1 << 21));
+    let readings = analyse(&first, &second, &found, 1e-2, 1e-1, &mut meter).unwrap();
+    assert!(
+        readings.iter().any(|r| matches!(
+            r,
+            Reading::Point {
+                contact: PointContact::IsolatedTangent,
+                ..
+            }
+        )),
+        "{readings:?}"
+    );
+    judge_contact(&first, &second, &readings).unwrap();
 }
