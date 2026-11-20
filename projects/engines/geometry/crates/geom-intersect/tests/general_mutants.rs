@@ -3,8 +3,9 @@
 //! halve, start points on the end of a cone's height (over part of a turn and over a whole one),
 //! a start point on the end of a sphere's longitude, where a sphere has no room past its end, and
 //! an edge a hair inside that end, which is not taken as a start on it, an edge that meets both
-//! ends of a sphere's longitude in one pair, and a sphere's end at a subnormal longitude, where the
-//! determinant of two rows of an edge's partials may be zero.
+//! ends of a sphere's longitude in one pair, a sphere's end at a subnormal longitude, where the
+//! determinant of two rows of an edge's partials may be zero, and an edge lying in the other
+//! surface whose boxes, a double long, reach exactly a floor.
 //!
 //! Run at the scale of the SSI corpus (1024 steps to the unit, floor 8) where a case has a scale,
 //! and in both orders of the pair.
@@ -436,6 +437,55 @@ fn rows_whose_determinant_may_be_zero_on_a_subnormal_end_are_not_solved() {
         (9672, 1, 2, vec![floor; 3]),
         (12193, 0, 0, vec![floor; 3]),
         (8266, 0, 0, vec![floor; 4]),
+    ];
+    assert_eq!(seen, want);
+}
+
+/// The plane z = 0 over the square one double wide each way at 2^52, as above, and the plane
+/// x = 2^52 over y in that double and z from −1/2 to 1/2: the first plane's edge u = 2^52 lies in
+/// the second. Its edge system's flagged boxes are a double long and cannot be halved, and at 2^52
+/// the doubles are a whole number apart, so a box's reach over the floor comes out whole: at a
+/// floor of 1 some reach exactly one floor, at a floor of 1/2 every one reaches more. A flagged box
+/// on an edge that lies in the other surface is the run's only if it reaches at most one floor: one
+/// that does is tried against the run and the search goes on, one that reaches more gives the pair
+/// up at once. Either way the pair ends flagged as undecided at the floor, in both orders and at
+/// both floors, with the work its search charges, as recorded.
+#[test]
+fn a_box_on_an_edge_in_the_other_surface_is_the_runs_only_within_a_floor() {
+    let at = 4_503_599_627_370_496.0; // 2^52
+    let square = ((at, at + 1.0), (at, at + 1.0));
+    let ground =
+        SurfaceKind::Plane(Plane::new([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], square).unwrap());
+    let wall = SurfaceKind::Plane(
+        Plane::new(
+            [at, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ((at, at + 1.0), (-0.5, 0.5)),
+        )
+        .unwrap(),
+    );
+    let seen: Vec<_> = [0.5, 1.0]
+        .into_iter()
+        .flat_map(|floor| [(floor, &ground, &wall), (floor, &wall, &ground)])
+        .map(|(floor, a, b)| {
+            let mut m = meter(1 << 16);
+            let found = subdivide(a, b, floor, &mut m).unwrap();
+            let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+            let whys: Vec<_> = found.flagged.iter().map(|f| f.why).collect();
+            (m.used().work, found.settled.len(), starts, whys)
+        })
+        .collect();
+    let floor = vec![Unresolved::UndecidedAtFloor {
+        test: Test::Exclusion,
+    }];
+    // (work, settled pairs, start points, why each pair is flagged): the ground and the wall, then
+    // the wall and the ground, at a floor of 1/2, then of 1.
+    let want = [
+        (12826, 0, 0, floor.clone()),
+        (20895, 0, 0, floor.clone()),
+        (12826, 0, 0, floor.clone()),
+        (46492, 0, 0, floor),
     ];
     assert_eq!(seen, want);
 }
