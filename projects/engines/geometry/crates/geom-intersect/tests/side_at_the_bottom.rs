@@ -25,11 +25,6 @@ const ENGINE: u128 = 5088;
 /// What the closed form spends before it finds the stretches meet and leaves the pair.
 const TRIED: u128 = 9;
 
-/// What the second order test spends more since decision 32.104: the run is the whole turn, and
-/// grown past the window's end it is read modulo the turn in two stretches, so the circle's first
-/// and second derivatives are each bounded once more, at a unit a coordinate.
-const ACROSS: u128 = 6;
-
 #[test]
 fn a_side_a_step_above_the_lowest_point_is_the_engines() {
     let mut c = -1.0_f64;
@@ -51,6 +46,8 @@ fn a_side_a_step_above_the_lowest_point_is_the_engines() {
         );
         let found = found.unwrap();
         assert_eq!(format!("{:?}", found.items()), want, "side at {c:e}");
-        assert_eq!(meter.used().work, ENGINE + TRIED + ACROSS, "side at {c:e}");
+        // The run is the whole turn: grown for its second derivatives it is still the whole turn,
+        // read once (decision 32.104), so the second order test costs what it did before.
+        assert_eq!(meter.used().work, ENGINE + TRIED, "side at {c:e}");
     }
 }
