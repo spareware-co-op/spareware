@@ -664,7 +664,7 @@ pub fn true_point(
         b.push(Interval::new(e, f)?);
     }
     let domain4: [Interval; 4] = b.try_into().map_err(|_| IntersectError::Internal)?;
-    let found = solve(&field, domain4, |_, _| Ok(true), meter)?;
+    let found = solve(&field, domain4, domain4, |_, _| Ok(true), meter)?;
     let [zero] = found.zeros.as_slice() else {
         return Ok(None);
     };

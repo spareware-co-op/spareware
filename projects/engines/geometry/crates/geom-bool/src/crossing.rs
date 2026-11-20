@@ -211,7 +211,8 @@ pub(crate) fn crossings_over(
         curve,
         plane: enclosed,
     };
-    solve(&field, [Interval::new(a, b)?], |_, _| Ok(true), meter)
+    let side = [Interval::new(a, b)?];
+    solve(&field, side, side, |_, _| Ok(true), meter)
 }
 
 /// Where the line o + t·v, over `domain`, meets `plane`: its one root, enclosed and cut to the

@@ -70,10 +70,22 @@ fn arc_wall(start: f64) -> SurfaceKind {
     SurfaceKind::Extrusion(Extrusion::new(profile, [0.0, 1.0, 2.0], (0.0, 1.0)).unwrap())
 }
 
+/// How many kinds [`kinds`] builds before their images: fewer under Miri, on one frame.
+const BUILT: usize = if cfg!(miri) { 36 } else { 68 };
+
+/// Every kind that has a ceiling, on each frame and domain, then each one turned and scaled. Under
+/// Miri the turned frame alone, whose unit vectors have three coordinates, and each kind's image
+/// under one of the transforms in turn, so that every kind, domain and transform is still held:
+/// the whole list ran past 680 yardstick seconds there.
 fn kinds() -> Vec<SurfaceKind> {
     let standard = Frame::standard().unwrap();
     let turn = (0.0, 2.0);
     let far = 17_592_186_044_416.75;
+    let frames = if cfg!(miri) {
+        vec![leaning()]
+    } else {
+        vec![standard, leaning()]
+    };
     let mut out = vec![
         SurfaceKind::Plane(
             Plane::new(
@@ -96,7 +108,7 @@ fn kinds() -> Vec<SurfaceKind> {
         wall([1.0, 2.0, 0.0], [4.0, -2.0, 1.0], [0.0, 0.0, 1.0]),
         wall([0.0; 3], [0.0, 3.0, 0.0], [1.0, -1.0, 0.5]),
     ];
-    for frame in [standard, leaning()] {
+    for frame in frames {
         for u in [turn, (0.25, 0.5), (far, far + 2.0), (-far - 2.0, -far)] {
             out.push(SurfaceKind::Cylinder(
                 Cylinder::new([1.0, -2.0, 3.0], 2.0, frame, (u, (-4.0, 8.0))).unwrap(),
@@ -127,11 +139,15 @@ fn kinds() -> Vec<SurfaceKind> {
         TypedTransform::from(Transform::scale(2.0, 0.5, 3.0).unwrap()),
     ];
     let mut images = Vec::new();
-    for s in &out {
-        for t in &transforms {
+    for (k, s) in out.iter().enumerate() {
+        for (j, t) in transforms.iter().enumerate() {
+            if cfg!(miri) && k.checked_rem(transforms.len()) != Some(j) {
+                continue;
+            }
             images.push(s.transformed(t, &mut meter()).unwrap().value);
         }
     }
+    assert_eq!(out.len(), BUILT);
     out.extend(images);
     out
 }
@@ -157,9 +173,9 @@ fn the_ceiling_holds_the_extents_box_and_twice_it_holds_it_with_room() {
             held += 1;
         }
     }
-    // Every kind built has both, the 64 round ones, the two planes and the two straight walls;
-    // their images add more (an affine image of a round kind has none).
-    assert!(held > 2 * 68, "{held}");
+    // Every kind built has both, the 64 round ones (32 under Miri), the two planes and the two
+    // straight walls; their images add more (an affine image of a round kind has none).
+    assert!(held > 2 * BUILT, "{held}");
 }
 
 #[test]

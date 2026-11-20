@@ -17,6 +17,8 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
+mod miri;
+
 use geom_curve::{CurveKind, Frame, Helix, HelixAxes, Line};
 use geom_intersect::IntersectError;
 use geom_intersect::curve_surface::curve_surface;
@@ -28,6 +30,7 @@ use geom_nurbs::{Basis, Curve, Surface};
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::{Seed, SplitMix64};
+use miri::{case, rounds};
 
 /// The meeting, within a budget well past the heaviest case here (a curve bent as the bowl is,
 /// some 4.5 million units): a closed form lost to the engine on an infinite line stops instead of
@@ -305,8 +308,14 @@ fn a_line_meets_a_cone() {
     assert_eq!(p.len(), 2);
     near(p[0][1], 0.0);
     near(p[1][1], 1.0);
-    // Parallel to a ruling: one root.
-    let p = points(&meet(&line([0.0, 0.0, 0.0], [1.0, 0.0, 1.0]), &c));
+    // Parallel to a ruling: one root. Under Miri the line runs eight and a half steps from the
+    // ruling beside it, not one and a half, on the cone for v from −5 to 5, its apex still on it:
+    // it meets the far side once, at (−6, 0, 4). The search beside the ruling all along the whole
+    // cone is minutes there.
+    let short =
+        SurfaceKind::Cone(Cone::new([0.0; 3], 2.0, 1.0, frame(), (ROUND, (-5.0, 5.0))).unwrap());
+    let (cone, from) = case((&c, [0.0, 0.0, 0.0]), (&short, [-10.0, 0.0, 0.0]));
+    let p = points(&meet(&line(from, [1.0, 0.0, 1.0]), cone));
     assert_eq!(p.len(), 1);
 }
 
@@ -603,11 +612,22 @@ fn a_seam_is_no_boundary() {
     let across = bezier(&[[-9.0, 0.0, 1.0], [0.0, 0.0, 1.0], [9.0, 0.0, 1.0]]);
     let r = meet(&across, &cylinder(5.0));
     assert_eq!(contacts(&r), [PointContact::Crossing; 2], "{:?}", r.items());
+    // Under Miri a band of the torus, its tube from v = −1/4 to 1/4, still a whole turn in u: the
+    // curve crosses it twice, once on its join at u = 0. The whole torus is minutes there.
+    let band = SurfaceKind::Torus(
+        Torus::new([0.0; 3], 10.0, 2.0, frame(), (ROUND, (-0.25, 0.25))).unwrap(),
+    );
+    let (ring, count) = case((torus(10.0, 2.0), 4), (band, 2));
     let r = meet(
         &bezier(&[[-20.0, 0.0, 0.5], [0.0, 0.0, 0.5], [20.0, 0.0, 0.5]]),
-        &torus(10.0, 2.0),
+        &ring,
     );
-    assert_eq!(contacts(&r), [PointContact::Crossing; 4], "{:?}", r.items());
+    assert_eq!(
+        contacts(&r),
+        vec![PointContact::Crossing; count],
+        "{:?}",
+        r.items()
+    );
     // Half a cylinder ends at u = 0 and u = 1: there a root is a touch, or flagged by the engine,
     // which cannot tell a root on a true end from one a rounding outside it.
     let half = SurfaceKind::Cylinder(
@@ -786,40 +806,72 @@ fn the_work_is_what_the_clipping_leaves() {
         curve_surface(c, s, &mut m).unwrap();
         m.used().work
     };
-    let down = bezier(&[[100.0, 100.0, 2000.0], [100.0, 100.0, -2000.0]]);
-    assert_eq!(work(&down, &bowl()), 363);
-    let flat = bezier(&[[-2000.0, 0.0, 500.0], [2000.0, 0.0, 500.0]]);
-    assert_eq!(work(&flat, &bowl()), 2042);
-    let above = bezier(&[[-2000.0, 0.0, 1500.0], [2000.0, 0.0, 1500.0]]);
-    assert_eq!(work(&above, &bowl()), 316);
     let tilted = bezier(&[
         [-900.0, -700.0, 1800.0],
         [300.0, 100.0, 0.0],
         [800.0, 900.0, -1500.0],
     ]);
-    assert_eq!(work(&tilted, &bowl()), 2510);
-    let graze = bezier(&[[-2000.0, 0.0, 1000.0], [2000.0, 0.0, 1000.0]]);
-    assert_eq!(work(&graze, &bowl()), 15_032);
-    let straight = segment([100.0, 100.0, 2000.0], [100.0, 100.0, -2000.0]);
-    assert_eq!(work(&straight, &bowl()), 293);
-    // The torus's quartic, by its own residual and reach.
-    assert_eq!(
-        work(&line([-20.0, 0.0, 0.0], [1.0, 0.0, 0.0]), &torus(10.0, 2.0)),
-        35
-    );
     let t = SurfaceKind::Torus(
         Torus::new([3.0, 4.0, 0.0], 10.0, 2.0, frame(), (ROUND, ROUND)).unwrap(),
     );
-    assert_eq!(work(&line([-20.0, 4.0, 2.0], [1.0, 0.0, 0.0]), &t), 39);
-    // A line of speed 2 reaches twice as far for each unit of t.
     let ring = torus(10.0, 2.0);
-    assert_eq!(work(&line([-20.0, 0.0, 0.0], [2.0, 0.0, 0.0]), &ring), 35);
-    assert_eq!(work(&line([-20.0, 0.0, 2.0], [2.0, 0.0, 0.0]), &ring), 39);
-    // A patch of two pieces in u: each box is clipped by the piece that holds it.
-    let down = bezier(&[[600.0, 100.0, 2000.0], [600.0, 100.0, -2000.0]]);
-    assert_eq!(work(&down, &two_pieces()), 633);
-    let across = bezier(&[[-2000.0, 0.0, 100.0], [2000.0, 0.0, 100.0]]);
-    assert_eq!(work(&across, &two_pieces()), 12_188);
+    let cases = vec![
+        (
+            bezier(&[[100.0, 100.0, 2000.0], [100.0, 100.0, -2000.0]]),
+            bowl(),
+            363,
+        ),
+        (
+            bezier(&[[-2000.0, 0.0, 500.0], [2000.0, 0.0, 500.0]]),
+            bowl(),
+            2042,
+        ),
+        (
+            bezier(&[[-2000.0, 0.0, 1500.0], [2000.0, 0.0, 1500.0]]),
+            bowl(),
+            316,
+        ),
+        (tilted, bowl(), 2510),
+        // The graze.
+        (
+            bezier(&[[-2000.0, 0.0, 1000.0], [2000.0, 0.0, 1000.0]]),
+            bowl(),
+            15_032,
+        ),
+        (
+            segment([100.0, 100.0, 2000.0], [100.0, 100.0, -2000.0]),
+            bowl(),
+            293,
+        ),
+        // The torus's quartic, by its own residual and reach.
+        (
+            line([-20.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+            torus(10.0, 2.0),
+            35,
+        ),
+        (line([-20.0, 4.0, 2.0], [1.0, 0.0, 0.0]), t, 39),
+        // A line of speed 2 reaches twice as far for each unit of t.
+        (line([-20.0, 0.0, 0.0], [2.0, 0.0, 0.0]), ring.clone(), 35),
+        (line([-20.0, 0.0, 2.0], [2.0, 0.0, 0.0]), ring, 39),
+        // A patch of two pieces in u: each box is clipped by the piece that holds it.
+        (
+            bezier(&[[600.0, 100.0, 2000.0], [600.0, 100.0, -2000.0]]),
+            two_pieces(),
+            633,
+        ),
+        (
+            bezier(&[[-2000.0, 0.0, 100.0], [2000.0, 0.0, 100.0]]),
+            two_pieces(),
+            12_188,
+        ),
+    ];
+    // Under Miri every case but the graze, the fifth: it is over half of the test's running time,
+    // and the whole test is over the time a test may take there.
+    let all = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    for &i in rounds(&all, &[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11]) {
+        let (c, s, want) = &cases[i];
+        assert_eq!(work(c, s), *want, "case {i}");
+    }
 }
 
 /// A bowl over [−1000, 1000]² of two biquadratic pieces in u, joined at u = 1/2.
