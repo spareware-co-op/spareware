@@ -20,6 +20,9 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+#[macro_use]
+mod slices;
+
 use geom_num::NumError;
 use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
@@ -892,17 +895,36 @@ fn cones_with_other_quadrics() {
     assert_eq!(coaxial.topology, Topology { conics: 2, ..NONE });
 }
 
-#[test]
-fn two_spheres() {
-    let a = sphere([0, 0, 0], 5);
-    // They share the circle at infinity, which has no real point, and their real circle.
-    let met = on(&a, &sphere([6, 0, 0], 5));
-    assert_eq!(met.segre, Segre::Pair);
-    assert_eq!(met.topology, Topology { conics: 1, ..NONE });
-    assert_eq!(on(&a, &sphere([20, 0, 0], 5)).topology, NONE);
-    assert_eq!(on(&a, &sphere([0, 0, 0], 4)).topology, NONE);
-    assert_eq!(on(&a, &a).topology, NONE.same_as());
+/// The spheres `two_spheres` meets with the sphere of radius 5 about the origin, each with the
+/// pencil's type where the test reads it and what the two share: crossing, apart, inside, and the
+/// same sphere.
+fn two_spheres_cases() -> Vec<(Form<Entry>, Option<Segre>, Topology)> {
+    vec![
+        // They share the circle at infinity, which has no real point, and their real circle.
+        (
+            sphere([6, 0, 0], 5),
+            Some(Segre::Pair),
+            Topology { conics: 1, ..NONE },
+        ),
+        (sphere([20, 0, 0], 5), None, NONE),
+        (sphere([0, 0, 0], 4), None, NONE),
+        (sphere([0, 0, 0], 5), None, NONE.same_as()),
+    ]
 }
+
+// Two spheres, one case to a quarter (decision 32.78, `slices`): each case is one classification,
+// and the four together ran past 680 yardstick seconds under Miri.
+quarters!(two_spheres, |part| {
+    let a = sphere([0, 0, 0], 5);
+    let cases = two_spheres_cases();
+    for (b, segre, topology) in &cases[slices::range_usize(cases.len(), part)] {
+        let met = on(&a, b);
+        if let Some(segre) = segre {
+            assert_eq!(&met.segre, segre);
+        }
+        assert_eq!(&met.topology, topology);
+    }
+});
 
 trait Whole {
     fn same_as(self) -> Topology;
@@ -914,19 +936,40 @@ impl Whole for Topology {
     }
 }
 
-#[test]
-fn the_filter_agrees_where_it_answers() {
+/// The pairs `the_filter_agrees_where_it_answers` hands the filter, a sphere about the origin and a
+/// tube along z, each with what the filter answers.
+fn filter_cases() -> Vec<(Form<Interval>, Form<Interval>, Option<Topology>)> {
     let i = |v: i64| Interval::of(v).unwrap();
     let form = |c: [i64; 3], d: [i64; 3], alpha: i64, beta: i64, gamma: i64| {
         revolution(c.map(i), d.map(i), i(alpha), i(beta), i(gamma)).unwrap()
     };
     let sphere_i = |r: i64| form([0, 0, 0], [0, 0, 0], 1, 0, r * r);
     let tube = |x: i64, r: i64| form([x, 0, 0], Z, 1, 1, r * r);
-    assert_eq!(filtered(&sphere_i(5), &tube(1, 1)), Some(smooth(2)));
-    assert_eq!(filtered(&sphere_i(5), &tube(5, 1)), Some(smooth(1)));
-    assert_eq!(filtered(&sphere_i(5), &tube(10, 1)), Some(NONE));
-    // Tangent: no interval excludes the double root.
-    assert_eq!(filtered(&sphere_i(2), &tube(1, 1)), None);
+    vec![
+        (sphere_i(5), tube(1, 1), Some(smooth(2))),
+        (sphere_i(5), tube(5, 1), Some(smooth(1))),
+        (sphere_i(5), tube(10, 1), Some(NONE)),
+        // Tangent: no interval excludes the double root.
+        (sphere_i(2), tube(1, 1), None),
+    ]
+}
+
+// The filter, one case to a quarter (decision 32.78, `slices`): each case is one filtered reading,
+// and the four together took 447 yardstick seconds under Miri.
+quarters!(the_filter_agrees_where_it_answers, |part| {
+    let cases = filter_cases();
+    for (a, b, want) in &cases[slices::range_usize(cases.len(), part)] {
+        assert_eq!(&filtered(a, b), want);
+    }
+});
+
+/// The slices' shares add up exactly to the whole's count, each once: a list of cases is one
+/// stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    let n = |len: usize| u32::try_from(len).unwrap();
+    slices::assert_joins(n(two_spheres_cases().len()), "two_spheres' cases");
+    slices::assert_joins(n(filter_cases().len()), "the filter's cases");
 }
 
 #[test]
@@ -1202,28 +1245,47 @@ fn a_definite_member_at_the_basis_s_lower_end_is_found() {
     check("[1111] definite at C − S", pair, Segre::Simple, NONE);
 }
 
-#[test]
-fn parallel_axes_in_any_direction_meet_at_their_point_at_infinity() {
-    // The shared kernel is the axes' direction at infinity: (1, 0, 0, 0) along x and (1, 1, 0, 0)
-    // along x + y, whose last part that is not zero is their first and second. Each pair is the
-    // pair along z turned, so it meets as that one does: two lines through the point at infinity.
-    let upright = on(&cylinder([0, 0, 0], Z, 5), &cylinder([6, 0, 0], Z, 5));
-    assert_eq!(upright.segre, Segre::OneApex);
+/// Two cylinders of radius 5 along `d`, one about the origin's axis and one about `offset`'s, meet
+/// as the pair along z does: two lines through the point at infinity.
+fn parallel_axes_meet_at_their_point_at_infinity(d: [i64; 3], offset: [i64; 3]) {
+    let pair = on(&cylinder([0, 0, 0], d, 5), &cylinder(offset, d, 5));
     assert_eq!(
-        upright.topology,
-        Topology {
-            lines: 2,
-            meets: 1,
-            ..NONE
-        }
+        (pair.segre, pair.topology),
+        (
+            Segre::OneApex,
+            Topology {
+                lines: 2,
+                meets: 1,
+                ..NONE
+            }
+        ),
+        "{d:?}"
     );
-    for (d, offset) in [(X, [0, 6, 0]), ([1, 1, 0], [0, 0, 6])] {
-        let turned = on(&cylinder([0, 0, 0], d, 5), &cylinder(offset, d, 5));
-        assert_eq!(
-            (turned.segre, turned.topology),
-            (upright.segre, upright.topology),
-            "{d:?}"
-        );
+}
+
+/// Parallel axes along z, x and x + y, one direction to a test: each is one classification, and
+/// the three together took 572 yardstick seconds under Miri (decision 32.78). Three cases do not
+/// fill the four slices of `slices`, so each has a test of its own.
+///
+/// The shared kernel is the axes' direction at infinity: (1, 0, 0, 0) along x and (1, 1, 0, 0)
+/// along x + y, whose last part that is not zero is their first and second. Each pair is the pair
+/// along z turned, so it meets as that one does: two lines through the point at infinity.
+mod parallel_axes_in_any_direction_meet_at_their_point_at_infinity {
+    use super::*;
+
+    #[test]
+    fn along_z() {
+        parallel_axes_meet_at_their_point_at_infinity(Z, [6, 0, 0]);
+    }
+
+    #[test]
+    fn along_x() {
+        parallel_axes_meet_at_their_point_at_infinity(X, [0, 6, 0]);
+    }
+
+    #[test]
+    fn along_x_and_y() {
+        parallel_axes_meet_at_their_point_at_infinity([1, 1, 0], [0, 0, 6]);
     }
 }
 
