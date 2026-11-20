@@ -515,6 +515,49 @@ fn a_region_whose_span_runs_from_a_shared_piece_across_the_join_past_the_seam_pa
     assert_eq!(members, vec![vec![1, 2]], "{:?}", out.common);
 }
 
+/// The first circle whole and a NURBS copy of its last quarter that ends `short` half-turns before
+/// the join, from (0, −1105) to 1105π·`short` steps short of (1105, 0), of another operand, between
+/// grid vertices at (0, −1105) and (1105, 0). As with the exact quarter's copy above, the copy's
+/// ends cut the circle into the piece from the seam to (0, −1105) and the piece from there round
+/// to the join, where the seam pave stands at the domain's start. Inside its paves that piece is
+/// the one stretch to the join, which the copy follows to well within the contact radius, so the
+/// two are one block, which covers the region where they overlap, and it stands.
+fn the_last_quarter_short_of_the_join(short: f64) {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let arc = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (1.5, 2.0 - short)).unwrap();
+    between(&mut arr, copy(&arc), [[0, -1105], [1105, 0]], 1);
+    let out = run(&arr).unwrap();
+    assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![1, 2]], "{:?}", out.common);
+}
+
+/// The last quarter's copy ending at 2 − 2^-52, the double just before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_52_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-52));
+}
+
+/// The last quarter's copy ending 2^-40 half-turns before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_40_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-40));
+}
+
+/// The last quarter's copy ending 2^-20 half-turns before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_20_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-20));
+}
+
+/// The last quarter's copy ending 2^-12 half-turns before the join, about 0.85 steps short of the
+/// vertex.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_12_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-12));
+}
+
 /// The first circle whole and a NURBS copy of its upper half, from (1105, 0) to (−1105, 0): the
 /// copy's ends cut the circle into the upper half, one block with the copy, and the lower half,
 /// which runs from (−1105, 0) round to the seam and is in no block. The region where the circle

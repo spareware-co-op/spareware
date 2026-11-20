@@ -144,7 +144,9 @@ type Span<'a> = (&'a CurveKind<3>, Vec<(f64, f64)>);
 /// The edge curve and parameter stretches of a block: `inner` gives them inside the end paves'
 /// enclosures, otherwise covering them. A block that runs round the seam, from the last pave of a
 /// closed edge to its first, is two stretches: from the last pave to the domain's end, and from
-/// the domain's start to the first pave (a point where that pave stands at the start itself).
+/// the domain's start to the first pave. Where that pave stands at the start itself, the second
+/// would be the one point at the start, which on a closed curve is the end of the first, so the
+/// block is the first alone.
 fn span_of<'a>(
     arr: &'a Arrangement,
     block: &PaveBlock,
@@ -174,8 +176,10 @@ fn span_of<'a>(
     // read modulo the turn (decision 32.104).
     let stretches = if block.wraps && inner && from.t.hi() > b {
         alloc::vec![(Seam::of_curve(curve).wrapped(from.t.hi()), end)]
-    } else if block.wraps {
+    } else if block.wraps && end > a {
         alloc::vec![(start, b), (a, end)]
+    } else if block.wraps {
+        alloc::vec![(start, b)]
     } else {
         alloc::vec![(start, end)]
     };
