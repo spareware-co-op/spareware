@@ -112,18 +112,12 @@ fn a_patch_one_double_wide_is_flagged_whole() {
 }
 
 /// A cone about z of radius one unit at v = 0 widening by half a unit to the unit of height, over
-/// the eighth of a turn either side of x (its turns counted from 10 half-turns on) and v from 0 to
-/// one unit; and the plane x = 1.1 units over y from −2 to 2 units and z from 0 to one unit. They
-/// meet in one curve, from its lowest point on x up both arms to the top, where the plane's edge
-/// z = 1 unit meets the cone on the end of its height. Those two start points stand on the end of
-/// the cone's domain, so they are proven in the room past it, and the pair is settled with nothing
-/// flagged, in both orders.
-#[test]
-fn a_plane_meets_a_cone_on_the_end_of_its_height() {
+/// the half-turns `turns` and v from 0 to one unit; and the plane x = 1.1 units over y from −2 to
+/// 2 units and z from 0 to one unit.
+fn cone_and_wall(turns: (f64, f64)) -> (SurfaceKind, SurfaceKind) {
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let cone = SurfaceKind::Cone(
-        Cone::new([0.0; 3], UNIT, 0.5, frame, ((9.75, 10.25), (0.0, UNIT))).unwrap(),
-    );
+    let cone =
+        SurfaceKind::Cone(Cone::new([0.0; 3], UNIT, 0.5, frame, (turns, (0.0, UNIT))).unwrap());
     let wall = SurfaceKind::Plane(
         Plane::new(
             [1.1 * UNIT, 0.0, 0.0],
@@ -133,6 +127,59 @@ fn a_plane_meets_a_cone_on_the_end_of_its_height() {
         )
         .unwrap(),
     );
+    (cone, wall)
+}
+
+/// A sphere of radius one unit about the origin, its longitude u over the half-turns `longitude`
+/// (counted from x towards y) and its latitude v from −0.3 to 0.4; and the plane z = 1/2 unit over
+/// x from −1 to 1.5 units and y over `across` units.
+fn sphere_and_lid(longitude: (f64, f64), across: (f64, f64)) -> (SurfaceKind, SurfaceKind) {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let sphere =
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], UNIT, frame, (longitude, (-0.3, 0.4))).unwrap());
+    let lid = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 0.5 * UNIT],
+            [UNIT, 0.0, 0.0],
+            [0.0, UNIT, 0.0],
+            ((-1.0, 1.5), across),
+        )
+        .unwrap(),
+    );
+    (sphere, lid)
+}
+
+/// A sphere of radius 5/4 unit about the origin, its longitude u from 0 to 3/4 of a half-turn and
+/// its latitude v from −0.3 to 0.4; and the plane z = 3/4 unit swept by x and by x + y, over u from
+/// −1.5 to 1 and v from −0.5 to 1.5. They meet in the circle of radius one unit, from where the
+/// plane's edge u = 1, the line x − y = 1 unit, crosses the sphere's end u = 0 at (1, 0, 3/4) units,
+/// exactly on the sphere (3, 4, 5), round to the sphere's end u = 3/4 inside the plane. The edge
+/// crosses that end at an angle, so each two of its three rows there determine the zero.
+fn slanted() -> (SurfaceKind, SurfaceKind) {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let sphere = SurfaceKind::Sphere(
+        Sphere::new([0.0; 3], 1.25 * UNIT, frame, ((0.0, 0.75), (-0.3, 0.4))).unwrap(),
+    );
+    let lid = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 0.75 * UNIT],
+            [UNIT, 0.0, 0.0],
+            [UNIT, UNIT, 0.0],
+            ((-1.5, 1.0), (-0.5, 1.5)),
+        )
+        .unwrap(),
+    );
+    (sphere, lid)
+}
+
+/// The cone and plane of `cone_and_wall`, the cone over the eighth of a turn either side of x (its
+/// turns counted from 10 half-turns on). They meet in one curve, from its lowest point on x up both
+/// arms to the top, where the plane's edge z = 1 unit meets the cone on the end of its height.
+/// Those two start points stand on the end of the cone's domain, so they are proven in the room
+/// past it, and the pair is settled with nothing flagged, in both orders.
+#[test]
+fn a_plane_meets_a_cone_on_the_end_of_its_height() {
+    let (cone, wall) = cone_and_wall((9.75, 10.25));
     for (a, b) in [(&cone, &wall), (&wall, &cone)] {
         let found = subdivide(a, b, FLOOR, &mut meter(1 << 24)).unwrap();
         assert!(found.flagged.is_empty(), "{found:#?}");
@@ -147,19 +194,7 @@ fn a_plane_meets_a_cone_on_the_end_of_its_height() {
 /// with nothing flagged, in both orders.
 #[test]
 fn a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height() {
-    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let cone = SurfaceKind::Cone(
-        Cone::new([0.0; 3], UNIT, 0.5, frame, ((0.25, 2.25), (0.0, UNIT))).unwrap(),
-    );
-    let wall = SurfaceKind::Plane(
-        Plane::new(
-            [1.1 * UNIT, 0.0, 0.0],
-            [0.0, UNIT, 0.0],
-            [0.0, 0.0, UNIT],
-            ((-2.0, 2.0), (0.0, 1.0)),
-        )
-        .unwrap(),
-    );
+    let (cone, wall) = cone_and_wall((0.25, 2.25));
     for (a, b) in [(&cone, &wall), (&wall, &cone)] {
         let found = subdivide(a, b, FLOOR, &mut meter(1 << 24)).unwrap();
         assert!(found.flagged.is_empty(), "{found:#?}");
@@ -167,9 +202,8 @@ fn a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height() {
     }
 }
 
-/// A sphere of radius one unit about the origin, its longitude u from 0 to 3/4 of a half-turn
-/// (counted from x towards y) and its latitude v from −0.3 to 0.4; and the plane z = 1/2 unit over
-/// x from −1 to 1.5 units and y from 0 to one unit. They meet in the circle of radius √3/2 at
+/// The sphere and plane of `sphere_and_lid`, the sphere's longitude from 0 to 3/4 of a half-turn
+/// and the plane's y from 0 to one unit. They meet in the circle of radius √3/2 at
 /// latitude 1/6, from where the plane's edge y = 0 crosses the sphere's end u = 0, at
 /// (√3/2, 0, 1/2) units, round to the sphere's end u = 3/4 inside the plane. The first of those
 /// two start points stands exactly on the end of the sphere's domain, where a sphere has no room
@@ -178,19 +212,7 @@ fn a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height() {
 /// sphere's (0, 1/6).
 #[test]
 fn a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude() {
-    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
-    let sphere = SurfaceKind::Sphere(
-        Sphere::new([0.0; 3], UNIT, frame, ((0.0, 0.75), (-0.3, 0.4))).unwrap(),
-    );
-    let lid = SurfaceKind::Plane(
-        Plane::new(
-            [0.0, 0.0, 0.5 * UNIT],
-            [UNIT, 0.0, 0.0],
-            [0.0, UNIT, 0.0],
-            ((-1.0, 1.5), (0.0, 1.0)),
-        )
-        .unwrap(),
-    );
+    let (sphere, lid) = sphere_and_lid((0.0, 0.75), (0.0, 1.0));
     // The start on both ends, as (the plane's x, y, the sphere's u, v), each the nearest double.
     let (x, v) = (0.75_f64.sqrt(), 1.0 / 6.0);
     for (swapped, (a, b)) in [(false, (&lid, &sphere)), (true, (&sphere, &lid))] {
@@ -214,4 +236,69 @@ fn a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude() {
         };
         assert!(starts.iter().any(holds), "{found:#?}");
     }
+}
+
+/// The work a run charges is part of its answer, since a budget ends a run. So the start points on
+/// the ends of domains above, on the end of the cone's height (over part of a turn and over a whole
+/// one) and on the end of the sphere's longitude, are each held to the exact work their subdivision
+/// charges, as recorded, with the settled pairs, start points and flagged pairs it gives, in both
+/// orders. Two more of the sphere: the first case mirrored in y = 0, so the start stands on the
+/// high end of the sphere's longitude (u = 0, from −3/4) and of the plane's y (0, from −1), and the
+/// sphere over the half-turn from 0 to 1 with the plane's y from 0 to one unit, where the plane's
+/// edge y = 0 meets the sphere on both ends of its longitude, at x = ±√3/2 units. On a sphere's end
+/// the edge's system is searched only on an end its flagged boxes stand on and only near them, a
+/// box whose range leaves out zero is dropped before the operator is charged for it, and a zero
+/// replaces only the flagged boxes it meets: each end's own start is found on that end.
+#[test]
+fn the_ends_of_domains_charge_their_recorded_work() {
+    let (cone, wall) = cone_and_wall((9.75, 10.25));
+    let (whole, round) = cone_and_wall((0.25, 2.25));
+    let (sphere, lid) = sphere_and_lid((0.0, 0.75), (0.0, 1.0));
+    let (mirrored, under) = sphere_and_lid((-0.75, 0.0), (-1.0, 0.0));
+    let (half, over) = sphere_and_lid((0.0, 1.0), (0.0, 1.0));
+    let (ball, slant) = slanted();
+    let runs = [
+        (&cone, &wall),
+        (&wall, &cone),
+        (&whole, &round),
+        (&round, &whole),
+        (&lid, &sphere),
+        (&sphere, &lid),
+        (&under, &mirrored),
+        (&mirrored, &under),
+        (&over, &half),
+        (&half, &over),
+        (&slant, &ball),
+        (&ball, &slant),
+    ];
+    let seen: Vec<_> = runs
+        .into_iter()
+        .map(|(a, b)| {
+            let mut m = meter(1 << 24);
+            let found = subdivide(a, b, FLOOR, &mut m).unwrap();
+            let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+            (
+                m.used().work,
+                found.settled.len(),
+                starts,
+                found.flagged.len(),
+            )
+        })
+        .collect();
+    // (work, settled pairs, start points, flagged pairs), in the order of `runs`.
+    let want = [
+        (2439, 1, 2, 0),
+        (2439, 1, 2, 0),
+        (7138, 1, 2, 0),
+        (7138, 1, 2, 0),
+        (7756, 3, 6, 0),
+        (10817, 4, 8, 0),
+        (12414, 5, 10, 0),
+        (10253, 4, 8, 0),
+        (12920, 4, 8, 0),
+        (12051, 4, 8, 0),
+        (44465, 6, 12, 0),
+        (33907, 6, 12, 0),
+    ];
+    assert_eq!(seen, want);
 }
