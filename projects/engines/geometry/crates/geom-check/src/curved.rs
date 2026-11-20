@@ -41,6 +41,10 @@
 //! | torus, a parallel | \| √((r − R)² + h²) − rₜ \| + δ + 2r·sin α |
 //! | torus, a meridian | \|r − rₜ\| + \|c − core\| + 2r·sin β, β between ẑ and the meridian's normal |
 //!
+//! On a plane the bound's numerator is compared with b · |n|, both squared, as a point's distance
+//! is, and nothing is divided by |n|: for spanning vectors of 1.6e8 steps |n| is no double, and a
+//! quotient's enclosure of an exact 0 widens past it (issue #1028).
+//!
 //! The meridian's term pairs each point with the ideal circle's by the rotation taking ẑ to the
 //! meridian's normal, which moves a unit vector at most 2·sin(β/2) ≤ 2·sin β. A torus takes the
 //! smaller of its two families' bounds, each valid for any circle.
@@ -222,22 +226,24 @@ impl Carrier {
 
     /// Whether every point of `circle` lies within `b` steps of the surface.
     pub(crate) fn holds_circle(&self, circle: &Circle<3>, b: f64) -> bool {
-        self.circle_bound(circle).is_some_and(|d| d <= b)
+        self.circle_fits(circle, b) == Some(true)
     }
 
     /// Whether every point of `ellipse` lies within `b` steps of the surface: `None` on a surface
     /// that has no certified test of an ellipse (a cone, a sphere, a torus).
     pub(crate) fn holds_ellipse(&self, ellipse: &Ellipse<3>, b: f64) -> Option<bool> {
-        let bound = match self {
+        let fits = match self {
             Carrier::Flat { origin, normal } => {
-                Oval::of(ellipse).and_then(|e| e.flat(*origin, *normal))
+                Oval::of(ellipse).and_then(|e| on_flat(e.flat(*origin, *normal)?, *normal, b))
             }
             Carrier::Round(cylinder) if tight::magnitude(cylinder.slope) == 0.0 => {
-                Oval::of(ellipse).and_then(|e| e.round(cylinder))
+                Oval::of(ellipse)
+                    .and_then(|e| e.round(cylinder))
+                    .map(|d| d <= b)
             }
             Carrier::Round(_) | Carrier::Ball { .. } | Carrier::Ring(_) => return None,
         };
-        Some(bound.is_some_and(|d| d <= b))
+        Some(fits == Some(true))
     }
 
     /// Whether the enclosed point `q` lies within `b` steps of the surface.
@@ -257,37 +263,40 @@ impl Carrier {
         }
     }
 
-    /// An upper bound on the distance of every point of `circle` from the surface.
-    fn circle_bound(&self, circle: &Circle<3>) -> Option<f64> {
+    /// Whether every point of `circle` lies within `limit` steps of the surface, `None` where its
+    /// bound cannot be formed: on a plane, its largest distance times |n| against the limit times
+    /// |n| ([`on_flat`]); on a curved surface, an upper bound on its distance against the limit.
+    fn circle_fits(&self, circle: &Circle<3>, limit: f64) -> Option<bool> {
         let (_, [_, _, own]) = circle.frame().unit_vectors().ok()?;
         let c = lift(circle.center())?;
         let r = at(circle.radius())?;
-        match self {
+        let bound = match self {
             Carrier::Flat { origin, normal } => {
                 let off = dot(sub3(c, *origin)?, *normal)?;
                 let tilt = length(cross(own, *normal)?)?;
                 let reach = plus(at(tight::magnitude(off))?, times(r, tilt)?)?;
-                Some(tight::magnitude(divide(reach, length(*normal)?)?))
+                return on_flat(reach, *normal, limit);
             }
             Carrier::Round(cone) => {
                 let (h, delta) = polar(cone.center, cone.axis, c)?;
                 let reach = times(r, length(cross(own, cone.axis)?)?)?;
                 let heights = plus(h, spread(reach)?)?;
                 let ideal = cone.gap(heights, r)?;
-                upper(&[at(tight::magnitude(ideal))?, delta, reach])
+                upper(&[at(tight::magnitude(ideal))?, delta, reach])?
             }
             Carrier::Ball { center, radius } => {
                 let w = sub3(c, *center)?;
                 let h = dot(w, own)?;
                 let delta = length(cross(w, own)?)?;
                 let ideal = minus(length([r, h, at(0.0)?])?, at(*radius)?)?;
-                upper(&[at(tight::magnitude(ideal))?, delta])
+                upper(&[at(tight::magnitude(ideal))?, delta])?
             }
             Carrier::Ring(torus) => match (torus.parallel(c, own, r), torus.meridian(c, own, r)) {
-                (Some(a), Some(b)) => Some(tight::smaller(a, b)),
-                (a, b) => a.or(b),
+                (Some(near), Some(far)) => tight::smaller(near, far),
+                (near, far) => near.or(far)?,
             },
-        }
+        };
+        Some(bound <= limit)
     }
 }
 
@@ -331,13 +340,13 @@ impl Oval {
         add3(self.center, add3(along, across)?)
     }
 
-    /// An upper bound on every point's distance from the plane through `origin` with `normal`:
-    /// (|(c − o) · n| + √((u · n)² + (v · n)²)) / |n|, the largest of the affine distance.
-    fn flat(&self, origin: V3, normal: V3) -> Option<f64> {
+    /// An upper bound on every point's distance from the plane through `origin` with `normal`,
+    /// times |n|: |(c − o) · n| + √((u · n)² + (v · n)²), the largest of the affine distance,
+    /// which [`on_flat`] compares against b · |n|.
+    fn flat(&self, origin: V3, normal: V3) -> Option<Interval> {
         let off = dot(sub3(self.center, origin)?, normal)?;
         let tilt = length([dot(self.u, normal)?, dot(self.v, normal)?, at(0.0)?])?;
-        let reach = plus(at(tight::magnitude(off))?, tilt)?;
-        Some(tight::magnitude(divide(reach, length(normal)?)?))
+        plus(at(tight::magnitude(off))?, tilt)
     }
 
     /// An upper bound on every point's distance from `cylinder`: δ + the larger of |A − R| and
@@ -708,10 +717,26 @@ fn same_side(a: Interval, b: Interval) -> bool {
 /// exact data, as [`flat`] compares a point's distance. A distance that cannot be formed certifies
 /// nothing.
 fn clear(offset: Interval, normal: V3, stray: f64) -> bool {
-    let room = || times(square(at(stray)?)?, dot(normal, normal)?);
     square(offset)
-        .zip(room())
+        .zip(room(normal, stray))
         .is_some_and(|(have, room)| have.lo() > room.hi())
+}
+
+/// b² · |n|², enclosed with its lower end at 0 or above: the product is never negative, so its
+/// enclosure may be cut at 0. Then b = 0 gives exactly 0 even where |n|² is no double, as for
+/// spanning vectors of 1.6e8 steps, whose enclosure times 0 widens below 0 and would refuse a
+/// distance of exactly 0 at a bound of nothing (issue #1028).
+fn room(normal: V3, b: f64) -> Option<Interval> {
+    let room = times(square(at(b)?)?, dot(normal, normal)?)?;
+    Interval::new(tight::larger(room.lo(), 0.0), room.hi()).ok()
+}
+
+/// Whether a distance from the plane of normal `normal`, given times |n| as `reach` (of either
+/// sign), is at most `b`: reach² ≤ b² · |n|², on the certified upper end of the one and the lower
+/// end of the other, exact on exact data. Nothing is divided by |n|, which for long spanning
+/// vectors is no double: a quotient's enclosure of an exact 0 widens past it (issue #1028).
+fn on_flat(reach: Interval, normal: V3, b: f64) -> Option<bool> {
+    Some(square(reach)?.hi() <= room(normal, b)?.lo())
 }
 
 /// Whether every coordinate of `v` is exactly zero.
@@ -725,13 +750,9 @@ fn fits(gap: Interval, b: f64) -> bool {
 }
 
 /// Whether `q` lies within `b` of the plane through `origin` with `normal`:
-/// ((q − o) · n)² ≤ b² · |n|², exact on exact data.
+/// ((q − o) · n)² ≤ b² · |n|², exact on exact data ([`on_flat`]).
 fn flat(origin: V3, normal: V3, q: V3, b: f64) -> bool {
-    let room = || times(square(at(b)?)?, dot(normal, normal)?);
-    sub3(q, origin)
-        .and_then(|w| square(dot(w, normal)?))
-        .zip(room())
-        .is_some_and(|(have, room)| have.hi() <= room.lo())
+    sub3(q, origin).and_then(|w| on_flat(dot(w, normal)?, normal, b)) == Some(true)
 }
 
 /// A point's height h along the axis and its distance ρ from it.

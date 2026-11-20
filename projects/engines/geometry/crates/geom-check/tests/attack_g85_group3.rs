@@ -955,6 +955,36 @@ fn a_wall_with_a_round_opening_passes() {
     );
 }
 
+#[test]
+fn a_wall_on_its_grid_with_its_circles_on_their_planes_passes_at_a_bound_of_nothing() {
+    // Issue #1028: bldg-25's wall on its grid with both circles of the opening exactly on their
+    // planes, as its bottom circle is. The faces' spanning vectors, of up to 6.4e8 steps, make
+    // |n| no double, and group 2 divided a circle's bound on a plane by it, so the exact 0
+    // widened to a subnormal and each circle was off its face at a bound of nothing.
+    let wall = |top: f64| {
+        wall_of(
+            [640_000_000, 480_000_000, 32_000_000],
+            ([320_000_000, 240_000_000], 64_000_000),
+            top,
+        )
+    };
+    assert_eq!(at(&wall(32_000_000.0), BodyKind::Solid, 0), []);
+    // The top circle a step above its plane is off the top at a bound of nothing, and only there.
+    let faults = at(&wall(32_000_001.0), BodyKind::Solid, 0);
+    assert!(
+        faults.iter().all(|f| f.kind == FaultKind::EdgeOffSurface),
+        "{faults:?}"
+    );
+    assert!(
+        faults.iter().any(|f| f.with == Some(Entity::Face(ix(1)))),
+        "{faults:?}"
+    );
+    assert!(
+        !faults.iter().any(|f| f.with == Some(Entity::Face(ix(0)))),
+        "{faults:?}"
+    );
+}
+
 /// The square of side 10 with a round hole of radius 2 at its centre, in z = 0, and a second
 /// sheet: a square in the plane x = 5 across it, from height `low` to `low` + 10.
 fn holed_beside(low: i64) -> Rows {
