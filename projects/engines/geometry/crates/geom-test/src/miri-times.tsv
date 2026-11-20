@@ -50,6 +50,7 @@
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring runs 44703337217 (miri_measure=new on test/phase5-intersect-mutants-e at a8b6d5823) and 44679007301 (miri_measure=all on it at 78c4ad94b, miri_measure_tests binary_id(geom-intersect::general_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 general_mutants tests, each from the later run that measured it (the tests since 78c4ad94b are new); the train's tests the runs also measured keep their rows.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1614,6 +1615,17 @@ native-only over 738	geom-intersect::edge_end	a_zero_on_the_end_of_a_nurbs_patch
 native-only over 737	geom-intersect::fit_refined	a_closed_loop_of_three_vertices_is_refined_and_closes
 native-only over 738	geom-intersect::fit_refined	a_two_vertex_branch_is_refined_into_a_certified_curve
 native-only over 738	geom-intersect::fit_refined	a_two_vertex_branch_on_the_plane_first_is_refined_too
+native-only over 747	geom-intersect::general_mutants	a_box_on_an_edge_in_the_other_surface_is_the_runs_only_within_a_floor
+native-only over 747	geom-intersect::general_mutants	a_chord_meets_both_ends_of_a_spheres_longitude_in_one_pair
+80	geom-intersect::general_mutants	a_patch_one_double_wide_is_flagged_whole
+native-only 626	geom-intersect::general_mutants	a_plane_edge_meets_a_sphere_on_the_end_of_its_longitude
+216	geom-intersect::general_mutants	a_plane_meets_a_cone_on_the_end_of_its_height
+native-only over 659	geom-intersect::general_mutants	a_plane_meets_a_whole_turn_of_cone_on_the_end_of_its_height
+native-only over 747	geom-intersect::general_mutants	an_edge_a_hair_inside_the_end_of_a_spheres_longitude_is_left_flagged
+native-only over 747	geom-intersect::general_mutants	rows_whose_determinant_may_be_zero_on_a_subnormal_end_are_not_solved
+native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_their_recorded_work
+3	geom-intersect::general_mutants	turns_that_share_twice_a_turn_round_are_not_one_region
+2	geom-intersect::general_mutants	turns_that_touch_a_turn_round_share_one_region
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_circle_twice
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_cylinder_twice
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_sphere_twice
