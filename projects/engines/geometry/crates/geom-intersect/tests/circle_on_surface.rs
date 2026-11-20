@@ -167,37 +167,57 @@ fn a_circle_in_a_plane_is_an_overlap() {
     );
 }
 
-#[test]
-fn a_circle_off_a_plane_is_the_engines() {
-    let flat = plane([3.0, 4.0, 5.0], X, Y, SIDE, SIDE);
-    // Across a normal that leans along a, along b, and a parallel circle a step off the plane
-    // either way: each fails one exact sign alone.
-    assert_eq!(
-        engine(&circle([12.0, 8.0, 5.0], 5.0, Y, [1.0, 0.0, 1.0]), &flat),
-        Said::Other
-    );
-    assert_eq!(
-        engine(&circle([12.0, 8.0, 5.0], 5.0, X, [0.0, 1.0, 1.0]), &flat),
-        Said::Other
-    );
-    assert_eq!(
-        engine(&circle([12.0, 8.0, 6.0], 5.0, X, Z), &flat),
-        Said::Nothing
-    );
-    assert_eq!(
-        engine(&circle([12.0, 8.0, 4.0], 5.0, X, Z), &flat),
-        Said::Nothing
-    );
-    // On the tilted plane, a centre off it along each coordinate in turn.
-    let tilted = plane(
-        [3.0, 4.0, 5.0],
-        [1.0, 1.0, 0.0],
-        [0.0, 1.0, 1.0],
-        SIDE,
-        SIDE,
-    );
-    for centre in [[5.0, 7.0, 7.0], [4.0, 8.0, 7.0], [4.0, 7.0, 8.0]] {
-        engine(&circle(centre, 2.0, X, [1.0, -1.0, 1.0]), &tilted);
+/// A circle off a plane is the engine's, in slices of the one case list, each slice a few runs of
+/// the engine (each run its own minutes under Miri): across a normal that leans along a, along b,
+/// and a parallel circle a step off the plane either way, each failing one exact sign alone; and on
+/// the tilted plane, a centre off it along each coordinate in turn.
+mod a_circle_off_a_plane_is_the_engines {
+    use super::*;
+
+    fn flat() -> SurfaceKind {
+        plane([3.0, 4.0, 5.0], X, Y, SIDE, SIDE)
+    }
+
+    #[test]
+    fn leaning_along_a() {
+        assert_eq!(
+            engine(&circle([12.0, 8.0, 5.0], 5.0, Y, [1.0, 0.0, 1.0]), &flat()),
+            Said::Other
+        );
+    }
+
+    #[test]
+    fn leaning_along_b() {
+        assert_eq!(
+            engine(&circle([12.0, 8.0, 5.0], 5.0, X, [0.0, 1.0, 1.0]), &flat()),
+            Said::Other
+        );
+    }
+
+    #[test]
+    fn a_step_off_either_way() {
+        assert_eq!(
+            engine(&circle([12.0, 8.0, 6.0], 5.0, X, Z), &flat()),
+            Said::Nothing
+        );
+        assert_eq!(
+            engine(&circle([12.0, 8.0, 4.0], 5.0, X, Z), &flat()),
+            Said::Nothing
+        );
+    }
+
+    #[test]
+    fn off_the_tilted_plane_along_each_coordinate() {
+        let tilted = plane(
+            [3.0, 4.0, 5.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 1.0],
+            SIDE,
+            SIDE,
+        );
+        for centre in [[5.0, 7.0, 7.0], [4.0, 8.0, 7.0], [4.0, 7.0, 8.0]] {
+            engine(&circle(centre, 2.0, X, [1.0, -1.0, 1.0]), &tilted);
+        }
     }
 }
 
@@ -653,30 +673,40 @@ fn circles_apart_in_one_plane_meet_nothing() {
     misses(&circle([2.4, 3.2, 1.0], 1.0, Z, LEAN), &leaning);
 }
 
-#[test]
-fn a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis() {
-    // The crossings at a third and two thirds of a turn round the circle, a sixth either side of
-    // the join round the axis, all inside domains of 1.9 half-turns from 0.05: each may hold only
-    // part of the other, so the pair is the engine's.
-    let part = (0.05, 1.95);
-    let short = Cylinder::new([0.0; 3], 5.0, Frame::new(X, Z).unwrap(), (part, SIDE)).unwrap();
-    let (what, work) = said(
-        &circle([5.0, 0.0, 10.0], 5.0, X, Z),
-        &SurfaceKind::Cylinder(short),
-    );
-    assert!(
-        what == Said::Other && work > FEW_POINTS,
-        "{what:?}, {work} units"
-    );
-    let arc = CurveKind::Circle(
-        Circle::new([5.0, 0.0, 10.0], 5.0, Frame::new(X, Z).unwrap(), part).unwrap(),
-    );
-    let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
-    let (what, work) = said(&arc, &tube);
-    assert!(
-        what == Said::Other && work > FEW_POINTS,
-        "{what:?}, {work} units"
-    );
+/// The crossings at a third and two thirds of a turn round the circle, a sixth either side of the
+/// join round the axis, all inside domains of 1.9 half-turns from 0.05: each may hold only part of
+/// the other, so the pair is the engine's. In slices of the one case list, one run of the engine
+/// each (each its own minutes under Miri).
+mod a_round_domain_or_a_circle_short_of_a_turn_is_the_engines_across_the_axis {
+    use super::*;
+
+    const PART: (f64, f64) = (0.05, 1.95);
+
+    #[test]
+    fn a_round_domain_short_of_a_turn() {
+        let short = Cylinder::new([0.0; 3], 5.0, Frame::new(X, Z).unwrap(), (PART, SIDE)).unwrap();
+        let (what, work) = said(
+            &circle([5.0, 0.0, 10.0], 5.0, X, Z),
+            &SurfaceKind::Cylinder(short),
+        );
+        assert!(
+            what == Said::Other && work > FEW_POINTS,
+            "{what:?}, {work} units"
+        );
+    }
+
+    #[test]
+    fn a_circle_short_of_a_turn() {
+        let arc = CurveKind::Circle(
+            Circle::new([5.0, 0.0, 10.0], 5.0, Frame::new(X, Z).unwrap(), PART).unwrap(),
+        );
+        let tube = SurfaceKind::Cylinder(cylinder([0.0; 3], 5.0, X, Z));
+        let (what, work) = said(&arc, &tube);
+        assert!(
+            what == Said::Other && work > FEW_POINTS,
+            "{what:?}, {work} units"
+        );
+    }
 }
 
 #[test]
