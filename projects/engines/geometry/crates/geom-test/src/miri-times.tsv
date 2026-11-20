@@ -54,6 +54,7 @@
 # GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 # GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
 # GitHub measuring run 44835390573 (miri_measure=new on fix/921-reduced at 058283656, miri_measure_tests naming the branch's 4 new half_plane tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1609,9 +1610,12 @@ native-only over 583	geom-intersect::circle_part_in_plane	what_the_signs_cannot_
 native-only over 745	geom-intersect::contact_mutants	a_bowl_over_a_wider_one_overlaps_though_only_the_small_one_reaches_an_edge
 native-only over 749	geom-intersect::contact_mutants	a_cluster_reaching_past_the_cap_is_not_read_in_the_turned_chart
 native-only over 749	geom-intersect::contact_mutants	a_cones_apex_on_a_plane_at_either_end_of_its_height_is_one_singular_point
+native-only over 563	geom-intersect::contact_mutants	a_cusp_on_a_torus_reads_its_gap_on_both_sides_of_zero
 native-only over 749	geom-intersect::contact_mutants	a_cylinder_on_a_plane_is_a_band_of_its_recorded_width
+native-only over 563	geom-intersect::contact_mutants	a_plane_that_meets_a_cylinder_at_its_corners_alone_is_not_settled
 native-only over 749	geom-intersect::contact_mutants	a_plane_touching_a_sphere_near_its_south_pole_is_read_where_it_touches
-native-only over 736	geom-intersect::contact_mutants	a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled
+native-only over 563	geom-intersect::contact_mutants	a_saddle_on_a_plane_whose_branches_are_not_its_zeros_is_undecided
+native-only over 563	geom-intersect::contact_mutants	a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled
 native-only over 736	geom-intersect::contact_mutants	a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work
 native-only over 736	geom-intersect::contact_mutants	a_turned_bowl_over_the_side_of_another_leaves_holes_so_it_is_no_overlap
 native-only over 736	geom-intersect::contact_mutants	ridges_too_close_to_part_overlap_where_each_reaches_one_side_alone
