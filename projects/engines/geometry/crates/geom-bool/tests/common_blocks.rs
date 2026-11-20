@@ -17,11 +17,13 @@
 )]
 
 use geom_bool::carrier::PointGeom;
-use geom_bool::common::Proof;
+use geom_bool::common::{Proof, common_blocks};
 use geom_bool::interfere::{Arrangement, EdgeIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
+use geom_bool::pave::{Pave, PaveBlock};
 use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
 use geom_num::P3;
+use geom_num::interval::Interval;
 use geom_run::{Budget, Exec, WorkMeter};
 
 fn meter() -> WorkMeter<'static> {
@@ -174,4 +176,66 @@ fn a_block_of_three_holds_the_weakest_proof_of_its_pairs() {
     let (members, widest) = proof_of(&out);
     assert_eq!(members, 3);
     assert!(2.85 < widest && widest < 3.0, "{widest}");
+}
+
+/// A closed circle of radius 1105 from (1105, 0) and a NURBS copy of its first quarter, to
+/// (0, 1105), of another operand, each one block between the vertices at the quarter's ends. The
+/// circle's block runs round the seam from the seam vertex's pave, whose enclosure is written
+/// from a little before the end and runs past it (decision 32.104). Inside its paves the block is
+/// one stretch, from where that pave ends modulo the turn to the quarter's pave, and the contact
+/// rule cuts only that stretch; a seam pave ending exactly on the end leaves nothing before the
+/// join, and the stretch from the domain's start. Both are one block with the copy, at the work
+/// the stretches take.
+#[test]
+fn a_block_from_a_seam_pave_past_the_end_is_one_stretch_inside_its_paves() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 2.0)).unwrap();
+    let quarter = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 0.5)).unwrap();
+    let copy = CurveKind::Circle(quarter)
+        .to_nurbs(&mut meter())
+        .unwrap()
+        .value
+        .curve;
+    let (s0, s1) = copy.domain();
+    let mut arr = Arrangement::default();
+    for (operand, curve) in [(0, CurveKind::Circle(circle)), (1, CurveKind::Nurbs(copy))] {
+        let curve = arr.carriers.add_curve(curve).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: None,
+            operand,
+        });
+    }
+    for [x, y] in [[1105, 0], [0, 1105]] {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, y, 0).unwrap()),
+            operand: 2,
+        });
+    }
+    let iv = |lo: f64, hi: f64| Interval::new(lo, hi).unwrap();
+    let pave = |vertex: usize, t: Interval| Some(Pave { vertex, t });
+    let common = |seam_end: f64| {
+        let blocks = [
+            PaveBlock {
+                edge: 0,
+                from: pave(0, iv(2.0 - 1.0 / 64.0, seam_end)),
+                to: pave(1, iv(0.5, 0.5)),
+                wraps: true,
+            },
+            PaveBlock {
+                edge: 1,
+                from: pave(0, iv(s0, s0)),
+                to: pave(1, iv(s1, s1)),
+                wraps: false,
+            },
+        ];
+        let mut m = meter();
+        let found = common_blocks(&arr, &blocks, &mut m).unwrap();
+        let members: Vec<Vec<usize>> = found.iter().map(|c| c.members.clone()).collect();
+        (members, m.used().work)
+    };
+    assert_eq!(
+        [common(2.0 + 1.0 / 64.0), common(2.0)],
+        [(vec![vec![0, 1]], 532_573), (vec![vec![0, 1]], 975_668)]
+    );
 }

@@ -408,6 +408,34 @@ fn a_box_across_the_join_is_compared_with_the_boxes_it_reaches_only() {
 }
 
 #[test]
+fn a_box_reaching_an_open_domain_s_end_goes_no_further() {
+    // The same three boxes on an open (0, 2), the last ending on the end: an end is no join, so it
+    // is compared with no earlier box, and the work is one charge an item.
+    let item = |spans: &[(f64, f64)]| Item::Point {
+        at: at(spans),
+        xyz: space(),
+        contact: PointContact::Crossing,
+        class: Exactness::Exact,
+    };
+    let items = vec![
+        item(&[(0.0, 0.05), (0.7, 0.8)]),
+        item(&[(1.0, 1.1), (0.5, 0.6)]),
+        item(&[(1.9, 2.0), (0.5, 0.6)]),
+    ];
+    let mut m = meter();
+    let seams = [Seam::open((0.0, 2.0)), Seam::open((0.0, 1.0))];
+    Intersection::on(
+        items,
+        Coverage::CompleteOutsideFlagged,
+        Vec::new(),
+        &seams,
+        &mut m,
+    )
+    .unwrap();
+    assert_eq!(m.used().work, 3);
+}
+
+#[test]
 fn the_sweep_stops_where_the_first_unknown_ends() {
     // Nine disjoint items, each beyond the last: one charge per item, and no comparison at all.
     let items: Vec<Item> = (0..9).map(|i| point(f64::from(i))).collect();

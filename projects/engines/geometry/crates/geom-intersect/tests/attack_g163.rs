@@ -529,6 +529,31 @@ fn a_cubic_pair_meets_nine_times() {
 }
 
 #[test]
+fn a_line_through_a_loop_s_double_point_crosses_both_its_branches_there() {
+    // The cubic's loop crosses itself at (0.5, 0.375), at 1/2 - √3/4 and 1/2 + √3/4, and tops out
+    // at (0.5, 1.5) at 1/2; the line x = 0.5 passes through both. The two crossings at the double
+    // point share the line's parameter and are two points: a zero is known only if it meets one
+    // found before in both parameters.
+    let looped = bezier(&[[0.0, 0.0], [3.0, 2.0], [-2.0, 2.0], [1.0, 0.0]]);
+    let line = bezier(&[[0.5, -1.0], [0.5, 2.0]]);
+    let r = meet(&line, &looped);
+    assert_eq!(points(&r).len(), 3, "{:?}", r.items());
+    // Each crossing is held by one point's box: the line's parameter is (y + 1) / 3.
+    let w = 3.0_f64.sqrt() / 4.0;
+    for (s, t) in [
+        (1.375 / 3.0, 0.5 - w),
+        (1.375 / 3.0, 0.5 + w),
+        (2.5 / 3.0, 0.5),
+    ] {
+        let holding = r.items().iter().filter(|i| {
+            let x = i.at().spans();
+            x[0].contains(s) && x[1].contains(t)
+        });
+        assert_eq!(holding.count(), 1, "({s}, {t}) in {:?}", r.items());
+    }
+}
+
+#[test]
 fn a_curve_in_space_passes_a_line_or_is_flagged_beside_it() {
     // 12.5: two space curves meeting is no stable fact, so a shadow's crossing whose third coordinate
     // agrees only to within its enclosure is a near miss, and one a step away is nothing.
@@ -2173,6 +2198,18 @@ fn a_seam_keeps_a_span_that_starts_in_the_window_and_writes_one_a_turn_outside_a
     // moved by a turn: it is written as the whole turn.
     assert_eq!(ends(-2.5, -2.45, -2.4), (0.0, 2.0));
     assert_eq!(ends(4.5, 4.55, 4.6), (0.0, 2.0));
+}
+
+#[test]
+fn a_span_moved_by_a_turn_onto_the_window_s_end_is_kept_there() {
+    // The window holds both its ends, the join's two names: a span that starts exactly on the end
+    // once moved back by the turn is written from there, not as the whole turn. Away from 0 the
+    // moved start can land on the end exactly, 104 and 102 sharing a step.
+    let turn = Seam::turns((100.0, 102.0));
+    let span = span_of(104.0_f64.next_up(), 104.5);
+    let kept = turn.hull(span, span).unwrap();
+    assert_eq!(kept.lo(), 102.0);
+    assert!(kept.hi() > 102.5 && kept.hi() < 103.0, "{kept:?}");
 }
 
 #[test]
