@@ -8124,12 +8124,12 @@
       "reason": "A crossing with nothing across it and off the domain stands beside a flagged box, or the trace is broken: an interior crossing always has a box across its side, and that box is settled or flagged. With || the test also accepts a flagged box level with the crossing in one parameter only, which differs only on that broken trace, where the answer is Internal rather than an ended branch."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/known.rs",
-      "mutant": "replace < with <= in tangent_cell",
-      "line_text": "let increasing = pick(start, along).hi() < pick(end, along).lo();",
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace > with >= in turning",
+      "line_text": "Ok((sigma > 0.0).then_some((sigma, kappa)))",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "They differ only where the stretch's start s and end e have s.hi == e.lo along the parameter. A stretch holds at least two vertices (k to k + 2 of the curve's), so the loop over its windows always runs. The original then reads the stretch as decreasing and needs each window strictly decreasing, so e.hi < s.lo; but s.lo <= s.hi = e.lo <= e.hi. The mutant reads it as increasing and needs each window strictly increasing, so s.hi < e.lo; but they are equal. Either way a window fails and tangent_cell gives None, for every input."
+      "reason": "The forms differ only when sigma is exactly 0, and it never is there. turning returns no bound before this line unless size, the norm of the normal, has a lower bound above 0; Interval::norm squares and sums with no rescaling and roots the sum, so that lower bound is the root of a positive double, at least about 2^-537. The norm of the partials, trace, is finite, as a square or sum past the doubles is an error, so its upper bound is at most about 2^512; and div refuses a trace whose lower bound is 0. sigma is div's lower bound, one step below the least corner quotient, which is at least about 2^-537 / 2^512 = 2^-1049, far above the smallest double 2^-1074, so sigma is positive and both forms keep it. The check is kept as a guard should Interval::norm change."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
@@ -9258,6 +9258,14 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "crosses only prunes facets. With == it also keeps a facet whose plane holds the whole triangle (every corner on it): an edge in that plane has both ends on it, so its crossing is skipped, and the plane meets the triangle's own plane in no line, so every meeting with it is Degenerate and gives no point. Every answer is the same, at more cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/known.rs",
+      "mutant": "replace < with <= in tangent_cell",
+      "line_text": "let increasing = pick(start, along).hi() < pick(end, along).lo();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only where the stretch's start s and end e have s.hi == e.lo along the parameter. A stretch holds at least two vertices (k to k + 2 of the curve's), so the loop over its windows always runs. The original then reads the stretch as decreasing and needs each window strictly decreasing, so e.hi < s.lo; but s.lo <= s.hi = e.lo <= e.hi. The mutant reads it as increasing and needs each window strictly increasing, so s.hi < e.lo; but they are equal. Either way a window fails and tangent_cell gives None, for every input."
     }
   ],
   "coverage_off": [
