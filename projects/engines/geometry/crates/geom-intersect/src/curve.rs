@@ -6,9 +6,11 @@
 //! NURBS pieces. In 3D the coordinate left out decides: a meeting is reported only where it is proven,
 //! and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. Two conics that
 //! are not both circles run the engine too: their exact counts are the fixed-integer predicates of
-//! chapter 14's piece G190. [`self_crossings`] runs the same engine on a curve and
-//! itself, above the diagonal, dropping every span whose tangents stay in one half-plane, since such a
-//! span cannot cross itself.
+//! chapter 14's piece G190. [`curves_over`] answers a box inside the two domains, by a closed form
+//! or the engine run from that box, so a caller can decide one part of a flagged region again.
+//! [`self_crossings`] runs the same engine on
+//! a curve and itself, above the diagonal, dropping every span whose tangents stay in one
+//! half-plane, since such a span cannot cross itself.
 //!
 //! Guarantees:
 //!
@@ -1714,13 +1716,80 @@ pub fn curves<const D: usize>(
     };
     let [first, second] = seams;
     let domain = [first.side()?, second.side()?];
-    let solved = solve(&gap, domain, |_, _| Ok(true), meter)?;
+    let solved = solve(&gap, domain, domain, |_, _| Ok(true), meter)?;
     let route = if routed {
         alloc::vec![Diag { code: ROUTE.into() }]
     } else {
         Vec::new()
     };
     finished(&gap, solved, route, meter)
+}
+
+/// Where `a` over `s` and `b` over `t` meet. A pair with a closed form is answered by it, as
+/// [`curves`] answers it, kept to the items that meet that box. Any other pair runs [`curves`]'
+/// engine started from that box inside the two whole domains, so it is split and grown as the
+/// whole search splits and grows it, at the same floor. A caller decides so one part of a region
+/// the whole pair left undecided, as the part of it past a vertex.
+///
+/// # Errors
+///
+/// As [`curves`], and [`IntersectError::Internal`] for a stretch that does not run forward.
+pub fn curves_over<const D: usize>(
+    a: &CurveKind<D>,
+    s: (f64, f64),
+    b: &CurveKind<D>,
+    t: (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Intersection, IntersectError> {
+    meter.poll()?;
+    // A pair `curves` answers in closed form is answered so here: what meets the box is the box's
+    // answer, since nothing outside the items is a meeting.
+    let closed = if a == b {
+        Some(whole_overlap(a.domain(), b.domain(), meter)?)
+    } else if let Closed::Decided(answer) = closed_form(a, b, meter)? {
+        Some(answer)
+    } else if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {
+        match closed_form(b, a, meter)? {
+            Closed::Decided(answer) => Some(answer.swapped(1)),
+            Closed::Undecided | Closed::Absent => None,
+        }
+    } else {
+        None
+    };
+    if let Some(answer) = closed {
+        let within = |x: &Interval, (lo, hi): (f64, f64)| x.lo() <= hi && lo <= x.hi();
+        let items: Vec<Item> = answer
+            .items()
+            .iter()
+            .filter(|i| match i.at().spans() {
+                [x, y, ..] => within(x, s) && within(y, t),
+                _ => true,
+            })
+            .cloned()
+            .collect();
+        let diagnostics = answer.diagnostics().to_vec();
+        return Intersection::new(items, answer.coverage(), diagnostics, meter);
+    }
+    // The pair as `curves` sets it up, so the box is searched as it is inside the whole.
+    let whole = (finite(a)?, finite(b)?);
+    let shared = if D == 3 { shared_plane(a, b) } else { None };
+    let gap = Gap {
+        a,
+        b,
+        seams: [seam_of(a, whole.0), seam_of(b, whole.1)],
+        axes: match shared {
+            Some(n) => across(n),
+            None => plane(a, b, whole, meter)?,
+        },
+        coplanar: shared.is_some(),
+        pieces_a: pieces(a, meter)?,
+        pieces_b: pieces(b, meter)?,
+    };
+    let [first, second] = gap.seams;
+    let domain = [first.side()?, second.side()?];
+    let start = [Interval::new(s.0, s.1)?, Interval::new(t.0, t.1)?];
+    let solved = solve(&gap, domain, start, |_, _| Ok(true), meter)?;
+    finished(&gap, solved, Vec::new(), meter)
 }
 
 /// The answer from what the engine found.
@@ -1812,7 +1881,7 @@ pub fn self_crossings<const D: usize>(
         }
         Ok(true)
     };
-    let mut solved = solve(&gap, [side, side], keep, meter)?;
+    let mut solved = solve(&gap, [side, side], [side, side], keep, meter)?;
     // The join of a closed curve, and any zero of the diagonal itself, are no crossing.
     solved.zeros.retain(|z| {
         let [s, t] = z.enclosure;

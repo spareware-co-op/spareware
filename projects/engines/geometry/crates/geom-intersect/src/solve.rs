@@ -442,8 +442,11 @@ pub(crate) fn runs<const N: usize>(
     Ok(out)
 }
 
-/// Every zero of `field` in `domain`, past what `keep` rules out: a box for which `keep` says no is
-/// dropped with whatever zeros it holds. A caller's test is what lets a search stop early.
+/// Every zero of `field` in `start`, a box inside `domain`, past what `keep` rules out: a box for
+/// which `keep` says no is dropped with whatever zeros it holds. A caller's test is what lets a
+/// search stop early. Boxes are split, widened and grown as shares of `domain` and kept inside
+/// `start`, so a search of all of `domain` starts from it, and a part of it searched again from
+/// that part is cut as it is inside the whole, at the whole's scale.
 ///
 /// # Errors
 ///
@@ -452,6 +455,7 @@ pub(crate) fn runs<const N: usize>(
 pub fn solve<F, K, const N: usize>(
     field: &F,
     domain: [Interval; N],
+    start: [Interval; N],
     mut keep: K,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Solved<N>, IntersectError>
@@ -461,7 +465,7 @@ where
 {
     let (mut zeros, mut flagged) = (Vec::<Zero<N>>::new(), Vec::new());
     let mut work = Vec::new();
-    work.push(domain);
+    work.push(start);
     while let Some(x) = work.pop() {
         meter.charge(1)?;
         meter.poll()?;
@@ -475,7 +479,7 @@ where
         }
         // The operator first: a clip can take a box below what the rounding of the kinds lets the
         // operator prove, and the operator settles a simple zero from far wider boxes.
-        let wide = widened(&x, &domain)?;
+        let wide = widened(&x, &start)?;
         let why = match step(field, &wide, meter)? {
             Step::Empty => continue,
             Step::Unique(enclosure) => {
@@ -486,7 +490,10 @@ where
                 // Worth keeping only if it cut a side to half or less, or the box would split
                 // anyway and lose the work. What is kept is grown: a zero on a split line then
                 // stays inside it, and no side falls to where rounding swamps the kinds' slopes.
-                let kept = grown(&y, &domain)?;
+                let mut kept = grown(&y, &domain)?;
+                for (slot, s) in kept.iter_mut().zip(&start) {
+                    *slot = shared(*slot, *s).ok_or_internal()?;
+                }
                 let halved = kept
                     .iter()
                     .zip(&wide)

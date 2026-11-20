@@ -416,6 +416,33 @@ fn a_foot_on_an_end_is_a_foot() {
     assert!(foot.distance.contains(3.0), "{foot:?}");
 }
 
+/// A circle's foot is its closed form, moved by whole turns onto whatever turn its domain is: from
+/// (7, 10), 10 from the centre, the foot is at atan2(4, 3)/π, 5 away, on each of these domains.
+#[test]
+fn a_circles_foot_is_its_turn_on_any_domain_that_holds_it() {
+    let turn = 4.0_f64.atan2(3.0) / core::f64::consts::PI;
+    for (domain, at) in [
+        ((0.0, 1.5), turn),
+        ((0.5, 2.5), turn + TURN),
+        ((-2.0, -0.5), turn - TURN),
+    ] {
+        let arc = circle(5.0, domain);
+        let found = project_curve(&arc, &[7.0, 10.0], FLOOR, &mut meter()).unwrap();
+        assert!(!found.tie_broken(), "{domain:?}: {found:?}");
+        let foot = found.first().unwrap();
+        assert_eq!(foot.place, Place::Foot, "{domain:?}: {found:?}");
+        assert!(
+            foot.at[0].lo() - 1e-12 <= at && at <= foot.at[0].hi() + 1e-12,
+            "{domain:?}: {foot:?}"
+        );
+        assert!(foot.distance.contains(5.0), "{domain:?}: {foot:?}");
+        assert!(
+            foot.point[0].contains(4.0) && foot.point[1].contains(6.0),
+            "{foot:?}"
+        );
+    }
+}
+
 /// y = x² from the centre of curvature at its vertex: the distance grows only with t⁴, so no test
 /// can settle the vertex, and what the floor leaves is one point.
 #[test]
@@ -619,7 +646,9 @@ fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
 /// what is pruned, which no answer shows. The pinned numbers move only with the search itself, or
 /// with what the kinds charge: the torus's moved from 59,498 to 275,498 when its partials began to
 /// pay for the arctangent's 192-bit corners (issue #765), with the same steps and the same answer
-/// (the old number comes back with `FAR_CORNER` set to 0).
+/// (the old number comes back with `FAR_CORNER` set to 0). The arc's from (4, 6) moved from 165 to
+/// 6 when a circle's foot became its closed form (issue #1102): its two ends and one bound. From
+/// (9, 2) the foot is the arc's start, which the closed form leaves to the search, at its old cost.
 #[test]
 fn each_search_takes_the_work_it_always_took() {
     let frame = Frame::standard().unwrap();
@@ -643,7 +672,7 @@ fn each_search_takes_the_work_it_always_took() {
         .unwrap(),
     );
     let curves: [(&CurveKind<2>, [f64; 2], u64); 3] = [
-        (&arc, [4.0, 6.0], 165),
+        (&arc, [4.0, 6.0], 6),
         (&arc, [9.0, 2.0], 165),
         (&ellipse, [1.0, 2.0], 191),
     ];

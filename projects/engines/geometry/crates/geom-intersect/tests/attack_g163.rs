@@ -1992,7 +1992,14 @@ impl Field<2> for Bent {
 #[test]
 fn a_field_without_clipping_keeps_its_zero() {
     let side = Interval::new(0.0, 1.0).unwrap();
-    let solved = solve(&Bent, [side, side], |_, _| Ok(true), &mut meter()).unwrap();
+    let solved = solve(
+        &Bent,
+        [side, side],
+        [side, side],
+        |_, _| Ok(true),
+        &mut meter(),
+    )
+    .unwrap();
     assert_eq!(solved.zeros.len(), 1);
     let [x, y] = solved.zeros[0].enclosure;
     assert!(x.contains(0.3) && y.contains(0.7), "{x:?} {y:?}");
