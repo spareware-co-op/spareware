@@ -18,7 +18,10 @@
 //! ([`crate::common::common_blocks`]). A region where two edges could not be told apart by their
 //! intersection, as along a circle and a NURBS close to it, is accepted only where a common block
 //! proven by the contact rule covers it on both edges, or where it touches a vertex both edges pass
-//! through; anywhere else it fails. Accepted at such a vertex, the region is the two edges' meeting
+//! through; anywhere else it fails. A region whose span straddles the pave of a piece in no block
+//! reaches into that piece only if the two edges, intersected again over the part past the pave's
+//! enclosure, meet there or cannot be decided there either: a span's end is a box's edge, not where
+//! the meeting ends. Accepted at such a vertex, the region is the two edges' meeting
 //! there, made one with the vertex by the contact rule, and it is recorded so ([`Touch`]): the
 //! face splitting then orders the two round the vertex as the arrangement has them, not as their
 //! tangents there say. A line run a hair into a disc from a vertex on its rim crosses the rim
@@ -61,14 +64,15 @@
 //!
 //! Cost: a box tree over the vertices and edges, then for each candidate pair one certified
 //! distance (vertex with edge) or one curve intersection (edge with edge), all charged to the
-//! meter; each edge's paves sorted once; and what the face stages cost ([`crate::face`]). No
-//! recursion.
+//! meter; each edge's paves sorted once; for a held region straddling the pave of a piece in no
+//! block, one more curve intersection over the part past it; and what the face stages cost
+//! ([`crate::face`]). No recursion.
 
 use alloc::vec::Vec;
 use core::fmt;
 
 use geom_bvh::{Aabb, Entry};
-use geom_intersect::curve::curves;
+use geom_intersect::curve::{curves, curves_over};
 use geom_intersect::project::{Projection, project_curve};
 use geom_intersect::solve::Reason;
 use geom_intersect::{IntersectError, Item, ParamBox, Unresolved};
@@ -471,13 +475,38 @@ struct Deferred {
 /// Whether common blocks cover a deferred region on both its edges: on each, the region's span
 /// reaches into one of the edge's pieces at least, and every piece it reaches into belongs to a
 /// common block that holds a piece of the other edge too. So a region an overlap of the two edges
-/// makes is covered however many vertices cut the overlap into blocks.
-fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> bool {
+/// makes is covered however many vertices cut the overlap into blocks. Where a span straddles a
+/// pave of a piece in no such block, the part past the pave is decided by the two edges'
+/// intersection over it and the other edge's span ([`curves_over`]).
+fn covered(
+    arr: &Arrangement,
+    region: &Deferred,
+    splits: &[SplitEdge],
+    common: &[CommonBlock],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, BuildError> {
     let (a, b) = region.edges;
     let (Some(s), Some(t)) = (region.at.spans().first(), region.at.spans().get(1)) else {
-        return false;
+        return Ok(false);
     };
-    held(*s, (a, b), splits, common) && held(*t, (b, a), splits, common)
+    let (s, t): (Interval, Interval) = (*s, *t);
+    let curve = |e: usize| {
+        arr.carriers
+            .curve(curve_of(arr, e)?)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))
+    };
+    let (curve_a, curve_b) = (curve(a)?, curve(b)?);
+    let on_a = held(s, (a, b), splits, common, |part| {
+        let met = curves_over(curve_a, part, curve_b, (t.lo(), t.hi()), meter)?;
+        Ok(!met.items().is_empty())
+    })?;
+    if !on_a {
+        return Ok(false);
+    }
+    held(t, (b, a), splits, common, |part| {
+        let met = curves_over(curve_b, part, curve_a, (s.lo(), s.hi()), meter)?;
+        Ok(!met.items().is_empty())
+    })
 }
 
 /// [`covered`] on one edge: whether the span `t` of `edge` reaches into a piece of it, past the
@@ -486,12 +515,22 @@ fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> b
 /// last, or, round a closed edge's seam, from its last pave to the domain's end and on from the
 /// start to its first: the span reaches into it past the one pave or before the other. A piece
 /// with no paves, a whole closed edge, is in no block and holds nothing.
-fn held(
+///
+/// A span's end is the edge of the last box its region was found in, which can straddle the pave
+/// where the meeting ends without the meeting passing it. So where the span straddles one pave of
+/// a piece in no block and ends inside the piece, it reaches into the piece only if `meets` says
+/// so of the part past the pave's enclosure: the two edges meet there, or that part cannot be
+/// decided either. A span over the whole of such a piece, or inside it, reaches into it.
+fn held<F>(
     t: Interval,
     (edge, other): (usize, usize),
     splits: &[SplitEdge],
     common: &[CommonBlock],
-) -> bool {
+    mut meets: F,
+) -> Result<bool, BuildError>
+where
+    F: FnMut((f64, f64)) -> Result<bool, BuildError>,
+{
     let paired = |k: usize| {
         common.iter().any(|block: &CommonBlock| {
             block.members.contains(&k)
@@ -524,12 +563,40 @@ fn held(
         if !reaches {
             continue;
         }
-        if !paired(k) {
-            return false;
+        if paired(k) {
+            any = true;
+            continue;
         }
-        any = true;
+        // A piece of no block: the parts of it the span reaches only across a pave it straddles
+        // are decided; a span reaching in any other way is in the piece.
+        let (over_start, over_end) = (before(t.lo(), from.t.lo()), before(to.t.hi(), t.hi()));
+        let mut parts = Vec::new();
+        if piece.block.wraps {
+            for (reached, over, part) in [
+                (past_start, over_start, (from.t.hi(), t.hi())),
+                (before_end, over_end, (t.lo(), to.t.lo())),
+            ] {
+                if reached && !over {
+                    return Ok(false);
+                }
+                if reached {
+                    parts.push(part);
+                }
+            }
+        } else if over_start && before(t.hi(), to.t.lo()) {
+            parts.push((from.t.hi(), t.hi()));
+        } else if over_end && before(from.t.hi(), t.lo()) {
+            parts.push((t.lo(), to.t.lo()));
+        } else {
+            return Ok(false);
+        }
+        for part in parts {
+            if meets(part)? {
+                return Ok(false);
+            }
+        }
     }
-    any
+    Ok(any)
 }
 
 /// A grid point's coordinates as doubles, which hold them exactly (at most 2^40).
@@ -1102,7 +1169,7 @@ fn finish(
                 });
             }
         }
-        if corners.is_empty() && !covered(region, &splits, &common) {
+        if corners.is_empty() && !covered(arr, region, &splits, &common, meter)? {
             return Err(BuildError::Unresolved {
                 first: Entity::Edge(a),
                 second: Entity::Edge(b),

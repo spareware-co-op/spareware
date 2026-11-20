@@ -638,7 +638,8 @@ fn read_pole(
             normal: normals(other, (ends(s), ends(r)), meter)?,
             floor,
         };
-        let found = solve(&toward, [span(whole)?], |_, _| Ok(true), meter)?;
+        let all = [span(whole)?];
+        let found = solve(&toward, all, all, |_, _| Ok(true), meter)?;
         if !found.flagged.is_empty() {
             return Ok(Read::Undecided);
         }

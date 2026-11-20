@@ -24,13 +24,14 @@
 511	geom-bool::names	a_vertex_where_three_planes_meet_keeps_its_name_through_a_later_cut
 507	geom-poly::subdivide	a_cache_from_other_inputs_changes_nothing
 506	geom-check::attack_g134	the_same_body_gives_the_same_report
+505	geom-num	plane::tests::lpi_classify_is_exact_in_both_widths_at_the_extremes_of_i128
 505	geom-surface::contract	without_conversions_a_broken_kind_is_caught_as_check_catches_it
 505	geom-surface::frame_rule	a_closed_paths_twist_is_spread_or_refused
 503	geom-poly::subdivide	a_split_with_an_empty_half_pays_and_is_taken
-493	geom-num	plane::tests::lpi_classify_is_exact_in_both_widths_at_the_extremes_of_i128
 490	geom-mesh::model	a_narrow_strip_is_not_pinched::remeshed
 484	geom-bool::names	two_doors_of_one_type_differ_and_a_third_renames_nothing
 483	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_half_space
+483	geom-intersect::circle_part_in_plane	a_circle_whose_turn_only_rounds_to_whole_is_the_engines
 478	geom-run::attack_g04	thread_counts_are_bounded_by_the_pool_and_by_the_chunk_count
 476	geom-bool::attack_g144	cutting_off_an_apex_of_four_faces_splits_the_vertex::by_a_box
 476	geom-curve::attack_g64	a_reversed_curve_is_the_transition_built_from_the_end
@@ -46,7 +47,6 @@
 448	geom-bool::combine	one_arrangement_gives_every_selection
 447	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_2
 447	geom-num::rng_properties	a_stream_is_its_blocks_in_order
-447	geom-surface::class_a_bounds	the_centred_form_is_used_wherever_the_parts_are_smooth
 446	geom-bool::names	a_new_vertex_half_a_step_from_an_old_one_takes_a_name_of_its_own
 446	geom-linalg::dense	kahan_matrix_shows_the_limit_of_column_pivoting
 445	geom-bool::attack_g144	a_blind_plug_closes_the_top_hole_alone
@@ -56,6 +56,7 @@
 438	geom-bool::cells	a_wall_makes_two_rooms_each_named_by_its_seed
 436	geom-analysis::continuity	a_g1_join_s_curvature_jump_peaks_mid_edge::its_curvature
 436	geom-run::properties	find_first_is_the_first_match
+434	geom-curve::compound	composites_join_exactly_and_convert_to_one_curve
 433	geom-analysis::rounds	a_round_runs_only_if_its_halves_fit_under_the_cap
 421	geom-bool::combine	a_result_less_exact_than_the_caller_takes_is_refused
 414	geom-check::faults	a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids
@@ -69,7 +70,6 @@
 402	geom-num::attack_g05	sinpi_and_cospi_hard_cases_of_the_port_and_their_neighbours
 401	geom-bool::combine	the_order_of_the_operands_does_not_count
 400	geom-op::attack_g82	paths_order_by_operation_then_labels
-396	geom-curve::compound	composites_join_exactly_and_convert_to_one_curve
 394	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::two_doors
 394	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_3
 393	geom-nurbs::restrict	a_curve_value_encloses_the_exact_value
@@ -81,4 +81,3 @@
 381	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_at_once
 378	geom-surface::frame_rule	the_frame_meets_its_stations_bit_for_bit_and_is_c1_between_them
 377	geom-mesh::slice	the_threads_do_not_show
-377	geom-surface::analytic	a_whole_cylinder_converts_exactly

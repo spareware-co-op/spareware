@@ -19,9 +19,11 @@ use geom_bool::interfere::{
     Arrangement, BuildError, EdgeIn, Entity, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
+use geom_curve::geom_nurbs::{Basis, Curve};
 use geom_curve::{Circle, CurveKind, Frame, ParamCurve};
 use geom_intersect::Unresolved;
 use geom_num::P3;
+use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
 
 fn meter() -> WorkMeter<'static> {
@@ -333,11 +335,11 @@ fn a_band_between_two_blocks_of_other_edges_is_refused() {
 
 /// The first circle's half from (0, −1105) to (0, 1105), and a NURBS copy of three quarters of it
 /// from the same start on to (−1105, 0): the arc's end cuts the copy, whose first piece is one
-/// block with the arc. The region where they overlap reaches, on the copy, past the pave at the
-/// arc's end into the copy's second piece, which no block holds: the region is covered on the
-/// arc but not on the copy, and is refused.
+/// block with the arc. The region where they overlap ends, on the copy, in a box that straddles
+/// the pave at the arc's end. Past that pave's enclosure the two edges are proven apart, so the
+/// region does not reach into the copy's second piece, which no block holds, and stands.
 #[test]
-fn a_region_reaching_past_an_overlap_into_a_piece_of_no_block_is_refused() {
+fn a_region_straddling_the_pave_at_an_overlap_s_end_stands() {
     let mut arr = Arrangement::default();
     between(
         &mut arr,
@@ -346,6 +348,49 @@ fn a_region_reaching_past_an_overlap_into_a_piece_of_no_block_is_refused() {
         0,
     );
     between(&mut arr, copy(&arc(1.5)), [[0, -1105], [-1105, 0]], 2);
+    let out = run(&arr).unwrap();
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
+}
+
+/// The first circle's upper half, from (1105, 0) to (−1105, 0), and a NURBS curve that follows it
+/// from (1105, 0) to (0, 1105) and runs on straight along its tangent there to (−600, 1105), of two
+/// operands, with a third operand's vertex at (663, 884) on both. The vertex cuts both, and their
+/// pieces before it are one block. Past it the two still overlap, to (0, 1105) and in the tangent
+/// band beyond, but their pieces there end at different vertices and are in no block. The region
+/// straddles the vertex's pave on the circle, and on the part past it the two edges cannot be
+/// told apart, so it reaches into the circle's second piece and is refused.
+#[test]
+fn a_region_overlapping_past_a_pave_into_a_piece_of_no_block_is_refused() {
+    let mut arr = Arrangement::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let upper = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 1.0)).unwrap();
+    between(
+        &mut arr,
+        CurveKind::Circle(upper),
+        [[1105, 0], [-1105, 0]],
+        0,
+    );
+    let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0]).unwrap();
+    let points = [
+        [1105.0, 0.0, 0.0],
+        [1105.0, 1105.0, 0.0],
+        [0.0, 1105.0, 0.0],
+        [-300.0, 1105.0, 0.0],
+        [-600.0, 1105.0, 0.0],
+    ];
+    let weights = [1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0, 1.0, 1.0];
+    let onward = Curve::new_rational(basis, &points, &weights).unwrap();
+    between(
+        &mut arr,
+        CurveKind::Nurbs(onward),
+        [[1105, 0], [-600, 1105]],
+        1,
+    );
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Grid(P3::new(663, 884, 0).unwrap()),
+        operand: 2,
+    });
     let (a, b, _) = refused(run(&arr));
     assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
 }
@@ -386,14 +431,105 @@ fn a_region_from_the_seam_stays_out_of_the_piece_that_ends_there() {
 /// The first circle whole and a NURBS copy of its upper half, from (1105, 0) to (−1105, 0): the
 /// copy's ends cut the circle into the upper half, one block with the copy, and the lower half,
 /// which runs from (−1105, 0) round to the seam and is in no block. The region where the circle
-/// and the copy overlap reaches a little below both ends of the copy, past the pave at (−1105, 0)
-/// into the lower half, so it is not covered on the circle and is refused.
+/// and the copy overlap ends, on the circle, in a box just past the pave at (−1105, 0). Past that
+/// pave's enclosure the two edges are proven apart, so the region stays out of the lower half and
+/// stands.
 #[test]
-fn a_region_reaching_into_a_piece_that_runs_to_the_seam_is_refused() {
+fn a_region_ending_in_a_box_past_the_pave_of_a_piece_that_runs_to_the_seam_stands() {
     let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let upper = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 1.0)).unwrap();
     between(&mut arr, copy(&upper), [[1105, 0], [-1105, 0]], 1);
-    let (a, b, _) = refused(run(&arr));
+    let out = run(&arr).unwrap();
+    assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+}
+
+/// The first circle's arc from `start`, a point of it, turning `turns` half-turns, counter-clockwise
+/// if `ccw`.
+fn turning(start: [f64; 2], turns: f64, ccw: bool) -> Circle<3> {
+    let normal = if ccw { 1.0 } else { -1.0 };
+    let frame = Frame::new([start[0], start[1], 0.0], [0.0, 0.0, normal]).unwrap();
+    Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, turns)).unwrap()
+}
+
+/// A vertex of `operand` where the planes x = −47, 3y = 3310 and z = 0 meet, at (−47, 1103⅓): a
+/// meeting of three planes off the grid, as a body's vertex can be, so it is committed to
+/// (−47, 1103) within a step. That is within a step of the first circle, so the vertex touches an
+/// edge along it, and its pave there lies 0.04 steps on from (−47, 1104) counter-clockwise: the
+/// piece between them is far shorter than a box at the intersection's floor.
+fn off_the_grid(arr: &mut Arrangement, operand: u32) {
+    let mut add =
+        |n: [i128; 3], d: i128| arr.carriers.add_plane(&Plane::new(n, d).unwrap()).unwrap();
+    let planes = [add([1, 0, 0], 47), add([0, 3, 0], -3310), add([0, 0, 1], 0)];
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Planes(planes),
+        operand,
+    });
+}
+
+/// The first circle's half from (47, −1104) to (−47, 1104), and a NURBS copy of three quarters of
+/// it from the same start on to (−1104, −47): the arc's end cuts the copy, whose first piece is one
+/// block with the arc, and the region where they overlap ends, on the copy, in a box that
+/// straddles the pave at the arc's end. Past that pave's enclosure the two edges are proven apart,
+/// so alone the region stands. A vertex of the arc's operand off the grid ([`off_the_grid`]) cuts
+/// the copy again just past that pave, within the box: the region runs over the whole of the piece
+/// between them, which no block holds, so it reaches into that piece and is refused.
+#[test]
+fn a_region_over_the_whole_of_a_short_piece_past_an_overlap_s_end_is_refused() {
+    let build = |cut: bool| {
+        let mut arr = Arrangement::default();
+        let half = turning([47.0, -1104.0], 1.0, true);
+        between(
+            &mut arr,
+            CurveKind::Circle(half),
+            [[47, -1104], [-47, 1104]],
+            0,
+        );
+        let on = turning([47.0, -1104.0], 1.5, true);
+        between(&mut arr, copy(&on), [[47, -1104], [-1104, -47]], 2);
+        if cut {
+            off_the_grid(&mut arr, 0);
+        }
+        arr
+    };
+    let out = run(&build(false)).unwrap();
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
+    let (a, b, _) = refused(run(&build(true)));
+    assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
+}
+
+/// The first circle's half from (47, −1104) to (−47, 1104), and a NURBS copy of three quarters of
+/// it running the other way, from (−1104, −47) through (−47, 1104) back to (47, −1104): the arc's
+/// end cuts the copy, whose second piece is one block with the arc, and the region where they
+/// overlap starts, on the copy, in a box that straddles the pave at the arc's end. Before that
+/// pave's enclosure the two edges are proven apart, so alone the region stands. A vertex of the
+/// arc's operand off the grid ([`off_the_grid`]) cuts the copy again just before that pave, within
+/// the box: the region runs over the whole of the piece between them, which no block holds, so it
+/// reaches into that piece and is refused.
+#[test]
+fn a_region_over_the_whole_of_a_short_piece_before_an_overlap_s_start_is_refused() {
+    let build = |cut: bool| {
+        let mut arr = Arrangement::default();
+        let half = turning([47.0, -1104.0], 1.0, true);
+        between(
+            &mut arr,
+            CurveKind::Circle(half),
+            [[47, -1104], [-47, 1104]],
+            0,
+        );
+        let back = turning([-1104.0, -47.0], 1.5, false);
+        between(&mut arr, copy(&back), [[-1104, -47], [47, -1104]], 2);
+        if cut {
+            off_the_grid(&mut arr, 0);
+        }
+        arr
+    };
+    let out = run(&build(false)).unwrap();
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+    let (a, b, _) = refused(run(&build(true)));
     assert_eq!((a, b), (Entity::Edge(0), Entity::Edge(1)));
 }
