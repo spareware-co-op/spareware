@@ -151,7 +151,14 @@ fn on_the_axis(a: &SurfaceKind, b: &SurfaceKind, two: &Branch, want: &[u64]) {
     assert!(curve.error() <= 1e-9, "{}", curve.error());
     recorded("PLANES", &bits(&a, &b, &curve), want);
     let (lo, hi) = ParamCurve::domain(&curve);
-    for k in 0..=4 {
+    // Under Miri, where the true points' proofs are nearly all of the test's time, the axis is
+    // checked at t = ¼ alone (near the origin a quick proof, far out a full one): the points at the
+    // span's ends and middle are the ones `bits` has just proven, held to the recorded bits.
+    #[cfg(miri)]
+    let quarters = [1];
+    #[cfg(not(miri))]
+    let quarters = 0..=4;
+    for k in quarters {
         let t = lo + (hi - lo) * f64::from(k) / 4.0;
         let x = true_point(&a, &b, &curve, t, &mut meter())
             .unwrap()
