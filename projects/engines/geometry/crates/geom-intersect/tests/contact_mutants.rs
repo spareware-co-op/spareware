@@ -1,8 +1,9 @@
 //! Contacts held to their exact answers and their exact work (12.9, 12.10): a cone's apex resting
 //! on a plane, a sphere touching a plane at its pole and near its other one, a sphere whose normal
-//! points in, and a cylinder resting on a plane, each in both orders of the pair. Work ends runs,
-//! so the work an analysis charges is part of its answer, and each is held to the unit, with each
-//! reading to its recorded bits.
+//! points in, a cylinder resting on a plane, and surfaces too close to part at the floor (bowls and
+//! ridges) whose clusters reach the edges of their domains in different ways, each in both orders
+//! of the pair. Work ends runs, so the work an analysis charges is part of its answer, and each is
+//! held to the unit, with each reading to its recorded bits.
 
 #![allow(
     clippy::unwrap_used,
@@ -16,6 +17,7 @@
 use geom_curve::Frame;
 use geom_intersect::contact::analyse;
 use geom_intersect::general::subdivide;
+use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
@@ -174,6 +176,193 @@ fn a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work() {
                  (-0.0684746503829956, 0.04889405518770218)), \
                  second: ((0.0, 2.0), (-0.5, -0.49701976776123047)), why: HigherOrderContact }]",
             ),
+        ],
+    );
+}
+
+/// z = h + (x² + y²)/1024 over the square [−r, r]² of a frame put at `at` and turned an eighth of a
+/// turn if `turned`, in Bézier form.
+fn bowl(r: f64, h: f64, at: (f64, f64), turned: bool) -> SurfaceKind {
+    let basis = || Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    let half = core::f64::consts::FRAC_1_SQRT_2;
+    let (cos, sin) = if turned { (half, half) } else { (1.0, 0.0) };
+    // The bowl's lowest point in the frame's own coordinates.
+    let (cp, cq) = (-(cos * at.0 + sin * at.1), -(-sin * at.0 + cos * at.1));
+    // The Bernstein coefficients of (t − c)²/1024 over [−r, r], and the points they sit over.
+    let along = |c: f64| {
+        let w = |a: f64, b: f64| (a - c) * (b - c) / 1024.0;
+        [(-r, w(-r, -r)), (0.0, w(-r, r)), (r, w(r, r))]
+    };
+    let mut net = Vec::new();
+    for (p, zp) in along(cp) {
+        for (q, zq) in along(cq) {
+            let (x, y) = (at.0 + cos * p - sin * q, at.1 + sin * p + cos * q);
+            net.push([x, y, h + zp + zq]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
+}
+
+/// A small bowl one unit above a wide one of the same shape: too close to part at the floor, so
+/// they overlap. The small one's cluster is all of it and so reaches every edge of its domain; the
+/// wide one's reaches none, and one surface at an edge is enough.
+#[test]
+fn a_bowl_over_a_wider_one_overlaps_though_only_the_small_one_reaches_an_edge() {
+    let side = "(0.0, 1.0), (0.0, 1.0)";
+    holds_to(
+        (
+            &bowl(256.0, 1.0, (0.0, 0.0), false),
+            &bowl(1024.0, 0.0, (0.0, 0.0), false),
+        ),
+        (256.0, 1024.0),
+        [
+            (
+                5492,
+                &format!(
+                    "[Overlap {{ first: ({side}), second: ((0.3125, 0.675048828125), \
+                     (0.3125, 0.675048828125)), coincidence: Within(Steps(432)) }}]"
+                ),
+            ),
+            (
+                4049,
+                &format!(
+                    "[Overlap {{ first: ((0.3596343994140625, 0.68359375), \
+                     (0.3596343994140625, 0.68359375)), second: ({side}), \
+                     coincidence: Within(Steps(463)) }}]"
+                ),
+            ),
+        ],
+    );
+}
+
+/// The same shape turned an eighth of a turn and hung one unit above a bowl's side: the pairs too
+/// close to part lie across a diagonal of each domain, so their patches leave holes in their hulls
+/// and the cluster is not an overlap. Each patch is counted once, however many pairs hold it.
+#[test]
+fn a_turned_bowl_over_the_side_of_another_leaves_holes_so_it_is_no_overlap() {
+    holds_to(
+        (
+            &bowl(512.0, 0.0, (0.0, 0.0), false),
+            &bowl(384.0, 1.0, (-512.0, 0.0), true),
+        ),
+        (128.0, 1024.0),
+        [
+            (
+                1_351_309,
+                "[Undecided { first: ((0.0, 0.545166015625), (0.0, 1.0)), \
+                 second: ((0.0, 1.0), (0.0, 1.0)), why: HigherOrderContact }]",
+            ),
+            (
+                1_460_130,
+                "[Undecided { first: ((0.0, 1.0), (0.0, 1.0)), \
+                 second: ((0.0, 0.5735015869140625), (0.0, 1.0)), why: HigherOrderContact }]",
+            ),
+        ],
+    );
+}
+
+/// z = h + 192·(s − s³/3) for s = x/512, over x in [−512, 512] and y in `ys`: a ridge steepest
+/// along x = 0 and level at x = ±512, u running along y (linear) and v along x (cubic), in Bézier
+/// form; or, `swapped`, u along x and v along y.
+fn ridge(ys: (f64, f64), h: f64, swapped: bool) -> SurfaceKind {
+    let line = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let cubic = || Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    // The Bernstein coefficients of s − s³/3 over [−1, 1] are −2/3, −2/3, 2/3, 2/3.
+    let column = [
+        (-512.0, -128.0),
+        (-512.0 / 3.0, -128.0),
+        (512.0 / 3.0, 128.0),
+        (512.0, 128.0),
+    ];
+    let mut net = Vec::new();
+    if swapped {
+        for (x, z) in column {
+            for y in [ys.0, ys.1] {
+                net.push([x, y, h + z]);
+            }
+        }
+        return SurfaceKind::Nurbs(Surface::new(cubic(), line(), &net).unwrap());
+    }
+    for y in [ys.0, ys.1] {
+        for (x, z) in column {
+            net.push([x, y, h + z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(line(), cubic(), &net).unwrap())
+}
+
+/// Two copies of the ridge 24 units apart: their boxes meet only where the ridge is steep, so the
+/// clusters lie in from the ridge's level ends, and each reaches one side of one domain alone. That
+/// is an edge, so each overlaps, whichever side it is: the start of the upper ridge's u and the end
+/// of the lower one's; the end of both; or, with u and v swapped, the start of the upper one's v
+/// and the end of the lower one's.
+#[test]
+fn ridges_too_close_to_part_overlap_where_each_reaches_one_side_alone() {
+    // Each cluster's part along y on the first surface and on the second, then along x; along y
+    // is u, or v if `swapped`.
+    let reads = |(y1, y2): (&str, &str), xs: [(&str, &str); 3], within: u64, swapped: bool| {
+        let each = xs.map(|(x1, x2)| {
+            let (first, second) = if swapped {
+                (format!("({x1}, {y1})"), format!("({x2}, {y2})"))
+            } else {
+                (format!("({y1}, {x1})"), format!("({y2}, {x2})"))
+            };
+            format!(
+                "Overlap {{ first: {first}, second: {second}, \
+                 coincidence: Within(Steps({within})) }}"
+            )
+        });
+        format!("[{}]", each.join(", "))
+    };
+    // Along x, with the upper ridge first and with the lower one first.
+    let upper_xs = [
+        (
+            "(0.19140625, 0.299072265625)",
+            "(0.2109527587890625, 0.3125)",
+        ),
+        (
+            "(0.3596343994140625, 0.545166015625)",
+            "(0.4257965087890625, 0.52734375)",
+        ),
+        (
+            "(0.6057281494140625, 0.68359375)",
+            "(0.5735015869140625, 0.7765960693359375)",
+        ),
+    ];
+    let lower_xs = [
+        (
+            "(0.19140625, 0.299072265625)",
+            "(0.2109527587890625, 0.3125)",
+        ),
+        (
+            "(0.4375, 0.545166015625)",
+            "(0.4257965087890625, 0.52734375)",
+        ),
+        (
+            "(0.6057281494140625, 0.68359375)",
+            "(0.5735015869140625, 0.675048828125)",
+        ),
+    ];
+    let (rising, falling, lower) = ((0.0, 512.0), (512.0, 0.0), (-256.0, 256.0));
+    let start_end = ("(0.0, 0.68359375)", "(0.3125, 1.0)");
+    let end_start = ("(0.4375, 1.0)", "(0.0, 0.52734375)");
+    for swapped in [false, true] {
+        holds_to(
+            (&ridge(rising, 24.0, swapped), &ridge(lower, 0.0, swapped)),
+            (128.0, 1024.0),
+            [
+                (3084, &reads(start_end, upper_xs, 241, swapped)),
+                (1557, &reads(end_start, lower_xs, 237, swapped)),
+            ],
+        );
+    }
+    let ends = ("(0.4375, 1.0)", "(0.3125, 1.0)");
+    holds_to(
+        (&ridge(falling, 24.0, false), &ridge(lower, 0.0, false)),
+        (128.0, 1024.0),
+        [
+            (3090, &reads(ends, upper_xs, 241, false)),
+            (1866, &reads(ends, lower_xs, 241, false)),
         ],
     );
 }
