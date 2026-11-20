@@ -535,14 +535,16 @@ pub(crate) fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
         .checked_add(u2.checked_mul(w2)?)
 }
 
-/// Whether faces `f` and `g` share an edge that is a full circle.
+/// Whether faces `f` and `g` share an edge that is a full circle: its domain exactly two
+/// half-turns, decided by an error-free sum. A domain whose difference only rounds to 2 is an arc
+/// short of a turn.
 fn shares_full_circle(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
     edges(a, f).any(|e| {
         let full = matches!(
             shape(a, e),
             Some(Shape::Circle(circle, _)) if {
                 let (lo, hi) = circle.domain();
-                hi - lo == 2.0
+                geom_num::eft::two_sum(hi, -lo) == (2.0, 0.0)
             }
         );
         full && edge_fins(a, e).any(|n| fin_face(a, n) == Some(g))

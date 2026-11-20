@@ -19,7 +19,7 @@ use geom_curve::{
 };
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Coincidence, CurveContact, CurveEnd, Intersection, Item};
-use geom_intersect::{Projection, project_curve, project_surface};
+use geom_intersect::{Projection, charts, project_curve, project_surface};
 use geom_num::exactness::Exactness;
 use geom_num::grid::Steps;
 use geom_nurbs::{Curve, Limit};
@@ -949,6 +949,50 @@ fn a_part_of_a_turn_is_left_to_the_general_paths() {
     let half =
         SurfaceKind::Torus(Torus::new([0.0; 3], 5.0, 1.0, up(), ((0.0, 1.0), ROUND)).unwrap());
     assert!(natural(&level(0.0), &half, &mut meter()).unwrap().is_none());
+}
+
+/// A turn is whole only when it is exactly two half-turns, decided by an error-free sum, as the
+/// seam charts decide it (12.10; issue 1104). A u span from −1.25 + 2⁻⁵² to 0.75 + 2⁻⁵³ is
+/// 2 − 2⁻⁵³ half-turns long, and its difference rounds to 2. A torus on it, and a cylinder on it
+/// about a whole torus, are each a part of a turn whose ends the charts do not close: they are left
+/// to the general paths, never met in rings that close.
+#[test]
+fn a_turn_that_only_rounds_to_whole_is_left_to_the_general_paths() {
+    let short = (-1.25 + f64::EPSILON, 0.75 + f64::EPSILON / 2.0);
+    assert_eq!(
+        short.1 - short.0,
+        2.0,
+        "the test needs a difference that rounds to 2"
+    );
+    let ring = SurfaceKind::Torus(Torus::new([0.0; 3], 5.0, 1.0, up(), (short, ROUND)).unwrap());
+    assert_eq!(charts(&ring).closes, [false, true]);
+    let found = natural(&level(0.0), &ring, &mut meter()).unwrap();
+    assert!(found.is_none(), "{:?}", found.map(|r| r.items().to_vec()));
+    let can = SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 5.0, up(), (short, TALL)).unwrap());
+    let found = natural(&can, &torus(0.0, 5.0, 1.0), &mut meter()).unwrap();
+    assert!(found.is_none(), "{:?}", found.map(|r| r.items().to_vec()));
+}
+
+/// A whole turn starting anywhere is reduced. A torus on u from 0 to 2, 1 to 3 or −3 to −1, each
+/// exactly two half-turns, meets the plane of its equator in its two equator circles, each closed,
+/// and a cylinder on the same turn meets a whole torus about its axis in two rings.
+#[test]
+fn a_whole_turn_starting_anywhere_is_reduced() {
+    for turn in [(0.0, 2.0), (1.0, 3.0), (-3.0, -1.0)] {
+        let ring = SurfaceKind::Torus(Torus::new([0.0; 3], 5.0, 1.0, up(), (turn, ROUND)).unwrap());
+        assert_eq!(charts(&ring).closes, [true, true], "{turn:?}");
+        let r = meet(&level(0.0), &ring);
+        rings_are(&r, &[(4.0, 0.0), (6.0, 0.0)]);
+        for item in r.items() {
+            let Item::Curve { ends, .. } = item else {
+                panic!("{item:?}");
+            };
+            assert_eq!(*ends, [CurveEnd::Closed; 2], "{turn:?}");
+        }
+        let can = SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 5.0, up(), (turn, TALL)).unwrap());
+        let r = meet(&can, &torus(0.0, 5.0, 1.0));
+        rings_are(&r, &[(5.0, -1.0), (5.0, 1.0)]);
+    }
 }
 
 /// The segment from `a` to `b`.
