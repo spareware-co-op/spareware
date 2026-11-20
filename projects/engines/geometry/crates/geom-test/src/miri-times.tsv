@@ -51,6 +51,7 @@
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring runs 44697299534 (miri_measure=new on fix/endless-plane-margin at d7baedbef), 44707088794 (miri_measure=new on it at a5ca7fce3) and 44759797282 (miri_measure=new on it at e39079682), the later two with miri_measure_tests naming the attack_g165 test each added, every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 5 new tests (only attack_g165 tests were added since d7baedbef); the train's tests the runs also measured keep their rows.
+# GitHub measuring run 44826270022 (miri_measure=new on fix/endless-plane-margin at 614c8729c, miri_measure_tests naming the attack_g165 test it added on a short second vector), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1339,6 +1340,7 @@ native-only over 1129	geom-intersect::attack_g165	a_column_on_a_slab_or_a_dome_m
 27	geom-intersect::attack_g165	an_endless_plane_crossed_where_an_arcs_box_ends_is_two_proven_crossings
 23	geom-intersect::attack_g165	an_endless_plane_on_a_short_first_vector_crosses_a_circle_across_it_in_two_proven_crossings
 12	geom-intersect::attack_g165	an_endless_plane_on_a_short_first_vector_crosses_an_arc_across_it_in_two_proven_crossings
+13	geom-intersect::attack_g165	an_endless_plane_on_a_short_second_vector_crosses_an_arc_across_it_in_two_proven_crossings
 352	geom-intersect::attack_g165	an_endless_plane_on_short_or_long_vectors_crosses_a_unit_circle_in_two_proven_crossings
 14	geom-intersect::attack_g165	an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle
 108	geom-intersect::attack_g165	an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex
