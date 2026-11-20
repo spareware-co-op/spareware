@@ -3,9 +3,10 @@
 //! bounded; a settled point outside a surface's domain is never fit data; a refinement near an edge
 //! starts from the middle of its data; a true point is proven in a wide box, and on a circle it is
 //! the near one of two; a cubic patch against a plane, whose pcurve is 0 across, is a curve or out
-//! of rounds, never refused; and the bounds and true points of two planes (near the origin and far out)
-//! and of the sheet and plane of `fit_refined` are the recorded bits, so any change to their
-//! arithmetic is seen.
+//! of rounds, never refused; a pcurve's side a few steps of the double wide on a surface curved
+//! across it is widened by half the widest side; and the bounds and true points of two planes (near
+//! the origin and far out), of the sheet and plane of `fit_refined` and of that thin side are the
+//! recorded bits, so any change to their arithmetic is seen.
 
 #![allow(
     clippy::unwrap_used,
@@ -371,6 +372,61 @@ fn a_cubic_patch_against_a_plane_is_a_curve_or_out_of_rounds() {
         Some(IntersectError::BudgetExceeded)
     );
 }
+
+/// (x(u), v, v²) over `along`'s domain × [−1, 1], x(u) the curve along u with Bézier points `xs`:
+/// curved across v, so a box's width in v moves its partials' bounds.
+fn ridge(along: Basis, xs: &[f64]) -> SurfaceKind {
+    let across = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for &x in xs {
+        for (y, z) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+            net.push([x, y, z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(along, across, &net).unwrap())
+}
+
+/// (v, (u − 3)², u − 3) over [2, 4] × [0, 1]: through the x axis at u = 3, curved across u, so a
+/// box's width in u moves its partials' bounds.
+fn trough() -> SurfaceKind {
+    let along = Basis::new(2, vec![2.0, 2.0, 2.0, 4.0, 4.0, 4.0]).unwrap();
+    let across = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for (y, z) in [(1.0, -1.0), (-1.0, 0.0), (1.0, 1.0)] {
+        for x in [0.0, 1.0] {
+            net.push([x, y, z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(along, across, &net).unwrap())
+}
+
+#[test]
+fn a_trough_side_a_few_steps_wide_is_widened_by_half_the_widest_side() {
+    // The ridge (u, v, v²) and the trough, from x = 1/4 to 3/4: on the ridge the pcurve's v is 0
+    // throughout, a line; on the trough its u runs from 3 to 3 + 2⁻⁵⁰, two steps of the double at
+    // 3 and under 4ε·(1 + 3), so that side is widened by half the widest side, its v from 1/4 to
+    // 3/4. The trough is curved across u, so how far it is widened shows in the bounds.
+    let line = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let (top, low) = (ridge(line, &[0.0, 1.0]), trough());
+    let w = 3.0 + 4.0 * f64::EPSILON;
+    assert!(w - 3.0 < 4.0 * f64::EPSILON * (1.0 + w));
+    let two = branch(vec![[0.25, 0.0, 3.0, 0.25], [0.75, 0.0, w, 0.75]]);
+    let curve = fit((&top, &low), REFS, &two, CEILING, &mut meter()).unwrap();
+    assert!(curve.error() <= CEILING, "{}", curve.error());
+    recorded("TROUGH_THIN", &bits(&top, &low, &curve), TROUGH_THIN);
+}
+
+/// The recorded bits of `bits` for the ridge and the trough a few steps wide.
+const TROUGH_THIN: &[u64] = &[
+    0x0000_0000_0000_0000,
+    0x3ff0_0000_0000_0000,
+    0x3d26_cef3_bbae_e5b6,
+    0x3d03_dccd_6c92_1ffa,
+    0x3d11_7057_5e22_0c9c,
+    0x0000_0000_0000_0000,
+    0x0000_0000_0000_0000,
+    0x0000_0000_0000_0000,
+];
 
 /// Every bound and true point of a fitted curve as bits: each span's ends and bounds, then the
 /// true point's enclosure at each span's ends and middle.
