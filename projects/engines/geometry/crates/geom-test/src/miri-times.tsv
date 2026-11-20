@@ -32,6 +32,7 @@
 # GitHub measuring run 44534321347 (miri_measure=new on fix/fuzz-slow-level-piercing at 85896a967).
 # GitHub measuring run 44562084137 (miri_measure=new on fix/line-cone-exact at 313824f07).
 # GitHub measuring run 44608532867 (miri_measure=new on land5/fixes-1 at d9b546470).
+# GitHub measuring run 44642981052 (miri_measure=new on test/phase5-intersect-mutants-d at 8072462a2).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1483,6 +1484,8 @@ native-only over 601	geom-intersect::axial_factor	a_line_meets_a_moved_cone_at_t
 245	geom-intersect::axial_factor	a_plane_cuts_a_moved_cylinder_or_cone_at_the_same_parameters
 native-only over 601	geom-intersect::boundary_branch	a_plane_cut_along_the_edge_of_the_other_patch_has_that_edge_for_its_branch
 native-only over 601	geom-intersect::boundary_branch	two_patches_meeting_along_an_edge_of_both_trace_it_once
+native-only over 601	geom-intersect::boundary_mutants	an_arc_in_a_plane_is_proven_in_pieces_within_the_ceiling
+native-only over 601	geom-intersect::boundary_mutants	an_edge_along_a_tilted_plane_meets_in_the_recorded_boxes
 native-only over 601	geom-intersect::boundary_units	a_planes_edge_along_a_cylinders_line_is_proven_in_pieces_of_half_a_unit
 native-only over 601	geom-intersect::boundary_units	a_strip_has_the_same_branch_however_its_parameters_are_written
 native-only over 601	geom-intersect::boundary_units	an_edge_along_a_plane_whose_vectors_lean_is_proven_where_it_lies
