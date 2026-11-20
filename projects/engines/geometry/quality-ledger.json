@@ -8852,14 +8852,6 @@
       "reason": "The loop keeps the widest side of the curve point's box. When w equals reach the mutant stores the same double, so the bound is the same."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
-      "mutant": "replace > with < in middle_of",
-      "line_text": "let start = if from.t.hi() > b {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Round a closed curve's join, middle_of starts the room after the join where a last pave past the end ends, read modulo the turn. The start is used only when the last pave ends at or past the end, so with < the two differ only for a pave past the end, where the room starts at the domain's start instead, which moves the middle by half that overrun. A last pave past the end is reached through interfere: a whole circle of radius 2^38 on a flat face whose side crosses it at y = -1/12000, under half a double before its join, has the last pave [1.9999999999999998, 2.0000000000000004], past the end by one double, and its arc round the join is In the face with the mutant too (measured on that face and on one whose other sides lie a radius further off; with the side at y = -1/7000 the pave ends on the end, where the two agree). Only a vertex made at the seam leaves a pave past the end, by about 1e-14 of a half-turn or less (a circle of radius 1105 cut at its seam: the work and blocks are the same with the mutant). Half such an overrun is under a thousandth of a step of arc at radius 2^38, so the two middles lie that close; a result could move only if the first pave lay within twice the overrun of the join, or a face's boundary passed that close to the middle without cutting the arc, and no input tried gives either. Killed by the module test face::tests::a_block_s_middle_lies_between_its_paves (a last pave ending on 2.25 wants 0.375, the mutant gives 0.25); the mutation gate runs only the crate's integration tests, so it cannot see that test."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
       "mutant": "replace < with <= in hull",
       "line_text": "if x.lo() < y.lo() { x.lo() } else { y.lo() },",

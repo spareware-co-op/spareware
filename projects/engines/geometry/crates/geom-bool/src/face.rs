@@ -938,9 +938,11 @@ pub(crate) fn edge_face(
 }
 
 /// A parameter strictly inside a block of `curve`, between its paves' enclosures, or `None` when
-/// the enclosures leave no room. Round a closed curve's join, a last pave whose enclosure runs past
-/// the end leaves no room before the end, and the room after the join starts where it ends, read
-/// modulo the turn (decision 32.104).
+/// the enclosures leave no room. Round a closed curve's join the room is one gap, from the last
+/// pave's end round the join to the first pave's start, read modulo the turn (decision 32.104):
+/// the room before the end, none where a last pave's enclosure runs past it, then the room after
+/// the join, which starts where that enclosure ends. Its middle is the middle of the whole gap, so
+/// a short room on one side of the join never puts it by a pave.
 fn middle_of(curve: &CurveKind<3>, block: &PaveBlock) -> Option<f64> {
     let (a, b) = curve.domain();
     let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);
@@ -952,7 +954,19 @@ fn middle_of(curve: &CurveKind<3>, block: &PaveBlock) -> Option<f64> {
             } else {
                 a
             };
-            between(from.t.hi(), b).or_else(|| between(start, to.t.lo()))
+            let before = greater(b - from.t.hi(), 0.0);
+            let after = to.t.lo() - start;
+            let half = before / 2.0 + after / 2.0;
+            // Half the gap on from the last pave's end where the room before the end is the
+            // longer, else half the gap back from the first pave's start: half the gap is at most
+            // the longer room, so the middle never passes that room's far end.
+            (half > 0.0).then(|| {
+                if before >= after {
+                    from.t.hi() + half
+                } else {
+                    to.t.lo() - half
+                }
+            })
         }
         _ => between(a, b),
     }
@@ -1883,10 +1897,16 @@ mod tests {
         let circle = CurveKind::Circle(
             Circle::new([0.0; 3], 100.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
         );
-        // Round the seam: from 1.5 to the end, or from the start to the last pave.
+        // Round the seam: the middle of the whole gap, from 1.5 round the join to 0.5, which is
+        // the join itself; and of one from 1.9375 to 1, which lies after the join, not in the
+        // short room before it.
         assert_eq!(
             middle_of(&circle, &block(Some(1.5), Some(0.5), true)),
-            Some(1.75)
+            Some(2.0)
+        );
+        assert_eq!(
+            middle_of(&circle, &block(Some(1.9375), Some(1.0), true)),
+            Some(0.46875)
         );
         assert_eq!(
             middle_of(&circle, &block(Some(2.0), Some(0.5), true)),
