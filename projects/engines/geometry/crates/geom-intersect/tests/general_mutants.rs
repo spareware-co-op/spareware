@@ -2,8 +2,9 @@
 //! patches of one carrier that wrap or touch a turn round, a patch one double wide that no cut can
 //! halve, start points on the end of a cone's height (over part of a turn and over a whole one),
 //! a start point on the end of a sphere's longitude, where a sphere has no room past its end, and
-//! an edge a hair inside that end, which is not taken as a start on it, and an edge that meets
-//! both ends of a sphere's longitude in one pair.
+//! an edge a hair inside that end, which is not taken as a start on it, an edge that meets both
+//! ends of a sphere's longitude in one pair, and a sphere's end at a subnormal longitude, where the
+//! determinant of two rows of an edge's partials may be zero.
 //!
 //! Run at the scale of the SSI corpus (1024 steps to the unit, floor 8) where a case has a scale,
 //! and in both orders of the pair.
@@ -374,4 +375,67 @@ fn a_chord_meets_both_ends_of_a_spheres_longitude_in_one_pair() {
         .collect();
     // (work, settled pairs, start points, flagged pairs), in the order above.
     assert_eq!(seen, [(7762, 1, 2, 0), (7762, 1, 2, 0)]);
+}
+
+/// A sphere of radius one unit about the origin, its longitude u from 620 · 2^−1074 of a half-turn,
+/// a subnormal, to 3/4 of a half-turn, and its latitude v from −0.3 to 0.4; and the plane z = 1/2
+/// unit over x from −1 to 1.5 units and y from 0 to one unit, its x carried by the vector
+/// (`scale`, 0, 0), so that its parameter along x runs over those units divided by `scale`.
+fn subnormal_end(scale: f64) -> (SurfaceKind, SurfaceKind) {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let start = f64::from_bits(620);
+    let sphere = SurfaceKind::Sphere(
+        Sphere::new([0.0; 3], UNIT, frame, ((start, 0.75), (-0.3, 0.4))).unwrap(),
+    );
+    let (a, b) = (-UNIT / scale, 1.5 * UNIT / scale);
+    let span = if scale > 0.0 { (a, b) } else { (b, a) };
+    let lid = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 0.5 * UNIT],
+            [scale, 0.0, 0.0],
+            [0.0, UNIT, 0.0],
+            (span, (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    (sphere, lid)
+}
+
+/// The sphere and plane of `subnormal_end`, the plane's x carried by 2^−20 of a unit and by −2^−20.
+/// The sphere's edge u = 620 · 2^−1074 meets the plane's edge y = 0 a subnormal hair inside it. On
+/// that end of the plane's domain the edge's partial in y along the edge is the radius times
+/// π² sin(πv) times the longitude, a subnormal, and its partial in y across the plane's x is exactly
+/// zero, so the determinant of the x and y rows is a few subnormal steps, and with each operation
+/// widening by a step one of its bounds comes out exactly zero: the upper one for 2^−20, the lower
+/// one for −2^−20. It may be zero, so those rows are not a choice to solve the end with. The pair is
+/// left flagged as undecided at the floor, in both orders and for both vectors, with the work its
+/// search charges, as recorded.
+#[test]
+fn rows_whose_determinant_may_be_zero_on_a_subnormal_end_are_not_solved() {
+    let seen: Vec<_> = [2.0_f64.powi(-20), -(2.0_f64.powi(-20))]
+        .into_iter()
+        .flat_map(|scale| {
+            let (sphere, lid) = subnormal_end(scale);
+            [(lid.clone(), sphere.clone()), (sphere, lid)]
+        })
+        .map(|(a, b)| {
+            let mut m = meter(1 << 24);
+            let found = subdivide(&a, &b, FLOOR, &mut m).unwrap();
+            let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
+            let whys: Vec<_> = found.flagged.iter().map(|f| f.why).collect();
+            (m.used().work, found.settled.len(), starts, whys)
+        })
+        .collect();
+    let floor = Unresolved::UndecidedAtFloor {
+        test: Test::Exclusion,
+    };
+    // (work, settled pairs, start points, why each pair is flagged): the plane and the sphere, then
+    // the sphere and the plane, for 2^−20, then for −2^−20.
+    let want = [
+        (9532, 0, 0, vec![floor; 3]),
+        (9672, 1, 2, vec![floor; 3]),
+        (12193, 0, 0, vec![floor; 3]),
+        (8266, 0, 0, vec![floor; 4]),
+    ];
+    assert_eq!(seen, want);
 }
