@@ -462,6 +462,75 @@ fn an_ellipse_on_a_plane_and_on_a_cylinder_passes_group_2() {
     }
 }
 
+/// The plane z = `z` through (`x`, 0, `z`), spanned by vectors of 1.6e8 steps along x and y, as
+/// the conversion writes a face of a case on its grid of 1.6e8 steps to the metre: its normal,
+/// 2.56e16 along z, is a double, and its length squared is not.
+fn long_level(x: f64, z: f64) -> SurfaceKind {
+    SurfaceKind::Plane(
+        Plane::new(
+            [x, 0.0, z],
+            [160_000_000.0, 0.0, 0.0],
+            [0.0, 160_000_000.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    )
+}
+
+/// The circle of radius 6 about (0, 0, `z`) in the plane z = `z`, starting along x.
+fn flat_circle(z: f64) -> CurveKind<3> {
+    round([0.0, 0.0, z], 6.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+}
+
+#[test]
+fn a_curve_exactly_on_a_plane_with_long_spanning_vectors_is_on_it_at_a_bound_of_nothing() {
+    // Issue #1028: a circle's and an ellipse's bound on a plane divided by |n|, which for spanning
+    // vectors of 1.6e8 steps is no double, so the exact 0 widened to a subnormal and the curve
+    // was off its plane at a bound of nothing; and a grid point's distance from a plane given by
+    // doubles, compared against b² · |n|², lost its exact 0 there as well. On the plane given by
+    // integers and on the same plane through a point half a step off the grid.
+    for x in [0.0, 0.5] {
+        for curve in [
+            flat_circle(0.0),
+            flat_oval(),
+            conjugate([0.0; 3], [6.0, 0.0, 0.0], [0.0, 4.0, 0.0]),
+        ] {
+            let mut r = oval_sheet(curve);
+            r.surfaces[0] = long_level(x, 0.0);
+            let faults = sheet_at(&r, 0);
+            assert!(!edge_off(&faults, 0, 0), "{x}: {faults:?}");
+            assert!(!off(&faults, 0, 0), "{x}: {faults:?}");
+            assert_eq!(sheet_at(&r, 1), [], "{x}");
+        }
+    }
+    // Still exact: a curve a step above such a plane, or one that leans out of it, is off it at
+    // a bound of nothing, as a vertex a step above the plane given by doubles is.
+    for curve in [
+        flat_circle(1.0),
+        round([0.0; 3], 6.0, [1.0, 0.0, 0.0], [0.0, 1.0, 1.0]),
+        conjugate([0.0, 0.0, 1.0], [6.0, 0.0, 0.0], [0.0, 4.0, 0.0]),
+        conjugate([0.0; 3], [6.0, 0.0, 0.0], [0.0, 4.0, 1.0]),
+    ] {
+        let mut r = oval_sheet(curve);
+        r.surfaces[0] = long_level(0.0, 0.0);
+        assert!(edge_off(&sheet_at(&r, 0), 0, 0));
+    }
+    let mut r = oval_sheet(flat_oval());
+    r.surfaces[0] = long_level(0.5, 1.0);
+    assert!(off(&sheet_at(&r, 0), 0, 0));
+    // And at the bound, on a plane whose normal is short: a curve a step above it is on it at a
+    // bound of one step and off it at none, and two steps above it are off it at one.
+    for (z, bound, away) in [(1.0, 1, false), (1.0, 0, true), (2.0, 1, true)] {
+        for curve in [
+            flat_circle(z),
+            conjugate([0.0, 0.0, z], [6.0, 0.0, 0.0], [0.0, 4.0, 0.0]),
+        ] {
+            let r = oval_sheet(curve);
+            assert_eq!(edge_off(&sheet_at(&r, bound), 0, 0), away, "{z} at {bound}");
+        }
+    }
+}
+
 #[test]
 fn an_ellipse_a_step_off_its_surface_is_refused_with_its_group_and_fault() {
     // Lifted one step off its plane: off at a bound of nothing, on at a bound of one.
