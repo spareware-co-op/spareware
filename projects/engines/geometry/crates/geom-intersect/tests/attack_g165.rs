@@ -2510,6 +2510,44 @@ fn an_endless_plane_on_a_short_first_vector_crosses_an_arc_across_it_in_two_prov
     assert!(found[1].contains(1.0 / short), "{:?}", r.items());
 }
 
+/// The arc of the circle in the plane x = 0 above from a quarter turn to seven quarters holds
+/// both its crossings with the endless plane z = 0 on a first vector of length 1 and a second of
+/// length 2^-30, at v = -2^30 and 2^30: two proven crossings. The arc runs across v there and not
+/// across u, so this pair reads the weight of v in the engine's contraction test, 1/dv of a step
+/// in space, as the arc in y = 0 above reads the weight of u; the whole circle in x = 0 is
+/// answered without the engine (decision 32.106).
+#[test]
+fn an_endless_plane_on_a_short_second_vector_crosses_an_arc_across_it_in_two_proven_crossings() {
+    let arc = CurveKind::Circle(
+        Circle::new(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+            (0.25, 1.75),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let flat = endless([0.0; 3], [1.0, 0.0, 0.0], [0.0, short, 0.0]);
+    let r = curve_surface(&arc, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<Interval> = Vec::new();
+    for item in r.items() {
+        let Item::Point { at, contact, .. } = item else {
+            panic!("{:?}", r.items());
+        };
+        assert_eq!(*contact, PointContact::Crossing, "{:?}", r.items());
+        let [_, u, v] = at.spans() else {
+            panic!("{at:?}");
+        };
+        assert!(u.contains(0.0), "{u:?}");
+        found.push(*v);
+    }
+    found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+    assert!(found[0].contains(-1.0 / short), "{:?}", r.items());
+    assert!(found[1].contains(1.0 / short), "{:?}", r.items());
+}
+
 /// The arc of the circle above from a quarter turn to seven quarters holds both its crossings with
 /// the endless plane z = 0: two proven crossings, nothing flagged and nothing touched. An arc short
 /// of a whole turn is the engine's, so this pair holds the plane's ends on the engine's path: held
