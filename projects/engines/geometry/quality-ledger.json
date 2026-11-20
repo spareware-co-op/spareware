@@ -8868,6 +8868,30 @@
       "reason": "The two differ only where lo == hi. A block's paves are in proven order (pave::order keeps one after another only when last.t.hi() < pave.t.lo()), and a domain has a < b, so that happens only for a block round a closed curve's seam whose last pave's enclosure ends exactly at the domain's end. The stages give a seam point the parameter at the domain's start, an enclosure from a (the projection's, in the vertex stage), and flag a crossing at the seam rather than enclose it, so no pave ends at b; were one to, the mutant would place the seam point, a point of the block, in place of the middle of the stretch after it."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with == in middle_of",
+      "line_text": "let start = if from.t.hi() > b {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed curve's join, middle_of starts the room after the join where a last pave past the end ends, read modulo the turn. With == a pave past the end gives the domain's start instead, which moves the middle by half that overrun, and a pave ending exactly on the end gives no middle (wrapped leaves the end in place). No public input tells them apart: pave enclosures are tight (one solver cell, 2^-18 of a half-turn, for an input vertex; about 1e-14 for one made at the seam), only a vertex made at the seam leaves a last pave past the end, by about 1e-14 or less, and no pave ends exactly on the end. A shift of half the overrun moves no result unless the next pave lies within twice the overrun of the join, which two separate vertices cannot; measured on a circle cut at its seam, the work and blocks are the same. Killed by the module test face::tests::a_block_s_middle_lies_between_its_paves (a last pave ending on 2.0 wants 0.25, one ending on 2.25 wants 0.375); the mutation gate runs only the crate's integration tests, so it cannot see that test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with < in middle_of",
+      "line_text": "let start = if from.t.hi() > b {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed curve's join, middle_of starts the room after the join where a last pave past the end ends, read modulo the turn. The start is used only when the last pave ends at or past the end, so with < the two differ only for a pave past the end, where the room starts at the domain's start instead, which moves the middle by half that overrun. No public input tells them apart: pave enclosures are tight (one solver cell, 2^-18 of a half-turn, for an input vertex; about 1e-14 for one made at the seam), and only a vertex made at the seam leaves a last pave past the end, by about 1e-14 or less. A shift of half the overrun moves no result unless the next pave lies within twice the overrun of the join, which two separate vertices cannot; measured on a circle cut at its seam, the work and blocks are the same. Killed by the module test face::tests::a_block_s_middle_lies_between_its_paves (a last pave ending on 2.25 wants 0.375, the mutant gives 0.25); the mutation gate runs only the crate's integration tests, so it cannot see that test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with >= in middle_of",
+      "line_text": "let start = if from.t.hi() > b {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed curve's join, middle_of starts the room after the join where a last pave past the end ends, read modulo the turn. With >= a last pave ending exactly on the domain's end reads its start as the end itself (wrapped leaves the end in place), so the block gets no middle where the original gives the middle of the room from the domain's start to the first pave; everywhere else the two agree. No public input reaches that: pave enclosures are tight (one solver cell, 2^-18 of a half-turn, for an input vertex; about 1e-14 for one made at the seam), and no pave ends exactly on the end, since a vertex in the last solver cell is also found at the start and written there. Killed by the module test face::tests::a_block_s_middle_lies_between_its_paves (a last pave ending on 2.0 wants 0.25, the mutant gives none); the mutation gate runs only the crate's integration tests, so it cannot see that test."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
       "mutant": "replace < with <= in hull",
       "line_text": "if x.lo() < y.lo() { x.lo() } else { y.lo() },",
@@ -9026,6 +9050,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With && a vertex is skipped only when it is outside on more axes at once, so fewer are skipped, and to_box finds those apart: touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace > with == in held",
+      "line_text": "} else if from.t.hi() > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed edge's join, held lets a span reach the piece after a last pave past the domain's end only if it ends past where that pave ends, read modulo the turn. With == a pave past the end falls to the other test, so a stretch after the join that ends inside the pave's overrun still reaches the piece, and a pave ending exactly on the end reads its end as the end itself (wrapped leaves it in place), so a stretch after the join no longer reaches the piece. No public input reaches either: pave enclosures are tight (one solver cell, 2^-18 of a half-turn, for an input vertex; about 1e-14 for one made at the seam), only a vertex made at the seam leaves a last pave past the end, by about 1e-14 or less, no overlap region measured ends inside that overrun, and no pave ends exactly on the end. Killed by the module tests interfere::tests::a_last_pave_ending_on_the_join_leaves_the_piece_round_it_from_the_start and interfere::tests::a_span_inside_a_last_pave_past_the_join_reaches_no_piece; the mutation gate runs only the crate's integration tests, so it cannot see them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace > with >= in held",
+      "line_text": "} else if from.t.hi() > end {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed edge's join, held lets a span reach the piece after a last pave past the domain's end only if it ends past where that pave ends, read modulo the turn. With >= a last pave ending exactly on the end is read that way too, and wrapped leaves the end in place, so a stretch after the join, short of the first pave, no longer reaches the piece round the join; everywhere else the two agree. No public input reaches that: pave enclosures are tight (one solver cell, 2^-18 of a half-turn, for an input vertex; about 1e-14 for one made at the seam), and no pave ends exactly on the end, since a vertex in the last solver cell is also found at the start and written there. Killed by the module test interfere::tests::a_last_pave_ending_on_the_join_leaves_the_piece_round_it_from_the_start; the mutation gate runs only the crate's integration tests, so it cannot see it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace && with || in held",
+      "line_text": "before(seam.wrapped(from.t.hi()), hi) && before_end",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Round a closed edge's join, after a last pave past the domain's end, held counts a stretch as reaching the piece only if it both ends past where that pave ends, read modulo the turn, and starts before the first pave. With || either is enough: a stretch inside the pave's overrun, or one wholly in a later piece, reaches the piece round the join, so a span held by another piece's block is refused when the piece round the join is in none. No public input reaches that: only a vertex made at the seam leaves a last pave past the end, by about 1e-14 or less, no overlap region measured ends inside that overrun, and the one overlap region found that ends inside its end paves away from the join (a copy of a circle's half across its seam) has the piece round the join paired; the other copies tried are already refused by the original, so the mutant cannot differ there. Killed by the module tests interfere::tests::a_span_short_of_the_join_does_not_reach_the_piece_round_it and interfere::tests::a_span_inside_a_last_pave_past_the_join_reaches_no_piece; the mutation gate runs only the crate's integration tests, so it cannot see them."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
