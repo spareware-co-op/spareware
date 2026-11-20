@@ -7,7 +7,10 @@
 //! rational surface `S_d` = (`A_d`·W − A·`W_d`) / W². The normal bound is the hull of the normal
 //! patches (`Surface::normal_patches`, collapsed edges divided out) cut down to the box. Partials
 //! of any order are the patch's repeated partial forms, at the point or bounded by their hulls,
-//! and for a rational surface the jet quotient A/W (`crate::jet`). Conversion
+//! and for a rational surface the jet quotient A/W (`crate::jet`); over a box, those of the patch
+//! cut down to it, or the whole patch's partial forms cut down to it where the cut's scale (its
+//! degree over the box's width) would leave the doubles, so a box however narrow has partials
+//! wherever the whole patch's partial forms do. Conversion
 //! to NURBS is the surface itself. A split inserts the parameter until its multiplicity is the
 //! degree in that direction and parts the net; a reversal negates and reverses one knot vector;
 //! a transform maps the control points with the weights kept.
@@ -42,7 +45,7 @@ use geom_curve::{CurveError, DerivativeBound, ParamMap};
 use geom_math::TypedTransform;
 use geom_num::interval::Interval;
 use geom_num::real::Real;
-use geom_nurbs::{Basis, BernsteinPatch, Bounds, Changed, Direction, Limit, Surface};
+use geom_nurbs::{Basis, BernsteinPatch, Bounds, Changed, Direction, Limit, NurbsError, Surface};
 use geom_run::WorkMeter;
 
 use crate::jet::Jet;
@@ -340,6 +343,31 @@ pub(crate) fn patch_partials(
     Ok(out)
 }
 
+/// The partials of the patch to `order` over `part`, a box inside its domain (no side one value):
+/// the patch cut down to the box, then differentiated, each partial form scaled by its degree over
+/// the box's width. Over a box so narrow that the scale takes them past the doubles (a few
+/// subnormals wide, as an interval rounded outward from exact zeros is), each partial form of the
+/// whole patch cut down to the box instead, as for a line: that scale is the degree over the
+/// patch's own width. Both hold the exact partials over the box.
+///
+/// # Errors
+///
+/// As [`patch_partials`].
+fn box_partials(
+    patch: &BernsteinPatch<3>,
+    part: ParamBox,
+    order: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<[Interval; 3]>, CurveError> {
+    let cut = restrict(patch, part)?;
+    match patch_partials(&cut, Where::Over(cut.domain()), order, meter) {
+        Err(CurveError::NotFinite | CurveError::Nurbs(NurbsError::NotFinite)) => {
+            patch_partials(patch, Where::Over(part), order, meter)
+        }
+        found => found,
+    }
+}
+
 /// Whether a parameter range takes the patch range `d`: a point by `holds` from `side`, a span by
 /// `meets`.
 fn takes(r: (f64, f64), d: (f64, f64), side: Limit, whole: (f64, f64)) -> bool {
@@ -480,8 +508,9 @@ impl ParamSurface for Surface<3> {
             if !(takes(region.0, pu, sides.0, du) && takes(region.1, pv, sides.1, dv)) {
                 continue;
             }
-            // A box: the patch cut down to it, then differentiated; a line: each partial form cut
-            // to the line, since the iso-line alone has no partials across it.
+            // A box: the patch cut down to it, then differentiated, unless that leaves the doubles
+            // (`box_partials`); a line: each partial form cut to the line, since the iso-line alone
+            // has no partials across it.
             let e = if point {
                 patch_partials(&p, Where::Point(u0, v0), order, meter)?
             } else {
@@ -490,8 +519,7 @@ impl ParamSurface for Surface<3> {
                     if line {
                         patch_partials(&p, Where::Over(part), k, m)
                     } else {
-                        let cut = restrict(&p, part)?;
-                        patch_partials(&cut, Where::Over(cut.domain()), k, m)
+                        box_partials(&p, part, k, m)
                     }
                 };
                 if p.is_rational() {
