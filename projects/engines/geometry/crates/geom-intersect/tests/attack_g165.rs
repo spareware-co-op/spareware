@@ -15,6 +15,8 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
+mod miri;
+
 use geom_curve::{Circle, CurveKind, Frame, ParamCurve};
 use geom_intersect::IntersectError;
 use geom_intersect::curve_surface::curve_surface;
@@ -27,6 +29,7 @@ use geom_nurbs::Limit;
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind};
 use geom_test::{Seed, SplitMix64};
+use miri::{case, rounds};
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const TALL: (f64, f64) = (-500.0, 500.0);
@@ -351,12 +354,33 @@ fn a_plane_cuts_a_cone_in_each_conic() {
 
 #[test]
 fn a_plane_through_a_cones_apex_is_a_point_or_rulings() {
-    let c = cone([0.0; 3], [0.0, 0.0, 1.0], 1.0);
-    assert_eq!(points(&meet(&level(0.0), &c)), 1);
-    let r = meet(&plane([0.0; 3], [1.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
+    // Under Miri the same cone 5 each way of its apex, not 500, and the same planes without ends
+    // (the module `miri` says why a test runs less there): their ends, 1000 out, lie past the
+    // cone's end circles and cut nothing, yet each is a line decided against the cone exactly,
+    // four a plane, a third of the native work. The plane along a ruling touches the end circles,
+    // and a smaller circle takes fewer boxes to cut there.
+    let c = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            0.0,
+            1.0,
+            frame_along([0.0, 0.0, 1.0]),
+            (ROUND, case(TALL, (-5.0, 5.0))),
+        )
+        .unwrap(),
+    );
+    let sheet = |c, a, b| case(plane(c, a, b), endless(c, a, b));
+    assert_eq!(
+        points(&meet(
+            &sheet([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            &c
+        )),
+        1
+    );
+    let r = meet(&sheet([0.0; 3], [1.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
     assert_eq!(curves(&r).len(), 1);
     assert!(tangent(&r));
-    let r = meet(&plane([0.0; 3], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
+    let r = meet(&sheet([0.0; 3], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &c);
     assert_eq!(curves(&r).len(), 2);
 }
 
@@ -645,7 +669,12 @@ fn a_piece_no_edge_cuts_is_read_where_the_meeting_may_lie() {
             )
             .unwrap(),
         );
-        for (a, b) in [(&plane, &cone), (&cone, &plane)] {
+        // Under Miri the pair in the issue's order only (the module `miri` says why a test runs
+        // less there): `natural` puts a pair in one order before any work, so the other order
+        // does the same work again for the same answer, and either order is held to its swap by
+        // `either_order_gives_the_same_items_swapped`.
+        let orders = [(&plane, &cone), (&cone, &plane)];
+        for &(a, b) in rounds(&orders, &orders[..1]) {
             let r = natural(a, b, &mut meter()).unwrap();
             for c in r.iter().flat_map(curves) {
                 let (lo, hi) = c.domain();
@@ -871,7 +900,11 @@ fn an_offset_from_a_corner_that_ends_at_zero_reaches_it() {
             )
             .unwrap(),
         );
-        for (a, b) in [(&sheet, &ball), (&ball, &sheet)] {
+        // Under Miri the pair in one order (the module `miri` says why a test runs less there):
+        // `natural` puts a pair in one order before any work, so the other order does the same
+        // work again, nearly all of it bounding the far plane, for the same answer.
+        let orders = [(&sheet, &ball), (&ball, &sheet)];
+        for &(a, b) in rounds(&orders, &orders[..1]) {
             let r = natural(a, b, &mut meter()).unwrap();
             assert!(
                 r.is_none(),
@@ -1573,25 +1606,32 @@ fn a_cone_ending_at_its_apex_is_cut_there() {
     // One nappe, 3 out for every 4 up, from its apex at the origin to 400 up: the apex is an edge
     // of one point, and a line through it leaves the domain there. Each piece runs from the apex
     // to the top circle, its middle 200 up, within what a cut can tell.
+    // Under Miri the same nappe 8 up, its middles 4 up and 3 out, and the same planes without
+    // ends (the module `miri` says why a test runs less there): their ends, 1000 out, lie past the
+    // top circle and cut nothing, yet each is a line decided against the cone exactly, four a
+    // plane, where those of the plane along the ruling all lie in a plane that touches the cone,
+    // half the native work. The top circle touches that plane too, and a smaller circle takes
+    // fewer boxes to cut there.
+    let (top, high, out) = case((400.0, 200.0, 150.0), (8.0, 4.0, 3.0));
+    let sheet = |c, a, b| case(plane(c, a, b), endless(c, a, b));
     let up = frame_along([0.0, 0.0, 1.0]);
-    let nappe =
-        SurfaceKind::Cone(Cone::new([0.0; 3], 0.0, 0.75, up, (ROUND, (0.0, 400.0))).unwrap());
+    let nappe = SurfaceKind::Cone(Cone::new([0.0; 3], 0.0, 0.75, up, (ROUND, (0.0, top))).unwrap());
     // A plane through the axis: two rays from the apex.
-    let r = meet(&plane([0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]), &nappe);
+    let r = meet(&sheet([0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]), &nappe);
     let c = curves(&r);
     assert_eq!(c.len(), 2, "{:?}", r.items());
     for ray in &c {
         let p = mid(ray);
-        assert!((p[2] - 200.0).abs() < 0.01, "{p:?}");
-        assert!((p[0].abs() - 150.0).abs() < 0.01, "{p:?}");
+        assert!((p[2] - high).abs() < 0.01, "{p:?}");
+        assert!((p[0].abs() - out).abs() < 0.01, "{p:?}");
     }
     // A plane touching it along the ruling (3, 0, 4): one tangent ray.
-    let r = meet(&plane([0.0; 3], [3.0, 0.0, 4.0], [0.0, 1.0, 0.0]), &nappe);
+    let r = meet(&sheet([0.0; 3], [3.0, 0.0, 4.0], [0.0, 1.0, 0.0]), &nappe);
     assert_eq!(curves(&r).len(), 1, "{:?}", r.items());
     assert!(tangent(&r), "{:?}", r.items());
     let p = mid(curves(&r)[0]);
-    assert!((p[2] - 200.0).abs() < 0.01, "{p:?}");
-    assert!((p[0] - 150.0).abs() < 0.01, "{p:?}");
+    assert!((p[2] - high).abs() < 0.01, "{p:?}");
+    assert!((p[0] - out).abs() < 0.01, "{p:?}");
 }
 
 /// A sphere, cylinder or cone on part of its turn and height: `turn` in half-turns, `height` in v.
@@ -2059,7 +2099,13 @@ fn every_closed_form_at_its_edges_makes_what_it_made() {
         ),
     ];
     let mut out = Vec::new();
-    for (k, (a, b)) in pairs.iter().enumerate() {
+    // Under Miri every pair but 13, the cone on a band two steps tall (the module `miri` says why
+    // a test runs less there): 21, the cone on a band half a step tall, is the same cut of the same
+    // kind of cone to points, the sharper case, and 13 is a fifth of the native work.
+    let every: Vec<usize> = (0..pairs.len()).collect();
+    let most: Vec<usize> = every.iter().copied().filter(|k| *k != 13).collect();
+    for &k in rounds(&every, &most) {
+        let (a, b) = &pairs[k];
         let line = match natural(a, b, &mut meter()) {
             Ok(Some(r)) => {
                 holds(&r, a, b);
@@ -2068,15 +2114,15 @@ fn every_closed_form_at_its_edges_makes_what_it_made() {
             other => format!("{other:?}"),
         };
         println!("{k}: {line}");
-        out.push(line);
+        out.push((k, line));
     }
     assert_eq!(
-        out.len(),
+        pairs.len(),
         AT_EDGES.len(),
         "the pins are the lines printed above"
     );
-    for (k, (got, want)) in out.iter().zip(AT_EDGES).enumerate() {
-        assert_eq!(got, want, "pair {k}");
+    for (k, got) in &out {
+        assert_eq!(got, AT_EDGES[*k], "pair {k}");
     }
 }
 
