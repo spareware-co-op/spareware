@@ -15,8 +15,9 @@
 //! and every function excused as a constant refusal still refuses;
 //! the limits are principle 12's in the crate, the gate and the workflow alike; the toolchain,
 //! Gungraun and Wasmtime pins agree wherever they are written; every action the workflow runs is
-//! pinned to the full commit `kernel.yml` runs, and no checkout keeps credentials; and no retired
-//! name is reused.
+//! pinned to a full commit, one reviewed commit across the kernel's workflows (`kernel.yml` or
+//! `kernel-oracles.yml` runs it already, and every kernel workflow that runs it runs that commit),
+//! and no checkout keeps credentials; and no retired name is reused.
 //!
 //! Method: a traceability check (<https://en.wikipedia.org/wiki/Traceability_matrix>): each check
 //! reads the files it compares and requires the sets they list to be equal. `geom-num`'s source is
@@ -1168,40 +1169,185 @@ fn locked_versions(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// Every kernel workflow (`.github/workflows/kernel*.yml`) by file name, read at compile time like
+/// every other file here, so the pin check needs no file access when it runs;
+/// `the_pin_check_reads_every_kernel_workflow` keeps the list whole.
+const KERNEL_WORKFLOWS: [(&str, &str); 12] = [
+    ("kernel.yml", KERNEL_WORKFLOW),
+    ("kernel-bench.yml", WORKFLOW),
+    (
+        "kernel-build.yml",
+        include_str!("../../../../../../.github/workflows/kernel-build.yml"),
+    ),
+    (
+        "kernel-certificates.yml",
+        include_str!("../../../../../../.github/workflows/kernel-certificates.yml"),
+    ),
+    (
+        "kernel-dev.yml",
+        include_str!("../../../../../../.github/workflows/kernel-dev.yml"),
+    ),
+    (
+        "kernel-fuzz.yml",
+        include_str!("../../../../../../.github/workflows/kernel-fuzz.yml"),
+    ),
+    (
+        "kernel-gate.yml",
+        include_str!("../../../../../../.github/workflows/kernel-gate.yml"),
+    ),
+    (
+        "kernel-golden.yml",
+        include_str!("../../../../../../.github/workflows/kernel-golden.yml"),
+    ),
+    (
+        "kernel-oracles.yml",
+        include_str!("../../../../../../.github/workflows/kernel-oracles.yml"),
+    ),
+    (
+        "kernel-quality.yml",
+        include_str!("../../../../../../.github/workflows/kernel-quality.yml"),
+    ),
+    (
+        "kernel-release.yml",
+        include_str!("../../../../../../.github/workflows/kernel-release.yml"),
+    ),
+    (
+        "kernel-variants.yml",
+        include_str!("../../../../../../.github/workflows/kernel-variants.yml"),
+    ),
+];
+
+/// The kernel workflows one of which must run an action already before the gates take it up.
+const REVIEWED_IN: [&str; 2] = ["kernel.yml", "kernel-oracles.yml"];
+
+/// The actions a workflow runs, each as its `uses:` value (`action@commit # tag`), in order. A
+/// workflow of this repository at the same commit (`uses: ./.github/workflows/...`, the job
+/// `cheap`) is no action to pin.
+fn actions_of(workflow: &str) -> Vec<&str> {
+    workflow
+        .lines()
+        .map(|line| line.trim().trim_start_matches("- "))
+        .filter_map(|line| line.strip_prefix("uses: "))
+        .filter(|uses| !uses.starts_with("./"))
+        .collect()
+}
+
+/// What is wrong with the pins of the actions kernel-bench.yml runs, given every kernel workflow by
+/// file name: each is pinned to a full commit (40 hexadecimal digits) with a comment naming the tag
+/// or branch it was checked against; kernel.yml or kernel-oracles.yml runs it already; and every
+/// kernel workflow that runs it runs that very commit.
+fn pin_problems(workflows: &[(&str, &str)]) -> Vec<String> {
+    let mut found = BTreeSet::new();
+    let bench = workflows
+        .iter()
+        .find(|(name, _)| *name == "kernel-bench.yml")
+        .map_or("", |(_, text)| *text);
+    let ours = actions_of(bench);
+    if ours.is_empty() {
+        found.insert("kernel-bench.yml runs no action".to_owned());
+    }
+    for uses in ours {
+        let (action, pin) = uses.split_once('@').unwrap_or((uses, ""));
+        let (commit, checked_against) = pin.split_once(" # ").unwrap_or((pin, ""));
+        let full = commit.len() == 40
+            && commit
+                .chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c));
+        if !full || checked_against.trim().is_empty() {
+            found.insert(format!(
+                "not pinned to a full commit with the tag it was checked against: {uses}"
+            ));
+        }
+        let mut reviewed = false;
+        for (name, text) in workflows {
+            for theirs in actions_of(text) {
+                let Some((other, pin)) = theirs.split_once('@') else {
+                    continue;
+                };
+                if other != action {
+                    continue;
+                }
+                let at = pin.split_whitespace().next().unwrap_or_default();
+                if at != commit {
+                    found.insert(format!(
+                        "{name} runs {action} at {at}, kernel-bench.yml at {commit}"
+                    ));
+                } else if REVIEWED_IN.contains(name) {
+                    reviewed = true;
+                }
+            }
+        }
+        if !reviewed {
+            found.insert(format!(
+                "neither kernel.yml nor kernel-oracles.yml runs {action} at {commit}"
+            ));
+        }
+    }
+    found.into_iter().collect()
+}
+
 #[test]
-fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
+fn every_action_runs_at_one_reviewed_commit_across_the_kernel_workflows() {
     // A tag or a branch can be moved to other code; a full commit cannot. Every action the gates
     // run is pinned to a full commit (40 hexadecimal digits) with a comment naming the tag or
-    // branch it was checked against, and to the very commit kernel.yml runs for that action, so
-    // the two workflows move together and only after review; and every checkout keeps no
-    // credentials.
-    let uses = |text: &'static str| -> Vec<&'static str> {
-        text.lines()
-            .map(|line| line.trim().trim_start_matches("- "))
-            // A workflow of this repository at the same commit (`uses: ./.github/workflows/...`,
-            // the job `cheap`) is no action to pin.
-            .filter(|line| line.starts_with("uses: ") && !line.starts_with("uses: ./"))
-            .collect()
-    };
-    let kernel = uses(KERNEL_WORKFLOW);
-    let ours = uses(WORKFLOW);
-    assert!(!ours.is_empty());
-    for line in &ours {
-        let pin = line
-            .split_once('@')
-            .and_then(|(_, pin)| pin.split_once(" # "));
-        assert!(
-            pin.is_some_and(|(commit, checked_against)| commit.len() == 40
-                && commit
-                    .chars()
-                    .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
-                && !checked_against.trim().is_empty()),
-            "not pinned to a full commit with the tag it was checked against: {line}"
-        );
-        assert!(
-            kernel.contains(line),
-            "kernel.yml runs another commit of this action, or does not run it: {line}"
-        );
+    // branch it was checked against, and runs at one reviewed commit across the kernel's
+    // workflows, which move together: kernel.yml or kernel-oracles.yml runs it already, so the
+    // gates take up no action the kernel's workflows had not run, and every kernel workflow that
+    // runs it runs that very commit, so a pin moved in one workflow alone fails here. And every
+    // checkout keeps no credentials.
+    assert_eq!(pin_problems(&KERNEL_WORKFLOWS), Vec::<String>::new());
+    // Each rule fails on a planted pin: another commit of actions/cache in kernel-bench.yml, an
+    // action no kernel workflow ran before, a tag in place of a commit, and a pin moved in
+    // another kernel workflow alone.
+    let restore = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+    let checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
+    for (file, from, to, said) in [
+        (
+            "kernel-bench.yml",
+            restore,
+            "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
+            "kernel-oracles.yml runs actions/cache/restore at \
+             55cc8345863c7cc4c66a329aec7e433d2d1c52a9, kernel-bench.yml at \
+             0057852bfaa89a56745cba8c7296529d2fc39830",
+        ),
+        (
+            "kernel-bench.yml",
+            restore,
+            "awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9",
+            "neither kernel.yml nor kernel-oracles.yml runs awalsh128/cache-apt-pkgs-action",
+        ),
+        (
+            "kernel-bench.yml",
+            restore,
+            "actions/cache/restore@v6.1.0",
+            "not pinned to a full commit",
+        ),
+        (
+            "kernel-quality.yml",
+            checkout,
+            "actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955",
+            "kernel-quality.yml runs actions/checkout at 08eba0b27e820071cde6df949e0beb9ba4906955",
+        ),
+    ] {
+        let planted: Vec<(&str, String)> = KERNEL_WORKFLOWS
+            .iter()
+            .map(|&(name, text)| {
+                let text = if name == file {
+                    let moved = text.replacen(from, to, 1);
+                    assert_ne!(moved, text, "the planted pin {to} applies to {file}");
+                    moved
+                } else {
+                    text.to_owned()
+                };
+                (name, text)
+            })
+            .collect();
+        let workflows: Vec<(&str, &str)> = planted
+            .iter()
+            .map(|(name, text)| (*name, text.as_str()))
+            .collect();
+        let found = pin_problems(&workflows);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
     let lines: Vec<&str> = WORKFLOW.lines().map(str::trim).collect();
     let checkouts: Vec<usize> = lines
@@ -1226,6 +1372,35 @@ fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
             "a checkout keeps its credentials: {with:?}"
         );
     }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "lists the workflows' directory, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_pin_check_reads_every_kernel_workflow() {
+    // A kernel workflow the pin check does not read could move a pin unseen.
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../.github/workflows");
+    let on_disk: BTreeSet<String> = std::fs::read_dir(&dir)
+        .expect("the workflows' directory is readable")
+        .map(|entry| {
+            entry
+                .expect("each entry of the workflows' directory is readable")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|name| {
+            name.starts_with("kernel") && (name.ends_with(".yml") || name.ends_with(".yaml"))
+        })
+        .collect();
+    let read: BTreeSet<String> = KERNEL_WORKFLOWS
+        .iter()
+        .map(|(name, _)| (*name).to_owned())
+        .collect();
+    assert_eq!(on_disk, read);
 }
 
 #[test]

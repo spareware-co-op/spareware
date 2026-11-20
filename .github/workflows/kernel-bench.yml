@@ -81,9 +81,10 @@ name: Kernel benchmarks
 # Read-only: the jobs report in their summaries and annotations, and never write to the repository
 # or the pull request (pull requests from forks get no write token).
 #
-# Every action is pinned to a full commit, the same commit kernel.yml pins for it (a test checks
-# they agree), and every checkout keeps no credentials; update a pin in both workflows, and only
-# after reviewing the new commit.
+# Every action is pinned to a full commit, one reviewed commit per action across the kernel's
+# workflows: kernel.yml or kernel-oracles.yml runs it already, and every kernel workflow that runs
+# it runs that very commit (a test checks they agree); every checkout keeps no credentials. Update
+# a pin in every kernel workflow at once, and only after reviewing the new commit.
 #
 # Every `run:` step runs in GitHub's default shell, `bash -e`, so a failing command ends its step
 # even after `set -uo pipefail`. A step that reports a check's verdict therefore catches the
@@ -444,16 +445,67 @@ jobs:
           key: ${{ matrix.target }}-base-${{ needs.scope.outputs.base_toolchain }}
           cache-directories: ~/.gungraun-runner
 
+      # Valgrind's packages come from GitHub's cache when a run before kept these very files, so the
+      # mirror serves only its index, which it can send fast while it sends packages slowly (job
+      # 136333192202: the index at 6.9 MB/s, then 35.5 MB of packages at 62.8 kB/s, past the
+      # step's 10 minutes). The key is the runner image and every file the install fetches, as the
+      # index just fetched names it, by file name (package and exact version) and SHA-256, so a hit
+      # installs the very packages the mirror would serve. A kept file is used only when its SHA-256
+      # is the index's: apt checks only the size of a package file it already holds. With none kept,
+      # the packages come from the mirror as before, and are kept for a later run that can read
+      # them: this pull request's, or every run's when main keeps them.
       # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
       # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
       # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
       # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
+      - name: The Valgrind packages the mirror's index names
+        id: valgrind-debs
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          # Each file the install fetches, as `<SHA-256>  <file>`: --print-uris names them and
+          # fetches nothing, and Acquire::ForceHash has it give the SHA-256, not the MD5.
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+              -o Acquire::ForceHash=sha256 install --print-uris --yes --no-install-recommends valgrind \
+            | sed -n "s/^'[^']*' \([^ ]*\) [0-9]* SHA256:\([0-9a-f]\{64\}\)\$/\2  \1/p" \
+            | sort > "$RUNNER_TEMP/valgrind-debs.sha256"
+          cat "$RUNNER_TEMP/valgrind-debs.sha256"
+          mkdir -p "$RUNNER_TEMP/valgrind-debs"
+          key=$(printf '%s\n' "${ImageOS:-} ${ImageVersion:-}" | cat - "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | sha256sum | cut -c1-16)
+          echo "key=valgrind-debs-$TARGET-$key" | tee -a "$GITHUB_OUTPUT"
+      - name: The Valgrind packages a run before kept
+        id: valgrind-kept
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
+      - name: The kept Valgrind packages, each held to the index's SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/valgrind-debs"
+          if [ -n "$(ls -A)" ]; then
+            if sha256sum --check --strict --quiet "$RUNNER_TEMP/valgrind-debs.sha256"; then
+              cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" | xargs -r sudo cp -t /var/cache/apt/archives --
+            else
+              echo "::warning::The kept Valgrind packages are not the files the index names; the mirror sends them."
+              rm -f -- ./*
+            fi
+          fi
       - name: Install Valgrind
         timeout-minutes: 10
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
+          # The files the install used, for the next step to keep when no run had kept them.
+          cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | (cd /var/cache/apt/archives && xargs -r cp -t "$RUNNER_TEMP/valgrind-debs" --)
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.valgrind-kept.outputs.cache-hit != 'true' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
 
       - name: Install the Gungraun runner the merge base needs
         run: |
@@ -665,16 +717,67 @@ jobs:
           key: ${{ matrix.target }}-head-${{ needs.scope.outputs.head_toolchain }}
           cache-directories: ~/.gungraun-runner
 
+      # Valgrind's packages come from GitHub's cache when a run before kept these very files, so the
+      # mirror serves only its index, which it can send fast while it sends packages slowly (job
+      # 136333192202: the index at 6.9 MB/s, then 35.5 MB of packages at 62.8 kB/s, past the
+      # step's 10 minutes). The key is the runner image and every file the install fetches, as the
+      # index just fetched names it, by file name (package and exact version) and SHA-256, so a hit
+      # installs the very packages the mirror would serve. A kept file is used only when its SHA-256
+      # is the index's: apt checks only the size of a package file it already holds. With none kept,
+      # the packages come from the mirror as before, and are kept for a later run that can read
+      # them: this pull request's, or every run's when main keeps them.
       # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
       # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
       # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
       # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
+      - name: The Valgrind packages the mirror's index names
+        id: valgrind-debs
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          # Each file the install fetches, as `<SHA-256>  <file>`: --print-uris names them and
+          # fetches nothing, and Acquire::ForceHash has it give the SHA-256, not the MD5.
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+              -o Acquire::ForceHash=sha256 install --print-uris --yes --no-install-recommends valgrind \
+            | sed -n "s/^'[^']*' \([^ ]*\) [0-9]* SHA256:\([0-9a-f]\{64\}\)\$/\2  \1/p" \
+            | sort > "$RUNNER_TEMP/valgrind-debs.sha256"
+          cat "$RUNNER_TEMP/valgrind-debs.sha256"
+          mkdir -p "$RUNNER_TEMP/valgrind-debs"
+          key=$(printf '%s\n' "${ImageOS:-} ${ImageVersion:-}" | cat - "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | sha256sum | cut -c1-16)
+          echo "key=valgrind-debs-$TARGET-$key" | tee -a "$GITHUB_OUTPUT"
+      - name: The Valgrind packages a run before kept
+        id: valgrind-kept
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
+      - name: The kept Valgrind packages, each held to the index's SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/valgrind-debs"
+          if [ -n "$(ls -A)" ]; then
+            if sha256sum --check --strict --quiet "$RUNNER_TEMP/valgrind-debs.sha256"; then
+              cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" | xargs -r sudo cp -t /var/cache/apt/archives --
+            else
+              echo "::warning::The kept Valgrind packages are not the files the index names; the mirror sends them."
+              rm -f -- ./*
+            fi
+          fi
       - name: Install Valgrind
         timeout-minutes: 10
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
+          # The files the install used, for the next step to keep when no run had kept them.
+          cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | (cd /var/cache/apt/archives && xargs -r cp -t "$RUNNER_TEMP/valgrind-debs" --)
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.valgrind-kept.outputs.cache-hit != 'true' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
 
       - name: Install the Gungraun runner the change needs
         run: |
@@ -938,16 +1041,67 @@ jobs:
             head -> ../target
           key: ${{ matrix.target }}-judge-${{ needs.scope.outputs.head_toolchain }}
 
+      # Valgrind's packages come from GitHub's cache when a run before kept these very files, so the
+      # mirror serves only its index, which it can send fast while it sends packages slowly (job
+      # 136333192202: the index at 6.9 MB/s, then 35.5 MB of packages at 62.8 kB/s, past the
+      # step's 10 minutes). The key is the runner image and every file the install fetches, as the
+      # index just fetched names it, by file name (package and exact version) and SHA-256, so a hit
+      # installs the very packages the mirror would serve. A kept file is used only when its SHA-256
+      # is the index's: apt checks only the size of a package file it already holds. With none kept,
+      # the packages come from the mirror as before, and are kept for a later run that can read
+      # them: this pull request's, or every run's when main keeps them.
       # apt's own retries and time limits, and the step's, so a stalled package mirror is retried or
       # fails the step in minutes instead of holding the job to its limit (run 44472997296: one
       # stall from 06:38 until the job's limit cancelled it at 07:08). geom-test's
       # tests/queue_wiring.rs holds every apt-get of the kernel's workflows to them.
+      - name: The Valgrind packages the mirror's index names
+        id: valgrind-debs
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          # Each file the install fetches, as `<SHA-256>  <file>`: --print-uris names them and
+          # fetches nothing, and Acquire::ForceHash has it give the SHA-256, not the MD5.
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+              -o Acquire::ForceHash=sha256 install --print-uris --yes --no-install-recommends valgrind \
+            | sed -n "s/^'[^']*' \([^ ]*\) [0-9]* SHA256:\([0-9a-f]\{64\}\)\$/\2  \1/p" \
+            | sort > "$RUNNER_TEMP/valgrind-debs.sha256"
+          cat "$RUNNER_TEMP/valgrind-debs.sha256"
+          mkdir -p "$RUNNER_TEMP/valgrind-debs"
+          key=$(printf '%s\n' "${ImageOS:-} ${ImageVersion:-}" | cat - "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | sha256sum | cut -c1-16)
+          echo "key=valgrind-debs-$TARGET-$key" | tee -a "$GITHUB_OUTPUT"
+      - name: The Valgrind packages a run before kept
+        id: valgrind-kept
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
+      - name: The kept Valgrind packages, each held to the index's SHA-256
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/valgrind-debs"
+          if [ -n "$(ls -A)" ]; then
+            if sha256sum --check --strict --quiet "$RUNNER_TEMP/valgrind-debs.sha256"; then
+              cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" | xargs -r sudo cp -t /var/cache/apt/archives --
+            else
+              echo "::warning::The kept Valgrind packages are not the files the index names; the mirror sends them."
+              rm -f -- ./*
+            fi
+          fi
       - name: Install Valgrind
         timeout-minutes: 10
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install --yes --no-install-recommends valgrind
           valgrind --version
+          # The files the install used, for the next step to keep when no run had kept them.
+          cut -c67- "$RUNNER_TEMP/valgrind-debs.sha256" \
+            | (cd /var/cache/apt/archives && xargs -r cp -t "$RUNNER_TEMP/valgrind-debs" --)
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.valgrind-kept.outputs.cache-hit != 'true' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        with:
+          path: ${{ runner.temp }}/valgrind-debs
+          key: ${{ steps.valgrind-debs.outputs.key }}
 
       # The golden digests (no benchmark may get faster by computing something else, and the
       # results recorded on one platform must come out the same here), the input classes, and the
