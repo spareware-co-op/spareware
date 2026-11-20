@@ -367,6 +367,29 @@ fn ridges_too_close_to_part_overlap_where_each_reaches_one_side_alone() {
     );
 }
 
+/// The hanging sphere at a floor of 4: its cluster at the pole reaches past an eighth of a turn
+/// from it, so it is never read in the turned chart, and stays undecided at the work recorded.
+#[test]
+fn a_cluster_reaching_past_the_cap_is_not_read_in_the_turned_chart() {
+    holds_to(
+        (&ball([0.0625, 0.03125, -5.0]), &level()),
+        (4.0, 1.0 / 16.0),
+        [
+            (
+                44_435,
+                "[Undecided { first: ((0.0, 2.0), (0.18359375, 0.5)), \
+                 second: ((-7.2421875, 3.15087890625), (-3.375, 4.978729248046875)), \
+                 why: HigherOrderContact }]",
+            ),
+            (
+                34_426,
+                "[Undecided { first: ((-3.61669921875, 3.3046875), (-3.61669921875, 3.3046875)), \
+                 second: ((0.0, 2.0), (0.2765960693359375, 0.5)), why: HigherOrderContact }]",
+            ),
+        ],
+    );
+}
+
 /// A cylinder of radius 5 units resting on a plane touches it along a line, in a band of
 /// √(2δ/Δκ) (`attack_g171.rs`), held to its recorded width and gap.
 #[test]
