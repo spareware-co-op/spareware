@@ -16,6 +16,8 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
+mod miri;
+
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, ParamCurve};
 use geom_intersect::IntersectError;
 use geom_intersect::curve::{curves, curves_over, self_crossings};
@@ -25,6 +27,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_test::{Seed, SplitMix64};
+use miri::{case, rounds};
 
 /// A meter with a budget every test here fits in, so a change that sends the engine round for ever
 /// fails on the budget instead of hanging.
@@ -1333,31 +1336,55 @@ fn a_line_meets_a_hyperbola_only_on_its_arc() {
 
 /// A closed cubic B-spline on a figure eight's polygon, a thousand grid steps to a unit, starting
 /// and ending at the right lobe's tip: it crosses itself once, at the waist, away from its join.
+///
+/// Under Miri a smaller eight of the same kind: a closed cubic B-spline of three spans, not seven,
+/// on the polygon (10, 0), (10, 11), (−10, −13), (−10, 13), (10, −11), (10, 0) at the same scale,
+/// leaving and reaching its join straight up as the seven-span one does. A search over the seven
+/// spans is minutes there.
 fn closed_eight() -> CurveKind<2> {
-    let polygon: Vec<[f64; 2]> = [
-        [10.0, 0.0],
-        [10.0, 6.0],
-        [5.0, 6.0],
-        [-5.0, -6.0],
-        [-10.0, -6.0],
-        [-10.0, 6.0],
-        [-5.0, 6.0],
-        [5.0, -6.0],
-        [10.0, -6.0],
-        [10.0, 0.0],
-    ]
-    .iter()
-    .map(|[x, y]| [x * 1000.0, y * 1000.0])
-    .collect();
-    let knots = vec![
-        0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 7.0, 7.0, 7.0,
-    ];
+    let (polygon, knots) = case(
+        (
+            vec![
+                [10.0, 0.0],
+                [10.0, 6.0],
+                [5.0, 6.0],
+                [-5.0, -6.0],
+                [-10.0, -6.0],
+                [-10.0, 6.0],
+                [-5.0, 6.0],
+                [5.0, -6.0],
+                [10.0, -6.0],
+                [10.0, 0.0],
+            ],
+            vec![
+                0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 7.0, 7.0, 7.0,
+            ],
+        ),
+        (
+            vec![
+                [10.0, 0.0],
+                [10.0, 11.0],
+                [-10.0, -13.0],
+                [-10.0, 13.0],
+                [10.0, -11.0],
+                [10.0, 0.0],
+            ],
+            vec![0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0],
+        ),
+    );
+    let polygon: Vec<[f64; 2]> = polygon
+        .iter()
+        .map(|[x, y]| [x * 1000.0, y * 1000.0])
+        .collect();
     CurveKind::Nurbs(Curve::new(Basis::new(3, knots).unwrap(), &polygon).unwrap())
 }
 
 #[test]
 fn a_closed_curve_crossing_itself_away_from_its_join_is_found() {
-    // Sampled 20,000 times, the curve's only crossing is at parameters 1.5 and 5.5.
+    // Sampled 20,000 times, the curve's only crossing is at parameters 1.5 and 5.5. Under Miri the
+    // smaller eight's, sampled 4,000 times, is at 3/4 and 9/4: run backwards it is its own mirror
+    // image in the x axis, so it crosses itself where it meets the axis, and at 3/4 its weights
+    // 1/64, 117/256, 117/256 and 9/128 give y = (117·11 − 117·13 + 18·13)/256 = 0.
     let r = self_crossings(&closed_eight(), &mut meter()).unwrap();
     assert!(
         matches!(
@@ -1371,7 +1398,10 @@ fn a_closed_curve_crossing_itself_away_from_its_join_is_found() {
         r.items()
     );
     let [s, t] = [r.items()[0].at().spans()[0], r.items()[0].at().spans()[1]];
-    assert!(s.contains(1.5) && t.contains(5.5), "{s:?} {t:?}");
+    assert!(
+        s.contains(case(1.5, 0.75)) && t.contains(case(5.5, 2.25)),
+        "{s:?} {t:?}"
+    );
 }
 
 #[test]
@@ -1427,22 +1457,28 @@ fn self_crossings_take_only_their_work() {
         let r = self_crossings(c, &mut m).unwrap();
         (r.items().len(), m.used().work)
     };
-    let got = [
-        work(&closed_eight()),
-        work(&bezier(&[
+    let curves = [
+        closed_eight(),
+        bezier(&[
             [0.0, 0.0],
             [3000.0, 3000.0],
             [-1000.0, 3000.0],
             [2000.0, 0.0],
-        ])),
-        work(&bezier(&[
+        ]),
+        bezier(&[
             [0.0, 0.0],
             [12000.0, 2000.0],
             [-4000.0, 8000.0],
             [4000.0, -4000.0],
-        ])),
+        ]),
     ];
-    assert_eq!(got, [(1, 39450), (1, 8789), (1, 6774)]);
+    // Under Miri the smaller eight, its join among the boxes pruned as natively, and the second
+    // loop: the seven-span eight is minutes there, and the first loop is left out to keep the
+    // test within the time it may take.
+    let want = [(1, case(39450, 27900)), (1, 8789), (1, 6774)];
+    for &i in rounds(&[0, 1, 2], &[0, 2]) {
+        assert_eq!(work(&curves[i]), want[i], "curve {i}");
+    }
 }
 
 #[test]
@@ -1464,15 +1500,20 @@ fn a_tangency_s_band_is_set_by_the_curvatures_difference() {
         ] => width.0,
         other => panic!("{other:?}"),
     };
-    let got = [
-        band(&hump, &dip),
-        band(&hump, &pid),
-        band(&dip, &hump),
-        band(&pid, &hump),
-        band(&hump, &wide),
-        band(&wide, &hump),
+    let pairs = [
+        (&hump, &dip, 23),
+        (&hump, &pid, 23),
+        (&dip, &hump, 23),
+        (&pid, &hump, 23),
+        (&hump, &wide, 45),
+        (&wide, &hump, 45),
     ];
-    assert_eq!(got, [23, 23, 23, 23, 45, 45]);
+    // Under Miri three of the pairs, as the six did not finish there: the dip run the other way,
+    // the pair swapped, and the wide hump's, swapped, for the other difference of curvatures.
+    for &i in rounds(&[0, 1, 2, 3, 4, 5], &[1, 2, 5]) {
+        let (a, b, want) = pairs[i];
+        assert_eq!(band(a, b), want, "pair {i}");
+    }
 }
 
 #[test]
@@ -1483,7 +1524,9 @@ fn a_tangency_too_sharp_to_read_at_one_step_is_higher_order() {
     // the tangents agree or oppose, and no difference of curvatures can be read. The second order
     // test gives up rather than guess a band (for the first, √(2/0.2) is 3.2 steps; a guess gave 2).
     let hump = bezier(&[[0.0, 0.0], [1000.0, 1.0e6], [2000.0, 0.0]]);
-    for (y0, y1) in [(-1.1e6, 2.1e6), (-1.4e6, 2.4e6)] {
+    // Under Miri the first wider curve only: the second takes twice the first's work, and the two
+    // together did not finish there.
+    for &(y0, y1) in rounds(&[(-1.1e6, 2.1e6), (-1.4e6, 2.4e6)], &[(-1.1e6, 2.1e6)]) {
         let wider = bezier(&[[-1000.0, y0], [1000.0, y1], [3000.0, y0]]);
         let r = meet(&hump, &wider);
         assert!(
