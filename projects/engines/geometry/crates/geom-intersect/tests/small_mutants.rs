@@ -3,6 +3,8 @@
 //! its points on both sheets at each eighth of a turn; a torus's nearest points where the boxes
 //! left undecided reach one end of a closed parameter, or both, as the bits of their parameters and
 //! the work of finding them; and a bound whose count of steps lies just under a rounding midpoint.
+//! Also: an oval whose gap the first walk steps over, walked again finer; a plane's touching point
+//! off its domain, no item; and a torus's nearest point at one end of its seam, one box.
 
 #![allow(
     clippy::unwrap_used,
@@ -14,6 +16,7 @@
 
 use geom_curve::Frame;
 use geom_intersect::bound::{Terms, settle};
+use geom_intersect::quadrics::natural;
 use geom_intersect::quartic::{Arc, meet};
 use geom_intersect::result::{Item, ParamBox, PointContact};
 use geom_intersect::solve::Field;
@@ -23,7 +26,7 @@ use geom_num::Exactness;
 use geom_num::grid::{GridStep, P3, Steps};
 use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Sphere, SurfaceKind, Torus};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::golden::{hex, sha256};
 
 const ROUND: (f64, f64) = (0.0, 2.0);
@@ -246,8 +249,13 @@ fn ring(domain: ((f64, f64), (f64, f64))) -> SurfaceKind {
 /// The nearest points of `p` on `s`: the work, and the digest of how many and each one's
 /// parameters, or of the enclosure where it is not a point.
 fn nearest(s: &SurfaceKind, p: [f64; 3]) -> (u128, String) {
+    nearest_within(s, p, 1e-6)
+}
+
+/// [`nearest`] within `tolerance`.
+fn nearest_within(s: &SurfaceKind, p: [f64; 3], tolerance: f64) -> (u128, String) {
     let mut meter = WorkMeter::new(Budget::of_work(1 << 22));
-    let found = project_surface(s, &p, 1e-6, &mut meter).unwrap();
+    let found = project_surface(s, &p, tolerance, &mut meter).unwrap();
     let mut out = Vec::new();
     match &found {
         Projection::Points(points) => {
@@ -380,3 +388,70 @@ fn a_fields_default_weights_are_ones() {
     // Any positive weights prove a contraction; the default is the plain norm's, one each.
     assert_eq!(Plain.weights(), [1.0; 2]);
 }
+
+#[test]
+fn one_loop_with_a_gap_the_first_walk_steps_over_is_walked_again_finer() {
+    // A sphere of radius 3.9993 whose centre stands about 3 from the axis of a cylinder of radius
+    // 1: it holds all of the cylinder's round but a gap about 0.03 of a radian either side of the
+    // far side, which stands at half a step of the walk of 64 past its sample there. One smooth
+    // oval, which the first walk reads as whole round, which one oval is not; the walk of 256 has
+    // a sample in the gap, and reads it as one arc.
+    let found = [quartic(
+        &cylinder([0.0; 3], Z, 1.0),
+        &sphere([2.996, 0.147, 0.0], 3.9993),
+    )];
+    holds(&found, &GAP);
+}
+
+const GAP: [(u128, &str); 1] = [(
+    382,
+    "2caff06da016bc5ff34ae1d336b4e389ffd5498594183a07cca25df076765ee1",
+)];
+
+/// The plane y = 5 over `u` by [-1, 1], along x and z from (0, 5, 0): it touches the sphere of
+/// radius 5 about the origin there, at its parameters (0, 0).
+fn touching(u: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Plane(Plane::new([0.0, 5.0, 0.0], X, Z, (u, (-1.0, 1.0))).unwrap())
+}
+
+#[test]
+fn a_touching_point_off_the_planes_domain_is_no_item() {
+    let ball = sphere([0.0; 3], 5.0);
+    let items = |u| {
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let found = natural(&ball, &touching(u), &mut meter).unwrap().unwrap();
+        found.items().len()
+    };
+    // The point at u = 0: inside [-1, 1], wholly below [1, 2], wholly above [-2, -1].
+    assert_eq!(items((-1.0, 1.0)), 1);
+    assert_eq!(items((1.0, 2.0)), 0);
+    assert_eq!(items((-2.0, -1.0)), 0);
+}
+
+#[test]
+fn a_torus_keeps_one_box_for_a_nearest_point_at_one_end_of_its_seam() {
+    // Within 1e-2, the boxes left undecided are a few 2^-12 of a half-turn wide. At y = 0.003 the
+    // nearest point is at u about 1.6e-4: they reach u = 0 and not u = 2, one point from one side;
+    // at y = -0.003 the mirror, u = 2 and not u = 0. At y = 0 they reach both, one from each side.
+    let s = ring((ROUND, (-1e-5, 1e-5)));
+    let found: Vec<_> = [0.003, -0.003, 0.0]
+        .iter()
+        .map(|y| nearest_within(&s, [6.0, *y, 0.0], 1e-2))
+        .collect();
+    holds(&found, &ONE_END);
+}
+
+const ONE_END: [(u128, &str); 3] = [
+    (
+        31_650,
+        "90302acd8bd4e457681da1b3aa631f3b4373f8ba83f307be1206060908b1fb4c",
+    ),
+    (
+        31_650,
+        "232c9eb239720553805e8832277a39a8fcc3667eef21dc9b2aea81df7cd01f2a",
+    ),
+    (
+        30_753,
+        "b1ee6770e0d17a8d1a4a9399ffc93b94fd951cc15e6a73553183ae97b9b38e3e",
+    ),
+];
