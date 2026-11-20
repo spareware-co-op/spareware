@@ -14,6 +14,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_curve::{CurveError, Frame};
 use geom_intersect::result::CurveEnd;
 use geom_intersect::seam::Passing;
@@ -30,6 +32,7 @@ use geom_surface::{
 };
 use geom_test::Seed;
 use geom_test::rng::SplitMix64;
+use miri::sized;
 
 const FLOOR: f64 = 1e-7;
 const CEILING: f64 = 1e-3;
@@ -705,8 +708,10 @@ fn each_kinds_equation_vanishes_on_it_with_its_gradient_along_its_normal() {
         (SurfaceKind::Torus(torus.clone()), Box::new(torus)),
     ];
     let mut r = rng("g168 kinds", 0x4731_3639);
+    // Under Miri, 100 points a kind, drawn the same way: each point is one enclosure, the same
+    // check at every point.
     for (kind, implicit) in &kinds {
-        for _ in 0..500 {
+        for _ in 0..sized(500, 100) {
             let (u, v) = (0.1 + unit(&mut r) * 1.8, unit(&mut r) * 0.8 - 0.4);
             let [s, su, sv] = kind
                 .partials(u, v, (Limit::FromRight, Limit::FromRight))
@@ -737,8 +742,10 @@ fn each_kinds_gradient_is_the_rate_of_its_equation() {
     let torus = Torus::new([1.0, 2.0, 3.0], 7.0, 3.0, frame, domain).unwrap();
     let kinds: [&dyn ImplicitBound; 2] = [&cone, &torus];
     let mut r = rng("g168 rates", 0x4731_3640);
+    // Under Miri, 100 points a kind, drawn the same way: each point is seven enclosures, the same
+    // check at every point.
     for kind in kinds {
-        for _ in 0..500 {
+        for _ in 0..sized(500, 100) {
             let p: [f64; 3] = core::array::from_fn(|_| unit(&mut r) * 20.0 - 10.0);
             let at = |q: [f64; 3]| {
                 kind.enclose_box(q.map(|x| Interval::point(x).unwrap()))
