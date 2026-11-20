@@ -448,8 +448,9 @@ impl Round {
     }
 
     /// ∂^{i+j}S/∂u^i∂v^j over the region in closed form (`crate::extent`): a torus by its
-    /// factored form c + (R + r·cos πv)·(cos πu·x̂ + sin πu·ŷ) + s·r·sin πv·n̂, every other kind
-    /// by its terms.
+    /// factored form c + (R + r·cos πv)·(cos πu·x̂ + sin πu·ŷ) + s·r·sin πv·n̂, a cylinder by its
+    /// own route through its terms, affine in v (`extent::cylinder`), every other kind by its
+    /// terms.
     fn closed(
         &self,
         which: Which,
@@ -459,6 +460,9 @@ impl Round {
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 3], CurveError> {
         let ((u0, u1), (v0, v1)) = region;
+        if which == Which::Cylinder && (u0 != u1 || v0 != v1) {
+            return extent::cylinder(terms, region, order, meter);
+        }
         if which != Which::Torus || (u0 == u1 && v0 == v1) {
             return extent::terms(terms, region, order, meter);
         }

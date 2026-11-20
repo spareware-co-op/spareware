@@ -16,6 +16,9 @@
 //! - **Only angles are cut into pieces**: a cylinder's and a cone's second parameter is a length,
 //!   so their normal bounds, and their affine images', cost the same over a long span of it as
 //!   over a short one.
+//! - **A cylinder's route is the generic one without its repeats**: its partials over a box are
+//!   those an affine surface of the same terms gets from the generic route, bit for bit, and at
+//!   the same work.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -39,7 +42,8 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{
-    Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind, Torus, partial_index,
+    AffineSurface, Cone, Cylinder, Fun, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind, Torus,
+    partial_index,
 };
 
 fn meter() -> WorkMeter<'static> {
@@ -575,4 +579,51 @@ fn only_angles_are_cut_into_pieces() {
     let sphere =
         SurfaceKind::Sphere(Sphere::new([0.0; 3], 2.0, f, ((0.0, 2.0), (-0.5, 0.5))).unwrap());
     assert!(work(&sphere, (-0.5, -0.4)) < work(&sphere, (-0.5, 0.5)));
+}
+
+/// Claim: a cylinder's partials over a box are the generic route's enclosures bit for bit, as an
+/// affine surface of the same terms gets them, and at the same work: the extent it takes once for
+/// a coordinate with no v in it is charged twice, as the generic route takes it, 36 units for the
+/// partials to order 2. A box of one point is the terms' enclosure there on both, at no work.
+#[test]
+fn a_cylinders_partials_are_the_generic_routes_at_the_same_work() {
+    let domain = ((0.0, 2.0), (-4.0, 6.0));
+    let center = [1.0, -2.0, 0.5];
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new(center, 3.0, Frame::standard().unwrap(), domain).unwrap(),
+    );
+    let generic = SurfaceKind::Affine(
+        AffineSurface::from_terms(
+            center,
+            &[
+                (Fun::Cos, Fun::One, [3.0, 0.0, 0.0]),
+                (Fun::Sin, Fun::One, [0.0, 3.0, 0.0]),
+                (Fun::One, Fun::Lin, [0.0, 0.0, 1.0]),
+            ],
+            domain,
+            (true, false),
+        )
+        .unwrap(),
+    );
+    let bits = |p: &[[Interval; 3]]| -> Vec<(u64, u64)> {
+        p.iter()
+            .flatten()
+            .map(|x| (x.lo().to_bits(), x.hi().to_bits()))
+            .collect()
+    };
+    let mut rng = Rng(0x0067_c711);
+    for _ in 0..300 {
+        let r = region(&mut rng, domain);
+        let (mut a, mut b) = (meter(), meter());
+        let ours = cylinder.partials_over(r, SIDES, 2, &mut a).unwrap();
+        let theirs = generic.partials_over(r, SIDES, 2, &mut b).unwrap();
+        assert_eq!(bits(&ours), bits(&theirs), "{r:?}");
+        let ((u0, u1), (v0, v1)) = r;
+        let work = if u0 == u1 && v0 == v1 {
+            (0, 0)
+        } else {
+            (36, 36)
+        };
+        assert_eq!((a.used().work, b.used().work), work, "{r:?}");
+    }
 }
