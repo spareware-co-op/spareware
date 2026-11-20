@@ -2283,3 +2283,53 @@ fn an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings() {
         assert_eq!(contact, PointContact::Crossing, "{:?}", r.items());
     }
 }
+
+/// The circle of radius 1 about the origin in the plane x = 0 crosses the endless plane z = 0 at
+/// (0, -1, 0) and (0, 1, 0): two proven crossings whatever the lengths of the plane's vectors,
+/// for the plane is the same plane (issue 1078: on vectors of length 2^-30 both were flagged as
+/// undecided). Two things carry it. The engine's contraction test weighs the plane's parameters
+/// by its vectors: unweighed, a step on vectors of length 2^-30 never reads as contracting. And
+/// both points stand on the circle's own box read in the plane's parameters, so the room the
+/// engine has past them is the margin the plane is held to, one grid step in space: 2^60 of the
+/// parameter on vectors of length 2^-60, where a unit of it is less than the rounding of a
+/// point of the circle and proves nothing alone, and 2^-30 of it on vectors of length 2^30.
+#[test]
+fn an_endless_plane_on_short_or_long_vectors_crosses_a_unit_circle_in_two_proven_crossings() {
+    let circle = CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let long = 1_073_741_824.0;
+    for (a, b) in [
+        (short * short, short * short),
+        (short, short),
+        (short, 1.0),
+        (1.0, short),
+        (long, long),
+        (1.0, 1.0),
+    ] {
+        let flat = endless([0.0; 3], [a, 0.0, 0.0], [0.0, b, 0.0]);
+        let r = curve_surface(&circle, &flat, &mut meter()).unwrap();
+        assert_eq!(r.items().len(), 2, "{a} {b}: {:?}", r.items());
+        let mut found: Vec<Interval> = Vec::new();
+        for item in r.items() {
+            let Item::Point { at, contact, .. } = item else {
+                panic!("{a} {b}: {:?}", r.items());
+            };
+            assert_eq!(*contact, PointContact::Crossing, "{a} {b}: {:?}", r.items());
+            let [_, u, v] = at.spans() else {
+                panic!("{at:?}");
+            };
+            assert!(u.contains(0.0), "{a} {b}: {u:?}");
+            found.push(*v);
+        }
+        found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+        assert!(found[0].contains(-1.0 / b), "{a} {b}: {:?}", r.items());
+        assert!(found[1].contains(1.0 / b), "{a} {b}: {:?}", r.items());
+    }
+}
