@@ -560,18 +560,27 @@ fn ten_by_ten_crossing_beams_are_counted_at_every_crossing() {
 #[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_same_pieces_come_out_on_any_threads() {
-    let blocks = [
-        A,
-        B,
-        Block {
+    // Under Miri a smaller arrangement (decision 32.68): two blocks at leaves of three, which still
+    // cut polygons, pass over splits that would copy them all and trace crossings, entering every
+    // kernel function the three blocks at leaves of two do (measured natively under Callgrind).
+    let (blocks, leaf) = if cfg!(miri) {
+        let long = Block {
+            low: [1, 1, 1],
+            high: [3, 9, 3],
+        };
+        (vec![B, long], 3)
+    } else {
+        let long = Block {
             low: [1, -2, 1],
             high: [3, 9, 3],
-        },
-    ];
+        };
+        (vec![A, B, long], 2)
+    };
     let list = polygons(&blocks);
     let cell = around(&list).unwrap();
-    let go =
-        |exec: &Exec<'_>| arrange(exec, cell, Winding::new(), &list, 2, &[], &mut meter()).unwrap();
+    let go = |exec: &Exec<'_>| {
+        arrange(exec, cell, Winding::new(), &list, leaf, &[], &mut meter()).unwrap()
+    };
     assert_eq!(go(&Exec::serial()), go(&Exec::with_pool(&Threads)));
 }
 
