@@ -16,9 +16,10 @@
 //! - **Only angles are cut into pieces**: a cylinder's and a cone's second parameter is a length,
 //!   so their normal bounds, and their affine images', cost the same over a long span of it as
 //!   over a short one.
-//! - **A cylinder's route is the generic one without its repeats**: its partials over a box are
-//!   those an affine surface of the same terms gets from the generic route, bit for bit, and at
-//!   the same work.
+//! - **A cylinder's route is the generic one without its reading of the grids' shapes**: its
+//!   partials over a box are those an affine surface of the same terms gets from the generic
+//!   route, bit for bit, and at the same work; over a box of one line, its bound holds the whole
+//!   line.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -582,9 +583,9 @@ fn only_angles_are_cut_into_pieces() {
 }
 
 /// Claim: a cylinder's partials over a box are the generic route's enclosures bit for bit, as an
-/// affine surface of the same terms gets them, and at the same work: the extent it takes once for
-/// a coordinate with no v in it is charged twice, as the generic route takes it, 36 units for the
-/// partials to order 2. A box of one point is the terms' enclosure there on both, at no work.
+/// affine surface of the same terms gets them, and at the same work: the same extents in the same
+/// order, 36 units for the partials to order 2. A box of one point is the terms' enclosure there on
+/// both, at no work.
 #[test]
 fn a_cylinders_partials_are_the_generic_routes_at_the_same_work() {
     let domain = ((0.0, 2.0), (-4.0, 6.0));
@@ -625,5 +626,41 @@ fn a_cylinders_partials_are_the_generic_routes_at_the_same_work() {
             (36, 36)
         };
         assert_eq!((a.used().work, b.used().work), work, "{r:?}");
+    }
+}
+
+/// Claim: a cylinder's bound over a box of one line, open in one parameter and one value in the
+/// other, holds the surface along the whole line, not only at the line's first end. On the unit
+/// cylinder about the z-axis, S(u, v) = (cos πu, sin πu, v), exact at these points: across u at
+/// v = ½ it holds (1, 0, ½), (0, 1, ½) and (−1, 0, ½); along v at u = 1 it holds (−1, 0, 0) and
+/// (−1, 0, 1).
+#[test]
+fn a_cylinders_bound_over_a_box_of_one_line_holds_the_whole_line() {
+    let cylinder = Cylinder::new(
+        [0.0; 3],
+        1.0,
+        Frame::standard().unwrap(),
+        ((0.0, 2.0), (0.0, 1.0)),
+    )
+    .unwrap();
+    let holds = |b: &Bounds<3>, p: [f64; 3]| {
+        p.iter()
+            .zip(b.lo.iter().zip(&b.hi))
+            .all(|(&x, (&lo, &hi))| lo <= x && x <= hi)
+    };
+    for (r, points) in [
+        (
+            ((0.0, 1.0), (0.5, 0.5)),
+            vec![[1.0, 0.0, 0.5], [0.0, 1.0, 0.5], [-1.0, 0.0, 0.5]],
+        ),
+        (
+            ((1.0, 1.0), (0.0, 1.0)),
+            vec![[-1.0, 0.0, 0.0], [-1.0, 0.0, 1.0]],
+        ),
+    ] {
+        let b = cylinder.bound(r, &mut meter()).unwrap();
+        for p in points {
+            assert!(holds(&b, p), "{r:?}: {p:?} outside {b:?}");
+        }
     }
 }

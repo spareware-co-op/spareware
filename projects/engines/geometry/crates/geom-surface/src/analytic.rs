@@ -460,7 +460,7 @@ impl Round {
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Interval; 3], CurveError> {
         let ((u0, u1), (v0, v1)) = region;
-        if which == Which::Cylinder && (u0 != u1 || v0 != v1) {
+        if which == Which::Cylinder {
             return extent::cylinder(terms, region, order, meter);
         }
         if which != Which::Torus || (u0 == u1 && v0 == v1) {
