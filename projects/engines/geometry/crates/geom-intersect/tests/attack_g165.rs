@@ -585,8 +585,7 @@ fn a_domain_trims_what_it_cuts() {
     let r = meet(&plane([0.0; 3], [1.0, 0.0, 1.0], [0.0, 1.0, 0.0]), &short);
     assert!(!curves(&r).is_empty(), "{:?}", r.items());
     for c in curves(&r) {
-        let (lo, hi) = c.domain();
-        assert!(hi - lo < 2.0, "{c:?}");
+        assert!(!whole_turn(c.domain()), "{c:?}");
         let p = mid(c);
         assert!((-1e-6..=10.0 + 1e-6).contains(&p[2]), "{p:?}");
     }
@@ -1162,6 +1161,13 @@ fn turn(x: f64, y: f64) -> f64 {
     if t < 0.0 { t + 2.0 } else { t }
 }
 
+/// Whether `(lo, hi)`, a domain in half-turns, is a whole turn: exactly two half-turns long, an
+/// error-free sum, as the seam charts decide it. A domain whose difference only rounds to 2 is an
+/// arc short of a turn.
+fn whole_turn((lo, hi): (f64, f64)) -> bool {
+    geom_num::eft::two_sum(hi, -lo) == (2.0, 0.0)
+}
+
 /// Where `p` stands in `s`'s parameters, read off the surface's own points: a plane by its vectors,
 /// a sphere about its centre, a cylinder or cone about the axis through the middles of opposite
 /// points. `None` where no turn can be read (on an axis, at an apex).
@@ -1241,7 +1247,7 @@ fn inside_by(s: &SurfaceKind, p: [f64; 3], slack: f64) -> Option<bool> {
     let ((u0, u1), (v0, v1)) = ParamSurface::domain(s);
     let round = !matches!(s, SurfaceKind::Plane(_));
     let mut sides = Vec::new();
-    if !round || u1 - u0 < 2.0 {
+    if !round || !whole_turn((u0, u1)) {
         // A turn is read in [0, 2): the copy of it nearest the domain's range.
         let gap = |x: f64| tight_gap(x, u0, u1);
         let u = if round {
@@ -2454,4 +2460,130 @@ fn a_whole_circle_across_a_plane_is_its_crossings_for_the_work_of_their_boxes() 
     let (found, work) = crossings(&arc, &endless([0.0; 3], x, y));
     assert_eq!(found.len(), 2, "{found:?}");
     assert!(work > 300, "{work}");
+}
+
+/// The circle of radius 500 about the origin in the plane x = 0, from (0, 0, 500) round through
+/// (0, −500, 0).
+fn upright() -> CurveKind<3> {
+    CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            500.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    )
+}
+
+/// The meeting of `circle` and `plane`, each item's (t, u, v) box where it is a point, and the
+/// work it took.
+fn met(circle: &CurveKind<3>, plane: &SurfaceKind) -> (Intersection, Vec<[Interval; 3]>, u128) {
+    let mut m = meter();
+    let r = curve_surface(circle, plane, &mut m).unwrap();
+    let points = r
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Point { at, .. } => {
+                let [t, u, v] = at.spans() else {
+                    panic!("{at:?}");
+                };
+                Some([*t, *u, *v])
+            }
+            _ => None,
+        })
+        .collect();
+    (r, points, m.used().work)
+}
+
+/// A whole circle crossed at its join, or a rounding short of it, is the engine's (decision
+/// 32.106): there the crossing's parameter reaches an end of the circle's domain. The circle
+/// `upright` starts at (0, 0, 500), and the plane y = 0 crosses it there (its parameter's box
+/// starts at 0) and at (0, 0, −500). The plane y = 10^-14 crosses it 6.4·10^-18 of a half-turn
+/// short of its end, so the parameter's box, read near 0 and moved a turn on, rounds up to 2, the
+/// end. The engine answers each for over 1,500 units, where the closed form takes 8. The plane
+/// y = −10^-14 crosses it the same step past its start, whose box stays clear of both ends: the
+/// closed form's, its two crossings for 8 units.
+#[test]
+fn a_whole_circle_crossed_at_its_join_is_the_engines() {
+    let circle = upright();
+    let (x, z) = ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    for s in [0.0, 1e-14] {
+        let (r, points, work) = met(&circle, &endless([0.0, s, 0.0], x, z));
+        assert!(points.len() >= 2, "{:?}", r.items());
+        assert!(work > 1_500, "{work}");
+    }
+    let (r, points, work) = met(&circle, &endless([0.0, -1e-14, 0.0], x, z));
+    assert_eq!(points.len(), 2, "{:?}", r.items());
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    assert!(
+        points.iter().all(|[t, _, _]| t.lo() > 0.0 && t.hi() < 2.0),
+        "{points:?}"
+    );
+    assert_eq!(work, 8);
+}
+
+/// A crossing whose (u, v) box stands past an end of the plane's domain is left out, each end in
+/// turn, and the other crossing is the closed form's, for 7 units. The circle `upright` crosses
+/// the plane z = 0 at (0, −500, 0) and (0, 500, 0): read with u along y, a domain of u from 0 to
+/// 1000 holds only the second and one from −1000 to 0 only the first; read with v along y, a
+/// domain of v from −1000 to 0 holds only the first (v from 0, the second: the test above).
+#[test]
+fn a_crossing_past_an_end_of_a_planes_domain_is_left_out() {
+    let circle = upright();
+    let (x, y) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let wide = (-1e3, 1e3);
+    let flat = |a, b, du, dv| SurfaceKind::Plane(Plane::new([0.0; 3], a, b, (du, dv)).unwrap());
+    for (plane, along) in [
+        (flat(y, x, (0.0, 1e3), wide), 500.0),
+        (flat(y, x, (-1e3, 0.0), wide), -500.0),
+        (flat(x, y, wide, (-1e3, 0.0)), -500.0),
+    ] {
+        let (r, points, work) = met(&circle, &plane);
+        assert_eq!(r.items().len(), 1, "{:?}", r.items());
+        assert_eq!(points.len(), 1, "{:?}", r.items());
+        let [_, u, v] = points[0];
+        assert!(u.contains(along) || v.contains(along), "{points:?}");
+        assert_eq!(work, 7);
+    }
+}
+
+/// A crossing whose (u, v) box reaches an end of the plane's domain is the engine's: the box
+/// cannot say on which side of the end the crossing stands. The circle `upright` crosses the plane
+/// z = 0 at (0, ±500, 0), its boxes there read in u along y (or v along y) as on an endless plane.
+/// A domain that ends exactly where such a box ends, past the crossing, has the box meet it at
+/// that end alone, each end in turn; and a domain whose edge runs through a crossing, u = 0 or
+/// v = ±500, has the crossing's box across it. The engine answers each for over 800 units, where
+/// the closed form takes 7 or 8.
+#[test]
+fn a_crossing_whose_box_reaches_an_end_of_a_planes_domain_is_the_engines() {
+    let circle = upright();
+    let (x, y) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let open = (f64::NEG_INFINITY, f64::INFINITY);
+    let wide = (-1e3, 1e3);
+    let flat = |a, b, du, dv| SurfaceKind::Plane(Plane::new([0.0; 3], a, b, (du, dv)).unwrap());
+    // The crossings' boxes along y, low and high, with u along y and with v along y.
+    let ends = |a, b, k: usize| {
+        let (_, points, _) = met(&circle, &flat(a, b, open, open));
+        assert_eq!(points.len(), 2, "{points:?}");
+        let low = points.iter().find(|p| p[k].hi() < 0.0).unwrap()[k];
+        let high = points.iter().find(|p| p[k].lo() > 0.0).unwrap()[k];
+        (low, high)
+    };
+    let (ul, uh) = ends(y, x, 1);
+    let (vl, vh) = ends(x, y, 2);
+    for plane in [
+        flat(y, x, (ul.hi(), 1e3), wide),
+        flat(y, x, (-1e3, uh.lo()), wide),
+        flat(x, y, wide, (vl.hi(), 1e3)),
+        flat(x, y, wide, (-1e3, vh.lo())),
+        flat(x, y, (0.0, 1e3), wide),
+        flat(x, y, (-1e3, 0.0), wide),
+        flat(x, y, wide, (-500.0, 1e3)),
+        flat(x, y, wide, (-1e3, 500.0)),
+    ] {
+        let (r, _, work) = met(&circle, &plane);
+        assert_eq!(r.items().len(), 2, "{:?}", r.items());
+        assert!(work > 800, "{work}");
+    }
 }

@@ -1975,7 +1975,9 @@ fn circle_across_plane(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let (lo, hi) = curve.domain();
-    if hi - lo < 2.0 {
+    // A whole turn is a domain of exactly two half-turns, an error-free sum, as the seam charts
+    // decide it (12.10): one whose difference only rounds to 2 is an arc short of a turn.
+    if !crate::seam::turn((lo, hi)) {
         return Ok(None);
     }
     let (c, a, b) = plane.vectors();
