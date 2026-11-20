@@ -541,15 +541,18 @@ mod tests {
     #[test]
     fn the_rows_kept_have_the_largest_determinant_the_first_of_a_tie() {
         // Every column pair of whole numbers from −3 to 3, against the determinants in integers.
+        // Under Miri, those from −2 to 2, with ties and zeros as the wider ones have: each pair is
+        // the same check, and Miri takes minutes over all 7^6.
+        let (base, reach) = if cfg!(miri) { (5_u32, 2_i64) } else { (7, 3) };
         let digits = |mut code: u32| -> [i64; 6] {
             let mut out = [0_i64; 6];
             for d in &mut out {
-                *d = i64::from(code % 7) - 3;
-                code /= 7;
+                *d = i64::from(code % base) - reach;
+                code /= base;
             }
             out
         };
-        for code in 0..7_u32.pow(6) {
+        for code in 0..base.pow(6) {
             let [a0, b0, a1, b1, a2, b2] = digits(code);
             let dets = [a0 * b1 - b0 * a1, a0 * b2 - b0 * a2, a1 * b2 - b1 * a2];
             let mut best: Option<(i64, usize)> = None;

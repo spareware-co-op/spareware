@@ -119,9 +119,10 @@ pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
 /// `FPTaylor`'s own, term by term (`opt-approx`): a cut term's pieces are its inequality on the
 /// parts of its box, and the shard that has some of them proves the inequality on the whole box
 /// from them.
-pub const SHARDED: [(&str, Shards); 2] = [
+pub const SHARDED: [(&str, Shards); 3] = [
     ("lpi_side", LPI_SIDE_SHARDS),
     ("line_cone", LINE_CONE_SHARDS),
+    ("line_cylinder", LINE_CYLINDER_SHARDS),
 ];
 
 /// The shards of one problem's terms: how many terms HOL Light's check of its certificate has,
@@ -383,6 +384,56 @@ pub const LINE_CONE_SHARDS: Shards = {
             &[P(38, 62)],
             &[P(38, 63)],
             &[P(38, 64)],
+        ],
+    }
+};
+
+/// `line_cylinder`'s 50 terms, shared out by what each took to check on a hosted runner. Its
+/// problem was one job (`fptaylor`, 350 minutes): 3 hours 0 minutes to 3 hours 46 minutes in runs
+/// 44213115533, 44301088103 and 44584142191 (on the last, 29 minutes loading HOL Light and 2 hours
+/// 19 minutes of terms), but on run 44676088332's slow runner 54 minutes loading, 57.6 for term
+/// 2, 164 for terms 3 to 49 and about 58 for term 50 (the same 46,000 cells as term 2): about 5
+/// hours 54 minutes, so the job was cancelled at its 350 minutes during term 50. Every term here
+/// is planned from that run, the slower: term k is the time between its `Proved: k/50` line and
+/// the one before (term 1, which has none before it, from its 145 s of Taylor theorems; term 50
+/// as term 2, whose cells it repeats; 0 for a term proved within the second). Planned as
+/// `lpi_side`'s are, 5.6 minutes before the terms, 1.8 for the first term's start, and the terms:
+/// a term over 5.6 minutes is a shard alone (terms 2 and 50, 57.6 minutes each, 65.0 planned and
+/// the longest shard; terms 4, 8, 10, 12, 34 and 35 over 13; 6, 37 and 39 under 14), and the
+/// rest, longest first, each go to the first shard they fit, filled to 13 minutes. The
+/// terms of a shard are cut by nothing here: no term is over an hour, so no cut and no second
+/// saved state.
+pub const LINE_CYLINDER_SHARDS: Shards = {
+    use Part::Term as T;
+    Shards {
+        terms: 50,
+        cuts: &[],
+        shards: &[
+            &[T(1), T(17), T(47)],
+            &[T(2)],
+            &[T(3), T(14), T(38)],
+            &[T(4)],
+            &[T(5), T(18)],
+            &[T(6)],
+            &[T(7), T(27), T(28)],
+            &[T(8)],
+            &[T(9), T(41), T(42)],
+            &[T(10)],
+            &[T(11), T(25), T(45)],
+            &[T(12)],
+            &[T(13), T(19)],
+            &[T(15), T(26), T(46)],
+            &[T(16), T(36), T(44)],
+            &[T(20), T(24)],
+            &[T(21), T(29)],
+            &[T(22), T(30)],
+            &[T(23), T(48), T(49)],
+            &[T(31), T(32), T(33), T(40), T(43)],
+            &[T(34)],
+            &[T(35)],
+            &[T(37)],
+            &[T(39)],
+            &[T(50)],
         ],
     }
 };

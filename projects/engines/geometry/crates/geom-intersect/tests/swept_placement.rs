@@ -23,6 +23,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_curve::{Basis, Circle, CurveKind, Frame, Line, ParamCurve, Trimmed};
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Intersection, Item};
@@ -32,6 +34,7 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{
     Cone, Cylinder, Extrusion, ParamSurface, Plane, Revolution, Sphere, SurfaceKind, Torus,
 };
+use miri::rounds;
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const WIDE: (f64, f64) = (-1000.0, 1000.0);
@@ -268,10 +271,15 @@ fn size_of(curves: &[CurveKind<3>]) -> f64 {
 /// `a` with `b` as built: `count` items. Then both moved by each of [`MOVES`]: the first answer's
 /// curves carried through the move, exactly, are the moved answer's.
 fn pinned(a: &SurfaceKind, b: &SurfaceKind, count: usize) {
+    pinned_by(a, b, count, &MOVES);
+}
+
+/// [`pinned`], moved by each of `moves`, some of [`MOVES`].
+fn pinned_by(a: &SurfaceKind, b: &SurfaceKind, count: usize, moves: &[(&str, Move)]) {
     let base = natural(a, b, &mut meter()).unwrap().unwrap();
     assert_eq!(base.items().len(), count, "{:?}", base.items());
     let first = curves(&base);
-    for (name, m) in MOVES {
+    for &(name, m) in moves {
         let (x, y) = (moved_surface(a, m), moved_surface(b, m));
         let what = format!("{} with {} {name}", short(a), short(b));
         let found = natural(&x, &y, &mut meter());
@@ -322,6 +330,11 @@ fn moved_extrusions_of_one_direction_meet_in_the_moved_lines() {
 
 #[test]
 fn a_plane_cuts_a_moved_extrusion_in_the_moved_section() {
+    // Under Miri, four of the moves: a turn, and a mirror showing in each row (with a scale and a
+    // translation among them). Each move is one meeting, and the same claims hold for each.
+    let few = [MOVES[1], MOVES[4], MOVES[5], MOVES[8]];
+    let moves = rounds(&MOVES, &few);
+    let pinned = |a: &SurfaceKind, b: &SurfaceKind, count| pinned_by(a, b, count, moves);
     // Along the direction: the plane x = 1 cuts the wall in a line, the column in two.
     let along = plane([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
     pinned(&along, &wall(), 1);
@@ -409,8 +422,11 @@ fn a_mirrored_revolution_is_told_from_a_turned_one_by_the_way_its_circles_run() 
     let sphere =
         SurfaceKind::Sphere(Sphere::new([0.0; 3], 10.0, up(), (ROUND, (-0.5, 0.5))).unwrap());
     let level = plane([0.0, 0.0, -4.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    // Under Miri, each pair is pinned under the two moves this test tells apart, not all ten: each
+    // move is one meeting, and the same claims hold for each.
+    let moves = rounds(&MOVES, &MOVES[6..8]);
     for (partner, count) in [(&sphere, 2), (&level, 1)] {
-        pinned(partner, &funnel(), count);
+        pinned_by(partner, &funnel(), count, moves);
         let base = curves(&natural(partner, &funnel(), &mut meter()).unwrap().unwrap());
         let mut answers = Vec::new();
         for name in ["upside down", "half turned"] {

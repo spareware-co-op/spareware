@@ -40,7 +40,8 @@ use std::time::Duration;
 
 use core::f64::consts::PI;
 
-use geom_curve::conic::Circle;
+use geom_curve::axes::Axes;
+use geom_curve::conic::{Circle, Ellipse};
 use geom_curve::line::Line;
 use geom_curve::{CurveKind, Frame};
 use geom_intersect::{
@@ -138,6 +139,17 @@ fn right_or_refused<const N: usize, const D: usize>(
 
 fn arc(centre: [f64; 2], radius: f64, domain: (f64, f64)) -> CurveKind<2> {
     CurveKind::Circle(Circle::new(centre, radius, Frame::standard().unwrap(), domain).unwrap())
+}
+
+/// The same arc as an ellipse of two equal axes: the same form, so the same certified bounds and
+/// the same search, which the ellipse kind still takes where the circle kind has its closed form.
+fn searched_arc(centre: [f64; 2], radius: f64, domain: (f64, f64)) -> CurveKind<2> {
+    let axes = Axes::Frame {
+        frame: Frame::standard().unwrap(),
+        a: radius,
+        b: radius,
+    };
+    CurveKind::Ellipse(Ellipse::new(centre, axes, domain).unwrap())
 }
 
 /// The point `rho` from the centre (1, 2), at angle `a` half-turns.
@@ -244,9 +256,11 @@ fn wr_740_a_point_near_an_arcs_centre_has_its_foot_at_the_points_angle() {
 /// of the answer: with a budget of 2^28 the answer comes and is the foot at the point's angle. The
 /// test holds the refusal at the meter (sixteen times it, 2^26, is refused too, as CI first showed), and holds the cost law on the
 /// cheap decades (answered at 2^15 for 1e-2; refused at 2^16 and answered at 2^20 for 1e-3).
+/// Both hold the search on the arc as an ellipse of equal axes: the circle kind's foot is now its
+/// closed form, at the same small work at every decade (the test after these two).
 #[test]
 fn wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_budget() {
-    let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
+    let quarter = searched_arc([1.0, 2.0], 5.0, (0.0, 0.5));
     for a in [0.05, 0.25, 0.45] {
         let p = near_centre(1e-6, a);
         let found = project_curve(&quarter, &p, 1e-9, &mut short_meter(22, 9));
@@ -262,7 +276,7 @@ fn wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_bu
 /// the point's angle, and each decade closer to the centre costs about ten times the work.
 #[test]
 fn wr_740_the_cost_near_a_centre_grows_as_the_radius_over_the_gap() {
-    let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
+    let quarter = searched_arc([1.0, 2.0], 5.0, (0.0, 0.5));
     let run = |rho: f64, bits: u32| {
         let mut m = WorkMeter::new(Budget::of_work(1u64 << bits));
         project_curve(&quarter, &near_centre(rho, 0.25), 1e-9, &mut m)
@@ -294,6 +308,39 @@ fn wr_740_the_cost_near_a_centre_grows_as_the_radius_over_the_gap() {
             "rho {rho} at 2^{short_of}: {}",
             short(&found)
         );
+    }
+}
+
+/// The circle kind has no such cost (issue #1102): off its axis its foot is a closed form, at the
+/// turn of the point's offset from the centre, so each of the defect's points down to 1e-6 of the
+/// radius from the centre is answered with the same work, the meter's count of its two ends and
+/// one bound, and the answer is the foot at the point's angle, `5 - rho` away.
+#[test]
+fn wr_740_a_circles_foot_near_its_centre_is_its_closed_form_at_the_same_work() {
+    let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
+    for rho in [1e-2, 1e-3, 1e-6] {
+        for a in [0.05, 0.25, 0.45] {
+            let mut m = meter();
+            let found = project_curve(&quarter, &near_centre(rho, a), 1e-9, &mut m);
+            let Ok(Projection::Points(points)) = &found else {
+                panic!("rho {rho} a {a}: {}", short(&found));
+            };
+            let [foot] = points.as_slice() else {
+                panic!("rho {rho} a {a}: {}", short(points));
+            };
+            assert!(
+                foot.place == Place::Foot
+                    && foot.at[0].lo() - 1e-7 <= a
+                    && a <= foot.at[0].hi() + 1e-7,
+                "rho {rho} a {a}: {foot:?}"
+            );
+            let want = 5.0 - rho;
+            assert!(
+                foot.distance.lo() - 1e-8 <= want && want <= foot.distance.hi() + 1e-8,
+                "rho {rho} a {a}: {foot:?}"
+            );
+            assert_eq!(m.used().work, 6, "rho {rho} a {a}");
+        }
     }
 }
 
