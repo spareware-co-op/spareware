@@ -236,8 +236,14 @@ fn curves_hold(r: &Intersection, a: &SurfaceKind, b: &SurfaceKind, what: &str) {
     for item in r.items() {
         if let Item::Curve { curve, .. } = item {
             let (lo, hi) = curve.domain();
-            for i in 0..=8 {
-                let t = lo + (hi - lo) * f64::from(i) / 8.0;
+            // Nine samples across the domain, and the end itself: lo + (hi - lo) rounds to either
+            // side of hi, below it leaving the end unchecked, past it no point of the curve. Every
+            // sample on the domain is kept.
+            let samples = (0..=8)
+                .map(|i| lo + (hi - lo) * f64::from(i) / 8.0)
+                .filter(|t| *t <= hi)
+                .chain([hi]);
+            for t in samples {
                 let p = curve.point(t, Limit::FromRight).unwrap();
                 for s in [a, b] {
                     let gap = off(s, p);

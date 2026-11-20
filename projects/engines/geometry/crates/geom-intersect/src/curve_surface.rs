@@ -10,7 +10,9 @@
 //! 32.74). A circle across the axis of a cylinder or cone, its normal parallel to the axis, meets
 //! nothing where its plane is past the domain, and otherwise meets it where it meets the circle the
 //! surface cuts in that plane: nothing, two crossings or one touch, told by enclosures and, on a
-//! coordinate axis, by exact signs (decision 32.86). Every other pair runs [`crate::solve`] on
+//! coordinate axis, by exact signs (decision 32.86). A whole circle across a plane meets it nowhere
+//! or at two crossings, where an enclosure of one discriminant tells which (decision 32.106); a
+//! touch, and a crossing too near one, are the engine's. Every other pair runs [`crate::solve`] on
 //! C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
@@ -1900,8 +1902,13 @@ fn in_parameters(
     t: (f64, f64),
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Interval, Interval), IntersectError> {
+    plane_box(plane, &curve.bound(t, meter)?)
+}
+
+/// The plane's parameters over the box `bound`, enclosed: the box read in the plane's own vectors.
+fn plane_box(plane: &Plane, bound: &Bounds<3>) -> Result<(Interval, Interval), IntersectError> {
     let (c, a, b) = plane.vectors();
-    let w = minus(sides(&curve.bound(t, meter)?)?, lift(c)?)?;
+    let w = minus(sides(bound)?, lift(c)?)?;
     let (a, b) = (lift(a)?, lift(b)?);
     let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
     let (wa, wb) = (dot(w, a)?, dot(w, b)?);
@@ -1947,6 +1954,84 @@ fn circle_in_plane(
         return arcs_in_plane(curve, circle, plane, meter);
     }
     lying(curve, u, v, meter).map(Some)
+}
+
+/// A whole circle across a plane (decision 32.106): nothing where the plane misses it, and
+/// otherwise each of its two crossings that the plane's domain holds. `None`, the engine's, where
+/// the circle is short of a whole turn, the enclosure of the discriminant below holds zero (a
+/// touch, a crossing too near one, or a circle lying in the plane), a crossing's parameter reaches
+/// the circle's join or its (u, v) an end of the plane's domain, or the two crossings' boxes meet.
+///
+/// Theorem. The circle q + R·(cos πt·x̂ + sin πt·ŷ) meets the plane through c across N = a × b
+/// where R·(α·cos πt + β·sin πt) = −δ, with α = N·x̂, β = N·ŷ and δ = N·(q − c): the point
+/// (X, Y) = R·(cos πt, sin πt) of the circle's own frame on the line α·X + β·Y = −δ. With
+/// ρ² = α² + β² that line stands |δ|/ρ from the centre, so the circle meets the plane nowhere where
+/// Δ = R²·ρ² − δ² < 0, and where Δ > 0 at two points, (X, Y) = (−δ·(α, β) ± √Δ·(−β, α))/ρ², the
+/// line's foot and a step along it either way, each a simple root of the equation in t, where the
+/// circle passes through the plane. Where ρ² is zero the two planes are parallel and Δ = −δ² ≤ 0.
+/// Every number is enclosed from the stored doubles, so where Δ's enclosure excludes zero its sign
+/// is the true one and the count is proven. A crossing's parameter is the angle of its (X, Y), which
+/// the positive ρ² does not change ([`turn_of`]), and its box is the circle's over that parameter.
+fn circle_across_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (lo, hi) = curve.domain();
+    if hi - lo < 2.0 {
+        return Ok(None);
+    }
+    let (c, a, b) = plane.vectors();
+    let n = cross(lift(a)?, lift(b)?)?;
+    let (_, [x, y, _]) = circle.frame().unit_vectors()?;
+    let (alpha, beta) = (dot(n, x)?, dot(n, y)?);
+    let delta = dot(n, minus(lift(circle.center())?, lift(c)?)?)?;
+    let r = Interval::point(circle.radius())?;
+    let rho = alpha.square()?.add(beta.square()?)?;
+    let excess = r.square()?.mul(rho)?.sub(delta.square()?)?;
+    match apart(excess) {
+        Some(Sign::Positive) => {}
+        Some(_) => return proven(Vec::new(), meter).map(Some),
+        None => return Ok(None),
+    }
+    let step = excess.sqrt()?;
+    let [fx, fy] = [delta.mul(alpha)?.neg(), delta.mul(beta)?.neg()];
+    let (du, dv) = ParamSurface::domain(plane);
+    let mut found = Vec::new();
+    for [ex, ey] in [[beta.neg(), alpha], [beta, alpha.neg()]] {
+        let (px, py) = (fx.add(ex.mul(step)?)?, fy.add(ey.mul(step)?)?);
+        // A point whose enclosure holds the centre has no angle to read.
+        if px.contains(0.0) && py.contains(0.0) {
+            return Ok(None);
+        }
+        // A whole turn: the join is no end, so a parameter whose enclosure reaches it is left.
+        let t = onto(turn_of(px, py)?, (lo, hi))?;
+        let Some(t) = t.filter(|t| t.lo() > lo && t.hi() < hi) else {
+            return Ok(None);
+        };
+        let bound = curve.bound(span(t), meter)?;
+        let (u, v) = plane_box(plane, &bound)?;
+        if u.hi() < du.0 || u.lo() > du.1 || v.hi() < dv.0 || v.lo() > dv.1 {
+            continue;
+        }
+        if u.lo() <= du.0 || u.hi() >= du.1 || v.lo() <= dv.0 || v.hi() >= dv.1 {
+            return Ok(None);
+        }
+        found.push(Item::Point {
+            at: ParamBox::new(&[t, u, v])?,
+            xyz: grid_box(&bound)?,
+            contact: PointContact::Crossing,
+            class: certified(),
+        });
+    }
+    // Two crossings whose boxes meet are not told apart: the engine's.
+    if let [p, q] = found.as_slice()
+        && p.at().meets(q.at())
+    {
+        return Ok(None);
+    }
+    proven(found, meter).map(Some)
 }
 
 /// A coordinate of a point of a circle, measured from the circle's centre: its sign, its square as
@@ -2967,7 +3052,12 @@ fn closed_form(
         (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
-        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
+        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => {
+            match circle_in_plane(curve, k, p, meter)? {
+                None => circle_across_plane(curve, k, p, meter),
+                found => Ok(found),
+            }
+        }
         (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => {
             match circle_on_cylinder(curve, k, c, meter)? {
                 None => circle_across(curve, k, &RoundKind::cylinder(c, seams), meter),
