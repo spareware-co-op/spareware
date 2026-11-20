@@ -36,6 +36,7 @@
 # GitHub measuring run 44636356667 (miri_measure=new on test/phase5-intersect-mutants-b at 44b58664b).
 # GitHub measuring run 44641548878 (miri_measure=new on land5/fixes-2 at 0a1c36808).
 # GitHub measuring run 44642981052 (miri_measure=new on test/phase5-intersect-mutants-d at 8072462a2).
+# GitHub measuring run 44651229391 (miri_measure=new on test/phase5-intersect-mutants-f at a29aac38c).
 35	geom-analysis::attack_g346	a_capped_run_is_still_certified
 2	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 601	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1605,6 +1606,7 @@ native-only over 601	geom-intersect::loop_far_from_zero	a_swept_loop_is_cut_wher
 7	geom-intersect::lower_half_arcs	an_arc_to_a_lower_half_end_on_the_line_through_the_centre_ends_in_place
 3	geom-intersect::lower_half_arcs	lower_half_ends_each_side_of_the_axis_are_placed
 3	geom-intersect::lower_half_arcs	upper_half_ends_each_side_of_the_axis_are_placed
+native-only over 601	geom-intersect::march_mutants	an_arc_along_an_edge_runs_one_way_from_its_first_start
 4	geom-intersect::on_axis_exact	a_line_across_a_torus_whose_axis_rounds_upright_crosses_it_twice
 3	geom-intersect::on_axis_exact	a_line_up_a_ruling_of_a_cylinder_whose_axis_rounds_upright_crosses_it_once
 native-only over 601	geom-intersect::parallel_hair	cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines
