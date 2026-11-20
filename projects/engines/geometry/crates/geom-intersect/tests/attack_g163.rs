@@ -401,6 +401,72 @@ fn whole_turns_from_anywhere_are_the_whole_overlap() {
     }
 }
 
+/// An arc a little short of a turn and the whole circle, either way round: one run of the arc that
+/// the circle's join cuts, so one overlap over the arc's domain and the whole circle's, never two
+/// pieces whose boxes meet (#1121).
+fn one_overlap_with_the_whole_circle(domain: (f64, f64)) {
+    let (a, whole) = (arc([0.0, 0.0], 5.0, domain), circle([0.0, 0.0], 5.0));
+    for (r, want) in [
+        (meet(&a, &whole), [domain, (0.0, 2.0)]),
+        (meet(&whole, &a), [(0.0, 2.0), domain]),
+    ] {
+        let [
+            Item::Overlap {
+                at,
+                proof: Coincidence::Identical,
+                ..
+            },
+        ] = r.items()
+        else {
+            panic!("{domain:?}: {:?}", r.items());
+        };
+        let spans: Vec<(f64, f64)> = at.spans().iter().map(|x| (x.lo(), x.hi())).collect();
+        assert_eq!(spans, want);
+        assert_eq!(r.coverage(), Coverage::TopologyCertified);
+    }
+}
+
+/// 2 − 2⁻⁵³ half-turns, whose difference rounds to a turn.
+#[test]
+fn an_arc_that_only_rounds_to_a_turn_meets_the_whole_circle_in_one_overlap() {
+    one_overlap_with_the_whole_circle((-1.25 + two_to(-52), 0.75 + two_to(-53)));
+}
+
+/// 2 − 2⁻⁵² half-turns from −1.25 + 2⁻⁵², across the circle's join at 0.
+#[test]
+fn an_arc_a_step_short_of_a_turn_meets_the_whole_circle_in_one_overlap() {
+    one_overlap_with_the_whole_circle((-1.25 + two_to(-52), 0.75));
+}
+
+/// 2 − 2⁻⁵² half-turns from −1, across the circle's join at 0.
+#[test]
+fn an_arc_from_minus_one_a_step_short_of_a_turn_meets_the_whole_circle_in_one_overlap() {
+    one_overlap_with_the_whole_circle((-1.0, 1.0 - two_to(-52)));
+}
+
+/// Two arcs each a step short of a turn share two runs, each gap one's shortfall, and the boxes
+/// cannot tell them apart: one region over both domains, flagged near coincident, either way round.
+#[test]
+fn two_arcs_a_step_short_of_a_turn_are_flagged_where_the_boxes_cannot_tell_their_runs_apart() {
+    let (d, e) = ((-1.25 + two_to(-52), 0.75), (0.0, 2.0 - two_to(-52)));
+    let (a, b) = (arc([0.0, 0.0], 5.0, d), arc([0.0, 0.0], 5.0, e));
+    for (r, want) in [(meet(&a, &b), [d, e]), (meet(&b, &a), [e, d])] {
+        let [
+            Item::Flagged {
+                at,
+                why: Unresolved::NearCoincident { .. },
+                ..
+            },
+        ] = r.items()
+        else {
+            panic!("{:?}", r.items());
+        };
+        let spans: Vec<(f64, f64)> = at.spans().iter().map(|x| (x.lo(), x.hi())).collect();
+        assert_eq!(spans, want);
+        assert_eq!(r.coverage(), Coverage::CompleteOutsideFlagged);
+    }
+}
+
 #[test]
 fn arcs_keep_only_the_crossings_on_them() {
     let a = circle([0.0, 0.0], 5.0);
