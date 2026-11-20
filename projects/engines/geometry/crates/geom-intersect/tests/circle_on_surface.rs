@@ -26,7 +26,7 @@
 
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame};
 use geom_intersect::curve_surface::curve_surface;
-use geom_intersect::result::{Coincidence, Item, PointContact};
+use geom_intersect::result::{Coincidence, Item, PointContact, Test, Unresolved};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
@@ -979,13 +979,48 @@ fn crossings(curve: &CurveKind<3>, surface: &SurfaceKind) -> (usize, usize, u128
     (points, items.len() - points, meter.used().work)
 }
 
+/// The pair's points; for each flag undecided at the floor, whether its span in parameter `k`, the
+/// one over [`SHORT`], starts at the short turn's start and whether it ends at its end; the work.
+fn at_the_ends(
+    curve: &CurveKind<3>,
+    surface: &SurfaceKind,
+    k: usize,
+) -> (usize, Vec<(bool, bool)>, u128) {
+    let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+    let found = curve_surface(curve, surface, &mut meter).unwrap();
+    let (mut points, mut ends) = (0, Vec::new());
+    for item in found.items() {
+        match item {
+            Item::Point { .. } => points += 1,
+            Item::Flagged {
+                at,
+                why:
+                    Unresolved::UndecidedAtFloor {
+                        test: Test::Uniqueness,
+                    },
+                ..
+            } => {
+                let span = &at.spans()[k];
+                ends.push((span.lo() == SHORT.0, span.hi() == SHORT.1));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    ends.sort_unstable();
+    (points, ends, meter.used().work)
+}
+
 #[test]
 fn circles_crossing_where_a_turn_only_rounds_to_whole_are_the_engines() {
     // The closed form across the axis answers whole turns (decision 32.86), and a turn short by
-    // 2⁻⁵³ half-turns is not one (issue 1104). Each pair crosses at two points, one of them where
-    // only the whole turn runs: (−5, 0) on a circle of radius 5 about the origin with x̂ at
-    // [`TILT`], and (0, 5) on a cylinder about (5, 5) with x̂ there. A gap that small is under a
-    // step long, so the engine finds both points too; the work tells the two apart.
+    // 2⁻⁵³ half-turns is not one (issue 1104). Each whole pair crosses at two points, one of them
+    // where only the whole turn runs: (−5, 0) on a circle of radius 5 about the origin with x̂ at
+    // [`TILT`], and (0, 5) on a cylinder about (5, 5) with x̂ there. On the short turn that point
+    // is at 1 + 7·10⁻¹⁷ half-turns, which is −1 + 7·10⁻¹⁷ a turn back, in [`SHORT`]'s gap from 1
+    // to −1 + 1.1·10⁻¹⁶: no root of the short pair lies there. The engine answers it with the
+    // other point and, at each end of the short turn, where the gap starts and where it ends, a
+    // flag undecided at the floor; it certifies no point in the gap. The work tells the closed
+    // form from the engine.
     let tilted = Frame::new(TILT, Z).unwrap();
     let on = |turn| CurveKind::Circle(Circle::new([0.0; 3], 5.0, tilted, turn).unwrap());
     let beside = SurfaceKind::Cylinder(cylinder([-5.0, 5.0, 0.0], 5.0, X, Z));
@@ -996,19 +1031,19 @@ fn circles_crossing_where_a_turn_only_rounds_to_whole_are_the_engines() {
     let ring = circle([0.0; 3], 5.0, X, Z);
     let (turned, near) = (on((-1.0, 1.0)), on(SHORT));
     let (round, gapped) = (over((-1.0, 1.0)), over(SHORT));
-    for (whole, short) in [
-        ((&turned, &beside), (&near, &beside)),
-        ((&ring, &round), (&ring, &gapped)),
+    for (k, (whole, short)) in [
+        (0, ((&turned, &beside), (&near, &beside))),
+        (1, ((&ring, &round), (&ring, &gapped))),
     ] {
         let (points, others, work) = crossings(whole.0, whole.1);
         assert!(
             points == 2 && others == 0 && work <= FEW_POINTS,
             "whole: {work} units"
         );
-        let (points, others, work) = crossings(short.0, short.1);
+        let (points, ends, work) = at_the_ends(short.0, short.1, k);
         assert!(
-            points == 2 && others == 0 && work > FEW_POINTS,
-            "short: {work} units"
+            points == 1 && ends == [(false, true), (true, false)] && work > FEW_POINTS,
+            "short: {points} points, flags at the ends {ends:?}, {work} units"
         );
     }
 }
