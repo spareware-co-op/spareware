@@ -309,3 +309,208 @@ fn an_arc_in_a_plane_is_proven_in_pieces_within_the_ceiling() {
         );
     }
 }
+
+/// The other plane's two vectors for a tie: whole numbers, none zero, whose three determinants of
+/// pairs of rows are all −7. The rows solved are the first pair of a tie, x and y, and z is left
+/// over; the normal equations of the middle's Gauss-Newton have every product counting
+/// (`[[26, 23], [23, 26]]`).
+const TIED_A: [f64; 3] = [-4.0, -1.0, 3.0];
+const TIED_B: [f64; 3] = [-3.0, 1.0, 4.0];
+
+/// The places of the branch's vertices along the edge, and the bits of the first and last cut's
+/// `(s, r)`, with the standing plane first, and second.
+const TIED_BITS: [(usize, [u64; 4], [u64; 4]); 2] = [
+    (
+        129,
+        [
+            0x40d5_0007_ffff_fffd,
+            0x40d5_0008_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+        [
+            0x40d5_03f7_ffff_fffd,
+            0x40d5_03f8_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+    ),
+    (
+        129,
+        [
+            0x40d5_0007_ffff_fff9,
+            0x40d5_0008_0000_0008,
+            0x40d5_fffb_6db6_db67,
+            0x40d6_0004_9249_2499,
+        ],
+        [
+            0x40d5_03f7_ffff_fff8,
+            0x40d5_03f8_0000_0007,
+            0x40d5_fffb_6db6_db67,
+            0x40d6_0004_9249_249a,
+        ],
+    ),
+];
+
+/// An edge a sixty-fourth of a unit long, from v = 10 to 10 + 1/64, of a plane standing on the
+/// other plane on vectors `along` and `across` along their cross product, which for each pair here
+/// lies along (−1, 1, −1): the line s = (v + 11) units, r = 22 units, from one end of the other
+/// plane's s to the other. Short, so that the left-over row, whose coefficients are whole numbers
+/// and not a tilt, is held within the floor's eighth. Gives, with the standing plane first and then
+/// second, how many vertices the branch has and the bits of its first and last cut's `(s, r)`.
+fn tied_rows(along: [f64; 3], across: [f64; 3]) -> Vec<(usize, [u64; 4], [u64; 4])> {
+    let length = 1.0 / 64.0;
+    let other = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            along,
+            across,
+            (
+                (21.0 * UNIT, (21.0 + length) * UNIT),
+                (21.75 * UNIT, 22.25 * UNIT),
+            ),
+        )
+        .unwrap(),
+    );
+    let origin = [0, 1, 2].map(|k| UNIT * (11.0 * along[k] + 22.0 * across[k]));
+    let own = SurfaceKind::Plane(
+        Plane::new(
+            origin,
+            [-UNIT, UNIT, -UNIT],
+            along.map(|c| c * UNIT),
+            ((0.0, 1.0), (10.0, 10.0 + length)),
+        )
+        .unwrap(),
+    );
+    let mut got = Vec::new();
+    for own_first in [true, false] {
+        let (found, [u, t, s, r]) = if own_first {
+            (branch(&own, &other), [0, 1, 2, 3])
+        } else {
+            (branch(&other, &own), [2, 3, 0, 1])
+        };
+        assert_eq!(found.deviation.to_bits(), 0, "{}", found.deviation);
+        let vertices = in_order(&found, t);
+        for v in &vertices {
+            let at = mid(v[t]);
+            let near = |x: Interval, at: f64| x.lo() - 1e-6 <= at && at <= x.hi() + 1e-6;
+            assert!(holds(v[u], 0.0), "{v:?}");
+            assert!(
+                near(v[s], (at + 11.0) * UNIT) && near(v[r], 22.0 * UNIT),
+                "{v:?}"
+            );
+        }
+        let bits = inner_bits(&vertices, [s, r]);
+        let (Some(first), Some(last)) = (bits.first(), bits.last()) else {
+            panic!("{vertices:?}");
+        };
+        got.push((vertices.len(), *first, *last));
+    }
+    got
+}
+
+/// The run along an edge in the plane whose rows tie at −7 takes 128 pieces, an eighth of a step
+/// each, and meets in the recorded boxes.
+#[test]
+fn an_edge_along_a_plane_with_tied_rows_meets_in_the_recorded_boxes() {
+    let got = tied_rows(TIED_A, TIED_B);
+    assert_eq!(got, TIED_BITS, "{got:#x?}");
+}
+
+/// Two more ties of the three determinants, with the solved pair x and y and z left over, whose
+/// last determinant `A1·B2 − B1·A2` has larger products than the first tie's: here 30 less 16,
+/// at a tie of 14, and in the third 2 less 9 (in the vectors' signs), at a tie of 7. A slip in
+/// that determinant that leaves it larger than the tie moves the rows solved to y and z, and
+/// with them every box of the run; in the first tie no such slip leaves it so large. Between
+/// them the two ties are moved by each of the four slips there, a product or the difference read
+/// as a sum, or the first product as a quotient.
+const TIED_TOO_A: [f64; 3] = [-2.0, -6.0, -4.0];
+const TIED_TOO_B: [f64; 3] = [1.0, -4.0, -5.0];
+const TIED_AGAIN_A: [f64; 3] = [2.0, -1.0, -3.0];
+const TIED_AGAIN_B: [f64; 3] = [1.0, 3.0, 2.0];
+
+/// The places of the branch's vertices along the edge, and the bits of the first and last cut's
+/// `(s, r)`, with the standing plane first, and second, for the third tie.
+const TIED_AGAIN_BITS: [(usize, [u64; 4], [u64; 4]); 2] = [
+    (
+        65,
+        [
+            0x40d5_000f_ffff_fffd,
+            0x40d5_0010_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+        [
+            0x40d5_03ef_ffff_fffd,
+            0x40d5_03f0_0000_0003,
+            0x40d5_fffb_6db6_db6b,
+            0x40d6_0004_9249_2495,
+        ],
+    ),
+    (
+        65,
+        [
+            0x40d5_000f_ffff_fff4,
+            0x40d5_0010_0000_000e,
+            0x40d5_fffb_6db6_db66,
+            0x40d6_0004_9249_249a,
+        ],
+        [
+            0x40d5_03ef_ffff_fff2,
+            0x40d5_03f0_0000_000c,
+            0x40d5_fffb_6db6_db66,
+            0x40d6_0004_9249_249a,
+        ],
+    ),
+];
+
+/// The run along an edge in the plane of the third tie takes 64 pieces, a fourth of a step each,
+/// and meets in the recorded boxes.
+#[test]
+fn an_edge_along_a_plane_whose_rows_tie_again_meets_in_the_recorded_boxes() {
+    let got = tied_rows(TIED_AGAIN_A, TIED_AGAIN_B);
+    assert_eq!(got, TIED_AGAIN_BITS, "{got:#x?}");
+}
+
+/// The places of the branch's vertices along the edge, and the bits of the first and last cut's
+/// `(s, r)`, with the standing plane first, and second, for the second tie.
+const TIED_TOO_BITS: [(usize, [u64; 4], [u64; 4]); 2] = [
+    (
+        257,
+        [
+            0x40d5_0003_ffff_fffd,
+            0x40d5_0004_0000_0003,
+            0x40d5_fffc_9249_248f,
+            0x40d6_0003_6db6_db71,
+        ],
+        [
+            0x40d5_03fb_ffff_fffd,
+            0x40d5_03fc_0000_0003,
+            0x40d5_fffc_9249_248f,
+            0x40d6_0003_6db6_db71,
+        ],
+    ),
+    (
+        257,
+        [
+            0x40d5_0003_ffff_fffc,
+            0x40d5_0004_0000_0006,
+            0x40d5_fffc_9249_248b,
+            0x40d6_0003_6db6_db75,
+        ],
+        [
+            0x40d5_03fb_ffff_fffa,
+            0x40d5_03fc_0000_0004,
+            0x40d5_fffc_9249_248b,
+            0x40d6_0003_6db6_db75,
+        ],
+    ),
+];
+
+/// The run along an edge in the plane of the second tie takes 256 pieces, a sixteenth of a step
+/// each, and meets in the recorded boxes.
+#[test]
+fn an_edge_along_a_plane_whose_last_rows_tie_meets_in_the_recorded_boxes() {
+    let got = tied_rows(TIED_TOO_A, TIED_TOO_B);
+    assert_eq!(got, TIED_TOO_BITS, "{got:#x?}");
+}
