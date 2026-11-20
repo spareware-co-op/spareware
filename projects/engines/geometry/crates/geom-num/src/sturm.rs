@@ -36,7 +36,12 @@
 //! `geom-gen`, and outward rounding proves each sign with no constant to derive.
 //!
 //! Cost: a chain is at most 24 products and 15 exact divisions of [`LIMBS`]-limb integers, on the
-//! stack, each O(`LIMBS`²). The filter is at most 60 interval operations. Recursion: none.
+//! stack. A product is O(`LIMBS`²), as [`Wide`]'s loops run over every limb. This module's own
+//! loops over limbs stop at the value's top limb that is not zero, as a big-number library's run
+//! over its normalised length: an exact division is O(n²) in the n limbs of its numerator, and one
+//! product to check it, and the shifts of the binary gcd and the long division of the square root
+//! run over the limbs their values use. The filter is at most 60 interval operations. Recursion:
+//! none.
 
 use crate::error::NumError;
 use crate::interval::Interval;
@@ -160,11 +165,24 @@ fn odd_inverse(x: u64) -> u64 {
     once(once(once(once(once(x)))))
 }
 
-/// `limbs` shifted right by `bits`.
+/// How many of `limbs` hold the value: one past the highest that is not zero, or none for zero.
+/// Every limb above is zero, so a loop over the value's limbs stops there, as a big-number
+/// library's do over its normalised length (num-bigint 0.4 drops a `BigUint`'s zero limbs above its
+/// top in `normalize`, and `mac_digit` and `sub2` loop over the lengths that leaves).
+fn used<const L: usize>(limbs: &[u64; L]) -> usize {
+    limbs
+        .iter()
+        .rposition(|l| *l != 0)
+        .map_or(0, |top| top.saturating_add(1))
+}
+
+/// `limbs` shifted right by `bits`. Each limb of the result is made from the two limbs `bits`
+/// above it, so past the limbs [`used`] counts the result is zero, and the loop stops there.
 fn shifted<const L: usize>(limbs: &[u64; L], bits: usize) -> [u64; L] {
     let (limb, part) = (bits / 64, bits % 64);
     let mut out = [0u64; L];
-    for (i, slot) in out.iter_mut().enumerate() {
+    let reach = used(limbs).saturating_sub(limb);
+    for (i, slot) in out.iter_mut().enumerate().take(reach) {
         let at = |k: usize| {
             i.checked_add(k)
                 .and_then(|j| limbs.get(j))
@@ -183,15 +201,18 @@ fn shifted<const L: usize>(limbs: &[u64; L], bits: usize) -> [u64; L] {
     out
 }
 
-/// `rest` minus `digit · limbs · 2^(64 · from)`, modulo 2^(64 · L).
+/// `rest` minus `digit · limbs · 2^(64 · from)`, modulo 2^(64 · to): the limbs from `to` up are
+/// left as they are. A carry or borrow only moves up, so the limbs below `to` are those of the
+/// whole difference.
 fn subtract_multiple<const L: usize>(
     rest: &mut [u64; L],
     digit: u64,
     limbs: &[u64; L],
     from: usize,
+    to: usize,
 ) {
     let (mut carry, mut borrow) = (0u64, false);
-    for (slot, &y) in rest.iter_mut().skip(from).zip(limbs) {
+    for (slot, &y) in rest.iter_mut().take(to).skip(from).zip(limbs) {
         // At most (2^64 − 1)² + 2^64 − 1, below 2^128.
         let wide = u128::from(digit)
             .wrapping_mul(u128::from(y))
@@ -210,6 +231,11 @@ fn subtract_multiple<const L: usize>(
 ///
 /// Digit by digit from the low end: past `d`'s trailing zeros `d` is odd, so each digit of the
 /// quotient is the low limb of what is left times `d`'s inverse modulo 2^64.
+///
+/// Only the digits below the shifted `n`'s top limb are made, each from the limbs below it. When
+/// `d` divides `n` the quotient is at most the shifted `n`, so its digits above are zero; when it
+/// does not, no quotient passes the check by product, whatever its digits. So the answer, `None`
+/// included, is the one the digits of every limb give.
 #[must_use]
 pub fn div_exact<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<Wide<L>> {
     let magnitude = |v: &Wide<L>| {
@@ -231,9 +257,10 @@ pub fn div_exact<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<Wide<L>> {
     let odd = shifted(&bottom, zeros);
     let inverse = odd_inverse(*odd.first()?);
     let mut quotient = [0u64; L];
-    for (i, digit) in quotient.iter_mut().enumerate() {
+    let reach = used(&rest);
+    for (i, digit) in quotient.iter_mut().enumerate().take(reach) {
         *digit = rest.get(i)?.wrapping_mul(inverse);
-        subtract_multiple(&mut rest, *digit, &odd, i);
+        subtract_multiple(&mut rest, *digit, &odd, i, reach);
     }
     let q = Wide::<L>::from_le_limbs(quotient);
     let answer = if n.is_negative() == d.is_negative() {
@@ -308,12 +335,15 @@ pub fn gcd_with_steps<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<(Wide<
         let (wide_x, wide_y) = (Wide::<L>::from_le_limbs(x), Wide::<L>::from_le_limbs(y));
         let difference = wide_x.checked_sub(&wide_y)?;
         if difference.is_zero() {
-            let mut out = wide_x;
-            let two = Wide::<L>::from_i64(2);
-            for _ in 0..common {
-                out = out.checked_mul(&two)?;
-            }
-            return Some((out, allowed.checked_sub(left)?));
+            // The odd part times 2^common in one product, not `common` doublings: a positive
+            // value's doublings only grow, so the product fits exactly when every doubling does,
+            // and is their value. Past the width there is no limb for the power, and `magnitude`
+            // refuses 2^(64L − 1), which the width holds only as a negative value: both `None`, as
+            // the doublings would be.
+            let mut power = [0u64; L];
+            *power.get_mut(common / 64)? = 1 << (common % 64);
+            let scale = magnitude(&Wide::<L>::from_le_limbs(power))?;
+            return Some((wide_x.checked_mul(&scale)?, allowed.checked_sub(left)?));
         }
         left = left.checked_sub(1)?;
         let (rest, keep_y) = if difference.is_negative() {
@@ -365,11 +395,13 @@ pub fn square_root<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
 }
 
 /// `n / d` and its remainder, for an `n` not negative and a positive `d`, by long division in bits.
+/// The bits above the limbs [`used`] counts are zero, and through them the remainder stays zero
+/// and the quotient's bits are clear, so the division starts below them.
 fn divided<const L: usize>(n: &Wide<L>, d: &Wide<L>) -> Option<(Wide<L>, Wide<L>)> {
     let limbs = n.to_le_limbs();
     let (mut quotient, mut rest) = ([0_u64; L], Wide::<L>::ZERO);
     let two = Wide::<L>::from_i64(2);
-    for bit in (0..L.checked_mul(64)?).rev() {
+    for bit in (0..used(&limbs).checked_mul(64)?).rev() {
         let set = (limbs.get(bit / 64)? >> (bit % 64)) & 1;
         rest = rest
             .checked_mul(&two)?

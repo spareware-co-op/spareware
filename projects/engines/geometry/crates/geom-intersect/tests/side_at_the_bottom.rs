@@ -10,10 +10,13 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_curve::{Circle, CurveKind, Frame};
 use geom_intersect::curve_surface::curve_surface;
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
+use miri::sized;
 
 const X: [f64; 3] = [1.0, 0.0, 0.0];
 const Y: [f64; 3] = [0.0, 1.0, 0.0];
@@ -28,7 +31,9 @@ const TRIED: u128 = 9;
 #[test]
 fn a_side_a_step_above_the_lowest_point_is_the_engines() {
     let mut c = -1.0_f64;
-    for _ in 0..4 {
+    // Under Miri, the side one step above alone: each step is one run of the engine, the same
+    // claim at each.
+    for _ in 0..sized(4, 1) {
         c = c.next_up();
         let circle = CurveKind::Circle(
             Circle::new([0.0; 3], 1.0, Frame::new(X, Z).unwrap(), (0.0, 2.0)).unwrap(),

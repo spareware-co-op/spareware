@@ -15,6 +15,8 @@
     reason = "test code: a failure should stop loudly"
 )]
 
+mod miri;
+
 use geom_intersect::IntersectError;
 use geom_intersect::general::{Subdivided, subdivide};
 use geom_intersect::known::{Known, KnownContact, subdivide_known};
@@ -24,6 +26,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
+use miri::case;
 
 /// A step of the grid here: a floor of 1/128, a double.
 const FLOOR: f64 = 1.0 / 128.0;
@@ -50,13 +53,18 @@ fn ground() -> SurfaceKind {
 /// `heights` in v (y follows v as the control points' Greville abscissae give it): every height is
 /// a dyadic double, so each root is where the test puts it, exactly.
 fn sheet(heights: &[f64]) -> SurfaceKind {
+    sheet_across(1.0, heights)
+}
+
+/// [`sheet`] over x in [−`w`, `w`].
+fn sheet_across(w: f64, heights: &[f64]) -> SurfaceKind {
     let degree = heights.len() - 1;
     let mut knots = vec![-1.0; degree + 1];
     knots.extend(vec![1.0; degree + 1]);
     let across = Basis::new(degree, knots).unwrap();
-    let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).unwrap();
+    let along = Basis::new(1, vec![-w, -w, w, w]).unwrap();
     let mut net = Vec::new();
-    for x in [-1.0, 1.0] {
+    for x in [-w, w] {
         for (j, z) in heights.iter().enumerate() {
             let y = -1.0 + 2.0 * j as f64 / degree as f64;
             net.push([x, y, *z]);
@@ -67,8 +75,13 @@ fn sheet(heights: &[f64]) -> SurfaceKind {
 
 /// z = K·(t − ½)², t = (v + 1)/2: tangent to the ground along v = 0 and nowhere else.
 fn tangent_sheet() -> SurfaceKind {
+    tangent_sheet_across(1.0)
+}
+
+/// [`tangent_sheet`] over x in [−`w`, `w`].
+fn tangent_sheet_across(w: f64) -> SurfaceKind {
     let k = 0.75;
-    sheet(&[k / 4.0, -k / 4.0, k / 4.0])
+    sheet_across(w, &[k / 4.0, -k / 4.0, k / 4.0])
 }
 
 /// z = K·(t − ½)·(t − r): crossing the ground along v = 0 and again along v = 2r − 1.
@@ -92,9 +105,14 @@ fn fillet(r: f64) -> SurfaceKind {
 /// The line v = 0 of a sheet on the ground, its known curve: (u, 0) on the sheet, (u, 0) on the
 /// ground, exact.
 fn line(contact: KnownContact) -> Known {
+    line_across(4, contact)
+}
+
+/// [`line`] from u = −`n`/4 to `n`/4, its vertices a quarter apart.
+fn line_across(n: i32, contact: KnownContact) -> Known {
     let point = |x: f64| Interval::point(x).unwrap();
     Known {
-        vertices: (-4..=4)
+        vertices: (-n..=n)
             .map(|k| {
                 let u = f64::from(k) / 4.0;
                 [point(u), point(0.0), point(u), point(0.0)]
@@ -277,8 +295,12 @@ fn no_known_curve_is_the_plain_search() {
 
 #[test]
 fn a_budget_stops_it_and_a_floor_must_be_positive() {
-    let (sheet, wall) = (tangent_sheet(), ground());
-    let known = [line(KnownContact::Tangent)];
+    // Under Miri, the tangent sheet a quarter as wide, x in [−1/4, 1/4], with its known line over
+    // that width: the same tube about the same contact, a third of the work (3,533 units against
+    // 10,239), and nothing settled or flagged on either.
+    let (w, n) = case((1.0, 4), (0.25, 1));
+    let (sheet, wall) = (tangent_sheet_across(w), ground());
+    let known = [line_across(n, KnownContact::Tangent)];
     let mut small = WorkMeter::new(Budget::of_work(8));
     assert_eq!(
         subdivide_known(&sheet, &wall, &known, FLOOR, &mut small),

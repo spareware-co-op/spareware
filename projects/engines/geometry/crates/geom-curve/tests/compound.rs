@@ -468,8 +468,18 @@ fn an_intersection_curve_carries_its_caches() {
     )
     .unwrap();
     assert_eq!(curve.error(), 2e-9);
-    for t in spatial() {
-        check(&curve, &params((0.0, 1.0)), &t, m).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    // Every transform of `spatial` natively; under Miri one of each kind it holds, the exact
+    // mirror, the rational turn, and in doubles a turn off the z axis and a stretch along all
+    // three: each one is the contract's whole walk, and with all nine the test took 513 yardstick
+    // seconds there.
+    let all = spatial();
+    let moves = if cfg!(miri) {
+        vec![&all[1], &all[2], &all[7], &all[8]]
+    } else {
+        all.iter().collect()
+    };
+    for t in moves {
+        check(&curve, &params((0.0, 1.0)), t, m).unwrap_or_else(|e| panic!("{t:?}: {e}"));
     }
     // A split tiles both halves, cuts the span it falls in and parts the chain.
     let (left, right) = curve.split(0.25, m).unwrap();
