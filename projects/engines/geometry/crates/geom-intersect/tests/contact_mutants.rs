@@ -127,7 +127,7 @@ fn a_plane_touching_a_sphere_near_its_south_pole_is_read_where_it_touches() {
 }
 
 /// A sphere hanging from the plane z = 0 at its north pole is one tangent point there, read in the
-/// turned chart (pole_contact.rs); and the same sphere flipped along its axis, whose normal points
+/// turned chart (`pole_contact.rs`); and the same sphere flipped along its axis, whose normal points
 /// in, is left undecided at its top pole, the turned chart never read.
 #[test]
 fn a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work() {
@@ -179,7 +179,7 @@ fn a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work() {
 }
 
 /// A cylinder of radius 5 units resting on a plane touches it along a line, in a band of
-/// √(2δ/Δκ) (attack_g171.rs), held to its recorded width and gap.
+/// √(2δ/Δκ) (`attack_g171.rs`), held to its recorded width and gap.
 #[test]
 fn a_cylinder_on_a_plane_is_a_band_of_its_recorded_width() {
     let unit = 1024.0;
