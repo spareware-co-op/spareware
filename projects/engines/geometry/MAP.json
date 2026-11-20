@@ -11961,7 +11961,7 @@
           "target": "lib"
         },
         {
-          "cost": "a chain is at most 24 products and 15 exact divisions of [`LIMBS`]-limb integers, on the stack, each O(`LIMBS`²). The filter is at most 60 interval operations. Recursion: none.",
+          "cost": "a chain is at most 24 products and 15 exact divisions of [`LIMBS`]-limb integers, on the stack. A product is O(`LIMBS`²), as [`Wide`]'s loops run over every limb. This module's own loops over limbs stop at the value's top limb that is not zero, as a big-number library's run over its normalised length: an exact division is O(n²) in the n limbs of its numerator, and one product to check it, and the shifts of the binary gcd and the long division of the square root run over the limbs their values use. The filter is at most 60 interval operations. Recursion: none.",
           "does": "[`Chain::of`] builds the Sturm chain of an integer polynomial as a subresultant chain, whose coefficients stay near the size of determinants of the polynomial's own. From it [`Chain::roots`] counts the distinct real roots and says whether any is repeated, and [`Chain::roots_between`] counts them between two rational points, ends excluded. [`filtered`] and [`filtered_between`] give the same answers in `f64` intervals where those decide, so that the wide path only runs near a repeated root (chapter 12.6).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
