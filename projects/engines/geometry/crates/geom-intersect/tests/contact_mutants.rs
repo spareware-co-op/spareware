@@ -480,3 +480,48 @@ fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
         ],
     );
 }
+
+/// The saddle z = (x² − y²)/8 over [−4, 4]², exact in Bézier form.
+fn saddle() -> SurfaceKind {
+    let basis = || Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    // The Bernstein coefficients of t² over [−4, 4], and the points they sit over.
+    let along = [(-4.0, 16.0), (0.0, -16.0), (4.0, 16.0)];
+    let mut net = Vec::new();
+    for (x, zx) in along {
+        for (y, zy) in along {
+            net.push([x, y, (zx - zy) / 8.0]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
+}
+
+/// A plane tangent to a saddle at its centre: solve proves the one zero, a crossing of four
+/// half-branches, but the branches counted ending on the cluster are not four (the cluster at a
+/// floor of 1/2 runs out to the saddle's edges), so the point is left undecided as a higher-order
+/// contact, never read as the crossing alone.
+#[test]
+fn a_saddle_on_a_plane_whose_branches_are_not_its_zeros_is_undecided() {
+    holds_to(
+        (&level(), &saddle()),
+        (1.0 / 2.0, 1.0 / 16.0),
+        [
+            (
+                1381,
+                "[Undecided { first: ((-9.0, 9.0), (-9.0, 9.0)), \
+                 second: ((0.0, 1.0), (0.0, 1.0)), why: HigherOrderContact }]",
+            ),
+            (
+                2756,
+                "[Undecided { first: ((0.4375, 1.0), (0.0, 0.4375)), \
+                 second: ((3.15087890625, 9.0), (-9.0, -3.375)), \
+                 why: UndecidedAtFloor { test: Exclusion } }, \
+                 Undecided { first: ((0.0, 0.4375), (0.0, 1.0)), \
+                 second: ((-9.0, -3.375), (3.15087890625, 9.0)), \
+                 why: UndecidedAtFloor { test: Exclusion } }, \
+                 Undecided { first: ((0.0, 1.0), (0.0, 1.0)), \
+                 second: ((-9.0, 4.978729248046875), (-9.0, 4.978729248046875)), \
+                 why: HigherOrderContact }]",
+            ),
+        ],
+    );
+}
