@@ -260,9 +260,9 @@ fn cross_tight(a: Vector, b: Vector) -> Result<Vector, IntersectError> {
     Ok([part(q, z, r, y)?, part(r, x, p, z)?, part(p, y, q, x)?])
 }
 
-/// The unit vector from the axis toward `p`, square to it; `None` where no enclosure tells `p` off
-/// the axis.
-fn outward(on: &Axis, p: Vector) -> Result<Option<Vector>, IntersectError> {
+/// The unit vector from the axis toward `p`, square to it, and `p`'s distance from the axis; `None`
+/// where no enclosure tells `p` off the axis.
+fn outward(on: &Axis, p: Vector) -> Result<Option<(Vector, Interval)>, IntersectError> {
     let w = less_tight(p, on.at)?;
     let lean = less_tight(w, scale_tight(on.along, dot_tight(w, on.along)?)?)?;
     if lean.iter().all(|c| c.contains(0.0)) {
@@ -270,11 +270,12 @@ fn outward(on: &Axis, p: Vector) -> Result<Option<Vector>, IntersectError> {
     }
     let size = tight::norm(&lean)?;
     let [x, y, z] = lean;
-    Ok(Some([
+    let out = [
         tight::div(x, size)?,
         tight::div(y, size)?,
         tight::div(z, size)?,
-    ]))
+    ];
+    Ok(Some((out, size)))
 }
 
 /// The vector `v` in the half-plane of `on` toward `out`: its parts across the axis and along it.
@@ -304,7 +305,7 @@ fn true_line(source: Source, on: &Axis) -> Result<Option<[[Interval; 2]; 2]>, In
             let [p, q, r] = scale_tight(d, tight::point(middle)?)?;
             let [x, y, z] = o;
             let inner = [tight::add(x, p)?, tight::add(y, q)?, tight::add(z, r)?];
-            let Some(out) = outward(on, inner)? else {
+            let Some((out, _)) = outward(on, inner)? else {
                 return Ok(None);
             };
             [flat(on, out, less_tight(o, on.at)?)?, flat(on, out, d)?]
@@ -333,7 +334,7 @@ fn true_round(source: Source, on: &Axis) -> Result<Option<TrueRound>, IntersectE
             radius,
             frame,
         } => {
-            let Some(out) = outward(on, lift(centre)?)? else {
+            let Some((out, rho)) = outward(on, lift(centre)?)? else {
                 return Ok(None);
             };
             let n = lift(frame.normal())?;
@@ -345,7 +346,9 @@ fn true_round(source: Source, on: &Axis) -> Result<Option<TrueRound>, IntersectE
                 tight::div(b, size)?,
                 tight::div(c, size)?,
             ];
-            let middle = flat(on, out, less_tight(lift(centre)?, on.at)?)?;
+            // The centre's ρ is its distance from the axis, exact where that is a double; its part
+            // along `out` would round.
+            let middle = [rho, dot_tight(less_tight(lift(centre)?, on.at)?, on.along)?];
             ([middle, flat(on, out, x)?, flat(on, out, p)?], radius)
         }
         _ => return Ok(None),
@@ -371,17 +374,20 @@ fn on_arc(
     else {
         return Ok(None);
     };
-    // The foot of the centre on the line, from the centre, and the half chord h² there: the
-    // meetings are foot ± (h/|d|)·d, read without the cancellation of the quadratic's terms.
+    // The foot of the centre on the line, from the centre, (k/|d|²)·d⊥ for d⊥ = (−d_z, d_ρ) and
+    // k = d⊥·w, w the line's origin from the centre, and the half chord h² = r² − k²/|d|² there:
+    // the meetings are foot ± (h/|d|)·d, read without the cancellation of the quadratic's terms,
+    // and w is read once, so an exact touch stays exact.
     let ([ax, ay], [mx, my], [dx, dy]) = (at, m, along);
     let a = square2(along)?;
     let (wx, wy) = (tight::sub(ax, mx)?, tight::sub(ay, my)?);
-    let t = tight::div(dot2(along, [wx, wy])?, a)?;
-    let foot = [
-        tight::sub(wx, tight::mul(t, dx)?)?,
-        tight::sub(wy, tight::mul(t, dy)?)?,
-    ];
-    let chord = tight::sub(tight::square(tight::point(r)?)?, square2(foot)?)?;
+    let k = tight::sub(tight::mul(dx, wy)?, tight::mul(dy, wx)?)?;
+    let across = tight::div(k, a)?;
+    let foot = [tight::mul(across, dy.neg())?, tight::mul(across, dx)?];
+    let chord = tight::sub(
+        tight::square(tight::point(r)?)?,
+        tight::div(tight::square(k)?, a)?,
+    )?;
     let told = if touching {
         chord.lo() == 0.0 && chord.hi() == 0.0
     } else {

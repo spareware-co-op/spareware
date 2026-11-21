@@ -181,6 +181,21 @@ fn an_arc_on_a_slanted_frame_keeps_its_ends_by_their_proof() {
 }
 
 #[test]
+fn an_arc_in_a_half_plane_off_the_frames_axes_is_touched_by_its_proof() {
+    // The upper half of the tube of radius 1 about (3, 4, 0), in the half-plane through the axis
+    // and that centre: the centre's ρ is 5 exactly, though the half-plane's direction (0.6, 0.8)
+    // rounds. z = 1 touches it at its top, z = −1 at its bottom, off it, and ρ = 6 and ρ = 4 at
+    // its two ends; each touch is told on the centre's ρ, not on its part along that direction.
+    let frame = Frame::new([3.0, 4.0, 0.0], [4.0, -3.0, 0.0]).unwrap();
+    let arc = Circle::new([3.0, 4.0, 0.0], 1.0, frame, (0.0, 1.0)).unwrap();
+    let half = revolution(CurveKind::Circle(arc));
+    assert_rings(&level(1.0), &half, &[(5.0, 1.0)]);
+    assert_rings(&level(-1.0), &half, &[]);
+    assert_rings(&cylinder(6.0), &half, &[(6.0, 0.0)]);
+    assert_rings(&cylinder(4.0), &half, &[(4.0, 0.0)]);
+}
+
+#[test]
 fn a_ring_no_enclosure_tells_from_the_arcs_end_is_left_to_the_general_paths() {
     // The arc up to the turn 1/3 (as a double, a hair under it): z = 0.8660254037844386, the double
     // under √3/2, meets it 1.3e−17 half-turns inside its end, which no enclosure of the turn tells
