@@ -592,6 +592,21 @@ fn at_the_largest_radii_the_edge_stage_refuses_such_a_meeting() {
     checked(&case, &out, &splitting);
 }
 
+/// The sweep's case at R = 541² + 4 with |D| about 6.07e11, outward (issue 1156). The triangle's
+/// third side, from W 2^39 steps out to the centre, runs along a radius and crosses the rim at
+/// right angles, but the closed form's discriminant, B² − AC from terms some 10¹³ times its size,
+/// kept their rounding: the crossing's box ran 17,060 steps along the side, the vertex made at
+/// its centre stood 140 steps inside the rim, and the edge stage refused it (`CoincidenceChain`).
+/// Taken as A less the square of the line's distance from the centre, the crossing is held to a
+/// step or two, and the faces split as a split must.
+#[test]
+fn a_side_from_far_out_to_the_centre_meets_the_rim_where_it_crosses() {
+    let case = rim_and_triangle(541, 606_525_672_786, false);
+    let out = case.build.run().unwrap();
+    let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
+    checked(&case, &out, &splitting);
+}
+
 /// A whole number from `lo` to `hi`, each power of two between them as likely as the next and
 /// each value within one as likely as the next, so small and large values both come.
 fn spread(rng: &mut SplitMix64, lo: i64, hi: i64) -> i64 {
