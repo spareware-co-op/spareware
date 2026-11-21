@@ -113,21 +113,28 @@ fn ring(on: &Axis, z: Interval, r: Interval, tangent: bool) -> Result<Piece, Int
 }
 
 /// Where a line meets a circle in the half-plane, as (ρ, z) and whether it touches: the quadratic in
-/// the line's parameter, exact where the data are. `None` for a discriminant no enclosure tells
-/// from zero.
+/// the line's parameter, exact where the data are. The circle stands about `centre` where that is
+/// given, a profile's centre enclosed from its own data ([`profile_centre`]), and about the
+/// curve's own centre otherwise. `None` for a discriminant no enclosure tells from zero.
 fn line_and_circle(
     line: &Line<2>,
     round: &Circle<2>,
+    centre: Option<[Interval; 2]>,
 ) -> Result<Option<Vec<Touch>>, IntersectError> {
     let (o, d, m) = (line.origin(), line.direction(), round.center());
     let (span, r) = (ParamCurve::domain(line), tight::point(round.radius())?);
     let [ox, oy] = o;
     let [dx, dy] = d;
-    let [mx, my] = m;
+    let [mx, my] = if let Some(enclosed) = centre {
+        enclosed
+    } else {
+        let [mx, my] = m;
+        [tight::point(mx)?, tight::point(my)?]
+    };
     let (px, py) = (tight::point(ox)?, tight::point(oy)?);
     let (vx, vy) = (tight::point(dx)?, tight::point(dy)?);
-    let wx = tight::sub(px, tight::point(mx)?)?;
-    let wy = tight::sub(py, tight::point(my)?)?;
+    let wx = tight::sub(px, mx)?;
+    let wy = tight::sub(py, my)?;
     let a = tight::add(tight::square(vx)?, tight::square(vy)?)?;
     let b = tight::add(tight::mul(vx, wx)?, tight::mul(vy, wy)?)?;
     let e = tight::sub(
@@ -752,6 +759,34 @@ fn profile_meridian(r: &Revolution) -> Result<Option<Meridians>, IntersectError>
     Ok(map.image(&kind)?.map(|(curve, _)| alloc::vec![curve]))
 }
 
+/// The centre of the circle a surface of revolution turns, in the half-plane its meridian is read
+/// in ([`profile_meridian`]): how far it stands from the axis, then how far along it, each
+/// enclosed from the profile's own data and exact where they are. The meridian circle's own
+/// centre is the half-plane map's image of this one, which rounds, and the rounding alone told a
+/// line from a circle it touches: about (15, 36, 0), 39 from the axis, the image stood a hair
+/// under 39, and the cylinder of radius 40 that touches the tube of radius 1 there was read as
+/// clear of it (issue 1161). `None` for any other surface or profile.
+fn profile_centre(s: &SurfaceKind) -> Result<Option<[Interval; 2]>, IntersectError> {
+    let SurfaceKind::Revolution(r) = s else {
+        return Ok(None);
+    };
+    let (profile, ..) = r.shape()?;
+    let Basis::Circle(round) = profile.basis() else {
+        return Ok(None);
+    };
+    let on = revolution_axis(r)?;
+    let at = lift(round.center())?;
+    let z = level(at, &on)?;
+    // The centre from its foot on the axis, (m − c) − z·ê: its length is the distance.
+    let ([p, q, t], [a, b, c], [x, y, w]) = (at, on.at, on.along);
+    let lean = [
+        tight::sub(tight::sub(p, a)?, tight::mul(x, z)?)?,
+        tight::sub(tight::sub(q, b)?, tight::mul(y, z)?)?,
+        tight::sub(tight::sub(t, c)?, tight::mul(w, z)?)?,
+    ];
+    Ok(Some([tight::norm(&lean)?, z]))
+}
+
 /// `s`'s meridian curves about `on`, if it stands square to the axis or about it: of a surface
 /// [`in_place`] gave.
 fn meridians(
@@ -821,12 +856,13 @@ fn same_place(a: (Interval, Interval), b: (Interval, Interval)) -> bool {
     meet(a.0, b.0) && meet(a.1, b.1)
 }
 
-/// The rings at the crossings of two sets of meridian curves. `None` where curve with curve could
-/// not decide.
+/// The rings at the crossings of two sets of meridian curves, each set with its
+/// [`profile_centre`]. `None` where curve with curve could not decide.
 fn rings(
     on: &Axis,
     first: &[CurveKind<2>],
     second: &[CurveKind<2>],
+    [of_first, of_second]: [Option<[Interval; 2]>; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Vec<Piece>>, IntersectError> {
     let mut out = Vec::new();
@@ -849,8 +885,12 @@ fn rings(
     for x in first {
         for y in second {
             let closed = match (x, y) {
-                (CurveKind::Line(l), CurveKind::Circle(c))
-                | (CurveKind::Circle(c), CurveKind::Line(l)) => Some(line_and_circle(l, c)?),
+                (CurveKind::Line(l), CurveKind::Circle(c)) => {
+                    Some(line_and_circle(l, c, of_second)?)
+                }
+                (CurveKind::Circle(c), CurveKind::Line(l)) => {
+                    Some(line_and_circle(l, c, of_first)?)
+                }
                 _ => None,
             };
             if let Some(found) = closed {
@@ -898,7 +938,8 @@ fn about_one_axis(
     let (Some(first), Some(second)) = (meridians(a, on, e, c)?, meridians(b, on, e, c)?) else {
         return Ok(None);
     };
-    rings(on, &first, &second, meter)
+    let centres = [profile_centre(a)?, profile_centre(b)?];
+    rings(on, &first, &second, centres, meter)
 }
 
 /// Whether the torus's angle to the plane is Villarceau's, and its circles if it is.
