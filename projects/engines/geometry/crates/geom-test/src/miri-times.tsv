@@ -58,6 +58,7 @@
 # GitHub measuring run 44835390573 (miri_measure=new on fix/921-reduced at 058283656, miri_measure_tests naming the branch's 4 new half_plane tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44840340929 (miri_measure=new on rows/phase5-line-along-a-ruling at the train's f447154e2, miri_measure_tests naming the 4 line_along_a_ruling tests #1139 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44856947585 (miri_measure=new on fix/derivative-bound-narrow-box at 23fde6008, miri_measure_tests naming the attack_g60 test #1148 adds), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44854421238 (miri_measure=new on rows/phase5-subnormal-box-partials at the train's 625c4ebc9, miri_measure_tests naming the attack_g60 test #1143 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
@@ -8853,6 +8854,7 @@ native-only over 563	geom-surface::analytic	every_analytic_kind_keeps_the_contra
 native-only over 563	geom-surface::analytic	spheres_keep_their_normals_at_the_poles_and_tori_their_forms
 17	geom-surface::analytic	split_and_reverse_are_exact_and_refusals_typed
 4	geom-surface::analytic	transforms_change_kinds_explicitly
+24	geom-surface::attack_g60	a_box_a_few_subnormals_wide_has_a_derivative_bound_that_holds_the_true_partial
 76	geom-surface::attack_g60	a_box_a_few_subnormals_wide_has_partials_that_hold_the_true_ones
 206	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_down
 166	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_up
