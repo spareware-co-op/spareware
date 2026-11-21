@@ -7412,14 +7412,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace + with * in plane",
-      "line_text": "Ok(across(widths.map(|w| 1.0 / (1.0 + w))))",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "across drops the coordinate where its argument is largest, so only the order of the three matters. 1 / w orders non-negative widths as 1 / (1 + w) does: both fall as the width grows, and two widths tie under one exactly when they tie under the other (a zero width is infinite under 1 / w, and still the largest). So the same coordinate is dropped."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace && with || in curves",
       "line_text": "if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {",
       "occurrences": 1,
