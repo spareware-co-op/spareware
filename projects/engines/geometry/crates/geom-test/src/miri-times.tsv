@@ -55,6 +55,7 @@
 # GitHub measuring runs 44703337217 (miri_measure=new on test/phase5-intersect-mutants-e at a8b6d5823) and 44679007301 (miri_measure=all on it at 78c4ad94b, miri_measure_tests binary_id(geom-intersect::general_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 general_mutants tests, each from the later run that measured it (the tests since 78c4ad94b are new); the train's tests the runs also measured keep their rows.
 # GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 # GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
+# GitHub measuring run 44835390573 (miri_measure=new on fix/921-reduced at 058283656, miri_measure_tests naming the branch's 4 new half_plane tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -1657,9 +1658,12 @@ native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_cylinder_twice
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_sphere_twice
 57	geom-intersect::half_plane	a_circle_in_a_plane_of_the_axis_is_a_meridian_while_it_stays_on_one_side
+58	geom-intersect::half_plane	a_circle_near_the_axis_in_a_plane_of_a_slanted_direction_is_read_in_that_plane
 155	geom-intersect::half_plane	a_circle_through_the_plane_at_its_ends_and_middle_is_no_meridian
 329	geom-intersect::half_plane	a_cone_scaled_by_three_meets_a_coaxial_revolution_in_its_ring
 2	geom-intersect::half_plane	a_crossing_keeps_the_boxes_of_its_quotients
+20	geom-intersect::half_plane	a_curved_profile_with_its_ends_and_middle_on_one_side_that_crosses_the_axis_is_no_meridian
+303	geom-intersect::half_plane	a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side
 32	geom-intersect::half_plane	a_meridian_whose_plane_is_exact_only_with_the_errors_of_its_products_is_one
 50	geom-intersect::half_plane	a_nurbs_profile_about_a_slanted_axis_is_read_in_the_plane_its_control_points_name
 78	geom-intersect::half_plane	a_nurbs_profile_is_a_meridian_by_its_control_points
@@ -1667,6 +1671,7 @@ native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_
 18	geom-intersect::half_plane	a_nurbs_profile_that_leaves_the_plane_between_its_ends_and_middle_is_no_meridian
 17	geom-intersect::half_plane	a_profile_across_the_axis_keeps_the_rings_of_its_far_part
 129	geom-intersect::half_plane	an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_centre
+323	geom-intersect::half_plane	the_issues_cone_scaled_by_three_meets_the_scaled_funnel_in_its_ring
 2	geom-intersect::half_plane	two_lines_parallel_to_within_rounding_meet_nowhere_on_their_spans
 native-only over 551	geom-intersect::known_mutants	a_cone_a_sphere_and_a_torus_carry_a_tangent_tube_by_their_own_equations
 native-only over 551	geom-intersect::known_mutants	a_crossing_curve_is_proven_whichever_way_it_runs
