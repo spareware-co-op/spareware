@@ -77,7 +77,7 @@ use geom_bvh::{Aabb, Entry};
 use geom_intersect::curve::{curves, curves_over};
 use geom_intersect::project::{Projection, project_curve};
 use geom_intersect::solve::Reason;
-use geom_intersect::{IntersectError, Item, ParamBox, Unresolved};
+use geom_intersect::{IntersectError, Item, ParamBox, Seam, Unresolved};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, P3};
@@ -90,7 +90,7 @@ use crate::common::{CommonBlock, common_blocks};
 use crate::distance::{Carriers, floor_at};
 use crate::face::{self, FaceInfo, SectionEdge};
 use crate::merge::merge_clusters;
-use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, split};
+use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, order_on, split};
 use crate::rule::{
     CoincidenceChain, Contact, ContactError, EPS_FIT, NearContact, REFINEMENTS, Verdict, decide,
     greater, judge, lesser,
@@ -485,8 +485,10 @@ struct Deferred {
 fn covered(
     arr: &Arrangement,
     region: &Deferred,
+    (sa, sb): (Seam, Seam),
     splits: &[SplitEdge],
     common: &[CommonBlock],
+    across: &[(usize, usize, Interval)],
     meter: &mut WorkMeter<'_>,
 ) -> Result<bool, BuildError> {
     let (a, b) = region.edges;
@@ -500,16 +502,32 @@ fn covered(
             .ok_or(BuildError::Missing(Entity::Edge(e)))
     };
     let (curve_a, curve_b) = (curve(a)?, curve(b)?);
-    let on_a = held(s, (a, b), splits, common, |part| {
-        let met = curves_over(curve_a, part, curve_b, (t.lo(), t.hi()), meter)?;
-        Ok(!met.items().is_empty())
+    // On a whole turn the other edge's span may run past its window's end (decision 32.104), and
+    // `curves_over` takes a box inside the two domains: it is asked stretch by stretch.
+    let on_a = held((s, sa), (a, b), splits, common, across, |part| {
+        for other in sb.spans(t).into_iter().flatten() {
+            if !curves_over(curve_a, part, curve_b, other, meter)?
+                .items()
+                .is_empty()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     })?;
     if !on_a {
         return Ok(false);
     }
-    held(t, (b, a), splits, common, |part| {
-        let met = curves_over(curve_b, part, curve_a, (s.lo(), s.hi()), meter)?;
-        Ok(!met.items().is_empty())
+    held((t, sb), (b, a), splits, common, across, |part| {
+        for other in sa.spans(s).into_iter().flatten() {
+            if !curves_over(curve_b, part, curve_a, other, meter)?
+                .items()
+                .is_empty()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     })
 }
 
@@ -518,18 +536,32 @@ fn covered(
 /// Only a common block's members are counted. A piece runs forward from its first pave to its
 /// last, or, round a closed edge's seam, from its last pave to the domain's end and on from the
 /// start to its first: the span reaches into it past the one pave or before the other. A piece
-/// with no paves, a whole closed edge, is in no block and holds nothing.
+/// with no paves, a whole closed edge, is in no block and holds nothing. On a whole turn the span
+/// and the last pave may run past the end (decision 32.104): the span is asked stretch by stretch
+/// of the domain it covers, and a last pave past the end leaves the piece round the join only the
+/// room from where it ends, read modulo the turn, to the first pave.
 ///
 /// A span's end is the edge of the last box its region was found in, which can straddle the pave
 /// where the meeting ends without the meeting passing it. So where the span straddles one pave of
 /// a piece in no block and ends inside the piece, it reaches into the piece only if `meets` says
 /// so of the part past the pave's enclosure: the two edges meet there, or that part cannot be
-/// decided either. A span over the whole of such a piece, or inside it, reaches into it.
+/// decided either. A span over the whole of such a piece, or inside it, reaches into it. Each
+/// stretch is read so on its own, so a part past a pave is never asked across the join: a span
+/// that straddles a pave there and ends inside the piece is in the piece.
+///
+/// A vertex on the seam itself has a box at each end of the domain: its pave holds the one at the
+/// start, and `across` the one at the end, as (edge, vertex, box). Its enclosure is both, so a
+/// span across the join that passes both straddles it, and each stretch leaves the box on its own
+/// side out: on the stretch to the domain's end, a piece ending at the vertex is asked from where
+/// the stretch starts inside it to the box at the end, and on the stretch from the start, a piece
+/// starting there from the box at the start to where the stretch ends. A stretch inside the box at
+/// the end reaches no piece, as one inside any pave's enclosure.
 fn held<F>(
-    t: Interval,
+    (t, seam): (Interval, Seam),
     (edge, other): (usize, usize),
     splits: &[SplitEdge],
     common: &[CommonBlock],
+    across: &[(usize, usize, Interval)],
     mut meets: F,
 ) -> Result<bool, BuildError>
 where
@@ -548,6 +580,19 @@ where
     // meets a pave's enclosure at its edge does not pass it, at either end (as a span starting at
     // the domain's start, where a seam pave's enclosure starts).
     let before = |a: f64, b: f64| a < b;
+    let (start_of_domain, end) = seam.domain();
+    let stretches = seam.spans(t);
+    // A seam pave's box at the domain's end, with the two stretches of a span across the join.
+    let far_box = |pave: Pave| {
+        let [Some(ending), Some(starting)] = stretches else {
+            return None;
+        };
+        across
+            .iter()
+            .filter(|seen: &&(usize, usize, Interval)| seen.0 == edge)
+            .find(|seen: &&(usize, usize, Interval)| seen.1 == pave.vertex)
+            .map(|seen: &(usize, usize, Interval)| (seen.2, ending, starting))
+    };
     let mut any = false;
     for (k, piece) in splits.iter().enumerate() {
         if piece.source != edge {
@@ -556,47 +601,86 @@ where
         let (Some(from), Some(to)) = (piece.block.from, piece.block.to) else {
             continue;
         };
-        // The span ends past where the piece starts, and starts before where it ends.
-        let past_start = before(from.t.hi(), t.hi());
-        let before_end = before(t.lo(), to.t.lo());
-        let reaches = if piece.block.wraps {
-            past_start || before_end
+        // The first pave's enclosure, and whether the piece runs round the join: a last pave past
+        // the end leaves the piece round the join the room from where it ends, read modulo the
+        // turn, to the first pave, which does not run round the join.
+        let (start, wraps) = if piece.block.wraps && from.t.hi() > end {
+            ((start_of_domain, seam.wrapped(from.t.hi())), false)
         } else {
-            past_start && before_end
+            ((from.t.lo(), from.t.hi()), piece.block.wraps)
         };
-        if !reaches {
-            continue;
-        }
-        if paired(k) {
-            any = true;
-            continue;
-        }
-        // A piece of no block: the parts of it the span reaches only across a pave it straddles
-        // are decided; a span reaching in any other way is in the piece.
-        let (over_start, over_end) = (before(t.lo(), from.t.lo()), before(to.t.hi(), t.hi()));
-        let mut parts = Vec::new();
-        if piece.block.wraps {
-            for (reached, over, part) in [
-                (past_start, over_start, (from.t.hi(), t.hi())),
-                (before_end, over_end, (t.lo(), to.t.lo())),
-            ] {
-                if reached && !over {
+        for (lo, hi) in stretches.into_iter().flatten() {
+            // Across the join, the seam pave the stretch runs to, with its box at the domain's end:
+            // on the stretch to the end the pave the piece ends at, on the one from the start the
+            // pave it starts at.
+            let seam_pave = far_box(if hi == end { to } else { from });
+            // A stretch inside that box reaches no piece, as one inside any pave's enclosure.
+            if seam_pave.is_some_and(|(far, _, _)| !before(lo, far.lo())) {
+                continue;
+            }
+            // The stretch ends past where the piece starts, and starts before where it ends.
+            let past_start = before(start.1, hi);
+            let before_end = before(lo, to.t.lo());
+            let reaches = if wraps {
+                past_start || before_end
+            } else {
+                past_start && before_end
+            };
+            if !reaches {
+                continue;
+            }
+            if paired(k) {
+                any = true;
+                continue;
+            }
+            // Across the join, a span past the seam pave's enclosure: on the stretch to the
+            // domain's end the piece ending there is asked to the box at the end, where the stretch
+            // from the start runs past the pave's box there, and on the one from the start the
+            // piece starting there from the box at the start, where the stretch to the end starts
+            // before the box at the end. Each stretch is past the box on its own side already: the
+            // one to the end by the rule above, the one from the start by reaching the piece.
+            let seam_part = seam_pave.and_then(|(far, ending, starting)| {
+                if hi == end {
+                    before(to.t.hi(), starting.1)
+                        .then_some((lo, far.lo()))
+                        .filter(|_| before(start.1, lo))
+                } else {
+                    before(ending.0, far.lo()).then_some((start.1, hi))
+                }
+            });
+            if let Some(part) = seam_part {
+                if meets(part)? {
                     return Ok(false);
                 }
-                if reached {
-                    parts.push(part);
-                }
+                continue;
             }
-        } else if over_start && before(t.hi(), to.t.lo()) {
-            parts.push((from.t.hi(), t.hi()));
-        } else if over_end && before(from.t.hi(), t.lo()) {
-            parts.push((t.lo(), to.t.lo()));
-        } else {
-            return Ok(false);
-        }
-        for part in parts {
-            if meets(part)? {
+            // A piece of no block: the parts of it the stretch reaches only across a pave it
+            // straddles are decided; a stretch reaching in any other way is in the piece.
+            let (over_start, over_end) = (before(lo, start.0), before(to.t.hi(), hi));
+            let mut parts = Vec::new();
+            if wraps {
+                for (reached, over, part) in [
+                    (past_start, over_start, (start.1, hi)),
+                    (before_end, over_end, (lo, to.t.lo())),
+                ] {
+                    if reached && !over {
+                        return Ok(false);
+                    }
+                    if reached {
+                        parts.push(part);
+                    }
+                }
+            } else if over_start && before(hi, to.t.lo()) {
+                parts.push((start.1, hi));
+            } else if over_end && before(start.1, lo) {
+                parts.push((lo, to.t.lo()));
+            } else {
                 return Ok(false);
+            }
+            for part in parts {
+                if meets(part)? {
+                    return Ok(false);
+                }
             }
         }
     }
@@ -752,6 +836,15 @@ fn curve_of(arr: &Arrangement, e: usize) -> Result<CurveIx, BuildError> {
         .curve)
 }
 
+/// The seam edge `e`'s parameter is written on: its curve's, a whole turn's join no end.
+fn seam_of(arr: &Arrangement, e: usize) -> Result<Seam, BuildError> {
+    let curve = arr
+        .carriers
+        .curve(curve_of(arr, e)?)
+        .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+    Ok(Seam::of_curve(curve))
+}
+
 /// The parameter of vertex `v`, at grid point `p`, on edge `e`: the enclosure of its nearest
 /// point's parameter at the finest refinement.
 pub(crate) fn parameter(
@@ -761,16 +854,38 @@ pub(crate) fn parameter(
     p: P3,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Interval, BuildError> {
+    Ok(parameters(arr, e, v, p, meter)?.0)
+}
+
+/// [`parameter`], and for a vertex on the edge's seam the box the projection gives it at the
+/// domain's end: there it has a nearest point at both ends of the domain, and the first, in
+/// parameter order, is at the start.
+fn parameters(
+    arr: &Arrangement,
+    e: usize,
+    v: usize,
+    p: P3,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Interval, Option<Interval>), BuildError> {
     let ix = curve_of(arr, e)?;
     let curve = arr
         .carriers
         .curve(ix)
         .ok_or(BuildError::Missing(Entity::Edge(e)))?;
     match project_curve(curve, &coordinates(p), floor_at(REFINEMENTS), meter)? {
-        Projection::Points(found) => found
-            .first()
-            .and_then(|n| n.at.first().copied())
-            .ok_or(BuildError::NotIsolated { vertex: v, edge: e }),
+        Projection::Points(found) => {
+            let first = found
+                .first()
+                .and_then(|n| n.at.first().copied())
+                .ok_or(BuildError::NotIsolated { vertex: v, edge: e })?;
+            let (_, end) = Seam::of_curve(curve).domain();
+            let last = found
+                .get(1..)
+                .and_then(<[_]>::last)
+                .and_then(|n| n.at.first().copied())
+                .filter(|x: &Interval| x.hi() == end);
+            Ok((first, last))
+        }
         Projection::Set { .. } | Projection::NonIsolated { .. } => {
             Err(BuildError::NotIsolated { vertex: v, edge: e })
         }
@@ -948,6 +1063,8 @@ pub(crate) struct Stages {
     pub(crate) interferences: Vec<Interference>,
     deferred: Vec<Deferred>,
     touches: Vec<Touch>,
+    /// Each vertex on an edge's seam, with its box at the domain's end: (edge, vertex, box).
+    across: Vec<(usize, usize, Interval)>,
 }
 
 /// Vertex with vertex: the merge stage over pairs of different operands, and each edge's own ends
@@ -1031,6 +1148,7 @@ fn merge_vertices(
         interferences,
         deferred: Vec::new(),
         touches: Vec::new(),
+        across: Vec::new(),
     })
 }
 
@@ -1054,11 +1172,14 @@ fn vertex_edge(
             Ok(widened(d, w)?)
         })?;
         if let Contact::Touch(_) = contact {
-            let t = parameter(arr, e, v, p, meter)?;
+            let (t, far) = parameters(arr, e, v, p, meter)?;
             st.paves
                 .get_mut(e)
                 .ok_or(BuildError::Missing(Entity::Edge(e)))?
                 .push(Pave { vertex: v, t });
+            if let Some(far) = far {
+                st.across.push((e, v, far));
+            }
             st.interferences
                 .push(Interference::VertexEdge { vertex: v, edge: e });
         }
@@ -1172,7 +1293,10 @@ fn edge_edge(
 /// of `v`'s paves there, `own`: a pave proven apart from it whose stretch of the edge to it lies
 /// all within the contact radius of `v`. Where an enclosure of `own` meets the meeting's, the two
 /// are left to [`order`], which makes them one; a stretch that leaves the radius is the edge
-/// passing `v` again, and the meeting keeps its own pave.
+/// passing `v` again, and the meeting keeps its own pave. On a whole turn a meeting's box across
+/// the join runs past the domain's end (decision 32.104), and so does its stretch to a pave: that
+/// is no stretch of the edge, and the meeting keeps its own pave, which [`order_on`] reads modulo
+/// the turn.
 fn stands_for(
     carriers: &Carriers,
     vertices: &[PointGeom],
@@ -1188,8 +1312,12 @@ fn stands_for(
         return Ok(false);
     }
     let (p, w) = committed(carriers, vertices, v)?;
+    let (_, end) = curve.domain();
     for t in own {
         let stretch = (lesser(t.lo(), param.lo()), greater(t.hi(), param.hi()));
+        if stretch.1 > end {
+            continue;
+        }
         let b = curve.bound(stretch, meter).map_err(IntersectError::from)?;
         if judge(to_box(p, w, &face::box_of(b.lo, b.hi)?)?) == Verdict::Touch {
             return Ok(true);
@@ -1210,7 +1338,16 @@ fn finish(
 ) -> Result<Interfered, BuildError> {
     let mut ordered = Vec::with_capacity(st.paves.len());
     for (e, list) in st.paves.into_iter().enumerate() {
-        ordered.push(order(e, list)?);
+        // A closed edge is read on its curve's seam, so a vertex on its join, found once each side
+        // of it, is one pave (decision 32.104). An edge with its own ends stops at them, wherever
+        // they stand on its curve: one that leaves a vertex on a whole circle's join and comes back
+        // to it keeps a pave at each end, so it is read on an open domain.
+        let own = st.ends.get(e).is_some_and(Option::is_some);
+        ordered.push(if own {
+            order(e, list)?
+        } else {
+            order_on(e, list, seam_of(arr, e)?)?
+        });
     }
     let mut splits = Vec::new();
     for (edge, (list, own)) in ordered.iter().zip(&st.ends).enumerate() {
@@ -1241,7 +1378,9 @@ fn finish(
                 });
             }
         }
-        if corners.is_empty() && !covered(arr, region, &splits, &common, meter)? {
+        let seams = (seam_of(arr, a)?, seam_of(arr, b)?);
+        if corners.is_empty() && !covered(arr, region, seams, &splits, &common, &st.across, meter)?
+        {
             return Err(BuildError::Unresolved {
                 first: Entity::Edge(a),
                 second: Entity::Edge(b),
@@ -1293,4 +1432,120 @@ pub fn interfere(
     let mut out = finish(arr, st, meter)?;
     face::settle(arr, &mut out, faces, &pairs.faces, remaining, meter)?;
     Ok(out)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "test code: a failure should stop loudly"
+)]
+mod tests {
+    use super::*;
+    use crate::common::Proof;
+    use crate::pave::History;
+
+    /// A whole turn in half-turns: a circle's domain, closed at its join.
+    fn turn() -> Seam {
+        Seam::turns((0.0, 2.0))
+    }
+
+    fn iv(lo: f64, hi: f64) -> Interval {
+        Interval::new(lo, hi).unwrap()
+    }
+
+    /// A piece of edge `source` from the pave enclosed by `from` to the one enclosed by `to`.
+    fn piece(source: usize, from: (f64, f64), to: (f64, f64), wraps: bool) -> SplitEdge {
+        let pave = |(lo, hi): (f64, f64)| Pave {
+            vertex: 0,
+            t: iv(lo, hi),
+        };
+        SplitEdge {
+            block: PaveBlock {
+                edge: source,
+                from: Some(pave(from)),
+                to: Some(pave(to)),
+                wraps,
+            },
+            source,
+            history: History::Split,
+        }
+    }
+
+    fn block(members: &[usize]) -> CommonBlock {
+        CommonBlock {
+            members: members.to_vec(),
+            proof: Proof::Exact,
+        }
+    }
+
+    #[test]
+    fn a_last_pave_ending_on_the_join_leaves_the_piece_round_it_from_the_start() {
+        // Edge 0 is cut at 0.5 and by a pave whose enclosure ends exactly on the domain's end; the
+        // piece round the join, from that pave to 0.5, is one block with edge 1's piece. A span
+        // after the join and short of 0.5 reaches into that piece only.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.75, 2.0), false),
+            piece(0, (1.75, 2.0), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[1, 2])];
+        let got = held(
+            (iv(0.25, 0.375), turn()),
+            (0, 1),
+            &splits,
+            &common,
+            &[],
+            |_| Ok(true),
+        );
+        assert!(got.unwrap());
+    }
+
+    #[test]
+    fn a_span_inside_a_last_pave_past_the_join_reaches_no_piece() {
+        // The last pave's enclosure runs a quarter past the end, so the piece round the join starts
+        // at 0.25. A span across the join that ends before 0.25 lies inside the pave and reaches no
+        // piece, even the paired one round the join.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.75, 2.25), false),
+            piece(0, (1.75, 2.25), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[1, 2])];
+        let got = held(
+            (iv(1.875, 2.125), turn()),
+            (0, 1),
+            &splits,
+            &common,
+            &[],
+            |_| Ok(true),
+        );
+        assert!(!got.unwrap());
+    }
+
+    #[test]
+    fn a_span_short_of_the_join_does_not_reach_the_piece_round_it() {
+        // Edge 0 is cut at 0.5, 1 and by a pave past the end; only the piece from 0.5 to 1 is one
+        // block with edge 1, and the piece round the join is in none. A span inside that piece is
+        // held: it starts past where the piece round the join ends, so does not reach it.
+        let splits = [
+            piece(0, (0.5, 0.5), (1.0, 1.0), false),
+            piece(0, (1.0, 1.0), (1.75, 2.25), false),
+            piece(0, (1.75, 2.25), (0.5, 0.5), true),
+            piece(1, (0.0, 0.0), (1.0, 1.0), false),
+        ];
+        let common = [block(&[0, 3])];
+        let got = held(
+            (iv(0.625, 0.875), turn()),
+            (0, 1),
+            &splits,
+            &common,
+            &[],
+            |_| Ok(true),
+        );
+        assert!(got.unwrap());
+    }
 }

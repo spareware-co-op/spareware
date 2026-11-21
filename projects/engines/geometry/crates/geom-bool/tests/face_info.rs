@@ -597,3 +597,111 @@ fn a_point_whose_every_ray_passes_within_a_step_of_a_corner_is_refused() {
     let placed = flat.place(&b.arr.carriers, raw(-500, 0, 0), Bound::ZERO, m);
     assert_eq!(placed.unwrap(), Place::In);
 }
+
+/// A whole circle of radius R = 2^38 about the origin, from (R, 0), lying on a flat face whose
+/// bottom side runs from (R + 1 − kq, −k) to (R + 1 + q, 1), q = 7000: the side crosses the circle
+/// at y = −1/q, less than a double's step before the circle's join, and its pave there ends
+/// exactly on the domain's end, 2 (decision 32.104). The arc from that pave round the join and
+/// over the top to the side's other crossing lies in the face. It is placed by the middle of the
+/// stretch from the domain's start to the far pave, since the pave leaves no room before the join;
+/// taking that empty room for a point would place the join itself, on the side, and the arc would
+/// not be In.
+#[test]
+fn a_circle_s_arc_from_a_pave_ending_on_its_join_is_in_the_face() {
+    let (r, q) = (1_i64 << 38, 7000_i64);
+    let k = (2 * r + 20) / q + 1;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], r as f64, frame, (0.0, 2.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let (left, right) = (r + 1 - k * q, r + 1 + q);
+    let corners: Vec<usize> = [[left, -k], [right, 1], [right, r + 10], [left, r + 10]]
+        .iter()
+        .map(|&[x, y]| b.vertex(raw(x, y, 0), 1))
+        .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = interfere(
+        &b.arr,
+        default_remaining(),
+        &Exec::serial(),
+        &mut WorkMeter::new(Budget::of_work(1 << 40)),
+    )
+    .unwrap();
+    assert!(
+        out.paves[round].iter().any(|p| p.t.hi() == 2.0),
+        "{:?}",
+        out.paves[round]
+    );
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}
+
+/// A whole circle of radius 1105 steps about the origin, from (1105, 0), lying on a flat face whose
+/// bottom side is level a step below the circle's join, at y = −1, and runs on well past the circle
+/// at both ends. The side crosses the circle a step of arc before its join and again near
+/// (−1105, −1), so the circle's last pave ends a step of arc short of the domain's end, 2. The arc
+/// from that pave round the join and over the top to the other crossing lies in the face; the arc
+/// below the side does not (issue #1094). The room the last pave leaves before the join is a step
+/// of arc long, so a point taken in it lies within a step of the side, and would place the arc On
+/// the side. The side between the crossings and the circle's arcs share their two vertices, so
+/// they are also asked whether they are one stretch of curve, and the circle's few steps before
+/// the join are near-level seen from the side's middle.
+#[test]
+fn a_circle_s_arc_from_a_pave_a_step_before_its_join_is_in_the_face() {
+    let r = 1105_i64;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], r as f64, frame, (0.0, 2.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let corners: Vec<usize> = [
+        [-2 * r, -1],
+        [r + 1000, -1],
+        [r + 1000, 2 * r],
+        [-2 * r, 2 * r],
+    ]
+    .iter()
+    .map(|&[x, y]| b.vertex(raw(x, y, 0), 1))
+    .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = b.run().unwrap();
+    let last = out.paves[round]
+        .iter()
+        .map(|p| p.t.hi())
+        .fold(0.0_f64, f64::max);
+    assert!(1.999 < last && last < 2.0, "{:?}", out.paves[round]);
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}
+
+/// A whole circle of radius 100 about the origin whose domain starts half a turn round, from 1 to
+/// 3, so its join is at (−100, 0), lying on a flat face whose right side, at x = 10, crosses it
+/// near t = 1.53 and t = 2.47. The arc from the upper crossing round the join to the lower one
+/// lies in the face; the arc through (100, 0) does not. The room after the join starts at the
+/// domain's start, 1: read from 0, that room would be a half-turn longer, and the middle of the gap
+/// would fall back to about 0, outside the domain, where no point of the circle can be placed.
+#[test]
+fn a_circle_s_arc_across_a_join_away_from_zero_is_in_the_face() {
+    let r = 100_i64;
+    let mut b = Build::default();
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0; 3], (r * S) as f64, frame, (1.0, 3.0)).unwrap();
+    let round = b.edge(CurveKind::Circle(circle), None, 0);
+    let corners: Vec<usize> = [[-2 * r, -2 * r], [10, -2 * r], [10, 2 * r], [-2 * r, 2 * r]]
+        .iter()
+        .map(|&[x, y]| b.vertex(p(x, y, 0), 1))
+        .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 1);
+    let out = b.run().unwrap();
+    assert_eq!(out.paves[round].len(), 2, "{:?}", out.paves[round]);
+    let arc: Vec<usize> = (0..out.splits.len())
+        .filter(|&s| out.splits[s].source == round && out.splits[s].block.wraps)
+        .collect();
+    assert_eq!(arc.len(), 1, "{:?}", out.splits);
+    assert_eq!(out.faces[face].in_blocks, arc);
+}

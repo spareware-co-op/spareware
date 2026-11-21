@@ -12,7 +12,8 @@
 //! - **One order.** [`Intersection::new`] sorts the items by kind, then by their enclosure on the
 //!   parameters: lower corner, then upper corner, coordinate by coordinate, compared exactly
 //!   (12.15). Two items of one kind whose enclosures overlap are refused: distinct items are
-//!   disjoint, so the order is total.
+//!   disjoint, so the order is total. Where a method gives the seams, an unknown on a whole turn
+//!   is read modulo the turn (decision 32.104).
 //! - **Nothing unproven is called certified.** [`Coverage::TopologyCertified`] with a flagged item
 //!   is refused: a flagged region is what such a result does not have.
 //! - **One shape of box.** Every item of an intersection has as many unknowns as the pair, and a
@@ -39,6 +40,7 @@ use geom_num::interval::Interval;
 use geom_num::{Exactness, Steps};
 use geom_run::{Usage, WorkMeter};
 
+use crate::curve::Seam;
 use crate::error::IntersectError;
 
 /// The most unknowns a pair has: surface with surface.
@@ -119,6 +121,23 @@ impl ParamBox {
             .iter()
             .zip(other.spans())
             .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+    }
+
+    /// Whether the two boxes share a point, each unknown read on its seam: on a whole turn modulo
+    /// the turn (decision 32.104). An unknown past the seams given is read on an open domain.
+    pub(crate) fn meets_on(
+        &self,
+        other: &ParamBox,
+        seams: &[Seam],
+    ) -> Result<bool, IntersectError> {
+        let mut all = true;
+        for (k, (a, b)) in self.spans().iter().zip(other.spans()).enumerate() {
+            all &= match seams.get(k) {
+                Some(seam) => seam.meets(*a, *b)?,
+                None => a.lo() <= b.hi() && b.lo() <= a.hi(),
+            };
+        }
+        Ok(all)
     }
 
     /// Whether this box starts, in the first unknown, at or before `other` ends there.
@@ -408,9 +427,27 @@ impl Intersection {
     /// or a certified topology with a flagged region. The meter's stop, as
     /// [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`].
     pub fn new(
+        items: Vec<Item>,
+        coverage: Coverage,
+        diagnostics: Vec<Diag>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Intersection, IntersectError> {
+        Intersection::on(items, coverage, diagnostics, &[], meter)
+    }
+
+    /// [`Intersection::new`] with each unknown read on its seam, the canonical first operand's
+    /// first: on a whole turn two enclosures that meet modulo the turn meet (decision 32.104), so
+    /// two items of one kind that do are refused. An unknown past the seams given is read on an
+    /// open domain, as [`Intersection::new`] reads every one.
+    ///
+    /// # Errors
+    ///
+    /// Those of [`Intersection::new`].
+    pub fn on(
         mut items: Vec<Item>,
         coverage: Coverage,
         diagnostics: Vec<Diag>,
+        seams: &[Seam],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Intersection, IntersectError> {
         meter.charge(u64::try_from(items.len()).unwrap_or(u64::MAX))?;
@@ -436,7 +473,27 @@ impl Intersection {
                 .take_while(|o| o.rank() == item.rank() && o.at().starts_within(item.at()))
             {
                 meter.charge(1)?;
-                if item.at().meets(other.at()) {
+                if item.at().meets_on(other.at(), seams)? {
+                    return Err(IntersectError::Internal);
+                }
+            }
+            // A box that reaches the end of a whole turn in the first unknown goes on past it, and
+            // there meets, modulo the turn, the boxes of its kind the sort put first.
+            let Some(past) = seams
+                .first()
+                .zip(item.at().spans().first())
+                .and_then(|(seam, x)| seam.past_end(*x))
+            else {
+                continue;
+            };
+            let earlier = items.get(..i).unwrap_or_default();
+            for other in earlier
+                .iter()
+                .filter(|o| o.rank() == item.rank())
+                .take_while(|o| o.at().spans().first().is_some_and(|x| x.lo() <= past))
+            {
+                meter.charge(1)?;
+                if item.at().meets_on(other.at(), seams)? {
                     return Err(IntersectError::Internal);
                 }
             }
