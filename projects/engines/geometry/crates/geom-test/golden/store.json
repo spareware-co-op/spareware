@@ -314,9 +314,15 @@
               "kind": "corpus",
               "piece": "issue 1068 (decision 32.104)",
               "why": "intersect/surface_torus/typical's results only (inputs unchanged): line_tori's lines run along x through each torus's centre, so each meets its torus in four points, the two on one side of the axis at u = 0, the torus's join, and the two outer ones at v = 0, the tube's join (of the 256 items, 128 have u on a join, 128 v, 64 both). The box of such a coordinate starts a hair before the join and ends a hair after it. Under decision 32.104 it is moved by the turn to start in the window and kept whole, ending past the window's end by at most 4.4e-16 (the move by the turn rounds out to the doubles beside the end), read modulo the turn; before, it was cut to the window at the join, from 0 to its tiny far end. So 192 items' u or v spans moved, each new span holding the old one modulo the turn. Every other part of every result is the same text before and after: each item's t span, box in space, contact and class, and each result's coverage, diagnostics and work count; no point added or lost"
+            },
+            {
+              "sha256": "430061f804ffa12b7d5044738a5ea8a75baa8517f83253518dc77c6d4606f222",
+              "kind": "improvement",
+              "piece": "issue 1156",
+              "why": "A line meets a circle in its plane by its discriminant held to what both its forms enclose, B² − AC and A less the square of the line's distance from the centre times A (geom-intersect's line_conic, issue 1156), so intersect/curve_line_circle/typical's result digest moved; its input digest and every other row are unchanged. All 64 answers are the same items in the same grid boxes, with the same work, 384 units; every enclosure lies inside the one before, the widest 8.17e-11 wide before and 5.32e-13 now."
             }
           ],
-          "sha256": "430061f804ffa12b7d5044738a5ea8a75baa8517f83253518dc77c6d4606f222"
+          "sha256": "303855851d1dd4a5e21ddde04cf428cad58dab2db306f7079b33ed9f3c1b23f0"
         },
         {
           "id": "geom-nurbs/operations",

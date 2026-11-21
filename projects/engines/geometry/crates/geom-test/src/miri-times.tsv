@@ -65,6 +65,8 @@
 # GitHub measuring run 44854421238 (miri_measure=new on rows/phase5-subnormal-box-partials at the train's 625c4ebc9, miri_measure_tests naming the attack_g60 test #1143 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44860095410 (miri_measure=new on fix/nonisolated-common-blocks at 028670b0d, miri_measure_tests naming the common_blocks test #1152 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44867854907 (miri_measure=all on fix/coincidence-far-line at f20e72332, miri_measure_tests naming the 2 tests #1156 added and the route test it changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44870980124 (miri_measure=all on fix/coincidence-far-line at b187535bf, miri_measure_tests naming the route test #1156 changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring runs 44858275436 (miri_measure=new on fix/1142-meridian-arc at a5e1f0fbd, miri_measure_tests naming its 5 meridian_arc tests) and 44877463963 (miri_measure=new on measure/1142-pole at 81cd8ae18, the change reworked and merged with the train at 345b5bfa6, miri_measure_tests naming its 6 newer tests: 5 in meridian_arc and the half_plane pole test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -384,6 +386,7 @@ native-only over 828	geom-bool::near_contact_booleans	fifty_successive_near_cont
 55	geom-bool::near_contact_booleans	points_far_apart_have_no_candidate_pairs
 native-only over 828	geom-bool::near_contact_booleans	the_broad_phase_finds_every_pair_the_contact_rule_could_join_and_agrees_with_brute_force
 180	geom-bool::near_tangent_vertex	a_piece_inside_no_part_of_its_face_is_refused
+native-only over 749	geom-bool::near_tangent_vertex	a_side_from_far_out_to_the_centre_meets_the_rim_where_it_crosses
 218	geom-bool::near_tangent_vertex	a_side_leaving_a_rim_vertex_at_the_least_angle_meets_the_rim_once_there
 373	geom-bool::near_tangent_vertex	a_side_run_a_hair_into_the_disc_splits_the_triangle_at_the_rim
 291	geom-bool::near_tangent_vertex	a_split_that_would_lose_the_triangle_is_refused
@@ -1255,6 +1258,7 @@ native-only over 733	geom-intersect::attack_g163	a_crossing_on_a_whole_circle_s_
 3	geom-intersect::attack_g163	a_field_without_clipping_keeps_its_zero
 native-only over 561	geom-intersect::attack_g163	a_line_all_but_tangent_to_a_circle_is_answered
 6	geom-intersect::attack_g163	a_line_and_a_conic_in_closed_form_take_only_its_work
+3	geom-intersect::attack_g163	a_line_from_far_out_crosses_a_circle_within_a_step_of_where_it_does
 6	geom-intersect::attack_g163	a_line_meets_a_circle
 6	geom-intersect::attack_g163	a_line_meets_a_hyperbola_only_on_its_arc
 11	geom-intersect::attack_g163	a_line_meets_each_conic
@@ -1266,7 +1270,7 @@ native-only over 561	geom-intersect::attack_g163	a_line_all_but_tangent_to_a_cir
 native-only over 561	geom-intersect::attack_g163	a_near_copy_is_flagged_and_never_reported_apart
 22	geom-intersect::attack_g163	a_near_miss_is_nothing_and_a_near_crossing_is_two
 22	geom-intersect::attack_g163	a_pair_in_one_plane_of_space_is_proven
-248	geom-intersect::attack_g163	a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide
+244	geom-intersect::attack_g163	a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide
 15	geom-intersect::attack_g163	a_rational_curve_is_not_in_the_plane_of_its_weighted_points
 14	geom-intersect::attack_g163	a_ray_meets_what_lies_ahead_of_it
 5	geom-intersect::attack_g163	a_rotated_circle_is_met_on_its_own_turns
