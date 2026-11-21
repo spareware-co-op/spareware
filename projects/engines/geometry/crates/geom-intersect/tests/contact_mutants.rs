@@ -15,11 +15,12 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::contact::analyse;
+use geom_intersect::contact::{Reading, analyse};
 use geom_intersect::general::subdivide;
+use geom_intersect::result::PointContact;
 use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 25))
@@ -435,14 +436,12 @@ fn a_cylinder_on_a_plane_is_a_band_of_its_recorded_width() {
 }
 
 /// A cylinder of radius 4 about the axis a = (0, 1, 1)/√2, and a plane through its line at
-/// u = 1/2 sunk 1/16 into it, spanned by x and a tilted 1/1024 toward that line's normal e₂: the
-/// plane's normal is never at right angles to a, so no normal of the cylinder is parallel to it
-/// and there is no contact. The axis is tilted, so the box of a patch's normals is wider than the
-/// normals: at a floor of 1 subdivision cannot part them near the line, and solve parts them below
-/// the floor. With the cylinder first, the look then settles every pair of that cluster, none of
-/// which holds a branch's start, so nothing is left to read.
-#[test]
-fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
+/// u = 1/2 sunk 1/16 into it, spanned by x and a tilted 1/1024 toward that line's normal e₂, over
+/// `domain`: the plane's normal is never at right angles to a, so no normal of the cylinder is
+/// parallel to it and there is no contact. The axis is tilted, so the box of a patch's normals is
+/// wider than the normals: at a floor of 1 subdivision cannot part them near the line, and solve
+/// parts them below the floor.
+fn tube_under_a_shallow_plane(domain: ((f64, f64), (f64, f64))) -> (SurfaceKind, SurfaceKind) {
     let s = core::f64::consts::FRAC_1_SQRT_2;
     let r = 4.0;
     let h = 1.0 / 16.0;
@@ -462,10 +461,19 @@ fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
             e2.map(|t| (r - h) * t),
             [1.0, 0.0, 0.0],
             [0.0, s + tilt * e2[1], s + tilt * e2[2]],
-            ((-3.0, 3.0), (-3.0, 3.0)),
+            domain,
         )
         .unwrap(),
     );
+    (tube, shallow)
+}
+
+/// The cylinder and the shallow plane over [−3, 3]²: with the cylinder first, the look settles
+/// every pair of the cluster near the line, none of which holds a branch's start, so nothing is
+/// left to read.
+#[test]
+fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
+    let (tube, shallow) = tube_under_a_shallow_plane(((-3.0, 3.0), (-3.0, 3.0)));
     holds_to(
         (&tube, &shallow),
         (1.0, 1.0 / 16.0),
@@ -478,5 +486,140 @@ fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
                  why: TangentBand { width: Steps(8) } }]",
             ),
         ],
+    );
+}
+
+/// The same pair with the plane cut to [−x, x] × [−3, 0], x = √127/16. A point (p, q) of the plane
+/// is on the cylinder where p² + (63/16 + q/1024)² = 16, so at q = 0 the two crossings pass through
+/// the plane's top corners (±x, 0), and below it they lie wider than x: the cylinder meets the
+/// plane's domain at those two corners alone. Each corner is an end of two of the plane's edges, and
+/// the plane goes on past both, so both edges prove the corner and it is one start. A pair holding
+/// one corner then has one start, which no settled pair can have (its starts pair off): with the
+/// cylinder first, the look leaves that cluster undecided at the floor, never a crossing.
+#[test]
+fn a_plane_that_meets_a_cylinder_at_its_corners_alone_is_not_settled() {
+    let x = 127f64.sqrt() / 16.0;
+    let (tube, shallow) = tube_under_a_shallow_plane(((-x, x), (-3.0, 0.0)));
+    let plane = format!("(({}, {x}), (-3.0, 0.0))", -x);
+    holds_to(
+        (&tube, &shallow),
+        (1.0, 1.0 / 16.0),
+        [
+            (
+                60_555,
+                &format!(
+                    "[Undecided {{ first: ((0.1, 0.45000000000000007), (-2.0, 2.0)), \
+                     second: {plane}, why: UndecidedAtFloor {{ test: Exclusion }} }}, \
+                     Undecided {{ first: ((0.4876831054687501, 0.6468750000000001), (-2.0, 2.0)), \
+                     second: {plane}, why: UndecidedAtFloor {{ test: LoopFreedom }} }}]"
+                ),
+            ),
+            (
+                471_656,
+                &format!(
+                    "[Undecided {{ first: {plane}, second: ((0.44063720703125, 0.9), (-2.0, 2.0)), \
+                     why: TangentBand {{ width: Steps(8) }} }}]"
+                ),
+            ),
+        ],
+    );
+}
+
+/// The saddle z = (x² − y²)/8 over [−4, 4]², exact in Bézier form.
+fn saddle() -> SurfaceKind {
+    let basis = || Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    // The Bernstein coefficients of t² over [−4, 4], and the points they sit over.
+    let along = [(-4.0, 16.0), (0.0, -16.0), (4.0, 16.0)];
+    let mut net = Vec::new();
+    for (x, zx) in along {
+        for (y, zy) in along {
+            net.push([x, y, (zx - zy) / 8.0]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
+}
+
+/// A plane tangent to a saddle at its centre: solve proves the one zero, a crossing of four
+/// half-branches, but the branches counted ending on the cluster are not four (the cluster at a
+/// floor of 1/2 runs out to the saddle's edges), so the point is left undecided as a higher-order
+/// contact, never read as the crossing alone.
+#[test]
+fn a_saddle_on_a_plane_whose_branches_are_not_its_zeros_is_undecided() {
+    holds_to(
+        (&level(), &saddle()),
+        (1.0 / 2.0, 1.0 / 16.0),
+        [
+            (
+                1381,
+                "[Undecided { first: ((-9.0, 9.0), (-9.0, 9.0)), \
+                 second: ((0.0, 1.0), (0.0, 1.0)), why: HigherOrderContact }]",
+            ),
+            (
+                2756,
+                "[Undecided { first: ((0.4375, 1.0), (0.0, 0.4375)), \
+                 second: ((3.15087890625, 9.0), (-9.0, -3.375)), \
+                 why: UndecidedAtFloor { test: Exclusion } }, \
+                 Undecided { first: ((0.0, 0.4375), (0.0, 1.0)), \
+                 second: ((-9.0, -3.375), (3.15087890625, 9.0)), \
+                 why: UndecidedAtFloor { test: Exclusion } }, \
+                 Undecided { first: ((0.0, 1.0), (0.0, 1.0)), \
+                 second: ((-9.0, 4.978729248046875), (-9.0, 4.978729248046875)), \
+                 why: HigherOrderContact }]",
+            ),
+        ],
+    );
+}
+
+/// `attack_g171.rs`'s torus and cylinder whose curvatures agree in one direction: the contact
+/// cannot be isolated, so it is read from its cluster as a singular point with the two
+/// half-branches that leave it, its gap the cluster's reach on both sides of zero. Subdivision
+/// takes about 20 million units here, so it is read in one order only.
+#[test]
+fn a_cusp_on_a_torus_reads_its_gap_on_both_sides_of_zero() {
+    let unit = 1024.0;
+    let (major, minor) = (3.0 * unit, unit);
+    let (cos, sin) = (0.5f64, 3.0f64.sqrt() / 2.0);
+    let torus = SurfaceKind::Torus(
+        Torus::new(
+            [0.0, 0.0, 0.0],
+            major,
+            minor,
+            Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap(),
+            ((-0.25, 0.25), (1.0 / 3.0 - 0.25, 1.0 / 3.0 + 0.25)),
+        )
+        .unwrap(),
+    );
+    let at = [major + minor * cos, 0.0, minor * sin];
+    let n = [cos, 0.0, sin];
+    let half = 0.5f64.sqrt();
+    let w = [-half * sin, -half, half * cos];
+    let radius = 4.0 * unit;
+    let centre: [f64; 3] = core::array::from_fn(|i| at[i] - radius * n[i]);
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new(
+            centre,
+            radius,
+            Frame::new(n, w).unwrap(),
+            ((-0.2, 0.2), (-1.5 * unit, 1.5 * unit)),
+        )
+        .unwrap(),
+    );
+    let found = subdivide(&torus, &cylinder, 8.0, &mut meter()).unwrap();
+    let read = analyse(&torus, &cylinder, &found, 8.0, unit, &mut meter()).unwrap();
+    let gaps: Vec<_> = read
+        .iter()
+        .filter_map(|r| match r {
+            Reading::Point {
+                contact: PointContact::Singular { branches: 2 },
+                gap,
+                ..
+            } => Some(*gap),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(gaps.len(), 1, "{read:?}");
+    assert!(
+        gaps[0].hi() > 0.0 && gaps[0].lo() == -gaps[0].hi(),
+        "{read:?}"
     );
 }
