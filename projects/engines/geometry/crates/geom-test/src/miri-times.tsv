@@ -55,6 +55,7 @@
 # GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 # GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44836709494 (miri_measure=new on fix/onto-across-the-join at a48b1925a, the train merged in, every test without a row: the branch's 2 new tests, a held_regions and an attack_g165 test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -305,6 +306,7 @@ native-only over 564	geom-bool::held_regions	a_region_over_the_whole_of_a_short_
 native-only over 564	geom-bool::held_regions	a_region_over_the_whole_of_a_short_piece_past_an_overlap_s_end_is_refused
 native-only over 564	geom-bool::held_regions	a_region_overlapping_past_a_pave_into_a_piece_of_no_block_is_refused
 native-only over 587	geom-bool::held_regions	a_region_straddling_the_pave_at_an_overlap_s_end_stands
+native-only over 560	geom-bool::held_regions	a_region_straddling_the_pave_at_an_overlap_s_end_stands_before_a_later_cut
 native-only over 696	geom-bool::held_regions	a_region_whose_span_runs_back_across_the_join_only_into_the_seam_box_stands
 native-only over 696	geom-bool::held_regions	a_region_whose_span_runs_from_a_shared_piece_across_the_join_past_the_seam_pave_stands
 native-only over 567	geom-bool::held_regions	an_overlap_cut_into_two_blocks_by_a_vertex_stands
@@ -1369,6 +1371,7 @@ native-only over 586	geom-intersect::attack_g165	a_run_round_a_whole_turn_is_rea
 66	geom-intersect::attack_g165	a_stretch_between_cuts_is_kept_only_where_its_middle_is_proven_inside
 356	geom-intersect::attack_g165	a_whole_circle_across_a_plane_is_its_crossings_for_the_work_of_their_boxes
 124	geom-intersect::attack_g165	a_whole_circle_crossed_at_its_join_is_the_engines
+111	geom-intersect::attack_g165	a_whole_circle_crossing_whose_box_ends_on_its_join_is_the_engines
 20	geom-intersect::attack_g165	an_endless_half_plane_cuts_a_cylinder_in_a_half_circle
 47	geom-intersect::attack_g165	an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings
 27	geom-intersect::attack_g165	an_endless_plane_crossed_where_an_arcs_box_ends_is_two_proven_crossings
