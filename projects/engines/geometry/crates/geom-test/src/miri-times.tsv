@@ -61,6 +61,8 @@
 # GitHub measuring run 44836709494 (miri_measure=new on fix/onto-across-the-join at a48b1925a, the train merged in, every test without a row: the branch's 2 new tests, a held_regions and an attack_g165 test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44840340929 (miri_measure=new on rows/phase5-line-along-a-ruling at the train's f447154e2, miri_measure_tests naming the 4 line_along_a_ruling tests #1139 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44855412674 (miri_measure=new on fix/onto-across-the-join at 8c9f23a73, the train merged in, every test without a row: the branch's held_regions test and the train's attack_g60 test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44854421238 (miri_measure=new on rows/phase5-subnormal-box-partials at the train's 625c4ebc9, miri_measure_tests naming the attack_g60 test #1143 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1818,7 +1820,11 @@ native-only over 1098	geom-intersect::selfcross_seams	a_tube_closed_on_itself_is
 3	geom-intersect::shared_carrier	nothing_is_claimed_where_the_patches_only_touch
 3	geom-intersect::shared_carrier	nothing_is_claimed_where_two_patches_reach_the_same_pole_apart
 4	geom-intersect::shared_carrier	patches_of_one_carrier_share_the_common_parameters
-175	geom-intersect::side_at_the_bottom	a_side_a_step_above_the_lowest_point_is_the_engines
+25	geom-intersect::side_at_the_bottom	a_side_a_step_inside_touching_crosses_the_circle_twice
+6	geom-intersect::side_at_the_bottom	a_side_far_from_touching_keeps_its_interval_enclosure
+42	geom-intersect::side_at_the_bottom	a_side_on_the_touch_holds_the_whole_circle_or_one_flagged_region
+144	geom-intersect::side_at_the_bottom	crossings_closer_than_a_step_of_their_angle_are_one_flagged_region
+21	geom-intersect::side_at_the_bottom	the_sliver_beyond_a_side_a_step_outside_touching_ends_at_its_crossings
 91	geom-intersect::silhouette_rulings	a_ruling_inside_the_domain_stays_with_the_search
 12	geom-intersect::silhouette_rulings	every_eighth_of_a_turn_is_decided_exactly
 5	geom-intersect::silhouette_rulings	every_ruling_is_an_end_ruling_plus_whole_half_turns
