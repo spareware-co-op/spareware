@@ -339,3 +339,163 @@ fn a_parallel_line_an_ulp_below_a_plane_whose_enclosures_hold_zero_meets_nothing
     assert!(found.items().is_empty(), "{:?}", found.items());
     assert!(work <= 1, "{work}");
 }
+
+/// The plane z = 0 over the square (0, 10) by (0, 10), u along x and v along y.
+fn square() -> SurfaceKind {
+    let side = (0.0, 10.0);
+    SurfaceKind::Plane(
+        Plane::new([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], (side, side)).unwrap(),
+    )
+}
+
+/// The segment `o + t·d`, t in [0, 1], its `d` stored as given.
+fn stored(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
+    CurveKind::Line(Line::new(o, d, (0.0, 1.0)).unwrap())
+}
+
+/// `x` more `n` steps of the doubles.
+fn up(x: f64, n: u32) -> f64 {
+    (0..n).fold(x, |y, _| y.next_up())
+}
+
+/// `x` less `n` steps of the doubles.
+fn down(x: f64, n: u32) -> f64 {
+    (0..n).fold(x, |y, _| y.next_down())
+}
+
+/// Whether `span` holds `(lo, hi)`, each within 10⁻⁹ outside.
+fn holds(span: (f64, f64), (lo, hi): (f64, f64)) -> bool {
+    span.0 <= lo && lo - span.0 < 1e-9 && hi <= span.1 && span.1 - hi < 1e-9
+}
+
+/// Whether `found` is one overlap by identity over the part of the segment `t`, at `u` and `v`.
+fn is_the_part(found: &Intersection, t: (f64, f64), u: (f64, f64), v: (f64, f64)) -> bool {
+    match found.items() {
+        [
+            item @ Item::Overlap {
+                proof: Coincidence::Identical,
+                ..
+            },
+        ] => {
+            let spans = spans(item);
+            holds(spans[0], t) && holds(spans[1], u) && holds(spans[2], v)
+        }
+        _ => false,
+    }
+}
+
+#[test]
+fn a_segment_in_a_plane_past_its_domain_is_the_part_on_it() {
+    // Issue 1159: a segment lying in a plane that runs past an end of its domain lies on it only
+    // where its u and its v are both in the domain, and the overlap is that part, its t cut there
+    // and its u and v the part's. Before, t was always the whole [0, 1]. The issue's two, the
+    // first run backwards too; one whose v is cut by its u's end; one along the domain's edge
+    // u = 0, whose u does not change and so cuts nothing; and one on the general plane, its
+    // vectors neither whole nor square to each other, over (0, 1) by (0, 1), along a from u = −1
+    // to 1 at v = 1/2.
+    let general = SurfaceKind::Plane(Plane::new(C, A, B, ((0.0, 1.0), (0.0, 1.0))).unwrap());
+    let cases = [
+        (
+            segment([-5.0, 5.0, 0.0], [5.0, 5.0, 0.0]),
+            square(),
+            (0.5, 1.0),
+            (0.0, 5.0),
+            (5.0, 5.0),
+        ),
+        (
+            segment([5.0, 5.0, 0.0], [-5.0, 5.0, 0.0]),
+            square(),
+            (0.0, 0.5),
+            (0.0, 5.0),
+            (5.0, 5.0),
+        ),
+        (
+            segment([-5.0, -5.0, 0.0], [15.0, 15.0, 0.0]),
+            square(),
+            (0.25, 0.75),
+            (0.0, 10.0),
+            (0.0, 10.0),
+        ),
+        (
+            segment([-5.0, -5.0, 0.0], [15.0, 5.0, 0.0]),
+            square(),
+            (0.5, 0.75),
+            (5.0, 10.0),
+            (0.0, 2.5),
+        ),
+        (
+            segment([0.0, -5.0, 0.0], [0.0, 5.0, 0.0]),
+            square(),
+            (0.5, 1.0),
+            (0.0, 0.0),
+            (0.0, 5.0),
+        ),
+        (
+            segment(
+                step(step(C, -1.0, A), 0.5, B),
+                step(step(C, 1.0, A), 0.5, B),
+            ),
+            general,
+            (0.5, 1.0),
+            (0.0, 1.0),
+            (0.5, 0.5),
+        ),
+    ];
+    for (line, plane, t, u, v) in cases {
+        let (found, work) = meet(&line, &plane);
+        assert!(is_the_part(&found, t, u, v), "{:?}", found.items());
+        assert_eq!(work, 1);
+    }
+}
+
+#[test]
+fn a_segment_in_a_plane_past_a_corner_of_its_domain_is_nothing() {
+    // Issue 1159: a segment whose u and v each run onto the domain, but never both at once, passes
+    // a corner outside it and meets nothing. Before, u and v were cut on their own and the answer
+    // was an overlap over the whole segment. One past each corner, a unit off it, and one wholly
+    // outside, 25 off.
+    let cases = [
+        segment([-6.0, 5.0, 0.0], [4.0, 15.0, 0.0]),
+        segment([5.0, -6.0, 0.0], [15.0, 4.0, 0.0]),
+        segment([-6.0, 5.0, 0.0], [4.0, -5.0, 0.0]),
+        segment([5.0, 16.0, 0.0], [15.0, 6.0, 0.0]),
+        segment([-20.0, 5.0, 0.0], [5.0, 30.0, 0.0]),
+    ];
+    for line in cases {
+        let (found, work) = meet(&line, &square());
+        assert!(found.items().is_empty(), "{:?}", found.items());
+        assert_eq!(work, 0);
+    }
+}
+
+#[test]
+fn a_segment_in_a_plane_a_hair_past_a_corner_of_its_domain_is_nothing() {
+    // Issue 1159: every bound of an enclosure is strictly past its exact value, so a segment that
+    // passes a corner of the domain outside it by less than its rounding can still have each of
+    // its u and v land on the domain, and its t cut by the one to meet, or cross, its t cut by the
+    // other. It is not on the bounded plane: nothing. Past (10, 10) by 37 steps above v = 16,
+    // where the two cuts meet; past (0, 10) by 43 steps above v = 9, where they meet too; past
+    // (10, 10) by 38 steps, where they cross; and past (0, 10) by 24 steps above v = 9, where they
+    // do not meet but the part's u or v is past an end.
+    let cases = [
+        stored([0.0, up(16.0, 37), 0.0], [20.0, -12.0, 0.0]),
+        stored([-9.0, up(9.0, 43), 0.0], [18.0, 2.0, 0.0]),
+        stored([0.0, up(16.0, 38), 0.0], [20.0, -12.0, 0.0]),
+        stored([-1.0, up(9.0, 24), 0.0], [2.0, 2.0, 0.0]),
+    ];
+    for line in cases {
+        let (found, work) = meet(&line, &square());
+        assert!(found.items().is_empty(), "{:?}", found.items());
+        assert_eq!(work, 0);
+    }
+    // A hair short of the corner instead, on the domain by a step: the part there, however short.
+    let (found, _) = meet(
+        &stored([0.0, down(16.0, 1), 0.0], [20.0, -12.0, 0.0]),
+        &square(),
+    );
+    assert!(
+        matches!(found.items(), [Item::Overlap { .. }]),
+        "{:?}",
+        found.items()
+    );
+}
