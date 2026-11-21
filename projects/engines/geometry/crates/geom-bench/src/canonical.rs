@@ -813,6 +813,18 @@ impl Canonical for crate::inputs::mesh::Pair {
     }
 }
 
+impl Canonical for crate::inputs::mesh::Sweep {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::minkowski::Sum {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for crate::inputs::mesh::Layers {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);

@@ -1982,15 +1982,16 @@ pub mod mesh {
     use geom_mesh::boolean::{Outcome, boolean as combine};
     use geom_mesh::classify::{Classifier, Located};
     use geom_mesh::envelope::TriangleEnvelope;
-    use geom_mesh::exact::build::{Polygons, build};
-    use geom_mesh::exact::{ExactMesh, MeshError};
+    use geom_mesh::exact::build::{Polygons, Source, build};
+    use geom_mesh::exact::{ExactMesh, MeshError, Role};
     use geom_mesh::hull::{Hull, HullError};
+    use geom_mesh::minkowski::{Sum, minkowski as sum};
     use geom_mesh::model::{Decimate, ModelError, Modelled, Remesh};
     use geom_mesh::slice::{Contour, slice as cut};
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
-    use geom_num::grid::P3;
+    use geom_num::grid::{GridStep, P3};
     use geom_num::{NumError, Sign, distance};
-    use geom_op::{OpId, OpPath};
+    use geom_op::{NameId, OpId, OpPath};
     use geom_poly::winding::WindingTest;
     use geom_run::{Budget, Exec, WorkMeter};
 
@@ -2130,6 +2131,27 @@ pub mod mesh {
                 &[&pair.first, &pair.second],
                 &[WindingTest::unite()],
                 &step,
+                &Exec::serial(),
+                &mut meter,
+            )
+        });
+    }
+
+    /// `geom_mesh::minkowski::minkowski`: each tool swept over its shape, at the building step,
+    /// serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn minkowski(batch: &[crate::inputs::mesh::Sweep], out: &mut Vec<Result<Sum, MeshError>>) {
+        run(batch, out, |sweep| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let source = Source {
+                name: NameId::from_bytes([9; 16]),
+                role: Role::Face,
+                flags: 0,
+            };
+            sum(
+                &sweep.shape,
+                &sweep.tool,
+                (source, GridStep::Q0),
                 &Exec::serial(),
                 &mut meter,
             )

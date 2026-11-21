@@ -440,6 +440,8 @@ pub static OPS: &[Op] = &[
     Op { group: "mesh", name: "envelope", measures: "geom_mesh::TriangleEnvelope::contains", classes: T, prepare: |c| bind(inputs::mesh::envelope(c), kernels::mesh::envelope) },
     Op { group: "mesh", name: "decimate", measures: "geom_mesh::model::decimate::decimate", classes: T, prepare: |c| bind(inputs::mesh::decimate(c), kernels::mesh::decimate) },
     Op { group: "mesh", name: "remesh", measures: "geom_mesh::model::remesh::remesh", classes: T, prepare: |c| bind(inputs::mesh::remesh(c), kernels::mesh::remesh) },
+    // Minkowski sums (piece G150): a tool swept over a solid, convex and not.
+    Op { group: "mesh", name: "minkowski", measures: "geom_mesh::minkowski::minkowski", classes: T, prepare: |c| bind(inputs::mesh::minkowski(c), kernels::mesh::minkowski) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },

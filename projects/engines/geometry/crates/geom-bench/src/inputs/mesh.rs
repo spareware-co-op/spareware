@@ -4,7 +4,9 @@
 //!
 //! For point location (piece G147), that field closed into a solid, with points in its box; for
 //! booleans (piece G148), two small prisms that cross; for slicing (piece G149), that solid and
-//! level planes; for hulls, points of a lattice. For
+//! level planes; for hulls, points of a lattice; for Minkowski sums (piece G150), such a prism and a
+//! small tetrahedron, the first prism's top folded down and the rest up, so both of the sum's paths
+//! run. For
 //! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
@@ -59,6 +61,15 @@ pub struct Pair {
     pub first: ExactMesh,
     /// The other, of the same ground plan and other heights.
     pub second: ExactMesh,
+}
+
+/// What `geom_mesh::minkowski::minkowski` takes.
+#[derive(Clone, Debug)]
+pub struct Sweep {
+    /// A closed solid, convex or not.
+    pub shape: ExactMesh,
+    /// A small convex solid, swept over it.
+    pub tool: ExactMesh,
 }
 
 /// The planes of one [`Layers`].
@@ -252,14 +263,29 @@ pub fn locate(class: Class) -> Vec<Probe> {
     })
 }
 
+/// The heights of a prism's top from `rng`, 4096 to 8191 steps, at its corners (0, 0), (1, 0),
+/// (0, 1) and (1, 1).
+fn tops(r: &mut SplitMix64) -> Option<[i64; 4]> {
+    let mut top = [0; 4];
+    for z in &mut top {
+        *z = 4096 + i64::try_from(r.next_u64() >> 52).ok()?;
+    }
+    Some(top)
+}
+
 /// One prism from `x` along x: a cell of side 4096 over a flat base, its top in two triangles at
 /// random heights.
 fn prism(r: &mut SplitMix64, x: i64) -> Option<ExactMesh> {
+    prism_of(tops(r)?, x)
+}
+
+/// The prism of [`prism`] with its top at the heights `top`, which meet on the diagonal from its
+/// first corner to its last.
+fn prism_of(top: [i64; 4], x: i64) -> Option<ExactMesh> {
     let mut vertices = Vec::with_capacity(8);
-    for (i, j) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+    for ((i, j), z) in [(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().zip(top) {
         let at = |z: i64| P3::new(x + i * 4096, j * 4096, z).ok().map(Corner::Grid);
-        let top = 4096 + i64::try_from(r.next_u64() >> 52).ok()?;
-        vertices.push(at(top)?);
+        vertices.push(at(z)?);
         vertices.push(at(0)?);
     }
     let faces: [&[u32]; 8] = [
@@ -311,6 +337,70 @@ pub fn boolean(class: Class) -> Vec<Pair> {
         Some(Pair {
             first: prism(&mut g, 0)?,
             second: prism(&mut g, 2048)?,
+        })
+    })
+}
+
+/// One tetrahedron from `rng`: the corner at the origin and one along each axis, 1024 to 2047
+/// steps out.
+fn tetrahedron(r: &mut SplitMix64) -> Option<ExactMesh> {
+    let mut leg = || i64::try_from(1024 + (r.next_u64() >> 54)).ok();
+    let (a, b, c) = (leg()?, leg()?, leg()?);
+    let vertices = [(0, 0, 0), (a, 0, 0), (0, b, 0), (0, 0, c)]
+        .into_iter()
+        .map(|(x, y, z)| P3::new(x, y, z).ok().map(Corner::Grid))
+        .collect::<Option<Vec<_>>>()?;
+    let polygons = Polygons {
+        vertices,
+        corners: vec![0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3],
+        loop_start: (0..=4_u32).map(|f| f.saturating_mul(3)).collect(),
+        face_loops: (0..=4).collect(),
+        face_run: alloc_zeros(4),
+        runs: vec![Source {
+            name: NameId::from_bytes([2; 16]),
+            role: Role::Face,
+            flags: 0,
+        }],
+        face_plane: Vec::new(),
+        edge_plane: Vec::new(),
+        corner_prop: Vec::new(),
+        props: PropTable::default(),
+        face_dev: Vec::new(),
+        class: Exactness::Exact,
+    };
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    build(&polygons, &Exec::serial(), &mut meter).ok()
+}
+
+/// A prism and a tetrahedron swept over it, for `geom_mesh::minkowski::minkowski`. The first
+/// prism's top folds down, so its sum is the union of the sums of every pair of triangles; every
+/// other prism's top folds up, which makes it convex and its sum one hull. One union takes about
+/// 200 times as long as one hull, so one in a batch keeps the benchmark inside a count gate's part.
+#[must_use]
+pub fn minkowski(class: Class) -> Vec<Sweep> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::minkowski", class);
+    batch_of(|n| {
+        let [a, b, c, d] = tops(&mut g)?;
+        // A ridge on the diagonal when its heights' sum is at least the other diagonal's.
+        let ridge = if a + d >= b + c {
+            [a, b, c, d]
+        } else {
+            [b, a, d, c]
+        };
+        let top = if n == 0 {
+            if a + d == b + c {
+                return None;
+            }
+            [ridge[1], ridge[0], ridge[3], ridge[2]]
+        } else {
+            ridge
+        };
+        Some(Sweep {
+            shape: prism_of(top, 0)?,
+            tool: tetrahedron(&mut g)?,
         })
     })
 }

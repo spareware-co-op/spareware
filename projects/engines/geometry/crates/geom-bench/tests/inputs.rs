@@ -2857,6 +2857,7 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("envelope", k::envelope, &m::envelope(Typical));
     all_ok("decimate", k::decimate, &m::decimate(Typical));
     all_ok("remesh", k::remesh, &m::remesh(Typical));
+    all_ok("minkowski", k::minkowski, &m::minkowski(Typical));
 }
 
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.

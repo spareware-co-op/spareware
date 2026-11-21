@@ -2432,6 +2432,21 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 &mut meter,
             )
         })),
+        ("mesh", "minkowski") => fold(inputs::mesh::minkowski(class).iter().map(|sweep| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let source = geom_mesh::exact::build::Source {
+                name: geom_op::NameId::from_bytes([9; 16]),
+                role: geom_mesh::exact::Role::Face,
+                flags: 0,
+            };
+            geom_mesh::minkowski::minkowski(
+                &sweep.shape,
+                &sweep.tool,
+                (source, geom_num::grid::GridStep::Q0),
+                &geom_run::Exec::serial(),
+                &mut meter,
+            )
+        })),
         ("mesh", "hull") => fold(inputs::mesh::hull(class).iter().map(|points| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::hull::Hull::of(points, &mut meter)
