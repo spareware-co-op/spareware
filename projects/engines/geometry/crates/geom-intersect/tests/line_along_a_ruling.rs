@@ -56,6 +56,16 @@ fn cone(c: [f64; 3], r0: f64, k: f64, f: Frame<3>) -> SurfaceKind {
     SurfaceKind::Cone(Cone::new(c, r0, k, f, ((0.0, 2.0), (-300.0, 300.0))).unwrap())
 }
 
+/// The cylinder about `c` of radius `r`, a whole turn and `v` along its axis.
+fn cylinder_over(c: [f64; 3], r: f64, f: Frame<3>, v: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Cylinder(Cylinder::new(c, r, f, ((0.0, 2.0), v)).unwrap())
+}
+
+/// The cone about `c` of radius `r0` at v = 0 and slope `k`, a whole turn and `v` along its axis.
+fn cone_over(c: [f64; 3], r0: f64, k: f64, f: Frame<3>, v: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Cone(Cone::new(c, r0, k, f, ((0.0, 2.0), v)).unwrap())
+}
+
 /// The line `o + t·d`, t in [−300, 300], as a plane's edge is.
 fn line(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
     CurveKind::Line(Line::new(o, d, (-300.0, 300.0)).unwrap())
@@ -98,6 +108,35 @@ fn along_all_of_it(found: &Intersection, u: f64, (v, w): (f64, f64)) {
                 panic!("{at:?}");
             };
             assert_eq!((t.lo(), t.hi()), (0.0, 1.0), "{at:?}");
+            assert!(near((turn.lo(), turn.hi()), u), "{at:?} against u = {u}");
+            let (lo, hi) = (height.lo(), height.hi());
+            assert!(lo <= v && v - lo < 1e-9, "{at:?} against v from {v}");
+            assert!(w <= hi && hi - w < 1e-9, "{at:?} against v to {w}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// The one overlap of `found`, by identity over the part of the segment from `first` to `last` at
+/// the turn `u`, from `v` to `w` (the lower first), each within 10⁻⁹ outside.
+fn along_part_of_it(found: &Intersection, (first, last): (f64, f64), u: f64, (v, w): (f64, f64)) {
+    match found.items() {
+        [
+            Item::Overlap {
+                at,
+                proof: Coincidence::Identical,
+                ..
+            },
+        ] => {
+            let [t, turn, height, ..] = at.spans() else {
+                panic!("{at:?}");
+            };
+            let (lo, hi) = (t.lo(), t.hi());
+            assert!(
+                lo <= first && first - lo < 1e-9,
+                "{at:?} against t from {first}"
+            );
+            assert!(last <= hi && hi - last < 1e-9, "{at:?} against t to {last}");
             assert!(near((turn.lo(), turn.hi()), u), "{at:?} against u = {u}");
             let (lo, hi) = (height.lo(), height.hi());
             assert!(lo <= v && v - lo < 1e-9, "{at:?} against v from {v}");
@@ -280,5 +319,123 @@ fn a_line_a_hair_off_parallel_is_still_the_engines() {
             ),
             Err(other) => panic!("{other:?}"),
         }
+    }
+}
+
+#[test]
+fn a_segment_along_a_cylinder_s_ruling_past_its_domain_is_the_part_on_it() {
+    // Issue 1153: a segment along a ruling that runs past an end of the cylinder's domain in v lies
+    // on it only where its v is in the domain, and the overlap is that part, its t cut there. Off
+    // the grid (32.107): the segment along the slant axis 192 from it, v from 0 to 3, against v in
+    // (1, 300) and (1, 2), and run backwards against (1, 300). On the grid (32.87's `Within`): the
+    // cylinder of radius 4 about z, (0, 4, −5) to (0, 4, 5) both ways and (0, 4, −5) to (0, 4, 15),
+    // against v in (0, 10).
+    let start = plus(APEX, 64.0, ACROSS);
+    let end = plus(start, 1.0, SLANT.1);
+    let slant = |v| cylinder_over(APEX, 192.0, frame(SLANT), v);
+    let upright = || cylinder_over([0.0; 3], 4.0, Frame::standard().unwrap(), (0.0, 10.0));
+    let cases = [
+        (
+            segment(start, end),
+            slant((1.0, 300.0)),
+            (1.0 / 3.0, 1.0),
+            0.25,
+            (1.0, 3.0),
+        ),
+        (
+            segment(start, end),
+            slant((1.0, 2.0)),
+            (1.0 / 3.0, 2.0 / 3.0),
+            0.25,
+            (1.0, 2.0),
+        ),
+        (
+            segment(end, start),
+            slant((1.0, 300.0)),
+            (0.0, 2.0 / 3.0),
+            0.25,
+            (1.0, 3.0),
+        ),
+        (
+            segment([0.0, 4.0, -5.0], [0.0, 4.0, 5.0]),
+            upright(),
+            (0.5, 1.0),
+            0.5,
+            (0.0, 5.0),
+        ),
+        (
+            segment([0.0, 4.0, 5.0], [0.0, 4.0, -5.0]),
+            upright(),
+            (0.0, 0.5),
+            0.5,
+            (0.0, 5.0),
+        ),
+        (
+            segment([0.0, 4.0, -5.0], [0.0, 4.0, 15.0]),
+            upright(),
+            (0.25, 0.75),
+            0.5,
+            (0.0, 10.0),
+        ),
+    ];
+    for (edge, surface, t, u, v) in cases {
+        let (found, work) = meet(&edge, &surface);
+        along_part_of_it(&found, t, u, v);
+        assert_eq!(work, 1);
+    }
+}
+
+#[test]
+fn a_segment_along_a_cone_s_ruling_past_its_domain_is_the_part_on_it() {
+    // Issue 1153 on a cone. Off the grid: the slant cone of slope 1 with its apex at APEX, and the
+    // segment along the ruling a quarter turn round from v = 4 to 8, against v in (5, 300) and
+    // (5, 7), and run backwards against (5, 300). On the grid: issue 1112's cone of start radius 16
+    // and slope 0.5 about z through (0, −4, 12), and (0, 4, −4) to (0, 8, 4), from v = −16 to −8,
+    // against v in (−12, 300) and (−14, −10).
+    let on = |a: f64, b: f64| segment(plus(APEX, a, RULING), plus(APEX, b, RULING));
+    let slant = |v| cone_over(APEX, 0.0, 1.0, frame(SLANT), v);
+    let upright = |v| cone_over([0.0, -4.0, 12.0], 16.0, 0.5, Frame::standard().unwrap(), v);
+    let side = || segment([0.0, 4.0, -4.0], [0.0, 8.0, 4.0]);
+    let cases = [
+        (
+            on(4.0, 8.0),
+            slant((5.0, 300.0)),
+            (0.25, 1.0),
+            0.25,
+            (5.0, 8.0),
+        ),
+        (
+            on(4.0, 8.0),
+            slant((5.0, 7.0)),
+            (0.25, 0.75),
+            0.25,
+            (5.0, 7.0),
+        ),
+        (
+            on(8.0, 4.0),
+            slant((5.0, 300.0)),
+            (0.0, 0.75),
+            0.25,
+            (5.0, 8.0),
+        ),
+        (
+            side(),
+            upright((-12.0, 300.0)),
+            (0.5, 1.0),
+            0.5,
+            (-12.0, -8.0),
+        ),
+        (
+            side(),
+            upright((-14.0, -10.0)),
+            (0.25, 0.75),
+            0.5,
+            (-14.0, -10.0),
+        ),
+    ];
+    for (edge, surface, t, u, v) in cases {
+        let (found, work) = meet(&edge, &surface);
+        along_part_of_it(&found, t, u, v);
+        assert_eq!(work, 1);
     }
 }
