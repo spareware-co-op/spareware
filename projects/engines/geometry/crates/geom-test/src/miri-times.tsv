@@ -60,6 +60,7 @@
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44836709494 (miri_measure=new on fix/onto-across-the-join at a48b1925a, the train merged in, every test without a row: the branch's 2 new tests, a held_regions and an attack_g165 test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44840340929 (miri_measure=new on rows/phase5-line-along-a-ruling at the train's f447154e2, miri_measure_tests naming the 4 line_along_a_ruling tests #1139 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44855412674 (miri_measure=new on fix/onto-across-the-join at 8c9f23a73, the train merged in, every test without a row: the branch's held_regions test and the train's attack_g60 test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -302,6 +303,7 @@ native-only over 550	geom-bool::common_blocks	halves_that_run_round_the_seam_are
 native-only over 550	geom-bool::held_regions	a_band_between_two_blocks_of_other_edges_is_refused
 116	geom-bool::held_regions	a_band_near_a_vertex_of_one_circle_only_is_refused
 native-only over 550	geom-bool::held_regions	a_band_needs_a_block_on_both_its_edges
+native-only over 565	geom-bool::held_regions	a_band_past_the_join_stands_in_the_piece_from_a_pave_ending_on_the_join
 native-only over 550	geom-bool::held_regions	a_band_stands_only_at_a_vertex_both_circles_pass_through
 native-only over 745	geom-bool::held_regions	a_copy_of_the_half_across_a_circle_s_seam_is_one_block_with_it
 native-only over 564	geom-bool::held_regions	a_region_ending_in_a_box_past_the_pave_of_a_piece_that_runs_to_the_seam_stands
@@ -8884,6 +8886,7 @@ native-only over 563	geom-surface::analytic	every_analytic_kind_keeps_the_contra
 native-only over 563	geom-surface::analytic	spheres_keep_their_normals_at_the_poles_and_tori_their_forms
 17	geom-surface::analytic	split_and_reverse_are_exact_and_refusals_typed
 4	geom-surface::analytic	transforms_change_kinds_explicitly
+76	geom-surface::attack_g60	a_box_a_few_subnormals_wide_has_partials_that_hold_the_true_ones
 206	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_down
 166	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::moved_up
 246	geom-surface::attack_g60	a_conversion_passes_within_its_deviation_either_way_and_fails_beyond::unmoved
