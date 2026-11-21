@@ -50,6 +50,7 @@
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring run 44838293103 (miri_measure=new on fix/seam-window-small-size at afa6aedb1, miri_measure_tests naming the 3 tests its own commit adds: 2 in attack_g163, 1 in split_round), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -426,6 +427,7 @@ native-only over 748	geom-bool::split_round	a_section_is_kept_only_where_it_is_i
 368	geom-bool::split_round	a_vertex_known_loosely_near_a_torus_band_s_steep_edge_is_refused
 152	geom-bool::split_round	a_vertex_near_a_cylinder_s_rim_whose_picture_may_cross_it_is_refused
 336	geom-bool::split_round	a_vertex_on_a_cylinder_s_side_is_placed
+169	geom-bool::split_round	a_window_across_a_cylinder_s_seam_a_step_to_the_unit_is_cut_out_without_a_search
 native-only over 573	geom-bool::split_round	a_window_across_a_cylinder_s_seam_is_cut_out
 native-only over 748	geom-bool::split_round	an_edge_through_a_cylinder_s_side_is_a_vertex_in_it
 252	geom-bool::split_round	coaxial_cylinders_of_one_radius_split_each_other
@@ -1226,6 +1228,7 @@ native-only over 561	geom-intersect::attack_g163	a_near_copy_is_flagged_and_neve
 248	geom-intersect::attack_g163	a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide
 15	geom-intersect::attack_g163	a_rational_curve_is_not_in_the_plane_of_its_weighted_points
 14	geom-intersect::attack_g163	a_ray_meets_what_lies_ahead_of_it
+14	geom-intersect::attack_g163	a_rim_and_an_arc_or_a_ruling_above_it_meet_nowhere_for_the_work_of_their_boxes
 6	geom-intersect::attack_g163	a_rotated_circle_is_met_on_its_own_turns
 4	geom-intersect::attack_g163	a_segment_and_a_ray_stop_where_they_stop
 3	geom-intersect::attack_g163	a_stop_stops
@@ -1245,6 +1248,7 @@ native-only over 1069	geom-intersect::attack_g163	a_whole_circle_s_search_takes_
 15	geom-intersect::attack_g163	an_infinite_line_cuts_a_curve_wherever_it_starts
 101	geom-intersect::attack_g163	an_inflection_on_a_line_is_of_higher_order
 native-only over 1069	geom-intersect::attack_g163	an_overlap_far_along_its_parameter_is_flagged_within_budget
+54	geom-intersect::attack_g163	arcs_as_wide_in_x_as_in_z_but_for_its_last_bit_are_solved_leaving_out_z
 6	geom-intersect::attack_g163	arcs_end_to_end_on_one_circle_touch_at_both_shared_ends
 8	geom-intersect::attack_g163	arcs_keep_only_the_crossings_on_them
 10	geom-intersect::attack_g163	arcs_of_one_circle_overlap_where_they_share_turns
