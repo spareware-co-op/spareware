@@ -8228,6 +8228,22 @@
       "reason": "grid_signs never fails: P3::new(0, 0, 0) is in range and orient3d on grid points never runs out of budget (its contract). Where it gives None, the mutant's path is the original's. Where it gives Some, c, a, b, the line's origin o and direction d are whole numbers below 2^40 in size, so c + a and c + b are exact and its two signs are those of d . (a x b) and (o - c) . (a x b), up to orient3d's orientation. The fallback, stored_signs, then has every factor 0 or in [1, 2^40), all tame, so it returns Some with the true signs of d . (a x b) and (c - o) . (a x b) (the enclosure's where it excludes zero, else the exact sum). Each pair of signs is zero in the same places, and the one caller, line_plane, reads only whether each is Zero. Neither path takes the meter, so no answer and no work moves."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace < with <= in on_stretch",
+      "line_text": "let (below, above) = (lo < v0, hi > v1);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only where lo == v0. lo is the lower bound of an enclosure of the line's v, strictly below its true lowest v, so all of the line is truly above v0 there: where the rate dz/s is proven apart from zero, the t of v0, enclosed, lies outside the segment, larger and smaller keep start and end, and the cut is the whole t, as the original answers. The mutant differs only where the rate's enclosure holds zero, where it returns None and the engine takes the pair: a line along a ruling has a rate only where its direction has a part along the axis, so that needs a part within a few steps of the least subnormal, 2^-1074, which only data of that size gives, nowhere near a model's coordinates. Who answers changes, not what is true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace > with >= in on_stretch",
+      "line_text": "let (below, above) = (lo < v0, hi > v1);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only where hi == v1. hi is the upper bound of an enclosure of the line's v, strictly above its true highest v, so all of the line is truly below v1 there: where the rate dz/s is proven apart from zero, the t of v1, enclosed, lies outside the segment, larger and smaller keep start and end, and the cut is the whole t, as the original answers. The mutant differs only where the rate's enclosure holds zero, where it returns None and the engine takes the pair: a line along a ruling has a rate only where its direction has a part along the axis, so that needs a part within a few steps of the least subnormal, 2^-1074, which only data of that size gives, nowhere near a model's coordinates. Who answers changes, not what is true."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/bernstein.rs",
       "mutant": "replace > with >= in BernsteinCurve<D>::clip",
       "line_text": "if t0 > t1 {",

@@ -890,8 +890,9 @@ fn along_ruling(
     let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
         return Ok(None);
     };
-    // Bounds that cross say the line stops short of the domain: no part of it is on the surface.
-    if from > to {
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
         return proven(Vec::new(), meter).map(Some);
     }
     let overlap = Item::Overlap {
@@ -1100,8 +1101,9 @@ fn on_ruling(
     let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
         return Ok(None);
     };
-    // Bounds that cross say the line stops short of the domain: no part of it is on the surface.
-    if from > to {
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
         return proven(Vec::new(), meter).map(Some);
     }
     let overlap = Item::Overlap {
@@ -1118,9 +1120,9 @@ fn on_ruling(
 /// The stretch of t, from `start` to `end`, over which a line along a ruling stands on the domain
 /// in v, `(v0, v1)` (issue 1153). Its height is z = oz + t·dz and its v is z/s, `s` the axial
 /// `factor`, so where its v, from `lo` to `hi`, runs past an end b of the domain, the stretch ends at
-/// t = (s·b − oz)/dz, enclosed, and its outer bound is taken. The bounds cross where the line stops
-/// short of the domain. `None` where an end is passed and the rate dz/s is not proven apart from
-/// zero.
+/// t = (s·b − oz)/dz, enclosed, and its outer bound is taken. Each bound is strictly past its exact
+/// value, so the bounds meet or cross only where the line stops short of the domain. `None` where
+/// an end is passed and the rate dz/s is not proven apart from zero.
 fn on_stretch(
     (start, end): (f64, f64),
     (lo, hi): (f64, f64),
