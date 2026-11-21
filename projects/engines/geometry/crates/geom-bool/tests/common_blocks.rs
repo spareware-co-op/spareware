@@ -5,7 +5,8 @@
 //! measured from the other line, and at the finest refinement (k = 8) a piece is apart when the
 //! line lies further than its radius, and touching when it lies within the contact radius of
 //! every point of the ball. Then a closed circle and its NURBS copy, cut into halves that share
-//! both their vertices, among them halves that run round the seam.
+//! both their vertices, among them halves that run round the seam, and into a quarter and three
+//! quarters, whose larger block is first measured from the circle's centre.
 
 #![allow(
     clippy::unwrap_used,
@@ -166,6 +167,19 @@ fn halves_that_run_round_the_seam_are_one_block() {
     for piece in [1, 3] {
         assert!(out.splits[piece].block.wraps, "{:?}", out.splits[piece]);
     }
+}
+
+/// The same cut at (1105, 0) and (0, 1105): a quarter and three quarters of each curve between the
+/// same two vertices (issue 1152). The three-quarter block's box is the whole circle's, so its
+/// first ball is centred on the circle's centre, from which every point of the other curve is as
+/// far: the projection leaves its nearest points undecided, which ended the run with `NotFinite`.
+/// Read as near, the piece is cut on, its halves' centres meet the other curve at isolated
+/// nearest points, and the two curves are two blocks of two, as when they are cut across.
+#[test]
+fn a_quarter_and_three_quarters_measured_from_the_centre_are_two_blocks() {
+    let out = closed_circle_and_copy([[1105, 0], [0, 1105]]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2], vec![1, 3]], "{:?}", out.common);
 }
 
 /// Three operands' edges between the same two points, on the axis, a quarter step above it and a

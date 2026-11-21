@@ -587,3 +587,62 @@ fn a_box_a_few_subnormals_wide_has_partials_that_hold_the_true_ones() {
         }
     }
 }
+
+/// Claim: over a box a few subnormals wide in v, the derivative bound in either direction is
+/// finite and holds the true partial (#1147). There the patch cut down to the box would scale its
+/// partial form in v by its degree over the box's width, past the doubles: both patches refused in
+/// v at 2⁻¹⁰⁷⁴, 17·2⁻¹⁰⁷⁴ and 10⁻³¹⁰. The polynomial patch's bounds are also tight: `S_v` is
+/// (0, 1, 0), and `S_u` is (3u², 0, 0), its x from 3/4 to 75/64 over u in [1/2, 5/8].
+#[test]
+fn a_box_a_few_subnormals_wide_has_a_derivative_bound_that_holds_the_true_partial() {
+    let sides = (Limit::FromRight, Limit::FromRight);
+    let us = (0.5, 0.625);
+    let holds = |b: &Bounds<3>, k: usize, lo: f64, hi: f64| b.lo[k] <= lo && hi <= b.hi[k];
+    let tight = |b: &Bounds<3>, k: usize, lo: f64, hi: f64| {
+        holds(b, k, lo, hi) && lo - b.lo[k] <= 1e-12 && b.hi[k] - hi <= 1e-12
+    };
+    for rational in [false, true] {
+        let s = cubic(rational);
+        for w in [f64::from_bits(1), f64::from_bits(17), 1e-310] {
+            for dir in [Direction::U, Direction::V] {
+                let why = format!("rational {rational}, v within {w:e}, {dir:?}");
+                let b = match s.derivative_bound((us, (-w, w)), dir, &mut meter()) {
+                    Ok(DerivativeBound::Bounded(b)) => b,
+                    other => panic!("{why}: {other:?}"),
+                };
+                let x = match dir {
+                    Direction::U => (0.75, 1.171_875),
+                    Direction::V => (0.0, 0.0),
+                };
+                let y = match dir {
+                    Direction::U => 0.0,
+                    Direction::V => 1.0,
+                };
+                for (k, (lo, hi)) in [(1, (y, y)), (2, (0.0, 0.0))] {
+                    assert!(holds(&b, k, lo, hi), "{why}: {b:?}");
+                    if !rational {
+                        assert!(tight(&b, k, lo, hi), "{why}: {b:?}");
+                    }
+                }
+                if !rational || dir == Direction::V {
+                    assert!(holds(&b, 0, x.0, x.1), "{why}: {b:?}");
+                    if !rational {
+                        assert!(tight(&b, 0, x.0, x.1), "{why}: {b:?}");
+                    }
+                } else {
+                    // The rational patch's x_u meets the point's own partial across the box.
+                    for u in [us.0, f64::midpoint(us.0, us.1), us.1] {
+                        let q = s
+                            .partials_over(((u, u), (0.0, 0.0)), sides, 1, &mut meter())
+                            .unwrap();
+                        let p = q[partial_index(1, 0).unwrap()][0];
+                        assert!(
+                            b.lo[0] <= p.hi() && p.lo() <= b.hi[0],
+                            "{why}: {b:?} at {u}: {p:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
