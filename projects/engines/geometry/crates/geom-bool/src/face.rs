@@ -213,7 +213,7 @@ fn key(i: usize) -> Result<u64, NumError> {
 }
 
 /// The grid box around the box `lo..hi`, whole steps outward.
-fn box_of(lo: [f64; 3], hi: [f64; 3]) -> Result<Box3, NumError> {
+pub(crate) fn box_of(lo: [f64; 3], hi: [f64; 3]) -> Result<Box3, NumError> {
     let [lx, ly, lz] = lo;
     let [hx, hy, hz] = hi;
     let min = P3::new(floor_ceil(lx)?.0, floor_ceil(ly)?.0, floor_ceil(lz)?.0)?;

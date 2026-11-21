@@ -528,6 +528,125 @@ fn a_side_run_a_hair_into_the_disc_splits_the_triangle_at_the_rim() {
     checked(&case, &out, &splitting);
 }
 
+/// The side a hair into the disc at R = 53 and |D| about 150, where the closed form holds its two
+/// crossings of the rim apart, both proven, in one grid box at V, the second about 0.013 steps
+/// from V (#1150). The contact rule makes both V. The crossing is V's pave on each edge, not a
+/// second one beside it, which would cut each into a piece from V to V, and the two are recorded as
+/// touching at V, as for a held region there: with the second pave the split refused the disc, and
+/// with one pave and no touch it orders the two at V by their tangents and refuses the triangle.
+#[test]
+fn two_proven_crossings_made_one_vertex_are_one_pave_and_a_touch() {
+    one_pave_and_a_touch(7, 159);
+}
+
+/// The same at R = 533 and |D| = 1,076,143, the seeded sweep's case at m = 23: the second crossing
+/// about 1.9e-6 steps from V, held apart once the closed form takes the exact discriminant.
+#[test]
+fn the_sweep_s_side_into_a_disc_of_radius_533_is_one_pave_and_a_touch() {
+    one_pave_and_a_touch(23, 1_076_143);
+}
+
+/// The inward case at `m` and `reach`: V, W, the centre and Q its only vertices, V one pave on the
+/// side and on the rim, the touch at V, and the split as [`checked`] holds a split to.
+fn one_pave_and_a_touch(m: i64, reach: i64) {
+    let case = rim_and_triangle(m, reach, true);
+    let out = case.build.run().unwrap();
+    assert_eq!(out.vertices.len(), 4, "{:?}", out.vertices);
+    let v = out.merged[case.v];
+    assert_eq!(
+        out.paves[case.side]
+            .iter()
+            .map(|p| p.vertex)
+            .collect::<Vec<_>>(),
+        [out.merged[case.v + 1], v]
+    );
+    let on_rim = out.paves[case.rim].iter().filter(|p| p.vertex == v).count();
+    assert_eq!(on_rim, 1, "{:?}", out.paves[case.rim]);
+    assert_eq!(
+        out.touches,
+        [Touch {
+            vertex: v,
+            edges: [case.rim, case.side]
+        }]
+    );
+    let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
+    checked(&case, &out, &splitting);
+}
+
+/// A rim that leaves its vertex V and comes back to it, a whole circle of radius 100 from V round
+/// to V, and a chord of another operand along its diameter, through V and the far side U: V is on
+/// the rim at both ends of its domain and keeps both paves there; the chord meets the rim at V,
+/// where both pass, as one pave on each and no touch, the two crossing there; and its meeting at
+/// U, proven apart from V, is a vertex of its own with a pave on each edge.
+#[test]
+fn a_rim_back_at_its_vertex_keeps_both_paves_and_a_meeting_apart_its_own() {
+    let mut build = Build::default();
+    let corner = build.vertex([100, 0], 0);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0, 0.0, 0.0], 100.0, frame, (0.0, 2.0)).unwrap();
+    let rim = build.edge(CurveKind::Circle(circle), Some([corner, corner]), 0);
+    let ends = [build.vertex([300, 0], 1), build.vertex([-300, 0], 1)];
+    let line = Line::new([300.0, 0.0, 0.0], [-600.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+    let chord = build.edge(CurveKind::Line(line), Some(ends), 1);
+    let out = build.run().unwrap();
+    let v = out.merged[corner];
+    // V, the chord's ends, and U, made last.
+    assert_eq!(out.vertices.len(), 4, "{:?}", out.vertices);
+    let u = 3;
+    let at = |e: usize| out.paves[e].iter().map(|p| p.vertex).collect::<Vec<_>>();
+    assert_eq!(at(rim), [v, u, v], "{:?}", out.paves[rim]);
+    assert_eq!(
+        at(chord),
+        [out.merged[ends[0]], v, u, out.merged[ends[1]]],
+        "{:?}",
+        out.paves[chord]
+    );
+    assert!(out.touches.is_empty(), "{:?}", out.touches);
+    let met: Vec<(usize, bool)> = out
+        .interferences
+        .iter()
+        .filter_map(|i| match i {
+            Interference::EdgeEdge { vertex, reused, .. } => Some((*vertex, *reused)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(met, [(v, true), (u, false)]);
+}
+
+/// A thin triangle of another operand with its corner V on a rim of radius 10^6 and its far side
+/// AB crossing the rim half a step from V, in a grid box that holds V: the contact rule makes that
+/// crossing V, the rim's pave of V stands for it, and AB, which did not pass through V, gets its
+/// first pave of V. The two cross at V rather than touch, so no touch is recorded.
+#[test]
+fn a_side_across_the_rim_by_a_corner_it_does_not_pass_is_its_pave_there_and_no_touch() {
+    let r = 1_000_000;
+    let mut build = Build::default();
+    let (_, rim) = build.disc([0, 0], r, 0);
+    let corner = build.vertex([0, r], 1);
+    let ends = [
+        build.vertex([1, r - 1000], 1),
+        build.vertex([0, r + 1000], 1),
+    ];
+    let (_, [_, far, _]) = build.triangle([corner, ends[0], ends[1]], 1);
+    let out = build.run().unwrap();
+    let v = out.merged[corner];
+    assert_eq!(out.vertices.len(), 3, "{:?}", out.vertices);
+    let at = |e: usize| out.paves[e].iter().map(|p| p.vertex).collect::<Vec<_>>();
+    assert_eq!(at(rim), [v], "{:?}", out.paves[rim]);
+    assert_eq!(
+        at(far),
+        [out.merged[ends[0]], v, out.merged[ends[1]]],
+        "{:?}",
+        out.paves[far]
+    );
+    assert!(out.touches.is_empty(), "{:?}", out.touches);
+    assert!(out.interferences.iter().any(|i| matches!(
+        i,
+        Interference::EdgeEdge { first, second, vertex, reused: true }
+            if (*first, *second, *vertex) == (rim, far, v)
+    )));
+}
+
 /// The reproducer of #900 with the edge stage's record of the touch taken away: the side and the
 /// rim are then ordered at V by their tangents, which put the side inside the rim while the
 /// arrangement has it outside, and every loop of the triangle runs a stretch of its boundary with

@@ -41,8 +41,10 @@
 //!   with [`BuildError::Unresolved`], and two paves whose order is not proven fail with
 //!   [`BuildError::Order`].
 //! - **A merge is handed on as made.** Two edges whose held meeting stands at a vertex they both
-//!   pass through are recorded as meeting there so ([`Interfered::touches`]), so that no later
-//!   stage reads in their tangents a crossing the contact rule has made that vertex.
+//!   pass through, or whose proven meeting the contact rule makes such a vertex apart from its
+//!   paves on them, are recorded as meeting there so ([`Interfered::touches`]), so that no later
+//!   stage reads in their tangents a crossing the contact rule has made that vertex. Such a proven
+//!   meeting is that vertex's pave on each edge, not a second one beside it.
 //! - **New vertices are certified against their carriers.** A vertex made where two edges cross
 //!   is the grid point nearest the meeting, proven within its bound of both curves, and refused
 //!   with [`crate::rule::CoincidenceChain`] when that bound passes the remaining one.
@@ -91,7 +93,7 @@ use crate::merge::merge_clusters;
 use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, split};
 use crate::rule::{
     CoincidenceChain, Contact, ContactError, EPS_FIT, NearContact, REFINEMENTS, Verdict, decide,
-    greater, judge,
+    greater, judge, lesser,
 };
 
 /// A vertex of an operand.
@@ -419,13 +421,15 @@ pub enum Interference {
     },
 }
 
-/// Two edges whose meeting near a vertex both pass through their intersection could not resolve,
-/// held and then accepted because it touches that vertex. The contact rule made the whole of it
-/// the vertex, so in the arrangement the two meet there and nowhere near it, and their tangents
-/// at the vertex describe the meeting before the merge, not after (11.4 step 2: the merged entity
-/// replaces its members in every later decision). Two whole lines or circles are held only where
-/// their closed form cannot tell their two crossings apart, or a tangency from them: made one
-/// vertex, they touch there and do not cross beyond it.
+/// Two edges whose meeting near a vertex both pass through the contact rule made that vertex: a
+/// region their intersection could not resolve, held and then accepted because it touches the
+/// vertex, or a proven meeting apart from the vertex's pave on an edge and within its contact
+/// radius all the way there (#1150). The contact rule made the whole of it the vertex, so in the
+/// arrangement the two meet there and nowhere near it, and their tangents at the vertex describe
+/// the meeting before the merge, not after (11.4 step 2: the merged entity replaces its members in
+/// every later decision). Two whole lines or circles whose two crossings their closed form cannot
+/// tell apart, or holds apart within the contact radius of the vertex, or a tangency from them:
+/// made one vertex, they touch there and do not cross beyond it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Touch {
     /// The vertex, by its index in [`Interfered::vertices`].
@@ -447,9 +451,9 @@ pub struct Interfered {
     pub ends: Vec<Option<[usize; 2]>>,
     /// What met what, lowest dimension first.
     pub interferences: Vec<Interference>,
-    /// The pairs of edges whose meeting their intersection could not resolve the contact rule
-    /// made a vertex both pass through: in the order the meetings were found, the pairs in index
-    /// order.
+    /// The pairs of edges whose meeting the contact rule made a vertex both pass through, as
+    /// [`Touch`] says: the proven meetings in the order they were found, then the held ones, the
+    /// pairs in index order.
     pub touches: Vec<Touch>,
     /// Every edge cut at its paves, in edge order, each piece with the edge it comes from.
     pub splits: Vec<SplitEdge>,
@@ -943,6 +947,7 @@ pub(crate) struct Stages {
     pub(crate) paves: Vec<Vec<Pave>>,
     pub(crate) interferences: Vec<Interference>,
     deferred: Vec<Deferred>,
+    touches: Vec<Touch>,
 }
 
 /// Vertex with vertex: the merge stage over pairs of different operands, and each edge's own ends
@@ -1025,6 +1030,7 @@ fn merge_vertices(
         paves,
         interferences,
         deferred: Vec::new(),
+        touches: Vec::new(),
     })
 }
 
@@ -1061,7 +1067,10 @@ fn vertex_edge(
 }
 
 /// Edge with edge: where two edges of different operands meet, a pave on each, at a vertex already
-/// on either if the meeting touches one, otherwise at a new vertex; undecided regions are held.
+/// on either if the meeting touches one, otherwise at a new vertex; undecided regions are held. A
+/// meeting made a vertex already on an edge, apart from its pave there but within its contact
+/// radius all the way to it ([`stands_for`]), is that pave; where both edges passed through the
+/// vertex, they touch there ([`Touch`]).
 fn edge_edge(
     arr: &Arrangement,
     st: &mut Stages,
@@ -1098,11 +1107,44 @@ fn edge_edge(
                             .push(new_vertex(carriers, [ca, cb], xyz, remaining, meter)?);
                         (st.vertices.len().saturating_sub(1), false)
                     };
-                    for (edge, param) in [(a, *s), (b, *t)] {
+                    // Made a vertex both edges already pass through, a meeting apart from its
+                    // pave on an edge but within its contact radius all the way there is that
+                    // pave, not a second one, and the two edges touch there (#1150).
+                    let (mut through, mut merged) = (true, false);
+                    for (edge, curve, param) in [(a, curve_a, *s), (b, curve_b, *t)] {
+                        let own: Vec<Interval> = st
+                            .paves
+                            .get(edge)
+                            .ok_or(BuildError::Missing(Entity::Edge(edge)))?
+                            .iter()
+                            .filter(|p: &&Pave| p.vertex == vertex)
+                            .map(|p: &Pave| p.t)
+                            .collect();
+                        through = through && !own.is_empty();
+                        if reused
+                            && stands_for(
+                                carriers,
+                                &st.vertices,
+                                (vertex, curve),
+                                &own,
+                                param,
+                                meter,
+                            )?
+                        {
+                            merged = true;
+                            continue;
+                        }
                         st.paves
                             .get_mut(edge)
                             .ok_or(BuildError::Missing(Entity::Edge(edge)))?
                             .push(Pave { vertex, t: param });
+                    }
+                    let touch = Touch {
+                        vertex,
+                        edges: [a, b],
+                    };
+                    if merged && through && !st.touches.contains(&touch) {
+                        st.touches.push(touch);
                     }
                     st.interferences.push(Interference::EdgeEdge {
                         first: a,
@@ -1126,6 +1168,36 @@ fn edge_edge(
     Ok(())
 }
 
+/// Whether a meeting at `param` on an edge of `curve`, made vertex `v` by the contact rule, is one
+/// of `v`'s paves there, `own`: a pave proven apart from it whose stretch of the edge to it lies
+/// all within the contact radius of `v`. Where an enclosure of `own` meets the meeting's, the two
+/// are left to [`order`], which makes them one; a stretch that leaves the radius is the edge
+/// passing `v` again, and the meeting keeps its own pave.
+fn stands_for(
+    carriers: &Carriers,
+    vertices: &[PointGeom],
+    (v, curve): (usize, &CurveKind<3>),
+    own: &[Interval],
+    param: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, BuildError> {
+    if own
+        .iter()
+        .any(|t| t.lo() <= param.hi() && param.lo() <= t.hi())
+    {
+        return Ok(false);
+    }
+    let (p, w) = committed(carriers, vertices, v)?;
+    for t in own {
+        let stretch = (lesser(t.lo(), param.lo()), greater(t.hi(), param.hi()));
+        let b = curve.bound(stretch, meter).map_err(IntersectError::from)?;
+        if judge(to_box(p, w, &face::box_of(b.lo, b.hi)?)?) == Verdict::Touch {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// The paves put in order, the edges split, the common blocks found, and every held region
 /// checked: it stands only where a common block covers it, or where it touches a vertex both
 /// edges pass through, as two edges tangent at a shared corner. Standing at such a vertex, it is
@@ -1146,7 +1218,7 @@ fn finish(
     }
     let pieces: Vec<PaveBlock> = splits.iter().map(|s: &SplitEdge| s.block).collect();
     let common = common_blocks(arr, &pieces, meter)?;
-    let mut touches = Vec::new();
+    let mut touches = st.touches;
     for region in &st.deferred {
         let (a, b) = region.edges;
         let shared: Vec<&Pave> = ordered
