@@ -318,11 +318,17 @@
             {
               "sha256": "430061f804ffa12b7d5044738a5ea8a75baa8517f83253518dc77c6d4606f222",
               "kind": "improvement",
+              "piece": "issue 1156",
+              "why": "A line meets a circle in its plane by its discriminant held to what both its forms enclose, B² − AC and A less the square of the line's distance from the centre times A (geom-intersect's line_conic, issue 1156), so intersect/curve_line_circle/typical's result digest moved; its input digest and every other row are unchanged. All 64 answers are the same items in the same grid boxes, with the same work, 384 units; every enclosure lies inside the one before, the widest 8.17e-11 wide before and 5.32e-13 now."
+            },
+            {
+              "sha256": "303855851d1dd4a5e21ddde04cf428cad58dab2db306f7079b33ed9f3c1b23f0",
+              "kind": "improvement",
               "piece": "issue 1155",
               "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so nine benchmarks' result digests moved; their input digests and every other row are unchanged. curve/helix_enclose and surface/torus_enclose: 192 and 256 of their 576 enclosures are inside the old ones, the rest the same. surface/torus_second_bound: the third coordinate of each of 64 mixed second partials of a torus about z, exactly 0, was enclosed by a subnormal each side, up to 2e-323, and is the point zero. surface/offset_point: 25 of its 192 coordinates, points in doubles, moved a double. intersect/natural_apex: the same 16 lines, each through the same apex along the same direction to the bit, the four at one apex listed in another order; their domain ends moved by up to 99 doubles about 1024 times the square root of 5 (14 nearer it, 11 farther, 7 the same; the farthest now 4.2e-11 from it, where it was 4.9e-11), and four height spans' ends short of the cones' end 1024 moved with them, by up to 9.1e-12. intersect/subdivide_patch, march_plate, march_poles and analyse_rest: 1,261 of 1,776, 340 of 608, 170 of 512 and 90 of 320 enclosures are inside the old ones and 458, 214, 328 and 179 the same; the searches read the tighter enclosures and so cut, step, refine and fit a few roundings apart, so 57, 54, 14 and 51 move across their old ones (by up to 1.2e-10, 1.8e-15, 5.0e-12 and 3.5e-16), and of march_plate's 64 fitted deviations 7 fell and 15 rose, by at most 1.1e-10 of themselves."
             }
           ],
-          "sha256": "05718431bfb4f3b4da96a519179d4997bb1bcca7006823511121a17ff866146f"
+          "sha256": "86eb11b66aeddc7d4876e2e253994dc91f3019370baaa1ac081ecced6f6b6adb"
         },
         {
           "id": "geom-nurbs/operations",

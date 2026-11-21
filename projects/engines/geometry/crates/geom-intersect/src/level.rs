@@ -496,7 +496,7 @@ fn span((a, b): (f64, f64)) -> Result<Interval, NumError> {
 
 /// `a` and `b` together: both hold one exact value, so their intersection does too (if rounding
 /// ever made them miss, the first is kept).
-fn meet(a: Interval, b: Interval) -> Result<Interval, NumError> {
+pub(crate) fn meet(a: Interval, b: Interval) -> Result<Interval, NumError> {
     let (lo, hi) = (larger(a.lo(), b.lo()), smaller(a.hi(), b.hi()));
     if lo <= hi {
         Interval::new(lo, hi)
