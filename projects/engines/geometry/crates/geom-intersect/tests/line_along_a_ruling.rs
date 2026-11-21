@@ -192,7 +192,8 @@ fn a_segment_along_a_cone_s_ruling_is_one_overlap() {
     // The issue's five piercing inputs, each a segment along a ruling of a cone about the z axis:
     // `f60001ff000201ff00ff030f00180026` on the cone of start radius 16 and slope 0.5;
     // `00ffff00fffffffffeffff03f8000000`, `00ffff20fffffffffeffff03f8000000` and
-    // `00ffff00fffffe03fefffd03f80043` on cones of slope zero, whose rulings run along the axis;
+    // `00ffff00fffffe03fefffd03f80043` on cones of slope zero, whose rulings run along the axis,
+    // each on the cone's join, u = 0, so held across it from just short of 2 (decision 32.104);
     // `000000010001ff0f00010001` from (0, 0, 4) to the apex at (0, 4, −4). Before, 826,784 to
     // 1,048,577 units a call of the target (flagged items, or the budget's stop).
     let issue: [(CurveKind<3>, SurfaceKind, f64, (f64, f64)); 5] = [
@@ -205,19 +206,19 @@ fn a_segment_along_a_cone_s_ruling_is_one_overlap() {
         (
             segment([-4.0, -4.0, 0.0], [-4.0, -4.0, -4.0]),
             cone([-8.0, -4.0, -4.0], 4.0, 0.0, Frame::standard().unwrap()),
-            0.0,
+            2.0,
             (0.0, 4.0),
         ),
         (
             segment([-4.0, -4.0, 128.0], [-4.0, -4.0, -4.0]),
             cone([-8.0, -4.0, -4.0], 4.0, 0.0, Frame::standard().unwrap()),
-            0.0,
+            2.0,
             (0.0, 132.0),
         ),
         (
             segment([-4.0, -4.0, 0.0], [-4.0, -4.0, -8.0]),
             cone([-8.0, -4.0, -12.0], 4.0, 0.0, Frame::standard().unwrap()),
-            0.0,
+            2.0,
             (4.0, 12.0),
         ),
         (

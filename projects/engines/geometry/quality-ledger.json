@@ -7316,22 +7316,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace > with >= in Seam::onto",
-      "line_text": "let moved = if self.closed && x.hi() > hi {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant moves a box ending exactly at hi a turn back, where it ends at lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace < with <= in Seam::onto",
-      "line_text": "} else if self.closed && x.hi() < lo {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant moves a box ending exactly at lo a turn on, where it ends at hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace > with >= in widest",
       "line_text": "if w > out {",
       "occurrences": 1,
@@ -8078,7 +8062,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((0.0, 1.0))",
-      "line_text": "let span = match &self.profile {",
+      "line_text": "let (lo, hi) = match &self.profile {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "whole serves only sweeps' early exit. Both sweeps then reach (0, 1), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
@@ -8086,7 +8070,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((-1.0, 0.0))",
-      "line_text": "let span = match &self.profile {",
+      "line_text": "let (lo, hi) = match &self.profile {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "whole serves only sweeps' early exit. Both sweeps then reach (−1, 0), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
@@ -8094,7 +8078,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((-1.0, 1.0))",
-      "line_text": "let span = match &self.profile {",
+      "line_text": "let (lo, hi) = match &self.profile {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "whole serves only sweeps' early exit. Both sweeps then reach (−1, 1), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
@@ -8978,14 +8962,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The loop keeps the widest side of the curve point's box. When w equals reach the mutant stores the same double, so the bound is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
-      "mutant": "replace < with <= in middle_of",
-      "line_text": "let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only where lo == hi. A block's paves are in proven order (pave::order keeps one after another only when last.t.hi() < pave.t.lo()), and a domain has a < b, so that happens only for a block round a closed curve's seam whose last pave's enclosure ends exactly at the domain's end. The stages give a seam point the parameter at the domain's start, an enclosure from a (the projection's, in the vertex stage), and flag a crossing at the seam rather than enclose it, so no pave ends at b; were one to, the mutant would place the seam point, a point of the block, in place of the middle of the stretch after it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
