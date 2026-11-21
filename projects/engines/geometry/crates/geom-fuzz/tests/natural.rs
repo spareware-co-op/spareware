@@ -393,6 +393,52 @@ fn a_side_parallel_to_a_cylinder_s_axis_costs_a_closed_form() {
     }
 }
 
+/// Issue 1155's input, stored in the target's `crashes` folder: two cones of slope 2 on parallel
+/// axes along (0.6, 0.8, 0), of start radius 256 and 0, whose centres differ by 320 square to the
+/// axis, so each end circle lies in the plane of an end of the other's domain and crosses the
+/// other's cut there, which 32.86 leaves to the engine. The engine's boxes were few, about 360 a
+/// circle, but each cost about 3,000 units: on this frame x̂'s x and y, ŷ's z and n̂'s z are
+/// exactly zero, and `tight` widened each exact zero over a norm that is not a point into a
+/// subnormal, so the arctangent of every extent took its dear path at every corner (4,042,400 of
+/// 4,153,564 units a call). A product with an exact zero, and an exact zero over a divisor clear
+/// of zero, are the point zero now (decision 32.109): 50,000 units a call.
+///
+/// With it, the SHA-256 of the Debug text of the answer's items, coverage and diagnostics, every
+/// field but its work, taken on this change's answer: the same two certified branches of the
+/// hyperbola as before, cut where the engine flags the corners, every number within 9e-13 of
+/// before's.
+const ZEROS_ON_A_FRAME_OFF_THE_GRID: [(&[u8], u128, &str); 1] = [(
+    &[
+        0x27, 0xff, 0xff, 0xaf, 0xff, 0xff, 0xaf, 0xff, 0xff, 0xff, 0xff, 0x7e, 0x73, 0x7e, 0x07,
+        0x27,
+    ],
+    50_000,
+    "22960ff6e48beabd01297baa6d6671266643845441df34cc9c748b36598a4c77",
+)];
+
+#[test]
+fn a_frame_s_exact_zeros_stay_exact_in_every_extent() {
+    for (data, most, digest) in ZEROS_ON_A_FRAME_OFF_THE_GRID {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let text = format!(
+            "{:?} {:?} {:?}",
+            answer.items(),
+            answer.coverage(),
+            answer.diagnostics()
+        );
+        let said = hex(sha256(text.as_bytes()));
+        assert!(
+            work <= most && said == digest,
+            "{work} units (at most {most}), answer {said}, on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
     let held = STILL_THE_ENGINES

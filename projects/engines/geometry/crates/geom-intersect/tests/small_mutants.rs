@@ -296,21 +296,23 @@ fn a_torus_splits_its_undecided_boxes_only_across_a_seam_they_reach_both_sides_o
     holds(&found, &NEAREST);
 }
 
+// The same points, bit for bit, as when the work was 2,583,747, 3,026,565, 2,812,021 and
+// 2,812,021, before a product with an exact zero came back the point zero (issue #1155).
 const NEAREST: [(u128, &str); 4] = [
     (
-        2_583_747,
+        408_409,
         "e9e2f3d39476335d6875bf63b440572d5da54371ccae8f0c690676183da306bf",
     ),
     (
-        3_026_565,
+        469_463,
         "c4d98e714133f4f94cbd8a3e20d2d520c5a1ed65195cfe98026fbcc157ce2a07",
     ),
     (
-        2_812_021,
+        442_569,
         "9a6fc0280afc726f406e6303aa68aa2b7b2e41a164bd8a3dd57b946cdf0f34fd",
     ),
     (
-        2_812_021,
+        442_569,
         "9a6fc0280afc726f406e6303aa68aa2b7b2e41a164bd8a3dd57b946cdf0f34fd",
     ),
 ];
@@ -441,17 +443,19 @@ fn a_torus_keeps_one_box_for_a_nearest_point_at_one_end_of_its_seam() {
     holds(&found, &ONE_END);
 }
 
+// The same points, bit for bit, as when the work was 31,650, 31,650 and 30,753, before a product
+// with an exact zero came back the point zero (issue #1155).
 const ONE_END: [(u128, &str); 3] = [
     (
-        31_650,
+        5_270,
         "90302acd8bd4e457681da1b3aa631f3b4373f8ba83f307be1206060908b1fb4c",
     ),
     (
-        31_650,
+        5_270,
         "232c9eb239720553805e8832277a39a8fcc3667eef21dc9b2aea81df7cd01f2a",
     ),
     (
-        30_753,
+        5_387,
         "b1ee6770e0d17a8d1a4a9399ffc93b94fd951cc15e6a73553183ae97b9b38e3e",
     ),
 ];

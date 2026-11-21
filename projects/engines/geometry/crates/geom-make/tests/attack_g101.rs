@@ -833,8 +833,10 @@ fn general_rotations_are_certified_where_the_checker_can_follow() {
     // A rotation by the direction (4, 3), its cosine 4/5 and its sine 3/5, accepted up to 64
     // steps: the box's corners, multiples of 5 apart, land on the grid; a sphere and a torus are
     // certified on their own; a prism's corners round off its faces' planes, and each face stands
-    // for its star of triangles (G134); a cylinder's or cone's caps tilt off the axis' exact data,
-    // which the checker follows only from G177.
+    // for its star of triangles (G134). A cylinder or cone turned about its own axis keeps its caps
+    // square to it, since its frame's exact zeros stay exact (issue #1155; they came back a
+    // subnormal off zero, and the checker found no certified test of a cap and the side). Turned
+    // about y, its caps tilt off the axis' exact data, which the checker follows only from G177.
     for (name, out) in primitives() {
         for axis in [Axis::Z, Axis::Y] {
             let moved = Moved {
@@ -849,8 +851,8 @@ fn general_rotations_are_certified_where_the_checker_can_follow() {
                 Rotation::direction(4, 3).unwrap(),
                 p(0, 0, 0),
             );
-            match name {
-                "box" | "prism" | "sphere" | "torus" => {
+            match (name, axis) {
+                ("box" | "prism" | "sphere" | "torus", _) | ("cylinder" | "cone", Axis::Z) => {
                     let turned = valid(&format!("{name} {axis:?}"), turned.unwrap());
                     assert!(matches!(turned.exactness, Exactness::Certified { .. }));
                 }
