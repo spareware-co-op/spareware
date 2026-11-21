@@ -20,7 +20,7 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::general::subdivide;
+use geom_intersect::general::{Settled, Subdivided, subdivide};
 use geom_intersect::march::{Branch, march};
 use geom_intersect::result::CurveEnd;
 use geom_num::interval::Interval;
@@ -513,4 +513,99 @@ const TIED_TOO_BITS: [(usize, [u64; 4], [u64; 4]); 2] = [
 fn an_edge_along_a_plane_whose_last_rows_tie_meets_in_the_recorded_boxes() {
     let got = tied_rows(TIED_TOO_A, TIED_TOO_B);
     assert_eq!(got, TIED_TOO_BITS, "{got:#x?}");
+}
+
+/// The tilted pair's point of the standing plane's edge u = 0 at `v`, as a start: the line s =
+/// (v + 11) units, r = 22 units of the other plane, every number exact.
+fn start_on_the_edge(v: f64) -> [Interval; 4] {
+    let at = |x: f64| Interval::new(x, x).unwrap();
+    [at(0.0), at(v), at((v + 11.0) * UNIT), at(22.0 * UNIT)]
+}
+
+/// Two starts of the tilted pair on the standing plane's edge u = 0, both past the end v = 12 of
+/// its domain, in the room the subdivision searches an edge's ends in: the zeros it reads on an
+/// end of the other surface's domain are not cut back to the patch. Between them the edge stands
+/// outside its own domain, so no run along it is tried: the march goes on, walks neither to the
+/// other, and leaves the pair unproven.
+#[test]
+fn two_starts_past_the_end_of_an_edge_have_no_run_between_them() {
+    let (own, other) = planes();
+    let found = Subdivided {
+        settled: vec![Settled {
+            first: ((0.0, 1.0), (10.0, 12.0)),
+            second: ((21.0 * UNIT, 23.0 * UNIT), (21.75 * UNIT, 22.25 * UNIT)),
+            starts: vec![
+                start_on_the_edge(12.0 + 1.0 / 64.0),
+                start_on_the_edge(12.0 + 1.0 / 32.0),
+            ],
+        }],
+        flagged: Vec::new(),
+    };
+    let traced = march(&own, &other, &found, FLOOR, CEILING, &mut meter()).unwrap();
+    assert!(traced.branches.is_empty(), "{:#?}", traced.branches);
+    assert_eq!(traced.unproven, found.settled, "{:#?}", traced.unproven);
+}
+
+/// Where the other plane's parameters stand on the edge of the next case: ten million, where a
+/// double's spacing is 2^-29.
+const FAR: f64 = 10_000_000.0;
+
+/// How far apart, along the edge, the next case's two starts stand: 2^-33, a sixteenth of a
+/// double's spacing at `FAR`.
+const HAIR: f64 = 1.0 / 8_589_934_592.0;
+
+/// The work the march along the short edge of the next case takes, recorded.
+const HAIR_WORK: u128 = 181;
+
+/// Two starts a hair apart on the edge u = 0 of a plane standing on another, whose parameters on
+/// the edge are (`FAR` + v, `FAR` − v): the other plane on (−1, 3, 3) and (3, −2, 1) through the
+/// origin, the own plane on their cross product and their difference from the other's point
+/// (`FAR`, `FAR`). The run between the starts is one piece, whose travel in the other plane's
+/// parameters is below their rounding: its first box, a little more than the first correction,
+/// rounds to no wider than the residual's own rounding and cannot hold Krawczyk's image, and is
+/// doubled until it does. The branch is the two starts, with the recorded work.
+#[test]
+fn two_starts_a_hair_apart_far_from_zero_are_joined_along_their_edge() {
+    let (along, across) = ([-1.0, 3.0, 3.0], [3.0, -2.0, 1.0]);
+    let on = |s: f64, r: f64| [0, 1, 2].map(|k| s * along[k] + r * across[k]);
+    let wide = ((FAR - 1.0, FAR + 1.0), (FAR - 1.0, FAR + 1.0));
+    let other = SurfaceKind::Plane(Plane::new([0.0; 3], along, across, wide).unwrap());
+    let own = SurfaceKind::Plane(
+        Plane::new(
+            on(FAR, FAR),
+            [9.0, 10.0, -7.0],
+            on(1.0, -1.0),
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let at = |x: f64| Interval::new(x, x).unwrap();
+    let (here, there) = (0.5, 0.5 + HAIR);
+    // The second start's (s, r) are not doubles: each is held between the two doubles about it.
+    let starts = vec![
+        [at(0.0), at(here), at(FAR + here), at(FAR - here)],
+        [
+            at(0.0),
+            at(there),
+            Interval::new(FAR + here, (FAR + here).next_up()).unwrap(),
+            Interval::new((FAR - here).next_down(), FAR - here).unwrap(),
+        ],
+    ];
+    let found = Subdivided {
+        settled: vec![Settled {
+            first: ((0.0, 1.0), (0.0, 1.0)),
+            second: wide,
+            starts: starts.clone(),
+        }],
+        flagged: Vec::new(),
+    };
+    let mut work = meter();
+    let traced = march(&own, &other, &found, FLOOR, CEILING, &mut work).unwrap();
+    assert!(traced.unproven.is_empty(), "{:#?}", traced.unproven);
+    let [branch] = traced.branches.as_slice() else {
+        panic!("{:#?}", traced.branches);
+    };
+    assert_eq!(branch.vertices, starts, "{:#?}", branch.vertices);
+    assert_eq!(branch.deviation.to_bits(), 0, "{}", branch.deviation);
+    assert_eq!(work.used().work, HAIR_WORK, "{:?}", work.used());
 }

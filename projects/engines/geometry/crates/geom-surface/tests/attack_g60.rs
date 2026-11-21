@@ -1,7 +1,7 @@
 //! Attacks on piece G60's claims for surfaces: the kind contract's margins (each law fires just
 //! past what it allows and not just inside it, normal signs included), its refusal probes one at a
 //! time and on any domain, and the NURBS kind on regions that touch knots, at creases approached
-//! from either side, at the domain's corners and outside it.
+//! from either side, at the domain's corners and outside it, and over boxes a few subnormals wide.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -20,7 +20,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::contract::check;
-use geom_surface::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
+use geom_surface::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -484,5 +484,165 @@ fn refusals_come_first() {
             Some(CurveError::ParameterOutside),
             "{dir:?} {t}"
         );
+    }
+}
+
+/// (x(u), v, 0) over [1/4, 1] × [−1, 1], cubic in u and linear in v: x(u) = u³ (its Bézier points
+/// the blossom of u³ at the ends, 1/64, 1/16, 1/4 and 1, all exact), or with `rational` the
+/// rational cubic on those points with weights 1, 5/4, 3/2 and 7/4 along u. Either way `S_v` is
+/// (0, 1, 0) everywhere, and `S_uv` and `S_vv` are 0.
+fn cubic(rational: bool) -> Surface<3> {
+    let along = Basis::new(3, vec![0.25, 0.25, 0.25, 0.25, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    let mut weights = Vec::new();
+    for (x, w) in [
+        (1.0 / 64.0, 1.0),
+        (1.0 / 16.0, 1.25),
+        (0.25, 1.5),
+        (1.0, 1.75),
+    ] {
+        for y in [-1.0, 1.0] {
+            net.push([x, y, 0.0]);
+            weights.push(w);
+        }
+    }
+    if rational {
+        Surface::new_rational(along, across, &net, &weights).unwrap()
+    } else {
+        Surface::new(along, across, &net).unwrap()
+    }
+}
+
+/// Claim: over a box a few subnormals wide in v, as an interval rounded outward from v = 0 is, the
+/// partials are finite and hold the true ones (#1140). There the patch cut down to the box would
+/// scale its partial forms by its degree over the box's width, past the doubles: the polynomial
+/// patch refused at 2⁻¹⁰⁷⁴, 17·2⁻¹⁰⁷⁴ and 10⁻³¹⁰, the rational one up to 10⁻²⁰⁰ too, where the jet
+/// quotient of the cut's huge forms did. The polynomial patch's are also tight: `S_u`'s x is 3u²,
+/// from 3/4 to 75/64 over u in [1/2, 5/8], `S_uu`'s 6u, from 3 to 15/4.
+#[test]
+fn a_box_a_few_subnormals_wide_has_partials_that_hold_the_true_ones() {
+    let sides = (Limit::FromRight, Limit::FromRight);
+    let us = (0.5, 0.625);
+    let narrow = [f64::from_bits(1), f64::from_bits(17), 1e-310];
+    let wider = [
+        f64::from_bits(1),
+        f64::from_bits(17),
+        1e-310,
+        1e-300,
+        1e-200,
+    ];
+    let holds = |i: Interval, lo: f64, hi: f64| i.lo() <= lo && hi <= i.hi();
+    let tight = |i: Interval, lo: f64, hi: f64| {
+        holds(i, lo, hi) && lo - i.lo() <= 1e-12 && i.hi() - hi <= 1e-12
+    };
+    for (rational, widths) in [(false, &narrow[..]), (true, &wider[..])] {
+        let s = cubic(rational);
+        for &w in widths {
+            for order in [1, 2] {
+                let why = format!("rational {rational}, v within {w:e}, order {order}");
+                let p = s
+                    .partials_over((us, (-w, w)), sides, order, &mut meter())
+                    .unwrap_or_else(|e| panic!("{why}: {e}"));
+                let at = |i: usize, j: usize| p[partial_index(i, j).unwrap()];
+                let (su, sv) = (at(1, 0), at(0, 1));
+                // S_v = (0, 1, 0) and S_u's y and z are 0, everywhere.
+                for (x, want) in [
+                    (sv[0], 0.0),
+                    (sv[1], 1.0),
+                    (sv[2], 0.0),
+                    (su[1], 0.0),
+                    (su[2], 0.0),
+                ] {
+                    assert!(holds(x, want, want), "{why}: {x:?} for {want}");
+                    if !rational {
+                        assert!(tight(x, want, want), "{why}: {x:?} for {want}");
+                    }
+                }
+                if rational {
+                    // S_u's x meets the point's own partials across the box.
+                    for u in [us.0, f64::midpoint(us.0, us.1), us.1] {
+                        let q = s
+                            .partials_over(((u, u), (0.0, 0.0)), sides, 1, &mut meter())
+                            .unwrap();
+                        let x = q[partial_index(1, 0).unwrap()][0];
+                        assert!(
+                            su[0].lo() <= x.hi() && x.lo() <= su[0].hi(),
+                            "{why}: {su:?} at {u}: {x:?}"
+                        );
+                    }
+                } else {
+                    assert!(tight(su[0], 0.75, 1.171_875), "{why}: {su:?}");
+                }
+                if order == 2 {
+                    let (suv, svv) = (at(1, 1), at(0, 2));
+                    for x in suv.into_iter().chain(svv) {
+                        assert!(holds(x, 0.0, 0.0), "{why}: {suv:?} {svv:?}");
+                    }
+                    if !rational {
+                        assert!(tight(at(2, 0)[0], 3.0, 3.75), "{why}: {:?}", at(2, 0));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Claim: over a box a few subnormals wide in v, the derivative bound in either direction is
+/// finite and holds the true partial (#1147). There the patch cut down to the box would scale its
+/// partial form in v by its degree over the box's width, past the doubles: both patches refused in
+/// v at 2⁻¹⁰⁷⁴, 17·2⁻¹⁰⁷⁴ and 10⁻³¹⁰. The polynomial patch's bounds are also tight: `S_v` is
+/// (0, 1, 0), and `S_u` is (3u², 0, 0), its x from 3/4 to 75/64 over u in [1/2, 5/8].
+#[test]
+fn a_box_a_few_subnormals_wide_has_a_derivative_bound_that_holds_the_true_partial() {
+    let sides = (Limit::FromRight, Limit::FromRight);
+    let us = (0.5, 0.625);
+    let holds = |b: &Bounds<3>, k: usize, lo: f64, hi: f64| b.lo[k] <= lo && hi <= b.hi[k];
+    let tight = |b: &Bounds<3>, k: usize, lo: f64, hi: f64| {
+        holds(b, k, lo, hi) && lo - b.lo[k] <= 1e-12 && b.hi[k] - hi <= 1e-12
+    };
+    for rational in [false, true] {
+        let s = cubic(rational);
+        for w in [f64::from_bits(1), f64::from_bits(17), 1e-310] {
+            for dir in [Direction::U, Direction::V] {
+                let why = format!("rational {rational}, v within {w:e}, {dir:?}");
+                let b = match s.derivative_bound((us, (-w, w)), dir, &mut meter()) {
+                    Ok(DerivativeBound::Bounded(b)) => b,
+                    other => panic!("{why}: {other:?}"),
+                };
+                let x = match dir {
+                    Direction::U => (0.75, 1.171_875),
+                    Direction::V => (0.0, 0.0),
+                };
+                let y = match dir {
+                    Direction::U => 0.0,
+                    Direction::V => 1.0,
+                };
+                for (k, (lo, hi)) in [(1, (y, y)), (2, (0.0, 0.0))] {
+                    assert!(holds(&b, k, lo, hi), "{why}: {b:?}");
+                    if !rational {
+                        assert!(tight(&b, k, lo, hi), "{why}: {b:?}");
+                    }
+                }
+                if !rational || dir == Direction::V {
+                    assert!(holds(&b, 0, x.0, x.1), "{why}: {b:?}");
+                    if !rational {
+                        assert!(tight(&b, 0, x.0, x.1), "{why}: {b:?}");
+                    }
+                } else {
+                    // The rational patch's x_u meets the point's own partial across the box.
+                    for u in [us.0, f64::midpoint(us.0, us.1), us.1] {
+                        let q = s
+                            .partials_over(((u, u), (0.0, 0.0)), sides, 1, &mut meter())
+                            .unwrap();
+                        let p = q[partial_index(1, 0).unwrap()][0];
+                        assert!(
+                            b.lo[0] <= p.hi() && p.lo() <= b.hi[0],
+                            "{why}: {b:?} at {u}: {p:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

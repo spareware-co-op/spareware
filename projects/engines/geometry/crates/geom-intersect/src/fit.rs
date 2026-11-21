@@ -204,6 +204,29 @@ fn smaller(a: f64, b: f64) -> f64 {
     geom_curve::tight::smaller(a, b)
 }
 
+/// `b` with every side that is thinner than a step of the double, yet not a point, widened by half
+/// the width of its widest side, kept inside `domain`. A pcurve that is 0 along a span has a bound
+/// over part of it a few subnormals wide, as every interval operation rounds outward (#1083); the
+/// NURBS kind reads partials over a box by cutting the patch to it and scaling by its degree over
+/// the box's width, and over a box a step or so wide the cut keeps only rounding, scaled far past
+/// the partials themselves (only where the scale would leave the doubles does it read the whole
+/// patch's partial forms instead, #1140). A side of no width is a line, which the kinds read as
+/// one. The wider box holds every point of `b`, so its bounds hold over `b` too.
+fn thick(b: Region, domain: Region) -> Region {
+    let ((a, c), (d, e)) = b;
+    let wide = larger(c - a, e - d) / 2.0;
+    let side = |(lo, hi): (f64, f64)| {
+        let step = 4.0 * f64::EPSILON * (1.0 + larger(lo.abs(), hi.abs()));
+        if lo < hi && hi - lo < step {
+            (lo - wide, hi + wide)
+        } else {
+            (lo, hi)
+        }
+    };
+    let (u, v) = b;
+    widened((side(u), side(v)), 0.0, domain)
+}
+
 /// Whether `b` lies inside `domain`.
 fn inside(((a, c), (d, e)): Region, ((u0, u1), (v0, v1)): Region) -> bool {
     u0 <= a && c <= u1 && v0 <= d && e <= v1
@@ -235,6 +258,7 @@ fn gap(
     if !inside(here, domain) || !inside(over, domain) {
         return Ok(None);
     }
+    let over = thick(over, domain);
     let Some(sm) = partials(surface, here, 0, meter)? else {
         return Ok(None);
     };
@@ -307,7 +331,8 @@ fn turning(
     let turn = Interval::norm(&[a, b, c, d, e, f])?;
     let kappa = turn.mul(trace)?.div(size.square()?)?.hi();
     let sigma = size.div(trace)?.lo();
-    Ok((sigma > 0.0 && kappa.is_finite()).then_some((sigma, kappa)))
+    // κ is finite: an interval's bounds always are, and an operation that would leave them errors.
+    Ok((sigma > 0.0).then_some((sigma, kappa)))
 }
 
 /// A lower bound on the sine of the angle between the normals over `a` on `first` and `b` on
@@ -737,7 +762,8 @@ pub fn fit(
 }
 
 /// A point of the true curve near `guess`, in the plane halfway between the data points `x` and
-/// `y` across their chord, by Newton's method in doubles: fit data, which the bounds then judge.
+/// `y` across their chord, by Newton's method in doubles: fit data, which the bounds then judge;
+/// `None` where a step leaves either surface's domain or the slope cannot be inverted.
 fn settle_point(
     (first, second): (&SurfaceKind, &SurfaceKind),
     guess: [f64; 4],
@@ -760,8 +786,19 @@ fn settle_point(
         tangent,
         floor: steps_at(&point),
     };
+    // Each step is read only inside both domains: a step that leaves one gives no point, never
+    // the kinds' refusal of a parameter outside, since the branch and the surfaces are valid.
+    let ((u1, v1), (u2, v2)) = (first.domain(), second.domain());
+    let inside = |z: &[f64; 4]| {
+        let [a1, b1, a2, b2] = *z;
+        let ok = u1.0 <= a1 && a1 <= u1.1 && v1.0 <= b1 && b1 <= v1.1;
+        ok && u2.0 <= a2 && a2 <= u2.1 && v2.0 <= b2 && b2 <= v2.1
+    };
     let mut z = guess;
     for _ in 0..8 {
+        if !inside(&z) {
+            return Ok(None);
+        }
         meter.charge(1)?;
         let r = field.at(z, meter)?.map(mid);
         let Some(j) = field.slope(&exact(&z)?, meter)? else {
@@ -778,9 +815,5 @@ fn settle_point(
             *w -= s;
         }
     }
-    let ((u1, v1), (u2, v2)) = (first.domain(), second.domain());
-    let [a1, b1, a2, b2] = z;
-    let ok = u1.0 <= a1 && a1 <= u1.1 && v1.0 <= b1 && b1 <= v1.1;
-    let ok = ok && u2.0 <= a2 && a2 <= u2.1 && v2.0 <= b2 && b2 <= v2.1;
-    Ok(ok.then_some(z))
+    Ok(inside(&z).then_some(z))
 }

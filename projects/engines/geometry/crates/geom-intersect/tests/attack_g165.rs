@@ -2408,6 +2408,168 @@ fn an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings() {
     }
 }
 
+/// The circle of radius 1 about the origin in the plane x = 0 crosses the endless plane z = 0 at
+/// (0, -1, 0) and (0, 1, 0): two proven crossings whatever the lengths of the plane's vectors,
+/// for the plane is the same plane (issue 1078: on vectors of length 2^-30 both were flagged as
+/// undecided). Two things carry it. The engine's contraction test weighs the plane's parameters
+/// by its vectors: unweighed, a step on vectors of length 2^-30 never reads as contracting. And
+/// both points stand on the circle's own box read in the plane's parameters, so the room the
+/// engine has past them is the margin the plane is held to, one grid step in space: 2^60 of the
+/// parameter on vectors of length 2^-60, where a unit of it is less than the rounding of a
+/// point of the circle and proves nothing alone, and 2^-30 of it on vectors of length 2^30.
+#[test]
+fn an_endless_plane_on_short_or_long_vectors_crosses_a_unit_circle_in_two_proven_crossings() {
+    let circle = CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let long = 1_073_741_824.0;
+    for (a, b) in [
+        (short * short, short * short),
+        (short, short),
+        (short, 1.0),
+        (1.0, short),
+        (long, long),
+        (1.0, 1.0),
+    ] {
+        let flat = endless([0.0; 3], [a, 0.0, 0.0], [0.0, b, 0.0]);
+        let r = curve_surface(&circle, &flat, &mut meter()).unwrap();
+        assert_eq!(r.items().len(), 2, "{a} {b}: {:?}", r.items());
+        let mut found: Vec<Interval> = Vec::new();
+        for item in r.items() {
+            let Item::Point { at, contact, .. } = item else {
+                panic!("{a} {b}: {:?}", r.items());
+            };
+            assert_eq!(*contact, PointContact::Crossing, "{a} {b}: {:?}", r.items());
+            let [_, u, v] = at.spans() else {
+                panic!("{at:?}");
+            };
+            assert!(u.contains(0.0), "{a} {b}: {u:?}");
+            found.push(*v);
+        }
+        found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+        assert!(found[0].contains(-1.0 / b), "{a} {b}: {:?}", r.items());
+        assert!(found[1].contains(1.0 / b), "{a} {b}: {:?}", r.items());
+    }
+}
+
+/// The circle of radius 1 about the origin in the plane y = 0 crosses the endless plane z = 0 at
+/// (-1, 0, 0) and (1, 0, 0), where u is -2^30 and 2^30 on a first vector of length 2^-30 and a
+/// second of length 1: two proven crossings. The circle runs across u there and not across v, so
+/// it is the weight of u that the engine's contraction test reads, 1/du of a step in space, the
+/// length of the first vector; the circle in x = 0 above runs across v alone, and reads only the
+/// weight of v.
+#[test]
+fn an_endless_plane_on_a_short_first_vector_crosses_a_circle_across_it_in_two_proven_crossings() {
+    let circle = CurveKind::Circle(
+        Circle::full(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [0.0, 1.0, 0.0]).unwrap(),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let flat = endless([0.0; 3], [short, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let r = curve_surface(&circle, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<Interval> = Vec::new();
+    for item in r.items() {
+        let Item::Point { at, contact, .. } = item else {
+            panic!("{:?}", r.items());
+        };
+        assert_eq!(*contact, PointContact::Crossing, "{:?}", r.items());
+        let [_, u, v] = at.spans() else {
+            panic!("{at:?}");
+        };
+        assert!(v.contains(0.0), "{v:?}");
+        found.push(*u);
+    }
+    found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+    assert!(found[0].contains(-1.0 / short), "{:?}", r.items());
+    assert!(found[1].contains(1.0 / short), "{:?}", r.items());
+}
+
+/// The arc of the circle above from a quarter turn to seven quarters holds both its crossings
+/// with the endless plane z = 0 on a first vector of length 2^-30 and a second of length 1, at
+/// u = -2^30 and 2^30: two proven crossings. An arc short of a whole turn is the engine's, as a
+/// whole circle across a plane need not stay (issue 1103), so this pair reads the weight of u in
+/// the engine's contraction test whatever answers the whole circle.
+#[test]
+fn an_endless_plane_on_a_short_first_vector_crosses_an_arc_across_it_in_two_proven_crossings() {
+    let arc = CurveKind::Circle(
+        Circle::new(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [0.0, 1.0, 0.0]).unwrap(),
+            (0.25, 1.75),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let flat = endless([0.0; 3], [short, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let r = curve_surface(&arc, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<Interval> = Vec::new();
+    for item in r.items() {
+        let Item::Point { at, contact, .. } = item else {
+            panic!("{:?}", r.items());
+        };
+        assert_eq!(*contact, PointContact::Crossing, "{:?}", r.items());
+        let [_, u, v] = at.spans() else {
+            panic!("{at:?}");
+        };
+        assert!(v.contains(0.0), "{v:?}");
+        found.push(*u);
+    }
+    found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+    assert!(found[0].contains(-1.0 / short), "{:?}", r.items());
+    assert!(found[1].contains(1.0 / short), "{:?}", r.items());
+}
+
+/// The arc of the circle in the plane x = 0 above from a quarter turn to seven quarters holds
+/// both its crossings with the endless plane z = 0 on a first vector of length 1 and a second of
+/// length 2^-30, at v = -2^30 and 2^30: two proven crossings. The arc runs across v there and not
+/// across u, so this pair reads the weight of v in the engine's contraction test, 1/dv of a step
+/// in space, as the arc in y = 0 above reads the weight of u; the whole circle in x = 0 is
+/// answered without the engine (decision 32.106).
+#[test]
+fn an_endless_plane_on_a_short_second_vector_crosses_an_arc_across_it_in_two_proven_crossings() {
+    let arc = CurveKind::Circle(
+        Circle::new(
+            [0.0; 3],
+            1.0,
+            Frame::new([0.0, 0.0, 1.0], [1.0, 0.0, 0.0]).unwrap(),
+            (0.25, 1.75),
+        )
+        .unwrap(),
+    );
+    let short = 1.0 / 1_073_741_824.0;
+    let flat = endless([0.0; 3], [1.0, 0.0, 0.0], [0.0, short, 0.0]);
+    let r = curve_surface(&arc, &flat, &mut meter()).unwrap();
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
+    let mut found: Vec<Interval> = Vec::new();
+    for item in r.items() {
+        let Item::Point { at, contact, .. } = item else {
+            panic!("{:?}", r.items());
+        };
+        assert_eq!(*contact, PointContact::Crossing, "{:?}", r.items());
+        let [_, u, v] = at.spans() else {
+            panic!("{at:?}");
+        };
+        assert!(u.contains(0.0), "{u:?}");
+        found.push(*v);
+    }
+    found.sort_by(|p, q| p.lo().total_cmp(&q.lo()));
+    assert!(found[0].contains(-1.0 / short), "{:?}", r.items());
+    assert!(found[1].contains(1.0 / short), "{:?}", r.items());
+}
+
 /// The arc of the circle above from a quarter turn to seven quarters holds both its crossings with
 /// the endless plane z = 0: two proven crossings, nothing flagged and nothing touched. An arc short
 /// of a whole turn is the engine's, so this pair holds the plane's ends on the engine's path: held
@@ -2588,6 +2750,23 @@ fn a_whole_circle_crossed_at_its_join_is_the_engines() {
         "{points:?}"
     );
     assert_eq!(work, 8);
+}
+
+/// A whole circle's crossing whose parameter's box ends exactly on the domain's end, or starts
+/// exactly on its start, is the engine's (decision 32.106): the box reaches the join. The plane
+/// y = 3·10^-13 crosses the circle `upright` 1.9·10^-16 of a half-turn short of its end, and the
+/// box, read near 0 and moved a turn on, is [2 − 2^-51, 2]. The plane y = −8000·2^-1074 crosses it
+/// 5·2^-1074 of a half-turn past its start, and the box is [0, 10·2^-1074]. The engine answers each
+/// for over 1,500 units, where the closed form takes 8.
+#[test]
+fn a_whole_circle_crossing_whose_box_ends_on_its_join_is_the_engines() {
+    let circle = upright();
+    let (x, z) = ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    for s in [3e-13, -f64::from_bits(8000)] {
+        let (r, points, work) = met(&circle, &endless([0.0, s, 0.0], x, z));
+        assert!(points.len() >= 2, "{:?}", r.items());
+        assert!(work > 1_500, "{work}");
+    }
 }
 
 /// A crossing whose (u, v) box stands past an end of the plane's domain is left out, each end in

@@ -358,6 +358,31 @@ fn a_region_straddling_the_pave_at_an_overlap_s_end_stands() {
     assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
 }
 
+/// The arc and its copy of three quarters above, with a fourth operand's vertex at (−663, 884) on
+/// the copy past the arc's end: it cuts the copy's second piece in two, and the piece from it on
+/// is in no block either. The region ends in the box that straddles the pave at the arc's end,
+/// well short of the vertex, so it lies wholly before that piece, reaches no part of it, and
+/// stands as without the cut.
+#[test]
+fn a_region_straddling_the_pave_at_an_overlap_s_end_stands_before_a_later_cut() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.5)), [[0, -1105], [-1105, 0]], 2);
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Grid(P3::new(-663, 884, 0).unwrap()),
+        operand: 3,
+    });
+    let out = run(&arr).unwrap();
+    assert_eq!(out.splits.len(), 4, "{:?}", out.splits);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
+}
+
 /// The first circle's upper half, from (1105, 0) to (−1105, 0), and a NURBS curve that follows it
 /// from (1105, 0) to (0, 1105) and runs on straight along its tangent there to (−600, 1105), of two
 /// operands, with a third operand's vertex at (663, 884) on both. The vertex cuts both, and their
@@ -574,6 +599,94 @@ fn a_region_ending_in_a_box_past_the_pave_of_a_piece_that_runs_to_the_seam_stand
     assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
     let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
     assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+}
+
+/// The first circle whole; a whole circle about (1105, −1105) whose radius is 14 doubles' steps
+/// short of 1105, which crosses the first 3.2·10^-12 below its join, the crossing's pave there
+/// ending exactly on the domain's end, 2; and an arc from (1100, −105) to (1100, 105) of a circle
+/// 10^-10 smaller, its centre 10^-10 off towards 0.05 radians, of a third operand. The arc lies
+/// within 10^-12 of the first circle, so the crossing cuts it at the same vertex, and the pieces
+/// of the two either side of the vertex are two common blocks, the circle's piece after it running
+/// round the join. Near 0.05 radians the two cross twice too close together to hold apart, one
+/// tangent band past the join and short of (1100, 105), which reaches only that piece. Read round
+/// the join from the pave that ends on its end, the piece holds the band, and it stands.
+#[test]
+fn a_band_past_the_join_stands_in_the_piece_from_a_pave_ending_on_the_join() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let cutter = Circle::new(
+        [1105.0, -1105.0, 0.0],
+        1_104.999_999_999_996_8,
+        frame,
+        (0.0, 2.0),
+    )
+    .unwrap();
+    let mut arr = arrangement(
+        vec![
+            CurveKind::Circle(first([1.0, 0.0])),
+            CurveKind::Circle(cutter),
+        ],
+        &[],
+    );
+    let along = Frame::new(
+        [0.995_475_113_122_170_7, -0.095_022_624_434_402_17, 0.0],
+        [0.0, 0.0, 1.0],
+    )
+    .unwrap();
+    let inner = Circle::new(
+        [9.991_938_772_459_098e-11, 5.000_136_861_576_372e-12, 0.0],
+        1_104.999_999_999_9,
+        along,
+        (0.0, 0.060_584_688_753_478_03),
+    )
+    .unwrap();
+    let met = curves(
+        &CurveKind::Circle(first([1.0, 0.0])),
+        &CurveKind::Circle(inner.clone()),
+        &mut meter(),
+    )
+    .unwrap();
+    match met.items() {
+        [
+            Item::Flagged {
+                at,
+                why: Unresolved::TangentBand { .. },
+                ..
+            },
+        ] => {
+            let s = at.spans()[0];
+            assert!(0.0 < s.lo() && s.hi() < 0.03, "{s:?}");
+        }
+        other => panic!("{other:?}"),
+    }
+    let b = between(
+        &mut arr,
+        CurveKind::Circle(inner),
+        [[1100, -105], [1100, 105]],
+        2,
+    );
+    let out = run(&arr).unwrap();
+    let join = *out.paves[0].iter().find(|p| p.t.hi() == 2.0).unwrap();
+    assert!(join.t.lo() < 2.0, "{join:?}");
+    assert!(
+        out.paves[b].iter().any(|p| p.vertex == join.vertex),
+        "{:?}",
+        out.paves[b]
+    );
+    let from = |e: usize| {
+        (0..out.splits.len())
+            .find(|&k| {
+                out.splits[k].source == e
+                    && out.splits[k]
+                        .block
+                        .from
+                        .is_some_and(|p| p.vertex == join.vertex)
+            })
+            .unwrap()
+    };
+    let (round, after) = (from(0), from(b));
+    assert!(out.splits[round].block.wraps, "{:?}", out.splits[round]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert!(members.contains(&vec![round, after]), "{:?}", out.common);
 }
 
 /// The first circle's arc from `start`, a point of it, turning `turns` half-turns, counter-clockwise
