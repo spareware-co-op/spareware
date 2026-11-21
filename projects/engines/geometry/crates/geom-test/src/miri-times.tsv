@@ -54,6 +54,7 @@
 # GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 # GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44840340929 (miri_measure=new on rows/phase5-line-along-a-ruling at the train's f447154e2, miri_measure_tests naming the 4 line_along_a_ruling tests #1139 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1667,6 +1668,10 @@ native-only over 551	geom-intersect::known_mutants	a_slanting_tangent_curve_is_b
 native-only over 741	geom-intersect::known_mutants	a_tangent_curve_along_the_second_parameter_is_proven_either_way
 native-only over 741	geom-intersect::known_mutants	enclosures_that_touch_do_not_run_one_way
 native-only over 741	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_taken_out_whole_by_its_own_equation
+111	geom-intersect::line_along_a_ruling	a_line_a_hair_off_parallel_is_still_the_engines
+6	geom-intersect::line_along_a_ruling	a_line_parallel_to_a_cylinder_s_axis_is_nothing_or_its_ruling
+99	geom-intersect::line_along_a_ruling	a_line_parallel_to_a_ruling_off_the_cone_is_nothing_or_one_crossing
+182	geom-intersect::line_along_a_ruling	a_segment_along_a_cone_s_ruling_is_one_overlap
 4	geom-intersect::line_cone_exact	a_crossing_of_a_cone_with_a_start_radius_keeps_its_answer
 4	geom-intersect::line_cone_exact	a_crossing_the_enclosures_count_keeps_its_answer
 113	geom-intersect::line_cone_exact	a_line_a_step_beside_an_apex_misses_the_cone
