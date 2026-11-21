@@ -485,15 +485,11 @@ fn a_side_leaving_a_rim_vertex_at_the_least_angle_meets_the_rim_once_there() {
             .any(|r| r.contains(&(1, 0)) && r.contains(&(0, 1))),
         "{inside:?}"
     );
-    // The meeting the edge stage made V is recorded, and the two are ordered there by how they
-    // bend, which this way agrees with their tangents. The split holds as a split must.
-    assert_eq!(
-        out.touches,
-        [Touch {
-            vertex: v,
-            edges: [case.rim, case.side]
-        }]
-    );
+    // The closed form holds the line's two crossings apart, V and the one behind it, off the side:
+    // along V + sD, |V + sD|² − R² = s(2 + s|D|²), positive for every s past 0, so the side meets
+    // the rim at V alone, its proven meeting's enclosures holding V's paves on both. The contact
+    // rule makes nothing V, so no touch is recorded, and the split holds as a split must.
+    assert!(out.touches.is_empty(), "{:?}", out.touches);
     checked(&case, &out, &splitting);
 }
 

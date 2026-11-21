@@ -718,7 +718,7 @@ fn add_product(sum: &mut ExactSum, factors: &[f64]) -> Option<()> {
 
 /// Adds `±(Σ mᵢ)² · Π scale` to `sum` exactly, each mᵢ a product of stored doubles: every
 /// product mᵢ·mⱼ·Π scale in turn, negated where `negative`.
-fn add_square<const K: usize>(
+pub(crate) fn add_square<const K: usize>(
     sum: &mut ExactSum,
     monomials: &[[f64; K]],
     scale: &[f64],

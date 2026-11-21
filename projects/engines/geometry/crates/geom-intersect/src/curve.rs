@@ -52,11 +52,13 @@ use geom_num::grid::{COORD_MAX, GridStep, P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::quadric;
+use geom_num::sturm::Point;
 use geom_num::{Exactness, Sign, math, predicate};
 use geom_nurbs::{BernsteinCurve, Bounds, Limit, NurbsError, Slab};
 use geom_run::WorkMeter;
 
 use crate::closed::{self, Meeting};
+use crate::curve_surface::add_square;
 use crate::error::IntersectError;
 use crate::result::{
     Coincidence, Coverage, Diag, Intersection, Item, OverlapRegion, ParamBox, PointContact, Test,
@@ -1205,6 +1207,126 @@ fn exactly<const D: usize>(line: &Line<D>, circle: &Circle<D>) -> Option<Meeting
     closed::line_sphere(&grid_line(line)?, &sphere).ok()
 }
 
+/// Δ of a line and a circle in its plane, where their data are whole: in the circle's own
+/// coordinates the line's quadratic has r⁴·Δ = r²·|d|² − |d × W|², W = o − c, a line meeting the
+/// circle where it comes within r of the centre. That is a sum of products of four stored
+/// doubles, summed exactly and rounded once, and Δ is enclosed two steps of it wide, as for a line
+/// and a cylinder: where the coefficients' enclosures cannot hold a near tangent's two roots
+/// apart, this can. `None` where a product would not be exact.
+fn circle_known<const D: usize>(
+    line: &Line<D>,
+    circle: &Circle<D>,
+) -> Result<Option<Interval>, IntersectError> {
+    let ([o0, o1, o2], [d0, d1, d2], [c0, c1, c2]) = (
+        doubles(&line.origin()),
+        doubles(&line.direction()),
+        doubles(&circle.center()),
+    );
+    let r = circle.radius();
+    // The components of d × W, each as four products of two stored doubles.
+    let across = [
+        [[d1, o2], [-d1, c2], [-d2, o1], [d2, c1]],
+        [[d2, o0], [-d2, c0], [-d0, o2], [d0, c2]],
+        [[d0, o1], [-d0, c1], [-d1, o0], [d1, c0]],
+    ];
+    let mut sum = ExactSum::new();
+    let summed = [d0, d1, d2]
+        .iter()
+        .try_for_each(|x| add_square(&mut sum, &[[*x]], &[r, r], false))
+        .and_then(|()| {
+            across
+                .iter()
+                .try_for_each(|part| add_square(&mut sum, part, &[], true))
+        });
+    let Some(e) = summed.map(|()| sum.round_ieee()).filter(|e| e.is_finite()) else {
+        return Ok(None);
+    };
+    let by = Interval::point(r)?.square()?.square()?;
+    Ok(Some(Interval::new(e.next_down(), e.next_up())?.div(by)?))
+}
+
+/// The two roots of a line and a circle of whole numbers that meet twice, where the coefficients'
+/// enclosures cannot hold them apart: Δ is the exact sum's ([`circle_known`]), and where the two
+/// roots' enclosures still meet, they are parted either side of the vertex −B/A, which lies
+/// midway between the roots, by exact counts of the roots on each side ([`closed::between`]).
+/// `None` where neither parts them.
+fn parted<const D: usize>(
+    line: &Line<D>,
+    circle: Option<&Circle<D>>,
+    terms: [Interval; 3],
+    exact: Option<Meeting>,
+) -> Result<Option<Vec<Interval>>, IntersectError> {
+    let (Some(Meeting::Twice), Some(circle)) = (exact, circle) else {
+        return Ok(None);
+    };
+    let Some(d) = circle_known(line, circle)? else {
+        return Ok(None);
+    };
+    if let Some(roots) = quadratic_with(terms, exact, Some(d))? {
+        return Ok(Some(roots));
+    }
+    let [a, b, _] = terms;
+    if a.contains(0.0) {
+        return Ok(None);
+    }
+    // A, a sum of squares, is above zero, so the first root's enclosure starts below the second's
+    // and ends below it: the two reach from the first's low end to the second's high end, and
+    // those take only the upper end of Δ's root.
+    let root = Interval::new(0.0, d.hi())?.sqrt()?;
+    let lo = b.neg().sub(root)?.div(a)?.lo();
+    let hi = b.neg().add(root)?.div(a)?.hi();
+    // Two doubles between the roots, so that the two enclosures stand apart; an exact count
+    // refuses a stretch whose start is not below its end.
+    let vertex = b.neg().div(a)?;
+    let below = vertex.lo() + (vertex.hi() - vertex.lo()) / 2.0;
+    let above = below.next_up();
+    let (Some(on), Some(sphere)) = (grid_line(line), sphere_of(circle)) else {
+        return Ok(None);
+    };
+    let count = |from: f64, to: f64| -> Option<u8> {
+        closed::between(
+            &on,
+            &quadric::Surface::Sphere(sphere),
+            ratio(from)?,
+            ratio(to)?,
+        )
+        .ok()
+    };
+    if count(lo, below) != Some(1) || count(above, hi) != Some(1) {
+        return Ok(None);
+    }
+    Ok(Some(alloc::vec![
+        Interval::new(lo, below)?,
+        Interval::new(above, hi)?
+    ]))
+}
+
+/// A circle of whole numbers as the sphere of its centre and radius, which a line in its plane
+/// meets where it meets the circle.
+fn sphere_of<const D: usize>(circle: &Circle<D>) -> Option<quadric::Sphere> {
+    Some(quadric::Sphere {
+        centre: grid_point(&circle.center())?,
+        radius: Steps(u64::try_from(whole(circle.radius())?).ok()?),
+    })
+}
+
+/// The most a whole double [`ratio`] takes: every whole number up to it is a double.
+const WHOLE_MOST: f64 = 9_007_199_254_740_992.0;
+
+/// `x` as a ratio of whole numbers, exactly: a double is a whole number times a power of two, so
+/// doubling it reaches a whole number. `None` where the two would not fit.
+fn ratio(x: f64) -> Option<Point> {
+    let (mut num, mut den) = (x, 1_i64);
+    while math::floor(num).ok()?.get() != num {
+        num *= 2.0;
+        den = den.checked_mul(2)?;
+    }
+    (num.abs() <= WHOLE_MOST).then(|| Point {
+        num: exact_i64(num),
+        den,
+    })
+}
+
 /// How a conic runs in its two vectors: c + αu + βv with (α, β) on a unit shape.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Shape {
@@ -1341,13 +1463,17 @@ pub(crate) fn quadratic_with(
 }
 
 /// A line with a conic in the plane. Written in the conic's own coordinates the line is a quadratic
-/// in s, A·s² + 2B·s + C, and B² − AC counts the meetings. `None` where an interval cannot tell:
-/// the engine then looks at the pair, and a tangency is flagged there.
+/// in s, A·s² + 2B·s + C, and B² − AC counts the meetings. Where the intervals cannot tell and
+/// `circle`, the conic, is of whole numbers, its exact Δ and exact counts place the roots
+/// ([`parted`]).
+/// `None` where neither can tell: the engine then looks at the pair, and a tangency is flagged
+/// there.
 fn line_conic<const D: usize>(
     line: &Line<D>,
     conic: &Conic,
     coordinates: [usize; 2],
     exact: Option<Meeting>,
+    circle: Option<&Circle<D>>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let i = Interval::point;
@@ -1380,7 +1506,11 @@ fn line_conic<const D: usize>(
             b0.square()?.sub(a0)?,
         ),
     };
-    let Some(roots) = quadratic([a, b, c], exact)? else {
+    let mut roots = quadratic([a, b, c], exact)?;
+    if roots.is_none() {
+        roots = parted(line, circle, [a, b, c], exact)?;
+    }
+    let Some(roots) = roots else {
         return Ok(None);
     };
     let tangent = exact == Some(Meeting::Tangent);
@@ -1663,11 +1793,11 @@ fn closed_form<const D: usize>(
             let Some(conic) = conic_of(other, axes)? else {
                 return Ok(Closed::Absent);
             };
-            let exact = match other {
-                CurveKind::Circle(c) => exactly(x, c),
-                _ => None,
+            let (exact, circle) = match other {
+                CurveKind::Circle(c) => (exactly(x, c), Some(c)),
+                _ => (None, None),
             };
-            line_conic(x, &conic, axes, exact, meter).map(decided)
+            line_conic(x, &conic, axes, exact, circle, meter).map(decided)
         }
         _ => Ok(Closed::Absent),
     }

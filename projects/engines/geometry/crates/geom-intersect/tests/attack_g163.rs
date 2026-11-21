@@ -1331,25 +1331,57 @@ fn a_line_all_but_tangent_to_a_circle_is_answered() {
     // The line through (k, 0) and (2k, 1) passes within about 1 / 2k² of the unit circle's edge,
     // near (0, -1), and meets it twice: the exact count says so, while the discriminant, exactly 1
     // against terms near k⁴, has an enclosure reaching far below zero. The closed form must take
-    // the root of what is not negative and leave the pair to the engine, never fail. The two
-    // crossings stand 2 / k steps apart, far below the floor, and the engine flags them as one
-    // tangent band (12.9), as two circles' closed form makes such a pair one.
+    // the root of what is not negative, never fail. On these whole numbers the exact sum gives
+    // the discriminant itself, 1, and holds the two roots apart, s = −1 and −1 + 2 / (k² + 1),
+    // two crossings 2 / k steps apart, both proven, far below the floor the engine stops at.
     for e in [20, 26] {
         let k = two_to(e);
         let unit = circle([0.0, 0.0], 1.0);
         is_empty(&meet(&segment([k, 0.0], [2.0 * k, 1.0]), &unit));
         let r = meet(&infinite([k, 0.0], [k, 1.0]), &unit);
-        let [
-            Item::Flagged {
-                at,
-                why: Unresolved::TangentBand { .. },
-                ..
-            },
-        ] = r.items()
-        else {
-            panic!("{:?}", r.items())
-        };
-        assert!((at.spans()[0].lo() + 1.0).abs() < 1e-6, "{:?}", r.items());
+        assert_eq!(r.items().len(), 2, "{:?}", r.items());
+        assert!(
+            r.items().iter().all(|i| matches!(
+                i,
+                Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }
+            ) && (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
+            "{:?}",
+            r.items()
+        );
+    }
+}
+
+#[test]
+fn a_line_all_but_tangent_to_a_circle_off_the_axes_is_answered() {
+    // The same line and unit circle moved into space: level at z = 5 about (0, 3, 5), and upright
+    // in x = 5 about (5, 3, 4). Each product of d × W, W = o − c, that the exact sum takes is not
+    // zero in one of the two at least, and the same two crossings are proven in both.
+    for e in [20, 26] {
+        let k = two_to(e);
+        let level = Frame::standard().unwrap();
+        let upright = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
+        for (frame, c, o, d) in [
+            (level, [0.0, 3.0, 5.0], [k, 3.0, 5.0], [k, 1.0, 0.0]),
+            (upright, [5.0, 3.0, 4.0], [5.0, k + 3.0, 4.0], [0.0, k, 1.0]),
+        ] {
+            let unit = CurveKind::Circle(Circle::full(c, 1.0, frame).unwrap());
+            let r = meet(&infinite(o, d), &unit);
+            assert_eq!(r.items().len(), 2, "{c:?}: {:?}", r.items());
+            assert!(
+                r.items().iter().all(|i| matches!(
+                    i,
+                    Item::Point {
+                        contact: PointContact::Crossing,
+                        ..
+                    }
+                ) && (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
+                "{c:?}: {:?}",
+                r.items()
+            );
+        }
     }
 }
 
@@ -2010,10 +2042,12 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
             .iter()
             .any(|d| d.code == "closed-form-to-engine")
     };
+    // The line all but tangent to a circle, half a step off the grid: no exact sum holds its
+    // discriminant, which the coefficients' enclosures cannot sign.
     let k = two_to(20);
     assert!(routed(
-        &infinite([k, 0.0], [k, 1.0]),
-        &circle([0.0, 0.0], 1.0)
+        &infinite([k + 0.5, 0.0], [k, 1.0]),
+        &circle([0.5, 0.0], 1.0)
     ));
     let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
     let level = infinite([0.0, 0.0], [1.0, 0.0]);
