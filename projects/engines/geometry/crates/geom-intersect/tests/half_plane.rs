@@ -571,11 +571,12 @@ fn a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side(
     assert!(middle[0] < 0.0, "{middle:?}");
     let horn = revolution(tube);
     // The span is short of a whole turn by 1.1e−16 half-turns, and the ring ρ = 2 stands 6.9e−18
-    // half-turns inside the arc's end, which no enclosure of its turn tells (issue 1142): this cut
-    // is both rings or none (the general paths).
-    if let Some(r) = natural(&level(0.0), &horn, &mut meter()).unwrap() {
-        assert_rings(&r, &[(0.0, 0.0), (2.0, 0.0)]);
-    }
+    // half-turns inside the arc's end: its turn, read on the profile's stored frame, not on its
+    // rounded image in the half-plane, is told inside the arc (issue 1142).
+    let mut m = meter();
+    let r = natural(&level(0.0), &horn, &mut m).unwrap().unwrap();
+    assert_rings(&r, &[(0.0, 0.0), (2.0, 0.0)]);
+    assert_eq!(m.used().work, 4284);
     let z = 0.75_f64.sqrt();
     let r = natural(&cylinder(1.5, WIDE), &horn, &mut meter())
         .unwrap()
@@ -588,6 +589,24 @@ fn a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side(
         .unwrap()
         .unwrap();
     assert_rings(&r, &[(1.125, -z), (1.125, z)]);
+}
+
+#[test]
+fn a_profile_from_a_spheres_pole_meets_it_at_the_pole_by_its_proof() {
+    // The segment from the pole (0, 0, 5) of the sphere of radius 5 to (8, 0, 11) sweeps a funnel
+    // that stands above the sphere's cap, so they meet at the pole alone. The profile's rounded
+    // image in the half-plane misses the pole by 1.7e−15, so the meeting's turn reaches the half
+    // circle's end 1/2: the pole is proven on the profile by exact signs on its stored doubles
+    // (issue 1142).
+    let ball = Sphere::new([0.0; 3], 5.0, up(), (ROUND, (-0.5, 0.5))).unwrap();
+    let funnel = revolution(segment([0.0, 0.0, 5.0], [8.0, 0.0, 11.0]));
+    let mut m = meter();
+    let r = natural(&SurfaceKind::Sphere(ball), &funnel, &mut m)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(r.items(), [Item::Point { .. }]), "{r:?}");
+    assert_rings(&r, &[(0.0, 5.0)]);
+    assert_eq!(m.used().work, 104);
 }
 
 #[test]
