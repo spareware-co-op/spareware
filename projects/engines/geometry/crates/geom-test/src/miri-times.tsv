@@ -50,9 +50,12 @@
 # GitHub measuring run 44794774394 (miri_measure=all on rows/phase5-yardstick at 91338c803, miri_measure_tests naming the six tests over 375 s that #1111, #1113, #1114 and #1119 sped up), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804230825 (miri_measure on rows/phase5-yardstick at fd4196eac, every test with no row), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
 # GitHub measuring run 44804656037 (miri_measure on rows/phase5-yardstick at 527d8b689, the seven tests #1125 changed or added), every report in yardstick seconds (decision 32.78), stopped at 600 s; listing: that run's own listing.
+# GitHub measuring runs 44697299534 (miri_measure=new on fix/endless-plane-margin at d7baedbef), 44707088794 (miri_measure=new on it at a5ca7fce3) and 44759797282 (miri_measure=new on it at e39079682), the later two with miri_measure_tests naming the attack_g165 test each added, every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 5 new tests (only attack_g165 tests were added since d7baedbef); the train's tests the runs also measured keep their rows.
+# GitHub measuring run 44826270022 (miri_measure=new on fix/endless-plane-margin at 614c8729c, miri_measure_tests naming the attack_g165 test it added on a short second vector), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring runs 44703337217 (miri_measure=new on test/phase5-intersect-mutants-e at a8b6d5823) and 44679007301 (miri_measure=all on it at 78c4ad94b, miri_measure_tests binary_id(geom-intersect::general_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 general_mutants tests, each from the later run that measured it (the tests since 78c4ad94b are new); the train's tests the runs also measured keep their rows.
 # GitHub measuring run 44677039347 (miri_measure=new on test/phase5-intersect-mutants-d3 at e749145e0, miri_measure_tests binary_id(geom-intersect::boundary_mutants)), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 2 new boundary_mutants tests; the train's tests the run also measured keep their rows.
 # GitHub measuring runs 44679002461 (miri_measure=all on test/phase5-intersect-mutants-c at 3e2edaf2c, miri_measure_tests binary_id(geom-intersect::fit_mutants)) and 44764005413 (miri_measure=all on it at e1af300f1, miri_measure_tests naming two_planes_meeting_in_a_line_have_the_recorded_bounds, the one test changed since), every report in yardstick seconds (decision 32.78), stopped at 600 s: the branch's 11 fit_mutants tests, each from the later run that measured it.
+# GitHub measuring run 44835390573 (miri_measure=new on fix/921-reduced at 058283656, miri_measure_tests naming the branch's 4 new half_plane tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44819854987 (miri_measure=all on test/phase5-intersect-mutants-h at 794b548f7, the train merged in, miri_measure_tests naming the branch's 3 new contact_mutants tests and the one whose body it rewrote), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -1133,6 +1136,8 @@ native-only over 693	geom-intersect	boundary::tests::a_curved_edge_is_halved_dow
 123	geom-intersect	boundary::tests::the_rows_kept_have_the_largest_determinant_the_first_of_a_tie
 6	geom-intersect	curve_surface::tests::a_lower_half_point_whose_x_is_not_surely_negative_is_its_mirror_a_turn_on
 7	geom-intersect	curve_surface::tests::a_lower_half_point_whose_x_is_surely_negative_is_its_mirror_a_turn_on
+5	geom-intersect	curve_surface::tests::a_step_in_space_is_one_over_each_length_on_square_vectors
+5	geom-intersect	curve_surface::tests::a_step_in_space_reaches_further_in_a_parameter_on_slanted_vectors
 6	geom-intersect	curve_surface::tests::an_upper_half_point_is_kept_on_either_side
 140	geom-intersect	curve_surface::tests::the_enclosures_signs_are_the_exact_signs_wherever_they_exclude_zero
 5	geom-intersect	curve_surface::tests::the_sign_of_a_number_known_not_to_be_zero_is_its_sign_bit
@@ -1338,6 +1343,10 @@ native-only over 1129	geom-intersect::attack_g165	a_column_on_a_slab_or_a_dome_m
 20	geom-intersect::attack_g165	an_endless_half_plane_cuts_a_cylinder_in_a_half_circle
 47	geom-intersect::attack_g165	an_endless_plane_crossed_where_a_circles_box_ends_is_two_proven_crossings
 27	geom-intersect::attack_g165	an_endless_plane_crossed_where_an_arcs_box_ends_is_two_proven_crossings
+23	geom-intersect::attack_g165	an_endless_plane_on_a_short_first_vector_crosses_a_circle_across_it_in_two_proven_crossings
+12	geom-intersect::attack_g165	an_endless_plane_on_a_short_first_vector_crosses_an_arc_across_it_in_two_proven_crossings
+13	geom-intersect::attack_g165	an_endless_plane_on_a_short_second_vector_crosses_an_arc_across_it_in_two_proven_crossings
+352	geom-intersect::attack_g165	an_endless_plane_on_short_or_long_vectors_crosses_a_unit_circle_in_two_proven_crossings
 14	geom-intersect::attack_g165	an_endless_plane_square_to_a_cones_axis_cuts_it_in_a_circle
 108	geom-intersect::attack_g165	an_endless_plane_through_a_cones_axis_cuts_it_in_two_rulings_through_its_apex
 203	geom-intersect::attack_g165	an_offset_from_a_corner_that_ends_at_zero_reaches_it
@@ -1649,9 +1658,12 @@ native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_cylinder_twice
 3	geom-intersect::grid_line_exact	a_line_whose_direction_rounds_onto_the_grid_crosses_a_sphere_twice
 57	geom-intersect::half_plane	a_circle_in_a_plane_of_the_axis_is_a_meridian_while_it_stays_on_one_side
+58	geom-intersect::half_plane	a_circle_near_the_axis_in_a_plane_of_a_slanted_direction_is_read_in_that_plane
 155	geom-intersect::half_plane	a_circle_through_the_plane_at_its_ends_and_middle_is_no_meridian
 329	geom-intersect::half_plane	a_cone_scaled_by_three_meets_a_coaxial_revolution_in_its_ring
 2	geom-intersect::half_plane	a_crossing_keeps_the_boxes_of_its_quotients
+20	geom-intersect::half_plane	a_curved_profile_with_its_ends_and_middle_on_one_side_that_crosses_the_axis_is_no_meridian
+303	geom-intersect::half_plane	a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side
 32	geom-intersect::half_plane	a_meridian_whose_plane_is_exact_only_with_the_errors_of_its_products_is_one
 50	geom-intersect::half_plane	a_nurbs_profile_about_a_slanted_axis_is_read_in_the_plane_its_control_points_name
 78	geom-intersect::half_plane	a_nurbs_profile_is_a_meridian_by_its_control_points
@@ -1659,6 +1671,7 @@ native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_
 18	geom-intersect::half_plane	a_nurbs_profile_that_leaves_the_plane_between_its_ends_and_middle_is_no_meridian
 17	geom-intersect::half_plane	a_profile_across_the_axis_keeps_the_rings_of_its_far_part
 129	geom-intersect::half_plane	an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_centre
+323	geom-intersect::half_plane	the_issues_cone_scaled_by_three_meets_the_scaled_funnel_in_its_ring
 2	geom-intersect::half_plane	two_lines_parallel_to_within_rounding_meet_nowhere_on_their_spans
 native-only over 551	geom-intersect::known_mutants	a_cone_a_sphere_and_a_torus_carry_a_tangent_tube_by_their_own_equations
 native-only over 551	geom-intersect::known_mutants	a_crossing_curve_is_proven_whichever_way_it_runs

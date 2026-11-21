@@ -222,12 +222,15 @@ fn to_half_plane(on: &Axis, at: Vector) -> Result<Option<Affine<2>>, IntersectEr
 
 /// The map to the half-plane of `on` that holds the profile `kind`, if the curve lies in that
 /// half-plane: decided from its own data, exactly, by [`in_half_plane`]. The axis is the profile's
-/// as stored, through `c` along `e`. The side is read at a circle's centre, which that proof needs
-/// off the axis, and at any other curve's middle. The map is read at the middle, as it always was,
-/// so no meridian moves; where the middle is on the axis, as a horn torus's circle has it, at the
-/// centre. (An ellipse's or a parabola's middle is nearer its centre than the radius of the ball
-/// [`in_half_plane`] proves clear, strictly, as its axes are not parallel; so where that proof
-/// holds the middle is off the axis, on the centre's side, and the middle serves.)
+/// as stored, through `c` along `e`. The side and the map are read at one point, the anchor: a
+/// circle's centre, which that proof needs off the axis and puts in the plane of the axis, and any
+/// other curve's middle. (An ellipse's or a parabola's middle is nearer its centre than the radius
+/// of the ball [`in_half_plane`] proves clear, strictly, as its axes are not parallel; so where that
+/// proof holds the middle is off the axis, on the centre's side, and the middle serves.) A
+/// circle's map was read at its middle as rounded, which is not data the proof holds: where the
+/// circle touches the axis there, as a horn torus's does, the middle rounded across the axis
+/// mirrored the meridian and lost its rings, and rounded off the plane of the axis turned it out
+/// of that plane (issue 921).
 fn half_plane_of(
     on: &Axis,
     (c, e): ([f64; 3], [f64; 3]),
@@ -239,12 +242,8 @@ fn half_plane_of(
         CurveKind::Circle(x) => x.center(),
         _ => middle_of,
     };
-    let map = match to_half_plane(on, lift(middle_of)?)? {
-        Some(map) => map,
-        None => match to_half_plane(on, lift(anchor)?)? {
-            Some(map) => map,
-            None => return Ok(None),
-        },
+    let Some(map) = to_half_plane(on, lift(anchor)?)? else {
+        return Ok(None);
     };
     Ok(in_half_plane(&Turn::new(c, e, anchor), kind, (lo, hi)).then_some(map))
 }

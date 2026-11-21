@@ -8,7 +8,8 @@
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly, and the cases reach every kind of surface.
 //! - Issue 995's segments along planes off the grid are answered by the closed form, each held to
-//!   its answer and its count, and so are its segments touching a cone's start circle (group Q).
+//!   its answer and its count, and so are its segments touching a cone's start circle (group Q)
+//!   and issue 1112's segments along a cone's ruling.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -194,6 +195,85 @@ fn along(uv: Option<[(f64, f64); 2]>) -> String {
 #[test]
 fn a_segment_along_a_plane_off_the_grid_is_a_closed_form() {
     for (data, uv, work) in LINES_ALONG_PLANES {
+        let (case, _) = decode(data);
+        let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let found = found.unwrap_or_else(|| panic!("stopped on the budget: {data:02x?}"));
+        assert_eq!(format!("{:?}", found.items()), along(uv), "{data:02x?}");
+        assert_eq!(used, work, "{data:02x?}");
+        holds(check(&case));
+    }
+}
+
+/// Issue 1112's inputs, stored in the target's `crashes` folder, each with the answer one call of
+/// `curve_surface` gives and the work it takes: a segment along a ruling of a cone about the z
+/// axis, (0, 4, −4) to (0, 8, 4) on the cone through (0, −4, 12) of start radius 16 and slope 0.5;
+/// three on cones of slope zero, whose rulings run along the axis; and (0, 0, 4) to the apex at
+/// (0, 4, −4) of the cone through (0, 4, 0) of start radius 2 and slope 0.5. The line's quadratic
+/// leads with A = 0, whose enclosure `quadratic_with` refused, and the engine ran along it: 927,183,
+/// 826,784, 946,148 and 832,796 units for one flagged item, and 1,048,577 for the budget's stop.
+/// Whether a line is parallel to a ruling is an exact sign now, and one with B and C zero lies
+/// along it (decision 32.107): one overlap by identity over all of it, t in [0, 1], at the
+/// enclosures of (u, v) given.
+const SEGMENTS_ALONG_A_RULING: [Pinned; 5] = [
+    (
+        &[
+            0xf6, 0x00, 0x01, 0xff, 0x00, 0x02, 0x01, 0xff, 0x00, 0xff, 0x03, 0x0f, 0x00, 0x18,
+            0x00, 0x26,
+        ],
+        Some([
+            (0.499_999_999_999_999_7, 0.500_000_000_000_000_3),
+            (-16.000_000_000_000_018, -7.999_999_999_999_988),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0x03, 0xf8, 0x00,
+            0x00, 0x00,
+        ],
+        Some([
+            (0.0, 1.5e-323),
+            (-3.996_802_888_650_565e-15, 4.000_000_000_000_004),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0xff, 0xff, 0x20, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0x03, 0xf8, 0x00,
+            0x00, 0x00,
+        ],
+        Some([
+            (0.0, 1.5e-323),
+            (-1.705_302_565_824_241e-13, 132.000_000_000_000_14),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0xff, 0xff, 0x00, 0xff, 0xff, 0xfe, 0x03, 0xfe, 0xff, 0xfd, 0x03, 0xf8, 0x00,
+            0x43,
+        ],
+        Some([
+            (0.0, 1.5e-323),
+            (3.999_999_999_999_988_5, 12.000_000_000_000_009),
+        ]),
+        1,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0xff, 0x0f, 0x00, 0x01, 0x00, 0x01,
+        ],
+        Some([
+            (1.499_999_999_999_999_6, 1.500_000_000_000_000_4),
+            (-4.000_000_000_000_009, 4.000_000_000_000_004),
+        ]),
+        1,
+    ),
+];
+
+#[test]
+fn a_segment_along_a_cone_s_ruling_is_a_closed_form() {
+    for (data, uv, work) in SEGMENTS_ALONG_A_RULING {
         let (case, _) = decode(data);
         let (found, used) = answer_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
         let found = found.unwrap_or_else(|| panic!("stopped on the budget: {data:02x?}"));
