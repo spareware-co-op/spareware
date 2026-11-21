@@ -24,6 +24,10 @@
 //!   proven within the contact radius of the other at the finest refinement, and is apart as soon
 //!   as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with
 //!   [`crate::rule::NearContact`]. Never a sampled check.
+//! - **Undecided is near.** Where the search from a piece's centre leaves the other block's nearest
+//!   points undecided, as from the centre of a circle on a copy of it, the distance is the widest
+//!   enclosure, zero to the largest double: the piece is neither apart nor touching, and is cut on
+//!   (issue 1152).
 //! - **Blocks of one operand are never common.** An operand's own edges meet only at their
 //!   vertices, so only blocks of different operands are compared.
 //! - **Deterministic.** Groups are taken in the order of their end vertices, blocks within a group
@@ -191,7 +195,9 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
 
 /// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
 /// on its own, so a nearest point of the curve outside the block is never taken for one of the
-/// block's. The upper end is infinite where a search is left undecided.
+/// block's. A search left undecided, as from the centre of a circle on a copy of it, gives the
+/// widest enclosure, zero to the largest double, so the piece is read as near and cut on (issue
+/// 1152).
 fn from_block(
     far_side: &Span<'_>,
     centre: &[f64; 3],
@@ -209,7 +215,9 @@ fn from_block(
                 .min_by(|x, y| x.lo().total_cmp(&y.lo()))
                 .ok_or(IntersectError::Internal)?,
             Projection::Set { distance, .. } => distance,
-            Projection::NonIsolated { .. } => Interval::new(0.0, f64::INFINITY)?,
+            // The nearest points could not be told apart: no bound but the widest, as
+            // `crate::distance` gives (an infinite end is no interval).
+            Projection::NonIsolated { .. } => Interval::new(0.0, f64::MAX)?,
         };
         lo = lesser(lo, d.lo());
         hi = lesser(hi, d.hi());

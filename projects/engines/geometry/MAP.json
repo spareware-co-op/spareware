@@ -2176,6 +2176,7 @@
           "guarantees": [
             "**Exact within one analytic kind on grid data.** Two lines whose origins and directions are whole numbers of steps are one or not by an exact test in 128-bit integers, with no enclosure; the common block says [`Proof::Exact`].",
             "**The contact rule across kinds.** Any other pair is one only when every piece of each is proven within the contact radius of the other at the finest refinement, and is apart as soon as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with [`crate::rule::NearContact`]. Never a sampled check.",
+            "**Undecided is near.** Where the search from a piece's centre leaves the other block's nearest points undecided, as from the centre of a circle on a copy of it, the distance is the widest enclosure, zero to the largest double: the piece is neither apart nor touching, and is cut on (issue 1152).",
             "**Blocks of one operand are never common.** An operand's own edges meet only at their vertices, so only blocks of different operands are compared.",
             "**Deterministic.** Groups are taken in the order of their end vertices, blocks within a group in edge order, and each common block lists its members in that order."
           ],
