@@ -66,6 +66,7 @@
 # GitHub measuring run 44854421238 (miri_measure=new on rows/phase5-subnormal-box-partials at the train's 625c4ebc9, miri_measure_tests naming the attack_g60 test #1143 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44860095410 (miri_measure=new on fix/nonisolated-common-blocks at 028670b0d, miri_measure_tests naming the common_blocks test #1152 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44879042375 (miri_measure=new on fix/seam-window-small-size at f4897a5e9, miri_measure_tests naming the across_the_narrowest test #1138 adds), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1173,6 +1174,7 @@ native-only over 693	geom-intersect	boundary::tests::a_curved_edge_is_halved_dow
 7	geom-intersect	quadrics::tests::cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines
 7	geom-intersect	quadrics::tests::equal_cylinders_on_parallel_axes_a_hair_apart_meet_in_two_lines
 7	geom-intersect	quadrics::tests::unequal_cylinders_on_parallel_axes_a_hair_apart_meet_nowhere
+5	geom-intersect::across_the_narrowest	arcs_crossing_at_right_angles_in_x_and_z_are_a_near_miss_found_leaving_out_y
 38	geom-intersect::attack_g158	a_batch_gives_the_same_answers_at_1_to_8_threads
 2	geom-intersect::attack_g158	a_box_across_the_join_is_compared_with_the_boxes_it_reaches_only
 2	geom-intersect::attack_g158	a_box_reaching_an_open_domain_s_end_goes_no_further
