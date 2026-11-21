@@ -1585,6 +1585,10 @@ struct Contact<'a> {
     seams: [Seam; 3],
     pieces: Vec<BernsteinCurve<3>>,
     patches: Vec<BernsteinPatch<3>>,
+    /// How far in space one unit of t, of u and of v reaches, for the engine's contraction test
+    /// ([`Field::weights`]): 1 each, but for a plane held from an endless one, whose u and v are
+    /// weighed by its vectors.
+    weights: [f64; 3],
 }
 
 /// The patch of `patches` that holds `u` × `v` whole, cut to it.
@@ -1738,6 +1742,10 @@ impl Contact<'_> {
 }
 
 impl Field<3> for Contact<'_> {
+    fn weights(&self) -> [f64; 3] {
+        self.weights
+    }
+
     fn at(
         &self,
         [t, u, v]: [f64; 3],
@@ -2124,6 +2132,23 @@ fn plane_box(plane: &Plane, bound: &Bounds<3>) -> Result<(Interval, Interval), I
     let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
     let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
     Ok((u, v))
+}
+
+/// How far one grid step in space can reach in each of `plane`'s parameters: bounds from above, in
+/// u and in v.
+///
+/// Theorem. A vector w of the plane c + u·a + v·b is du·a + dv·b with
+/// du = w·(|b|²·a − (a·b)·b)/D and D = |a|²·|b|² − (a·b)², positive since a and b are not parallel.
+/// The vector it is dotted with has square |b|²·D, so by Cauchy and Schwarz |du| ≤ |w|·√(|b|²/D),
+/// reached where w runs along it; the same with a and b exchanged gives |dv| ≤ |w|·√(|a|²/D). For
+/// vectors square to each other these are |w|/|a| and |w|/|b|. Each is enclosed from the stored
+/// doubles and its upper end taken, so a step of length 1 moves u and v by no more than is returned.
+fn step_in_parameters(plane: &Plane) -> Result<(f64, f64), IntersectError> {
+    let (_, a, b) = plane.vectors();
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    Ok((bb.div(det)?.sqrt()?.hi(), aa.div(det)?.sqrt()?.hi()))
 }
 
 /// A circle lying in a plane: an overlap for each part of it the plane's domain holds, nothing
@@ -3323,22 +3348,32 @@ pub fn curve_surface(
     }
     // A plane may run on without end (the only kind that may), and the engine needs a finite
     // domain. Every point of the curve lies in its box, so the plane held, on each end it lacks, to
-    // that box read in its own parameters and a unit past it meets the curve where the plane does,
-    // and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across an
-    // endless plane was refused as invalid input).
+    // that box read in its own parameters and a margin past it meets the curve where the plane
+    // does, and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across
+    // an endless plane was refused as invalid input). The margin is room for the engine to prove a
+    // root on the box's edge alone, and any width of it is sound; it is one grid step in space,
+    // read in each parameter by `step_in_parameters`, so it does not shrink in space with short
+    // vectors (issue 1078: a unit of the parameter left 2^-30 of a step past a circle's crossings
+    // on vectors of that length, and both were flagged). The engine's contraction test weighs u
+    // and v by the same step, a unit of each as 1/du and 1/dv of a step in space: any positive
+    // weights prove a contraction, and unweighed, the plain norm of a step on short vectors
+    // stays above 1 down to the least box the engine keeps, however much room the box has.
     let held;
     let mut surface = surface;
+    let mut weights = [1.0; 3];
     if let SurfaceKind::Plane(p) = surface {
         let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
         if ![u0, u1, v0, v1].into_iter().all(f64::is_finite) {
             let (u, v) = in_parameters(curve, p, finite(curve)?, meter)?;
+            let (du, dv) = step_in_parameters(p)?;
+            weights = [1.0, 1.0 / du, 1.0 / dv];
             let mut ends = [(u0, u1), (v0, v1)];
-            for ((lo, hi), x) in ends.iter_mut().zip([u, v]) {
+            for (((lo, hi), x), step) in ends.iter_mut().zip([u, v]).zip([du, dv]) {
                 if !lo.is_finite() {
-                    *lo = (smaller(x.lo(), *hi) - 1.0).next_down();
+                    *lo = (smaller(x.lo(), *hi) - step).next_down();
                 }
                 if !hi.is_finite() {
-                    *hi = (larger(x.hi(), *lo) + 1.0).next_up();
+                    *hi = (larger(x.hi(), *lo) + step).next_up();
                 }
             }
             let (c, a, b) = p.vectors();
@@ -3354,6 +3389,7 @@ pub fn curve_surface(
         seams: [seam_t, seam_u, seam_v],
         pieces: crate::curve::pieces(curve, meter)?,
         patches: patches(surface, meter)?,
+        weights,
     };
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
     let solved = solve(&field, domain, domain, |_, _| Ok(true), meter)?;
@@ -3386,6 +3422,37 @@ mod tests {
 
     fn exactly(x: f64) -> Interval {
         Interval::point(x).unwrap()
+    }
+
+    fn plane_on(a: [f64; 3], b: [f64; 3]) -> Plane {
+        Plane::new([0.0; 3], a, b, ((-1.0, 1.0), (-1.0, 1.0))).unwrap()
+    }
+
+    #[test]
+    fn a_step_in_space_is_one_over_each_length_on_square_vectors() {
+        // u's vector 2^-30 long and v's 2^-20: a step is 2^30 of u and 2^20 of v, each held from
+        // above within a rounding.
+        let (du, dv) = step_in_parameters(&plane_on(
+            [1.0 / 1_073_741_824.0, 0.0, 0.0],
+            [0.0, 1.0 / 1_048_576.0, 0.0],
+        ))
+        .unwrap();
+        assert!((1_073_741_824.0..1_073_741_824.1).contains(&du), "{du}");
+        assert!((1_048_576.0..1_048_576.1).contains(&dv), "{dv}");
+        // Unit vectors: a unit of each.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])).unwrap();
+        assert!((1.0..1.000_000_1).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
+    }
+
+    #[test]
+    fn a_step_in_space_reaches_further_in_a_parameter_on_slanted_vectors() {
+        // a = (1, 0, 0), b = (1, 1, 0): D = 1·2 − 1 = 1, so a step is at most √2 of u (along
+        // (1, −1, 0)/√2, which is √2·a − b/√2) and 1 of v.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [1.0, 1.0, 0.0])).unwrap();
+        let root = 2.0_f64.sqrt();
+        assert!((root..root + 1e-9).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
     }
 
     #[test]
