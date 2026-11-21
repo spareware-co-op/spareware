@@ -73,7 +73,7 @@ use geom_nurbs::Curve;
 use geom_run::WorkMeter;
 use geom_surface::{Extrusion, ParamSurface, Plane, Revolution, SurfaceKind, Torus};
 
-use crate::curve::{curves, finite, sign_of, turn_of, whole};
+use crate::curve::{bound_on, curves, finite, seam_of, sign_of, turn_of, whole};
 use crate::curve_surface::{cross, curve_surface, dot, lift, minus};
 use crate::error::IntersectError;
 use crate::quadrics::{
@@ -1381,7 +1381,9 @@ fn rings(
                         let [t, ..] = at.spans() else {
                             return Err(IntersectError::Internal);
                         };
-                        let b = x.bound((t.lo(), t.hi()), meter)?;
+                        // On a whole meridian circle a span across its join is read modulo the
+                        // turn (decision 32.104).
+                        let b = bound_on(x, *t, meter)?;
                         let ([r0, z0], [r1, z1]) = (b.lo, b.hi);
                         let (r, z) = (Interval::new(r0, r1)?, Interval::new(z0, z1)?);
                         place(r, z, !matches!(contact, PointContact::Crossing))?;
@@ -1633,7 +1635,9 @@ fn plane_along(
                 let [t, ..] = place.spans() else {
                     return Err(IntersectError::Internal);
                 };
-                let b = kind.bound((t.lo(), t.hi()), meter)?;
+                // On a whole profile circle a span across its join is read modulo the turn
+                // (decision 32.104).
+                let b = bound_on(kind, *t, meter)?;
                 let [x0, y0, z0] = b.lo;
                 let [x1, y1, z1] = b.hi;
                 let from = [
@@ -1676,6 +1680,7 @@ fn plane_across(
     let [e, f, g] = d;
     // Where the profile passes the planes the extrusion's ends reach, whose images are its ends.
     let (lo, hi) = finite(kind)?;
+    let seam = seam_of(kind, (lo, hi));
     let mut cuts = Vec::new();
     for v in [span.0, span.1] {
         let moved = endless(a, [x - v * e, y - v * f, z - v * g])?;
@@ -1683,7 +1688,9 @@ fn plane_across(
             let [t, ..] = item.at().spans() else {
                 return Err(IntersectError::Internal);
             };
-            let t = tight::middle(*t);
+            // On a whole profile circle a span across its join is read modulo the turn
+            // (decision 32.104): its middle, on the window.
+            let t = seam.wrapped(tight::middle(*t));
             if t > lo && t < hi {
                 cuts.push(t);
             }
@@ -1771,17 +1778,18 @@ struct Sweep {
 }
 
 impl Sweep {
-    /// How far along the unit direction `d` the sweep's points over `t` start, enclosed.
+    /// How far along the unit direction `d` the sweep's points over `t` start, enclosed: on a
+    /// whole profile circle `t` may run across its join (decision 32.104).
     fn height(
         &self,
-        t: (f64, f64),
+        t: Interval,
         d: Vector,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Interval, IntersectError> {
         let Some(profile) = &self.profile else {
             return point(self.from);
         };
-        let b = profile.bound(t, meter)?;
+        let b = bound_on(profile, t, meter)?;
         let ([x0, y0, z0], [x1, y1, z1]) = (b.lo, b.hi);
         let at = [
             Interval::new(x0, x1)?,
@@ -1795,7 +1803,7 @@ impl Sweep {
     /// and how wide that start is.
     fn reach(
         &self,
-        t: (f64, f64),
+        t: Interval,
         d: Vector,
         meter: &mut WorkMeter<'_>,
     ) -> Result<((f64, f64), f64), IntersectError> {
@@ -1806,11 +1814,11 @@ impl Sweep {
 
     /// Every height the sweep reaches, enclosed.
     fn whole(&self, d: Vector, meter: &mut WorkMeter<'_>) -> Result<(f64, f64), IntersectError> {
-        let span = match &self.profile {
+        let (lo, hi) = match &self.profile {
             Some(profile) => finite(profile)?,
             None => (0.0, 0.0),
         };
-        let h = self.height(span, d, meter)?;
+        let h = self.height(Interval::new(lo, hi)?, d, meter)?;
         Ok((h.lo() + self.run.0, h.hi() + self.run.1))
     }
 }
@@ -1913,14 +1921,16 @@ pub(crate) fn sweeps(
                 let [t, s, ..] = at.spans() else {
                     return Err(IntersectError::Internal);
                 };
-                // Each sweep runs from where its profile stands at the crossing.
-                let ((a0, a1), wide_a) = first.reach((t.lo(), t.hi()), d, meter)?;
-                let ((b0, b1), wide_b) = second.reach((s.lo(), s.hi()), d, meter)?;
+                // Each sweep runs from where its profile stands at the crossing. On a whole
+                // cross-section circle a span across its join is read modulo the turn (decision
+                // 32.104).
+                let ((a0, a1), wide_a) = first.reach(*t, d, meter)?;
+                let ((b0, b1), wide_b) = second.reach(*s, d, meter)?;
                 let (lo, hi) = (tight::larger(a0, b0), tight::smaller(a1, b1));
                 if lo >= hi {
                     continue;
                 }
-                let box2 = first.section.bound((t.lo(), t.hi()), meter)?;
+                let box2 = bound_on(&first.section, *t, meter)?;
                 let ([x0, y0], [x1, y1]) = (box2.lo, box2.hi);
                 let from = plus(
                     scale(side, Interval::new(x0, x1)?)?,

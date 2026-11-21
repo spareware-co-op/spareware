@@ -249,7 +249,7 @@ fn a_line_meets_a_sphere() {
     let p = points(&r);
     near(p[0][0], 5.0);
     near(p[1][0], 13.0);
-    near(p[0][1], 0.0);
+    near(p[0][1], 2.0);
     let turn = 4.0_f64.atan2(3.0) / core::f64::consts::PI;
     near(p[0][2], -turn);
     near(p[1][2], turn);
@@ -283,9 +283,9 @@ fn a_line_meets_a_cylinder() {
         "{:?}",
         r.items()
     );
-    spans_hold(&r, [(0.0, 1.0), (0.0, 0.0), (-9.0, 9.0)]);
+    spans_hold(&r, [(0.0, 1.0), (2.0, 2.0), (-9.0, 9.0)]);
     let r = meet(&segment([5.0, 0.0, 9.0], [5.0, 0.0, -9.0]), &c);
-    spans_hold(&r, [(0.0, 1.0), (0.0, 0.0), (-9.0, 9.0)]);
+    spans_hold(&r, [(0.0, 1.0), (2.0, 2.0), (-9.0, 9.0)]);
     // Past the cylinder's height.
     is_empty(&meet(&line([-9.0, 3.0, 60.0], [1.0, 0.0, 0.0]), &c));
 }
@@ -302,11 +302,11 @@ fn a_line_meets_a_cone() {
     near(p[1][0], 12.0);
     near(p[0][2], 1.0);
     near(p[0][1], 1.0);
-    near(p[1][1], 0.0);
+    near(p[1][1], 2.0);
     // Below the apex the radius is negative and e(u) runs the other way.
     let p = points(&meet(&line([-9.0, 0.0, -5.0], [1.0, 0.0, 0.0]), &c));
     assert_eq!(p.len(), 2);
-    near(p[0][1], 0.0);
+    near(p[0][1], 2.0);
     near(p[1][1], 1.0);
     // Parallel to a ruling: one root. Under Miri the line runs eight and a half steps from the
     // ruling beside it, not one and a half, on the cone for v from −5 to 5, its apex still on it:
@@ -659,7 +659,7 @@ fn an_axis_off_the_origin_is_read_exactly() {
         "{:?}",
         r.items()
     );
-    spans_hold(&r, [(0.0, 1.0), (0.0, 0.0), (-9.0, 9.0)]);
+    spans_hold(&r, [(0.0, 1.0), (2.0, 2.0), (-9.0, 9.0)]);
     let t = SurfaceKind::Torus(
         Torus::new([3.0, 4.0, 0.0], 10.0, 2.0, frame(), (ROUND, ROUND)).unwrap(),
     );

@@ -54,9 +54,11 @@
 //!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
 //!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
 //!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
-//!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
-//!   circle whose stretches would meet, as where a side stands within a rounding of touching it
-//!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's. Where a side
+//!   stands within a rounding of touching the circle, the square of its half-chord is enclosed
+//!   from its exact sum, so its two crossings are held apart (decision 32.108). A circle whose
+//!   stretches would still meet, two crossings closer than a step of their angle, is the
+//!   engine's (decision 32.80).
 //! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
 //!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
 //!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
@@ -89,6 +91,9 @@
 //! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
 //! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
 //! where an enclosure of the same value holds zero.
+//! A unit circle in a plane whose domain's side stands a step inside touching it cost 5,097
+//! units before decision 32.108, nearly all of it the engine's; now 11, and one exact sum of 17
+//! products for each crossing, formed only where the enclosure of its square holds zero.
 //! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
 //! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
 //! now a few predicates, and a box of the circle for each point. A plane's edge through a cone's
@@ -134,9 +139,9 @@ use geom_surface::{
 
 use crate::closed::{self, Meeting};
 use crate::curve::{
-    Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
-    grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span, turn_of,
-    whole, widest,
+    Crossing, Seam, bound_over, certified, cut, enclosed_sum, exact_steps, finite, grid_box,
+    grid_line, grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span,
+    turn_of, whole, widest,
 };
 use crate::error::IntersectError;
 use crate::quadrics::{off_line, parallel, plus, same_line, scale};
@@ -1546,7 +1551,7 @@ fn line_torus(
             items.push(item);
         }
     }
-    let regions = runs(solved.flagged)?;
+    let regions = runs(solved.flagged, &[Seam::open(stretch)])?;
     let settled = exact.is_some_and(|roots| {
         roots.repeated
             && solved.zeros.len().saturating_add(regions.len()) == usize::from(roots.distinct)
@@ -1575,7 +1580,9 @@ fn line_torus(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    let [seam_u, seam_v] = seams;
+    let seams = [Seam::open(stretch), seam_u, seam_v];
+    Intersection::on(items, coverage, Vec::new(), &seams, meter)
 }
 
 /// C(t) − S(u, v).
@@ -1674,7 +1681,7 @@ fn projected(
 
 /// The seams of `surface` over its domain: a round kind closes about its axis, and a torus about its
 /// tube too.
-fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
+pub(crate) fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
     let (u, v) = ParamSurface::domain(surface);
     match surface {
         SurfaceKind::Torus(_) => [Seam::turns(u), Seam::turns(v)],
@@ -1845,26 +1852,53 @@ fn second_order(
     let not_smooth = Unresolved::NonSmooth {
         at: Degeneracy::Crease,
     };
-    // Over a run grown past where rounding swamps second derivatives, and on the domains.
+    // Over a run grown past where rounding swamps second derivatives, and on the domains: on a
+    // whole turn a run may run past the window's end by under a turn (decision 32.104), and is
+    // read modulo the turn, each stretch either side of the join on its own.
     let [seam_t, seam_u, seam_v] = field.seams;
     let [t, u, v] = grown(
         &[t, u, v],
-        &[seam_t.whole()?, seam_u.whole()?, seam_v.whole()?],
+        &[seam_t.reach()?, seam_u.reach()?, seam_v.reach()?],
     )?;
-    let (DerivativeBound::Bounded(d1), DerivativeBound::Bounded(d2)) = (
-        field.curve.derivative_bound(span(t), 1, meter)?,
-        field.curve.derivative_bound(span(t), 2, meter)?,
-    ) else {
-        return Ok(not_smooth);
+    // Written back as an answer writes a span: one grown a turn wide or more is the whole turn,
+    // read once, not again over the stretch past the end that it overlaps.
+    let [t, u, v] = [seam_t.onto(t)?, seam_u.onto(u)?, seam_v.onto(v)?];
+    let mut slopes: [Option<Bounds<3>>; 2] = [None, None];
+    for part in seam_t.spans(t).into_iter().flatten() {
+        for (slot, order) in slopes.iter_mut().zip([1, 2]) {
+            let DerivativeBound::Bounded(d) = field.curve.derivative_bound(part, order, meter)?
+            else {
+                return Ok(not_smooth);
+            };
+            *slot = Some(match slot.take() {
+                Some(a) => a.union(&d).map_err(CurveError::from)?,
+                None => d,
+            });
+        }
+    }
+    let [Some(d1), Some(d2)] = slopes else {
+        return Err(IntersectError::Internal);
     };
     let (d1, d2) = (sides(&d1)?, sides(&d2)?);
     let limit = (Limit::FromRight, Limit::FromRight);
-    let Ok(list) = field
-        .surface
-        .partials_over((span(u), span(v)), limit, 2, meter)
-    else {
-        return Ok(not_smooth);
-    };
+    let mut list: Vec<[Interval; 3]> = Vec::new();
+    for region in field.regions(u, v).into_iter().flatten() {
+        let Ok(part) = field.surface.partials_over(region, limit, 2, meter) else {
+            return Ok(not_smooth);
+        };
+        if list.is_empty() {
+            list = part;
+            continue;
+        }
+        if part.len() != list.len() {
+            return Err(IntersectError::Internal);
+        }
+        for (held, more) in list.iter_mut().zip(&part) {
+            for (a, b) in held.iter_mut().zip(more) {
+                *a = Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()))?;
+            }
+        }
+    }
     let partial = |i: usize, j: usize| -> Result<[Interval; 3], IntersectError> {
         list.get(partial_index(i, j)?)
             .copied()
@@ -1926,32 +1960,38 @@ fn finished(
     for f in &mut flagged {
         f.region = held(f.region)?;
     }
-    let regions = runs(flagged)?;
+    let regions = runs(flagged, &field.seams)?;
     let mut items = Vec::new();
     let mut seen: Vec<[Interval; 3]> = Vec::new();
     for z in &solved.zeros {
         let enclosure = held(z.enclosure)?;
         // A zero inside a run is part of what the run could not tell apart, and one on a join is
-        // found from both sides of it.
-        let meeting = |hull: &[Interval; 3]| {
-            hull.iter()
-                .zip(&enclosure)
-                .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+        // found from both sides of it: on a whole turn, modulo the turn (decision 32.104).
+        let meeting = |hull: &[Interval; 3]| -> Result<bool, IntersectError> {
+            let mut all = true;
+            for ((seam, a), b) in field.seams.iter().zip(hull).zip(&enclosure) {
+                all &= seam.meets(*a, *b)?;
+            }
+            Ok(all)
         };
-        if regions.iter().any(|(hull, _)| meeting(hull)) || seen.iter().any(meeting) {
+        let mut known = false;
+        for hull in regions.iter().map(|(hull, _)| hull).chain(&seen) {
+            known |= meeting(hull)?;
+        }
+        if known {
             continue;
         }
         seen.push(enclosure);
         let [t, u, v] = enclosure;
         items.push(Item::Point {
             at: ParamBox::new(&enclosure)?,
-            xyz: grid_box(&field.curve.bound(span(t), meter)?)?,
+            xyz: grid_box(&bound_over(field.curve, seam_t, t, meter)?)?,
             contact: boundary(field, [t, u, v]),
             class: certified(),
         });
     }
     for ([t, u, v], why) in regions {
-        let image = field.curve.bound(span(t), meter)?;
+        let image = bound_over(field.curve, seam_t, t, meter)?;
         let at = ParamBox::new(&[t, u, v])?;
         let xyz = grid_box(&image)?;
         let why = match why {
@@ -1971,7 +2011,7 @@ fn finished(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    Intersection::on(items, coverage, Vec::new(), &field.seams, meter)
 }
 
 /// How a proven root stands against the two domains.
@@ -2336,8 +2376,18 @@ fn across(b: &Coord, r: f64, sign: Sign) -> Result<Coord, IntersectError> {
     square.extend(b.square.iter().map(|&(x, y)| (-x, y)));
     let r = Interval::point(r)?;
     let d = r.mul(r)?.sub(b.near.mul(b.near)?)?;
-    // The square is positive where this is called; its enclosure may reach below zero.
-    let root = Interval::new(larger(d.lo(), 0.0), larger(d.hi(), 0.0))?.sqrt()?;
+    // The square is positive where this is called (the line crosses the circle, by exact signs),
+    // but where the line stands within a rounding of touching the circle this enclosure reaches
+    // zero, and so would both crossings' coordinates (issue 1003). Then the square's exact sum,
+    // two steps wide, encloses it away from zero: a sum of products of tame doubles is a whole
+    // multiple of 2^-604, so a positive one rounds to a normal double. Only there, so every
+    // other answer keeps its boxes (decision 32.108).
+    let d = if d.contains(0.0) {
+        enclosed_sum(&square)?
+    } else {
+        d
+    };
+    let root = d.sqrt()?;
     let near = if sign == Sign::Negative {
         root.neg()
     } else {
@@ -2773,6 +2823,7 @@ fn arcs_in_plane(
     }
     // Two stretches whose enclosures meet hold crossings the enclosures cannot tell apart, as
     // where a side stands within a rounding of touching the circle: the engine's (32.80).
+    // Raw on purpose: a stretch through the join is two pieces, which meet only modulo the turn.
     let apart = items.iter().enumerate().all(|(k, a)| {
         let later = items.get(k.saturating_add(1)..).unwrap_or_default();
         later.iter().all(|b| !a.at().meets(b.at()))
@@ -3088,14 +3139,18 @@ fn circle_across(
         let [on_u, on_v] = surface_ends(round.seams, u, v);
         *slot = Some(Item::Point {
             at: ParamBox::new(&[t, u, v])?,
-            xyz: grid_box(&curve.bound(span(t), meter)?)?,
+            // A span across the join is read modulo the turn (decision 32.104).
+            xyz: grid_box(&bound_over(curve, Seam::turns((lo, hi)), t, meter)?)?,
             contact: standing(tangent, [false, on_u, on_v]),
             class: certified(),
         });
     }
-    // Two crossings whose boxes meet are not told apart: the engine's.
+    // Two crossings whose boxes meet are not told apart: the engine's. On a whole turn they meet
+    // modulo the turn (decision 32.104).
+    let [seam_u, seam_v] = round.seams;
+    let seams = [Seam::turns((lo, hi)), seam_u, seam_v];
     if let [Some(a), Some(b)] = &found
-        && a.at().meets(b.at())
+        && a.at().meets_on(b.at(), &seams)?
     {
         return Ok(None);
     }
