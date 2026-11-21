@@ -68,6 +68,7 @@
 # GitHub measuring run 44860095410 (miri_measure=new on fix/nonisolated-common-blocks at 028670b0d, miri_measure_tests naming the common_blocks test #1152 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44867854907 (miri_measure=all on fix/coincidence-far-line at f20e72332, miri_measure_tests naming the 2 tests #1156 added and the route test it changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44870980124 (miri_measure=all on fix/coincidence-far-line at b187535bf, miri_measure_tests naming the route test #1156 changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring runs 44858275436 (miri_measure=new on fix/1142-meridian-arc at a5e1f0fbd, miri_measure_tests naming its 5 meridian_arc tests) and 44877463963 (miri_measure=new on measure/1142-pole at 81cd8ae18, the change reworked and merged with the train at 345b5bfa6, miri_measure_tests naming its 6 newer tests: 5 in meridian_arc and the half_plane pole test), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
 native-only over 723	geom-analysis::attack_g346	an_edge_across_knot_lines_keeps_every_value_under_its_maximum
@@ -1720,6 +1721,7 @@ native-only over 721	geom-intersect::general_mutants	the_ends_of_domains_charge_
 20	geom-intersect::half_plane	a_nurbs_profile_takes_its_plane_from_its_first_control_point_off_the_axis
 18	geom-intersect::half_plane	a_nurbs_profile_that_leaves_the_plane_between_its_ends_and_middle_is_no_meridian
 17	geom-intersect::half_plane	a_profile_across_the_axis_keeps_the_rings_of_its_far_part
+14	geom-intersect::half_plane	a_profile_from_a_spheres_pole_meets_it_at_the_pole_by_its_proof
 129	geom-intersect::half_plane	an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_centre
 323	geom-intersect::half_plane	the_issues_cone_scaled_by_three_meets_the_scaled_funnel_in_its_ring
 2	geom-intersect::half_plane	two_lines_parallel_to_within_rounding_meet_nowhere_on_their_spans
@@ -1772,6 +1774,16 @@ native-only over 741	geom-intersect::loop_far_from_zero	a_swept_loop_is_cut_wher
 5	geom-intersect::lower_half_arcs	lower_half_ends_each_side_of_the_axis_are_placed
 6	geom-intersect::lower_half_arcs	upper_half_ends_each_side_of_the_axis_are_placed
 native-only over 714	geom-intersect::march_mutants	an_arc_along_an_edge_runs_one_way_from_its_first_start
+26	geom-intersect::meridian_arc	a_cone_meets_a_half_tube_only_on_its_arc
+17	geom-intersect::meridian_arc	a_crossing_off_a_profile_segments_span_is_dropped_before_the_arc_is_asked
+107	geom-intersect::meridian_arc	a_cut_through_an_arcs_ends_keeps_its_rings_by_their_proof
+12	geom-intersect::meridian_arc	a_half_tube_cut_below_its_arc_meets_no_ring
+64	geom-intersect::meridian_arc	a_half_tube_keeps_only_the_ring_on_its_arc
+61	geom-intersect::meridian_arc	a_ring_a_hair_from_an_arcs_end_is_placed_by_the_proven_sign_of_its_offset
+36	geom-intersect::meridian_arc	a_ring_no_enclosure_tells_from_the_arcs_end_is_left_to_the_general_paths
+33	geom-intersect::meridian_arc	a_touch_whose_image_meets_twice_is_left_to_the_general_paths
+112	geom-intersect::meridian_arc	an_arc_in_a_half_plane_off_the_frames_axes_is_touched_by_its_proof
+37	geom-intersect::meridian_arc	an_arc_on_a_slanted_frame_keeps_its_ends_by_their_proof
 4	geom-intersect::on_axis_exact	a_line_across_a_torus_whose_axis_rounds_upright_crosses_it_twice
 3	geom-intersect::on_axis_exact	a_line_up_a_ruling_of_a_cylinder_whose_axis_rounds_upright_crosses_it_once
 native-only over 714	geom-intersect::parallel_hair	cylinders_whose_radii_differ_by_less_than_the_hair_between_their_axes_meet_in_two_lines
