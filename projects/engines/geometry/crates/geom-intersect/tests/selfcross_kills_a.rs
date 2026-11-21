@@ -370,3 +370,44 @@ fn pieces_that_meet_only_at_an_apex_are_flagged_as_touching() {
     let count = touching_flags(&teardrop(true, false), 0, Some(-1.0));
     assert!(count[2] > 0, "{count:?}");
 }
+
+/// 2⁵², where the doubles are 1 apart.
+const FAR: f64 = 4_503_599_627_370_496.0;
+
+/// The ramp of `pinched_ramp` without its point (rows 0 to 5), on knots moved from 0 to `FAR`
+/// both ways, so that each knot span ends at two adjacent doubles and holds none between.
+fn far_ramp() -> SurfaceKind {
+    let z = [0.0, 0.5, 0.5, 0.5, 0.5, 0.0];
+    let knots = |n: u32| {
+        let mut k = vec![FAR];
+        for i in 0..n {
+            k.push(FAR + f64::from(i));
+        }
+        k.push(FAR + f64::from(n - 1));
+        Basis::new(1, k).unwrap()
+    };
+    let mut net = Vec::new();
+    for (i, h) in z.iter().enumerate() {
+        for r in [1.0, 2.0] {
+            net.push([r * SQUARE[i % 4][0], r * SQUARE[i % 4][1], *h]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(knots(6), knots(2), &net).unwrap())
+}
+
+/// The exact work the search takes on the far ramp, with how many branches, unproven pairs and
+/// flags it leaves. No stretch of a boundary whose span ends at two adjacent doubles has a double
+/// strictly inside it, so it is never halved: a halving that took the midpoint when it rounds to
+/// either end would cut such a stretch again, and the recorded work would move.
+#[test]
+fn a_ramp_on_knots_one_double_apart_takes_its_recorded_work() {
+    let mut m = meter();
+    let found = self_intersect(&far_ramp(), FLOOR, CEILING, &mut m).unwrap();
+    let seen = (
+        m.used().work,
+        found.branches.len(),
+        found.unproven.len(),
+        found.flagged.len(),
+    );
+    assert_eq!(seen, (29_986, 0, 0, 21));
+}
