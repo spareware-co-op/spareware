@@ -453,7 +453,10 @@ fn grid_signs(line: &Line<3>, plane: &Plane) -> Result<Option<(Sign, Sign)>, Int
     Ok(Some((along, side)))
 }
 
-/// A line lying in a plane: the part of it over the plane's domain.
+/// A line lying in a plane: the part of it over the plane's domain. Its t is cut to where both its
+/// u and its v are on the domain ([`on_stretch`], issue 1159), and its u and v are those of that
+/// part. A coordinate whose rate along the line is not proven apart from zero does not cut t: the
+/// line runs along its level, which is on the domain, as a line along an edge of it does.
 fn in_plane(
     line: &Line<3>,
     plane: &Plane,
@@ -466,13 +469,36 @@ fn in_plane(
     let hull =
         |a: Interval, b: Interval| Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()));
     let domain = ParamSurface::domain(plane);
+    let (along_u, along_v) = (hull(u0, u1)?, hull(v0, v1)?);
+    let (Some(_), Some(_)) = (within(along_u, domain.0)?, within(along_v, domain.1)?) else {
+        return proven(Vec::new(), meter);
+    };
+    // u and v run as o + t·d: o at t = 0, and o + d at t = 1.
+    let (ou, ov) = plane_parameters(line, plane, Interval::point(0.0)?)?;
+    let (pu, pv) = plane_parameters(line, plane, Interval::point(1.0)?)?;
+    let one = Interval::point(1.0)?;
+    let stretch = |(lo, hi): (f64, f64), (o, p): (Interval, Interval), ends| {
+        let cut = on_stretch(span_t, (lo, hi), (o, p.sub(o)?), one, ends)?;
+        Ok::<_, IntersectError>(cut.unwrap_or(span_t))
+    };
+    let on_u = stretch((along_u.lo(), along_u.hi()), (ou, pu), domain.0)?;
+    let on_v = stretch((along_v.lo(), along_v.hi()), (ov, pv), domain.1)?;
+    let (from, to) = (larger(on_u.0, on_v.0), smaller(on_u.1, on_v.1));
+    // Bounds that meet or cross say the line passes a corner of the domain outside it, each being
+    // strictly past its exact value, as `within` reads a bound on an end.
+    if from >= to {
+        return proven(Vec::new(), meter);
+    }
+    // The part's u and v, which a line a hair past a corner may still have past an end.
+    let (uf, vf) = plane_parameters(line, plane, Interval::point(from)?)?;
+    let (ut, vt) = plane_parameters(line, plane, Interval::point(to)?)?;
     let (Some(u), Some(v)) = (
-        within(hull(u0, u1)?, domain.0)?,
-        within(hull(v0, v1)?, domain.1)?,
+        within(hull(uf, ut)?, domain.0)?,
+        within(hull(vf, vt)?, domain.1)?,
     ) else {
         return proven(Vec::new(), meter);
     };
-    let at = ParamBox::new(&[Interval::new(span_t.0, span_t.1)?, u, v])?;
+    let at = ParamBox::new(&[Interval::new(from, to)?, u, v])?;
     let overlap = Item::Overlap {
         at,
         region: OverlapRegion {
