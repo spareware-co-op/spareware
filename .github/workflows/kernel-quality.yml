@@ -77,11 +77,13 @@ name: Kernel quality
 #   run found Miri does not finish it. One plan job (`miri-plan`) lists the run's tests under Miri
 #   once, fails on a test with no row, writes each partition's filterset of finishing tests and
 #   geom-pool's, and hands them on with the cargo-nextest it built, for one day; the partitions
-#   (`miri`) and geom-pool's job (`miri-pool`, with the doctests) run from that hand-over, so none
-#   lists every test or builds a tool. The plan packs the partitions so each job ends within 15
-#   minutes, its set-up counted, on a cold cache and a runner 1.6 times slower
-#   (`geom_test::miri::PART_SECONDS`). A pull request that changes how Miri runs gets the plan,
-#   partition 1 and geom-pool's job at a short budget, the miri-smoke profile. geom-pool's tests
+#   and geom-pool's job (`miri-pool`, with the doctests) run from that hand-over, so none lists
+#   every test or builds a tool. A matrix holds at most 256 jobs, so two jobs run the partitions,
+#   `miri` partitions 1 to 256 and `miri-2` 257 on (32.105), as the mutants' shards run. The plan
+#   packs the partitions so each job ends within 15 minutes, its set-up counted, on a cold cache
+#   and a runner 1.6 times slower (`geom_test::miri::PART_SECONDS`). A pull request that changes
+#   how Miri runs gets the plan, partition 1 and geom-pool's job at a short budget, the miri-smoke
+#   profile. geom-pool's tests
 #   run under Tree Borrows, every other crate's under Stacked Borrows, while crossbeam-epoch 0.9.21
 #   is in the lock (the step says why).
 #
@@ -103,7 +105,10 @@ name: Kernel quality
 #   gh run download <run id> -p 'miri-measure-[0-9]*' -D measure/parts
 #   reports=(); for f in measure/parts/*/junit-*.xml; do reports+=(--report "$f"); done
 #   cargo run -p geom-test --bin kernel-quality -- miri-times "${reports[@]}" \
-#     --scale 1 --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
+#     --yardstick --stop 600 --list measure/plan/miri-list.json --note "<the run, its ref and commit>"
+#
+# Each part runs the yardstick first (32.78) and uploads its report as yardstick.xml beside its
+# own, so `--yardstick` stores each part's rows in yardstick seconds, over that part's own scale.
 #
 # Every pull request and queued change runs this workflow, so its last job, `done` ("Kernel quality
 # checks pass"), always reports: main's ruleset requires it (.github/rulesets/protect-main.json).
@@ -1026,6 +1031,8 @@ jobs:
     timeout-minutes: 30
     outputs:
       parts: ${{ steps.plan.outputs.parts }}
+      count_2: ${{ steps.plan.outputs.count_2 }}
+      parts_2: ${{ steps.plan.outputs.parts_2 }}
     env:
       # A push to main's crates (empty: every kernel crate).
       REACHED: ${{ needs.when.outputs.miri_packages }}
@@ -1078,9 +1085,13 @@ jobs:
             --list "$RUNNER_TEMP/miri-plan/miri-list.json" --out "$RUNNER_TEMP/miri-plan")
           echo "$plan"
           echo "parts=$(jq -c .parts <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "count_2=$(jq -r .count_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "parts_2=$(jq -c .parts_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "Miri's plan: $(jq -r .tests <<<"$plan") tests in $(jq -r .count <<<"$plan") partitions, and geom-pool's $(jq -r .pool <<<"$plan")." >> "$GITHUB_STEP_SUMMARY"
           echo "$PACKAGES" > "$RUNNER_TEMP/miri-plan/packages.txt"
           cp "$(command -v cargo-nextest)" "$RUNNER_TEMP/miri-plan/cargo-nextest"
+          # The tool each Miri job reads its report with (`miri-stopped`), as built here.
+          cp target/debug/kernel-quality "$RUNNER_TEMP/miri-plan/kernel-quality"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: miri-plan
@@ -1141,10 +1152,32 @@ jobs:
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
           cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
+          install -m 755 "$RUNNER_TEMP/miri-plan/kernel-quality" "$HOME/.cargo/bin/kernel-quality"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      # The tests have a limit of their own, under the job's: a partition planned within 13
+      # minutes that overruns is stopped here, red, and the steps after it still run, so its log,
+      # the summary of its stopped tests and its report are kept. Run 44168015168's partition 65
+      # overran inside this step until the job's 30 minutes, and GitHub kept nothing of it.
+      # `geom_test::miri::TESTS_STEP_MINUTES`, with the set-up and the first upload's bound,
+      # fits the job's limit (kernel_quality_workflow.rs).
+      # The yardstick (32.78): the runner's processor, then one fixed small test alone under Miri;
+      # its seconds over its row are this job's scale, held at 0.5 from below, and each test's stop
+      # is its row times 1.6 times the scale. Over 3 the job fails here, a runner too slow to judge.
+      - name: The runner's processor and Miri's scale (partition ${{ matrix.partition }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          kernel-quality miri-scale --report target/nextest/miri-yardstick/junit.xml \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})
+        timeout-minutes: 24
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           # Miri's defaults stay: isolation from the host (no clock but Miri's own, no outside
@@ -1161,9 +1194,181 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             profile=(--profile miri-smoke)
           fi
+          # coreutils' timeout stops nextest with SIGTERM a minute before this step's limit
+          # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
+          # report, which GitHub's own stop at the limit does not let it do (trial run
+          # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
-          cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
+          timeout --signal=TERM --kill-after=30 1380 \
+            cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
             -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
+      # A test nextest stops at the budget is counted as passing (the profiles' `on-timeout =
+      # "pass"`), and its report shows a plain pass; a test nobody saw finish is not one (32.68).
+      # This step reads the report, names every test stopped as stopped with no verdict in the
+      # job's summary, and fails the job on any not on the list of tests that may stop (geom-test's
+      # src/miri-may-stop.tsv, the table's rows over 375 s). A pull request's short stop may end
+      # every test whose row a 1.6 times slower runner takes past it. It runs whatever the tests
+      # did.
+      - name: Tests stopped with no verdict (partition ${{ matrix.partition }})
+        if: ${{ !cancelled() }}
+        run: |
+          stop=600 profile=default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            stop=60 profile=miri-smoke
+          fi
+          kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --yardstick target/nextest/miri-yardstick/junit.xml \
+            --title "Partition ${{ matrix.partition }}" | tee -a "$GITHUB_STEP_SUMMARY"
+      # The partition's report, in two tries. GitHub's storage can stall an upload until the
+      # job's limit (run 44075531453: partition 31's tests passed in 466 s, then its upload hung
+      # for 22 minutes), so each try is bounded; a first try that fails or runs out of time does
+      # not fail the job by itself, only starts the second, under the same name (`overwrite`
+      # replaces a part the first left), for the reader of `miri-<partition>`
+      # (`gh run download <run id> -n miri-<partition>`, for `kernel-quality miri-times`). The
+      # second try's failure fails the job: a report lost twice is never passed over. A reader of
+      # a job red only there: the tests' verdict is in the test step's log; re-run the job for its
+      # report.
+      - id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        continue-on-error: true
+        with:
+          name: miri-${{ matrix.partition }}
+          path: target/nextest/*/junit*.xml
+          if-no-files-found: ignore
+      - name: The report again, the first try having failed
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.report.outcome != 'success' && steps.report.outcome != 'skipped' }}
+        timeout-minutes: 3
+        with:
+          name: miri-${{ matrix.partition }}
+          path: target/nextest/*/junit*.xml
+          if-no-files-found: ignore
+          overwrite: true
+
+  miri-2:
+    name: Miri (partition ${{ matrix.partition }})
+    needs: [when, cheap, miri-plan]
+    # Partitions 257 on, for a plan of more partitions than one matrix may hold (32.105): the same
+    # steps as `miri`, word for word. A plan of 256 partitions or fewer runs none, and a pull
+    # request none, since it runs partition 1 alone; its matrix still lists partition 257,
+    # because a matrix may not be empty.
+    if: needs.when.outputs.miri == 'true' && github.event_name != 'pull_request' && needs.miri-plan.outputs.count_2 != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: ${{ fromJSON(needs.miri-plan.outputs.parts_2) }}
+    env:
+      # The plan packs the tests Miri finishes (geom-test's src/miri-times.tsv) into the
+      # partitions, so that each partition's listing and tests end within what is left of 15
+      # minutes (principle 8) after its set-up, each test planned at 1.6 times its seconds and
+      # never over the stop (`geom_test::miri::PART_SECONDS`, `planned`), in whatever order
+      # nextest starts them: geom-test's
+      # kernel_quality_workflow.rs holds the plan to it. Hashed into 16, every test took 1.7 to 3.4
+      # hours a partition (run 43696026626), 823 of them stopped at their budget; such tests are
+      # native-only now (32.58).
+      # A partition a push's crates leave without a test passes.
+      NEXTEST_NO_TESTS: pass
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install the pinned nightly with Miri
+        run: |
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component miri,rust-src
+          cargo "+$RUST_NIGHTLY" miri setup
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Restores the cache the plan saves, and saves none.
+          save-if: false
+          key: miri
+          add-job-id-key: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miri-plan
+          path: ${{ runner.temp }}/miri-plan
+      - name: The plan's cargo-nextest and crates
+        run: |
+          # The artifact keeps no file modes. The binary is the plan's own locked build of the
+          # pinned version from crates.io, checked here before it runs anything.
+          install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
+          cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
+          install -m 755 "$RUNNER_TEMP/miri-plan/kernel-quality" "$HOME/.cargo/bin/kernel-quality"
+          packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
+          echo "$packages"
+          echo "PACKAGES=$packages" >> "$GITHUB_ENV"
+      # The tests have a limit of their own, under the job's: a partition planned within 13
+      # minutes that overruns is stopped here, red, and the steps after it still run, so its log,
+      # the summary of its stopped tests and its report are kept. Run 44168015168's partition 65
+      # overran inside this step until the job's 30 minutes, and GitHub kept nothing of it.
+      # `geom_test::miri::TESTS_STEP_MINUTES`, with the set-up and the first upload's bound,
+      # fits the job's limit (kernel_quality_workflow.rs).
+      # The yardstick (32.78): the runner's processor, then one fixed small test alone under Miri;
+      # its seconds over its row are this job's scale, held at 0.5 from below, and each test's stop
+      # is its row times 1.6 times the scale. Over 3 the job fails here, a runner too slow to judge.
+      - name: The runner's processor and Miri's scale (partition ${{ matrix.partition }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          kernel-quality miri-scale --report target/nextest/miri-yardstick/junit.xml \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Every kernel test Miri finishes (partition ${{ matrix.partition }})
+        timeout-minutes: 24
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          # Miri's defaults stay: isolation from the host (no clock but Miri's own, no outside
+          # entropy, environment variables hidden), so a seeded test runs its fixed default seed;
+          # and extra rounding error on the float operations whose precision Rust does not
+          # guarantee, so a golden hash that rests on one of them fails here. One change: an
+          # operation isolation refuses returns an error with a warning instead of stopping the
+          # run, because proptest's failure persistence asks for the working directory before
+          # every property and carries on without it.
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          # A pull request runs the miri-smoke profile: the same run at a short budget per test.
+          profile=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            profile=(--profile miri-smoke)
+          fi
+          # coreutils' timeout stops nextest with SIGTERM a minute before this step's limit
+          # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
+          # report, which GitHub's own stop at the limit does not let it do (trial run
+          # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
+          # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
+          timeout --signal=TERM --kill-after=30 1380 \
+            cargo miri nextest run --locked $PACKAGES "${profile[@]}" \
+            -E "not package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/part-${{ matrix.partition }}.txt"))"
+      # A test nextest stops at the budget is counted as passing (the profiles' `on-timeout =
+      # "pass"`), and its report shows a plain pass; a test nobody saw finish is not one (32.68).
+      # This step reads the report, names every test stopped as stopped with no verdict in the
+      # job's summary, and fails the job on any not on the list of tests that may stop (geom-test's
+      # src/miri-may-stop.tsv, the table's rows over 375 s). A pull request's short stop may end
+      # every test whose row a 1.6 times slower runner takes past it. It runs whatever the tests
+      # did.
+      - name: Tests stopped with no verdict (partition ${{ matrix.partition }})
+        if: ${{ !cancelled() }}
+        run: |
+          stop=600 profile=default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            stop=60 profile=miri-smoke
+          fi
+          kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --yardstick target/nextest/miri-yardstick/junit.xml \
+            --title "Partition ${{ matrix.partition }}" | tee -a "$GITHUB_STEP_SUMMARY"
       # The partition's report, in two tries. GitHub's storage can stall an upload until the
       # job's limit (run 44075531453: partition 31's tests passed in 466 s, then its upload hung
       # for 22 minutes), so each try is bounded; a first try that fails or runs out of time does
@@ -1235,6 +1440,7 @@ jobs:
           # pinned version from crates.io, checked here before it runs anything.
           install -m 755 "$RUNNER_TEMP/miri-plan/cargo-nextest" "$HOME/.cargo/bin/cargo-nextest"
           cargo nextest --version | grep -qxF "release: $CARGO_NEXTEST_VERSION"
+          install -m 755 "$RUNNER_TEMP/miri-plan/kernel-quality" "$HOME/.cargo/bin/kernel-quality"
           packages=$(cat "$RUNNER_TEMP/miri-plan/packages.txt")
           echo "$packages"
           echo "PACKAGES=$packages" >> "$GITHUB_ENV"
@@ -1260,8 +1466,26 @@ jobs:
       # on 32 seeds of the tests that nest and panic.
       # Like every partition, it runs the tests Miri's table says finish (its rows are measured
       # under Tree Borrows); a test measured over the stop is native-only, never run to the stop.
+      # Its tests have a partition's limit of their own, `geom_test::miri::TESTS_STEP_MINUTES`, for
+      # the plan holds them to a partition's seconds: an overrun is stopped here, red, and the
+      # reading of the report and its upload still run (kernel_quality_workflow.rs).
+      # The yardstick, as in each partition (32.78): the runner's processor and this job's scale,
+      # measured under the partitions' own flags so every job's scale is counted the same way.
+      - name: The runner's processor and Miri's scale (geom-pool)
+        if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          kernel-quality miri-scale --report target/nextest/miri-yardstick/junit.xml \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')
+        timeout-minutes: 24
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
           MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace -Zmiri-tree-borrows -Zmiri-ignore-leaks
@@ -1270,8 +1494,25 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             profile=(--profile miri-smoke)
           fi
-          cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
+          # coreutils' timeout stops nextest with SIGTERM a minute before this step's limit
+          # (`geom_test::miri::TESTS_RUN_SECONDS`): nextest then ends its tests and writes its
+          # report, which GitHub's own stop at the limit does not let it do (trial run
+          # 44290072805: no report). The step's limit stays, for a run that ignores the signal.
+          timeout --signal=TERM --kill-after=30 1380 \
+            cargo miri nextest run --locked -p geom-pool "${profile[@]}" \
             -E "package(geom-pool) & ($(cat "$RUNNER_TEMP/miri-plan/pool.txt"))"
+      # As in each partition: every geom-pool test stopped is named as stopped with no verdict,
+      # and one not on the list of tests that may stop fails the job (32.68).
+      - name: geom-pool's tests stopped with no verdict
+        if: ${{ !cancelled() && (env.REACHED == '' || contains(format('{0} ', env.REACHED), '-p geom-pool ')) }}
+        run: |
+          stop=600 profile=default-miri
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            stop=60 profile=miri-smoke
+          fi
+          kernel-quality miri-stopped --stop "$stop" --report "target/nextest/$profile/junit.xml" \
+            --yardstick target/nextest/miri-yardstick/junit.xml \
+            --title "geom-pool under Tree Borrows" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The kernel's doctests under Miri
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1280,8 +1521,12 @@ jobs:
           # nextest does not run doctests, so this job runs them, every one.
           # shellcheck disable=SC2086 # PACKAGES holds several -p arguments, none with a space.
           cargo miri test --locked $PACKAGES --doc
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      # Bounded like a partition's first try, so the tests' limit, the set-up and the upload fit
+      # the job's limit.
+      - id: report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
+        timeout-minutes: 3
         with:
           name: miri-pool
           path: target/nextest/*/junit*.xml
@@ -1419,6 +1664,22 @@ jobs:
         with:
           name: miri-measure-plan
           path: ${{ runner.temp }}/measure
+      # The yardstick, as in each gate job (32.78): the runner's processor and this part's scale,
+      # its report kept as yardstick.xml beside the part's reports, so `kernel-quality miri-times
+      # --yardstick` stores this part's rows in yardstick seconds, each over this part's own scale.
+      - name: The runner's processor and Miri's scale (part ${{ matrix.part }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          mkdir -p target/nextest/miri-measure-ci
+          mv target/nextest/miri-yardstick/junit.xml target/nextest/miri-measure-ci/yardstick.xml
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-scale \
+            --report target/nextest/miri-measure-ci/yardstick.xml | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Measure this part's tests under Miri (part ${{ matrix.part }})
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1453,7 +1714,9 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit-*.xml
+          path: |
+            target/nextest/miri-measure-ci/junit-*.xml
+            target/nextest/miri-measure-ci/yardstick.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
@@ -1464,7 +1727,7 @@ jobs:
           reports=()
           for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            "${reports[@]}" --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --yardstick --stop 600 --dry-run
 
   miri-measure-2:
     name: Miri's measuring run (part ${{ matrix.part }})
@@ -1515,6 +1778,22 @@ jobs:
         with:
           name: miri-measure-plan
           path: ${{ runner.temp }}/measure
+      # The yardstick, as in each gate job (32.78): the runner's processor and this part's scale,
+      # its report kept as yardstick.xml beside the part's reports, so `kernel-quality miri-times
+      # --yardstick` stores this part's rows in yardstick seconds, each over this part's own scale.
+      - name: The runner's processor and Miri's scale (part ${{ matrix.part }})
+        timeout-minutes: 12
+        env:
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
+          MIRIFLAGS: -Zmiri-isolation-error=warn-nobacktrace
+        run: |
+          grep -m1 '^model name' /proc/cpuinfo
+          cargo miri nextest run --locked -p geom-num --profile miri-yardstick \
+            -E 'test(=plane::tests::the_largest_denominators_of_both_widths)'
+          mkdir -p target/nextest/miri-measure-ci
+          mv target/nextest/miri-yardstick/junit.xml target/nextest/miri-measure-ci/yardstick.xml
+          cargo run --locked -q -p geom-test --bin kernel-quality -- miri-scale \
+            --report target/nextest/miri-measure-ci/yardstick.xml | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Measure this part's tests under Miri (part ${{ matrix.part }})
         env:
           RUSTUP_TOOLCHAIN: ${{ env.RUST_NIGHTLY }}
@@ -1549,7 +1828,9 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: miri-measure-${{ matrix.part }}
-          path: target/nextest/miri-measure-ci/junit-*.xml
+          path: |
+            target/nextest/miri-measure-ci/junit-*.xml
+            target/nextest/miri-measure-ci/yardstick.xml
           retention-days: 3
           if-no-files-found: error
       - name: Every test finished or was stopped, none failed
@@ -1560,14 +1841,14 @@ jobs:
           reports=()
           for f in target/nextest/miri-measure-ci/junit-*.xml; do reports+=(--report "$f"); done
           cargo run --locked -q -p geom-test --bin kernel-quality -- miri-times \
-            "${reports[@]}" --scale 1 --stop 600 --dry-run
+            "${reports[@]}" --yardstick --stop 600 --dry-run
 
   # The one check main's ruleset requires of this workflow: it fails if any job failed or was
   # cancelled, or if a gate `when` chose did not run, and when mutation and coverage both passed on
   # a change it leaves the mark that spares the same tree a second run.
   done:
     name: Kernel quality checks pass
-    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri-plan, miri, miri-pool, miri-measure-plan, miri-measure, miri-measure-2]
+    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri-plan, miri, miri-2, miri-pool, miri-measure-plan, miri-measure, miri-measure-2]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1581,6 +1862,7 @@ jobs:
           MUTANTS: ${{ needs.when.outputs.mutants }}
           COVERAGE: ${{ needs.when.outputs.coverage }}
           MIRI: ${{ needs.when.outputs.miri }}
+          MIRI_2: ${{ needs.miri-plan.outputs.count_2 }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
           bad=$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")
@@ -1593,6 +1875,10 @@ jobs:
           if [ "$MUTANTS" = true ]; then must="$must mutants-plan mutants-judge"; fi
           if [ "$COVERAGE" = true ]; then must="$must coverage-plan coverage-parts coverage gates-seeded"; fi
           if [ "$MIRI" = true ]; then must="$must miri-plan miri miri-pool"; fi
+          # Partitions 257 on, when the plan gave any and the event runs every partition.
+          if [ "$MIRI" = true ] && [ "$GITHUB_EVENT_NAME" != pull_request ] && [ "$MIRI_2" != 0 ]; then
+            must="$must miri-2"
+          fi
           for job in $must; do
             result=$(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")
             if [ "$result" != success ]; then

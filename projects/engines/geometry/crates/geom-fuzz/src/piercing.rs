@@ -32,13 +32,15 @@
 use geom_curve::tight::{larger, smaller};
 use geom_curve::{CurveKind, Frame, Line, ParamCurve};
 use geom_intersect::curve_surface::curve_surface;
-use geom_intersect::{IntersectError, Intersection, Item};
+use geom_intersect::{IntersectError, Intersection, Item, Seam};
+use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Curve, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Torus};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_test::{ByteSource, Entropy};
 
 use crate::Finding;
+use crate::seams::{curve_box, surface_box};
 
 /// The work a case may take: a curve lying near a surface walks its length at the floor, and a stop
 /// there is an answer the laws accept.
@@ -251,9 +253,9 @@ fn apart(a: &Bounds<3>, b: &Bounds<3>) -> f64 {
 }
 
 /// The three spans of `item`'s box.
-fn spans(item: &Item) -> Result<[(f64, f64); 3], Finding> {
+fn spans(item: &Item) -> Result<[Interval; 3], Finding> {
     match item.at().spans() {
-        [t, u, v, ..] => Ok([(t.lo(), t.hi()), (u.lo(), u.hi()), (v.lo(), v.hi())]),
+        [t, u, v, ..] => Ok([*t, *u, *v]),
         _ => Err(Finding::new("a curve and surface's box has three", || {
             format!("{item:?}")
         })),
@@ -273,8 +275,8 @@ fn points_are_meetings(
         }
         let [t, u, v] = spans(item)?;
         let mut work = meter();
-        let x = must(a.bound(t, &mut work), "a point's box is in the domain")?;
-        let y = must(b.bound((u, v), &mut work), "a point's box is in the domain")?;
+        let x = curve_box(a, Seam::of_curve(a), t, &mut work)?;
+        let y = surface_box(b, (u, v), &mut work)?;
         let gap = apart(&x, &y);
         if gap > SLACK {
             return Err(Finding::new("a point lies on both", || {

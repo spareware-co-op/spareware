@@ -20,8 +20,9 @@ use geom_bool::interfere::{
     Arrangement, BuildError, EdgeIn, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
-use geom_bool::pave::{History, OrderError, Pave, PaveError, blocks, order, split};
+use geom_bool::pave::{History, OrderError, Pave, PaveError, blocks, order, order_on, split};
 use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
+use geom_intersect::Seam;
 use geom_num::P3;
 use geom_num::interval::Interval;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -374,6 +375,55 @@ fn paves_of_two_vertices_whose_parameters_meet_are_refused() {
         ],
     );
     assert_eq!(a.unwrap(), b.unwrap());
+}
+
+#[test]
+fn paves_on_a_closed_edge_are_read_modulo_the_turn_across_its_join() {
+    // Decision 32.104: on a whole turn an enclosure starts in the window and may run past its end.
+    // A vertex on the join is found as [1.75, 2.25] by one route and [0, 0.125] by another.
+    let iv = |a: f64, b: f64| Interval::new(a, b).unwrap();
+    let pave = |vertex: usize, t: Interval| Pave { vertex, t };
+    let turn = Seam::turns((0.0, 2.0));
+    let paves = |v: usize| {
+        vec![
+            pave(1, iv(0.0, 0.125)),
+            pave(2, iv(1.0, 1.0)),
+            pave(v, iv(1.75, 2.25)),
+        ]
+    };
+    // One vertex: one pave, at the meet modulo the turn, where the first stood.
+    let one = order_on(4, paves(1), turn).unwrap();
+    assert_eq!(one, [pave(1, iv(0.0, 0.125)), pave(2, iv(1.0, 1.0))]);
+    let narrow = order_on(
+        4,
+        vec![pave(1, iv(0.0625, 0.5)), pave(1, iv(1.75, 2.25))],
+        turn,
+    )
+    .unwrap();
+    assert_eq!(narrow, [pave(1, iv(0.0625, 0.25))]);
+    // A lone pave across the join is kept.
+    let lone = vec![pave(1, iv(1.75, 2.25))];
+    assert_eq!(order_on(4, lone.clone(), turn).unwrap(), lone);
+    // Two vertices whose enclosures meet across the join: the order is not proven, the last pave
+    // named first, as it stands before the first round the join.
+    let Err(OrderError::Undecided(e)) = order_on(4, paves(3), turn) else {
+        panic!("two vertices met across the join");
+    };
+    assert_eq!((e.edge, e.first.vertex, e.second.vertex), (4, 3, 1));
+    // Read on an open domain, as `order` reads, the two enclosures are apart.
+    assert_eq!(order(4, paves(3)).unwrap().len(), 3);
+    assert_eq!(
+        order_on(4, paves(3), Seam::open((0.0, 2.0))).unwrap().len(),
+        3
+    );
+    // Apart across the join too: kept, in order.
+    let apart = order_on(
+        4,
+        vec![pave(1, iv(0.5, 0.625)), pave(3, iv(1.75, 2.25))],
+        turn,
+    )
+    .unwrap();
+    assert_eq!(apart.len(), 2);
 }
 
 #[test]

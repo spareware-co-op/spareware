@@ -10,7 +10,11 @@
 //! 32.74). A circle across the axis of a cylinder or cone, its normal parallel to the axis, meets
 //! nothing where its plane is past the domain, and otherwise meets it where it meets the circle the
 //! surface cuts in that plane: nothing, two crossings or one touch, told by enclosures and, on a
-//! coordinate axis, by exact signs (decision 32.86). Every other pair runs [`crate::solve`] on
+//! coordinate axis, by exact signs (decision 32.86). A whole circle across a plane meets it nowhere
+//! or at two crossings, where an enclosure of one discriminant tells which (decision 32.106); a
+//! touch, and a crossing too near one, are the engine's. A line parallel to a cylinder's axis or to
+//! a cone's ruling, its quadratic's leading coefficient zero exactly, meets it nowhere, once, or
+//! along the ruling (decision 32.107). Every other pair runs [`crate::solve`] on
 //! C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
@@ -20,8 +24,18 @@
 //! - **Exact where the data are.** On whole-number data the count, and whether a root is double, come
 //!   from exact signs, within the budgets of chapter 6.2. Whether a line runs along a plane, and
 //!   whether it lies in it, are exact signs of the stored doubles on any data whose products of
-//!   three are exact (decision 32.85). Elsewhere an interval decides, and what it cannot tell goes
-//!   to the engine.
+//!   three are exact (decision 32.85). Where the enclosure of a line's discriminant against a
+//!   cylinder, or a cone whose radius at v = 0 is zero, reaches zero, its sign is exact on any
+//!   stored doubles whose products of eight are exact, and the discriminant is then enclosed
+//!   from its exact sum: a line through the apex or tangent is one point, and one a step either
+//!   side two or none (decision 32.87). For a cone of any other start radius the discriminant is
+//!   P + Q·√N, and its sign is exact in whole numbers of the stored doubles of at most 768 bits,
+//!   with P² against Q²·N in 1,536 where the signs of P and Q differ (decision 32.88). Where the
+//!   enclosure of a line's leading coefficient against a cylinder or a cone holds zero, whether it
+//!   is zero, the line parallel to the axis or to a ruling, is an exact sign in whole numbers of
+//!   the stored doubles, and so, where the enclosure of its constant term holds zero too, is whether
+//!   the line lies on the surface (decision 32.107). Elsewhere an interval decides, and what it
+//!   cannot tell goes to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
@@ -40,9 +54,11 @@
 //!   vectors, is the engine's (decision 32.69). An arc's end on the circle's own join is placed
 //!   by an exact sign, so it is the domain's own end exactly and no stretch stands past the join
 //!   unless the arc passes it; where an end's enclosure reaches the join and the frame's x runs
-//!   off the plane's axes, or the join is off x's line, the circle is the engine's. So is a
-//!   circle whose stretches would meet, as where a side stands within a rounding of touching it
-//!   and the enclosures of its two crossings cannot tell them apart (decision 32.80).
+//!   off the plane's axes, or the join is off x's line, the circle is the engine's. Where a side
+//!   stands within a rounding of touching the circle, the square of its half-chord is enclosed
+//!   from its exact sum, so its two crossings are held apart (decision 32.108). A circle whose
+//!   stretches would still meet, two crossings closer than a step of their angle, is the
+//!   engine's (decision 32.80).
 //! - **Crossings across an axis are proven or left.** A circle across a parallel round axis has
 //!   points only where enclosures prove the two circles of its plane crossing, or exact signs on a
 //!   coordinate axis prove them crossing or touching, and only with its crossings' boxes apart. A
@@ -75,9 +91,23 @@
 //! and one along it 0.48 to 8.3 off it took 720,686 to 919,038 to say nothing, before decision
 //! 32.85; now two exact sums of 6 and 12 products of three doubles, at most 1 unit, formed only
 //! where an enclosure of the same value holds zero.
+//! A unit circle in a plane whose domain's side stands a step inside touching it cost 5,097
+//! units before decision 32.108, nearly all of it the engine's; now 11, and one exact sum of 17
+//! products for each crossing, formed only where the enclosure of its square holds zero.
 //! An end circle of a cone of radius 344 to 856 across another cone on a parallel axis
 //! cost the engine 258,258 to 1,759,429 units before decision 32.86, for nothing or two points;
-//! now a few predicates, and a box of the circle for each point. Recursion: none.
+//! now a few predicates, and a box of the circle for each point. A plane's edge through a cone's
+//! apex, or tangent to a cylinder off the grid, cost the engine 483,244 to 4,147,759 units before
+//! decision 32.87; now 4, and where the enclosure of the discriminant reaches zero, one exact sum
+//! of at most 432 products of six or eight doubles, each at most 128 doubles on the stack.
+//! A plane's edge beside a cone of start radius 100 off the grid cost the engine 3,824,869
+//! units, and a segment touching a start circle 387,503 to 597,337, before decision 32.88; now
+//! at most 4, and where the enclosure reaches zero 50 products of 768-bit integers and three
+//! of 1,536-bit ones, on the stack. A segment along a cone's ruling cost the engine 826,784 to
+//! 1,048,577 units, and a plane's sides parallel to a cylinder's axis all but 2,494 of a call of
+//! the natural target's 908,956, before decision 32.107; now at most 4, and where the enclosure of
+//! the leading coefficient holds zero at most 42 products of 768-bit integers and three of
+//! 1,536-bit ones, on the stack. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -99,6 +129,7 @@ use geom_num::grid::{P3, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::sturm::Roots;
+use geom_num::wide::Wide;
 use geom_num::{math, predicate, quadric};
 use geom_nurbs::{BernsteinCurve, BernsteinPatch, Bounds, Direction, Limit, NurbsError};
 use geom_run::WorkMeter;
@@ -108,9 +139,9 @@ use geom_surface::{
 
 use crate::closed::{self, Meeting};
 use crate::curve::{
-    Crossing, Seam, bound_over, certified, cut, exact_steps, finite, grid_box, grid_line,
-    grid_point, held, onto, proven, quadratic, seam_of, sign_of, slope_over, span, turn_of, whole,
-    widest,
+    Crossing, Seam, bound_over, certified, cut, enclosed_sum, exact_steps, finite, grid_box,
+    grid_line, grid_point, held, onto, proven, quadratic_with, seam_of, sign_of, slope_over, span,
+    turn_of, whole, widest,
 };
 use crate::error::IntersectError;
 use crate::quadrics::{off_line, parallel, plus, same_line, scale};
@@ -497,16 +528,17 @@ fn on_domains(
     root(line, t, (u, v), standing(double, ends), meter).map(Some)
 }
 
-/// The roots of the line with A·t² + 2B·t + C = 0 on a quadric, as items.
+/// The roots of the line with A·t² + 2B·t + C = 0 on a quadric, as items: counted by `exact`
+/// where it is known, with `known` for the discriminant where an exact sum gave it.
 fn quadric_roots(
     line: &Line<3>,
     terms: [Interval; 3],
-    exact: Option<Meeting>,
+    (exact, known): (Option<Meeting>, Option<Interval>),
     seams: [Seam; 2],
     place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError> + Copy,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    let Some(roots) = quadratic(terms, exact)? else {
+    let Some(roots) = quadratic_with(terms, exact, known)? else {
         return Ok(None);
     };
     let double = exact == Some(Meeting::Tangent) || exact == Some(Meeting::Apex);
@@ -558,7 +590,7 @@ fn line_sphere(
     quadric_roots(
         line,
         [dot(d, d)?, dot(o, d)?, c],
-        exact,
+        (exact, None),
         seams,
         place,
         meter,
@@ -574,12 +606,20 @@ fn exact_sphere(line: &Line<3>, sphere: &Sphere) -> Option<Meeting> {
     closed::line_sphere(&grid_line(line)?, &s).ok()
 }
 
-/// The point `c + n`, on the grid.
+/// The axis's two points, the centre `c` and `c + n`, n the stored normal, if `c` and `n` are both
+/// on the grid and `c + n` is in reach. The far point is summed in integers, not doubles (#1063):
+/// near 2^39 a double holds only 2^-13, so a normal's fraction under half of that rounds away in
+/// `c + n`, the sum lands on the grid, and the closed forms would be handed an upright axis for a
+/// tilted surface.
 fn on_axis(center: &[f64; 3], frame: &Frame<3>) -> Option<(P3, P3)> {
-    let n = frame.normal();
-    let [a, b, c] = *center;
-    let [p, q, r] = n;
-    Some((grid_point(center)?, grid_point(&[a + p, b + q, c + r])?))
+    let (c, n) = (grid_point(center)?, grid_point(&frame.normal())?);
+    let along = P3::new(
+        c.x.get().checked_add(n.x.get())?,
+        c.y.get().checked_add(n.y.get())?,
+        c.z.get().checked_add(n.z.get())?,
+    )
+    .ok()?;
+    Some((c, along))
 }
 
 /// A line with a cylinder.
@@ -599,8 +639,22 @@ fn line_cylinder(
     let exact = exact_cylinder(line, cylinder);
     let domain = ParamSurface::domain(cylinder);
     if exact == Some(Meeting::Within) {
-        return along_ruling(line, cylinder, meter).map(Some);
+        return along_ruling(line, cylinder, meter);
     }
+    // A line parallel to the axis has A = 0 exactly, which no enclosure is (each is rounded
+    // outward), so it is decided before the quadratic (issue 1112).
+    let [lead, _, constant] = terms;
+    if lead.contains(0.0) && parallel_to(line, cylinder.frame().normal()) == Some(true) {
+        return beside_axis(line, cylinder, constant, meter);
+    }
+    // Whole-number data too: the exact sum counts as `closed::line_cylinder` would, and holds Δ to
+    // a step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        let n = lift(cylinder.frame().normal())?;
+        stored_count(cylinder_excess(line, cylinder), dot(n, n)?)?
+    } else {
+        (None, None)
+    };
     // The point at v stands s·v along n̂, so the height z is at v = z/s (z·s only for s = ±1, as
     // built; a similarity scales the axial factor).
     let factor = Interval::point(cylinder.axial_sign())?;
@@ -612,10 +666,148 @@ fn line_cylinder(
         };
         Ok(Some((u, v)))
     };
-    quadric_roots(line, terms, exact, seams, place, meter)
+    quadric_roots(line, terms, known, seams, place, meter)
 }
 
-/// How a line meets a cylinder, exactly, where their data are whole.
+/// Whether the enclosure of the discriminant B² − A·C reaches zero, so that it cannot count the
+/// roots.
+fn straddles([a, b, c]: [Interval; 3]) -> Result<bool, IntersectError> {
+    let d = b.square()?.sub(a.mul(c)?)?;
+    Ok(d.lo() <= 0.0 && d.hi() >= 0.0)
+}
+
+/// The count from an exact multiple of the discriminant, `excess` = `by`·Δ with `by` positive,
+/// and an enclosure of Δ two steps of `excess` wide. `(None, None)` where no exact sum was taken.
+fn stored_count(
+    excess: Option<f64>,
+    by: Interval,
+) -> Result<(Option<Meeting>, Option<Interval>), IntersectError> {
+    let Some(e) = excess else {
+        return Ok((None, None));
+    };
+    let meeting = if e > 0.0 {
+        Meeting::Twice
+    } else if e < 0.0 {
+        Meeting::Nowhere
+    } else {
+        Meeting::Tangent
+    };
+    let known = Interval::new(e.next_down(), e.next_up())?.div(by)?;
+    Ok((Some(meeting), Some(known)))
+}
+
+/// Whether products of up to [`MOST_FACTORS`] doubles this size are exact as sums of doubles:
+/// zero, or between 10⁻²⁴ and 10²⁴ in size. Every part of such a product is a whole multiple of
+/// the product of the factors' last places, each at least 2⁻¹³², so of 2⁻¹⁰⁵⁶, which a double
+/// holds, and none is near 2¹⁰²⁴.
+fn mild(x: f64) -> bool {
+    x == 0.0 || (1e-24..=1e24).contains(&x) || (-1e24..=-1e-24).contains(&x)
+}
+
+/// The most stored doubles in one product of an exact sum here.
+const MOST_FACTORS: usize = 8;
+
+/// The most doubles such a product is the sum of: 2^(`MOST_FACTORS` − 1).
+const MOST_PARTS: usize = 128;
+
+/// Adds the product of `factors`, at most [`MOST_FACTORS`] stored doubles, to `sum` exactly: each
+/// factor multiplies every part so far into a double and its error (`two_prod`), so the product
+/// is the sum of at most 128 doubles, held on the stack. `None` where a factor is not [`mild`] or
+/// there are too many.
+fn add_product(sum: &mut ExactSum, factors: &[f64]) -> Option<()> {
+    let (&first, rest) = factors.split_first()?;
+    if rest.len() >= MOST_FACTORS || !factors.iter().all(|x| mild(*x)) {
+        return None;
+    }
+    let mut parts = [0.0; MOST_PARTS];
+    *parts.first_mut()? = first;
+    let mut count: usize = 1;
+    for &f in rest {
+        let mut next = [0.0; MOST_PARTS];
+        for (i, &part) in parts.iter().take(count).enumerate() {
+            let (p, e) = two_prod(part, f);
+            let at = i.checked_mul(2)?;
+            *next.get_mut(at)? = p;
+            *next.get_mut(at.checked_add(1)?)? = e;
+        }
+        parts = next;
+        count = count.checked_mul(2)?;
+    }
+    sum.add_slice(parts.get(..count)?);
+    Some(())
+}
+
+/// Adds `±(Σ mᵢ)² · Π scale` to `sum` exactly, each mᵢ a product of stored doubles: every
+/// product mᵢ·mⱼ·Π scale in turn, negated where `negative`.
+fn add_square<const K: usize>(
+    sum: &mut ExactSum,
+    monomials: &[[f64; K]],
+    scale: &[f64],
+    negative: bool,
+) -> Option<()> {
+    for p in monomials {
+        for q in monomials {
+            let mut factors = [0.0; MOST_FACTORS];
+            let all = p.iter().chain(q).chain(scale);
+            let count = all.clone().count();
+            for (slot, x) in factors.iter_mut().zip(all) {
+                *slot = *x;
+            }
+            if negative {
+                let first = factors.first_mut()?;
+                *first = -*first;
+            }
+            add_product(sum, factors.get(..count)?)?;
+        }
+    }
+    Some(())
+}
+
+/// The twelve products of three stored doubles whose sum is W·(d × n), W = o − c.
+fn skew_terms(o: [f64; 3], c: [f64; 3], d: [f64; 3], n: [f64; 3]) -> [[f64; 3]; 12] {
+    let [c0, c1, c2] = c;
+    let mut terms = [[0.0; 3]; 12];
+    let parts = triple_terms(o, d, n);
+    let behind = triple_terms([-c0, -c1, -c2], d, n);
+    for (slot, term) in terms.iter_mut().zip(parts.iter().chain(&behind)) {
+        *slot = *term;
+    }
+    terms
+}
+
+/// The components of a × b, each as two products of two stored doubles.
+fn cross_parts(a: [f64; 3], b: [f64; 3]) -> [[[f64; 2]; 2]; 3] {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    [
+        [[a1, b2], [-a2, b1]],
+        [[a2, b0], [-a0, b2]],
+        [[a0, b1], [-a1, b0]],
+    ]
+}
+
+/// N·Δ for a line and a cylinder, exactly, rounded once: Δ is the discriminant of the line's
+/// quadratic in the cylinder's own coordinates and N = n·n, n the stored axis. A line meets the
+/// cylinder where it comes within r of the axis, and its distance from the axis is
+/// |W·(d × n)| / |d × n|, W = o − c, so N·Δ = r²·|d × n|² − (W·(d × n))², a sum of products of
+/// six stored doubles. `None` where a product would not be exact.
+fn cylinder_excess(line: &Line<3>, cylinder: &Cylinder) -> Option<f64> {
+    let (o, d) = (line.origin(), line.direction());
+    let (c, n, r) = (
+        cylinder.center(),
+        cylinder.frame().normal(),
+        cylinder.radius(),
+    );
+    let mut sum = ExactSum::new();
+    for part in cross_parts(d, n) {
+        add_square(&mut sum, &part, &[r, r], false)?;
+    }
+    add_square(&mut sum, &skew_terms(o, c, d, n), &[], true)?;
+    let e = sum.round_ieee();
+    e.is_finite().then_some(e)
+}
+
+/// How a line meets a cylinder, exactly, where their data are whole. [`line_cylinder`] reads only
+/// whether it lies along a ruling: the count is the exact sum's, which encloses Δ too.
 fn exact_cylinder(line: &Line<3>, cylinder: &Cylinder) -> Option<Meeting> {
     let (base, along) = on_axis(&cylinder.center(), &cylinder.frame())?;
     let c = quadric::Cylinder {
@@ -626,16 +818,65 @@ fn exact_cylinder(line: &Line<3>, cylinder: &Cylinder) -> Option<Meeting> {
     closed::line_cylinder(&grid_line(line)?, &c).ok()
 }
 
-/// A line along a cylinder's ruling: the part over the domain in v, at the ruling's u.
+/// Whether `line` runs parallel to the stored axis `n`, exactly: d × n is zero in whole numbers of
+/// the stored doubles (d and n, each times one power of two). `None` where one does not fit.
+fn parallel_to(line: &Line<3>, n: [f64; 3]) -> Option<bool> {
+    let ((d, _), (n, _)) = (whole_numbers(line.direction())?, whole_numbers(n)?);
+    Some(wide_cross(&d, &n)?.iter().all(|x| x.signum() == Sign::Zero))
+}
+
+/// The sign of N·C for a line parallel to a cylinder's axis: C is the line's distance from the
+/// axis squared less r², so N·C = |W × n|² − r²·N with W = o − c and N = n·n. Exact in whole numbers
+/// of the stored doubles (o, c and r; n), of degree two in each kind, so the scaling keeps the
+/// sign. `None` where one does not fit.
+fn axis_gap(line: &Line<3>, cylinder: &Cylinder) -> Option<Sign> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cylinder.center());
+    let ([o0, o1, o2, c0, c1, c2, r], _) =
+        whole_numbers([o0, o1, o2, c0, c1, c2, cylinder.radius()])?;
+    let (n, _) = whole_numbers(cylinder.frame().normal())?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let m = wide_cross(&w, &n)?;
+    let r_n = r.checked_mul(&r)?.checked_mul(&wide_dot(&n, &n)?)?;
+    Some(wide_dot(&m, &m)?.checked_sub(&r_n)?.signum())
+}
+
+/// A line parallel to a cylinder's axis (issue 1112): A and B are zero exactly, so C, the line's
+/// distance from the axis squared less r², is the same at every point. Apart from zero, by its
+/// enclosure or by its exact sign, the line meets the cylinder nowhere; zero, it lies along a
+/// ruling. `None` where the exact sign cannot be taken.
+fn beside_axis(
+    line: &Line<3>,
+    cylinder: &Cylinder,
+    constant: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let on = if constant.contains(0.0) {
+        axis_gap(line, cylinder).map(|s| s == Sign::Zero)
+    } else {
+        Some(false)
+    };
+    match on {
+        Some(true) => along_ruling(line, cylinder, meter),
+        Some(false) => proven(Vec::new(), meter).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// A line along a cylinder's ruling: the part over the domain in v, at the ruling's u; the line's
+/// t is cut to the part ([`on_stretch`]). `None` where that part cannot be placed.
 fn along_ruling(
     line: &Line<3>,
     cylinder: &Cylinder,
     meter: &mut WorkMeter<'_>,
-) -> Result<Intersection, IntersectError> {
+) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [_, _, dz]) = local(line, cylinder.center(), &cylinder.frame())?;
     let domain = ParamSurface::domain(cylinder);
     let Some(u) = around(ox, oy, domain.0)? else {
-        return proven(Vec::new(), meter);
+        return proven(Vec::new(), meter).map(Some);
     };
     // The height z is at v = z/s.
     let factor = Interval::point(cylinder.axial_sign())?;
@@ -649,17 +890,25 @@ fn along_ruling(
         larger(first.hi(), last.hi()),
     );
     let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
-        return proven(Vec::new(), meter);
+        return proven(Vec::new(), meter).map(Some);
     };
+    let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
+        return Ok(None);
+    };
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
+        return proven(Vec::new(), meter).map(Some);
+    }
     let overlap = Item::Overlap {
-        at: ParamBox::new(&[Interval::new(start, end)?, u, v])?,
+        at: ParamBox::new(&[Interval::new(from, to)?, u, v])?,
         region: OverlapRegion {
             boundary: Vec::new(),
         },
         proof: Coincidence::Identical,
         class: certified(),
     };
-    proven(alloc::vec![overlap], meter)
+    proven(alloc::vec![overlap], meter).map(Some)
 }
 
 /// A line with a cone: ρ = r₀ + k·v on the axis at z = s·v, so ρ = r₀ + (k/s)·z, ρ² against
@@ -672,6 +921,7 @@ fn line_cone(
 ) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
     let (r0, k) = cone.radius_and_slope();
+    let started = r0 != 0.0;
     // k/s and z/s, not k·s and z·s: the two agree only for s = ±1, as built, and a similarity
     // scales the axial factor.
     let factor = Interval::point(cone.axial_sign())?;
@@ -699,7 +949,483 @@ fn line_cone(
         let flip = Interval::point(flip)?;
         Ok(around(x.mul(flip)?, y.mul(flip)?, domain.0)?.map(|u| (u, v)))
     };
-    quadric_roots(line, terms, None, seams, place, meter)
+    // Whole-number data too: the exact sums count as `closed::line_cone` would, and hold Δ to a
+    // step besides, which a count alone does not, so a near tangent's two roots stand apart.
+    let known = if straddles(terms)? {
+        if started {
+            started_count(line, cone)
+        } else {
+            let n = lift(cone.frame().normal())?;
+            let by = dot(n, n)?.mul(factor.square()?)?;
+            stored_count(cone_excess(line, cone), by)?
+        }
+    } else {
+        (None, None)
+    };
+    // A line parallel to a ruling has A = 0 exactly, which no enclosure is, so it is decided
+    // before the quadratic (issue 1112).
+    let [lead, ..] = terms;
+    if lead.contains(0.0) && parallel_to_a_ruling(line, cone) == Some(true) {
+        return beside_ruling(line, cone, terms, known.0, seams, place, meter);
+    }
+    quadric_roots(line, terms, known, seams, place, meter)
+}
+
+/// Whether `line` runs parallel to a ruling of `cone`, exactly: its leading coefficient is
+/// A = (s²·|d × n|² − k²·(d·n)²) / (s²·N), with N = n·n, and the top is zero in whole numbers of
+/// the stored doubles (d; n; k and s), of degree two in each kind. `None` where one does not fit.
+fn parallel_to_a_ruling(line: &Line<3>, cone: &Cone) -> Option<bool> {
+    let (_, k) = cone.radius_and_slope();
+    let (d, _) = whole_numbers(line.direction())?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let (m, along) = (wide_cross(&d, &n)?, wide_dot(&d, &n)?);
+    let across = s.checked_mul(&s)?.checked_mul(&wide_dot(&m, &m)?)?;
+    let up = k
+        .checked_mul(&k)?
+        .checked_mul(&along)?
+        .checked_mul(&along)?;
+    Some(across.checked_sub(&up)?.signum() == Sign::Zero)
+}
+
+/// The sign of s²·N·C for a line and a cone, C the constant of the line's quadratic. With W = o − c
+/// and N = n·n, s²·N·C = P + Q·√N, where P = s²·(|W × n|² − N·r₀²) − k²·(W·n)² and
+/// Q = −2·r₀·k·s·(W·n), each of degree two in each kind of the stored doubles (o, c and r₀; n; k and
+/// s), so in whole numbers of them the sign is that of P + Q where P and Q do not have opposite
+/// signs, and P's times that of P² − Q²·N where they do, as [`started_sign`] reads Δ. `None` where a
+/// whole number does not fit.
+fn ruling_gap(line: &Line<3>, cone: &Cone) -> Option<Sign> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cone.center());
+    let (r0, k) = cone.radius_and_slope();
+    let ([o0, o1, o2, c0, c1, c2, r0], _) = whole_numbers([o0, o1, o2, c0, c1, c2, r0])?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let (m, big_n, along) = (wide_cross(&w, &n)?, wide_dot(&n, &n)?, wide_dot(&w, &n)?);
+    let off = wide_dot(&m, &m)?.checked_sub(&big_n.checked_mul(&r0)?.checked_mul(&r0)?)?;
+    let p = s.checked_mul(&s)?.checked_mul(&off)?.checked_sub(
+        &k.checked_mul(&k)?
+            .checked_mul(&along)?
+            .checked_mul(&along)?,
+    )?;
+    let q = r0.checked_mul(&k)?.checked_mul(&s)?.checked_mul(&along)?;
+    let q = q.checked_add(&q)?.checked_neg()?;
+    let opposite = matches!(
+        (p.signum(), q.signum()),
+        (Sign::Positive, Sign::Negative) | (Sign::Negative, Sign::Positive)
+    );
+    if !opposite {
+        return Some(p.checked_add(&q)?.signum());
+    }
+    let (p2, q2, n2): (Square, Square, Square) = (p.resize()?, q.resize()?, big_n.resize()?);
+    let gap = p2
+        .checked_mul(&p2)?
+        .checked_sub(&q2.checked_mul(&q2)?.checked_mul(&n2)?)?;
+    Some(p.signum().mul(gap.signum()))
+}
+
+/// A line parallel to a ruling of a cone, its leading coefficient A zero exactly (issue 1112): the
+/// quadratic is 2B·t + C. Where B is proven apart from zero the line crosses once, at t = −C/2B.
+/// Where the exact count says Δ = B² is zero, B is zero, and C, the same at every point, says
+/// whether the line lies along the ruling or meets the cone nowhere: apart from zero by its
+/// enclosure or by its exact sign. `None` where neither tells.
+fn beside_ruling(
+    line: &Line<3>,
+    cone: &Cone,
+    [_, b, c]: [Interval; 3],
+    count: Option<Meeting>,
+    seams: [Seam; 2],
+    place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    if !b.contains(0.0) {
+        let t = c.div(b.add(b)?)?.neg();
+        let items = on_domains(line, t, false, seams, place, meter)?
+            .into_iter()
+            .collect();
+        return proven(items, meter).map(Some);
+    }
+    if count != Some(Meeting::Tangent) {
+        return Ok(None);
+    }
+    let on = if c.contains(0.0) {
+        ruling_gap(line, cone).map(|s| s == Sign::Zero)
+    } else {
+        Some(false)
+    };
+    match on {
+        Some(true) => on_ruling(line, cone, meter),
+        Some(false) => proven(Vec::new(), meter).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// A line along a ruling of a cone: the part over the domain in v, at the ruling's u. About the
+/// axis every point of it is ρ·e(u), ρ = r₀ + σ·z, so u is the turn of its origin's (x, y), or of
+/// its direction's (dx, dy) where ρ there may be zero (the apex), each turned by the sign of ρ or
+/// of its rate σ·dz: past the apex ρ is negative and e(u) points the other way, so the one u holds
+/// the ruling on both nappes. The line's t is cut to the part over the domain ([`on_stretch`]).
+/// `None` where neither sign is proven, or where that part cannot be placed.
+fn on_ruling(
+    line: &Line<3>,
+    cone: &Cone,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
+    let (r0, k) = cone.radius_and_slope();
+    let factor = Interval::point(cone.axial_sign())?;
+    let sigma = Interval::point(k)?.div(factor)?;
+    let (rho, rate) = (Interval::point(r0)?.add(sigma.mul(oz)?)?, sigma.mul(dz)?);
+    let (x, y, sign) = match (apart(rho), apart(rate)) {
+        (Some(sign), _) => (ox, oy, sign),
+        (None, Some(sign)) => (dx, dy, sign),
+        (None, None) => return Ok(None),
+    };
+    let flip = Interval::point(if sign == Sign::Negative { -1.0 } else { 1.0 })?;
+    let domain = ParamSurface::domain(cone);
+    let Some(u) = around(x.mul(flip)?, y.mul(flip)?, domain.0)? else {
+        return proven(Vec::new(), meter).map(Some);
+    };
+    // The height z is at v = z/s.
+    let (start, end) = finite_line(line)?;
+    let v_of = |t: f64| -> Result<Interval, IntersectError> {
+        Ok(along(oz, dz, Interval::point(t)?)?.div(factor)?)
+    };
+    let (first, last) = (v_of(start)?, v_of(end)?);
+    let (lo, hi) = (
+        smaller(first.lo(), last.lo()),
+        larger(first.hi(), last.hi()),
+    );
+    let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
+        return proven(Vec::new(), meter).map(Some);
+    };
+    let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
+        return Ok(None);
+    };
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
+        return proven(Vec::new(), meter).map(Some);
+    }
+    let overlap = Item::Overlap {
+        at: ParamBox::new(&[Interval::new(from, to)?, u, v])?,
+        region: OverlapRegion {
+            boundary: Vec::new(),
+        },
+        proof: Coincidence::Identical,
+        class: certified(),
+    };
+    proven(alloc::vec![overlap], meter).map(Some)
+}
+
+/// The stretch of t, from `start` to `end`, over which a line along a ruling stands on the domain
+/// in v, `(v0, v1)` (issue 1153). Its height is z = oz + t·dz and its v is z/s, `s` the axial
+/// `factor`, so where its v, from `lo` to `hi`, runs past an end b of the domain, the stretch ends at
+/// t = (s·b − oz)/dz, enclosed, and its outer bound is taken. Each bound is strictly past its exact
+/// value, so the bounds meet or cross only where the line stops short of the domain. `None` where
+/// an end is passed and the rate dz/s is not proven apart from zero.
+fn on_stretch(
+    (start, end): (f64, f64),
+    (lo, hi): (f64, f64),
+    (oz, dz): (Interval, Interval),
+    factor: Interval,
+    (v0, v1): (f64, f64),
+) -> Result<Option<(f64, f64)>, IntersectError> {
+    let (below, above) = (lo < v0, hi > v1);
+    if !below && !above {
+        return Ok(Some((start, end)));
+    }
+    let Some(rate) = apart(dz.div(factor)?) else {
+        return Ok(None);
+    };
+    let at = |b: f64| -> Result<Interval, IntersectError> {
+        Ok(Interval::point(b)?.mul(factor)?.sub(oz)?.div(dz)?)
+    };
+    // Where v rises with t the line passes the domain's low end first; where it falls, the high.
+    let (first, last) = if rate == Sign::Positive {
+        ((below, v0), (above, v1))
+    } else {
+        ((above, v1), (below, v0))
+    };
+    let from = if first.0 {
+        larger(start, at(first.1)?.lo())
+    } else {
+        start
+    };
+    let to = if last.0 {
+        smaller(end, at(last.1)?.hi())
+    } else {
+        end
+    };
+    Ok(Some((from, to)))
+}
+
+/// The components of (o − c) × d, each as four products of two stored doubles.
+fn cross_parts_from(o: [f64; 3], c: [f64; 3], d: [f64; 3]) -> [[[f64; 2]; 4]; 3] {
+    let ([o0, o1, o2], [c0, c1, c2], [d0, d1, d2]) = (o, c, d);
+    [
+        [[o1, d2], [-c1, d2], [-o2, d1], [c2, d1]],
+        [[o2, d0], [-c2, d0], [-o0, d2], [c0, d2]],
+        [[o0, d1], [-c0, d1], [-o1, d0], [c1, d0]],
+    ]
+}
+
+/// s²·N·Δ for a line and a cone whose radius at v = 0 is zero, exactly, rounded once: Δ is the
+/// discriminant of the line's quadratic in the cone's own coordinates, N = n·n with n the stored
+/// axis, s the axial factor and k the slope. The apex is then the stored centre c, and the plane
+/// through it and the line, of normal m = W × d with W = o − c, cuts the double cone in two
+/// rulings, touches it along one, or holds the apex alone as k²·N·|m|² is above, equal to or
+/// below (s² + k²)·(m·n)²: s²·N·Δ is their difference, a sum of products of eight stored
+/// doubles. A line through the apex has m = 0, so Δ = 0: it meets the cone there alone, or lies
+/// along a ruling. For a cone whose radius at v = 0 is zero only (a cone of another start radius
+/// is [`started_count`]'s); `None` where a product would not be exact.
+fn cone_excess(line: &Line<3>, cone: &Cone) -> Option<f64> {
+    let (_, k) = cone.radius_and_slope();
+    let (o, d) = (line.origin(), line.direction());
+    let (c, n, s) = (cone.center(), cone.frame().normal(), cone.axial_sign());
+    let mut sum = ExactSum::new();
+    for part in cross_parts_from(o, c, d) {
+        for x in n {
+            add_square(&mut sum, &part, &[k, k, x, x], false)?;
+        }
+    }
+    let skew = skew_terms(o, c, d, n);
+    add_square(&mut sum, &skew, &[s, s], true)?;
+    add_square(&mut sum, &skew, &[k, k], true)?;
+    let e = sum.round_ieee();
+    e.is_finite().then_some(e)
+}
+
+/// The width of the whole numbers of [`started_count`]: 768 bits. Each factor there is below
+/// 2^127 ([`whole_numbers`]), and P and Q, sums of products of eight and seven, fit it while each
+/// kind's whole numbers stay below about 2^90; past that a step is `None` (the engine's).
+type Part = Wide<12>;
+
+/// The width of P² − Q²·N: 1,536 bits, twice [`Part`]'s.
+type Square = Wide<24>;
+
+/// The fraction field of a double's bits: the low 52 bits.
+const FRACTION: u64 = (1 << 52) - 1;
+
+/// A normal double's hidden bit, above its 52 fraction bits.
+const HIDDEN: i64 = 1 << 52;
+
+/// 2^32, the place of the upper half of a 64-bit limb.
+const TWO_POW_32: f64 = 4_294_967_296.0;
+
+/// A finite double as m·2^e exactly, m odd and below 2^53 in size, or (0, 0) for a zero: the
+/// significand with its hidden bit and the exponent less the bias and the 52 fraction bits (IEEE
+/// 754-2019, section 3.3; the subnormals have no hidden bit and the exponent of the least normal
+/// one). `None` for an infinity or NaN. (The same as `geom_math`'s `exact::dyadic`, which that
+/// crate keeps to itself.)
+fn dyadic(x: f64) -> Option<(i64, i32)> {
+    if !x.is_finite() {
+        return None;
+    }
+    let bits = x.to_bits();
+    let fraction = i64::try_from(bits & FRACTION).ok()?;
+    let field = i32::try_from((bits >> 52) & 0x7ff).ok()?;
+    // A subnormal, of field 0, has no hidden bit and the exponent of the least normal double.
+    let m = if field == 0 {
+        fraction
+    } else {
+        fraction.checked_add(HIDDEN)?
+    };
+    let e = field.max(1).checked_sub(1075)?;
+    if m == 0 {
+        return Some((0, 0));
+    }
+    // m ≠ 0 and below 2^53, so it has at most 52 trailing zeros.
+    let zeros = m.trailing_zeros();
+    let m = m.checked_shr(zeros)?;
+    let m = if x.is_sign_negative() {
+        m.checked_neg()?
+    } else {
+        m
+    };
+    Some((m, e.checked_add(i32::try_from(zeros).ok()?)?))
+}
+
+/// Stored doubles of one kind as whole numbers, exactly: each times 2^−e, with e the exponent of
+/// the least last place among them, and e. `None` where one would reach 2^127 (they span more
+/// than about 127 bits) or is not finite.
+fn whole_numbers<const K: usize>(xs: [f64; K]) -> Option<([Part; K], i32)> {
+    let mut parts = [(0, 0); K];
+    for (slot, x) in parts.iter_mut().zip(xs) {
+        *slot = dyadic(x)?;
+    }
+    let least = parts
+        .iter()
+        .filter(|(m, _)| *m != 0)
+        .map(|&(_, e)| e)
+        .min()
+        .unwrap_or(0);
+    let mut whole = [Part::ZERO; K];
+    for (slot, (m, e)) in whole.iter_mut().zip(parts) {
+        if m != 0 {
+            let shift = u32::try_from(e.checked_sub(least)?).ok()?;
+            *slot = Part::from_i128(i128::from(m).checked_mul(2_i128.checked_pow(shift)?)?);
+        }
+    }
+    Some((whole, least))
+}
+
+/// a·b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_dot(a: &[Part; 3], b: &[Part; 3]) -> Option<Part> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    a0.checked_mul(b0)?
+        .checked_add(&a1.checked_mul(b1)?)?
+        .checked_add(&a2.checked_mul(b2)?)
+}
+
+/// a × b for whole-number vectors, exactly; `None` where it does not fit.
+fn wide_cross(a: &[Part; 3], b: &[Part; 3]) -> Option<[Part; 3]> {
+    let ([a0, a1, a2], [b0, b1, b2]) = (a, b);
+    let minus = |p: &Part, q: &Part, r: &Part, s: &Part| -> Option<Part> {
+        p.checked_mul(q)?.checked_sub(&r.checked_mul(s)?)
+    };
+    Some([
+        minus(a1, b2, a2, b1)?,
+        minus(a2, b0, a0, b2)?,
+        minus(a0, b1, a1, b0)?,
+    ])
+}
+
+/// 2^e as a double, for the normal powers of two only (e from −1022 to 1023), from its bits.
+fn pow2(e: i32) -> Option<f64> {
+    let field = u64::try_from(e.checked_add(1023)?).ok()?;
+    (1..=2046)
+        .contains(&field)
+        .then(|| f64::from_bits(field << 52))
+}
+
+/// A whole number enclosed: its limbs' halves summed exactly and rounded once to nearest, then
+/// widened a step either way. `None` where it does not fit a double.
+fn enclose<const L: usize>(w: &Wide<L>) -> Option<Interval> {
+    let negative = w.is_negative();
+    let magnitude = if negative { w.checked_neg()? } else { *w };
+    let mut sum = ExactSum::new();
+    let mut place = 1.0;
+    for limb in magnitude.to_le_limbs() {
+        for half in [limb & 0xffff_ffff, limb >> 32] {
+            if half != 0 {
+                sum.add(f64::from(u32::try_from(half).ok()?) * place);
+            }
+            place *= TWO_POW_32;
+        }
+    }
+    let r = sum.round_ieee();
+    let r = if negative { -r } else { r };
+    if !r.is_finite() {
+        return None;
+    }
+    Interval::new(r.next_down(), r.next_up()).ok()
+}
+
+/// The count of a line on a cone of any start radius r₀, from the exact sign of its
+/// discriminant, and an enclosure of the discriminant (or `None` where its doubles cannot hold
+/// it). `(None, None)` where a whole number does not fit.
+///
+/// With W = o − c, m = W × d, N = n·n, s the axial factor and k the slope, Δ is
+/// (P + Q·√N) / (s²·N), where P = k²·N·|m|² − (s² + k²)·(m·n)² + r₀²·s²·|d × n|², a sum of
+/// products of eight stored doubles, and Q = 2·r₀·k·s·((d·d)(W·n) − (W·d)(d·n)), of seven. (For
+/// r₀ = 0 it is [`cone_excess`]'s.) Where P and Q do not have opposite signs, Δ has the sign of
+/// P + Q; where they do, P + Q·√N has P's sign times that of P² − Q²·N, which is then also
+/// (P² − Q²·N) / (P − Q·√N) with no cancellation in either part.
+///
+/// Each stored double is m·2^e exactly, so each of the four kinds of data (o, c and r₀; d; n;
+/// k and s) times one power of two is a whole number, and P and Q·√N are homogeneous in each kind
+/// (of degrees two, two, two and two), so the scaling keeps the sign, and Δ only gains the power
+/// of two of the first two kinds, squared. P, Q and N are then whole numbers of at most 768 bits
+/// and P² − Q²·N of at most 1,536 ([`Part`], [`Square`]).
+///
+/// Cost: four conversions of at most seven doubles, 50 products and 30 sums or differences of
+/// 768-bit integers, three products and a difference of 1,536-bit ones where the signs differ, and
+/// the enclosure's four or five conversions and a few interval steps. No allocation: every number
+/// is on the stack.
+fn started_count(line: &Line<3>, cone: &Cone) -> (Option<Meeting>, Option<Interval>) {
+    match started_sign(line, cone) {
+        Some((Sign::Positive, known)) => (Some(Meeting::Twice), known),
+        Some((Sign::Negative, known)) => (Some(Meeting::Nowhere), known),
+        Some((Sign::Zero, known)) => (Some(Meeting::Tangent), known),
+        None => (None, None),
+    }
+}
+
+/// The sign of Δ for [`started_count`], and its enclosure where the doubles hold it.
+fn started_sign(line: &Line<3>, cone: &Cone) -> Option<(Sign, Option<Interval>)> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cone.center());
+    let (r0, k) = cone.radius_and_slope();
+    let ([o0, o1, o2, c0, c1, c2, r0], lengths) = whole_numbers([o0, o1, o2, c0, c1, c2, r0])?;
+    let (d, along) = whole_numbers(line.direction())?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let (m, dn) = (wide_cross(&w, &d)?, wide_cross(&d, &n)?);
+    let (big_n, mn) = (wide_dot(&n, &n)?, wide_dot(&m, &n)?);
+    let (kk, ss) = (k.checked_mul(&k)?, s.checked_mul(&s)?);
+    let p = kk
+        .checked_mul(&big_n)?
+        .checked_mul(&wide_dot(&m, &m)?)?
+        .checked_sub(&ss.checked_add(&kk)?.checked_mul(&mn.checked_mul(&mn)?)?)?
+        .checked_add(
+            &r0.checked_mul(&r0)?
+                .checked_mul(&ss)?
+                .checked_mul(&wide_dot(&dn, &dn)?)?,
+        )?;
+    let q = wide_dot(&d, &d)?
+        .checked_mul(&wide_dot(&w, &n)?)?
+        .checked_sub(&wide_dot(&w, &d)?.checked_mul(&wide_dot(&d, &n)?)?)?
+        .checked_mul(&r0.checked_mul(&k)?.checked_mul(&s)?)?;
+    let q = q.checked_add(&q)?;
+    let opposite = matches!(
+        (p.signum(), q.signum()),
+        (Sign::Positive, Sign::Negative) | (Sign::Negative, Sign::Positive)
+    );
+    let gap = if opposite {
+        let (p2, q2) = (p.resize::<24>()?, q.resize::<24>()?);
+        let n2: Square = big_n.resize()?;
+        Some(
+            p2.checked_mul(&p2)?
+                .checked_sub(&q2.checked_mul(&q2)?.checked_mul(&n2)?)?,
+        )
+    } else {
+        None
+    };
+    let sign = match &gap {
+        Some(e) => p.signum().mul(e.signum()),
+        None => p.checked_add(&q)?.signum(),
+    };
+    let scale = lengths.checked_add(along)?.checked_mul(2)?;
+    Some((
+        sign,
+        started_delta([&p, &q, &big_n, &ss], gap.as_ref(), scale),
+    ))
+}
+
+/// Δ = (P + Q·√N) / (s²·N) · 2^`scale` enclosed, through (P² − Q²·N) / (P − Q·√N) where `gap`
+/// holds P² − Q²·N; `None` where a step leaves the doubles.
+fn started_delta(
+    [p, q, big_n, ss]: [&Part; 4],
+    gap: Option<&Square>,
+    scale: i32,
+) -> Option<Interval> {
+    let (p, q, big_n, ss) = (enclose(p)?, enclose(q)?, enclose(big_n)?, enclose(ss)?);
+    let q_root = q.mul(big_n.sqrt().ok()?).ok()?;
+    let top = match gap {
+        Some(e) => enclose(e)?.div(p.sub(q_root).ok()?).ok()?,
+        None => p.add(q_root).ok()?,
+    };
+    let unit = Interval::point(pow2(scale)?).ok()?;
+    top.div(ss.mul(big_n).ok()?).ok()?.mul(unit).ok()
 }
 
 /// What an exact chain says of a line and a torus, on whole-number data.
@@ -855,12 +1581,8 @@ fn line_torus(
         ],
         speed: a.sqrt()?.hi(),
     };
-    let solved = solve(
-        &quartic,
-        [Interval::new(stretch.0, stretch.1)?],
-        |_, _| Ok(true),
-        meter,
-    )?;
+    let side = [Interval::new(stretch.0, stretch.1)?];
+    let solved = solve(&quartic, side, side, |_, _| Ok(true), meter)?;
     let domain = ParamSurface::domain(torus);
     let sign = Interval::point(torus.axial_sign())?;
     let place = |t: Interval| -> Result<Option<(Interval, Interval)>, IntersectError> {
@@ -889,7 +1611,7 @@ fn line_torus(
             items.push(item);
         }
     }
-    let regions = runs(solved.flagged)?;
+    let regions = runs(solved.flagged, &[Seam::open(stretch)])?;
     let settled = exact.is_some_and(|roots| {
         roots.repeated
             && solved.zeros.len().saturating_add(regions.len()) == usize::from(roots.distinct)
@@ -918,7 +1640,9 @@ fn line_torus(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    let [seam_u, seam_v] = seams;
+    let seams = [Seam::open(stretch), seam_u, seam_v];
+    Intersection::on(items, coverage, Vec::new(), &seams, meter)
 }
 
 /// C(t) − S(u, v).
@@ -928,6 +1652,10 @@ struct Contact<'a> {
     seams: [Seam; 3],
     pieces: Vec<BernsteinCurve<3>>,
     patches: Vec<BernsteinPatch<3>>,
+    /// How far in space one unit of t, of u and of v reaches, for the engine's contraction test
+    /// ([`Field::weights`]): 1 each, but for a plane held from an endless one, whose u and v are
+    /// weighed by its vectors.
+    weights: [f64; 3],
 }
 
 /// The patch of `patches` that holds `u` × `v` whole, cut to it.
@@ -1013,7 +1741,7 @@ fn projected(
 
 /// The seams of `surface` over its domain: a round kind closes about its axis, and a torus about its
 /// tube too.
-fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
+pub(crate) fn seams_of(surface: &SurfaceKind) -> [Seam; 2] {
     let (u, v) = ParamSurface::domain(surface);
     match surface {
         SurfaceKind::Torus(_) => [Seam::turns(u), Seam::turns(v)],
@@ -1081,6 +1809,10 @@ impl Contact<'_> {
 }
 
 impl Field<3> for Contact<'_> {
+    fn weights(&self) -> [f64; 3] {
+        self.weights
+    }
+
     fn at(
         &self,
         [t, u, v]: [f64; 3],
@@ -1180,26 +1912,53 @@ fn second_order(
     let not_smooth = Unresolved::NonSmooth {
         at: Degeneracy::Crease,
     };
-    // Over a run grown past where rounding swamps second derivatives, and on the domains.
+    // Over a run grown past where rounding swamps second derivatives, and on the domains: on a
+    // whole turn a run may run past the window's end by under a turn (decision 32.104), and is
+    // read modulo the turn, each stretch either side of the join on its own.
     let [seam_t, seam_u, seam_v] = field.seams;
     let [t, u, v] = grown(
         &[t, u, v],
-        &[seam_t.whole()?, seam_u.whole()?, seam_v.whole()?],
+        &[seam_t.reach()?, seam_u.reach()?, seam_v.reach()?],
     )?;
-    let (DerivativeBound::Bounded(d1), DerivativeBound::Bounded(d2)) = (
-        field.curve.derivative_bound(span(t), 1, meter)?,
-        field.curve.derivative_bound(span(t), 2, meter)?,
-    ) else {
-        return Ok(not_smooth);
+    // Written back as an answer writes a span: one grown a turn wide or more is the whole turn,
+    // read once, not again over the stretch past the end that it overlaps.
+    let [t, u, v] = [seam_t.onto(t)?, seam_u.onto(u)?, seam_v.onto(v)?];
+    let mut slopes: [Option<Bounds<3>>; 2] = [None, None];
+    for part in seam_t.spans(t).into_iter().flatten() {
+        for (slot, order) in slopes.iter_mut().zip([1, 2]) {
+            let DerivativeBound::Bounded(d) = field.curve.derivative_bound(part, order, meter)?
+            else {
+                return Ok(not_smooth);
+            };
+            *slot = Some(match slot.take() {
+                Some(a) => a.union(&d).map_err(CurveError::from)?,
+                None => d,
+            });
+        }
+    }
+    let [Some(d1), Some(d2)] = slopes else {
+        return Err(IntersectError::Internal);
     };
     let (d1, d2) = (sides(&d1)?, sides(&d2)?);
     let limit = (Limit::FromRight, Limit::FromRight);
-    let Ok(list) = field
-        .surface
-        .partials_over((span(u), span(v)), limit, 2, meter)
-    else {
-        return Ok(not_smooth);
-    };
+    let mut list: Vec<[Interval; 3]> = Vec::new();
+    for region in field.regions(u, v).into_iter().flatten() {
+        let Ok(part) = field.surface.partials_over(region, limit, 2, meter) else {
+            return Ok(not_smooth);
+        };
+        if list.is_empty() {
+            list = part;
+            continue;
+        }
+        if part.len() != list.len() {
+            return Err(IntersectError::Internal);
+        }
+        for (held, more) in list.iter_mut().zip(&part) {
+            for (a, b) in held.iter_mut().zip(more) {
+                *a = Interval::new(smaller(a.lo(), b.lo()), larger(a.hi(), b.hi()))?;
+            }
+        }
+    }
     let partial = |i: usize, j: usize| -> Result<[Interval; 3], IntersectError> {
         list.get(partial_index(i, j)?)
             .copied()
@@ -1261,32 +2020,38 @@ fn finished(
     for f in &mut flagged {
         f.region = held(f.region)?;
     }
-    let regions = runs(flagged)?;
+    let regions = runs(flagged, &field.seams)?;
     let mut items = Vec::new();
     let mut seen: Vec<[Interval; 3]> = Vec::new();
     for z in &solved.zeros {
         let enclosure = held(z.enclosure)?;
         // A zero inside a run is part of what the run could not tell apart, and one on a join is
-        // found from both sides of it.
-        let meeting = |hull: &[Interval; 3]| {
-            hull.iter()
-                .zip(&enclosure)
-                .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+        // found from both sides of it: on a whole turn, modulo the turn (decision 32.104).
+        let meeting = |hull: &[Interval; 3]| -> Result<bool, IntersectError> {
+            let mut all = true;
+            for ((seam, a), b) in field.seams.iter().zip(hull).zip(&enclosure) {
+                all &= seam.meets(*a, *b)?;
+            }
+            Ok(all)
         };
-        if regions.iter().any(|(hull, _)| meeting(hull)) || seen.iter().any(meeting) {
+        let mut known = false;
+        for hull in regions.iter().map(|(hull, _)| hull).chain(&seen) {
+            known |= meeting(hull)?;
+        }
+        if known {
             continue;
         }
         seen.push(enclosure);
         let [t, u, v] = enclosure;
         items.push(Item::Point {
             at: ParamBox::new(&enclosure)?,
-            xyz: grid_box(&field.curve.bound(span(t), meter)?)?,
+            xyz: grid_box(&bound_over(field.curve, seam_t, t, meter)?)?,
             contact: boundary(field, [t, u, v]),
             class: certified(),
         });
     }
     for ([t, u, v], why) in regions {
-        let image = field.curve.bound(span(t), meter)?;
+        let image = bound_over(field.curve, seam_t, t, meter)?;
         let at = ParamBox::new(&[t, u, v])?;
         let xyz = grid_box(&image)?;
         let why = match why {
@@ -1306,7 +2071,7 @@ fn finished(
     } else {
         Coverage::TopologyCertified
     };
-    Intersection::new(items, coverage, Vec::new(), meter)
+    Intersection::on(items, coverage, Vec::new(), &field.seams, meter)
 }
 
 /// How a proven root stands against the two domains.
@@ -1453,8 +2218,13 @@ fn in_parameters(
     t: (f64, f64),
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Interval, Interval), IntersectError> {
+    plane_box(plane, &curve.bound(t, meter)?)
+}
+
+/// The plane's parameters over the box `bound`, enclosed: the box read in the plane's own vectors.
+fn plane_box(plane: &Plane, bound: &Bounds<3>) -> Result<(Interval, Interval), IntersectError> {
     let (c, a, b) = plane.vectors();
-    let w = minus(sides(&curve.bound(t, meter)?)?, lift(c)?)?;
+    let w = minus(sides(bound)?, lift(c)?)?;
     let (a, b) = (lift(a)?, lift(b)?);
     let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
     let (wa, wb) = (dot(w, a)?, dot(w, b)?);
@@ -1462,6 +2232,23 @@ fn in_parameters(
     let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
     let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
     Ok((u, v))
+}
+
+/// How far one grid step in space can reach in each of `plane`'s parameters: bounds from above, in
+/// u and in v.
+///
+/// Theorem. A vector w of the plane c + u·a + v·b is du·a + dv·b with
+/// du = w·(|b|²·a − (a·b)·b)/D and D = |a|²·|b|² − (a·b)², positive since a and b are not parallel.
+/// The vector it is dotted with has square |b|²·D, so by Cauchy and Schwarz |du| ≤ |w|·√(|b|²/D),
+/// reached where w runs along it; the same with a and b exchanged gives |dv| ≤ |w|·√(|a|²/D). For
+/// vectors square to each other these are |w|/|a| and |w|/|b|. Each is enclosed from the stored
+/// doubles and its upper end taken, so a step of length 1 moves u and v by no more than is returned.
+fn step_in_parameters(plane: &Plane) -> Result<(f64, f64), IntersectError> {
+    let (_, a, b) = plane.vectors();
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    Ok((bb.div(det)?.sqrt()?.hi(), aa.div(det)?.sqrt()?.hi()))
 }
 
 /// A circle lying in a plane: an overlap for each part of it the plane's domain holds, nothing
@@ -1500,6 +2287,86 @@ fn circle_in_plane(
         return arcs_in_plane(curve, circle, plane, meter);
     }
     lying(curve, u, v, meter).map(Some)
+}
+
+/// A whole circle across a plane (decision 32.106): nothing where the plane misses it, and
+/// otherwise each of its two crossings that the plane's domain holds. `None`, the engine's, where
+/// the circle is short of a whole turn, the enclosure of the discriminant below holds zero (a
+/// touch, a crossing too near one, or a circle lying in the plane), a crossing's parameter reaches
+/// the circle's join or its (u, v) an end of the plane's domain, or the two crossings' boxes meet.
+///
+/// Theorem. The circle q + R·(cos πt·x̂ + sin πt·ŷ) meets the plane through c across N = a × b
+/// where R·(α·cos πt + β·sin πt) = −δ, with α = N·x̂, β = N·ŷ and δ = N·(q − c): the point
+/// (X, Y) = R·(cos πt, sin πt) of the circle's own frame on the line α·X + β·Y = −δ. With
+/// ρ² = α² + β² that line stands |δ|/ρ from the centre, so the circle meets the plane nowhere where
+/// Δ = R²·ρ² − δ² < 0, and where Δ > 0 at two points, (X, Y) = (−δ·(α, β) ± √Δ·(−β, α))/ρ², the
+/// line's foot and a step along it either way, each a simple root of the equation in t, where the
+/// circle passes through the plane. Where ρ² is zero the two planes are parallel and Δ = −δ² ≤ 0.
+/// Every number is enclosed from the stored doubles, so where Δ's enclosure excludes zero its sign
+/// is the true one and the count is proven. A crossing's parameter is the angle of its (X, Y), which
+/// the positive ρ² does not change ([`turn_of`]), and its box is the circle's over that parameter.
+fn circle_across_plane(
+    curve: &CurveKind<3>,
+    circle: &Circle<3>,
+    plane: &Plane,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let (lo, hi) = curve.domain();
+    // A whole turn is a domain of exactly two half-turns, an error-free sum, as the seam charts
+    // decide it (12.10): one whose difference only rounds to 2 is an arc short of a turn.
+    if !crate::seam::turn((lo, hi)) {
+        return Ok(None);
+    }
+    let (c, a, b) = plane.vectors();
+    let n = cross(lift(a)?, lift(b)?)?;
+    let (_, [x, y, _]) = circle.frame().unit_vectors()?;
+    let (alpha, beta) = (dot(n, x)?, dot(n, y)?);
+    let delta = dot(n, minus(lift(circle.center())?, lift(c)?)?)?;
+    let r = Interval::point(circle.radius())?;
+    let rho = alpha.square()?.add(beta.square()?)?;
+    let excess = r.square()?.mul(rho)?.sub(delta.square()?)?;
+    match apart(excess) {
+        Some(Sign::Positive) => {}
+        Some(_) => return proven(Vec::new(), meter).map(Some),
+        None => return Ok(None),
+    }
+    let step = excess.sqrt()?;
+    let [fx, fy] = [delta.mul(alpha)?.neg(), delta.mul(beta)?.neg()];
+    let (du, dv) = ParamSurface::domain(plane);
+    let mut found = Vec::new();
+    for [ex, ey] in [[beta.neg(), alpha], [beta, alpha.neg()]] {
+        let (px, py) = (fx.add(ex.mul(step)?)?, fy.add(ey.mul(step)?)?);
+        // A point whose enclosure holds the centre has no angle to read.
+        if px.contains(0.0) && py.contains(0.0) {
+            return Ok(None);
+        }
+        // A whole turn: the join is no end, so a parameter whose enclosure reaches it is left.
+        let t = onto(turn_of(px, py)?, (lo, hi))?;
+        let Some(t) = t.filter(|t| t.lo() > lo && t.hi() < hi) else {
+            return Ok(None);
+        };
+        let bound = curve.bound(span(t), meter)?;
+        let (u, v) = plane_box(plane, &bound)?;
+        if u.hi() < du.0 || u.lo() > du.1 || v.hi() < dv.0 || v.lo() > dv.1 {
+            continue;
+        }
+        if u.lo() <= du.0 || u.hi() >= du.1 || v.lo() <= dv.0 || v.hi() >= dv.1 {
+            return Ok(None);
+        }
+        found.push(Item::Point {
+            at: ParamBox::new(&[t, u, v])?,
+            xyz: grid_box(&bound)?,
+            contact: PointContact::Crossing,
+            class: certified(),
+        });
+    }
+    // Two crossings whose boxes meet are not told apart: the engine's.
+    if let [p, q] = found.as_slice()
+        && p.at().meets(q.at())
+    {
+        return Ok(None);
+    }
+    proven(found, meter).map(Some)
 }
 
 /// A coordinate of a point of a circle, measured from the circle's centre: its sign, its square as
@@ -1569,8 +2436,18 @@ fn across(b: &Coord, r: f64, sign: Sign) -> Result<Coord, IntersectError> {
     square.extend(b.square.iter().map(|&(x, y)| (-x, y)));
     let r = Interval::point(r)?;
     let d = r.mul(r)?.sub(b.near.mul(b.near)?)?;
-    // The square is positive where this is called; its enclosure may reach below zero.
-    let root = Interval::new(larger(d.lo(), 0.0), larger(d.hi(), 0.0))?.sqrt()?;
+    // The square is positive where this is called (the line crosses the circle, by exact signs),
+    // but where the line stands within a rounding of touching the circle this enclosure reaches
+    // zero, and so would both crossings' coordinates (issue 1003). Then the square's exact sum,
+    // two steps wide, encloses it away from zero: a sum of products of tame doubles is a whole
+    // multiple of 2^-604, so a positive one rounds to a normal double. Only there, so every
+    // other answer keeps its boxes (decision 32.108).
+    let d = if d.contains(0.0) {
+        enclosed_sum(&square)?
+    } else {
+        d
+    };
+    let root = d.sqrt()?;
     let near = if sign == Sign::Negative {
         root.neg()
     } else {
@@ -1905,7 +2782,9 @@ fn stretches_of(
 /// enclosures; which arcs there are is exact, and so is each arc's place against the join: an arc
 /// that starts on the join starts at the domain's first end exactly, one that ends on it ends at
 /// the domain's last end exactly, and there is a stretch past the join only where the arc passes
-/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn.)
+/// it. (A circle kind's domain is at most one turn long, so a whole one is exactly one turn: two
+/// half-turns, decided by an error-free sum, as the seam charts decide it (12.10). A domain whose
+/// difference only rounds to 2 is short of a turn.)
 fn arcs_in_plane(
     curve: &CurveKind<3>,
     circle: &Circle<3>,
@@ -1918,7 +2797,7 @@ fn arcs_in_plane(
     };
     let (lo, hi) = curve.domain();
     let (q, r) = (circle.center(), circle.radius());
-    if hi - lo < 2.0 || !tame(r) {
+    if !crate::seam::turn((lo, hi)) || !tame(r) {
         return Ok(None);
     }
     let (du, dv) = ParamSurface::domain(plane);
@@ -2004,6 +2883,7 @@ fn arcs_in_plane(
     }
     // Two stretches whose enclosures meet hold crossings the enclosures cannot tell apart, as
     // where a side stands within a rounding of touching the circle: the engine's (32.80).
+    // Raw on purpose: a stretch through the join is two pieces, which meet only modulo the turn.
     let apart = items.iter().enumerate().all(|(k, a)| {
         let later = items.get(k.saturating_add(1)..).unwrap_or_default();
         later.iter().all(|b| !a.at().meets(b.at()))
@@ -2017,7 +2897,9 @@ fn arcs_in_plane(
 /// A circle about a round kind's axis and of its radius there: an overlap at the v of its height,
 /// over every u, where the domain holds that v; nothing where it does not; and `None`, the
 /// engine's, where the domain is short of a whole turn (it may hold a part of the circle) or an
-/// enclosure cannot place v against an end and the axis is off the coordinate axes.
+/// enclosure cannot place v against an end and the axis is off the coordinate axes. A whole turn
+/// is exactly two half-turns, decided by an error-free sum, as the seam charts decide it (12.10):
+/// a domain whose difference only rounds to 2 is short.
 ///
 /// The circle's v is placed by [`height_across`].
 fn ring_overlap(
@@ -2027,7 +2909,7 @@ fn ring_overlap(
     (du, dv): ((f64, f64), (f64, f64)),
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
-    if du.1 - du.0 < 2.0 {
+    if !crate::seam::turn(du) {
         return Ok(None);
     }
     let v = match height_across(at, (center, frame, factor), dv)? {
@@ -2228,7 +3110,9 @@ enum Meet {
 /// the circle the surface cuts in its plane. `None`, the engine's, where either domain is short of
 /// a whole turn, the plane holds a cone's apex, neither the enclosures nor exact signs tell how the
 /// two circles stand, the plane's enclosure reaches an end of the domain and the circles are not
-/// apart, or their two crossings are not apart.
+/// apart, or their two crossings are not apart. A whole turn is exactly two half-turns, decided by
+/// an error-free sum, as the seam charts decide it (12.10): a domain whose difference only rounds
+/// to 2 is short.
 ///
 /// Theorem. A plane square to the axis of a right circular cylinder or cone cuts it in the circle
 /// about the axis of the radius at that height, |r₀ + k·v|, or at a cone's apex in that point. A
@@ -2245,7 +3129,7 @@ fn circle_across(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Intersection>, IntersectError> {
     let ((du, dv), (lo, hi)) = (round.domain, curve.domain());
-    if du.1 - du.0 < 2.0 || hi - lo < 2.0 {
+    if !crate::seam::turn(du) || !crate::seam::turn((lo, hi)) {
         return Ok(None);
     }
     if !parallel(round.frame.normal(), circle.frame().normal()) {
@@ -2315,14 +3199,18 @@ fn circle_across(
         let [on_u, on_v] = surface_ends(round.seams, u, v);
         *slot = Some(Item::Point {
             at: ParamBox::new(&[t, u, v])?,
-            xyz: grid_box(&curve.bound(span(t), meter)?)?,
+            // A span across the join is read modulo the turn (decision 32.104).
+            xyz: grid_box(&bound_over(curve, Seam::turns((lo, hi)), t, meter)?)?,
             contact: standing(tangent, [false, on_u, on_v]),
             class: certified(),
         });
     }
-    // Two crossings whose boxes meet are not told apart: the engine's.
+    // Two crossings whose boxes meet are not told apart: the engine's. On a whole turn they meet
+    // modulo the turn (decision 32.104).
+    let [seam_u, seam_v] = round.seams;
+    let seams = [Seam::turns((lo, hi)), seam_u, seam_v];
     if let [Some(a), Some(b)] = &found
-        && a.at().meets(b.at())
+        && a.at().meets_on(b.at(), &seams)?
     {
         return Ok(None);
     }
@@ -2520,7 +3408,12 @@ fn closed_form(
         (CurveKind::Line(l), SurfaceKind::Cylinder(c)) => line_cylinder(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Cone(c)) => line_cone(l, c, seams, meter),
         (CurveKind::Line(l), SurfaceKind::Torus(t)) => line_torus(l, t, seams, meter).map(Some),
-        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => circle_in_plane(curve, k, p, meter),
+        (CurveKind::Circle(k), SurfaceKind::Plane(p)) => {
+            match circle_in_plane(curve, k, p, meter)? {
+                None => circle_across_plane(curve, k, p, meter),
+                found => Ok(found),
+            }
+        }
         (CurveKind::Circle(k), SurfaceKind::Cylinder(c)) => {
             match circle_on_cylinder(curve, k, c, meter)? {
                 None => circle_across(curve, k, &RoundKind::cylinder(c, seams), meter),
@@ -2568,6 +3461,41 @@ pub fn curve_surface(
     if let Some(answer) = closed_form(curve, surface, meter)? {
         return Ok(answer);
     }
+    // A plane may run on without end (the only kind that may), and the engine needs a finite
+    // domain. Every point of the curve lies in its box, so the plane held, on each end it lacks, to
+    // that box read in its own parameters and a margin past it meets the curve where the plane
+    // does, and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across
+    // an endless plane was refused as invalid input). The margin is room for the engine to prove a
+    // root on the box's edge alone, and any width of it is sound; it is one grid step in space,
+    // read in each parameter by `step_in_parameters`, so it does not shrink in space with short
+    // vectors (issue 1078: a unit of the parameter left 2^-30 of a step past a circle's crossings
+    // on vectors of that length, and both were flagged). The engine's contraction test weighs u
+    // and v by the same step, a unit of each as 1/du and 1/dv of a step in space: any positive
+    // weights prove a contraction, and unweighed, the plain norm of a step on short vectors
+    // stays above 1 down to the least box the engine keeps, however much room the box has.
+    let held;
+    let mut surface = surface;
+    let mut weights = [1.0; 3];
+    if let SurfaceKind::Plane(p) = surface {
+        let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
+        if ![u0, u1, v0, v1].into_iter().all(f64::is_finite) {
+            let (u, v) = in_parameters(curve, p, finite(curve)?, meter)?;
+            let (du, dv) = step_in_parameters(p)?;
+            weights = [1.0, 1.0 / du, 1.0 / dv];
+            let mut ends = [(u0, u1), (v0, v1)];
+            for (((lo, hi), x), step) in ends.iter_mut().zip([u, v]).zip([du, dv]) {
+                if !lo.is_finite() {
+                    *lo = (smaller(x.lo(), *hi) - step).next_down();
+                }
+                if !hi.is_finite() {
+                    *hi = (larger(x.hi(), *lo) + step).next_up();
+                }
+            }
+            let (c, a, b) = p.vectors();
+            held = SurfaceKind::Plane(Plane::new(c, a, b, (ends[0], ends[1]))?);
+            surface = &held;
+        }
+    }
     let [seam_u, seam_v] = seams_of(surface);
     let seam_t = seam_of(curve, finite(curve)?);
     let field = Contact {
@@ -2576,9 +3504,10 @@ pub fn curve_surface(
         seams: [seam_t, seam_u, seam_v],
         pieces: crate::curve::pieces(curve, meter)?,
         patches: patches(surface, meter)?,
+        weights,
     };
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
-    let solved = solve(&field, domain, |_, _| Ok(true), meter)?;
+    let solved = solve(&field, domain, domain, |_, _| Ok(true), meter)?;
     finished(&field, solved, meter)
 }
 
@@ -2608,6 +3537,37 @@ mod tests {
 
     fn exactly(x: f64) -> Interval {
         Interval::point(x).unwrap()
+    }
+
+    fn plane_on(a: [f64; 3], b: [f64; 3]) -> Plane {
+        Plane::new([0.0; 3], a, b, ((-1.0, 1.0), (-1.0, 1.0))).unwrap()
+    }
+
+    #[test]
+    fn a_step_in_space_is_one_over_each_length_on_square_vectors() {
+        // u's vector 2^-30 long and v's 2^-20: a step is 2^30 of u and 2^20 of v, each held from
+        // above within a rounding.
+        let (du, dv) = step_in_parameters(&plane_on(
+            [1.0 / 1_073_741_824.0, 0.0, 0.0],
+            [0.0, 1.0 / 1_048_576.0, 0.0],
+        ))
+        .unwrap();
+        assert!((1_073_741_824.0..1_073_741_824.1).contains(&du), "{du}");
+        assert!((1_048_576.0..1_048_576.1).contains(&dv), "{dv}");
+        // Unit vectors: a unit of each.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])).unwrap();
+        assert!((1.0..1.000_000_1).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
+    }
+
+    #[test]
+    fn a_step_in_space_reaches_further_in_a_parameter_on_slanted_vectors() {
+        // a = (1, 0, 0), b = (1, 1, 0): D = 1·2 − 1 = 1, so a step is at most √2 of u (along
+        // (1, −1, 0)/√2, which is √2·a − b/√2) and 1 of v.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [1.0, 1.0, 0.0])).unwrap();
+        let root = 2.0_f64.sqrt();
+        assert!((root..root + 1e-9).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
     }
 
     #[test]

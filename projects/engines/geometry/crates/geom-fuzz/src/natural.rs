@@ -26,8 +26,9 @@
 //! case's count, which the target's tests hold for the issue's four inputs, for the end circles
 //! a plane's domain holds a part of (decision 32.69), for an end circle about a line through a
 //! sphere's centre that stands off the sphere (decision 32.74), for the end circles of a cone
-//! across another on a parallel axis (decision 32.86), and for what is still the engine's;
-//! [`answer_of`] reads its answer.
+//! across another on a parallel axis (decision 32.86), for a plane's edge through a cone's apex
+//! or tangent to a cylinder (decision 32.87) or beside a cone of start radius 100 (decision
+//! 32.88), and for what is still the engine's; [`answer_of`] reads its answer.
 
 #![allow(
     clippy::many_single_char_names,
@@ -44,6 +45,7 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 use geom_test::{ByteSource, Entropy};
 
 use crate::Finding;
+use crate::seams::surface_box;
 
 /// The work a case may take: an edge of a surface against the other, and a stop there is an answer
 /// the laws accept.
@@ -292,14 +294,8 @@ fn points_are_meetings(
         }));
     };
     let mut work = meter();
-    let x = must(
-        a.bound(((u.lo(), u.hi()), (v.lo(), v.hi())), &mut work),
-        "a point's box is in the domain",
-    )?;
-    let y = must(
-        b.bound(((s.lo(), s.hi()), (t.lo(), t.hi())), &mut work),
-        "a point's box is in the domain",
-    )?;
+    let x = surface_box(a, (*u, *v), &mut work)?;
+    let y = surface_box(b, (*s, *t), &mut work)?;
     let gap = apart(&x, &y);
     if gap > SLACK {
         return Err(Finding::new("a point lies on both", || {

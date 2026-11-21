@@ -145,6 +145,19 @@ impl Build {
     }
 }
 
+/// The least-angle case's m and |D|: R = 2047² + 4 and |D| about 6.8e7, or under Miri, where that
+/// radius takes minutes, R = 255² + 4 and the same |D|. The side then leaves V at sin θ about
+/// 2.3e-13 and crosses the rim again 3e-8 steps away, as before within the meeting the edge stage
+/// makes V: the same touch is recorded and the faces split by how the side and the rim bend there,
+/// so the same assertions hold.
+fn least_angle() -> (i64, i64) {
+    if cfg!(miri) {
+        (255, 1 << 26)
+    } else {
+        (2047, 1 << 26)
+    }
+}
+
 /// a and b with a·x + b·y = gcd(a, b), and the gcd.
 fn euclid(a: i128, b: i128) -> (i128, i128, i128) {
     let (mut r0, mut r1, mut x0, mut x1, mut y0, mut y1) = (a, b, 1, 0, 0, 1);
@@ -416,7 +429,8 @@ fn runs(splitting: &Splitting, f: usize, piece: Piece) -> Vec<(usize, usize)> {
 /// rim's arc inside it, each arc and side run once each way by the two halves.
 #[test]
 fn a_side_leaving_a_rim_vertex_at_the_least_angle_meets_the_rim_once_there() {
-    let case = rim_and_triangle(2047, 1 << 26, false);
+    let (m, reach) = least_angle();
+    let case = rim_and_triangle(m, reach, false);
     let out = case.build.run().unwrap();
     // V, W, the centre, and Q where the third side crosses the rim: nothing else.
     assert_eq!(out.vertices.len(), 4, "{:?}", out.vertices);
@@ -537,7 +551,8 @@ fn a_split_that_would_lose_the_triangle_is_refused() {
 /// bounds neither, so the disc is refused rather than split as if it were not there.
 #[test]
 fn a_piece_inside_no_part_of_its_face_is_refused() {
-    let case = rim_and_triangle(2047, 1 << 26, false);
+    let (m, reach) = least_angle();
+    let case = rim_and_triangle(m, reach, false);
     let mut out = case.build.run().unwrap();
     let third = case.build.arr.faces[case.triangle].loops[0]
         .iter()
@@ -572,6 +587,21 @@ fn at_the_largest_radii_the_edge_stage_refuses_such_a_meeting() {
         other => panic!("{other:?}"),
     }
     let case = rim_and_triangle(32767, 1 << 26, true);
+    let out = case.build.run().unwrap();
+    let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
+    checked(&case, &out, &splitting);
+}
+
+/// The sweep's case at R = 541² + 4 with |D| about 6.07e11, outward (issue 1156). The triangle's
+/// third side, from W 2^39 steps out to the centre, runs along a radius and crosses the rim at
+/// right angles, but the closed form's discriminant, B² − AC from terms some 10¹³ times its size,
+/// kept their rounding: the crossing's box ran 17,060 steps along the side, the vertex made at
+/// its centre stood 140 steps inside the rim, and the edge stage refused it (`CoincidenceChain`).
+/// Taken as A less the square of the line's distance from the centre, the crossing is held to a
+/// step or two, and the faces split as a split must.
+#[test]
+fn a_side_from_far_out_to_the_centre_meets_the_rim_where_it_crosses() {
+    let case = rim_and_triangle(541, 606_525_672_786, false);
     let out = case.build.run().unwrap();
     let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
     checked(&case, &out, &splitting);

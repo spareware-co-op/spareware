@@ -9,6 +9,12 @@
 //! profile's direction, rounded from 30 to 30.000000000000004 by the half-plane map, was parallel
 //! to the cone's other ruling to within rounding, and two lines whose exact determinant is not zero
 //! divided by an enclosure of it that held zero.
+//!
+//! The map into the half-plane was still read at the profile's middle as rounded, which for a
+//! circle is not the point the proof reads its side at, its centre: a circle touching the axis at
+//! its middle, as a horn torus's does, whose middle rounded across the axis was read mirrored and
+//! lost its rings, and one whose middle rounded off the plane of the axis was read turned out of
+//! it. A circle's map is read at its centre now.
 
 #![allow(
     clippy::unwrap_used,
@@ -27,10 +33,11 @@ use geom_curve::{
 use geom_intersect::curve::curves;
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Intersection, Item};
+use geom_math::{RationalTransform, TypedTransform};
 use geom_num::interval::Interval;
-use geom_nurbs::Curve;
+use geom_nurbs::{Curve, Limit};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Cylinder, Plane, Revolution, SurfaceKind};
+use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Revolution, Sphere, SurfaceKind};
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const WIDE: (f64, f64) = (-1000.0, 1000.0);
@@ -497,4 +504,106 @@ fn an_ellipse_or_a_parabola_is_a_meridian_by_its_plane_and_a_ball_about_its_cent
     let h = Hyperbola::new([3.0, 0.0, 0.0], flat, (-1.0, 1.0)).unwrap();
     let r = revolution(CurveKind::Hyperbola(h));
     assert!(natural(&level(0.5), &r, &mut meter()).unwrap().is_none());
+}
+
+#[test]
+fn a_curved_profile_with_its_ends_and_middle_on_one_side_that_crosses_the_axis_is_no_meridian() {
+    // The three points the old test read stand on one side of the axis, and each curve crosses it
+    // between them, so a cut there meets the far part, whose rings the old test lost (a crossing at
+    // ρ < 0 is dropped). Either the true rings or none (the general paths).
+    //
+    // The circle about ρ = 1 of radius 2 starting at its top: its ends (1, 0, 2) and its middle
+    // (1, 0, −2) are at ρ = 1, and it reaches ρ = −1 at z = 0, where z = 0 cuts the rings ρ = 1
+    // and ρ = 3.
+    let top = Frame::new([0.0, 0.0, 1.0], [0.0, 1.0, 0.0]).unwrap();
+    let round = Circle::new([1.0, 0.0, 0.0], 2.0, top, ROUND).unwrap();
+    let round = revolution(CurveKind::Circle(round));
+    if let Some(r) = natural(&level(0.0), &round, &mut meter()).unwrap() {
+        assert_rings(&r, &[(1.0, 0.0), (3.0, 0.0)]);
+    }
+    // A cubic Bézier curve, z = 3t, at ρ = 2 at its ends and ρ = 1/2 at its middle: ρ(1/4) = −1/4,
+    // so z = 3/4 cuts the ring ρ = 1/4.
+    let bent = revolution(bezier(&[
+        [2.0, 0.0, 0.0],
+        [-4.0, 0.0, 1.0],
+        [4.0, 0.0, 2.0],
+        [2.0, 0.0, 3.0],
+    ]));
+    if let Some(r) = natural(&level(0.75), &bent, &mut meter()).unwrap() {
+        assert_rings(&r, &[(0.25, 0.75)]);
+    }
+}
+
+#[test]
+fn the_issues_cone_scaled_by_three_meets_the_scaled_funnel_in_its_ring() {
+    // The issue's input as it was met: the cone ρ = 4 − z/2 and the revolution ρ = 7 + z/2, parallel
+    // to the cone's other ruling, meet in the ring ρ = 11/2 at z = −3; both moved by x ↦ 3x, they
+    // gave Err(InvalidInput). Moved, the ring is ρ = 33/2 at z = −9.
+    let cone = Cone::new([0.0; 3], 4.0, -0.5, up(), (ROUND, (-10.0, 10.0))).unwrap();
+    let funnel = revolution(segment([2.0, 0.0, -10.0], [12.0, 0.0, 10.0]));
+    let three = [[3, 0, 0], [0, 3, 0], [0, 0, 3]];
+    let three = TypedTransform::from(RationalTransform::new(three, [0, 0, 0], 1).unwrap());
+    let moved = |s: &SurfaceKind| {
+        let m = s.transformed(&three, &mut meter()).unwrap();
+        assert_eq!(m.deviation, 0.0, "{s:?}");
+        m.value
+    };
+    let (cone, funnel) = (moved(&SurfaceKind::Cone(cone)), moved(&funnel));
+    let r = natural(&cone, &funnel, &mut meter()).unwrap().unwrap();
+    assert_rings(&r, &[(16.5, -9.0)]);
+}
+
+#[test]
+fn a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side() {
+    // A horn torus's tube, about ρ = 1 of radius 1 in y = 0, which touches the axis: its frame is
+    // turned a little about its normal and its span starts opposite the point that touches, so its
+    // middle is that point. As rounded, the middle stands across the axis: the meridian was read
+    // mirrored, about ρ = −1, so z = 0 gave the point on the axis alone and lost the ring ρ = 2,
+    // and the cylinder ρ = 3/2 and the sphere of radius 3/2 gave nothing.
+    let turned = Frame::new(
+        [0.999_925_666_296_434_9, 0.0, 0.012_192_697_881_553_619],
+        [0.0, 1.0, 0.0],
+    );
+    let span = (-1.996_118_847_557_761, 0.003_881_152_442_238_966_5);
+    let tube = CurveKind::Circle(Circle::new([1.0, 0.0, 0.0], 1.0, turned.unwrap(), span).unwrap());
+    let (lo, hi) = tube.domain();
+    let middle = tube.point(lo * 0.5 + hi * 0.5, Limit::FromRight).unwrap();
+    assert!(middle[0] < 0.0, "{middle:?}");
+    let horn = revolution(tube);
+    let r = natural(&level(0.0), &horn, &mut meter()).unwrap().unwrap();
+    assert_rings(&r, &[(0.0, 0.0), (2.0, 0.0)]);
+    let z = 0.75_f64.sqrt();
+    let r = natural(&cylinder(1.5, WIDE), &horn, &mut meter())
+        .unwrap()
+        .unwrap();
+    assert_rings(&r, &[(1.5, -z), (1.5, z)]);
+    // ρ² + z² = 9/4 and (ρ − 1)² + z² = 1 meet at ρ = 9/8.
+    let ball = Sphere::new([0.0; 3], 1.5, up(), (ROUND, (-0.5, 0.5))).unwrap();
+    let z = (2.25_f64 - 1.265_625).sqrt();
+    let r = natural(&SurfaceKind::Sphere(ball), &horn, &mut meter())
+        .unwrap()
+        .unwrap();
+    assert_rings(&r, &[(1.125, -z), (1.125, z)]);
+}
+
+#[test]
+fn a_circle_near_the_axis_in_a_plane_of_a_slanted_direction_is_read_in_that_plane() {
+    // In the plane of the z axis and (1, 3, 0), of normal (3, −1, 0): the circle about (1, 3, 0),
+    // √10 off the axis, of radius r = 3.162277660168379, the largest double whose square is at most
+    // 10, so it is proven off the axis and all but touches it at its middle. As rounded, the middle
+    // stands 2.5e−16 off the axis and 3.5e−17 off the plane, so the map read there turned the plane
+    // by about 8 degrees, and z = 0 cut the far ring at ρ = 6.26099, not √10 + r = 6.32456.
+    let r = 3.162_277_660_168_379;
+    let tilted = Frame::new([1.0, 3.0, -1.5], [3.0, -1.0, 0.0]).unwrap();
+    let tm = -0.859_017_035_971_376;
+    let tube = Circle::new([1.0, 3.0, 0.0], r, tilted, (tm - 1.0, tm + 1.0)).unwrap();
+    let near = revolution(CurveKind::Circle(tube));
+    let got = natural(&level(0.0), &near, &mut meter()).unwrap().unwrap();
+    assert_rings(&got, &[(0.0, 0.0), (10.0_f64.sqrt() + r, 0.0)]);
+    let gap = 3.0 - 10.0_f64.sqrt();
+    let z = (r * r - gap * gap).sqrt();
+    let got = natural(&cylinder(3.0, WIDE), &near, &mut meter())
+        .unwrap()
+        .unwrap();
+    assert_rings(&got, &[(3.0, -z), (3.0, z)]);
 }

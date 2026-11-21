@@ -51,7 +51,15 @@
 //!   [`BUDGET`], fits one alone with its listing, so none is left out for want of a partition.
 //!   geom-pool's finishing tests, which run under Tree
 //!   Borrows, are one part of their own, held to the same rule. `kernel_quality_workflow.rs` holds
-//!   the table's plan to all of it.
+//!   the table's plan to all of it. The partitions run in the workflow's two partition jobs, one
+//!   GitHub Actions matrix each, `miri` 1 to 256 and `miri-2` 257 on ([`gate_matrix`]), so a plan
+//!   of more than [`crate::mutants::MAX_SHARDS`] is refused, as the mutants' shards are (32.105).
+//! - **A test nobody saw finish is not a pass (32.68).** The gate's profiles count a test nextest
+//!   stops at [`BUDGET`] as passing, so [`stops`] reads each gate job's report for the tests
+//!   stopped there and the job names them in its summary as stopped with no verdict. Only a test
+//!   whose row is over [`SURE_WITHIN`], which a runner [`SLOWER`] can take to the stop, may be:
+//!   [`MAY_STOP`] lists them, written from the table ([`render_may_stop`]) and held to at most
+//!   [`MAY_STOP_MOST`]; any other test stopped fails its job ([`allowed_stops`]).
 //! - **A measuring part ends within the stop.** Each test of a measuring run is planned at its
 //!   finishing row's seconds, or at [`BUDGET`], the stop of a measuring run on a CI runner, when
 //!   its row is native-only or it has none, so a part's tests take at most [`BUDGET`] at
@@ -138,6 +146,19 @@ pub const PART_SECONDS: u64 = 780;
 /// `.config/nextest.toml` stops a test still running then. A finishing row is always under it.
 pub const BUDGET: u64 = 600;
 
+/// The limit of a partition's tests' step, in minutes: over [`PART_SECONDS`], so a partition the
+/// plan holds is never stopped by it, and under the job's 30 minutes by [`FIXED_SECONDS`] and the
+/// first try of its report's upload, so a partition that overruns fails in that step with its
+/// log, the summary of its stopped tests and its report kept (run 44168015168's partition 65 ran
+/// out the job's limit inside the step, and nothing of it was kept).
+pub const TESTS_STEP_MINUTES: u64 = 24;
+
+/// The seconds after which a Miri gate job's tests' step stops nextest with SIGTERM (coreutils'
+/// `timeout`), a minute before [`TESTS_STEP_MINUTES`]: nextest then ends its tests and writes its
+/// report. GitHub's own stop at the step's limit ends nextest before it writes one (trial run
+/// 44290072805 found no report), so without this an overrun kept its log and lost its report.
+pub const TESTS_RUN_SECONDS: u64 = TESTS_STEP_MINUTES * 60 - 60;
+
 /// `seconds` on a runner [`SLOWER`], rounded up.
 fn on_a_slower_runner(seconds: u64) -> u64 {
     seconds.saturating_mul(SLOWER.0).div_ceil(SLOWER.1)
@@ -149,6 +170,191 @@ fn on_a_slower_runner(seconds: u64) -> u64 {
 pub fn planned(seconds: u64) -> u64 {
     on_a_slower_runner(seconds).min(BUDGET)
 }
+
+/// The most seconds a finishing row may hold and its test still be planned to end within
+/// [`BUDGET`] on a runner [`SLOWER`]: 600 s over 1.6, 375 s (32.68). A test whose row is over it
+/// can reach the stop on a slow runner, so only such a test may be stopped there with no verdict,
+/// and only while it is on [`MAY_STOP`].
+pub const SURE_WITHIN: u64 = 375;
+
+/// The yardstick (32.78): one fixed small test every Miri job runs alone under Miri before its
+/// own tests, as (binary id, test). Its row in [`TIMES`] is its time on the runner the table's
+/// seconds are counted in, so the job's [`job_scale`] is the speed of the runner it got, and each
+/// test's stop ([`stop_ms`]) is counted in that runner's own seconds. GitHub's runners come in
+/// two speeds (run 44248913106's partition 33 ran 1.4 times its proving run's seconds; a row
+/// measured on the fast one stopped its test on the slow one), and a stop fixed in one runner's
+/// seconds goes red by the luck of the runner.
+pub const YARDSTICK: (&str, &str) = (
+    "geom-num",
+    "plane::tests::the_largest_denominators_of_both_widths",
+);
+
+/// The least a job's scale is held at, as a fraction (num, den): 0.5. A faster runner is judged
+/// as one at 0.5, so a stop never falls under half its row's planned time.
+pub const SCALE_LEAST: (u64, u64) = (1, 2);
+
+/// The most a job's scale may be, as a fraction (num, den): 3. Over it the job fails as a runner
+/// too slow to judge, the runner's red and not a test's.
+pub const SCALE_MOST: (u64, u64) = (3, 1);
+
+/// Whether `a` is less than `b`, two fractions (num, den) with nonzero denominators.
+fn less((an, ad): (u64, u64), (bn, bd): (u64, u64)) -> bool {
+    // Two u64s' product always fits a u128, so neither side saturates.
+    u128::from(an).saturating_mul(u128::from(bd)) < u128::from(bn).saturating_mul(u128::from(ad))
+}
+
+/// A job's scale from its yardstick's run (32.78): the yardstick's seconds in `report` (its run's
+/// nextest report) over its row in `rows`, as a fraction (num, den), held at [`SCALE_LEAST`] from
+/// below.
+///
+/// # Errors
+///
+/// When the yardstick has no finishing row in `rows`, or `report` does not show it passing: a
+/// missing time is an error, never a default. When the scale is over [`SCALE_MOST`]: the runner
+/// is too slow to judge.
+pub fn job_scale(rows: &[Row], report: &[Reported]) -> Result<(u64, u64), String> {
+    let (binary, test) = YARDSTICK;
+    let row = rows
+        .iter()
+        .find(|r| r.binary == binary && r.test == test)
+        .ok_or_else(|| format!("the yardstick {binary} {test} has no row in Miri's table"))?;
+    let State::Finishes(seconds) = row.state else {
+        return Err(format!(
+            "the yardstick {binary} {test} is native-only: it has no time to scale by"
+        ));
+    };
+    if seconds == 0 {
+        return Err(format!(
+            "the yardstick {binary} {test}'s row is 0 s: it has no time to scale by"
+        ));
+    }
+    let ran = report
+        .iter()
+        .find(|r| r.binary == binary && r.test == test)
+        .ok_or_else(|| format!("the yardstick {binary} {test} is not in its report"))?;
+    let ms = match &ran.outcome {
+        Outcome::Passed(ms) => *ms,
+        Outcome::TimedOut(ms) => {
+            return Err(format!(
+                "the yardstick {binary} {test} was stopped after {ms} ms: no time to scale by"
+            ));
+        }
+        Outcome::Failed(words) => {
+            return Err(format!("the yardstick {binary} {test} failed: {words}"));
+        }
+    };
+    let den = seconds
+        .checked_mul(1000)
+        .ok_or("the yardstick's row overflows")?;
+    let scale = (ms, den);
+    if less(SCALE_MOST, scale) {
+        return Err(format!(
+            "runner too slow to judge: the yardstick took {} times its row (over {}), the \
+             runner's red and not a test's",
+            scale_text(scale),
+            scale_text(SCALE_MOST)
+        ));
+    }
+    Ok(if less(scale, SCALE_LEAST) {
+        SCALE_LEAST
+    } else {
+        scale
+    })
+}
+
+/// A scale as a decimal of three places, rounded up (`1.400`).
+#[must_use]
+pub fn scale_text((num, den): (u64, u64)) -> String {
+    let milli = (u128::from(num) * 1000).div_ceil(u128::from(den.max(1)));
+    format!("{}.{:03}", milli / 1000, milli % 1000)
+}
+
+/// A finishing test's stop in a job at `scale`, in milliseconds (32.78): its row's `seconds`
+/// times 1.6 ([`SLOWER`]) times the scale, rounded up; a stop past `u64::MAX` milliseconds is
+/// `u64::MAX`.
+#[must_use]
+pub fn stop_ms(seconds: u64, (num, den): (u64, u64)) -> u64 {
+    let top = u128::from(seconds)
+        .checked_mul(1000)
+        .and_then(|t| t.checked_mul(u128::from(SLOWER.0)))
+        .and_then(|t| t.checked_mul(u128::from(num)));
+    // Two u64s' product always fits a u128.
+    let bottom = u128::from(SLOWER.1).saturating_mul(u128::from(den.max(1)));
+    top.and_then(|t| u64::try_from(t.div_ceil(bottom)).ok())
+        .unwrap_or(u64::MAX)
+}
+
+/// What a gate job's report says of its tests' stops at its scale ([`over_stops`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Judged {
+    /// Each test that reached its own stop, as `binary test: why`: each fails the job.
+    pub over: Vec<String>,
+    /// Each test a short run's stop (the `miri-smoke` profile's, under [`BUDGET`]) ended before
+    /// its own: no verdict and not a pass, named, as `binary test: why`.
+    pub cut: Vec<String>,
+}
+
+/// Every test of a gate job's `report` that ran to its stop at `scale` (32.78). A test's own stop
+/// is [`stop_ms`] of its row; `ceiling` is the profile's stop in seconds, where nextest ends any
+/// test. A test that passed at or after its own stop, or that nextest stopped with its own stop
+/// at or under `ceiling`, is over: a test stopped at its budget is a failure, never a pass. So is
+/// a test that ran with no finishing row. At [`BUDGET`] a test nextest stopped is over whatever
+/// its own stop, since no stop is widened past the budget; under it (a short run) a test ended
+/// before its own stop is cut, named and not passed.
+#[must_use]
+pub fn over_stops(report: &[Reported], rows: &[Row], scale: (u64, u64), ceiling: u64) -> Judged {
+    let ceiling_ms = ceiling.saturating_mul(1000);
+    let mut out = Judged::default();
+    for r in report {
+        let row = rows
+            .iter()
+            .find(|x| x.binary == r.binary && x.test == r.test);
+        let Some(State::Finishes(seconds)) = row.map(|x| x.state) else {
+            if !matches!(r.outcome, Outcome::Failed(_)) {
+                out.over
+                    .push(format!("{} {}: no finishing row", r.binary, r.test));
+            }
+            continue;
+        };
+        let own = stop_ms(seconds, scale);
+        let (ms, by_nextest) = match r.outcome {
+            Outcome::TimedOut(ms) => (ms, true),
+            Outcome::Passed(ms) => (ms, ms >= ceiling_ms),
+            Outcome::Failed(_) => continue,
+        };
+        if ms < own && !by_nextest {
+            continue;
+        }
+        let why = format!(
+            "{} {}: {ms} ms, its stop {own} ms (row {seconds} s x 1.6 x {})",
+            r.binary,
+            r.test,
+            scale_text(scale)
+        );
+        if ms < own && ceiling < BUDGET {
+            out.cut
+                .push(format!("{why}, ended at the short run's {ceiling} s"));
+        } else {
+            out.over.push(why);
+        }
+    }
+    out
+}
+
+/// The tests a gate job may see stopped at [`BUDGET`] with no verdict (32.68): every finishing row
+/// over [`SURE_WITHIN`], `seconds<TAB>binary id<TAB>test name` a line, `#` lines comments, written
+/// by `kernel-quality miri-may-stop` (and `miri-times`) from [`TIMES`] with
+/// [`render_may_stop`], never by hand.
+pub const MAY_STOP: &str = include_str!("miri-may-stop.tsv");
+
+/// [`MAY_STOP`]'s path from the repository root.
+pub const MAY_STOP_PATH: &str = "projects/engines/geometry/crates/geom-test/src/miri-may-stop.tsv";
+
+/// How many tests [`MAY_STOP`] may hold. It may only be lowered: `kernel_quality_workflow.rs`
+/// fails when the list holds more (a test newly measured over [`SURE_WITHIN`] is resized under
+/// `cfg(miri)` before it lands) and when it holds fewer (the change that shrank it lowers this
+/// too, so the list can never grow back). The aim is none.
+pub const MAY_STOP_MOST: usize = 75;
 
 /// The one crate Miri runs under Tree Borrows (the workflow's job `miri-pool` says why): its
 /// finishing tests run in that job, and no partition holds them.
@@ -458,6 +664,145 @@ pub fn render(comments: &[&str], rows: &[Row]) -> String {
     out
 }
 
+/// Each finishing row whose test may reach `stop` on a runner [`SLOWER`]: its seconds on that
+/// runner, rounded up, over `stop`. At [`BUDGET`] these are the rows over [`SURE_WITHIN`]
+/// ([`MAY_STOP`]); at a shorter stop (the `miri-smoke` profile's) more. Longest first, then by
+/// binary and name.
+#[must_use]
+pub fn may_stop_at(rows: &[Row], stop: u64) -> Vec<Timed> {
+    let mut out: Vec<Timed> = finishing(rows)
+        .into_iter()
+        .filter(|t| on_a_slower_runner(t.seconds) > stop)
+        .collect();
+    out.sort_by(|x, y| {
+        y.seconds
+            .cmp(&x.seconds)
+            .then_with(|| (&x.binary, &x.test).cmp(&(&y.binary, &y.test)))
+    });
+    out
+}
+
+/// [`MAY_STOP`]'s text from the table's rows: its header, then each row [`may_stop_at`] gives at
+/// [`BUDGET`], one a line.
+#[must_use]
+pub fn render_may_stop(rows: &[Row]) -> String {
+    let mut out = String::from(
+        "# The Miri tests a gate job may see stopped at the 600 s budget with no verdict (decision \
+         32.68):\n\
+         # every finishing row of Miri's table (miri-times.tsv) over 375 s, 600 s over the 1.6 \
+         times slower\n\
+         # runner the plan allows, whose test such a runner can take to the stop. Written by\n\
+         # `kernel-quality miri-may-stop` (and `miri-times`) from the table, never by hand. A \
+         test on it that\n\
+         # is stopped is named in its job's summary as stopped, not passed; any other test \
+         stopped fails its\n\
+         # job. It may only shrink (`geom_test::miri::MAY_STOP_MOST`): each test on it is to be \
+         resized under\n\
+         # cfg(miri), the same law on a smaller input, until Miri finishes it within 375 s.\n\
+         # `seconds<TAB>binary<TAB>test`, the longest first.\n",
+    );
+    for t in may_stop_at(rows, BUDGET) {
+        out.push_str(&t.seconds.to_string());
+        out.push('\t');
+        out.push_str(&t.binary);
+        out.push('\t');
+        out.push_str(&t.test);
+        out.push('\n');
+    }
+    out
+}
+
+/// The tests of a [`MAY_STOP`] text, as (binary, test).
+///
+/// # Errors
+///
+/// As [`parse_table`]; also for a row that is not finishing over [`SURE_WITHIN`], which never
+/// belongs on the list.
+pub fn parse_may_stop(text: &str) -> Result<Vec<(String, String)>, String> {
+    parse_table(text)?
+        .into_iter()
+        .map(|r| match r.state {
+            State::Finishes(s) if s > SURE_WITHIN => Ok((r.binary, r.test)),
+            _ => Err(format!(
+                "{} {}: not a finishing row over {SURE_WITHIN} s",
+                r.binary, r.test
+            )),
+        })
+        .collect()
+}
+
+/// The tests a gate job at `stop` seconds may see stopped with no verdict, as (binary, test): at
+/// [`BUDGET`], those of `list` (the text of [`MAY_STOP`]); at a shorter stop, a short run's (the
+/// `miri-smoke` profile's), each [`may_stop_at`] gives.
+///
+/// # Errors
+///
+/// For a stop past [`BUDGET`], and at [`BUDGET`] for a `list` that [`parse_may_stop`] refuses or
+/// that is not what [`render_may_stop`] writes from `rows`.
+pub fn allowed_stops(
+    rows: &[Row],
+    list: &str,
+    stop: u64,
+) -> Result<BTreeSet<(String, String)>, String> {
+    if stop > BUDGET {
+        return Err(format!("a stop of {stop} s is past the {BUDGET} s budget"));
+    }
+    if stop < BUDGET {
+        return Ok(may_stop_at(rows, stop)
+            .into_iter()
+            .map(|t| (t.binary, t.test))
+            .collect());
+    }
+    let listed = parse_may_stop(list)?;
+    if list != render_may_stop(rows) {
+        return Err(format!(
+            "{MAY_STOP_PATH} is not what `kernel-quality miri-may-stop` writes from Miri's table"
+        ));
+    }
+    Ok(listed.into_iter().collect())
+}
+
+/// What a gate job's reports say of the tests nextest stopped ([`stops`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Stops {
+    /// The tests the reports name.
+    pub reported: usize,
+    /// The stopped tests that may be, as `binary test`.
+    pub allowed: Vec<String>,
+    /// The stopped tests that may not be, as `binary test`: each fails the job.
+    pub refused: Vec<String>,
+}
+
+/// Which of a gate job's reported tests nextest stopped at `stop` seconds with no verdict, split
+/// by whether `may` (as (binary, test)) holds them. A stopped test is one timed out, or one passed
+/// at `stop` or later: the gate's profiles count a test stopped as passing (`on-timeout =
+/// "pass"`), and nothing passes later than the stop that ends it, as [`measured`] reads a
+/// measuring run.
+#[must_use]
+pub fn stops(report: &[Reported], stop: u64, may: &BTreeSet<(String, String)>) -> Stops {
+    let stop_ms = stop.saturating_mul(1000);
+    let mut out = Stops {
+        reported: report.len(),
+        ..Stops::default()
+    };
+    for r in report {
+        let stopped = match r.outcome {
+            Outcome::Passed(ms) => ms >= stop_ms,
+            Outcome::TimedOut(_) => true,
+            Outcome::Failed(_) => false,
+        };
+        if stopped {
+            let name = format!("{} {}", r.binary, r.test);
+            if may.contains(&(r.binary.clone(), r.test.clone())) {
+                out.allowed.push(name);
+            } else {
+                out.refused.push(name);
+            }
+        }
+    }
+    out
+}
+
 /// One test's outcome in a nextest report (`junit.xml`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -655,11 +1000,63 @@ pub fn write_table(
     listed: Option<&[(String, String)]>,
     note: Option<&str>,
 ) -> Result<String, String> {
+    write_table_parts(old, &[(report, scale)], stop, listed, note)
+}
+
+/// The scale that turns a measuring job's seconds into yardstick seconds (32.78): the inverse of
+/// the job's [`job_scale`] from its yardstick run's report, `yardstick`, against the yardstick's
+/// row in `rows`. A test of `s` seconds in such a job is stored as `s` over the job's scale.
+///
+/// # Errors
+///
+/// As [`job_scale`]: a missing yardstick time is an error, never a default, and a runner over
+/// [`SCALE_MOST`] is too slow to judge.
+pub fn to_yardstick_seconds(rows: &[Row], yardstick: &[Reported]) -> Result<(u64, u64), String> {
+    let (num, den) = job_scale(rows, yardstick)?;
+    Ok((den, num))
+}
+
+/// One measuring report made ready for [`write_table_parts`] in yardstick seconds (32.78,
+/// `kernel-quality miri-times --yardstick`): its tests, with the scale of its own job's yardstick
+/// report `yardstick` ([`to_yardstick_seconds`] against `rows`, the table before the run), so the
+/// same work measured on a slow runner and on a fast one gives the same row. The yardstick's own
+/// row is the unit and stays as it is: the yardstick in `report` is left out.
+///
+/// # Errors
+///
+/// As [`to_yardstick_seconds`].
+pub fn in_yardstick_seconds(
+    rows: &[Row],
+    report: &[Reported],
+    yardstick: &[Reported],
+) -> Result<(Vec<Reported>, (u64, u64)), String> {
+    let scale = to_yardstick_seconds(rows, yardstick)?;
+    let (yb, yt) = YARDSTICK;
+    let tests = report
+        .iter()
+        .filter(|r| !(r.binary == yb && r.test == yt))
+        .cloned()
+        .collect();
+    Ok((tests, scale))
+}
+
+/// [`write_table`] of several reports, each at its own scale.
+///
+/// # Errors
+///
+/// As [`write_table`].
+pub fn write_table_parts(
+    old: &str,
+    parts: &[(&[Reported], (u64, u64))],
+    stop: u64,
+    listed: Option<&[(String, String)]>,
+    note: Option<&str>,
+) -> Result<String, String> {
     let (mut comments, rows, pending) = parse_old(old)?;
     if let Some(note) = note {
         comments.push(format!("# {note}"));
     }
-    let rows = measured(&rows, report, scale, stop)?;
+    let rows = measured_parts(&rows, parts, stop)?;
     let known: BTreeSet<(&str, &str)> = rows
         .iter()
         .map(|r| (r.binary.as_str(), r.test.as_str()))
@@ -697,6 +1094,19 @@ pub fn measured(
     scale: (u64, u64),
     stop: u64,
 ) -> Result<Vec<Row>, String> {
+    measured_parts(rows, &[(report, scale)], stop)
+}
+
+/// [`measured`] of several reports, each at its own scale; a test two reports name is an error.
+///
+/// # Errors
+///
+/// As [`write_table`].
+pub fn measured_parts(
+    rows: &[Row],
+    parts: &[(&[Reported], (u64, u64))],
+    stop: u64,
+) -> Result<Vec<Row>, String> {
     let stop_ms = stop.checked_mul(1000).ok_or("stop overflows")?;
     let mut table: BTreeMap<(String, String), State> = rows
         .iter()
@@ -704,7 +1114,10 @@ pub fn measured(
         .collect();
     let mut failed = Vec::new();
     let mut seen = BTreeSet::new();
-    for r in report {
+    for (r, scale) in parts
+        .iter()
+        .flat_map(|(report, scale)| report.iter().map(move |r| (r, *scale)))
+    {
         if !plain(&r.binary) || !plain(&r.test) {
             return Err(format!("a name a filterset could misread: {r:?}"));
         }
@@ -913,9 +1326,10 @@ pub struct GatePlan {
 /// # Errors
 ///
 /// When a test fits no partition (a finishing row at or over [`BUDGET`], which [`parse_table`]
-/// refuses), when the partitions are more than one matrix of GitHub Actions holds
-/// ([`crate::mutants::MATRIX_JOBS`]), or when [`TREE_BORROWS_CRATE`]'s finishing tests do not fit
-/// their one job.
+/// refuses), when the partitions are more than the gate's two partition jobs hold (`miri` and
+/// `miri-2`, one GitHub Actions matrix of [`crate::mutants::MATRIX_JOBS`] each, so
+/// [`crate::mutants::MAX_SHARDS`] in all, as the mutants' shard jobs; 32.105), or when
+/// [`TREE_BORROWS_CRATE`]'s finishing tests do not fit their one job.
 pub fn gate_plan(rows: &[Row]) -> Result<GatePlan, String> {
     let (pool, rest): (Vec<Timed>, Vec<Timed>) = finishing(rows)
         .into_iter()
@@ -923,10 +1337,10 @@ pub fn gate_plan(rows: &[Row]) -> Result<GatePlan, String> {
     let parts = pack(&rest, Rule::Job).ok_or_else(|| {
         format!("a finishing test takes {BUDGET} s or longer, which no partition can hold")
     })?;
-    let most = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
+    let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap_or(usize::MAX);
     if parts.len() > most {
         return Err(format!(
-            "{} partitions, more than the {most} one matrix holds",
+            "{} partitions, more than the {most} the two matrices of the partition jobs hold",
             parts.len()
         ));
     }
@@ -982,17 +1396,40 @@ pub fn to_measure(rows: &[Row], listed: &[(String, String)], which: Measuring) -
 }
 
 /// The parts of a measuring run: its tests packed ([`pack`]) into parts whose tests each end
-/// within [`BUDGET`] at [`AT_ONCE`] a time ([`Rule::Stop`]). No tests give one empty part.
+/// within [`BUDGET`] at [`AT_ONCE`] a time ([`Rule::Stop`]), and [`TREE_BORROWS_CRATE`]'s tests
+/// all in one part of their own, the last, so they are measured together at [`AT_ONCE`] a time as
+/// the gate's job `miri-pool` runs them (32.78: measured one or two to a part, they ran nearly
+/// alone, and in `miri-pool` 1.25 to 1.73 times their rows). No tests give one empty part.
 ///
 /// # Errors
 ///
 /// For more parts than the workflow's part jobs hold ([`crate::mutants::MAX_SHARDS`]): the run is
 /// to be narrowed by a filterset. Also for a test planned over the stop, which [`to_measure`]
-/// never gives.
+/// never gives, and for [`TREE_BORROWS_CRATE`]'s tests not fitting one part.
 pub fn measure_plan(tests: &[Timed]) -> Result<Plan, String> {
-    let plan = pack(tests, Rule::Stop).ok_or_else(|| {
+    let (pool, rest): (Vec<Timed>, Vec<Timed>) = tests
+        .iter()
+        .cloned()
+        .partition(|t| crate_of(&t.binary) == TREE_BORROWS_CRATE);
+    let mut plan = pack(&rest, Rule::Stop).ok_or_else(|| {
         format!("a test is planned over the {BUDGET} s stop, which no part can hold")
     })?;
+    if !pool.is_empty() {
+        let together = pack(&pool, Rule::Stop)
+            .filter(|p| p.parts.len() == 1)
+            .ok_or_else(|| {
+                format!(
+                    "{TREE_BORROWS_CRATE}'s {} tests do not fit one measuring part within the \
+                     {BUDGET} s stop",
+                    pool.len()
+                )
+            })?;
+        if rest.is_empty() {
+            plan = together;
+        } else {
+            plan.parts.extend(together.parts);
+        }
+    }
     let n = plan.len();
     let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap_or(usize::MAX);
     if n > most {
@@ -1011,11 +1448,7 @@ pub fn measure_plan(tests: &[Timed]) -> Result<Plan, String> {
 /// runs a job only when its count is not 0. `count` is 0 when there is no test to measure.
 #[must_use]
 pub fn measure_matrix(tests: usize, count: usize) -> String {
-    let jobs = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
-    let first: Vec<usize> = (1..=count.clamp(1, jobs)).collect();
-    let count_2 = count.saturating_sub(jobs);
-    let second: Vec<usize> =
-        (jobs.saturating_add(1)..=jobs.saturating_add(count_2.max(1))).collect();
+    let (first, count_2, second) = two_matrices(count);
     serde_json::json!({
         "tests": tests,
         "count": count,
@@ -1024,6 +1457,37 @@ pub fn measure_matrix(tests: usize, count: usize) -> String {
         "parts_2": second,
     })
     .to_string()
+}
+
+/// The gate's partitions as JSON for the workflow (`kernel-quality miri-plan`): `{"count": n,
+/// "parts": [...], "count_2": m, "parts_2": [...], "tests": t, "pool": p}`, numbered from 1, as
+/// [`measure_matrix`] numbers a measuring run's parts: `parts` lists the job `miri`'s, 1 to
+/// `min(n, 256)`, and `parts_2` the job `miri-2`'s, 257 to `n`, `m` of them (32.105). A matrix
+/// may not be empty, so `miri-2` lists 257 when it has none and the workflow runs it only when
+/// `count_2` is not 0. `tests` counts the partitions' tests and `pool` geom-pool's.
+#[must_use]
+pub fn gate_matrix(count: usize, tests: usize, pool: usize) -> String {
+    let (first, count_2, second) = two_matrices(count);
+    serde_json::json!({
+        "count": count,
+        "parts": first,
+        "count_2": count_2,
+        "parts_2": second,
+        "tests": tests,
+        "pool": pool,
+    })
+    .to_string()
+}
+
+/// `count` parts numbered from 1 in two matrices of at most [`crate::mutants::MATRIX_JOBS`]: the
+/// first's list (1 at least), how many the second runs, and its list (257 at least).
+fn two_matrices(count: usize) -> (Vec<usize>, usize, Vec<usize>) {
+    let jobs = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap_or(usize::MAX);
+    let first: Vec<usize> = (1..=count.clamp(1, jobs)).collect();
+    let count_2 = count.saturating_sub(jobs);
+    let second: Vec<usize> =
+        (jobs.saturating_add(1)..=jobs.saturating_add(count_2.max(1))).collect();
+    (first, count_2, second)
 }
 
 impl Plan {
@@ -1674,13 +2138,47 @@ mod tests {
             .collect();
         assert!(gate_plan(&crowded).is_err_and(|e| e.contains("geom-pool")));
         assert!(gate_plan(&crowded[..4]).is_ok());
-        // More partitions than one matrix holds are refused: tests of 599 s, four a partition.
-        let most = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap();
+        // More partitions than the two matrices hold are refused (32.105): tests of 599 s, four
+        // a partition. One more than one matrix holds is planned, for `miri-2`.
+        let one = usize::try_from(crate::mutants::MATRIX_JOBS).unwrap();
+        let most = usize::try_from(crate::mutants::MAX_SHARDS).unwrap();
+        assert_eq!(most, 2 * one);
         let wide: Vec<Row> = (0..=4 * most)
             .map(|i| row("geom-num", &format!("t{i}"), State::Finishes(599)))
             .collect();
-        assert!(gate_plan(&wide).is_err_and(|e| e.contains("matrix")));
+        assert!(gate_plan(&wide).is_err_and(|e| e.contains("two matrices")));
         assert_eq!(gate_plan(&wide[..4 * most]).unwrap().parts.len(), most);
+        assert_eq!(gate_plan(&wide[..=4 * one]).unwrap().parts.len(), one + 1);
+        assert_eq!(gate_plan(&wide[..4 * one]).unwrap().parts.len(), one);
+    }
+
+    #[test]
+    fn the_gates_partitions_are_numbered_from_one_in_two_jobs() {
+        let read = |s: String| serde_json::from_str::<Value>(&s).unwrap();
+        // One partition: `miri` runs it, `miri-2` none (its matrix still lists 257).
+        let m = read(gate_matrix(1, 7, 2));
+        assert_eq!(m["count"], 1);
+        assert_eq!(m["parts"], serde_json::json!([1]));
+        assert_eq!(m["count_2"], 0);
+        assert_eq!(m["parts_2"], serde_json::json!([257]));
+        assert_eq!(m["tests"], 7);
+        assert_eq!(m["pool"], 2);
+        // 256: all in `miri`.
+        let m = read(gate_matrix(256, 0, 0));
+        let first: Vec<u64> = (1..=256).collect();
+        assert_eq!(m["parts"], serde_json::json!(first));
+        assert_eq!(m["count_2"], 0);
+        assert_eq!(m["parts_2"], serde_json::json!([257]));
+        // 257 to 512: the rest in `miri-2`, each matrix at most 256.
+        let m = read(gate_matrix(264, 0, 0));
+        assert_eq!(m["parts"], serde_json::json!(first));
+        assert_eq!(m["count_2"], 8);
+        let second: Vec<u64> = (257..=264).collect();
+        assert_eq!(m["parts_2"], serde_json::json!(second));
+        let m = read(gate_matrix(512, 0, 0));
+        assert_eq!(m["count_2"], 256);
+        let second: Vec<u64> = (257..=512).collect();
+        assert_eq!(m["parts_2"], serde_json::json!(second));
     }
 
     #[test]

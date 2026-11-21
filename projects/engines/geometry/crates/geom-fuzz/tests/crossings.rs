@@ -105,3 +105,20 @@ fn every_kind_meets_every_kind() {
         }
     }
 }
+
+#[test]
+fn a_crossing_on_a_whole_circle_s_join_lies_on_both() {
+    // A segment from (-8, 0) to (8, 0) through a whole circle of radius 4 about the origin: it
+    // crosses at (4, 0), the circle's join, where the circle's span starts in the window and may
+    // run past its end (decision 32.104), and at (-4, 0). Asked either way round.
+    let segment = Drawn {
+        kind: 0,
+        at: [254, 0, 2, 0, 0, 0],
+    };
+    let circle = Drawn {
+        kind: 1,
+        at: [0, 0, 3, 0, 0, 0],
+    };
+    pair(segment, circle);
+    pair(circle, segment);
+}

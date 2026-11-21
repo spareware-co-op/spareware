@@ -1417,6 +1417,14 @@ const LINE_CONE_TENTHS: [u32; 70] = [
     88, 125, 59, 555, 57, 271, 12, 271, 15, 192, 11, 595, 103, 56, 59, 17, 20, 17, 14, 9, 11, 90,
     529, 134, 864, 134, 807, 40, 1379,
 ];
+/// `line_cylinder`'s terms on the slow runner of run 44676088332, by the term's place less one:
+/// the minutes between its `Proved` line and the one before; term 1 from its Taylor theorems
+/// (2.4); term 50 as term 2; 0 for a term proved within the second.
+const LINE_CYLINDER_TENTHS: [u32; 50] = [
+    24, 576, 12, 130, 20, 62, 11, 149, 11, 157, 35, 135, 37, 41, 35, 41, 30, 36, 19, 19, 20, 20,
+    30, 37, 20, 20, 20, 20, 36, 36, 0, 0, 54, 90, 73, 12, 64, 3, 62, 0, 7, 8, 2, 3, 1, 1, 2, 2, 22,
+    576,
+];
 /// The slower of runs 43564407246 and 44504522597, each of which checked the whole problem in one
 /// job until it stopped; 0 also for terms 58 to 60, which neither run finished (each a shard
 /// alone, which no plan of several parts weighs).
@@ -1426,9 +1434,10 @@ const ELLIPSE_SIDE_TENTHS: [u32; 60] = [
     174, 105, 224, 99, 33, 34, 33, 0, 0, 0,
 ];
 /// The measured terms of each sharded problem.
-const MEASURED: [(&str, &[u32]); 3] = [
+const MEASURED: [(&str, &[u32]); 4] = [
     ("lpi_side", &LPI_SIDE_TENTHS),
     ("line_cone", &LINE_CONE_TENTHS),
+    ("line_cylinder", &LINE_CYLINDER_TENTHS),
     ("ellipse_side", &ELLIPSE_SIDE_TENTHS),
 ];
 

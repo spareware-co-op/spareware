@@ -38,6 +38,7 @@ use geom_num::isolate::RESOLUTION_FLOOR;
 use geom_num::newton::inverse;
 use geom_run::WorkMeter;
 
+use crate::curve::Seam;
 use crate::error::IntersectError;
 
 /// How much of a box's width a step widens it by on each side: a zero on a split line then stands
@@ -285,7 +286,6 @@ fn step<F: Field<N>, const N: usize>(
 /// the sign of zero.
 trait Larger {
     fn max_of(self, other: f64) -> f64;
-    fn neg_of(self) -> f64;
 }
 
 impl Larger for f64 {
@@ -295,10 +295,6 @@ impl Larger for f64 {
         } else {
             self
         }
-    }
-
-    fn neg_of(self) -> f64 {
-        -self
     }
 }
 
@@ -414,27 +410,41 @@ fn found<F: Field<N>, const N: usize>(
 }
 
 /// Flagged boxes joined into runs, each a hull and the reason of its first box: a caller reports a
-/// run as one item, since items must be disjoint, and its width is the band's.
+/// run as one item, since items must be disjoint, and its width is the band's. The boxes are
+/// written on `seams`, and on a whole turn they touch and join modulo the turn (decision 32.104).
 pub(crate) fn runs<const N: usize>(
     mut regions: Vec<Flagged<N>>,
+    seams: &[Seam; N],
 ) -> Result<Vec<([Interval; N], Reason)>, IntersectError> {
     regions.sort_unstable_by(|a, b| {
         let lower = |f: &Flagged<N>| f.region.first().map_or(0.0, |x| x.lo());
         lower(a).total_cmp(&lower(b))
     });
-    let touching =
-        |a: &[Interval; N], b: &[Interval; N]| a.iter().zip(b).all(|(p, q)| meets(*p, *q));
+    let touching = |a: &[Interval; N], b: &[Interval; N]| -> Result<bool, IntersectError> {
+        let mut all = true;
+        for ((seam, p), q) in seams.iter().zip(a).zip(b) {
+            all &= seam.meets(*p, *q)?;
+        }
+        Ok(all)
+    };
     let mut out: Vec<([Interval; N], Reason)> = Vec::new();
     for f in regions {
         let mut hull = f.region;
         // Each hull it touches joins it, and a hull grown so may touch another.
-        while let Some(k) = out.iter().position(|(h, _)| touching(h, &hull)) {
+        loop {
+            let mut found = None;
+            for (k, (h, _)) in out.iter().enumerate() {
+                if touching(h, &hull)? {
+                    found = Some(k);
+                    break;
+                }
+            }
+            let Some(k) = found else {
+                break;
+            };
             let (other, _) = out.swap_remove(k);
-            for (slot, r) in hull.iter_mut().zip(&other) {
-                *slot = Interval::new(
-                    (-slot.lo()).max_of(-r.lo()).neg_of(),
-                    slot.hi().max_of(r.hi()),
-                )?;
+            for ((slot, r), seam) in hull.iter_mut().zip(&other).zip(seams) {
+                *slot = seam.hull(*slot, *r)?;
             }
         }
         out.push((hull, f.why));
@@ -442,8 +452,11 @@ pub(crate) fn runs<const N: usize>(
     Ok(out)
 }
 
-/// Every zero of `field` in `domain`, past what `keep` rules out: a box for which `keep` says no is
-/// dropped with whatever zeros it holds. A caller's test is what lets a search stop early.
+/// Every zero of `field` in `start`, a box inside `domain`, past what `keep` rules out: a box for
+/// which `keep` says no is dropped with whatever zeros it holds. A caller's test is what lets a
+/// search stop early. Boxes are split, widened and grown as shares of `domain` and kept inside
+/// `start`, so a search of all of `domain` starts from it, and a part of it searched again from
+/// that part is cut as it is inside the whole, at the whole's scale.
 ///
 /// # Errors
 ///
@@ -452,6 +465,7 @@ pub(crate) fn runs<const N: usize>(
 pub fn solve<F, K, const N: usize>(
     field: &F,
     domain: [Interval; N],
+    start: [Interval; N],
     mut keep: K,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Solved<N>, IntersectError>
@@ -461,7 +475,7 @@ where
 {
     let (mut zeros, mut flagged) = (Vec::<Zero<N>>::new(), Vec::new());
     let mut work = Vec::new();
-    work.push(domain);
+    work.push(start);
     while let Some(x) = work.pop() {
         meter.charge(1)?;
         meter.poll()?;
@@ -475,7 +489,7 @@ where
         }
         // The operator first: a clip can take a box below what the rounding of the kinds lets the
         // operator prove, and the operator settles a simple zero from far wider boxes.
-        let wide = widened(&x, &domain)?;
+        let wide = widened(&x, &start)?;
         let why = match step(field, &wide, meter)? {
             Step::Empty => continue,
             Step::Unique(enclosure) => {
@@ -486,7 +500,10 @@ where
                 // Worth keeping only if it cut a side to half or less, or the box would split
                 // anyway and lose the work. What is kept is grown: a zero on a split line then
                 // stays inside it, and no side falls to where rounding swamps the kinds' slopes.
-                let kept = grown(&y, &domain)?;
+                let mut kept = grown(&y, &domain)?;
+                for (slot, s) in kept.iter_mut().zip(&start) {
+                    *slot = shared(*slot, *s).ok_or_internal()?;
+                }
                 let halved = kept
                     .iter()
                     .zip(&wide)

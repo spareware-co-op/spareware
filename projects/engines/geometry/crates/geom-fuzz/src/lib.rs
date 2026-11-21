@@ -35,7 +35,9 @@
 //! see; and [`general`] (G169, G170), subdivision leaves no crossing outside its settled or
 //! flagged pairs, and marching stays on both surfaces.
 //! [`adversarial`] holds the generators aimed at chapter 28.5's hard
-//! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
+//! cases, [`robustness`] counts how many plain designs succeed, and [`seams`] bounds a curve or
+//! surface over a span an answer writes on its seam, for the targets that name it. Gate 2 (32.46)
+//! adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), each with the laws that need no
 //! conversion run again after a budget stop, and the offset kinds, which cost most of their
@@ -287,6 +289,7 @@ pub mod reductions;
 pub mod references;
 pub mod robustness;
 pub mod roots;
+pub mod seams;
 pub mod seeded;
 pub mod sequence;
 pub mod sketch_corpus;

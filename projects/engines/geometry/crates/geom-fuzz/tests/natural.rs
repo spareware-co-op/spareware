@@ -113,32 +113,21 @@ fn an_edge_lying_on_the_other_surface_costs_a_closed_form() {
     }
 }
 
-/// Issue 974's inputs that the closed form does not take, stored in the target's `crashes` folder,
-/// each with the work one call of `natural` takes on it today: a count held from above, so that it
-/// can only get cheaper. Each still pays the engine for an edge, whose own work is given first:
-///
-/// - a sphere against a cylinder about a line through its centre, whose end circle is a great
-///   circle of the sphere: no closed form places a circle on a sphere (19,090 of 19,133);
-/// - a cone against a plane that holds its axis, an edge of the plane passing through the apex,
-///   where the line meets the cone at one point that is no simple root (483,244 of 484,099).
+/// Issue 974's input that the closed form does not take, stored in the target's `crashes` folder,
+/// with the work one call of `natural` takes on it today: a count held from above, so that it can
+/// only get cheaper. It still pays the engine for an edge, whose own work is given first: a sphere
+/// against a cylinder about a line through its centre, whose end circle is a great circle of the
+/// sphere: no closed form places a circle on a sphere (19,090 of 19,133).
 ///
 /// Not stored: an end circle on the axis off the grid that lies in a plane. `quadrics::edges`
 /// rounds its centre off the plane, the engine runs round it, and the call stops on the budget. A
 /// stop's count is the budget's own, which no test can hold tighter.
-const STILL_THE_ENGINES: [(&[u8], u128); 2] = [
-    (
-        &[
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
-        ],
-        19_133,
-    ),
-    (
-        &[
-            0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-        ],
-        484_099,
-    ),
-];
+const STILL_THE_ENGINES: [(&[u8], u128); 1] = [(
+    &[
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00,
+    ],
+    19_133,
+)];
 
 /// The issue's fifth input, stored in the target's `crashes` folder, with the work one call of
 /// `natural` takes on it now: a sphere of radius 256 against a cylinder of radius 1 about a line
@@ -184,6 +173,64 @@ const AN_EDGE_IN_A_PLANE_OFF_THE_GRID: [(&[u8], u128); 1] = [(
     ],
     60,
 )];
+
+/// Issue 995's inputs of a plane's edge through a cone's apex or tangent to a cylinder, stored in
+/// the target's `crashes` folder (the first was issue 974's, held at 484,099 before), with the
+/// work one call of `natural` takes on each now that the sign of the edge's discriminant is
+/// decided exactly where its enclosure reaches zero (decision 32.87). Before, the engine bisected
+/// round the touching point and flagged it:
+///
+/// - the edge through the apex of a cone on the z axis, on the grid: 484,099 units each, 483,244
+///   of them on that edge; the answer is the same in every field but the work;
+/// - the same on the frame off the grid: 3,991,888 and 4,149,800; the two rulings the answer holds
+///   now run to the apex, where before they stopped 0.157 and 0.031 short of it, at the flagged
+///   box;
+/// - the edge tangent to a cylinder of radius 232 on the frame off the grid: 3,322,070; the
+///   answer is the same in every field but the work;
+/// - the edge beside a cone of start radius 100 on the frame off the grid (issue 1016), which
+///   misses it: the edge stands exactly 84 from the axis and the cone's radius there is 84 less
+///   about 8.5e-15. 3,843,784 units before, the engine bisecting round a near touch that is not
+///   there; now the sign of P + Q·√N is exact (decision 32.88): 18,911, and the answer, the
+///   plane's circle on the cone, is the same in every field but the work.
+const AN_EDGE_THROUGH_AN_APEX_OR_TANGENT: [(&[u8], u128); 7] = [
+    (
+        &[
+            0x03, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (
+        &[
+            0x13, 0x00, 0x00, 0x4b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x63, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (
+        &[
+            0x03, 0x00, 0x00, 0x4b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        ],
+        859,
+    ),
+    (&[0x93, 0x03, 0x4b, 0x00, 0x00, 0x03], 23_544),
+    (
+        &[
+            0x57, 0x00, 0xb5, 0xff, 0xff, 0xff, 0x00, 0x00, 0xb5, 0xff, 0xff, 0xff, 0x00,
+        ],
+        2_045,
+    ),
+    (
+        &[
+            0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x2a, 0x00, 0xff, 0xef, 0xe7, 0x03, 0x3a,
+        ],
+        20_937,
+    ),
+    (
+        &[
+            0x00, 0xde, 0xff, 0xce, 0xff, 0xff, 0xff, 0xff, 0xff, 0x03, 0x04, 0x63, 0xff, 0xff,
+        ],
+        18_911,
+    ),
+];
 
 /// Issue 995's group 3, stored in the target's `crashes` folder: two cones of slope 2 on parallel,
 /// distinct axes along (0.6, 0.8, 0), each end circle of one (radius 344 to 856) taken against
@@ -307,13 +354,53 @@ fn an_end_circle_in_the_plane_of_the_others_end_costs_a_closed_form() {
     }
 }
 
+/// Issue 1112's natural input, stored in the target's `crashes` folder: the cylinder of radius 221
+/// along x through (0, −132, −144), its ends at x = ±300, against the plane z = 0. The plane's
+/// sides y = −300 and y = 300 run parallel to the axis, 221.27 and 455 from it; the line's
+/// quadratic leads with A = 0, whose enclosure `quadratic_with` refused, and the engine ran along
+/// each side for nothing: 908,956 units a call. Whether a line is parallel to the axis is an exact
+/// sign now, and one whose C, the same at every point, is apart from zero meets nothing (decision
+/// 32.107): 2,494 units a call.
+///
+/// With it, the SHA-256 of the Debug text of the answer's items, coverage and diagnostics, every
+/// field but its work, taken on the engine's answer before that change: the answer is the same.
+const SIDES_ALONG_A_CYLINDER: [(&[u8], u128, &str); 1] = [(
+    &[0xee, 0x00, 0xdf, 0xdc, 0xdc, 0x3d, 0x06],
+    2_494,
+    "5c0cf5de123ea230d50c1bba4ee7a7cc307f4176ae50b3661db06b5f1ef46787",
+)];
+
+#[test]
+fn a_side_parallel_to_a_cylinder_s_axis_costs_a_closed_form() {
+    for (data, most, digest) in SIDES_ALONG_A_CYLINDER {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let text = format!(
+            "{:?} {:?} {:?}",
+            answer.items(),
+            answer.coverage(),
+            answer.diagnostics()
+        );
+        let said = hex(sha256(text.as_bytes()));
+        assert!(
+            work <= most && said == digest,
+            "{work} units (at most {most}), answer {said}, on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
     let held = STILL_THE_ENGINES
         .into_iter()
         .chain(ARCS_A_PLANE_HOLDS)
         .chain(AN_END_CIRCLE_OFF_A_SPHERE)
-        .chain(AN_EDGE_IN_A_PLANE_OFF_THE_GRID);
+        .chain(AN_EDGE_IN_A_PLANE_OFF_THE_GRID)
+        .chain(AN_EDGE_THROUGH_AN_APEX_OR_TANGENT);
     for (data, most) in held {
         let (case, _) = decode(data);
         let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));

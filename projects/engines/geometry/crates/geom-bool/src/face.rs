@@ -86,7 +86,7 @@ use geom_intersect::curve_surface::curve_surface;
 use geom_intersect::project::{Projection, project_curve};
 use geom_intersect::quadrics::natural;
 use geom_intersect::solve::Reason;
-use geom_intersect::{CurveContact, CurveEnd, IntersectError, Item, Unresolved};
+use geom_intersect::{CurveContact, CurveEnd, IntersectError, Item, Seam, Unresolved};
 use geom_num::grid::COORD_MAX;
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
@@ -108,7 +108,7 @@ use crate::interfere::{
     Arrangement, BuildError, Entity, Interfered, Interference, Stages, certify, committed,
     coordinates, edge_entry, floor_ceil, nearest_point, parameter, to_box, touching, widened,
 };
-use crate::pave::{OrderError, Pave, PaveBlock, blocks, order};
+use crate::pave::{OrderError, Pave, PaveBlock, blocks, order_on};
 use crate::rule::{
     Contact, ContactError, EPS_FIT, NearContact, REFINEMENTS, Verdict, decide, greater, judge,
     lesser,
@@ -938,13 +938,44 @@ pub(crate) fn edge_face(
 }
 
 /// A parameter strictly inside a block of `curve`, between its paves' enclosures, or `None` when
-/// the enclosures leave no room.
-fn middle_of(curve: &impl ParamCurve<3>, block: &PaveBlock) -> Option<f64> {
+/// an open block's enclosures leave no room. Round a closed curve's join the room is one gap, from
+/// the last pave's end round the join to the first pave's start, read modulo the turn (decision
+/// 32.104): the room before the end, none where a last pave's enclosure runs past it, then the room
+/// after the join, which starts where that enclosure ends. Its middle is the middle of the whole
+/// gap, so a short room on one side of the join never puts it by a pave.
+fn middle_of(curve: &CurveKind<3>, block: &PaveBlock) -> Option<f64> {
     let (a, b) = curve.domain();
     let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);
     match (block.from, block.to) {
         (Some(from), Some(to)) if !block.wraps => between(from.t.hi(), to.t.lo()),
-        (Some(from), Some(to)) => between(from.t.hi(), b).or_else(|| between(a, to.t.lo())),
+        (Some(from), Some(to)) => {
+            let start = if from.t.hi() > b {
+                Seam::of_curve(curve).wrapped(from.t.hi())
+            } else {
+                a
+            };
+            let before = greater(b - from.t.hi(), 0.0);
+            let after = to.t.lo() - start;
+            let half = before / 2.0 + after / 2.0;
+            // Half the gap on from the last pave's end where the room before the end is the
+            // longer, else half the gap back from the first pave's start: half the gap is at most
+            // the longer room, so the middle never passes that room's far end.
+            //
+            // Neither room is negative, so no test of half is needed. `before` is at least 0. The
+            // first pave starts in the window (32.104), so at or after a; where the last pave runs
+            // past the end, the seam is a whole turn (`Seam::turns`, exactly), and the last pave's
+            // end lies before the first's start a turn on: order_on proved the two do not meet
+            // modulo the turn, or, for one pave, its span is narrower than a turn (`Seam::onto`
+            // writes a wider one as the whole domain, which does not run past the end). So that end
+            // less the turn is below `to.t.lo()`, and `start`, its rounded value, is at most it:
+            // rounding keeps order. Half is 0 only where both rooms round away, and the middle is
+            // then a pave's end, as `between` gives one of two neighbouring doubles.
+            Some(if before >= after {
+                from.t.hi() + half
+            } else {
+                to.t.lo() - half
+            })
+        }
         _ => between(a, b),
     }
 }
@@ -1108,10 +1139,11 @@ fn shared_vertices(
         .collect())
 }
 
-/// The paves in their proven order, two that are not proven apart failing as a section's.
-fn section_order(faces: [usize; 2], paves: Vec<Pave>) -> Result<Vec<Pave>, BuildError> {
+/// The paves in their proven order on `seam`, the section curve's, two that are not proven apart
+/// failing as a section's.
+fn section_order(faces: [usize; 2], paves: Vec<Pave>, seam: Seam) -> Result<Vec<Pave>, BuildError> {
     let [f1, _] = faces;
-    order(f1, paves).map_err(|e| match e {
+    order_on(f1, paves, seam).map_err(|e| match e {
         OrderError::Undecided(p) => BuildError::SectionOrder {
             faces,
             first: p.first,
@@ -1204,7 +1236,9 @@ fn section(
         return Err(BuildError::Missing(Entity::Face(f1)));
     };
     let paves = section_paves(arr, out, (first, second), (&pa, &pb))?;
-    let ordered = section_order([f1, f2], paves)?;
+    // A line between two planes has no join.
+    let open = Seam::open((f64::NEG_INFINITY, f64::INFINITY));
+    let ordered = section_order([f1, f2], paves, open)?;
     let mut kept = Vec::new();
     for (from, to) in ordered.iter().zip(ordered.iter().skip(1)) {
         let (pf, _) = committed(&arr.carriers, &out.vertices, from.vertex)?;
@@ -1673,7 +1707,7 @@ fn round_section(
     }
     let carriers = &arr.carriers;
     for (curve, list) in curves.into_iter().zip(paves) {
-        let ordered = section_order(faces, list)?;
+        let ordered = section_order(faces, list, Seam::of_curve(&curve))?;
         let mut kept = Vec::new();
         for block in blocks(f1, &ordered, closes(&curve)) {
             let Some(t) = middle_of(&curve, &block) else {
@@ -1861,22 +1895,35 @@ mod tests {
 
     #[test]
     fn a_block_s_middle_lies_between_its_paves() {
-        let line = Line::new([0.0; 3], [10.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+        let line = CurveKind::Line(Line::new([0.0; 3], [10.0, 0.0, 0.0], (0.0, 1.0)).unwrap());
         assert_eq!(
             middle_of(&line, &block(Some(0.25), Some(0.75), false)),
             Some(0.5)
         );
         assert_eq!(middle_of(&line, &block(Some(0.5), Some(0.5), false)), None);
         assert_eq!(middle_of(&line, &block(None, None, false)), Some(0.5));
-        let circle = Circle::new([0.0; 3], 100.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap();
-        // Round the seam: from 1.5 to the end, or from the start to the last pave.
+        let circle = CurveKind::Circle(
+            Circle::new([0.0; 3], 100.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+        );
+        // Round the seam: the middle of the whole gap, from 1.5 round the join to 0.5, which is
+        // the join itself; and of one from 1.9375 to 1, which lies after the join, not in the
+        // short room before it.
         assert_eq!(
             middle_of(&circle, &block(Some(1.5), Some(0.5), true)),
-            Some(1.75)
+            Some(2.0)
+        );
+        assert_eq!(
+            middle_of(&circle, &block(Some(1.9375), Some(1.0), true)),
+            Some(0.46875)
         );
         assert_eq!(
             middle_of(&circle, &block(Some(2.0), Some(0.5), true)),
             Some(0.25)
+        );
+        // A last pave past the end is read modulo the turn: the room starts at 0.25, not at 0.
+        assert_eq!(
+            middle_of(&circle, &block(Some(2.25), Some(0.5), true)),
+            Some(0.375)
         );
     }
 

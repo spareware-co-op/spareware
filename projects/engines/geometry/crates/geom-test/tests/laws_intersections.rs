@@ -802,7 +802,8 @@ fn from_edge(quadric: &SurfaceKind, x: [f64; 3]) -> f64 {
     f64::min((h - domain.0).abs(), (h - domain.1).abs())
 }
 
-/// The whole of a curve: closed, one full turn; open, running to the patch's edge or its apex.
+/// The whole of a curve: closed, one full turn; open, running to the patch's edge or its apex. A
+/// full turn is exactly two half-turns, by an error-free sum: one that only rounds to 2 is short.
 fn whole(
     quadric: &SurfaceKind,
     curve: &CurveKind<3>,
@@ -811,7 +812,7 @@ fn whole(
 ) -> Result<(), String> {
     let (lo, hi) = ParamCurve::domain(curve);
     if ends == [CurveEnd::Closed; 2] {
-        return if hi - lo == 2.0 {
+        return if geom_num::eft::two_sum(hi, -lo) == (2.0, 0.0) {
             Ok(())
         } else {
             Err(format!("a closed curve on ({lo}, {hi})"))
