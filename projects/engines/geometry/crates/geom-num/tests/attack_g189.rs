@@ -663,7 +663,15 @@ fn two_circles_meet_on_both_and_their_order_is_the_one_stated() {
 fn a_crossing_lies_exactly_on_its_carrier_and_its_circle() {
     let mut rng = Rng::new();
     let mut made = 0;
-    for _ in 0..cases(4_000) {
+    // Under Miri the first 40 of the same cases, of which more than 20 meet: a debug build's 200,
+    // of which more than 100 meet, took 507 s there, over the 375 s a test may take (decision
+    // 32.68).
+    let (n, least) = if cfg!(miri) {
+        (40, 20)
+    } else {
+        (cases(4_000), 100)
+    };
+    for _ in 0..n {
         let circle = rng.circle();
         let l = rng.carrier_near(&circle);
         let (Ok(p), Ok(q)) = (
@@ -686,7 +694,7 @@ fn a_crossing_lies_exactly_on_its_carrier_and_its_circle() {
             assert!(!p.same(&q).unwrap());
         }
     }
-    assert!(made > 100, "only {made} pairs met");
+    assert!(made > least, "only {made} pairs met");
 }
 
 #[test]

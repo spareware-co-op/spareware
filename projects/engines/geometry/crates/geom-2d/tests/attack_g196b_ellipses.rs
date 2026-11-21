@@ -790,8 +790,20 @@ fn an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays
         (-m, -(1 << 38) - (1 << 31)),
         (m, -(1 << 38) + (1 << 31)),
     ));
-    for c in &curves[1..5] {
-        let Curve::Arc(arc) = c else { panic!("an arc") };
+    // Under Miri the ellipse, the line and the half of each circle the two crossings lie on (the
+    // first circle's upper arc, the second's lower): all four arcs took 486 s there, over the 375 s
+    // a test may take (decision 32.68).
+    if cfg!(miri) {
+        curves = vec![curves[0], curves[2], curves[3], curves[5]];
+    }
+    let arcs: Vec<Arc2> = curves
+        .iter()
+        .filter_map(|c| match c {
+            Curve::Arc(arc) => Some(*arc),
+            _ => None,
+        })
+        .collect();
+    for arc in &arcs {
         assert!(!matches!(
             e.meeting(&Conic::of_round(&arc.round()).unwrap()).unwrap(),
             Meeting::At { roots, .. } if roots.count() > 0
@@ -806,10 +818,9 @@ fn an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays
         let z = v.crossing().unwrap();
         assert!(want.iter().any(|w| w.same(&z).unwrap()), "{v:?}");
     }
-    // The two circles cross: two of the vertices are where.
-    let [Curve::Arc(x), _, Curve::Arc(y), _] = [curves[1], curves[2], curves[3], curves[4]] else {
-        panic!("arcs")
-    };
+    // The two circles cross: two of the vertices are where (the first arc is on the first circle,
+    // the one halfway along on the second).
+    let (x, y) = (arcs[0], arcs[arcs.len() / 2]);
     for r in [Root::First, Root::Second] {
         let z = Crossing2::of_rounds(&x.round(), &y.round(), r).unwrap();
         rank_of(&a, &z);

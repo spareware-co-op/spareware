@@ -246,7 +246,9 @@ fn jiggled(a: &Assembly) -> Vec<f64> {
     x
 }
 
-fn assert_derivatives(s: &Sketch) {
+/// Every Jacobian entry of `s` against its central difference, in every column natively and in
+/// every `miri_every`-th column under Miri, where each column costs two evaluations of every row.
+fn assert_derivatives(s: &Sketch, miri_every: usize) {
     let mut a = Assembly::new(s).unwrap();
     let x = jiggled(&a);
     a.rescale(&x).unwrap();
@@ -255,7 +257,8 @@ fn assert_derivatives(s: &Sketch) {
     let rows = a.residuals().len();
     assert_eq!(jacobian.rows(), rows);
     let h = 1e-5;
-    for j in 0..x.len() {
+    let every = if cfg!(miri) { miri_every } else { 1 };
+    for j in (0..x.len()).step_by(every) {
         let scale = a.variables()[j].scale;
         let at = |value: f64, a: &mut Assembly| {
             let mut y = x.clone();
@@ -278,13 +281,17 @@ fn assert_derivatives(s: &Sketch) {
 
 #[test]
 fn every_jacobian_entry_is_the_derivative_of_its_residual() {
-    assert_derivatives(&scene());
+    // Under Miri every sixth column: every column took 476 s there, over the 375 s a test may take
+    // (decision 32.68).
+    assert_derivatives(&scene(), 6);
 }
 
 #[test]
 fn a_variable_twice_in_a_rule_adds_up() {
     // The point is an end of its own line, and the two lines share a corner: each variable has two
-    // partial derivatives in one row, and the entry is their sum.
+    // partial derivatives in one row, and the entry is their sum. Under Miri every fourth column of
+    // each: every column of the seven took 582 s there, over the 375 s a test may take (decision
+    // 32.68).
     for rule in [
         "on-line 1.0 2.0",
         "point-line 1.0 2.3 1 left",
@@ -294,7 +301,7 @@ fn a_variable_twice_in_a_rule_adds_up() {
         "symmetric 1.0 1.2 2.0",
         "sweep 4.0 0.25",
     ] {
-        assert_derivatives(&alone(rule).unwrap());
+        assert_derivatives(&alone(rule).unwrap(), 4);
     }
     // On its own line a point's row is zero whatever moves, and so is its gradient.
     let s = alone("on-line 1.0 2.0").unwrap();

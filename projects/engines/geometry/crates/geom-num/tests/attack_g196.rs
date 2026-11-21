@@ -207,7 +207,15 @@ fn a_circle_written_as_an_ellipse_has_the_circle_s_ends() {
 #[test]
 fn an_ellipse_s_ends_are_on_it_either_side_of_its_centre_and_beyond_every_crossing() {
     let mut rng = Rng::new();
-    let cases = if cfg!(debug_assertions) { 100 } else { 2_000 };
+    // Under Miri the first 25 of the same cases: the 100 of a debug build took 589 s there, over
+    // the 375 s a test may take (decision 32.68).
+    let cases = if cfg!(miri) {
+        25
+    } else if cfg!(debug_assertions) {
+        100
+    } else {
+        2_000
+    };
     let mut checked = 0;
     for case in 0..cases {
         let centre = rng.grid();
