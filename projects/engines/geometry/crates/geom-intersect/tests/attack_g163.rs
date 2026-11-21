@@ -778,8 +778,14 @@ fn a_meeting_on_a_closed_curves_join_is_one_proven_point() {
     let across = bezier(&[[300.0, 40.0], [450.0, 20.0], [550.0, -20.0], [700.0, -40.0]]);
     let r = meet(&c, &across);
     assert_eq!(contacts(&r), [PointContact::Crossing], "{:?}", r.items());
-    let (s, _) = points(&r)[0];
-    assert!(s < 1e-6 || s > 2.0 - 1e-6 || (s - 0.0).abs() < 1e-3, "{s}");
+    // Its span holds the join, read at either end of the turn: a span across the join is kept
+    // whole from the window's side (decision 32.104), so its middle need not be the join.
+    let s = r.items()[0].at().spans()[0];
+    assert!(
+        (s.lo() <= 0.0 && 0.0 <= s.hi()) || (s.lo() <= 2.0 && 2.0 <= s.hi()),
+        "{s:?}"
+    );
+    assert!(s.hi() - s.lo() < 1e-3, "{s:?}");
     let e = ellipse([0.0, 0.0], 500.0, 300.0);
     assert_eq!(contacts(&meet(&e, &across)), [PointContact::Crossing]);
     // Past the join, on the far side of the turn.
@@ -1297,12 +1303,12 @@ fn the_engine_takes_only_its_work() {
     assert_eq!(
         got,
         [
-            (3, 3589),
-            (3, 3589),
-            (3, 3589),
+            (3, 3670),
+            (3, 3670),
+            (3, 3670),
             (2, 507),
             (0, 254),
-            (3, 3880)
+            (3, 5115)
         ]
     );
 }
@@ -1408,8 +1414,9 @@ fn a_line_all_but_tangent_to_a_circle_is_answered() {
     // The line through (k, 0) and (2k, 1) passes within about 1 / 2k² of the unit circle's edge,
     // near (0, -1), and meets it twice: the exact count says so, while the discriminant, exactly 1
     // against terms near k⁴, has an enclosure reaching far below zero. The closed form must take
-    // the root of what is not negative and, where it cannot part the roots, leave the pair to the
-    // engine, never fail.
+    // the root of what is not negative, never fail. On these whole numbers the exact sum gives
+    // the discriminant itself, 1, and holds the two roots apart, s = −1 and −1 + 2 / (k² + 1),
+    // two crossings 2 / k steps apart, both proven, far below the floor the engine stops at.
     for e in [20, 26] {
         let k = two_to(e);
         let unit = circle([0.0, 0.0], 1.0);
@@ -1417,11 +1424,80 @@ fn a_line_all_but_tangent_to_a_circle_is_answered() {
         let r = meet(&infinite([k, 0.0], [k, 1.0]), &unit);
         assert_eq!(r.items().len(), 2, "{:?}", r.items());
         assert!(
-            r.items()
-                .iter()
-                .all(|i| (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
+            r.items().iter().all(|i| matches!(
+                i,
+                Item::Point {
+                    contact: PointContact::Crossing,
+                    ..
+                }
+            ) && (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
             "{:?}",
             r.items()
+        );
+    }
+}
+
+#[test]
+fn a_line_all_but_tangent_to_a_circle_off_the_axes_is_answered() {
+    // The same line and unit circle moved into space: level at z = 5 about (0, 3, 5), and upright
+    // in x = 5 about (5, 3, 4). Each product of d × W, W = o − c, that the exact sum takes is not
+    // zero in one of the two at least, and the same two crossings are proven in both.
+    for e in [20, 26] {
+        let k = two_to(e);
+        let level = Frame::standard().unwrap();
+        let upright = Frame::new([0.0, 1.0, 0.0], [1.0, 0.0, 0.0]).unwrap();
+        for (frame, c, o, d) in [
+            (level, [0.0, 3.0, 5.0], [k, 3.0, 5.0], [k, 1.0, 0.0]),
+            (upright, [5.0, 3.0, 4.0], [5.0, k + 3.0, 4.0], [0.0, k, 1.0]),
+        ] {
+            let unit = CurveKind::Circle(Circle::full(c, 1.0, frame).unwrap());
+            let r = meet(&infinite(o, d), &unit);
+            assert_eq!(r.items().len(), 2, "{c:?}: {:?}", r.items());
+            assert!(
+                r.items().iter().all(|i| matches!(
+                    i,
+                    Item::Point {
+                        contact: PointContact::Crossing,
+                        ..
+                    }
+                ) && (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
+                "{c:?}: {:?}",
+                r.items()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_long_line_all_but_tangent_to_a_small_circle_is_flagged_in_little_work() {
+    // #904: the circle of radius 53 about the origin, and a segment to its grid point V = (45, 28)
+    // from W = V + D or W = V − D, D = (5, −8) + t (−28, 45) with t = ⌊2^32 / 53⌋, so D · V = 1
+    // and |D| is about 2^32: from V + D it comes in a hair outside the circle; from V − D a hair
+    // inside it, crossing the circle 2 / |D| before V, 2^-31 steps away. The closed form counts
+    // the crossings but cannot hold them apart, and the engine flags the tangent band at V. It
+    // once split both parameters as shares of their domains while the segment's moves 2^32 steps
+    // a unit and the circle's 166, cutting the circle's 2^24 times finer than the floor needs:
+    // about 10^7 units of work each way. Split across the side that reaches farthest in space,
+    // each way fits in 2^16.
+    let t = (1_i64 << 32) / 53;
+    let v = [45.0, 28.0];
+    let turn_at_v = 28.0_f64.atan2(45.0) / core::f64::consts::PI;
+    for d in [[5 - 28 * t, 45 * t - 8], [28 * t - 5, 8 - 45 * t]] {
+        let side = segment([v[0] + d[0] as f64, v[1] + d[1] as f64], v);
+        let rim = circle([0.0, 0.0], 53.0);
+        let r = curves(&rim, &side, &mut WorkMeter::new(Budget::of_work(1 << 16))).unwrap();
+        assert_eq!(r.coverage(), Coverage::CompleteOutsideFlagged, "{d:?}");
+        let [Item::Flagged { at, xyz, .. }] = r.items() else {
+            panic!("{d:?}: {:?}", r.items())
+        };
+        let s = at.spans();
+        assert!(
+            s[0].contains(turn_at_v) && s[1].hi() == 1.0 && s[1].lo() > 1.0 - 1e-9,
+            "{d:?}: {s:?}"
+        );
+        assert!(
+            xyz.contains(geom_num::P3::new(45, 28, 0).unwrap()),
+            "{d:?}: {xyz:?}"
         );
     }
 }
@@ -1728,7 +1804,7 @@ fn self_crossings_take_only_their_work() {
     // Under Miri the smaller eight, its join among the boxes pruned as natively, and the second
     // loop: the seven-span eight is minutes there, and the first loop is left out to keep the
     // test within the time it may take.
-    let want = [(1, case(39450, 27900)), (1, 8789), (1, 6774)];
+    let want = [(1, case(41832, 28293)), (1, 9594), (1, 7338)];
     for &i in rounds(&[0, 1, 2], &[0, 2]) {
         assert_eq!(work(&curves[i]), want[i], "curve {i}");
     }
@@ -1974,7 +2050,7 @@ fn a_whole_circle_s_search_takes_only_its_work() {
         work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
         work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
     ];
-    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1315)]);
+    assert_eq!(got, [(2, 9046), (1, 603), (1, 603), (1, 679)]);
 }
 
 #[test]
@@ -2126,13 +2202,14 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
             .iter()
             .any(|d| d.code == "closed-form-to-engine")
     };
-    // The line within about 1 / 2k² of the unit circle, at k = 2^26: Δ is 1, which neither form
-    // of the discriminant holds apart from zero there (issue 1156), so the roots are not parted.
-    // Only the piece of it by the circle, from (−k, −2) to (k, 0), so the engine's search is short.
+    // The line within about 1 / 2k² of the unit circle, at k = 2^26, half a step off the grid: no
+    // exact sum holds its discriminant, and Δ is 1, which neither form of it holds apart from zero
+    // there (issue 1156), so the roots are not parted. Only the piece of it by the circle, from
+    // (−k, −2) to (k, 0) moved half a step, so the engine's search is short.
     let k = two_to(26);
     assert!(routed(
-        &segment([-k, -2.0], [k, 0.0]),
-        &circle([0.0, 0.0], 1.0)
+        &segment([0.5 - k, -2.0], [k + 0.5, 0.0]),
+        &circle([0.5, 0.0], 1.0)
     ));
     let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
     let level = infinite([0.0, 0.0], [1.0, 0.0]);

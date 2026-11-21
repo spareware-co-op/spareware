@@ -20,7 +20,9 @@
 //!   resolution floor, or cannot be split, is flagged rather than split again.
 //! - **Enclosures apart.** A zero's enclosure reaches less than a step, and two zeros nearer than
 //!   that are refined until the doubles part them.
-//! - **Deterministic.** Boxes are taken lower first, the longest side split at its middle.
+//! - **Deterministic.** Boxes are taken lower first, the longest side split at its middle: the
+//!   one that reaches farthest in space where the field measures each ([`Field::sides`]),
+//!   otherwise the longest as a share of the domain.
 //!
 //! Method: Krawczyk's operator ([Krawczyk 1969](https://doi.org/10.1007/BF02234767)) on a
 //! subdivision work list, as `geom_num::isolate` runs it, and the small inverse is that module's
@@ -113,6 +115,23 @@ pub trait Field<const N: usize> {
     ///
     /// As [`Field::at`].
     fn reach(&self, x: &[Interval; N], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError>;
+
+    /// How far each unknown's side of `x` reaches in space, in grid steps, for a field whose
+    /// unknowns each move a thing of their own, as a curve pair's two parameters each move one
+    /// curve: the largest is [`Field::reach`], and the box is split across the side that reaches
+    /// farthest, so a slow thing's side is never cut finer than the floor needs because a fast
+    /// one's is long. `None`, the default, splits the side longest as a share of the domain.
+    ///
+    /// # Errors
+    ///
+    /// As [`Field::at`].
+    fn sides(
+        &self,
+        _x: &[Interval; N],
+        _meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[f64; N]>, IntersectError> {
+        Ok(None)
+    }
 }
 
 /// A zero, proven the only one in its box.
@@ -338,11 +357,13 @@ pub(crate) fn grown<const N: usize>(
     Ok(out)
 }
 
-/// `x` split across its longest side relative to `domain`: the lower half and the upper; `None` if
-/// that side has no double between its ends.
+/// `x` split across its longest side, the one that reaches farthest in space where the field
+/// measures its `sides` ([`Field::sides`]), otherwise relative to `domain`: the lower half and the
+/// upper; `None` if that side has no double between its ends.
 fn halves<const N: usize>(
     x: &[Interval; N],
     domain: &[Interval; N],
+    sides: Option<[f64; N]>,
 ) -> Result<Option<Pair<N>>, IntersectError> {
     let mut longest = (0, f64::NEG_INFINITY);
     for (i, (a, d)) in x.iter().zip(domain).enumerate() {
@@ -352,6 +373,7 @@ fn halves<const N: usize>(
         } else {
             0.0
         };
+        let share = sides.and_then(|r| r.get(i).copied()).unwrap_or(share);
         if share > longest.1 {
             longest = (i, share);
         }
@@ -454,9 +476,10 @@ pub(crate) fn runs<const N: usize>(
 
 /// Every zero of `field` in `start`, a box inside `domain`, past what `keep` rules out: a box for
 /// which `keep` says no is dropped with whatever zeros it holds. A caller's test is what lets a
-/// search stop early. Boxes are split, widened and grown as shares of `domain` and kept inside
-/// `start`, so a search of all of `domain` starts from it, and a part of it searched again from
-/// that part is cut as it is inside the whole, at the whole's scale.
+/// search stop early. Boxes are widened and grown as shares of `domain`, split across the side
+/// that reaches farthest in space where the field measures its sides and otherwise as shares of
+/// `domain`, and kept inside `start`, so a search of all of `domain` starts from it, and a part of
+/// it searched again from that part is cut as it is inside the whole, at the whole's scale.
 ///
 /// # Errors
 ///
@@ -529,11 +552,17 @@ where
             work.push(clipped);
             continue;
         }
-        if field.reach(&x, meter)? <= RESOLUTION_FLOOR.get() {
+        // A field that measures its sides apart has the largest for its reach.
+        let sides = field.sides(&x, meter)?;
+        let reach = match sides {
+            Some(each) => each.into_iter().fold(0.0, Larger::max_of),
+            None => field.reach(&x, meter)?,
+        };
+        if reach <= RESOLUTION_FLOOR.get() {
             flagged.push(Flagged { region: x, why });
             continue;
         }
-        match halves(&x, &domain)? {
+        match halves(&x, &domain, sides)? {
             Some((lower, upper)) => {
                 work.push(upper);
                 work.push(lower);
