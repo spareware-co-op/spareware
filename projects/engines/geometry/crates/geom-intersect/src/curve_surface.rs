@@ -12,7 +12,9 @@
 //! surface cuts in that plane: nothing, two crossings or one touch, told by enclosures and, on a
 //! coordinate axis, by exact signs (decision 32.86). A whole circle across a plane meets it nowhere
 //! or at two crossings, where an enclosure of one discriminant tells which (decision 32.106); a
-//! touch, and a crossing too near one, are the engine's. Every other pair runs [`crate::solve`] on
+//! touch, and a crossing too near one, are the engine's. A line parallel to a cylinder's axis or to
+//! a cone's ruling, its quadratic's leading coefficient zero exactly, meets it nowhere, once, or
+//! along the ruling (decision 32.107). Every other pair runs [`crate::solve`] on
 //! C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.
 //!
 //! Guarantees:
@@ -28,8 +30,12 @@
 //!   from its exact sum: a line through the apex or tangent is one point, and one a step either
 //!   side two or none (decision 32.87). For a cone of any other start radius the discriminant is
 //!   P + Q·√N, and its sign is exact in whole numbers of the stored doubles of at most 768 bits,
-//!   with P² against Q²·N in 1,536 where the signs of P and Q differ (decision 32.88). Elsewhere
-//!   an interval decides, and what it cannot tell goes to the engine.
+//!   with P² against Q²·N in 1,536 where the signs of P and Q differ (decision 32.88). Where the
+//!   enclosure of a line's leading coefficient against a cylinder or a cone holds zero, whether it
+//!   is zero, the line parallel to the axis or to a ruling, is an exact sign in whole numbers of
+//!   the stored doubles, and so, where the enclosure of its constant term holds zero too, is whether
+//!   the line lies on the surface (decision 32.107). Elsewhere an interval decides, and what it
+//!   cannot tell goes to the engine.
 //! - **Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's
 //!   tangent plane the box is a candidate, and the second order test compares the curve's normal
 //!   curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ,
@@ -92,7 +98,11 @@
 //! A plane's edge beside a cone of start radius 100 off the grid cost the engine 3,824,869
 //! units, and a segment touching a start circle 387,503 to 597,337, before decision 32.88; now
 //! at most 4, and where the enclosure reaches zero 50 products of 768-bit integers and three
-//! of 1,536-bit ones, on the stack. Recursion: none.
+//! of 1,536-bit ones, on the stack. A segment along a cone's ruling cost the engine 826,784 to
+//! 1,048,577 units, and a plane's sides parallel to a cylinder's axis all but 2,494 of a call of
+//! the natural target's 908,956, before decision 32.107; now at most 4, and where the enclosure of
+//! the leading coefficient holds zero at most 42 products of 768-bit integers and three of
+//! 1,536-bit ones, on the stack. Recursion: none.
 
 #![allow(
     clippy::many_single_char_names,
@@ -626,6 +636,12 @@ fn line_cylinder(
     if exact == Some(Meeting::Within) {
         return along_ruling(line, cylinder, meter).map(Some);
     }
+    // A line parallel to the axis has A = 0 exactly, which no enclosure is (each is rounded
+    // outward), so it is decided before the quadratic (issue 1112).
+    let [lead, _, constant] = terms;
+    if lead.contains(0.0) && parallel_to(line, cylinder.frame().normal()) == Some(true) {
+        return beside_axis(line, cylinder, constant, meter);
+    }
     // Whole-number data too: the exact sum counts as `closed::line_cylinder` would, and holds Δ to
     // a step besides, which a count alone does not, so a near tangent's two roots stand apart.
     let known = if straddles(terms)? {
@@ -797,6 +813,54 @@ fn exact_cylinder(line: &Line<3>, cylinder: &Cylinder) -> Option<Meeting> {
     closed::line_cylinder(&grid_line(line)?, &c).ok()
 }
 
+/// Whether `line` runs parallel to the stored axis `n`, exactly: d × n is zero in whole numbers of
+/// the stored doubles (d and n, each times one power of two). `None` where one does not fit.
+fn parallel_to(line: &Line<3>, n: [f64; 3]) -> Option<bool> {
+    let ((d, _), (n, _)) = (whole_numbers(line.direction())?, whole_numbers(n)?);
+    Some(wide_cross(&d, &n)?.iter().all(|x| x.signum() == Sign::Zero))
+}
+
+/// The sign of N·C for a line parallel to a cylinder's axis: C is the line's distance from the
+/// axis squared less r², so N·C = |W × n|² − r²·N with W = o − c and N = n·n. Exact in whole numbers
+/// of the stored doubles (o, c and r; n), of degree two in each kind, so the scaling keeps the
+/// sign. `None` where one does not fit.
+fn axis_gap(line: &Line<3>, cylinder: &Cylinder) -> Option<Sign> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cylinder.center());
+    let ([o0, o1, o2, c0, c1, c2, r], _) =
+        whole_numbers([o0, o1, o2, c0, c1, c2, cylinder.radius()])?;
+    let (n, _) = whole_numbers(cylinder.frame().normal())?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let m = wide_cross(&w, &n)?;
+    let r_n = r.checked_mul(&r)?.checked_mul(&wide_dot(&n, &n)?)?;
+    Some(wide_dot(&m, &m)?.checked_sub(&r_n)?.signum())
+}
+
+/// A line parallel to a cylinder's axis (issue 1112): A and B are zero exactly, so C, the line's
+/// distance from the axis squared less r², is the same at every point. Apart from zero, by its
+/// enclosure or by its exact sign, the line meets the cylinder nowhere; zero, it lies along a
+/// ruling. `None` where the exact sign cannot be taken.
+fn beside_axis(
+    line: &Line<3>,
+    cylinder: &Cylinder,
+    constant: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let on = if constant.contains(0.0) {
+        axis_gap(line, cylinder).map(|s| s == Sign::Zero)
+    } else {
+        Some(false)
+    };
+    match on {
+        Some(true) => along_ruling(line, cylinder, meter).map(Some),
+        Some(false) => proven(Vec::new(), meter).map(Some),
+        None => Ok(None),
+    }
+}
+
 /// A line along a cylinder's ruling: the part over the domain in v, at the ruling's u.
 fn along_ruling(
     line: &Line<3>,
@@ -884,7 +948,155 @@ fn line_cone(
     } else {
         (None, None)
     };
+    // A line parallel to a ruling has A = 0 exactly, which no enclosure is, so it is decided
+    // before the quadratic (issue 1112).
+    let [lead, ..] = terms;
+    if lead.contains(0.0) && parallel_to_a_ruling(line, cone) == Some(true) {
+        return beside_ruling(line, cone, terms, known.0, seams, place, meter);
+    }
     quadric_roots(line, terms, known, seams, place, meter)
+}
+
+/// Whether `line` runs parallel to a ruling of `cone`, exactly: its leading coefficient is
+/// A = (s²·|d × n|² − k²·(d·n)²) / (s²·N), with N = n·n, and the top is zero in whole numbers of
+/// the stored doubles (d; n; k and s), of degree two in each kind. `None` where one does not fit.
+fn parallel_to_a_ruling(line: &Line<3>, cone: &Cone) -> Option<bool> {
+    let (_, k) = cone.radius_and_slope();
+    let (d, _) = whole_numbers(line.direction())?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let (m, along) = (wide_cross(&d, &n)?, wide_dot(&d, &n)?);
+    let across = s.checked_mul(&s)?.checked_mul(&wide_dot(&m, &m)?)?;
+    let up = k
+        .checked_mul(&k)?
+        .checked_mul(&along)?
+        .checked_mul(&along)?;
+    Some(across.checked_sub(&up)?.signum() == Sign::Zero)
+}
+
+/// The sign of s²·N·C for a line and a cone, C the constant of the line's quadratic. With W = o − c
+/// and N = n·n, s²·N·C = P + Q·√N, where P = s²·(|W × n|² − N·r₀²) − k²·(W·n)² and
+/// Q = −2·r₀·k·s·(W·n), each of degree two in each kind of the stored doubles (o, c and r₀; n; k and
+/// s), so in whole numbers of them the sign is that of P + Q where P and Q do not have opposite
+/// signs, and P's times that of P² − Q²·N where they do, as [`started_sign`] reads Δ. `None` where a
+/// whole number does not fit.
+fn ruling_gap(line: &Line<3>, cone: &Cone) -> Option<Sign> {
+    let ([o0, o1, o2], [c0, c1, c2]) = (line.origin(), cone.center());
+    let (r0, k) = cone.radius_and_slope();
+    let ([o0, o1, o2, c0, c1, c2, r0], _) = whole_numbers([o0, o1, o2, c0, c1, c2, r0])?;
+    let (n, _) = whole_numbers(cone.frame().normal())?;
+    let ([k, s], _) = whole_numbers([k, cone.axial_sign()])?;
+    let w = [
+        o0.checked_sub(&c0)?,
+        o1.checked_sub(&c1)?,
+        o2.checked_sub(&c2)?,
+    ];
+    let (m, big_n, along) = (wide_cross(&w, &n)?, wide_dot(&n, &n)?, wide_dot(&w, &n)?);
+    let off = wide_dot(&m, &m)?.checked_sub(&big_n.checked_mul(&r0)?.checked_mul(&r0)?)?;
+    let p = s.checked_mul(&s)?.checked_mul(&off)?.checked_sub(
+        &k.checked_mul(&k)?
+            .checked_mul(&along)?
+            .checked_mul(&along)?,
+    )?;
+    let q = r0.checked_mul(&k)?.checked_mul(&s)?.checked_mul(&along)?;
+    let q = q.checked_add(&q)?.checked_neg()?;
+    let opposite = matches!(
+        (p.signum(), q.signum()),
+        (Sign::Positive, Sign::Negative) | (Sign::Negative, Sign::Positive)
+    );
+    if !opposite {
+        return Some(p.checked_add(&q)?.signum());
+    }
+    let (p2, q2, n2): (Square, Square, Square) = (p.resize()?, q.resize()?, big_n.resize()?);
+    let gap = p2
+        .checked_mul(&p2)?
+        .checked_sub(&q2.checked_mul(&q2)?.checked_mul(&n2)?)?;
+    Some(p.signum().mul(gap.signum()))
+}
+
+/// A line parallel to a ruling of a cone, its leading coefficient A zero exactly (issue 1112): the
+/// quadratic is 2B·t + C. Where B is proven apart from zero the line crosses once, at t = −C/2B.
+/// Where the exact count says Δ = B² is zero, B is zero, and C, the same at every point, says
+/// whether the line lies along the ruling or meets the cone nowhere: apart from zero by its
+/// enclosure or by its exact sign. `None` where neither tells.
+fn beside_ruling(
+    line: &Line<3>,
+    cone: &Cone,
+    [_, b, c]: [Interval; 3],
+    count: Option<Meeting>,
+    seams: [Seam; 2],
+    place: impl Fn(Interval) -> Result<Option<(Interval, Interval)>, IntersectError>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    if !b.contains(0.0) {
+        let t = c.div(b.add(b)?)?.neg();
+        let items = on_domains(line, t, false, seams, place, meter)?
+            .into_iter()
+            .collect();
+        return proven(items, meter).map(Some);
+    }
+    if count != Some(Meeting::Tangent) {
+        return Ok(None);
+    }
+    let on = if c.contains(0.0) {
+        ruling_gap(line, cone).map(|s| s == Sign::Zero)
+    } else {
+        Some(false)
+    };
+    match on {
+        Some(true) => on_ruling(line, cone, meter),
+        Some(false) => proven(Vec::new(), meter).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// A line along a ruling of a cone: the part over the domain in v, at the ruling's u. About the
+/// axis every point of it is ρ·e(u), ρ = r₀ + σ·z, so u is the turn of its origin's (x, y), or of
+/// its direction's (dx, dy) where ρ there may be zero (the apex), each turned by the sign of ρ or
+/// of its rate σ·dz: past the apex ρ is negative and e(u) points the other way, so the one u holds
+/// the ruling on both nappes. `None` where neither sign is proven.
+fn on_ruling(
+    line: &Line<3>,
+    cone: &Cone,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Intersection>, IntersectError> {
+    let ([ox, oy, oz], [dx, dy, dz]) = local(line, cone.center(), &cone.frame())?;
+    let (r0, k) = cone.radius_and_slope();
+    let factor = Interval::point(cone.axial_sign())?;
+    let sigma = Interval::point(k)?.div(factor)?;
+    let (rho, rate) = (Interval::point(r0)?.add(sigma.mul(oz)?)?, sigma.mul(dz)?);
+    let (x, y, sign) = match (apart(rho), apart(rate)) {
+        (Some(sign), _) => (ox, oy, sign),
+        (None, Some(sign)) => (dx, dy, sign),
+        (None, None) => return Ok(None),
+    };
+    let flip = Interval::point(if sign == Sign::Negative { -1.0 } else { 1.0 })?;
+    let domain = ParamSurface::domain(cone);
+    let Some(u) = around(x.mul(flip)?, y.mul(flip)?, domain.0)? else {
+        return proven(Vec::new(), meter).map(Some);
+    };
+    // The height z is at v = z/s.
+    let (start, end) = finite_line(line)?;
+    let v_of = |t: f64| -> Result<Interval, IntersectError> {
+        Ok(along(oz, dz, Interval::point(t)?)?.div(factor)?)
+    };
+    let (first, last) = (v_of(start)?, v_of(end)?);
+    let (lo, hi) = (
+        smaller(first.lo(), last.lo()),
+        larger(first.hi(), last.hi()),
+    );
+    let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
+        return proven(Vec::new(), meter).map(Some);
+    };
+    let overlap = Item::Overlap {
+        at: ParamBox::new(&[Interval::new(start, end)?, u, v])?,
+        region: OverlapRegion {
+            boundary: Vec::new(),
+        },
+        proof: Coincidence::Identical,
+        class: certified(),
+    };
+    proven(alloc::vec![overlap], meter).map(Some)
 }
 
 /// The components of (o − c) × d, each as four products of two stored doubles.
@@ -1375,6 +1587,10 @@ struct Contact<'a> {
     seams: [Seam; 3],
     pieces: Vec<BernsteinCurve<3>>,
     patches: Vec<BernsteinPatch<3>>,
+    /// How far in space one unit of t, of u and of v reaches, for the engine's contraction test
+    /// ([`Field::weights`]): 1 each, but for a plane held from an endless one, whose u and v are
+    /// weighed by its vectors.
+    weights: [f64; 3],
 }
 
 /// The patch of `patches` that holds `u` × `v` whole, cut to it.
@@ -1528,6 +1744,10 @@ impl Contact<'_> {
 }
 
 impl Field<3> for Contact<'_> {
+    fn weights(&self) -> [f64; 3] {
+        self.weights
+    }
+
     fn at(
         &self,
         [t, u, v]: [f64; 3],
@@ -1947,6 +2167,23 @@ fn plane_box(plane: &Plane, bound: &Bounds<3>) -> Result<(Interval, Interval), I
     let u = wa.mul(bb)?.sub(wb.mul(ab)?)?.div(det)?;
     let v = wb.mul(aa)?.sub(wa.mul(ab)?)?.div(det)?;
     Ok((u, v))
+}
+
+/// How far one grid step in space can reach in each of `plane`'s parameters: bounds from above, in
+/// u and in v.
+///
+/// Theorem. A vector w of the plane c + u·a + v·b is du·a + dv·b with
+/// du = w·(|b|²·a − (a·b)·b)/D and D = |a|²·|b|² − (a·b)², positive since a and b are not parallel.
+/// The vector it is dotted with has square |b|²·D, so by Cauchy and Schwarz |du| ≤ |w|·√(|b|²/D),
+/// reached where w runs along it; the same with a and b exchanged gives |dv| ≤ |w|·√(|a|²/D). For
+/// vectors square to each other these are |w|/|a| and |w|/|b|. Each is enclosed from the stored
+/// doubles and its upper end taken, so a step of length 1 moves u and v by no more than is returned.
+fn step_in_parameters(plane: &Plane) -> Result<(f64, f64), IntersectError> {
+    let (_, a, b) = plane.vectors();
+    let (a, b) = (lift(a)?, lift(b)?);
+    let (aa, ab, bb) = (dot(a, a)?, dot(a, b)?, dot(b, b)?);
+    let det = aa.mul(bb)?.sub(ab.mul(ab)?)?;
+    Ok((bb.div(det)?.sqrt()?.hi(), aa.div(det)?.sqrt()?.hi()))
 }
 
 /// A circle lying in a plane: an overlap for each part of it the plane's domain holds, nothing
@@ -3151,22 +3388,32 @@ pub fn curve_surface(
     }
     // A plane may run on without end (the only kind that may), and the engine needs a finite
     // domain. Every point of the curve lies in its box, so the plane held, on each end it lacks, to
-    // that box read in its own parameters and a unit past it meets the curve where the plane does,
-    // and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across an
-    // endless plane was refused as invalid input).
+    // that box read in its own parameters and a margin past it meets the curve where the plane
+    // does, and nowhere on an end it gains (issue 1071: an end circle of a cone or cylinder across
+    // an endless plane was refused as invalid input). The margin is room for the engine to prove a
+    // root on the box's edge alone, and any width of it is sound; it is one grid step in space,
+    // read in each parameter by `step_in_parameters`, so it does not shrink in space with short
+    // vectors (issue 1078: a unit of the parameter left 2^-30 of a step past a circle's crossings
+    // on vectors of that length, and both were flagged). The engine's contraction test weighs u
+    // and v by the same step, a unit of each as 1/du and 1/dv of a step in space: any positive
+    // weights prove a contraction, and unweighed, the plain norm of a step on short vectors
+    // stays above 1 down to the least box the engine keeps, however much room the box has.
     let held;
     let mut surface = surface;
+    let mut weights = [1.0; 3];
     if let SurfaceKind::Plane(p) = surface {
         let ((u0, u1), (v0, v1)) = ParamSurface::domain(p);
         if ![u0, u1, v0, v1].into_iter().all(f64::is_finite) {
             let (u, v) = in_parameters(curve, p, finite(curve)?, meter)?;
+            let (du, dv) = step_in_parameters(p)?;
+            weights = [1.0, 1.0 / du, 1.0 / dv];
             let mut ends = [(u0, u1), (v0, v1)];
-            for ((lo, hi), x) in ends.iter_mut().zip([u, v]) {
+            for (((lo, hi), x), step) in ends.iter_mut().zip([u, v]).zip([du, dv]) {
                 if !lo.is_finite() {
-                    *lo = (smaller(x.lo(), *hi) - 1.0).next_down();
+                    *lo = (smaller(x.lo(), *hi) - step).next_down();
                 }
                 if !hi.is_finite() {
-                    *hi = (larger(x.hi(), *lo) + 1.0).next_up();
+                    *hi = (larger(x.hi(), *lo) + step).next_up();
                 }
             }
             let (c, a, b) = p.vectors();
@@ -3182,6 +3429,7 @@ pub fn curve_surface(
         seams: [seam_t, seam_u, seam_v],
         pieces: crate::curve::pieces(curve, meter)?,
         patches: patches(surface, meter)?,
+        weights,
     };
     let domain = [seam_t.side()?, seam_u.side()?, seam_v.side()?];
     let solved = solve(&field, domain, domain, |_, _| Ok(true), meter)?;
@@ -3214,6 +3462,37 @@ mod tests {
 
     fn exactly(x: f64) -> Interval {
         Interval::point(x).unwrap()
+    }
+
+    fn plane_on(a: [f64; 3], b: [f64; 3]) -> Plane {
+        Plane::new([0.0; 3], a, b, ((-1.0, 1.0), (-1.0, 1.0))).unwrap()
+    }
+
+    #[test]
+    fn a_step_in_space_is_one_over_each_length_on_square_vectors() {
+        // u's vector 2^-30 long and v's 2^-20: a step is 2^30 of u and 2^20 of v, each held from
+        // above within a rounding.
+        let (du, dv) = step_in_parameters(&plane_on(
+            [1.0 / 1_073_741_824.0, 0.0, 0.0],
+            [0.0, 1.0 / 1_048_576.0, 0.0],
+        ))
+        .unwrap();
+        assert!((1_073_741_824.0..1_073_741_824.1).contains(&du), "{du}");
+        assert!((1_048_576.0..1_048_576.1).contains(&dv), "{dv}");
+        // Unit vectors: a unit of each.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])).unwrap();
+        assert!((1.0..1.000_000_1).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
+    }
+
+    #[test]
+    fn a_step_in_space_reaches_further_in_a_parameter_on_slanted_vectors() {
+        // a = (1, 0, 0), b = (1, 1, 0): D = 1·2 − 1 = 1, so a step is at most √2 of u (along
+        // (1, −1, 0)/√2, which is √2·a − b/√2) and 1 of v.
+        let (du, dv) = step_in_parameters(&plane_on([1.0, 0.0, 0.0], [1.0, 1.0, 0.0])).unwrap();
+        let root = 2.0_f64.sqrt();
+        assert!((root..root + 1e-9).contains(&du), "{du}");
+        assert!((1.0..1.000_000_1).contains(&dv), "{dv}");
     }
 
     #[test]

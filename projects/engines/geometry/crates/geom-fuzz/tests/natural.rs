@@ -354,6 +354,45 @@ fn an_end_circle_in_the_plane_of_the_others_end_costs_a_closed_form() {
     }
 }
 
+/// Issue 1112's natural input, stored in the target's `crashes` folder: the cylinder of radius 221
+/// along x through (0, −132, −144), its ends at x = ±300, against the plane z = 0. The plane's
+/// sides y = −300 and y = 300 run parallel to the axis, 221.27 and 455 from it; the line's
+/// quadratic leads with A = 0, whose enclosure `quadratic_with` refused, and the engine ran along
+/// each side for nothing: 908,956 units a call. Whether a line is parallel to the axis is an exact
+/// sign now, and one whose C, the same at every point, is apart from zero meets nothing (decision
+/// 32.107): 2,494 units a call.
+///
+/// With it, the SHA-256 of the Debug text of the answer's items, coverage and diagnostics, every
+/// field but its work, taken on the engine's answer before that change: the answer is the same.
+const SIDES_ALONG_A_CYLINDER: [(&[u8], u128, &str); 1] = [(
+    &[0xee, 0x00, 0xdf, 0xdc, 0xdc, 0x3d, 0x06],
+    2_494,
+    "5c0cf5de123ea230d50c1bba4ee7a7cc307f4176ae50b3661db06b5f1ef46787",
+)];
+
+#[test]
+fn a_side_parallel_to_a_cylinder_s_axis_costs_a_closed_form() {
+    for (data, most, digest) in SIDES_ALONG_A_CYLINDER {
+        let (case, _) = decode(data);
+        let work = work_of(&case).unwrap_or_else(|finding| panic!("{finding}"));
+        let answer = answer_of(&case)
+            .unwrap_or_else(|finding| panic!("{finding}"))
+            .unwrap_or_else(|| panic!("no answer on {data:02x?}"));
+        let text = format!(
+            "{:?} {:?} {:?}",
+            answer.items(),
+            answer.coverage(),
+            answer.diagnostics()
+        );
+        let said = hex(sha256(text.as_bytes()));
+        assert!(
+            work <= most && said == digest,
+            "{work} units (at most {most}), answer {said}, on {data:02x?}"
+        );
+        holds(harness(data));
+    }
+}
+
 #[test]
 fn what_the_closed_form_leaves_costs_no_more_than_today() {
     let held = STILL_THE_ENGINES

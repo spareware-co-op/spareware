@@ -291,8 +291,9 @@ pub fn judge(
             .flatten()
             .any(|&(_, h)| (g > 0.0 && h < 0.0) || (g < 0.0 && h > 0.0));
         // The second surface is trimmed and its equation is not, so a crossing counts only where
-        // the first surface's point is on the second's own patch.
-        if changes && reaches(second, on(first, at.0, at.1)?) {
+        // its own point, found between the two grid points, is on the second's own patch: a grid
+        // point a cell away may stand over the patch when the crossing does not.
+        if changes && crosses_on(first, second, implicit, (at, g), [right, up])? {
             let covered = found.settled.iter().any(|p| within(p.first, at, room))
                 || found.flagged.iter().any(|p| within(p.first, at, room));
             if !covered {
@@ -304,6 +305,43 @@ pub fn judge(
         }
     }
     Ok(())
+}
+
+/// How many times a grid segment is halved to find its crossing: to a 2⁻⁵² share of a cell, a
+/// double's precision.
+const HALVINGS: u32 = 52;
+
+/// Whether `first` crosses the equation `implicit` on the patch of `second` between the grid point
+/// `at`, where the equation's value is `g`, and one of its `neighbours` whose value has the other
+/// sign. Each such segment is halved [`HALVINGS`] times, keeping its end with `g`'s sign and the
+/// other end, so the sign change, and the crossing, stays between them, and the crossing's own
+/// point is asked whether it stands over the patch.
+fn crosses_on(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    implicit: &dyn ImplicitBound,
+    ((u, v), g): ((f64, f64), f64),
+    neighbours: [Option<&((f64, f64), f64)>; 2],
+) -> Result<bool, Finding> {
+    for &(to, h) in neighbours.into_iter().flatten() {
+        if h.is_sign_negative() == g.is_sign_negative() {
+            continue;
+        }
+        let (mut near, mut far) = ((u, v), to);
+        for _ in 0..HALVINGS {
+            let mid = (near.0 / 2.0 + far.0 / 2.0, near.1 / 2.0 + far.1 / 2.0);
+            let x = value(implicit, on(first, mid.0, mid.1)?)?;
+            if x.is_sign_negative() == g.is_sign_negative() {
+                near = mid;
+            } else {
+                far = mid;
+            }
+        }
+        if reaches(second, on(first, near.0, near.1)?) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Whether `x` is exactly `at`.
@@ -424,15 +462,26 @@ pub fn judge_march(
     Ok(())
 }
 
-/// How far apart a parameter box's two surface points are, at the middle of each.
+/// How far apart a parameter box's two surface points are, at the middle of each. A contact on a
+/// seam is read in a chart that does not cut it, and its box may reach past the domain's end
+/// (G173), where it is the same points as the domain's start: so the middle of a parameter that
+/// closes ([`charts`], an exact whole turn) is read modulo the turn, inside the domain.
 fn apart_at(
     first: &SurfaceKind,
     second: &SurfaceKind,
     [a, b, c, d]: &[Interval; 4],
 ) -> Result<f64, Finding> {
     let mid = |x: &Interval| x.lo() / 2.0 + x.hi() / 2.0;
-    let p = on(first, mid(a), mid(b))?;
-    let q = on(second, mid(c), mid(d))?;
+    let turned = |t: f64, ((lo, _), closes): ((f64, f64), bool)| {
+        if closes {
+            lo + (t - lo).rem_euclid(TURN)
+        } else {
+            t
+        }
+    };
+    let [lu, lv, ls, lr] = lines([first, second], &[charts(first), charts(second)]);
+    let p = on(first, turned(mid(a), lu), turned(mid(b), lv))?;
+    let q = on(second, turned(mid(c), ls), turned(mid(d), lr))?;
     Ok(p.iter()
         .zip(&q)
         .fold(0.0, |sum, (x, y)| sum + (x - y) * (x - y))

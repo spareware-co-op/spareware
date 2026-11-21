@@ -373,8 +373,11 @@ fn a_cubic_patch_against_a_plane_is_a_curve_or_out_of_rounds() {
         assert!(s.curve <= coarse, "{s:?}");
     }
     // The curve is a straight segment, so the cache keeps one span however much data refinement
-    // adds, and one cubic span of the pcurve u = x^(1/3) is not within 1/256 of it: the fit is
-    // out of rounds, as its errors say, never a refusal of the input.
+    // adds. The best cubic span of the pcurve u = x^(1/3) is within 1/256 of it (its gap is about
+    // 1.5e-3), but the certified bound stops it: the turning kappa, about 6.7 at u = 1/2 on this
+    // flat patch (about 12 over the binding piece's widened box), with the sine bound 0.64 where
+    // the surfaces cross at right angles, keeps the curve's bound near 4.5e-3, over 1/256 every
+    // round. The fit is out of rounds, as its errors say, never a refusal of the input.
     assert_eq!(
         fit((&patch, &across), REFS, &two(), CEILING, &mut meter()).err(),
         Some(IntersectError::BudgetExceeded)
