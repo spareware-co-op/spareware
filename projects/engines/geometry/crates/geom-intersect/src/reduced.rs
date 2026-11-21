@@ -68,12 +68,12 @@ use geom_num::eft::two_prod;
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::Steps;
 use geom_num::interval::Interval;
-use geom_num::{Sign, quadric};
+use geom_num::{Sign, math, quadric};
 use geom_nurbs::Curve;
 use geom_run::WorkMeter;
 use geom_surface::{Extrusion, ParamSurface, Plane, Revolution, SurfaceKind, Torus};
 
-use crate::curve::{curves, finite, sign_of, whole};
+use crate::curve::{curves, finite, sign_of, turn_of, whole};
 use crate::curve_surface::{cross, curve_surface, dot, lift, minus};
 use crate::error::IntersectError;
 use crate::quadrics::{
@@ -113,8 +113,10 @@ fn ring(on: &Axis, z: Interval, r: Interval, tangent: bool) -> Result<Piece, Int
 }
 
 /// Where a line meets a circle in the half-plane, as (ρ, z) and whether it touches: the quadratic in
-/// the line's parameter, exact where the data are. `None` for a discriminant no enclosure tells
-/// from zero.
+/// the line's parameter, exact where the data are, kept where it lies on the line's span and on the
+/// circle's arc ([`on_arc`]). `None` for a discriminant no enclosure tells from zero, or a meeting
+/// whose turn's enclosure reaches an end of the arc that [`at_end`] does not prove it is (issue
+/// 1142: the arc was solved as its whole circle, so a profile's half circle met rings off it).
 fn line_and_circle(
     line: &Line<2>,
     round: &Circle<2>,
@@ -143,18 +145,158 @@ fn line_and_circle(
         return Ok(None);
     }
     let root = tight::sqrt(disc)?;
-    let mut out = Vec::new();
     let signs: &[f64] = if touching { &[1.0] } else { &[1.0, -1.0] };
+    let mut meets = Vec::new();
     for sign in signs {
         let t = tight::div(tight::sub(tight::mul(root, tight::point(*sign)?)?, b)?, a)?;
+        let rho = tight::add(px, tight::mul(vx, t)?)?;
+        let z = tight::add(py, tight::mul(vy, t)?)?;
+        meets.push((t, [rho, z]));
+    }
+    let (lo, hi) = ParamCurve::domain(round);
+    let mut out = Vec::new();
+    for (k, &(t, at)) in meets.iter().enumerate() {
         if t.hi() < span.0 || t.lo() > span.1 {
             continue;
         }
-        let rho = tight::add(px, tight::mul(vx, t)?)?;
-        let z = tight::add(py, tight::mul(vy, t)?)?;
+        let ends = match on_arc(round, at)? {
+            Arc::On => [false; 2],
+            Arc::Off => continue,
+            Arc::Ends(ends) => ends,
+        };
+        if ends != [false; 2] {
+            // The line's other meeting, if it has two, whose box the end must stand off.
+            let other = meets
+                .iter()
+                .enumerate()
+                .find(|(j, _)| *j != k)
+                .map(|(_, &(_, there))| there);
+            let mut proven = false;
+            for (end, reached) in [lo, hi].into_iter().zip(ends) {
+                proven = proven || (reached && at_end(line, round, end, other)?);
+            }
+            if !proven {
+                return Ok(None);
+            }
+        }
+        let [rho, z] = at;
         out.push((rho, z, touching));
     }
     Ok(Some(out))
+}
+
+/// Where a circle's point stands on the circle's arc, by the enclosure of its turn.
+enum Arc {
+    /// On the arc: its domain is a whole turn, or holds the enclosure moved by whole turns.
+    On,
+    /// Off it: no move of the enclosure by whole turns meets the domain.
+    Off,
+    /// The enclosure, moved by whole turns, reaches the domain's start, its end, or both.
+    Ends([bool; 2]),
+}
+
+/// Where the point `(x, y)` of `round` stands on its arc: its turn read on the circle's frame, as
+/// [`crate::curve::curves`] reads a line's meeting with a circle, and each move of it by whole
+/// turns that can meet the domain, as `onto` moves it there. The domain is closed, so an
+/// enclosure inside it, an end included, is on the arc.
+fn on_arc(round: &Circle<2>, [x, y]: [Interval; 2]) -> Result<Arc, IntersectError> {
+    let (lo, hi) = ParamCurve::domain(round);
+    if crate::seam::turn((lo, hi)) {
+        return Ok(Arc::On);
+    }
+    let [mx, my] = round.center();
+    let (wx, wy) = (
+        tight::sub(x, tight::point(mx)?)?,
+        tight::sub(y, tight::point(my)?)?,
+    );
+    let (_, [u, v, _]) = round.frame().unit_vectors()?;
+    let along = |[p, q, _]: [Interval; 3]| -> Result<Interval, IntersectError> {
+        Ok(tight::add(tight::mul(p, wx)?, tight::mul(q, wy)?)?)
+    };
+    let turn = turn_of(along(u)?, along(v)?)?;
+    let mut turns = math::floor((lo - turn.hi()) / 2.0)?.get();
+    let (mut start, mut end) = (false, false);
+    for _ in 0..3 {
+        let moved = tight::add(turn, tight::point(2.0 * turns)?)?;
+        turns += 1.0;
+        if moved.lo() >= lo && moved.hi() <= hi {
+            return Ok(Arc::On);
+        }
+        start = start || moved.contains(lo);
+        end = end || moved.contains(hi);
+    }
+    Ok(if start || end {
+        Arc::Ends([start, end])
+    } else {
+        Arc::Off
+    })
+}
+
+/// Whether the meeting of `line` with `round` that the box `other` does not hold (the line's other
+/// meeting, if it has two) is the end of the arc at the turn `s`, by exact signs, never by a
+/// rounded turn. At a multiple of a half-turn the end is c + r·g/|x| on the frame's stored x and
+/// normal (0, 0, k), g = cos πs·x + sin πs·x turned a quarter turn (anticlockwise for k > 0), each
+/// entry ±x's or zero: it lies on the line exactly where (c − o) × d = A and g × d = B have
+/// |x|·A = −r·B, opposite signs and A²·|x|² = r²·B² (on the stored doubles, so no turn and no
+/// root is rounded). Then it is one of the line's meetings with the circle, and standing off
+/// `other` it is this one.
+fn at_end(
+    line: &Line<2>,
+    round: &Circle<2>,
+    s: f64,
+    other: Option<[Interval; 2]>,
+) -> Result<bool, IntersectError> {
+    let (Some(cos), Some(sin)) = (
+        crate::seam::exact_cospi(s),
+        crate::seam::exact_cospi(s - 0.5),
+    ) else {
+        return Ok(false);
+    };
+    let frame = round.frame();
+    let ([x0, x1], [_, _, k]) = (frame.x(), frame.normal());
+    let quarter = if k > 0.0 { sin } else { -sin };
+    let (gx, gy) = (cos * x0 - quarter * x1, cos * x1 + quarter * x0);
+    let ([mx, my], r) = (round.center(), round.radius());
+    let ([ox, oy], [dx, dy]) = (line.origin(), line.direction());
+    let across = |u: &Exact, v: &Exact| u.times(&Exact::of(dy)).less(&v.times(&Exact::of(dx)));
+    let a = across(
+        &Exact::of(mx).less(&Exact::of(ox)),
+        &Exact::of(my).less(&Exact::of(oy)),
+    );
+    let b = across(&Exact::of(gx), &Exact::of(gy));
+    let size = Exact::of(x0)
+        .times(&Exact::of(x0))
+        .plus(&Exact::of(x1).times(&Exact::of(x1)));
+    let reach = Exact::of(r);
+    let squares = a
+        .times(&a)
+        .times(&size)
+        .less(&reach.times(&reach).times(&b.times(&b)));
+    let opposite = matches!(
+        (a.sign(), b.sign()),
+        (Some(Sign::Zero), Some(Sign::Zero))
+            | (Some(Sign::Positive), Some(Sign::Negative))
+            | (Some(Sign::Negative), Some(Sign::Positive))
+    );
+    if !opposite || !squares.is(Sign::Zero) {
+        return Ok(false);
+    }
+    let Some([p, q]) = other else {
+        return Ok(true);
+    };
+    // The end c + r·(cos πs·x̂ + sin πs·ŷ), enclosed.
+    let (_, [[ux, uy, _], [vx, vy, _], _]) = frame.unit_vectors()?;
+    let near = |m: f64, u: Interval, v: Interval| -> Result<Interval, IntersectError> {
+        let w = tight::add(
+            tight::mul(tight::point(cos)?, u)?,
+            tight::mul(tight::point(sin)?, v)?,
+        )?;
+        Ok(tight::add(
+            tight::point(m)?,
+            tight::mul(tight::point(r)?, w)?,
+        )?)
+    };
+    Ok(!same_place((near(mx, ux, vx)?, near(my, uy, vy)?), (p, q)))
 }
 
 /// A straight meridian curve.
