@@ -21,7 +21,7 @@ use geom_curve::{Basis, Circle, CurveKind, Frame, ParamCurve, Trimmed};
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Intersection, Item};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cylinder, Plane, Revolution, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Revolution, SurfaceKind};
 
 const ROUND: (f64, f64) = (0.0, 2.0);
 const WIDE: (f64, f64) = (-1000.0, 1000.0);
@@ -124,6 +124,18 @@ fn a_half_tube_keeps_only_the_ring_on_its_arc() {
 }
 
 #[test]
+fn a_cone_meets_a_half_tube_only_on_its_arc() {
+    // The cones ρ = 5 + z and ρ = 5 − z cross the whole circle at z = ±1/√2, and only +1/√2 is on
+    // the arc: each keeps one ring, its turn read on the cone's line from the cone's own data.
+    let half = revolution(tube(upper(), (0.0, 1.0)));
+    let z = 0.5_f64.sqrt();
+    for (slope, rho) in [(1.0, 5.0 + z), (-1.0, 5.0 - z)] {
+        let cone = Cone::new([0.0; 3], 5.0, slope, up(), (ROUND, (-4.0, 4.0))).unwrap();
+        assert_rings(&SurfaceKind::Cone(cone), &half, &[(rho, z)]);
+    }
+}
+
+#[test]
 fn a_cut_through_an_arcs_ends_keeps_its_rings_by_their_proof() {
     // z = 0 meets the upper half at its two ends, ρ = 6 at turn 0 and ρ = 4 at turn 1, and the
     // cylinders ρ = 6 and ρ = 4 touch it there; each end is proven on the line by exact signs.
@@ -181,4 +193,25 @@ fn a_ring_no_enclosure_tells_from_the_arcs_end_is_left_to_the_general_paths() {
     let z = 0.75_f64.sqrt();
     assert_rings(&level(0.5), &third, &[(5.0 + z, 0.5)]);
     assert_rings(&level(0.9), &third, &[]);
+}
+
+#[test]
+fn a_ring_a_hair_from_an_arcs_end_is_placed_by_the_proven_sign_of_its_offset() {
+    // The arc from the turn 8 + 1/6 to 8 + 1/3 (as doubles), four turns out: its ends are no
+    // multiple of a half-turn, and a turn's enclosure moved there is an ulp of 8 wide, 1.8e−15
+    // half-turns, so it reaches an end that close. Each cut meets the arc about 1e−15 half-turns
+    // from an end, and the sign of sin π(t − s), on geom-num's proven cospi and sinpi of the end,
+    // tells the side (60-digit check of each offset). sin π(lo − 8) = 0.4999999999999983890…:
+    // z = 0.49999999999999617 meets the circle 8.2e−16 half-turns before the start, z =
+    // 0.5000000000000012 1.0e−15 after it.
+    let arc = revolution(tube(upper(), (8.0 + 1.0 / 6.0, 8.0 + 1.0 / 3.0)));
+    let rho = |z: f64| 5.0 + (1.0 - z * z).sqrt();
+    assert_rings(&level(0.499_999_999_999_996_17), &arc, &[]);
+    let z = 0.500_000_000_000_001_2;
+    assert_rings(&level(z), &arc, &[(rho(z), z)]);
+    // sin π(hi − 8) = 0.8660254037844395768…: z = 0.866025403784438 meets it 9.8e−16 half-turns
+    // before the end, z = 0.8660254037844412 1.0e−15 past it.
+    let z = 0.866_025_403_784_438;
+    assert_rings(&level(z), &arc, &[(rho(z), z)]);
+    assert_rings(&level(0.866_025_403_784_441_2), &arc, &[]);
 }
