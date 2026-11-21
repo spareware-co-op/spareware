@@ -8126,7 +8126,7 @@
             "**Zeros on split lines are found once.** Each step runs on the box widened a little inside the domain, and a zero whose enclosure meets an earlier proof box is that zero.",
             "**Bounded.** The list is explicit, each box is charged, and a box that reaches less than the resolution floor, or cannot be split, is flagged rather than split again.",
             "**Enclosures apart.** A zero's enclosure reaches less than a step, and two zeros nearer than that are refined until the doubles part them.",
-            "**Deterministic.** Boxes are taken lower first, the longest side split at its middle."
+            "**Deterministic.** Boxes are taken lower first, the longest side split at its middle: the one that reaches farthest in space where the field measures each ([`Field::sides`]), otherwise the longest as a share of the domain."
           ],
           "job": "The interval engine: every zero of a small system over a box, each proven alone in a box of its own or flagged where it could not be decided (chapter 12.3).",
           "method": {

@@ -474,6 +474,22 @@ impl<const D: usize> Field<2> for Gap<'_, D> {
         Ok(if a > b { a } else { b })
     }
 
+    /// Each curve's piece on its own: a side's speed in steps a unit of its parameter is its own
+    /// curve's, and two curves' may stand 2^24 apart (a side 2^32 steps long on [0, 1] beside a
+    /// rim of radius 53 on two half turns), where cutting both as shares of their domains would cut
+    /// the slow one that much finer than the floor needs.
+    fn sides(
+        &self,
+        [s, t]: &[Interval; 2],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[f64; 2]>, IntersectError> {
+        let [first, second] = self.seams;
+        Ok(Some([
+            widest(&bound_over(self.a, first, *s, meter)?),
+            widest(&bound_over(self.b, second, *t, meter)?),
+        ]))
+    }
+
     fn narrow(
         &self,
         [s, t]: &[Interval; 2],

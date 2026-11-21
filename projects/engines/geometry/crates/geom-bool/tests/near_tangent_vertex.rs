@@ -9,8 +9,7 @@
 //! smaller factor even. So two whole circles crossing at a grid vertex have tangents a double tells
 //! apart there, at any radius the grid holds; a line can meet a circle at an angle no enclosure
 //! tells, and then crosses it again within a fraction of a step, below the edge stage's
-//! resolution, so the two crossings are one meeting at the vertex. At the grid's largest radii the
-//! edge stage refuses such a meeting instead.
+//! resolution, so the two crossings are one meeting at the vertex, at the grid's largest radii too.
 //!
 //! The side from V may run a hair outside the rim (D · (V − C) = 1) or a hair into the disc
 //! (D · (V − C) = −1). Into the disc, its second crossing lies on the side itself, 2 / |D| from V,
@@ -21,7 +20,7 @@
 //! piece and by area. With the record taken away the tangents' order contradicts the arrangement,
 //! and the split refuses the triangle (`Uncovered`) rather than return no faces for it, as it did;
 //! a piece said to lie inside a face that lies outside it is refused the same way. A seeded sweep
-//! runs both ways over radii from 53 up and sides of every length the test's time allows.
+//! runs both ways over radii from 53 up and sides up to 2^26 or 64 R.
 
 #![allow(
     clippy::unwrap_used,
@@ -38,8 +37,8 @@ use core::f64::consts::PI;
 
 use geom_bool::carrier::{CarrierIx, PointGeom};
 use geom_bool::interfere::{
-    Arrangement, BuildError, EdgeIn, EdgeUse, Entity, FaceIn, Interfered, Interference, Touch,
-    VertexIn, interfere,
+    Arrangement, BuildError, EdgeIn, EdgeUse, FaceIn, Interfered, Interference, Touch, VertexIn,
+    interfere,
 };
 use geom_bool::merge::default_remaining;
 use geom_bool::pave::Pave;
@@ -570,26 +569,41 @@ fn a_piece_inside_no_part_of_its_face_is_refused() {
     );
 }
 
-/// At R = 32767² + 4, about 1.07e9, and |D| about 3.4e8 (sin θ about 2.8e-18) the edge stage can no
-/// longer settle the meeting of the side and the rim at its floor of a step, and refuses it: no
-/// order is ever asked of the two pieces there. Run into the disc, the same side's meeting is
-/// still settled there, and the faces split as a split must.
+/// At R = 32767² + 4, about 1.07e9, and |D| about 3.4e8 (sin θ about 2.8e-18) the edge stage still
+/// settles the meeting of the side and the rim at its floor of a step, both ways, and the faces
+/// split as a split must. Run outside the disc it once refused it (`Unresolved`), while the
+/// intersection split both parameters as shares of their domains, the rim's moving about ten times
+/// as far a unit as the side's; it now splits the side that reaches farthest in space.
 #[test]
-fn at_the_largest_radii_the_edge_stage_refuses_such_a_meeting() {
-    let case = rim_and_triangle(32767, 1 << 26, false);
-    match case.build.run() {
-        Err(BuildError::Unresolved { first, second, .. }) => {
-            assert_eq!(
-                [first, second],
-                [Entity::Edge(case.rim), Entity::Edge(case.side)]
-            );
-        }
-        other => panic!("{other:?}"),
+fn at_the_largest_radii_the_edge_stage_settles_such_a_meeting() {
+    for inward in [false, true] {
+        let case = rim_and_triangle(32767, 1 << 26, inward);
+        let out = case
+            .build
+            .run()
+            .unwrap_or_else(|e| panic!("inward {inward}: {e:?}"));
+        let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
+        checked(&case, &out, &splitting);
     }
-    let case = rim_and_triangle(32767, 1 << 26, true);
-    let out = case.build.run().unwrap();
-    let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
-    checked(&case, &out, &splitting);
+}
+
+/// #904's first case: R = 53 and a side about as long as the radius, D = (−23, 37) and |D| about
+/// 43.6, both ways. Into the disc the edge stage once refused it with a non-finite number in the
+/// contact rule (`Contact(Num(NotFinite))`): the common-block test measured a piece of one block
+/// from the other's whole curve, and where that curve's nearest point lay outside the block it
+/// set the distance's upper end to infinity, which no enclosure holds. Each block is now measured
+/// on its own stretch of its curve. Both ways the triangle, within the contact radius at this
+/// size, is then refused where a point is placed in it (`Unclassified`), as it was outward.
+#[test]
+fn a_side_as_long_as_the_radius_is_refused_without_a_non_finite_number() {
+    for inward in [false, true] {
+        let case = rim_and_triangle(7, 53, inward);
+        let got = case.build.run();
+        assert!(
+            matches!(got, Err(BuildError::Unclassified { face, .. }) if face == case.triangle),
+            "inward {inward}: {got:?}"
+        );
+    }
 }
 
 /// A whole number from `lo` to `hi`, each power of two between them as likely as the next and
@@ -602,13 +616,38 @@ fn spread(rng: &mut SplitMix64, lo: i64, hi: i64) -> i64 {
         .unwrap()
 }
 
+/// #904's second case: R = 53 and |D| = 2^32, a side four thousand million steps long run a hair
+/// outside the small disc's rim and a hair into it. Into the disc the side and the rim cross at V
+/// and again 2^-31 steps along the side, and their intersection flags the tangent band at V. Its
+/// search once split both parameters as shares of their domains, while the side moves 2^32 steps
+/// a unit of its parameter and the rim 166: the rim's was cut 2^24 times finer than the floor
+/// needs, a million boxes and 1.6e7 units of work (100 seconds in a debug build). It now splits
+/// the side that reaches farthest in space, and interfere fits in 2^16 units of work either way;
+/// the faces split as a split must.
+#[test]
+fn a_long_side_by_a_small_disc_meets_its_rim_in_little_work() {
+    for inward in [false, true] {
+        let case = rim_and_triangle(7, 1 << 32, inward);
+        let out = interfere(
+            &case.build.arr,
+            default_remaining(),
+            &Exec::serial(),
+            &mut WorkMeter::new(Budget::of_work(1 << 16)),
+        )
+        .unwrap_or_else(|e| panic!("inward {inward}: {e:?}"));
+        let splitting = split(&case.build.arr, &out, &mut meter()).unwrap();
+        checked(&case, &out, &splitting);
+    }
+}
+
 /// The side from V a hair outside the rim and a hair into the disc, at radii R = m² + 4 from 53
 /// (m = 7) to about 6.7e7 (m = 8191) and lengths |D| from 2^20, or R, to 2^26 or 64 R, both
 /// seeded: each case splits as [`checked`] holds a split to. Up to these radii the edge stage
-/// settles the meeting of the side and the rim; at the grid's largest it refuses it
-/// ([`at_the_largest_radii_the_edge_stage_refuses_such_a_meeting`]). A longer side into a small
-/// disc is split right too, but the intersection's tangent band along it takes seconds a case
-/// and more (m = 7 and |D| = 2^32, 100 seconds in a debug build), so the sweep stops short of it.
+/// settles the meeting of the side and the rim, and at the grid's largest too
+/// ([`at_the_largest_radii_the_edge_stage_settles_such_a_meeting`]). A longer side into a small
+/// disc is split right too ([`a_long_side_by_a_small_disc_meets_its_rim_in_little_work`]), but at
+/// m = 541 and |D| about 2^39 the edge stage refuses the side outside the rim
+/// (`CoincidenceChain`), so the sweep stops short of such lengths.
 #[test]
 fn near_tangent_sides_split_at_the_rim_both_ways_at_seeded_sizes() {
     const CASES: usize = 32;

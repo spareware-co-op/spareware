@@ -1220,12 +1220,12 @@ fn the_engine_takes_only_its_work() {
     assert_eq!(
         got,
         [
-            (3, 3589),
-            (3, 3589),
-            (3, 3589),
+            (3, 3670),
+            (3, 3670),
+            (3, 3670),
             (2, 507),
             (0, 254),
-            (3, 3880)
+            (3, 5115)
         ]
     );
 }
@@ -1331,19 +1331,58 @@ fn a_line_all_but_tangent_to_a_circle_is_answered() {
     // The line through (k, 0) and (2k, 1) passes within about 1 / 2k² of the unit circle's edge,
     // near (0, -1), and meets it twice: the exact count says so, while the discriminant, exactly 1
     // against terms near k⁴, has an enclosure reaching far below zero. The closed form must take
-    // the root of what is not negative and leave the pair to the engine, never fail.
+    // the root of what is not negative and leave the pair to the engine, never fail. The two
+    // crossings stand 2 / k steps apart, far below the floor, and the engine flags them as one
+    // tangent band (12.9), as two circles' closed form makes such a pair one.
     for e in [20, 26] {
         let k = two_to(e);
         let unit = circle([0.0, 0.0], 1.0);
         is_empty(&meet(&segment([k, 0.0], [2.0 * k, 1.0]), &unit));
         let r = meet(&infinite([k, 0.0], [k, 1.0]), &unit);
-        assert_eq!(r.items().len(), 2, "{:?}", r.items());
+        let [
+            Item::Flagged {
+                at,
+                why: Unresolved::TangentBand { .. },
+                ..
+            },
+        ] = r.items()
+        else {
+            panic!("{:?}", r.items())
+        };
+        assert!((at.spans()[0].lo() + 1.0).abs() < 1e-6, "{:?}", r.items());
+    }
+}
+
+#[test]
+fn a_long_line_all_but_tangent_to_a_small_circle_is_flagged_in_little_work() {
+    // #904: the circle of radius 53 about the origin, and a segment to its grid point V = (45, 28)
+    // from W = V + D or W = V − D, D = (5, −8) + t (−28, 45) with t = ⌊2^32 / 53⌋, so D · V = 1
+    // and |D| is about 2^32: from V + D it comes in a hair outside the circle; from V − D a hair
+    // inside it, crossing the circle 2 / |D| before V, 2^-31 steps away. The closed form counts
+    // the crossings but cannot hold them apart, and the engine flags the tangent band at V. It
+    // once split both parameters as shares of their domains while the segment's moves 2^32 steps
+    // a unit and the circle's 166, cutting the circle's 2^24 times finer than the floor needs:
+    // about 10^7 units of work each way. Split across the side that reaches farthest in space,
+    // each way fits in 2^16.
+    let t = (1_i64 << 32) / 53;
+    let v = [45.0, 28.0];
+    let turn_at_v = 28.0_f64.atan2(45.0) / core::f64::consts::PI;
+    for d in [[5 - 28 * t, 45 * t - 8], [28 * t - 5, 8 - 45 * t]] {
+        let side = segment([v[0] + d[0] as f64, v[1] + d[1] as f64], v);
+        let rim = circle([0.0, 0.0], 53.0);
+        let r = curves(&rim, &side, &mut WorkMeter::new(Budget::of_work(1 << 16))).unwrap();
+        assert_eq!(r.coverage(), Coverage::CompleteOutsideFlagged, "{d:?}");
+        let [Item::Flagged { at, xyz, .. }] = r.items() else {
+            panic!("{d:?}: {:?}", r.items())
+        };
+        let s = at.spans();
         assert!(
-            r.items()
-                .iter()
-                .all(|i| (i.at().spans()[0].lo() + 1.0).abs() < 1e-6),
-            "{:?}",
-            r.items()
+            s[0].contains(turn_at_v) && s[1].hi() == 1.0 && s[1].lo() > 1.0 - 1e-9,
+            "{d:?}: {s:?}"
+        );
+        assert!(
+            xyz.contains(geom_num::P3::new(45, 28, 0).unwrap()),
+            "{d:?}: {xyz:?}"
         );
     }
 }
@@ -1601,7 +1640,7 @@ fn self_crossings_take_only_their_work() {
     // Under Miri the smaller eight, its join among the boxes pruned as natively, and the second
     // loop: the seven-span eight is minutes there, and the first loop is left out to keep the
     // test within the time it may take.
-    let want = [(1, case(39450, 27900)), (1, 8789), (1, 6774)];
+    let want = [(1, case(41832, 28293)), (1, 9594), (1, 7338)];
     for &i in rounds(&[0, 1, 2], &[0, 2]) {
         assert_eq!(work(&curves[i]), want[i], "curve {i}");
     }
@@ -1847,7 +1886,7 @@ fn a_whole_circle_s_search_takes_only_its_work() {
         work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
         work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
     ];
-    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
+    assert_eq!(got, [(2, 9046), (1, 603), (1, 603), (1, 677)]);
 }
 
 #[test]
