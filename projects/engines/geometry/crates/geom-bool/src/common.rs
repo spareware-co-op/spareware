@@ -23,7 +23,10 @@
 //! - **The contact rule across kinds.** Any other pair is one only when every piece of each is
 //!   proven within the contact radius of the other at the finest refinement, and is apart as soon
 //!   as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with
-//!   [`crate::rule::NearContact`]. Never a sampled check.
+//!   [`crate::rule::NearContact`]. A piece whose distance the search leaves undecided is neither,
+//!   and is cut again; one still so at the deepest cut fails with `NearContact` too, its enclosure
+//!   from zero to the largest distance between its box and the other block's box. Never a sampled
+//!   check.
 //! - **Blocks of one operand are never common.** An operand's own edges meet only at their
 //!   vertices, so only blocks of different operands are compared.
 //! - **Deterministic.** Groups are taken in the order of their end vertices, blocks within a group
@@ -43,8 +46,8 @@
 
 use alloc::vec::Vec;
 
-use geom_intersect::IntersectError;
 use geom_intersect::project::{Projection, project_curve_over};
+use geom_intersect::{IntersectError, Seam};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
 use geom_num::{NumError, Sign};
@@ -141,7 +144,9 @@ type Span<'a> = (&'a CurveKind<3>, Vec<(f64, f64)>);
 /// The edge curve and parameter stretches of a block: `inner` gives them inside the end paves'
 /// enclosures, otherwise covering them. A block that runs round the seam, from the last pave of a
 /// closed edge to its first, is two stretches: from the last pave to the domain's end, and from
-/// the domain's start to the first pave (a point where that pave stands at the start itself).
+/// the domain's start to the first pave. Where that pave stands at the start itself, the second
+/// would be the one point at the start, which on a closed curve is the end of the first, so the
+/// block is the first alone.
 fn span_of<'a>(
     arr: &'a Arrangement,
     block: &PaveBlock,
@@ -165,10 +170,16 @@ fn span_of<'a>(
         (greater(from.t.lo(), a), lesser(to.t.hi(), b))
     };
     // Each stretch runs forward: an edge's paves are in proven order, each enclosure ending before
-    // the next begins (`crate::pave::order`), and a block runs between two neighbours, or from the
-    // last round to the first.
-    let stretches = if block.wraps {
+    // the next begins (`crate::pave::order_on`), and a block runs between two neighbours, or from
+    // the last round to the first. Inside the paves, a last pave whose enclosure runs past the end
+    // leaves nothing before the join, and the stretch after it starts where that enclosure ends,
+    // read modulo the turn (decision 32.104).
+    let stretches = if block.wraps && inner && from.t.hi() > b {
+        alloc::vec![(Seam::of_curve(curve).wrapped(from.t.hi()), end)]
+    } else if block.wraps && end > a {
         alloc::vec![(start, b), (a, end)]
+    } else if block.wraps {
+        alloc::vec![(start, b)]
     } else {
         alloc::vec![(start, end)]
     };
@@ -189,17 +200,52 @@ fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
     Ok((centre, radius))
 }
 
+/// A box, as its lowest and highest corners.
+type Corners = ([f64; 3], [f64; 3]);
+
+/// The box of a block: on each axis, the least low and the greatest high of its stretches' boxes.
+fn box_of(side: &Span<'_>, meter: &mut WorkMeter<'_>) -> Result<Corners, BuildError> {
+    let (curve, stretches) = side;
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for &stretch in stretches {
+        let bounds = curve.bound(stretch, meter).map_err(IntersectError::from)?;
+        for (l, &x) in lo.iter_mut().zip(&bounds.lo) {
+            *l = lesser(*l, x);
+        }
+        for (h, &x) in hi.iter_mut().zip(&bounds.hi) {
+            *h = greater(*h, x);
+        }
+    }
+    Ok((lo, hi))
+}
+
+/// The largest distance between a point of box `a` and a point of box `b`: on each axis the
+/// greater of the two ends' gaps, each difference and product rounded up, so it is at least the
+/// true one.
+fn farthest(a: &Corners, b: &Corners) -> Result<f64, NumError> {
+    let ((a_lo, a_hi), (b_lo, b_hi)) = (a, b);
+    let mut sum = 0.0_f64;
+    for (((&p, &q), &r), &s) in a_lo.iter().zip(a_hi).zip(b_lo).zip(b_hi) {
+        let gap = greater(s - p, q - r).next_up();
+        sum = ((gap * gap).next_up() + sum).next_up();
+    }
+    Ok(Interval::point(sum)?.sqrt()?.hi())
+}
+
 /// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
 /// on its own, so a nearest point of the curve outside the block is never taken for one of the
-/// block's. The upper end is infinite where a search is left undecided.
+/// block's. A stretch whose search is left undecided (`NonIsolated`) gives no upper end and holds
+/// the lower one at zero at most, so the distance is `None`, undecided, when no stretch's search is
+/// decided.
 fn from_block(
     far_side: &Span<'_>,
     centre: &[f64; 3],
     floor: f64,
     meter: &mut WorkMeter<'_>,
-) -> Result<Interval, BuildError> {
+) -> Result<Option<Interval>, BuildError> {
     let (curve, stretches) = far_side;
-    let (mut lo, mut hi) = (f64::INFINITY, f64::INFINITY);
+    let mut lo = f64::INFINITY;
+    let mut hi: Option<f64> = None;
     for &stretch in stretches {
         let d = match project_curve_over(curve, stretch, centre, floor, meter)? {
             // The nearest point found: of those whose distance starts lowest, the first.
@@ -209,12 +255,18 @@ fn from_block(
                 .min_by(|x, y| x.lo().total_cmp(&y.lo()))
                 .ok_or(IntersectError::Internal)?,
             Projection::Set { distance, .. } => distance,
-            Projection::NonIsolated { .. } => Interval::new(0.0, f64::INFINITY)?,
+            Projection::NonIsolated { .. } => {
+                lo = lesser(lo, 0.0);
+                continue;
+            }
         };
         lo = lesser(lo, d.lo());
-        hi = lesser(hi, d.hi());
+        hi = Some(hi.map_or(d.hi(), |h| lesser(h, d.hi())));
     }
-    Ok(Interval::new(lo, hi)?)
+    Ok(match hi {
+        Some(hi) => Some(Interval::new(lo, hi)?),
+        None => None,
+    })
 }
 
 /// The one-sided distance of block `a` (its inner stretches) from block `b` (its outer ones), held
@@ -234,27 +286,44 @@ fn one_side(
             .bound((lo, hi), meter)
             .map_err(IntersectError::from)?;
         let (centre, reach) = ball(bounds.lo, bounds.hi)?;
-        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
         // The distance of every point of the piece from the other block: at least the centre's
         // distance from the block less the radius, and at most that distance plus the radius. It
         // is read by the contact rule: above zero is apart, and at the finest refinement, holding
         // zero within `ε_fit` touches (the enclosure's upper end is then its largest size, since
-        // the lower is above minus the radius).
-        let floor = near.lo() - reach;
-        let ceiling = near.hi() + reach;
-        let enclosure = Interval::new(floor, ceiling)?;
-        let verdict = judge(enclosure);
-        if verdict == Verdict::Decided(Sign::Positive) {
-            return Ok(Side::Apart);
-        }
-        if depth >= REFINEMENTS && verdict == Verdict::Touch {
-            widest = Some(match widest {
-                Some(w) if w.hi() >= ceiling => w,
-                _ => enclosure,
-            });
-            continue;
-        }
+        // the lower is above minus the radius). A distance left undecided is neither: the piece is
+        // cut again with the finer floor, as an undecided enclosure is.
+        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
+        let enclosure = match near {
+            Some(near) => {
+                let enclosure = Interval::new(near.lo() - reach, near.hi() + reach)?;
+                let verdict = judge(enclosure);
+                if verdict == Verdict::Decided(Sign::Positive) {
+                    return Ok(Side::Apart);
+                }
+                if depth >= REFINEMENTS && verdict == Verdict::Touch {
+                    widest = Some(match widest {
+                        Some(w) if w.hi() >= enclosure.hi() => w,
+                        _ => enclosure,
+                    });
+                    continue;
+                }
+                Some(enclosure)
+            }
+            None => None,
+        };
         if depth >= DEEPEST {
+            // Still undecided at the deepest cut: the contact rule's refusal, with the finest
+            // enclosure reached. A distance the search left undecided has no upper end of its
+            // own; every point of the piece lies in its box and every point of the other block in
+            // that block's box, so the largest distance between the two boxes is one, and a
+            // distance is never below zero.
+            let enclosure = match enclosure {
+                Some(enclosure) => enclosure,
+                None => Interval::new(
+                    0.0,
+                    farthest(&(bounds.lo, bounds.hi), &box_of(far_side, meter)?)?,
+                )?,
+            };
             return Err(ContactError::NearContact(NearContact {
                 enclosure,
                 refinement: depth,

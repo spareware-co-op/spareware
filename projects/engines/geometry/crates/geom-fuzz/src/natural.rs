@@ -45,6 +45,7 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 use geom_test::{ByteSource, Entropy};
 
 use crate::Finding;
+use crate::seams::surface_box;
 
 /// The work a case may take: an edge of a surface against the other, and a stop there is an answer
 /// the laws accept.
@@ -293,14 +294,8 @@ fn points_are_meetings(
         }));
     };
     let mut work = meter();
-    let x = must(
-        a.bound(((u.lo(), u.hi()), (v.lo(), v.hi())), &mut work),
-        "a point's box is in the domain",
-    )?;
-    let y = must(
-        b.bound(((s.lo(), s.hi()), (t.lo(), t.hi())), &mut work),
-        "a point's box is in the domain",
-    )?;
+    let x = surface_box(a, (*u, *v), &mut work)?;
+    let y = surface_box(b, (*s, *t), &mut work)?;
     let gap = apart(&x, &y);
     if gap > SLACK {
         return Err(Finding::new("a point lies on both", || {

@@ -78,9 +78,11 @@ use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind, Tor
 
 use crate::closed::{self, Natural, Position};
 use crate::curve::{
-    enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
+    bound_on, enclosed_sum, exact_steps, grid_box, grid_point, held, sign_of, turn_of, whole,
 };
-use crate::curve_surface::{circle_lies_on, cross, curve_surface, dot, lift, minus, sides};
+use crate::curve_surface::{
+    circle_lies_on, cross, curve_surface, dot, lift, minus, seams_of, sides,
+};
 use crate::error::IntersectError;
 use crate::reduced;
 use crate::result::{
@@ -2046,7 +2048,8 @@ fn marks(
                 let [t, ..] = item.at().spans() else {
                     continue;
                 };
-                out.push(sides(&edge.bound((t.lo(), t.hi()), meter)?)?);
+                // On an edge circle a span across its join is read modulo the turn (32.104).
+                out.push(sides(&bound_on(&edge, *t, meter)?)?);
             }
         }
         out.extend(apex_ends(surface)?);
@@ -2509,7 +2512,14 @@ pub fn natural(
     let Some(items) = items_of(found, x, y, meter)? else {
         return Ok(None);
     };
-    let answer = Intersection::new(items, Coverage::TopologyCertified, Vec::new(), meter)?;
+    let ([u1, v1], [u2, v2]) = (seams_of(x), seams_of(y));
+    let answer = Intersection::on(
+        items,
+        Coverage::TopologyCertified,
+        Vec::new(),
+        &[u1, v1, u2, v2],
+        meter,
+    )?;
     Ok(Some(if turned { answer.swapped(2) } else { answer }))
 }
 

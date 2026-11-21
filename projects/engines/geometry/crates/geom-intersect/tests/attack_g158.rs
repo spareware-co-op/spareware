@@ -25,8 +25,8 @@ mod miri;
 use geom_curve::{CurveKind, Frame, Line};
 use geom_intersect::{
     CanonicalKey, Coincidence, Coverage, CurveContact, CurveEnd, Diag, Geom, IntersectError,
-    Intersection, Item, Operand, OverlapRegion, ParamBox, PointContact, StepsInterval, Unresolved,
-    pair, pairs, share,
+    Intersection, Item, Operand, OverlapRegion, ParamBox, PointContact, Seam, StepsInterval,
+    Unresolved, pair, pairs, share,
 };
 use geom_math::Box3;
 use geom_num::interval::Interval;
@@ -306,6 +306,133 @@ fn an_overlap_is_found_across_an_item_between() {
         item(&[(1.0, 2.0), (1.0, 2.0)]),
     ];
     assert_eq!(answer(touching), Err(IntersectError::Internal));
+}
+
+/// Decision 32.104: on a whole turn a box may run past the window's end, read modulo the turn, so
+/// two items of one kind that meet only there are refused once the answer knows the seams.
+#[test]
+fn enclosures_that_meet_modulo_a_whole_turn_meet() {
+    let item = |spans: &[(f64, f64)]| Item::Point {
+        at: at(spans),
+        xyz: space(),
+        contact: PointContact::Crossing,
+        class: Exactness::Exact,
+    };
+    let on = |items: Vec<Item>, seams: &[Seam]| {
+        Intersection::on(
+            items,
+            Coverage::CompleteOutsideFlagged,
+            Vec::new(),
+            seams,
+            &mut meter(),
+        )
+    };
+    let (turn, open) = (Seam::turns((0.0, 2.0)), Seam::open((0.0, 1.0)));
+    // Across the join of the first unknown: the sort puts the box at its start first.
+    let across = || {
+        vec![
+            item(&[(1.9, 2.1), (0.5, 0.6)]),
+            item(&[(0.0, 0.05), (0.55, 0.58)]),
+        ]
+    };
+    assert!(answer(across()).is_ok());
+    assert_eq!(on(across(), &[turn, open]), Err(IntersectError::Internal));
+    assert!(on(across(), &[]).is_ok());
+    assert!(on(across(), &[Seam::open((0.0, 2.0)), open]).is_ok());
+    // Apart in the second unknown, or past the far box's end less the turn, they stand apart.
+    let apart = vec![
+        item(&[(1.9, 2.1), (0.5, 0.6)]),
+        item(&[(0.0, 0.05), (0.7, 0.8)]),
+    ];
+    assert!(on(apart, &[turn, open]).is_ok());
+    let beyond = vec![
+        item(&[(1.9, 2.1), (0.5, 0.6)]),
+        item(&[(0.125, 0.25), (0.55, 0.58)]),
+    ];
+    assert!(on(beyond, &[turn, open]).is_ok());
+    // A box ending on the join meets one starting on it: the join's two names are one point.
+    let on_join = || {
+        vec![
+            item(&[(1.5, 2.0), (0.5, 0.6)]),
+            item(&[(0.0, 0.1), (0.55, 0.58)]),
+        ]
+    };
+    assert_eq!(on(on_join(), &[turn, open]), Err(IntersectError::Internal));
+    // Across the join of the second unknown, met by the sweep itself.
+    let second = vec![
+        item(&[(0.2, 0.3), (1.9, 2.1)]),
+        item(&[(0.25, 0.26), (0.0, 0.05)]),
+    ];
+    assert_eq!(on(second, &[open, turn]), Err(IntersectError::Internal));
+    // Only boxes of one kind must stand apart.
+    let kinds = vec![
+        item(&[(1.9, 2.1), (0.5, 0.6)]),
+        Item::Flagged {
+            at: at(&[(0.0, 0.05), (0.55, 0.58)]),
+            xyz: space(),
+            why: Unresolved::HigherOrderContact,
+        },
+    ];
+    assert!(on(kinds, &[turn, open]).is_ok());
+}
+
+#[test]
+fn a_box_across_the_join_is_compared_with_the_boxes_it_reaches_only() {
+    // Three disjoint boxes on (0, 2), the last across the join: it is compared with the first,
+    // which starts by its end less the turn, and not with the second.
+    let item = |spans: &[(f64, f64)]| Item::Point {
+        at: at(spans),
+        xyz: space(),
+        contact: PointContact::Crossing,
+        class: Exactness::Exact,
+    };
+    let items = vec![
+        item(&[(0.0, 0.05), (0.7, 0.8)]),
+        item(&[(1.0, 1.1), (0.5, 0.6)]),
+        item(&[(1.9, 2.1), (0.5, 0.6)]),
+    ];
+    let mut m = meter();
+    let seams = [Seam::turns((0.0, 2.0)), Seam::open((0.0, 1.0))];
+    Intersection::on(
+        items.clone(),
+        Coverage::CompleteOutsideFlagged,
+        Vec::new(),
+        &seams,
+        &mut m,
+    )
+    .unwrap();
+    assert_eq!(m.used().work, 3 + 1);
+    let mut m = meter();
+    Intersection::new(items, Coverage::CompleteOutsideFlagged, Vec::new(), &mut m).unwrap();
+    assert_eq!(m.used().work, 3);
+}
+
+#[test]
+fn a_box_reaching_an_open_domain_s_end_goes_no_further() {
+    // The same three boxes on an open (0, 2), the last ending on the end: an end is no join, so it
+    // is compared with no earlier box, and the work is one charge an item.
+    let item = |spans: &[(f64, f64)]| Item::Point {
+        at: at(spans),
+        xyz: space(),
+        contact: PointContact::Crossing,
+        class: Exactness::Exact,
+    };
+    let items = vec![
+        item(&[(0.0, 0.05), (0.7, 0.8)]),
+        item(&[(1.0, 1.1), (0.5, 0.6)]),
+        item(&[(1.9, 2.0), (0.5, 0.6)]),
+    ];
+    let mut m = meter();
+    let seams = [Seam::open((0.0, 2.0)), Seam::open((0.0, 1.0))];
+    Intersection::on(
+        items,
+        Coverage::CompleteOutsideFlagged,
+        Vec::new(),
+        &seams,
+        &mut m,
+    )
+    .unwrap();
+    assert_eq!(m.used().work, 3);
 }
 
 #[test]

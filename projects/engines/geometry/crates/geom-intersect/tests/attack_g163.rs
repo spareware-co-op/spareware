@@ -19,13 +19,14 @@
 mod miri;
 
 use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parabola, ParamCurve};
-use geom_intersect::IntersectError;
 use geom_intersect::curve::{curves, curves_over, self_crossings};
 use geom_intersect::result::{Coincidence, Coverage, Intersection, Item, PointContact, Unresolved};
 use geom_intersect::solve::{Field, solve};
+use geom_intersect::{IntersectError, Seam};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
+use geom_surface::{Cylinder, Plane, SurfaceKind, Torus};
 use geom_test::{Seed, SplitMix64};
 use miri::{case, rounds};
 
@@ -221,7 +222,7 @@ fn two_circles_cross_touch_or_miss() {
     assert_eq!(meet(&a, &circle([6.0, 0.0], 5.0)).items().len(), 2);
     let r = meet(&a, &circle([10.0, 0.0], 5.0));
     assert_eq!(contacts(&r), [PointContact::IsolatedTangent]);
-    near(points(&r)[0].0, 0.0);
+    near(points(&r)[0].0, 2.0);
     near(points(&r)[0].1, 1.0);
     let r = meet(&a, &circle([3.0, 0.0], 2.0));
     assert_eq!(contacts(&r), [PointContact::IsolatedTangent]);
@@ -506,6 +507,57 @@ fn a_line_meets_a_circle() {
     );
 }
 
+/// Whether a point of `found` has a circle's span (its second) holding all of `p..=q`, modulo the
+/// turn (decision 32.104: on a whole turn a span may run past the window's end). A span from 2 up
+/// to 4 less a turn is exact, so the shifted span is the same span.
+fn held_over(found: &Intersection, p: f64, q: f64) -> bool {
+    found.items().iter().any(|i| {
+        let t = i.at().spans()[1];
+        let holds = |lo: f64, hi: f64| lo <= p && hi >= q;
+        let shifted = t.lo() >= 2.0 && t.hi() < 4.0 && holds(t.lo() - 2.0, t.hi() - 2.0);
+        matches!(i, Item::Point { .. }) && (holds(t.lo(), t.hi()) || shifted)
+    })
+}
+
+#[test]
+fn a_crossing_a_rounding_from_the_join_is_held_at_its_own_turn() {
+    // The line x = 1 on the circle of radius r about the origin, written over the turn (1/4, 9/4):
+    // it crosses at (1, ±y) with y² = r² − 1, at turns ±τ where τ = atan(y)/π, so on the domain at
+    // 2 + τ (or τ once it passes 1/4) and 2 − τ. For r a rounding either side of √2, τ is 1/4 less
+    // or more by under |r² − 2|/(3π) (atan's slope near 1 is under 0.51 and |1 − y| under
+    // |r² − 2|/1.99), which is under 2^-54, the doubles' step above 1/4 and the least step here:
+    // so each crossing lies strictly between two neighbouring doubles, and a span holds it only if
+    // it holds both. The crossing near 1/4 has its turn read as a box across 1/4, which meets the
+    // domain there and a whole turn on, at 9/4.
+    let pi = core::f64::consts::PI;
+    for r in [
+        core::f64::consts::SQRT_2.next_down(),
+        core::f64::consts::SQRT_2,
+    ] {
+        // r·r − 2 rounded once: its sign is exact.
+        let error = r.mul_add(r, -2.0);
+        assert!(error != 0.0 && error.abs() / (3.0 * pi) < f64::EPSILON / 4.0);
+        let found = meet(
+            &infinite([1.0, 0.0], [0.0, 1.0]),
+            &arc([0.0, 0.0], r, (0.25, 2.25)),
+        );
+        let between = if error < 0.0 {
+            // τ under 1/4: at 2 + τ, just short of 9/4, and 2 − τ, just past 7/4.
+            [(2.25_f64.next_down(), 2.25), (1.75, 1.75_f64.next_up())]
+        } else {
+            // τ over 1/4: just past the domain's start, and 2 − τ just short of 7/4.
+            [(0.25, 0.25_f64.next_up()), (1.75_f64.next_down(), 1.75)]
+        };
+        for (p, q) in between {
+            assert!(
+                held_over(&found, p, q),
+                "r {r}: ({p}, {q}) in {:?}",
+                found.items()
+            );
+        }
+    }
+}
+
 #[test]
 fn a_swapped_pair_gives_the_same_points_swapped() {
     let a = circle([0.0, 0.0], 5.0);
@@ -576,7 +628,7 @@ fn a_rotated_circle_is_met_on_its_own_turns() {
     let a = CurveKind::Circle(Circle::full([0.0, 0.0], 5.0, frame).unwrap());
     let p = points(&meet(&segment([0.0, 0.0], [0.0, 9.0]), &a));
     assert_eq!(p.len(), 1);
-    near(p[0].1, 0.0);
+    near(p[0].1, 2.0);
     let frame = Frame::new([1.0, 0.0], [0.0, 0.0, -1.0]).unwrap();
     let a = CurveKind::Circle(Circle::full([0.0, 0.0], 5.0, frame).unwrap());
     let p = points(&meet(&segment([0.0, 0.0], [0.0, 9.0]), &a));
@@ -603,6 +655,31 @@ fn a_cubic_pair_meets_nine_times() {
     let r = meet(&a, &b);
     let n = r.items().len();
     assert_eq!(n, 9, "{:?}", r.items());
+}
+
+#[test]
+fn a_line_through_a_loop_s_double_point_crosses_both_its_branches_there() {
+    // The cubic's loop crosses itself at (0.5, 0.375), at 1/2 - √3/4 and 1/2 + √3/4, and tops out
+    // at (0.5, 1.5) at 1/2; the line x = 0.5 passes through both. The two crossings at the double
+    // point share the line's parameter and are two points: a zero is known only if it meets one
+    // found before in both parameters.
+    let looped = bezier(&[[0.0, 0.0], [3.0, 2.0], [-2.0, 2.0], [1.0, 0.0]]);
+    let line = bezier(&[[0.5, -1.0], [0.5, 2.0]]);
+    let r = meet(&line, &looped);
+    assert_eq!(points(&r).len(), 3, "{:?}", r.items());
+    // Each crossing is held by one point's box: the line's parameter is (y + 1) / 3.
+    let w = 3.0_f64.sqrt() / 4.0;
+    for (s, t) in [
+        (1.375 / 3.0, 0.5 - w),
+        (1.375 / 3.0, 0.5 + w),
+        (2.5 / 3.0, 0.5),
+    ] {
+        let holding = r.items().iter().filter(|i| {
+            let x = i.at().spans();
+            x[0].contains(s) && x[1].contains(t)
+        });
+        assert_eq!(holding.count(), 1, "({s}, {t}) in {:?}", r.items());
+    }
 }
 
 #[test]
@@ -1437,7 +1514,7 @@ fn a_closed_curve_s_join_is_no_boundary_and_an_open_end_is() {
     let other = circle([5.0, 5.0], 5.0);
     touches_are(
         &touches(&meet(&circle([0.0, 0.0], 5.0), &other)),
-        &[(Crossing, 0.0), (Crossing, 0.5)],
+        &[(Crossing, 0.5), (Crossing, 2.0)],
     );
     touches_are(
         &touches(&meet(&arc([0.0, 0.0], 5.0, (0.0, 1.0)), &other)),
@@ -1724,13 +1801,13 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
     let west = bezier(&[[0.0, 0.0], [-5000.0, 0.0], [-10000.0, 0.0]]);
     let slant = bezier(&[[-6000.0, -1000.0], [-5000.0, 0.0], [-4000.0, 1000.0]]);
     for (a, b, s, t) in [
-        (turn(0.0), east.clone(), 0.0, 0.5),
+        (turn(0.0), east.clone(), 2.0, 0.5),
         (turn(0.0), west.clone(), 1.0, 0.5),
-        (turn(1.0), west.clone(), 1.0, 0.5),
+        (turn(1.0), west.clone(), 3.0, 0.5),
         (turn(1.0), east.clone(), 2.0, 0.5),
-        (turn(1.0), slant.clone(), 1.0, 0.5),
-        (east.clone(), turn(0.0), 0.5, 0.0),
-        (west.clone(), turn(1.0), 0.5, 1.0),
+        (turn(1.0), slant.clone(), 3.0, 0.5),
+        (east.clone(), turn(0.0), 0.5, 2.0),
+        (west.clone(), turn(1.0), 0.5, 3.0),
     ] {
         let r = meet(&a, &b);
         assert!(
@@ -1847,7 +1924,35 @@ fn a_whole_circle_s_search_takes_only_its_work() {
         work(&bezier(&[[4000.0, near], [5000.0, near], [6000.0, near]])),
         work(&bezier(&[[0.0, 0.0], [5000.0, 0.0], [10000.0, 0.0]])),
     ];
-    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1313)]);
+    assert_eq!(got, [(2, 707_831), (1, 1263), (1, 1263), (1, 1315)]);
+}
+
+#[test]
+fn the_engine_holds_a_crossing_a_hair_before_the_join_across_it() {
+    // A whole circle of radius 5000 over (0, 2) and the straight quadratic y = -h cross at the turn
+    // 2 - d, d = asin(h/5000)/π, within a part in 10^12 of h/(5000π): a few hundred steps of the
+    // doubles below 2 or more. The engine's zero box there lies across the join, and decision
+    // 32.104 keeps it whole from the window's side; held to the join's near side, [0, ε], it would
+    // miss the crossing.
+    let turn = CurveKind::Circle(
+        Circle::new([0.0, 0.0], 5000.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap(),
+    );
+    let pi = core::f64::consts::PI;
+    let mut across = Vec::new();
+    for h in [1e-7, 1e-8, 1e-9, 1e-10] {
+        let r = meet(&turn, &bezier(&[[4000.0, -h], [5000.0, -h], [6000.0, -h]]));
+        let [Item::Point { at, .. }] = r.items() else {
+            panic!("h {h}: {:?}", r.items());
+        };
+        let s = at.spans()[0];
+        let d = h / (5000.0 * pi);
+        assert!(
+            s.lo() <= 2.0 - 1.01 * d && 2.0 - 0.99 * d <= s.hi() && s.hi() - s.lo() < 1e-6,
+            "h {h}: {s:?}"
+        );
+        across.push((h, s, s.hi() > 2.0));
+    }
+    assert!(across.iter().any(|(.., over)| *over), "{across:?}");
 }
 
 #[test]
@@ -2196,6 +2301,193 @@ fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
     );
 }
 
+fn span_of(lo: f64, hi: f64) -> Interval {
+    Interval::new(lo, hi).unwrap()
+}
+
+#[test]
+fn a_seam_says_two_spans_meet_modulo_a_whole_turn() {
+    // Decision 32.104: on a whole turn a span starts in the window and may run past its end.
+    let turn = Seam::turns((0.0, 2.0));
+    let open = Seam::open((0.0, 2.0));
+    let across = span_of(1.9, 2.1);
+    let cases = [
+        (across, span_of(0.0, 0.05), true, false),
+        (across, span_of(0.2, 0.3), false, false),
+        // The join's two names are one point.
+        (span_of(1.5, 2.0), span_of(0.0, 0.1), true, false),
+        (span_of(0.5, 1.0), span_of(0.9, 1.2), true, true),
+        (span_of(0.5, 1.0), span_of(1.1, 1.2), false, false),
+    ];
+    for (a, b, on_turn, on_open) in cases {
+        assert_eq!(turn.meets(a, b).unwrap(), on_turn, "{a:?} {b:?} on a turn");
+        assert_eq!(turn.meets(b, a).unwrap(), on_turn, "{b:?} {a:?} on a turn");
+        assert_eq!(open.meets(a, b).unwrap(), on_open, "{a:?} {b:?} open");
+    }
+    // Short of a whole turn the domain is open, whatever its spans.
+    let arc = Seam::turns((0.0, 1.5));
+    assert!(!arc.closed());
+    assert!(!arc.meets(span_of(1.4, 1.5), span_of(0.0, 0.1)).unwrap());
+    assert!(turn.closed());
+    assert!(!open.closed());
+    assert_eq!(turn.domain(), (0.0, 2.0));
+}
+
+#[test]
+fn a_seam_joins_two_spans_across_a_whole_turn_s_join() {
+    let turn = Seam::turns((0.0, 2.0));
+    // The second moved by the turn that meets the first, enclosed, and the join written past the
+    // end.
+    let moved = span_of(0.0, 0.1)
+        .add(Interval::point(2.0).unwrap())
+        .unwrap();
+    let joined = turn.hull(span_of(1.9, 2.05), span_of(0.0, 0.1)).unwrap();
+    assert_eq!((joined.lo(), joined.hi()), (1.9, moved.hi()));
+    assert!(joined.hi() >= 2.1);
+    // The other way round the join starts in the window too, and holds both, tight.
+    let joined = turn.hull(span_of(0.0, 0.1), span_of(1.9, 2.05)).unwrap();
+    assert!(joined.lo() <= 1.9 && joined.lo() > 1.89, "{joined:?}");
+    assert!(joined.hi() >= 2.1 && joined.hi() < 2.11, "{joined:?}");
+    // A join a turn wide or more is the whole turn.
+    let whole = turn.hull(span_of(0.0, 1.5), span_of(1.4, 2.6)).unwrap();
+    assert_eq!((whole.lo(), whole.hi()), (0.0, 2.0));
+    // An open domain joins as the plain hull.
+    let open = Seam::open((0.0, 2.0));
+    let plain = open.hull(span_of(0.5, 1.0), span_of(1.5, 1.8)).unwrap();
+    assert_eq!((plain.lo(), plain.hi()), (0.5, 1.8));
+}
+
+#[test]
+fn a_seam_keeps_a_span_that_starts_in_the_window_and_writes_one_a_turn_outside_as_the_turn() {
+    // Decision 32.104: a span is written from a start in the window, and a span it cannot so
+    // write is the whole turn. Each pair below meets, so the hull is their plain join.
+    let turn = Seam::turns((0.0, 2.0));
+    let ends = |a: f64, b: f64, c: f64| {
+        let s = turn.hull(span_of(a, b), span_of(b, c)).unwrap();
+        (s.lo(), s.hi())
+    };
+    // A span from the window's start starts in the window, not a turn before it.
+    assert_eq!(ends(0.0, 0.25, 0.5), (0.0, 0.5));
+    // A short span is no turn wide, however far its ends are apart as a ratio.
+    assert_eq!(ends(0.25, 0.5, 0.75), (0.25, 0.75));
+    // A span more than a turn before the window or past its end still lies outside it once
+    // moved by a turn: it is written as the whole turn.
+    assert_eq!(ends(-2.5, -2.45, -2.4), (0.0, 2.0));
+    assert_eq!(ends(4.5, 4.55, 4.6), (0.0, 2.0));
+}
+
+#[test]
+fn a_span_moved_by_a_turn_onto_the_window_s_end_is_kept_there() {
+    // The window holds both its ends, the join's two names: a span that starts exactly on the end
+    // once moved back by the turn is written from there, not as the whole turn. Away from 0 the
+    // moved start can land on the end exactly, 104 and 102 sharing a step.
+    let turn = Seam::turns((100.0, 102.0));
+    let span = span_of(104.0_f64.next_up(), 104.5);
+    let kept = turn.hull(span, span).unwrap();
+    assert_eq!(kept.lo(), 102.0);
+    assert!(kept.hi() > 102.5 && kept.hi() < 103.0, "{kept:?}");
+}
+
+#[test]
+fn an_open_seam_joins_spans_at_its_two_ends_across_the_domain_never_round_it() {
+    // An open domain's ends are no join: spans at its two ends are not moved to meet.
+    let open = Seam::open((0.0, 2.0));
+    let joined = open.hull(span_of(0.0, 0.5), span_of(1.5, 2.0)).unwrap();
+    assert_eq!((joined.lo(), joined.hi()), (0.0, 2.0));
+}
+
+#[test]
+fn a_seam_wraps_a_value_into_its_window() {
+    let turn = Seam::turns((0.0, 2.0));
+    assert_eq!(turn.wrapped(2.25), 0.25);
+    assert_eq!(turn.wrapped(-0.5), 1.5);
+    assert_eq!(turn.wrapped(1.0), 1.0);
+    assert_eq!(turn.wrapped(2.0), 2.0);
+    let shifted = Seam::turns((1.0, 3.0));
+    assert_eq!(shifted.wrapped(3.5), 1.5);
+    assert_eq!(shifted.wrapped(0.5), 2.5);
+    assert_eq!(Seam::open((0.0, 2.0)).wrapped(2.25), 2.25);
+}
+
+#[test]
+fn a_seam_cuts_a_span_at_the_join_into_stretches_of_the_domain() {
+    let turn = Seam::turns((0.0, 2.0));
+    // 2.1 − 2 is exact (Sterbenz), so the far stretch's end is the double the span's end names.
+    assert_eq!(
+        turn.spans(span_of(1.9, 2.1)),
+        [Some((1.9, 2.0)), Some((0.0, 2.1 - 2.0))]
+    );
+    assert_eq!(turn.spans(span_of(0.5, 0.7)), [Some((0.5, 0.7)), None]);
+    assert_eq!(turn.spans(span_of(1.5, 2.0)), [Some((1.5, 2.0)), None]);
+    assert_eq!(turn.spans(span_of(0.0, 2.0)), [Some((0.0, 2.0)), None]);
+    // A point on the join has no length to cut: it is the join.
+    assert_eq!(turn.spans(span_of(2.0, 2.0)), [Some((2.0, 2.0)), None]);
+    // A kind refuses the span past its end, and takes each stretch, which lies in the domain.
+    let circle = arc([0.0, 0.0], 1.0, (0.0, 2.0));
+    let mut meter = meter();
+    assert!(geom_curve::ParamCurve::bound(&circle, (1.9, 2.1), &mut meter).is_err());
+    for part in turn.spans(span_of(1.9, 2.1)).into_iter().flatten() {
+        assert!(geom_curve::ParamCurve::bound(&circle, part, &mut meter).is_ok());
+    }
+    let open = Seam::open((0.0, 2.0));
+    assert_eq!(open.spans(span_of(1.9, 2.1)), [Some((1.9, 2.1)), None]);
+}
+
+#[test]
+fn a_seam_is_read_from_the_operand_the_answer_was_written_on() {
+    let frame = Frame::standard().unwrap();
+    let whole = arc([0.0, 0.0], 1.0, (0.0, 2.0));
+    let part = arc([0.0, 0.0], 1.0, (0.0, 1.0));
+    assert!(Seam::of_curve(&whole).closed());
+    assert!(Seam::of_curve(&ellipse([0.0, 0.0], 2.0, 1.0)).closed());
+    assert!(!Seam::of_curve(&part).closed());
+    assert!(!Seam::of_curve(&segment([0.0, 0.0], [1.0, 1.0])).closed());
+    assert_eq!(Seam::of_curve(&whole).domain(), (0.0, 2.0));
+    let cylinder = SurfaceKind::Cylinder(
+        Cylinder::new([0.0; 3], 1.0, frame, ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
+    );
+    let torus = SurfaceKind::Torus(
+        Torus::new([0.0; 3], 3.0, 1.0, frame, ((0.0, 2.0), (0.0, 2.0))).unwrap(),
+    );
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    let closed = |s: &SurfaceKind| Seam::of_surface(s).map(Seam::closed);
+    assert_eq!(closed(&cylinder), [true, false]);
+    assert_eq!(closed(&torus), [true, true]);
+    assert_eq!(closed(&plane), [false, false]);
+}
+
+/// A domain whose length only rounds to a whole turn is an arc short of one, not a closed turn:
+/// from −1.25 + 2⁻⁵² to 0.75 + 2⁻⁵³ is 2 − 2⁻⁵³ half-turns, which a circle takes as an arc of at
+/// most one turn, and a turn on from its start lands a double's step past its end. A domain of
+/// exactly two half-turns is closed wherever it starts.
+#[test]
+fn a_domain_that_only_rounds_to_a_turn_is_not_closed() {
+    let short = (-1.25 + two_to(-52), 0.75 + two_to(-53));
+    assert_eq!(short.1 - short.0, 2.0);
+    assert!(!Seam::turns(short).closed());
+    assert!(!Seam::of_curve(&arc([0.0, 0.0], 1.0, short)).closed());
+    for whole in [
+        (0.0, 2.0),
+        (1.0, 3.0),
+        (-3.0, -1.0),
+        (-1.25 + two_to(-52), 0.75 + two_to(-52)),
+    ] {
+        assert!(Seam::turns(whole).closed(), "{whole:?}");
+        assert!(
+            Seam::of_curve(&arc([0.0, 0.0], 1.0, whole)).closed(),
+            "{whole:?}"
+        );
+    }
+}
+
 /// A box about an item's enclosure, a hundredth wider at each end but inside the two domains.
 fn about<const D: usize>(item: &Item, a: &CurveKind<D>, b: &CurveKind<D>) -> [(f64, f64); 2] {
     let [s, t, ..] = item.at().spans() else {
@@ -2257,10 +2549,10 @@ fn the_engine_answers_a_box_in_the_plane_a_pair_shares() {
     let half = curves_over(&ring, (0.5, 1.5), &across, across.domain(), &mut meter()).unwrap();
     assert_eq!(crossings(&half), 1);
     let whole = meet(&ring, &across);
-    let inner = whole
-        .items()
-        .iter()
-        .filter(|i| i.at().spans()[0].lo() > 0.5);
+    let inner = whole.items().iter().filter(|i| {
+        let s = i.at().spans()[0];
+        s.lo() > 0.5 && s.hi() < 1.5
+    });
     for item in inner {
         let [s, t] = about(item, &ring, &across);
         let over = curves_over(&ring, s, &across, t, &mut meter()).unwrap();
