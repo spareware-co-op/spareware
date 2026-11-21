@@ -42,11 +42,11 @@ use geom_fuzz::orient2d::{
     Case, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference,
 };
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract,
-    crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg,
-    make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing,
-    planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence,
-    solids, surface_offsets, surfaces, transforms, variants, wide,
+    Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, commits,
+    contract, crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level,
+    linalg, make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils,
+    piercing, planes, predicates, project, prune, quadric, records, reductions, references, roots,
+    sequence, solids, surface_offsets, surfaces, transforms, variants, wide,
 };
 
 use geom_num::Sign;
@@ -59,7 +59,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 48] = [
+const TARGETS: [(&str, Harness); 49] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -69,6 +69,7 @@ const TARGETS: [(&str, Harness); 48] = [
     ("cache", cache::harness),
     ("cbor", cbor::harness),
     ("cdt", cdt::harness),
+    ("commits", commits::harness),
     ("contract", contract::harness),
     ("curve_offsets", curve_offsets::harness),
     ("curves", curves::harness),

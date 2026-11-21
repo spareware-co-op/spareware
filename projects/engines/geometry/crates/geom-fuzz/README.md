@@ -77,13 +77,17 @@ to one plane and one order to any points, rays or flaps; `exact` (`src/exact.rs`
 (`src/cdt.rs`, G153), the triangulation is a true constrained Delaunay triangulation and one answer
 in any input order; `solids` (`src/solids.rs`, G147 to G152, and through the mesh boolean
 G126 to G129's arrangement code), `geom-mesh`'s operations on small solids agree with counted
-cells; and `booleans` (`src/booleans.rs`, G130 to G133, G137 to G139 and G144, with G129's
+cells; `booleans` (`src/booleans.rs`, G130 to G133, G137 to G139 and G144, with G129's
 `rebuild.rs`), `geom-bool`'s boolean pipeline on small solids agrees with counted cells: every
 selection of one arrangement, a half-space and a wire kept inside the boxes, rooms and their
 leaks, batch cuts and a re-cut from the last cut's cache, and a local step on its full and fast
-paths, every result passing the full checker and the second checker, which agree. `make` and
-`sequence` reach G134's checker groups. Which lines of each piece they reach, and the pieces no
-target reaches yet (G142, G143 and G145, which the boolean pipeline does not call), are in
+paths, every result passing the full checker and the second checker, which agree; and `commits`
+(`src/commits.rs`, G142), `geom-poly`'s plane commit holds its edge exactly, stays in budget,
+proves a deviation that the exact distance at no corner of its extent beats (decided in big
+integers), maps a class exactly under the grid's 48 signed permutations, refuses a flip exactly
+when the ideal sign is certain and differs, and refuses NaN, infinite and degenerate input by
+type. `make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and
+the pieces no target reaches yet (G143 and G145, which the boolean pipeline does not call), are in
 `projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.

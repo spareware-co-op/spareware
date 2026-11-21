@@ -64,7 +64,10 @@
 //! input order, and [`solids`] (G147 to G152), `geom-mesh`'s operations on small solids agree with
 //! counted cells, and [`booleans`] (G130 to G133, G137 to G139 and G144, with G129's rebuild),
 //! `geom-bool`'s boolean pipeline on small solids agrees with counted cells, every result passing
-//! both checkers. For the Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! both checkers, and [`commits`] (G142), `geom-poly`'s plane commit holds its edge exactly, stays
+//! in budget, proves a deviation no corner beats in exact integers, maps a class exactly under the
+//! grid's symmetries and refuses a flip exactly when the ideal sign is certain and differs. For the
+//! Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -242,6 +245,7 @@ pub mod boxtree;
 pub mod cache;
 pub mod cbor;
 pub mod cdt;
+pub mod commits;
 pub mod contract;
 pub mod curve_offsets;
 pub mod curves;

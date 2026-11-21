@@ -10,8 +10,8 @@
 # the larger.
 # `test certificates_workflow` came after those pushes: its seconds are the same job's on the head
 # of the pull request that added it (run 44086231115).
-# `test solidcore_job` is not measured yet: it carries the slowest listed time, as the rule above
-# plans an unlisted unit, until the wasm job has run on it.
+# `test solidcore_job`, and geom-fuzz's `test commits`, are not measured yet: each carries the
+# slowest listed time, as the rule above plans an unlisted unit, until the wasm job has run on it.
 # The sixteen units that came with Phase 5 (geom-fuzz's `test crossings`, `general`, `intersect`,
 # `level`, `natural`, `pencils`, `piercing`, `project`, `quadric` and `reductions`; geom-test's
 # `bin ssi`, `bin ssi-runner`, `test laws_intersections`, `test ssi`, `test ssi_tool` and
@@ -32,6 +32,7 @@ geom-fuzz test boxtree	4
 geom-fuzz test cache	5
 geom-fuzz test cbor	3
 geom-fuzz test cdt	1
+geom-fuzz test commits	350
 geom-fuzz test contract	9
 geom-fuzz test crossings	3
 geom-fuzz test curve_offsets	25
