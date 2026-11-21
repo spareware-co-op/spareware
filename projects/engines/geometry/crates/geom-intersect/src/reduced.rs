@@ -429,29 +429,27 @@ fn on_arc(
             return Ok(Some(found));
         }
     }
-    let other = if touching {
-        None
+    // An end on the line is a meeting; it is this one where the other meeting's turn, read as this
+    // one's, misses it: no move of it by whole turns meets the end, the arc (s, s).
+    let clear = if touching {
+        [true, true]
     } else {
-        Some(meeting(-which)?)
+        let other = meeting(-which)?;
+        let turn = turn_of(dot2(other, x)?, dot2(other, y)?)?;
+        [
+            matches!(moved(turn, (lo, lo))?, Arc::Off),
+            matches!(moved(turn, (hi, hi))?, Arc::Off),
+        ]
     };
-    for (s, reached) in [(lo, start), (hi, end)] {
+    for ((s, reached), apart) in [(lo, start), (hi, end)].into_iter().zip(clear) {
         let (Some(cos), Some(sin)) = (
             crate::seam::exact_cospi(s),
             crate::seam::exact_cospi(s - 0.5),
         ) else {
             continue;
         };
-        if reached && end_on_line(sources, e, (cos, sin)) {
-            // The end is a meeting; it is this one where it stands off the other. x and y are x̂
-            // and ŷ times |y|.
-            let size = tight::sqrt(square2(y)?)?;
-            let [p, q] = blend(
-                (tight::div(tight::point(cos * r)?, size)?, x),
-                (tight::div(tight::point(sin * r)?, size)?, y),
-            )?;
-            if other.is_none_or(|[u, v]| !same_place((p, q), (u, v))) {
-                return Ok(Some(true));
-            }
+        if reached && end_on_line(sources, e, (cos, sin)) && apart {
+            return Ok(Some(true));
         }
     }
     Ok(None)

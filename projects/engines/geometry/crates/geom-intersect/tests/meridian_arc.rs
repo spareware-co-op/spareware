@@ -17,7 +17,7 @@
     reason = "test code: a failure should stop loudly"
 )]
 
-use geom_curve::{Basis, Circle, CurveKind, Frame, ParamCurve, Trimmed};
+use geom_curve::{Basis, Circle, CurveKind, Frame, Line, ParamCurve, Trimmed};
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{Intersection, Item};
 use geom_run::{Budget, WorkMeter};
@@ -196,10 +196,28 @@ fn an_arc_in_a_half_plane_off_the_frames_axes_is_touched_by_its_proof() {
 }
 
 #[test]
+fn a_touch_whose_image_meets_twice_is_left_to_the_general_paths() {
+    // The arc from the top of the tube of radius 1 about (513, 420, 0), through its outside at
+    // turn 1/2, to its bottom: ρ = 664 touches it there, as the centre's ρ is 663 exactly. Its
+    // image in the half-plane is rounded and meets the line twice, which the true chord, exactly
+    // zero, does not: the meetings are not told apart as the image's are, so the pair is the
+    // general paths'.
+    let frame = Frame::new([0.0, 0.0, 1.0], [-420.0, 513.0, 0.0]).unwrap();
+    let arc = Circle::new([513.0, 420.0, 0.0], 1.0, frame, (0.0, 1.0)).unwrap();
+    let half = revolution(CurveKind::Circle(arc));
+    assert!(
+        natural(&cylinder(664.0), &half, &mut meter())
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 fn a_ring_no_enclosure_tells_from_the_arcs_end_is_left_to_the_general_paths() {
     // The arc up to the turn 1/3 (as a double, a hair under it): z = 0.8660254037844386, the double
-    // under √3/2, meets it 1.3e−17 half-turns inside its end, which no enclosure of the turn tells
-    // and no exact sign reaches (the end is no multiple of a half-turn), so the pair is the
+    // under √3/2, meets it 1.3e−17 half-turns inside its end. No enclosure of the turn tells that,
+    // the proven sign of sin π(t − s) at the end is enclosed in [−1.3e−15, 9.4e−16], which holds
+    // zero, and no exact sign reaches the end (no multiple of a half-turn), so the pair is the
     // general paths'. Away from the end the arc decides: z = 1/2 keeps ρ = 5 + √3/2 alone, and
     // z = 0.9 meets it nowhere.
     let third = revolution(tube(upper(), (0.0, 1.0 / 3.0)));
@@ -208,6 +226,18 @@ fn a_ring_no_enclosure_tells_from_the_arcs_end_is_left_to_the_general_paths() {
     let z = 0.75_f64.sqrt();
     assert_rings(&level(0.5), &third, &[(5.0 + z, 0.5)]);
     assert_rings(&level(0.9), &third, &[]);
+}
+
+#[test]
+fn a_crossing_off_a_profile_segments_span_is_dropped_before_the_arc_is_asked() {
+    // The segment from ρ = 1/2 to ρ = 1 at that same height, swept about the axis, is a flat ring
+    // inside the tube's hole: its line crosses the circle where the arc's end is left to the
+    // general paths (above), but off the segment's own span, so the crossing is dropped before
+    // the arc is asked, and the pair meets nowhere.
+    let third = revolution(tube(upper(), (0.0, 1.0 / 3.0)));
+    let z = 0.866_025_403_784_438_6;
+    let flat = Line::segment([0.5, 0.0, z], [1.0, 0.0, z]).unwrap().value;
+    assert_rings(&revolution(CurveKind::Line(flat)), &third, &[]);
 }
 
 #[test]
@@ -229,4 +259,11 @@ fn a_ring_a_hair_from_an_arcs_end_is_placed_by_the_proven_sign_of_its_offset() {
     let z = 0.866_025_403_784_438;
     assert_rings(&level(z), &arc, &[(rho(z), z)]);
     assert_rings(&level(0.866_025_403_784_441_2), &arc, &[]);
+    // The arc from 8 + 1/6 to 8 + 5/6, whose ends stand 2/3 of a half-turn apart, so each meeting
+    // is told from its own end alone: sin π(hi − 8) = sin π(lo − 8), and z = 0.5000000000000012
+    // meets it 1.0e−15 half-turns inside both ends, z = 0.49999999999999617 8.2e−16 outside both.
+    let long = revolution(tube(upper(), (8.0 + 1.0 / 6.0, 8.0 + 5.0 / 6.0)));
+    let z = 0.500_000_000_000_001_2;
+    assert_rings(&level(z), &long, &[(10.0 - rho(z), z), (rho(z), z)]);
+    assert_rings(&level(0.499_999_999_999_996_17), &long, &[]);
 }
