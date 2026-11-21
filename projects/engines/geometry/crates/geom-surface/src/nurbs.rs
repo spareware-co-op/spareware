@@ -368,6 +368,43 @@ fn box_partials(
     }
 }
 
+/// A box holding the partial in `dir` at every point of `region`, a box meeting the patch's
+/// domain: the bound of the patch cut down to the box, its partial form scaled by its degree over
+/// the box's width. Over a box so narrow that the scale takes it past the doubles, the partial form
+/// of the whole patch cut down to the same box instead, as in [`box_partials`]: that scale is the
+/// degree over the patch's own width. Both hold the partial over the box.
+///
+/// # Errors
+///
+/// As [`BernsteinPatch::derivative_bound`] and [`patch_partials`].
+fn box_derivative_bound(
+    patch: &BernsteinPatch<3>,
+    region: ParamBox,
+    dir: Direction,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Bounds<3>, CurveError> {
+    match restrict(patch, region)?.derivative_bound(dir, meter) {
+        Err(NurbsError::NotFinite) => {
+            let (du, dv) = patch.domain();
+            let part = (clip(region.0, du), clip(region.1, dv));
+            let (i, j) = match dir {
+                Direction::U => (1, 0),
+                Direction::V => (0, 1),
+            };
+            let all = patch_partials(patch, Where::Over(part), 1, meter)?;
+            let d = all
+                .get(partial_index(i, j)?)
+                .copied()
+                .ok_or(CurveError::Defect)?;
+            Ok(Bounds {
+                lo: d.map(Interval::lo),
+                hi: d.map(Interval::hi),
+            })
+        }
+        found => Ok(found?),
+    }
+}
+
 /// Whether a parameter range takes the patch range `d`: a point by `holds` from `side`, a span by
 /// `meets`.
 fn takes(r: (f64, f64), d: (f64, f64), side: Limit, whole: (f64, f64)) -> bool {
@@ -483,8 +520,7 @@ impl ParamSurface for Surface<3> {
         for p in self.bernstein(meter)? {
             let (pu, pv) = p.domain();
             if meets(region.0, pu) && meets(region.1, pv) {
-                let part = restrict(&p, region)?;
-                out = Some(union(out, part.derivative_bound(dir, meter)?)?);
+                out = Some(union(out, box_derivative_bound(&p, region, dir, meter)?)?);
             }
         }
         out.map(DerivativeBound::Bounded).ok_or(CurveError::Defect)

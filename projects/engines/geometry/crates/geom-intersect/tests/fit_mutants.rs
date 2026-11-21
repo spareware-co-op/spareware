@@ -362,7 +362,8 @@ fn a_cubic_patch_against_a_plane_is_a_curve_or_out_of_rounds() {
     // The cubic patch (u³, v, 0) meets the plane y = 0 along v = 0, from u = 0.5 to 0.8: both
     // vertices lie on both surfaces and inside both domains, so the branch is valid (#1083: it was
     // refused as InvalidInput). The pcurve's v is 0 over every span, and its bound over a half
-    // span is a few subnormals wide, a box the patch's partials cannot be read over.
+    // span is a few subnormals wide, a box the patch's partials could not be read over before
+    // #1140.
     let (patch, (_, across)) = (cubic(), crossing_planes());
     let at = |u: f64| [u, 0.0, u * u * u, 0.0];
     let two = || branch(vec![at(0.5), at(0.8)]);
