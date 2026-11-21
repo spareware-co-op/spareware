@@ -193,6 +193,34 @@ fn unit_box() -> Held {
     )
 }
 
+/// geom-make's turned sliver (`inherited_wait.rs`): a prism on a sliver triangle, moved and turned
+/// by a direction that rounds its corners, which the checker passes at two steps.
+fn a_turned_sliver() -> Held {
+    let (c, accept) = (ctx(), Some(certified(1 << 40)));
+    let sliver = Held::new(
+        prism(
+            &c,
+            &PrismInput {
+                base: vec![p(-7, 2433, 0), p(-6, 2434, 0), p(-5, 2437, 0)],
+                height: Steps(41_472_000),
+            },
+        )
+        .unwrap(),
+    );
+    let raised =
+        Held::new(move_by(&c, sliver.moved(accept), [-34, 50_368_000, 50_368_000]).unwrap());
+    Held::new(
+        rotate(
+            &c,
+            raised.moved(accept),
+            Axis::Y,
+            Rotation::direction(-512, -511).unwrap(),
+            p(50_368_000, -15_168_000, -2_035_199),
+        )
+        .unwrap(),
+    )
+}
+
 fn a_prism() -> PrismInput {
     PrismInput {
         base: vec![p(0, 0, 0), p(10, 0, 0), p(12, 7, 0), p(3, 11, 0)],
@@ -265,6 +293,14 @@ fn tilted(key: u8) -> Instance {
     Instance {
         key: [key; 16],
         transform: TypedTransform::rotation(Axis::Z, Rotation::direction(4, 3).unwrap()).unwrap(),
+    }
+}
+
+/// The turn of [`tilted`] about x, which tilts a cylinder's axis off the grid.
+fn tipped(key: u8) -> Instance {
+    Instance {
+        key: [key; 16],
+        transform: TypedTransform::rotation(Axis::X, Rotation::direction(4, 3).unwrap()).unwrap(),
     }
 }
 
@@ -650,9 +686,21 @@ fn drive_rotate() -> Driver {
                 }),
             ),
             trigger("NotAccepted", turned(&bx, None)),
-            // A flat body's rounded corners are certified since G129's meeting points; curved
-            // faces moved by a deviation still wait for the checker of piece G177.
-            trigger("NotCertifiedYet", turned(&cyl, Some(certified(64)))),
+            // A flat body's rounded corners are certified since G129's meeting points, and so is a
+            // cylinder turned about its own axis, whose frame keeps its exact zeros (issue #1155).
+            // Turned about x, its caps tilt off the axis' exact data and wait for piece G177.
+            trigger(
+                "NotCertifiedYet",
+                cyl.transform("transform.rotate by (4, 3) about x", |c, h| {
+                    rotate(
+                        c,
+                        h.moved(Some(certified(64))),
+                        Axis::X,
+                        Rotation::direction(4, 3).unwrap(),
+                        p(0, 0, 0),
+                    )
+                }),
+            ),
         ],
         accept: Some(Box::new(move |class| turned(&accepting, class))),
         range: Some((quarter(&unit_box(), 0), quarter(&unit_box(), 1))),
@@ -703,11 +751,20 @@ fn drive_scale() -> Driver {
             ),
             trigger("NotAccepted", by(&ballish, [(2, 1); 3], None)),
             trigger("KindNotCertified", by(&cyl, wide(2), Some(certified(64)))),
-            // A uniform scale keeps circles, and the cylinder's curved faces it moves by a
-            // deviation wait for piece G177's checker (a flat body's rounded corners no longer do).
+            // A uniform scale keeps circles, and a cylinder's frame keeps its exact zeros (issue
+            // #1155), so its scaled caps stay square to its axis and are certified. An exact
+            // stretch of a body less than exact keeps no angle, and waits for piece G417 whatever
+            // the checker finds (geom-make's `inherited_wait.rs`).
             trigger(
                 "NotCertifiedYet",
-                by(&cyl, [(1, 3); 3], Some(certified(64))),
+                a_turned_sliver().transform("transform.scale a sliver", |c, h| {
+                    scale(
+                        c,
+                        h.moved(Some(certified(1 << 40))),
+                        [(2, 1), (1, 1), (1, 1)].map(|(n, d)| Scale::new(n, d).unwrap()),
+                        p(-10_544_000, 1, 0),
+                    )
+                }),
             ),
         ],
         accept: Some(Box::new(move |class| by(&accepting, [(2, 1); 3], class))),
@@ -757,11 +814,12 @@ fn drive_pattern() -> Driver {
                     vec![matrix([[2, 0, 0], [0, 1, 0], [0, 0, 1]])],
                 ),
             ),
-            // Curved faces moved by a deviation wait for piece G177's checker; a flat body's
-            // rounded corners are certified since G129's meeting points.
+            // Curved faces whose caps tilt off the axis' exact data wait for piece G177's checker;
+            // a flat body's rounded corners are certified since G129's meeting points, and a
+            // cylinder turned about its own axis since its frame keeps its exact zeros (#1155).
             trigger(
                 "NotCertifiedYet",
-                of(&cyl, Some(certified(64)), vec![tilted(1)]),
+                of(&cyl, Some(certified(64)), vec![tipped(1)]),
             ),
         ],
         accept: Some(Box::new(move |class| {

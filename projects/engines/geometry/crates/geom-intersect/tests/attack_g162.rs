@@ -646,9 +646,11 @@ fn least_work(call: &dyn Fn(&mut WorkMeter<'_>) -> bool) -> u64 {
 /// what is pruned, which no answer shows. The pinned numbers move only with the search itself, or
 /// with what the kinds charge: the torus's moved from 59,498 to 275,498 when its partials began to
 /// pay for the arctangent's 192-bit corners (issue #765), with the same steps and the same answer
-/// (the old number comes back with `FAR_CORNER` set to 0). The arc's from (4, 6) moved from 165 to
-/// 6 when a circle's foot became its closed form (issue #1102): its two ends and one bound. From
-/// (9, 2) the foot is the arc's start, which the closed form leaves to the search, at its old cost.
+/// (the old number comes back with `FAR_CORNER` set to 0), and from 275,498 to 45,584 when a
+/// product with an exact zero came back the point zero (issue #1155), the same answer to the bit.
+/// The arc's from (4, 6) moved from 165 to 6 when a circle's foot became its closed form (issue
+/// #1102): its two ends and one bound. From (9, 2) the foot is the arc's start, which the closed
+/// form leaves to the search, at its old cost.
 #[test]
 fn each_search_takes_the_work_it_always_took() {
     let frame = Frame::standard().unwrap();
@@ -686,7 +688,7 @@ fn each_search_takes_the_work_it_always_took() {
     let surfaces: [(&SurfaceKind, [f64; 3], u64); 3] = [
         (&sphere, [1.0, 2.0, 0.5], 46_607),
         (&cone, [1.0, 2.0, 0.5], 2_093),
-        (&torus, [5.0, 2.0, 1.0], 275_498),
+        (&torus, [5.0, 2.0, 1.0], 45_584),
     ];
     for (surface, p, pinned) in surfaces {
         let call = |m: &mut WorkMeter<'_>| project_surface(surface, &p, FLOOR, m).is_ok();

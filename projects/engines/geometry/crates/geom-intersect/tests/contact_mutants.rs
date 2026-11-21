@@ -86,11 +86,13 @@ fn a_cones_apex_on_a_plane_at_either_end_of_its_height_is_one_singular_point() {
                 contact: Singular { branches: 0 } }]";
     let first = format!("[Point {{ at: [{on_cone}, {on_plane}], {rest}");
     let second = format!("[Point {{ at: [{on_plane}, {on_cone}], {rest}");
+    // The same readings at 5,645 and 5,647 units until a product with an exact zero came back the
+    // point zero (issue #1155).
     for v in [(0.0, 4.0), (-4.0, 0.0)] {
         holds_to(
             (&cone(v), &level()),
             (1.0 / 16.0, 1.0 / 16.0),
-            [(5645, &first), (5647, &second)],
+            [(4925, &first), (4927, &second)],
         );
     }
 }
@@ -103,26 +105,35 @@ fn a_plane_touching_a_sphere_near_its_south_pole_is_read_where_it_touches() {
     let at = [5.0 * 27.0 / 205.0, 5.0 * 36.0 / 205.0, -5.0 * 40.0 / 41.0];
     let along = [-0.8, 0.6, 0.0];
     let up = [24.0 / 41.0, 32.0 / 41.0, 9.0 / 41.0];
+    // Until a product with an exact zero came back the point zero (issue #1155), the plane's
+    // parameters were read as [-4.01468935120884e-15, 4.006924326692184e-15] and
+    // [-6.392583305350423e-15, 6.298483132808708e-15], the gap as [-1.5229552036822156e-14,
+    // 1.536115408315578e-14]; and in the other order, at 18,447 units, the plane's as
+    // [-4.777255301842622e-15, 4.891556418810474e-15] and [-9.923431093258219e-15,
+    // 9.783597774103383e-15], the gap as [-1.8026230914462632e-14, 1.7889754718264806e-14]. Each
+    // gap is narrower now about the same touch, and each box but one end of one parameter. The
+    // refinement starts from a box a few bits apart and steps until a step leaves it as it was: in
+    // the other order that took 50 steps, where it took 6.
     holds_to(
         (&ball([0.0; 3]), &plane(at, along, up, 9.0)),
         (1.0 / 64.0, 1.0 / 16.0),
         [
             (
                 18_704,
-                "[Point { at: [Interval { lo: 0.29516723530086547, hi: 0.2951672353008677 }, \
+                "[Point { at: [Interval { lo: 0.2951672353008655, hi: 0.29516723530086764 }, \
                  Interval { lo: -0.42955342504544614, hi: -0.42955342504544475 }, \
-                 Interval { lo: -4.01468935120884e-15, hi: 4.006924326692184e-15 }, \
-                 Interval { lo: -6.392583305350423e-15, hi: 6.298483132808708e-15 }], \
-                 gap: Interval { lo: -1.5229552036822156e-14, hi: 1.536115408315578e-14 }, \
+                 Interval { lo: -3.683867969300058e-15, hi: 3.796481540582697e-15 }, \
+                 Interval { lo: -6.4361372283748394e-15, hi: 6.2343647517837105e-15 }], \
+                 gap: Interval { lo: -1.5146691489130604e-14, hi: 1.5244174486414767e-14 }, \
                  contact: IsolatedTangent }]",
             ),
             (
-                18_447,
-                "[Point { at: [Interval { lo: -4.777255301842622e-15, hi: 4.891556418810474e-15 }, \
-                 Interval { lo: -9.923431093258219e-15, hi: 9.783597774103383e-15 }, \
-                 Interval { lo: 0.29516723530086525, hi: 0.2951672353008679 }, \
-                 Interval { lo: -0.42955342504544636, hi: -0.4295534250454445 }], \
-                 gap: Interval { lo: -1.8026230914462632e-14, hi: 1.7889754718264806e-14 }, \
+                22_627,
+                "[Point { at: [Interval { lo: -4.5434288732303215e-15, hi: 4.741903443786597e-15 }, \
+                 Interval { lo: -9.451778982593638e-15, hi: 9.472605174078137e-15 }, \
+                 Interval { lo: 0.29516723530086525, hi: 0.29516723530086786 }, \
+                 Interval { lo: -0.42955342504544636, hi: -0.4295534250454446 }], \
+                 gap: Interval { lo: -1.770941117328911e-14, hi: 1.7777649271388023e-14 }, \
                  contact: IsolatedTangent }]",
             ),
         ],
@@ -135,6 +146,14 @@ fn a_plane_touching_a_sphere_near_its_south_pole_is_read_where_it_touches() {
 #[test]
 fn a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work() {
     let hanging = ball([0.0625, 0.03125, -5.0]);
+    // The plane touches at its parameters (0, 0). Until a product with an exact zero came back the
+    // point zero (issue #1155), they were read as [-1.7347234759768148e-17,
+    // 1.0408340855860915e-17] and [-2.447639532942543e-18, 1.889169156999523e-18]; and in the
+    // other order, at 580,030 units, as [-1.7347234759768126e-17, 1.0408340855860895e-17] and
+    // [-1.7906731663020902e-18, 5.148220737605164e-18]. The refinement starts from a box a few
+    // bits apart, and steps until a step leaves it as it was or for 64 steps: the other order's
+    // second parameter is narrower now, at 64 steps where it took 59, and this order's wider, both
+    // at 64.
     holds_to(
         (&hanging, &level()),
         (1.0 / 16.0, 1.0 / 16.0),
@@ -142,15 +161,15 @@ fn a_sphere_at_a_plane_by_its_pole_charges_its_recorded_work() {
             (
                 581_829,
                 "[Point { at: [Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.5, hi: 0.5 }, \
-                 Interval { lo: -1.7347234759768148e-17, hi: 1.0408340855860915e-17 }, \
-                 Interval { lo: -2.447639532942543e-18, hi: 1.889169156999523e-18 }], \
+                 Interval { lo: -1.7347234759768145e-17, hi: 1.0408340855860906e-17 }, \
+                 Interval { lo: -3.470802393666515e-18, hi: 3.4680915102407465e-18 }], \
                  gap: Interval { lo: -5.329070518200785e-15, hi: 3.5527136788005246e-15 }, \
                  contact: IsolatedTangent }]",
             ),
             (
-                580_030,
-                "[Point { at: [Interval { lo: -1.7347234759768126e-17, hi: 1.0408340855860895e-17 }, \
-                 Interval { lo: -1.7906731663020902e-18, hi: 5.148220737605164e-18 }, \
+                580_505,
+                "[Point { at: [Interval { lo: -1.7347234759768133e-17, hi: 1.0408340855860889e-17 }, \
+                 Interval { lo: -1.745460850205552e-18, hi: 3.458709577724905e-18 }, \
                  Interval { lo: 0.0, hi: 2.0 }, Interval { lo: 0.5, hi: 0.5 }], \
                  gap: Interval { lo: -3.552713678800509e-15, hi: 5.329070518200762e-15 }, \
                  contact: IsolatedTangent }]",
@@ -474,13 +493,15 @@ fn tube_under_a_shallow_plane(domain: ((f64, f64), (f64, f64))) -> (SurfaceKind,
 #[test]
 fn a_shallow_plane_whose_normals_solve_parts_below_the_floor_is_settled() {
     let (tube, shallow) = tube_under_a_shallow_plane(((-3.0, 3.0), (-3.0, 3.0)));
+    // The same readings at 144,813 and 704,500 units until a product with an exact zero came back
+    // the point zero (issue #1155).
     holds_to(
         (&tube, &shallow),
         (1.0, 1.0 / 16.0),
         [
-            (144_813, "[]"),
+            (5_323, "[]"),
             (
-                704_500,
+                28_132,
                 "[Undecided { first: ((-3.0, 1.1015625), (-3.0, 3.0)), \
                  second: ((0.46602401733398435, 0.9), (-2.0, 2.0)), \
                  why: TangentBand { width: Steps(8) } }]",
@@ -501,12 +522,14 @@ fn a_plane_that_meets_a_cylinder_at_its_corners_alone_is_not_settled() {
     let x = 127f64.sqrt() / 16.0;
     let (tube, shallow) = tube_under_a_shallow_plane(((-x, x), (-3.0, 0.0)));
     let plane = format!("(({}, {x}), (-3.0, 0.0))", -x);
+    // The same readings at 60,555 and 471,656 units until a product with an exact zero came back
+    // the point zero (issue #1155).
     holds_to(
         (&tube, &shallow),
         (1.0, 1.0 / 16.0),
         [
             (
-                60_555,
+                2_199,
                 &format!(
                     "[Undecided {{ first: ((0.1, 0.45000000000000007), (-2.0, 2.0)), \
                      second: {plane}, why: UndecidedAtFloor {{ test: Exclusion }} }}, \
@@ -515,7 +538,7 @@ fn a_plane_that_meets_a_cylinder_at_its_corners_alone_is_not_settled() {
                 ),
             ),
             (
-                471_656,
+                18_804,
                 &format!(
                     "[Undecided {{ first: {plane}, second: ((0.44063720703125, 0.9), (-2.0, 2.0)), \
                      why: TangentBand {{ width: Steps(8) }} }}]"

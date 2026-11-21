@@ -404,10 +404,17 @@ fn every_returned_body_passes_the_full_checker_and_the_answers_are_the_full_buil
     // bodies were returned and 123 waited for it. With it a rounded flat face stands for its
     // star of triangles and those 123 are returned. Fifteen of them are a primitive's first
     // transform, so each is transformed again ten ways: 150 operations more, every one returned.
+    // Until a product with an exact zero came back the point zero (issue #1155), a cylinder or cone
+    // turned 35 degrees about its own axis waited for G177: its frame's zeros came back subnormals
+    // off zero, and the checker found no certified test of a cap and the side. Of 1740 operations
+    // 1536 were returned and 96 waited; now the 48 that end in that turn are returned. Six of them
+    // are a primitive's first transform, so each is transformed again ten ways: 60 operations more,
+    // of which 48 are returned, the 3-4-5 turn waits for G177 and the stretch along y is refused,
+    // as for every other curved body.
     let expected = Tally {
-        returned: 1536,
-        waits: [("G177", 96)].into(),
-        refused: 108,
+        returned: 1632,
+        waits: [("G177", 54)].into(),
+        refused: 114,
     };
     assert_eq!(tally, expected);
 }
