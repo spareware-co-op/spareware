@@ -201,10 +201,15 @@ def kernel_map(map_json, layer_names, tools, ops, data, classes, solidcore, file
                 op["from"] = "the interface's own list of what each of its operations gives"
                 op["calls"] = sorted(t["name"] for t in by_piece[r["piece"]])
             elif r["piece"] in ours:
-                op["classes"] = [ours[r["piece"]].get("class")]
-                op["from"] = ours[r["piece"]].get("from", "")
-                if op["classes"][0] not in class_names:
-                    problems.append(f"map.json gives {r['piece']} the class {op['classes'][0]!r}, which chapter 9 does not have")
+                # One class ("class"), or several ("classes") where the plan gives an operation's
+                # answers different classes case by case; shown in chapter 9's order, as above.
+                entry = ours[r["piece"]]
+                given = entry["classes"] if "classes" in entry else [entry.get("class")]
+                op["classes"] = [c for c in class_names if c in given]
+                op["from"] = entry.get("from", "")
+                for c in given:
+                    if c not in class_names:
+                        problems.append(f"map.json gives {r['piece']} the class {c!r}, which chapter 9 does not have")
             else:
                 problems.append(f"{r['piece']} is answered by our core, but neither the interface nor map.json says its class")
                 op["classes"] = []

@@ -333,8 +333,9 @@ fn value_call(out: &mut String, arguments: &str, sign: &str) -> Result<(), EmitE
 /// that fits [`WIDTH`] columns and the expression is not a `larger` whose arguments pass
 /// [`CALL_ARGS_WIDTH`]. Otherwise the scale is the largest of several terms, times their common
 /// factor if they have one ([`crate::predicate_derive`]'s scale expression), and it is computed one
-/// term per line: the larger of the first two terms, then the larger of the scale so far and each
-/// further term, then the common factor times the scale. Those are the operations the one-line
+/// term per line: the larger of the first two terms (or the first term, then the larger of it and
+/// the second, when two would pass [`CALL_ARGS_WIDTH`]), then the larger of the scale so far and
+/// each further term, then the common factor times the scale. Those are the operations the one-line
 /// expression performs, on the same values, so they give the same `f64` and the same roundings;
 /// the header shows the one-line expression they compute. A scale of another form, or a line that
 /// would still be too long, is refused.
@@ -373,16 +374,20 @@ fn scale_lines(e: &ScaleExpr, groups: &[String]) -> Result<Vec<String>, EmitErro
     let mut lines = Vec::new();
     let mut previous: Option<String> = None;
     for term in terms {
-        lines.push(match previous {
-            None => {
-                previous = Some(term);
-                continue;
+        let Some(p) = previous.take() else {
+            previous = Some(term);
+            continue;
+        };
+        if format!("{p}, {term}").chars().count() > CALL_ARGS_WIDTH {
+            // Two long terms take a line each: the same values, in the same order.
+            if p != "scale" {
+                lines.push(format!("    let scale = {p};"));
             }
-            Some(p) => {
-                previous = Some("scale".to_owned());
-                format!("    let scale = larger({p}, {term});")
-            }
-        });
+            lines.push(format!("    let scale = larger(scale, {term});"));
+        } else {
+            lines.push(format!("    let scale = larger({p}, {term});"));
+        }
+        previous = Some("scale".to_owned());
     }
     if let Some(c) = common {
         lines.push(format!(
@@ -900,6 +905,24 @@ fn header(
         .scale_expr
         .roundings()
         .ok_or_else(|| EmitError("the scale's roundings".to_owned()))?;
+    // The monomials of S the run-time scale leaves out (`predicate_derive`'s rule), if any.
+    let computed = d.scale_expr.monomials(groups.len());
+    let left_out: Vec<String> = root
+        .scale
+        .iter()
+        .filter(|m| !computed.contains(*m))
+        .map(|m| monomial_text(m, &groups))
+        .collect();
+    let leaves_out = if left_out.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " The scale at run time leaves out {}, never the largest alone: a monomial left out \
+             is the average of other monomials of S, and the largest of the rest is S for every \
+             input (the proof in [`super`]).",
+            left_out.join(", ")
+        )
+    };
     doc_para(
         out,
         &format!(
@@ -907,7 +930,7 @@ fn header(
              its exact value: {scale_roundings} rounding(s), each product counting its own and \
              both its operands', each `larger` the larger of its operands'. It computes the bound \
              as the constant times S, one more rounding: k = {scale_roundings} + 1. The constant \
-             is E · (1 + 2u)^k, rounded up to an `f64`."
+             is E · (1 + 2u)^k, rounded up to an `f64`.{leaves_out}"
         ),
     );
     doc(out, "");
@@ -2491,7 +2514,11 @@ const PARENT_HEADER_TOP: &[&str] = &[
      k = r + 1 (each module's header gives both). The constant is at least E · (1 + 2u)^k and \
      (1 − u)(1 + 2u) ≥ 1, so the computed bound is at least E · S; a computed value beyond it has \
      the exact sign. A computed \
-     scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The full statement, with \
+     scale of zero is exactly zero, and then |v| ≤ (B + E) · S = 0. The scale at run time leaves \
+     out a monomial of the result's scale set that is the average of other monomials of the set \
+     (x^2·y^2, of x^4 and y^4): its value, their geometric mean, is never above the largest of \
+     them, and the largest of the monomials kept is S for every input, so the filter computes \
+     the same S. The full statement, with \
      references, is in geom-gen's `predicate_derive.rs`.",
     "",
     "P:The constants, beside Shewchuk's stage-A bounds (`exactinit` in `predicates.c`; \

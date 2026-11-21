@@ -316,6 +316,15 @@ impl<const D: usize> ParamCurve<D> for Circle<D> {
         form::enclose_at(&self.form, self.domain, t, order, meter)
     }
 
+    fn enclose_point(
+        &self,
+        t: f64,
+        _side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        form::enclose_point_at(&self.form, self.domain, t, meter).map(Some)
+    }
+
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError> {
         form::bound(&self.form, self.domain, span, meter)
     }
@@ -418,6 +427,15 @@ impl<const D: usize> ParamCurve<D> for Ellipse<D> {
         form::enclose_at(&self.form, self.domain, t, order, meter)
     }
 
+    fn enclose_point(
+        &self,
+        t: f64,
+        _side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        form::enclose_point_at(&self.form, self.domain, t, meter).map(Some)
+    }
+
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError> {
         form::bound(&self.form, self.domain, span, meter)
     }
@@ -504,6 +522,15 @@ impl<const D: usize> ParamCurve<D> for Hyperbola<D> {
         form::enclose_at(&self.form, self.domain, t, order, meter)
     }
 
+    fn enclose_point(
+        &self,
+        t: f64,
+        _side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        form::enclose_point_at(&self.form, self.domain, t, meter).map(Some)
+    }
+
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError> {
         form::bound(&self.form, self.domain, span, meter)
     }
@@ -588,6 +615,15 @@ impl<const D: usize> ParamCurve<D> for Parabola<D> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; D]>, CurveError> {
         form::enclose_at(&self.form, self.domain, t, order, meter)
+    }
+
+    fn enclose_point(
+        &self,
+        t: f64,
+        _side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        form::enclose_point_at(&self.form, self.domain, t, meter).map(Some)
     }
 
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError> {

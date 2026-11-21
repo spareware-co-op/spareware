@@ -71,16 +71,37 @@ fn exponent(x: f64) -> i64 {
 
 #[test]
 fn every_benchmark_has_a_full_batch() {
-    // A scenario's batch is one whole job (inputs::scenario).
+    // A scenario's batch is one whole job (inputs::scenario); the heaviest few hold the sizes
+    // inputs::SHORT_BATCHES gives.
     for name in names() {
+        let short = inputs::SHORT_BATCHES
+            .iter()
+            .find(|(short, _)| *short == name);
         let full = if name.starts_with("scenario/") {
             1
+        } else if let Some(&(_, size)) = short {
+            size
         } else {
             BATCH
         };
         assert_eq!(prepare_named(&name).unwrap().len(), full, "{name}");
     }
     assert_eq!(names().len(), cases().count() + growth_cases().count());
+}
+
+#[test]
+fn every_short_batch_is_a_catalogued_benchmark() {
+    // Every short batch names a catalogued benchmark, once, and is shorter than a full one, but
+    // never empty (that its inputs are the full batch's is checked in inputs/mod.rs).
+    let all = names();
+    for (i, (name, size)) in inputs::SHORT_BATCHES.iter().enumerate() {
+        assert!(all.iter().any(|n| n == name), "{name}");
+        assert!((1..BATCH).contains(size), "{name}: {size}");
+        assert!(
+            inputs::SHORT_BATCHES[..i].iter().all(|(n, _)| n != name),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -2556,17 +2577,19 @@ fn records_typical_batches_all_succeed() {
     }
 }
 
-/// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
+/// Runs `kernel` on `batch` and requires one `Ok` result per input, naming the first error. That
+/// the batch is full is `every_benchmark_has_a_full_batch`'s check.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
     kernel: fn(&[T], &mut Vec<Result<R, E>>),
     batch: &[T],
 ) {
+    assert!(!batch.is_empty(), "{name}: an empty batch");
     let mut out = Vec::with_capacity(batch.len());
     kernel(batch, &mut out);
     assert_eq!(
         out.len(),
-        BATCH,
+        batch.len(),
         "{name}: a kernel that could not build its transform or frame"
     );
     for r in &out {
@@ -2956,4 +2979,66 @@ fn roots_typical_batches_all_succeed() {
         k::gauss_legendre,
         &m::gauss_legendre(Typical),
     );
+}
+
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.46) orders every list and
+/// reads every key.
+#[test]
+fn intersect_typical_batches_all_succeed() {
+    use geom_bench::inputs::intersect as m;
+    use geom_bench::kernels::intersect as k;
+    all_ok("sort_items", k::sorted, &m::items(Typical));
+    all_ok("key_circle", k::keys, &m::circles(Typical));
+    all_ok("pair_lines", k::paired, &m::lines(Typical));
+    all_ok("curve_segments", k::met, &m::segment_pairs(Typical));
+    all_ok("curve_circles", k::met, &m::circle_pairs(Typical));
+    all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
+    all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
+    all_ok("curve_loop", k::crossed, &m::loops(Typical));
+    all_ok("surface_plane", k::pierced, &m::line_planes(Typical));
+    all_ok("surface_torus", k::pierced, &m::line_tori(Typical));
+    all_ok("surface_patch", k::pierced, &m::cubic_patches(Typical));
+    all_ok(
+        "natural_plane",
+        k::closed_forms,
+        &m::plane_cylinders(Typical),
+    );
+    all_ok(
+        "natural_spheres",
+        k::closed_forms,
+        &m::sphere_pairs(Typical),
+    );
+    all_ok("natural_tee", k::closed_forms, &m::tees(Typical));
+    all_ok("natural_apex", k::closed_forms, &m::apexes(Typical));
+    all_ok("quartic_walk", k::walked, &m::walks(Typical));
+    all_ok("reduced_torus", k::closed_forms, &m::torus_cuts(Typical));
+    all_ok("reduced_tube", k::closed_forms, &m::torus_tubes(Typical));
+    all_ok("reduced_wall", k::closed_forms, &m::wall_cuts(Typical));
+    all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
+    all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+    all_ok("trace_patch", k::cut_patches, &m::patches(Typical));
+    all_ok("subdivide_patch", k::subdivided, &m::sheets(Typical));
+    all_ok("march_plate", k::marched, &m::plates(Typical));
+    all_ok("march_poles", k::through_poles, &m::poles(Typical));
+    all_ok("known_tangent", k::known_cut, &m::tangents(Typical));
+    all_ok("selfcross_sweep", k::self_cross, &m::sweeps(Typical));
+    all_ok("fit_curve", k::fit_curve, &m::crossings(Typical));
+    all_ok("analyse_rest", k::touched, &m::rests(Typical));
+    all_ok("trace_silhouette", k::silhouettes, &m::tori(Typical));
+}
+
+/// Every typical batch of the decisions on lines and quadrics (decision 32.46) is decided.
+#[test]
+fn quadric_typical_batches_all_succeed() {
+    use geom_bench::inputs::quadric as m;
+    use geom_bench::kernels::quadric as k;
+    all_ok("line_sphere", k::spheres, &m::spheres(Typical));
+    all_ok("line_cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("line_cone", k::cones, &m::cones(Typical));
+    all_ok("line_torus", k::tori, &m::tori(Typical));
+    all_ok("parallel", k::directions, &m::directions(Typical));
+    all_ok("axis_gap", k::gaps, &m::gaps(Typical));
+    all_ok("tangent", k::tangents, &m::tangents(Typical));
+    all_ok("pencil_simple", k::pencils, &m::simple_pencils(Typical));
+    all_ok("pencil_node", k::pencils, &m::nodal_pencils(Typical));
 }

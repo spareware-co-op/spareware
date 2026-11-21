@@ -128,9 +128,7 @@ fn point_at<K: ParamCurve<D>, const D: usize>(
     t: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<[Interval; D], CurveError> {
-    kind.enclose(t, Limit::FromRight, 0, meter)?
-        .first()
-        .copied()
+    kind.enclose_point(t, Limit::FromRight, meter)?
         .ok_or(CurveError::Defect)
 }
 
