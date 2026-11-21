@@ -639,7 +639,7 @@ fn line_cylinder(
     let exact = exact_cylinder(line, cylinder);
     let domain = ParamSurface::domain(cylinder);
     if exact == Some(Meeting::Within) {
-        return along_ruling(line, cylinder, meter).map(Some);
+        return along_ruling(line, cylinder, meter);
     }
     // A line parallel to the axis has A = 0 exactly, which no enclosure is (each is rounded
     // outward), so it is decided before the quadratic (issue 1112).
@@ -860,22 +860,23 @@ fn beside_axis(
         Some(false)
     };
     match on {
-        Some(true) => along_ruling(line, cylinder, meter).map(Some),
+        Some(true) => along_ruling(line, cylinder, meter),
         Some(false) => proven(Vec::new(), meter).map(Some),
         None => Ok(None),
     }
 }
 
-/// A line along a cylinder's ruling: the part over the domain in v, at the ruling's u.
+/// A line along a cylinder's ruling: the part over the domain in v, at the ruling's u; the line's
+/// t is cut to the part ([`on_stretch`]). `None` where that part cannot be placed.
 fn along_ruling(
     line: &Line<3>,
     cylinder: &Cylinder,
     meter: &mut WorkMeter<'_>,
-) -> Result<Intersection, IntersectError> {
+) -> Result<Option<Intersection>, IntersectError> {
     let ([ox, oy, oz], [_, _, dz]) = local(line, cylinder.center(), &cylinder.frame())?;
     let domain = ParamSurface::domain(cylinder);
     let Some(u) = around(ox, oy, domain.0)? else {
-        return proven(Vec::new(), meter);
+        return proven(Vec::new(), meter).map(Some);
     };
     // The height z is at v = z/s.
     let factor = Interval::point(cylinder.axial_sign())?;
@@ -889,17 +890,25 @@ fn along_ruling(
         larger(first.hi(), last.hi()),
     );
     let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
-        return proven(Vec::new(), meter);
+        return proven(Vec::new(), meter).map(Some);
     };
+    let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
+        return Ok(None);
+    };
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
+        return proven(Vec::new(), meter).map(Some);
+    }
     let overlap = Item::Overlap {
-        at: ParamBox::new(&[Interval::new(start, end)?, u, v])?,
+        at: ParamBox::new(&[Interval::new(from, to)?, u, v])?,
         region: OverlapRegion {
             boundary: Vec::new(),
         },
         proof: Coincidence::Identical,
         class: certified(),
     };
-    proven(alloc::vec![overlap], meter)
+    proven(alloc::vec![overlap], meter).map(Some)
 }
 
 /// A line with a cone: ρ = r₀ + k·v on the axis at z = s·v, so ρ = r₀ + (k/s)·z, ρ² against
@@ -1059,7 +1068,8 @@ fn beside_ruling(
 /// axis every point of it is ρ·e(u), ρ = r₀ + σ·z, so u is the turn of its origin's (x, y), or of
 /// its direction's (dx, dy) where ρ there may be zero (the apex), each turned by the sign of ρ or
 /// of its rate σ·dz: past the apex ρ is negative and e(u) points the other way, so the one u holds
-/// the ruling on both nappes. `None` where neither sign is proven.
+/// the ruling on both nappes. The line's t is cut to the part over the domain ([`on_stretch`]).
+/// `None` where neither sign is proven, or where that part cannot be placed.
 fn on_ruling(
     line: &Line<3>,
     cone: &Cone,
@@ -1093,8 +1103,16 @@ fn on_ruling(
     let Some(v) = within(Interval::new(lo, hi)?, domain.1)? else {
         return proven(Vec::new(), meter).map(Some);
     };
+    let Some((from, to)) = on_stretch((start, end), (lo, hi), (oz, dz), factor, domain.1)? else {
+        return Ok(None);
+    };
+    // Bounds that meet or cross say the line stops short of the domain, each being strictly past
+    // its exact value, as `within` reads a bound on an end: no part of it is on the surface.
+    if from >= to {
+        return proven(Vec::new(), meter).map(Some);
+    }
     let overlap = Item::Overlap {
-        at: ParamBox::new(&[Interval::new(start, end)?, u, v])?,
+        at: ParamBox::new(&[Interval::new(from, to)?, u, v])?,
         region: OverlapRegion {
             boundary: Vec::new(),
         },
@@ -1102,6 +1120,48 @@ fn on_ruling(
         class: certified(),
     };
     proven(alloc::vec![overlap], meter).map(Some)
+}
+
+/// The stretch of t, from `start` to `end`, over which a line along a ruling stands on the domain
+/// in v, `(v0, v1)` (issue 1153). Its height is z = oz + t·dz and its v is z/s, `s` the axial
+/// `factor`, so where its v, from `lo` to `hi`, runs past an end b of the domain, the stretch ends at
+/// t = (s·b − oz)/dz, enclosed, and its outer bound is taken. Each bound is strictly past its exact
+/// value, so the bounds meet or cross only where the line stops short of the domain. `None` where
+/// an end is passed and the rate dz/s is not proven apart from zero.
+fn on_stretch(
+    (start, end): (f64, f64),
+    (lo, hi): (f64, f64),
+    (oz, dz): (Interval, Interval),
+    factor: Interval,
+    (v0, v1): (f64, f64),
+) -> Result<Option<(f64, f64)>, IntersectError> {
+    let (below, above) = (lo < v0, hi > v1);
+    if !below && !above {
+        return Ok(Some((start, end)));
+    }
+    let Some(rate) = apart(dz.div(factor)?) else {
+        return Ok(None);
+    };
+    let at = |b: f64| -> Result<Interval, IntersectError> {
+        Ok(Interval::point(b)?.mul(factor)?.sub(oz)?.div(dz)?)
+    };
+    // Where v rises with t the line passes the domain's low end first; where it falls, the high.
+    let (first, last) = if rate == Sign::Positive {
+        ((below, v0), (above, v1))
+    } else {
+        ((above, v1), (below, v0))
+    };
+    let from = if first.0 {
+        larger(start, at(first.1)?.lo())
+    } else {
+        start
+    };
+    let to = if last.0 {
+        smaller(end, at(last.1)?.hi())
+    } else {
+        end
+    };
+    Ok(Some((from, to)))
 }
 
 /// The components of (o − c) × d, each as four products of two stored doubles.

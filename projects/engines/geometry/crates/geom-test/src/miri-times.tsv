@@ -64,6 +64,7 @@
 # GitHub measuring run 44856947585 (miri_measure=new on fix/derivative-bound-narrow-box at 23fde6008, miri_measure_tests naming the attack_g60 test #1148 adds), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44854421238 (miri_measure=new on rows/phase5-subnormal-box-partials at the train's 625c4ebc9, miri_measure_tests naming the attack_g60 test #1143 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44867796857 (miri_measure=new on fix/ruling-domain at 7180d02e6, the train merged in, every test without a row: the branch's 3 line_along_a_ruling tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44860095410 (miri_measure=new on fix/nonisolated-common-blocks at 028670b0d, miri_measure_tests naming the common_blocks test #1152 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44867854907 (miri_measure=all on fix/coincidence-far-line at f20e72332, miri_measure_tests naming the 2 tests #1156 added and the route test it changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44870980124 (miri_measure=all on fix/coincidence-far-line at b187535bf, miri_measure_tests naming the route test #1156 changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
@@ -1733,6 +1734,9 @@ native-only over 741	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_
 6	geom-intersect::line_along_a_ruling	a_line_parallel_to_a_cylinder_s_axis_is_nothing_or_its_ruling
 99	geom-intersect::line_along_a_ruling	a_line_parallel_to_a_ruling_off_the_cone_is_nothing_or_one_crossing
 182	geom-intersect::line_along_a_ruling	a_segment_along_a_cone_s_ruling_is_one_overlap
+147	geom-intersect::line_along_a_ruling	a_segment_along_a_cone_s_ruling_past_its_domain_is_the_part_on_it
+7	geom-intersect::line_along_a_ruling	a_segment_along_a_cylinder_s_ruling_past_its_domain_is_the_part_on_it
+42	geom-intersect::line_along_a_ruling	a_segment_along_a_ruling_a_hair_short_of_the_domain_is_nothing
 4	geom-intersect::line_cone_exact	a_crossing_of_a_cone_with_a_start_radius_keeps_its_answer
 4	geom-intersect::line_cone_exact	a_crossing_the_enclosures_count_keeps_its_answer
 113	geom-intersect::line_cone_exact	a_line_a_step_beside_an_apex_misses_the_cone

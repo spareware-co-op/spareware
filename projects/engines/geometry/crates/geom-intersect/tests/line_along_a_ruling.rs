@@ -56,6 +56,16 @@ fn cone(c: [f64; 3], r0: f64, k: f64, f: Frame<3>) -> SurfaceKind {
     SurfaceKind::Cone(Cone::new(c, r0, k, f, ((0.0, 2.0), (-300.0, 300.0))).unwrap())
 }
 
+/// The cylinder about `c` of radius `r`, a whole turn and `v` along its axis.
+fn cylinder_over(c: [f64; 3], r: f64, f: Frame<3>, v: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Cylinder(Cylinder::new(c, r, f, ((0.0, 2.0), v)).unwrap())
+}
+
+/// The cone about `c` of radius `r0` at v = 0 and slope `k`, a whole turn and `v` along its axis.
+fn cone_over(c: [f64; 3], r0: f64, k: f64, f: Frame<3>, v: (f64, f64)) -> SurfaceKind {
+    SurfaceKind::Cone(Cone::new(c, r0, k, f, ((0.0, 2.0), v)).unwrap())
+}
+
 /// The line `o + t·d`, t in [−300, 300], as a plane's edge is.
 fn line(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
     CurveKind::Line(Line::new(o, d, (-300.0, 300.0)).unwrap())
@@ -69,6 +79,16 @@ fn segment(a: [f64; 3], b: [f64; 3]) -> CurveKind<3> {
 /// `a + k·b`.
 fn plus(a: [f64; 3], k: f64, b: [f64; 3]) -> [f64; 3] {
     [a[0] + k * b[0], a[1] + k * b[1], a[2] + k * b[2]]
+}
+
+/// `x` less `n` steps of the doubles.
+fn down(x: f64, n: u32) -> f64 {
+    (0..n).fold(x, |y, _| y.next_down())
+}
+
+/// The segment `o + t·d`, t in [0, 1], its `d` stored as given.
+fn stored(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
+    CurveKind::Line(Line::new(o, d, (0.0, 1.0)).unwrap())
 }
 
 /// The answer and the work it took.
@@ -98,6 +118,35 @@ fn along_all_of_it(found: &Intersection, u: f64, (v, w): (f64, f64)) {
                 panic!("{at:?}");
             };
             assert_eq!((t.lo(), t.hi()), (0.0, 1.0), "{at:?}");
+            assert!(near((turn.lo(), turn.hi()), u), "{at:?} against u = {u}");
+            let (lo, hi) = (height.lo(), height.hi());
+            assert!(lo <= v && v - lo < 1e-9, "{at:?} against v from {v}");
+            assert!(w <= hi && hi - w < 1e-9, "{at:?} against v to {w}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// The one overlap of `found`, by identity over the part of the segment from `first` to `last` at
+/// the turn `u`, from `v` to `w` (the lower first), each within 10⁻⁹ outside.
+fn along_part_of_it(found: &Intersection, (first, last): (f64, f64), u: f64, (v, w): (f64, f64)) {
+    match found.items() {
+        [
+            Item::Overlap {
+                at,
+                proof: Coincidence::Identical,
+                ..
+            },
+        ] => {
+            let [t, turn, height, ..] = at.spans() else {
+                panic!("{at:?}");
+            };
+            let (lo, hi) = (t.lo(), t.hi());
+            assert!(
+                lo <= first && first - lo < 1e-9,
+                "{at:?} against t from {first}"
+            );
+            assert!(last <= hi && hi - last < 1e-9, "{at:?} against t to {last}");
             assert!(near((turn.lo(), turn.hi()), u), "{at:?} against u = {u}");
             let (lo, hi) = (height.lo(), height.hi());
             assert!(lo <= v && v - lo < 1e-9, "{at:?} against v from {v}");
@@ -281,5 +330,184 @@ fn a_line_a_hair_off_parallel_is_still_the_engines() {
             ),
             Err(other) => panic!("{other:?}"),
         }
+    }
+}
+
+#[test]
+fn a_segment_along_a_cylinder_s_ruling_past_its_domain_is_the_part_on_it() {
+    // Issue 1153: a segment along a ruling that runs past an end of the cylinder's domain in v lies
+    // on it only where its v is in the domain, and the overlap is that part, its t cut there. Off
+    // the grid (32.107): the segment along the slant axis 192 from it, v from 0 to 3, against v in
+    // (1, 300), (1, 2) and (−1, 2), and run backwards against (1, 300). On the grid (32.87's
+    // `Within`): the cylinder of radius 4 about z, (0, 4, −5) to (0, 4, 5) both ways, (0, 4, −5) to
+    // (0, 4, 15) and (0, 4, 5) to (0, 4, 15), against v in (0, 10).
+    let start = plus(APEX, 64.0, ACROSS);
+    let end = plus(start, 1.0, SLANT.1);
+    let slant = |v| cylinder_over(APEX, 192.0, frame(SLANT), v);
+    let upright = || cylinder_over([0.0; 3], 4.0, Frame::standard().unwrap(), (0.0, 10.0));
+    let cases = [
+        (
+            segment(start, end),
+            slant((1.0, 300.0)),
+            (1.0 / 3.0, 1.0),
+            0.25,
+            (1.0, 3.0),
+        ),
+        (
+            segment(start, end),
+            slant((1.0, 2.0)),
+            (1.0 / 3.0, 2.0 / 3.0),
+            0.25,
+            (1.0, 2.0),
+        ),
+        (
+            segment(end, start),
+            slant((1.0, 300.0)),
+            (0.0, 2.0 / 3.0),
+            0.25,
+            (1.0, 3.0),
+        ),
+        (
+            segment([0.0, 4.0, -5.0], [0.0, 4.0, 5.0]),
+            upright(),
+            (0.5, 1.0),
+            0.5,
+            (0.0, 5.0),
+        ),
+        (
+            segment([0.0, 4.0, 5.0], [0.0, 4.0, -5.0]),
+            upright(),
+            (0.0, 0.5),
+            0.5,
+            (0.0, 5.0),
+        ),
+        (
+            segment([0.0, 4.0, -5.0], [0.0, 4.0, 15.0]),
+            upright(),
+            (0.25, 0.75),
+            0.5,
+            (0.0, 10.0),
+        ),
+        (
+            segment(start, end),
+            slant((-1.0, 2.0)),
+            (0.0, 2.0 / 3.0),
+            0.25,
+            (0.0, 2.0),
+        ),
+        (
+            segment([0.0, 4.0, 5.0], [0.0, 4.0, 15.0]),
+            upright(),
+            (0.0, 0.5),
+            0.5,
+            (5.0, 10.0),
+        ),
+    ];
+    for (edge, surface, t, u, v) in cases {
+        let (found, work) = meet(&edge, &surface);
+        along_part_of_it(&found, t, u, v);
+        assert_eq!(work, 1);
+    }
+}
+
+#[test]
+fn a_segment_along_a_cone_s_ruling_past_its_domain_is_the_part_on_it() {
+    // Issue 1153 on a cone. Off the grid: the slant cone of slope 1 with its apex at APEX, and the
+    // segment along the ruling a quarter turn round from v = 4 to 8, against v in (5, 300), (5, 7)
+    // and (3, 7), and run backwards against (5, 300). On the grid: issue 1112's cone of start
+    // radius 16 and slope 0.5 about z through (0, −4, 12), and (0, 4, −4) to (0, 8, 4), from
+    // v = −16 to −8, against v in (−12, 300), (−14, −10) and (−20, −10).
+    let on = |a: f64, b: f64| segment(plus(APEX, a, RULING), plus(APEX, b, RULING));
+    let slant = |v| cone_over(APEX, 0.0, 1.0, frame(SLANT), v);
+    let upright = |v| cone_over([0.0, -4.0, 12.0], 16.0, 0.5, Frame::standard().unwrap(), v);
+    let side = || segment([0.0, 4.0, -4.0], [0.0, 8.0, 4.0]);
+    let cases = [
+        (
+            on(4.0, 8.0),
+            slant((5.0, 300.0)),
+            (0.25, 1.0),
+            0.25,
+            (5.0, 8.0),
+        ),
+        (
+            on(4.0, 8.0),
+            slant((5.0, 7.0)),
+            (0.25, 0.75),
+            0.25,
+            (5.0, 7.0),
+        ),
+        (
+            on(8.0, 4.0),
+            slant((5.0, 300.0)),
+            (0.0, 0.75),
+            0.25,
+            (5.0, 8.0),
+        ),
+        (
+            side(),
+            upright((-12.0, 300.0)),
+            (0.5, 1.0),
+            0.5,
+            (-12.0, -8.0),
+        ),
+        (
+            side(),
+            upright((-14.0, -10.0)),
+            (0.25, 0.75),
+            0.5,
+            (-14.0, -10.0),
+        ),
+        (
+            on(4.0, 8.0),
+            slant((3.0, 7.0)),
+            (0.0, 0.75),
+            0.25,
+            (4.0, 7.0),
+        ),
+        (
+            side(),
+            upright((-20.0, -10.0)),
+            (0.0, 0.75),
+            0.5,
+            (-16.0, -10.0),
+        ),
+    ];
+    for (edge, surface, t, u, v) in cases {
+        let (found, work) = meet(&edge, &surface);
+        along_part_of_it(&found, t, u, v);
+        assert_eq!(work, 1);
+    }
+}
+
+#[test]
+fn a_segment_along_a_ruling_a_hair_short_of_the_domain_is_nothing() {
+    // Issue 1153: every bound of an enclosure is strictly past its exact value, so a segment along
+    // a ruling that stops short of an end of the domain in v by less than its v's rounding still
+    // lands on the domain there, and its cut t then meets or crosses itself. It is not on the
+    // bounded surface: nothing. The cylinder of radius 4 and the cone of radius 4 and slope 1, both
+    // about z with v in (0, 10), each from v = 13 down by 20 steps short of 3, so 9·10⁻¹⁵ above
+    // v = 10, where t is cut to from = to = 1; and the slant cone of slope 1 with v in (5, 300),
+    // from v = 4 along 48 steps short of one RULING, so 5·10⁻¹⁵ below v = 5, where from is a step
+    // past to.
+    let short = -down(3.0, 20);
+    let along = down(1.0, 48);
+    let cases = [
+        (
+            stored([0.0, 4.0, 13.0], [0.0, 0.0, short]),
+            cylinder_over([0.0; 3], 4.0, Frame::standard().unwrap(), (0.0, 10.0)),
+        ),
+        (
+            stored([0.0, 17.0, 13.0], [0.0, short, short]),
+            cone_over([0.0; 3], 4.0, 1.0, Frame::standard().unwrap(), (0.0, 10.0)),
+        ),
+        (
+            stored(plus(APEX, 4.0, RULING), [along, along, 0.0]),
+            cone_over(APEX, 0.0, 1.0, frame(SLANT), (5.0, 300.0)),
+        ),
+    ];
+    for (edge, surface) in cases {
+        let (found, work) = meet(&edge, &surface);
+        assert!(found.items().is_empty(), "{:?}", found.items());
+        assert_eq!(work, 0);
     }
 }
