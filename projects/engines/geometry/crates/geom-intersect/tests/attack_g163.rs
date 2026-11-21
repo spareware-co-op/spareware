@@ -2023,9 +2023,10 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
     };
     // The line within about 1 / 2k² of the unit circle, at k = 2^26: Δ is 1, which neither form
     // of the discriminant holds apart from zero there (issue 1156), so the roots are not parted.
+    // Only the piece of it by the circle, from (−k, −2) to (k, 0), so the engine's search is short.
     let k = two_to(26);
     assert!(routed(
-        &infinite([k, 0.0], [k, 1.0]),
+        &segment([-k, -2.0], [k, 0.0]),
         &circle([0.0, 0.0], 1.0)
     ));
     let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
