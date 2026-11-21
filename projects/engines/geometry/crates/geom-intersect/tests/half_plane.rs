@@ -610,6 +610,23 @@ fn a_profile_from_a_spheres_pole_meets_it_at_the_pole_by_its_proof() {
 }
 
 #[test]
+fn a_profile_whose_line_crosses_the_axis_past_its_span_is_read_on_its_own_side() {
+    // The profile is the piece t in (2, 3) of the line (21 − 6t, 0, 13 − 2t), from (9, 0, 9) to
+    // (3, 0, 7); its line crosses the axis at t = 3.5, past its end. The sphere of radius 10 meets
+    // the line at t = 2.5, on the span, in the ring ρ = 6 at z = 8, and at t = 5.1, off it. The
+    // true line is read in the half-plane toward the span's middle, t = 2.5: read toward a point
+    // past the crossing (t = 4 or more) it is the mirror image, whose meeting (−6, 8) is off the
+    // sphere's half circle, and the ring is lost (issue 1142).
+    let ball = Sphere::new([0.0; 3], 10.0, up(), (ROUND, (-0.5, 0.5))).unwrap();
+    let line = Line::new([21.0, 0.0, 13.0], [-6.0, 0.0, -2.0], (2.0, 3.0)).unwrap();
+    let funnel = revolution(CurveKind::Line(line));
+    let r = natural(&SurfaceKind::Sphere(ball), &funnel, &mut meter())
+        .unwrap()
+        .unwrap();
+    assert_rings(&r, &[(6.0, 8.0)]);
+}
+
+#[test]
 fn a_circle_near_the_axis_in_a_plane_of_a_slanted_direction_is_read_in_that_plane() {
     // In the plane of the z axis and (1, 3, 0), of normal (3, −1, 0): the circle about (1, 3, 0),
     // √10 off the axis, of radius r = 3.162277660168379, the largest double whose square is at most
