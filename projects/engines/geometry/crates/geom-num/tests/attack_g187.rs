@@ -181,7 +181,10 @@ fn agrees(l: &Carrier, p: &Rational2, q: &Rational2, r: &Rational2) {
 #[test]
 fn random_inputs_at_every_scale_match_the_oracle() {
     let mut rng = Rng::new();
-    for _ in 0..cases(40_000) {
+    // Under Miri the first 500 of the same inputs: a debug build's 2,000 took 586 s there, over
+    // the 375 s a test may take (decision 32.68).
+    let n = if cfg!(miri) { 500 } else { cases(40_000) };
+    for _ in 0..n {
         let (l, p, q, r) = (rng.carrier(), rng.point(), rng.point(), rng.point());
         agrees(&l, &p, &q, &r);
     }
@@ -486,7 +489,10 @@ fn orient_filter_boundary_crossed_both_ways() {
 fn the_filters_never_contradict_the_exact_paths_and_both_outcomes_occur() {
     let mut rng = Rng::new();
     let mut decided = [0_u64; 4];
-    for _ in 0..cases(100_000) {
+    // Under Miri the first 1,500 of the same inputs: a debug build's 5,000 took 446 s there, over
+    // the 375 s a test may take (decision 32.68).
+    let n = if cfg!(miri) { 1_500 } else { cases(100_000) };
+    for _ in 0..n {
         let (l, m, p, q, r) = (
             rng.carrier(),
             rng.carrier(),

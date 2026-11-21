@@ -25,6 +25,8 @@ use geom_sketch::equation::Assembly;
 use geom_sketch::model::{ItemId, Smoothness, SplineEnd};
 use geom_sketch::smooth::continuity;
 use geom_sketch::text::{parse, write};
+use geom_test::golden::check::PERTURBATION_SEEDS;
+use geom_test::golden::perturb::Heap;
 use geom_test::golden::{self, hex, sha256};
 
 /// The corpus's golden in the golden store.
@@ -70,10 +72,11 @@ fn drawing(rng: &mut Lcg) -> String {
     text
 }
 
-fn corpus() -> Vec<u8> {
+/// The corpus's first `rounds` rounds, of 64.
+fn corpus(rounds: usize) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut rng = Lcg(0x0220);
-    for round in 0..64 {
+    for round in 0..rounds {
         let base = drawing(&mut rng);
         let rule = RULES[round % RULES.len()];
         let text =
@@ -113,8 +116,29 @@ fn corpus() -> Vec<u8> {
 
 #[test]
 fn spline_golden_hash_is_the_same_on_every_target() {
+    // Under Miri the first 8 of the 64 rounds, built twice, once on each of the golden's two
+    // perturbed heaps, must give the same bytes: the golden's repeat, on a smaller corpus. The
+    // store's digest is of all 64 rounds and is the native test's, checked on every target; the
+    // whole corpus, twice, took 548 s under Miri, over the 375 s a test may take (decision 32.68).
+    if cfg!(miri) {
+        let runs: Vec<Vec<u8>> = PERTURBATION_SEEDS
+            .iter()
+            .map(|seed| {
+                let heap = Heap::shift_and_fragment(*seed);
+                let bytes = corpus(8);
+                drop(heap);
+                bytes
+            })
+            .collect();
+        assert_ne!(runs[0], [] as [u8; 0]);
+        assert_eq!(
+            runs[0], runs[1],
+            "the first 8 rounds differ between two heaps"
+        );
+        return;
+    }
     let checked = golden::check(GOLDEN, || {
-        let bytes = corpus();
+        let bytes = corpus(64);
         (sha256(&bytes), bytes)
     });
     println!(

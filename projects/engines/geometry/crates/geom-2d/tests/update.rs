@@ -722,8 +722,12 @@ fn a_chunk_is_halved_past_twice_its_size_and_not_before() {
 
 #[test]
 fn location_and_face_walks_cross_chunks() {
-    let live = Live::from_noded(&lattice(40)).unwrap();
-    assert!(live.chunk_count() > 10);
+    // Under Miri a lattice of side 20, whose 840 segments take at least four chunks of 256: side
+    // 40's 3,280 segments took 518 s there, over the 375 s a test may take (decision 32.68). The
+    // places asked are the same places of the smaller lattice.
+    let (side, chunks) = if cfg!(miri) { (20, 3) } else { (40, 10) };
+    let live = Live::from_noded(&lattice(side)).unwrap();
+    assert!(live.chunk_count() > chunks);
     let mut m = unlimited();
     // Inside a cell: the face is the cell, four corners round.
     let Location::Face(Some(h)) = live.locate(&rat(21, 21, 2), &mut m).unwrap() else {
@@ -734,23 +738,25 @@ fn location_and_face_walks_cross_chunks() {
         [(10, 10), (11, 10), (11, 11), (10, 11)]
     );
     // Above the lattice: the ray meets the top of a column at a corner, and the face is the
-    // unbounded one, whose boundary is the lattice's outline, 160 corners round.
-    let Location::Face(Some(h)) = live.locate(&rat(10, 45, 1), &mut m).unwrap() else {
+    // unbounded one, whose boundary is the lattice's outline, 4 side corners round.
+    let top = i128::from(side);
+    let Location::Face(Some(h)) = live.locate(&rat(10, top + 5, 1), &mut m).unwrap() else {
         panic!("a face");
     };
     assert_eq!(
         steps_of(&[h.from.clone(), h.to.clone()]),
-        [(10, 40), (11, 40)]
+        [(10, top), (11, top)]
     );
     let outline = live.face_cycle(&h, &mut m).unwrap();
-    assert_eq!(outline.len(), 160);
-    // A corner and a point on a unit segment.
+    assert_eq!(outline.len(), 4 * side as usize);
+    // A corner, half way along and three quarters up, and a point on a unit segment beside it.
+    let (half, up) = (top / 2, 3 * top / 4);
     assert!(matches!(
-        live.locate(&rat(20, 30, 1), &mut m).unwrap(),
+        live.locate(&rat(half, up, 1), &mut m).unwrap(),
         Location::Vertex(_)
     ));
     assert!(matches!(
-        live.locate(&rat(41, 60, 2), &mut m).unwrap(),
+        live.locate(&rat(2 * half + 1, 2 * up, 2), &mut m).unwrap(),
         Location::Edge(..)
     ));
 }

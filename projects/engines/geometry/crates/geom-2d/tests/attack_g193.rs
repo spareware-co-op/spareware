@@ -673,7 +673,15 @@ fn a_small_circle_far_away_takes_a_fine_line() {
 #[test]
 fn common_tangents_of_every_kind_at_every_scale() {
     let mut rng = Rng::new();
-    let cases = if cfg!(debug_assertions) { 40 } else { 800 };
+    // Under Miri the first 10 of the same cases: a debug build's 40 took 578 s there, over the
+    // 375 s a test may take (decision 32.68).
+    let cases = if cfg!(miri) {
+        10
+    } else if cfg!(debug_assertions) {
+        40
+    } else {
+        800
+    };
     let mut fine = 0;
     for _ in 0..cases {
         let far = 1_i64 << (16 + rng.next() % 22);

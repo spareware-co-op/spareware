@@ -290,9 +290,13 @@ fn a_spline_with_a_stopped_point_has_no_provable_length() {
 #[test]
 fn a_length_rule_reads_the_error_of_the_stated_length() {
     let exact = 5.0 * PI / 2.0;
-    let s = with_rule(&quarters(), &format!("spline-length 2.0 {exact}"));
-    let r = tail(&s, 1);
-    assert!(r[0].abs() < 1e-9, "{r:?}");
+    // Under Miri the stated length that misses alone, which reads the same error: both took 396 s
+    // there, over the 375 s a test may take (decision 32.68).
+    if !cfg!(miri) {
+        let s = with_rule(&quarters(), &format!("spline-length 2.0 {exact}"));
+        let r = tail(&s, 1);
+        assert!(r[0].abs() < 1e-9, "{r:?}");
+    }
     let s = with_rule(&quarters(), "spline-length 2.0 8");
     let r = tail(&s, 1);
     assert!((r[0] - (exact - 8.0)).abs() < 1e-9, "{r:?}");
@@ -428,7 +432,11 @@ fn every_jacobian_entry_is_the_derivative_of_its_residual() {
 fn every_spline_rule_is_enclosed_around_the_residual_it_stores() {
     let mut text = quarters();
     text.push_str("entity 1.7 point 0 0\nentity 1.8 point 6 1\nentity 2.3 line 1.7 1.8 segment\n");
-    for rule in [
+    // Under Miri one rule of each kind: a join, a tangent line, against an arc, against a line,
+    // the length and the pinned point. All twelve took 438 s there, over the 375 s a test may take
+    // (decision 32.68).
+    let miri = [2, 3, 5, 7, 10, 11];
+    for (k, rule) in [
         "spline-join 2.0 finish 2.1 start g1",
         "spline-join 2.0 finish 2.1 start g2",
         "spline-join 2.0 finish 2.1 start g3",
@@ -441,7 +449,13 @@ fn every_spline_rule_is_enclosed_around_the_residual_it_stores() {
         "spline-against 2.1 finish 2.3 start g3",
         "spline-length 2.1 7",
         "spline-through 2.0 1.7 0.3",
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if cfg!(miri) && !miri.contains(&k) {
+            continue;
+        }
         let s = with_rule(&text, rule);
         let mut a = Assembly::new(&s).unwrap();
         let mut x = a.start().unwrap();

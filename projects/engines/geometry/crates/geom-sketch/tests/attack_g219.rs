@@ -488,8 +488,10 @@ fn the_radii_are_dimensions_and_measure() {
 
 /// The length of the ellipse of axis (a, 0) and minor radius b from the parameter t0 to t1, by
 /// Simpson's rule on 200,000 panels: an oracle of its own, independent of the kernel's quadrature.
+/// Under Miri on 2,000, whose error on these smooth speeds is still far under the 1e-9 the test
+/// asks: its rule's error falls as the fourth power of the panel.
 fn simpson(a: f64, b: f64, t0: f64, t1: f64) -> f64 {
-    let n = 200_000;
+    let n = if cfg!(miri) { 2_000 } else { 200_000 };
     let h = (t1 - t0) / f64::from(n);
     let speed = |t: f64| {
         let s = t * std::f64::consts::PI;
@@ -532,7 +534,15 @@ fn an_elliptical_arcs_length_is_its_quadrature() {
     let jacobian = a.jacobian().to_dense().unwrap();
     let last = a.residuals().len() - 1;
     let h = 1e-6;
+    // Under Miri the arc's own columns alone, its axis, minor radius and ends' parameters, the
+    // ones the row moves with: every column took 472 s there, over the 375 s a test may take
+    // (decision 32.68). Natively every other column is checked to be zero as well.
+    let own = [id(7, 0), id(8, 0), id(8, 1)];
+    let owners: Vec<ItemId> = a.variables().iter().map(|v| v.owner).collect();
     for j in 0..x.len() {
+        if cfg!(miri) && !own.contains(&owners[j]) {
+            continue;
+        }
         let scale = a.variables()[j].scale;
         let mut at = |value: f64| {
             let mut y = x.clone();
@@ -758,8 +768,11 @@ fn a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radiu
     let s = with(&["on-ellipse 1.1 5.0"]).unwrap();
     let start = Assembly::new(&s).unwrap();
     let mut read = 0;
-    for i in 0..25 {
-        for j in 0..25 {
+    // Under Miri every other step of the same range, 13 by 13 of the 25 by 25, which took 538 s
+    // there, over the 375 s a test may take (decision 32.68).
+    let (step, least) = if cfg!(miri) { (2, 135) } else { (1, 500) };
+    for i in (0..25).step_by(step) {
+        for j in (0..25).step_by(step) {
             let (grow, thin) = (-6.0 + 0.61 * f64::from(i), -4.0 + 0.53 * f64::from(j));
             let x = moved(&start, &[(id(5, 0), 0, grow), (id(5, 0), 2, thin)]);
             let mut a = Assembly::new(&s).unwrap();
@@ -786,7 +799,7 @@ fn a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radiu
             read += 1;
         }
     }
-    assert!(read > 500, "{read}");
+    assert!(read > least, "{read}");
 }
 
 #[test]
