@@ -15,14 +15,19 @@
 )]
 
 use geom_bool::carrier::PointGeom;
+use geom_bool::distance::FIRST_FLOOR;
 use geom_bool::interfere::{
     Arrangement, BuildError, EdgeIn, Entity, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
+use geom_bool::rule::REFINEMENTS;
 use geom_curve::geom_nurbs::{Basis, Curve};
 use geom_curve::{Circle, CurveKind, Frame, ParamCurve};
-use geom_intersect::Unresolved;
+use geom_intersect::curve::{curves, curves_over};
+use geom_intersect::project::{Projection, project_curve};
+use geom_intersect::{Item, ParamBox, Seam, Unresolved};
 use geom_num::P3;
+use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -353,6 +358,31 @@ fn a_region_straddling_the_pave_at_an_overlap_s_end_stands() {
     assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
 }
 
+/// The arc and its copy of three quarters above, with a fourth operand's vertex at (−663, 884) on
+/// the copy past the arc's end: it cuts the copy's second piece in two, and the piece from it on
+/// is in no block either. The region ends in the box that straddles the pave at the arc's end,
+/// well short of the vertex, so it lies wholly before that piece, reaches no part of it, and
+/// stands as without the cut.
+#[test]
+fn a_region_straddling_the_pave_at_an_overlap_s_end_stands_before_a_later_cut() {
+    let mut arr = Arrangement::default();
+    between(
+        &mut arr,
+        CurveKind::Circle(arc(1.0)),
+        [[0, -1105], [0, 1105]],
+        0,
+    );
+    between(&mut arr, copy(&arc(1.5)), [[0, -1105], [-1105, 0]], 2);
+    arr.vertices.push(VertexIn {
+        point: PointGeom::Grid(P3::new(-663, 884, 0).unwrap()),
+        operand: 3,
+    });
+    let out = run(&arr).unwrap();
+    assert_eq!(out.splits.len(), 4, "{:?}", out.splits);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 1]], "{:?}", out.common);
+}
+
 /// The first circle's upper half, from (1105, 0) to (−1105, 0), and a NURBS curve that follows it
 /// from (1105, 0) to (0, 1105) and runs on straight along its tangent there to (−600, 1105), of two
 /// operands, with a third operand's vertex at (663, 884) on both. The vertex cuts both, and their
@@ -414,10 +444,12 @@ fn a_copy_of_the_half_across_a_circle_s_seam_is_one_block_with_it() {
 /// quarter from there to (0, 1105), of another operand: the copy's ends cut the circle into that
 /// quarter, one block with the copy, and the rest, which runs from (0, 1105) round to the seam and
 /// is in no block. The region where the circle and the copy overlap starts at the seam, where the
-/// rest ends, and stops short of the pave at (0, 1105), so it reaches into the quarter alone and
-/// stands: a region that starts where a piece ends does not reach into the piece.
+/// rest ends, and stops short of the pave at (0, 1105). Its span on the circle is kept whole
+/// across the join (decision 32.104): it starts in the window a little before the end and passes
+/// the seam pave's enclosure, a box at each end of the domain. Before the box at the end the two
+/// edges are proven apart, so the region stays out of the rest and stands.
 #[test]
-fn a_region_from_the_seam_stays_out_of_the_piece_that_ends_there() {
+fn a_region_from_the_seam_whose_span_runs_back_past_the_join_stands() {
     let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
     let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
     let quarter = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 0.5)).unwrap();
@@ -426,6 +458,129 @@ fn a_region_from_the_seam_stays_out_of_the_piece_that_ends_there() {
     assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
     let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
     assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+}
+
+/// The region of the quarter's copy above, asked as the held check asks it: its span on the
+/// circle runs across the join and passes both boxes the projection gives the seam vertex
+/// (1105, 0), one at each end of the domain. Over the stretch to the domain's end less the box
+/// there the circle and the copy are proven apart; over the whole stretch, which holds the vertex,
+/// they meet.
+#[test]
+fn the_region_from_the_seam_passes_both_boxes_of_the_seam_pave_and_is_apart_before_them() {
+    let circle = CurveKind::Circle(first([1.0, 0.0]));
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let quarter = copy(&Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 0.5)).unwrap());
+    let mut m = meter();
+    let met = curves(&circle, &quarter, &mut m).unwrap();
+    let regions: Vec<ParamBox> = met
+        .items()
+        .iter()
+        .filter_map(|item| match item {
+            Item::Flagged { at, .. } => Some(*at),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(regions.len(), 1, "{:?}", met.items());
+    let (s, t) = (regions[0].spans()[0], regions[0].spans()[1]);
+    let [Some(ending), Some(starting)] = Seam::of_curve(&circle).spans(s) else {
+        panic!("{s:?}");
+    };
+    let [Some(other), None] = Seam::of_curve(&quarter).spans(t) else {
+        panic!("{t:?}");
+    };
+    let floor = FIRST_FLOOR / f64::from(1_u32 << REFINEMENTS);
+    let Projection::Points(found) =
+        project_curve(&circle, &[1105.0, 0.0, 0.0], floor, &mut m).unwrap()
+    else {
+        panic!("not points");
+    };
+    let boxes: Vec<Interval> = found.iter().map(|n| n.at[0]).collect();
+    assert_eq!(boxes.len(), 2, "{boxes:?}");
+    let (near, far) = (boxes[0], boxes[1]);
+    assert_eq!((near.lo(), far.hi()), (0.0, 2.0), "{boxes:?}");
+    assert!(
+        ending.0 < far.lo() && near.hi() < starting.1,
+        "{s:?} {boxes:?}"
+    );
+    let before = curves_over(&circle, (ending.0, far.lo()), &quarter, other, &mut m).unwrap();
+    assert!(before.items().is_empty(), "{:?}", before.items());
+    let whole = curves_over(&circle, ending, &quarter, other, &mut m).unwrap();
+    assert_ne!(whole.items(), []);
+}
+
+/// The first circle whole and a NURBS copy of its arc from 2^-14 half-turns past the seam to
+/// (0, 1105), of another operand, between grid vertices at (1105, 0) and (0, 1105). The region's
+/// span on the circle runs back across the join only as far as the seam pave's box at the
+/// domain's end, [2 - 2^-18, 2]: that stretch is inside the seam pave's enclosure and reaches no
+/// piece, and the stretch from the start reaches only the piece the copy shares, so it stands.
+#[test]
+fn a_region_whose_span_runs_back_across_the_join_only_into_the_seam_box_stands() {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let arc = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (2f64.powi(-14), 0.5)).unwrap();
+    between(&mut arr, copy(&arc), [[1105, 0], [0, 1105]], 1);
+    let out = run(&arr).unwrap();
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+}
+
+/// The first circle whole and a NURBS copy of its last quarter, from (0, -1105) to (1105, 0), of
+/// another operand, between grid vertices there. The region's span on the circle runs across the
+/// join: the stretch to the domain's end is in the piece the copy shares, and the stretch from the
+/// start passes the seam pave's enclosure into the piece from the seam, where the edges are proven
+/// apart past the pave's box at the start, so it stands.
+#[test]
+fn a_region_whose_span_runs_from_a_shared_piece_across_the_join_past_the_seam_pave_stands() {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let arc = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (1.5, 2.0)).unwrap();
+    between(&mut arr, copy(&arc), [[0, -1105], [1105, 0]], 1);
+    let out = run(&arr).unwrap();
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![1, 2]], "{:?}", out.common);
+}
+
+/// The first circle whole and a NURBS copy of its last quarter that ends `short` half-turns before
+/// the join, from (0, −1105) to 1105π·`short` steps short of (1105, 0), of another operand, between
+/// grid vertices at (0, −1105) and (1105, 0). As with the exact quarter's copy above, the copy's
+/// ends cut the circle into the piece from the seam to (0, −1105) and the piece from there round
+/// to the join, where the seam pave stands at the domain's start. Inside its paves that piece is
+/// the one stretch to the join, which the copy follows to well within the contact radius, so the
+/// two are one block, which covers the region where they overlap, and it stands.
+fn the_last_quarter_short_of_the_join(short: f64) {
+    let mut arr = arrangement(vec![CurveKind::Circle(first([1.0, 0.0]))], &[]);
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let arc = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (1.5, 2.0 - short)).unwrap();
+    between(&mut arr, copy(&arc), [[0, -1105], [1105, 0]], 1);
+    let out = run(&arr).unwrap();
+    assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert_eq!(members, vec![vec![1, 2]], "{:?}", out.common);
+}
+
+/// The last quarter's copy ending at 2 − 2^-52, the double just before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_52_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-52));
+}
+
+/// The last quarter's copy ending 2^-40 half-turns before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_40_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-40));
+}
+
+/// The last quarter's copy ending 2^-20 half-turns before the join.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_20_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-20));
+}
+
+/// The last quarter's copy ending 2^-12 half-turns before the join, about 0.85 steps short of the
+/// vertex.
+#[test]
+fn the_last_quarter_ending_2_to_the_minus_12_short_of_the_join_stands() {
+    the_last_quarter_short_of_the_join(2f64.powi(-12));
 }
 
 /// The first circle whole and a NURBS copy of its upper half, from (1105, 0) to (−1105, 0): the
@@ -444,6 +599,94 @@ fn a_region_ending_in_a_box_past_the_pave_of_a_piece_that_runs_to_the_seam_stand
     assert!(out.splits[1].block.wraps, "{:?}", out.splits[1]);
     let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
     assert_eq!(members, vec![vec![0, 2]], "{:?}", out.common);
+}
+
+/// The first circle whole; a whole circle about (1105, −1105) whose radius is 14 doubles' steps
+/// short of 1105, which crosses the first 3.2·10^-12 below its join, the crossing's pave there
+/// ending exactly on the domain's end, 2; and an arc from (1100, −105) to (1100, 105) of a circle
+/// 10^-10 smaller, its centre 10^-10 off towards 0.05 radians, of a third operand. The arc lies
+/// within 10^-12 of the first circle, so the crossing cuts it at the same vertex, and the pieces
+/// of the two either side of the vertex are two common blocks, the circle's piece after it running
+/// round the join. Near 0.05 radians the two cross twice too close together to hold apart, one
+/// tangent band past the join and short of (1100, 105), which reaches only that piece. Read round
+/// the join from the pave that ends on its end, the piece holds the band, and it stands.
+#[test]
+fn a_band_past_the_join_stands_in_the_piece_from_a_pave_ending_on_the_join() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let cutter = Circle::new(
+        [1105.0, -1105.0, 0.0],
+        1_104.999_999_999_996_8,
+        frame,
+        (0.0, 2.0),
+    )
+    .unwrap();
+    let mut arr = arrangement(
+        vec![
+            CurveKind::Circle(first([1.0, 0.0])),
+            CurveKind::Circle(cutter),
+        ],
+        &[],
+    );
+    let along = Frame::new(
+        [0.995_475_113_122_170_7, -0.095_022_624_434_402_17, 0.0],
+        [0.0, 0.0, 1.0],
+    )
+    .unwrap();
+    let inner = Circle::new(
+        [9.991_938_772_459_098e-11, 5.000_136_861_576_372e-12, 0.0],
+        1_104.999_999_999_9,
+        along,
+        (0.0, 0.060_584_688_753_478_03),
+    )
+    .unwrap();
+    let met = curves(
+        &CurveKind::Circle(first([1.0, 0.0])),
+        &CurveKind::Circle(inner.clone()),
+        &mut meter(),
+    )
+    .unwrap();
+    match met.items() {
+        [
+            Item::Flagged {
+                at,
+                why: Unresolved::TangentBand { .. },
+                ..
+            },
+        ] => {
+            let s = at.spans()[0];
+            assert!(0.0 < s.lo() && s.hi() < 0.03, "{s:?}");
+        }
+        other => panic!("{other:?}"),
+    }
+    let b = between(
+        &mut arr,
+        CurveKind::Circle(inner),
+        [[1100, -105], [1100, 105]],
+        2,
+    );
+    let out = run(&arr).unwrap();
+    let join = *out.paves[0].iter().find(|p| p.t.hi() == 2.0).unwrap();
+    assert!(join.t.lo() < 2.0, "{join:?}");
+    assert!(
+        out.paves[b].iter().any(|p| p.vertex == join.vertex),
+        "{:?}",
+        out.paves[b]
+    );
+    let from = |e: usize| {
+        (0..out.splits.len())
+            .find(|&k| {
+                out.splits[k].source == e
+                    && out.splits[k]
+                        .block
+                        .from
+                        .is_some_and(|p| p.vertex == join.vertex)
+            })
+            .unwrap()
+    };
+    let (round, after) = (from(0), from(b));
+    assert!(out.splits[round].block.wraps, "{:?}", out.splits[round]);
+    let members: Vec<Vec<usize>> = out.common.iter().map(|c| c.members.clone()).collect();
+    assert!(members.contains(&vec![round, after]), "{:?}", out.common);
 }
 
 /// The first circle's arc from `start`, a point of it, turning `turns` half-turns, counter-clockwise

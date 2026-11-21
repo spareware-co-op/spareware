@@ -19,6 +19,10 @@
 //! - **One vertex is one pave where it touches the edge once.** Paves of one vertex whose
 //!   enclosures meet become one, whose enclosure is the meet of theirs; a vertex met twice at
 //!   enclosures proven apart (an edge that leaves a vertex and comes back to it) keeps both.
+//! - **A closed curve's join is no end.** [`order_on`] reads the paves on the edge's curve's seam
+//!   (`geom_intersect::Seam`): on a whole turn an enclosure starts in the window and may run past
+//!   its end, read modulo the turn (decision 32.104), so the last pave is also tried against the
+//!   first, and a vertex on the join found once each side of it is one pave.
 //! - **The blocks cover the edge.** Each block runs from a pave to the next; an open edge's blocks
 //!   run from its first pave to its last, and a closed edge's from each pave round to the next.
 //! - **Deterministic.** Paves are sorted by the lower end of their enclosure, then its upper end,
@@ -36,6 +40,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
 
+use geom_intersect::Seam;
 use geom_num::NumError;
 use geom_num::interval::Interval;
 
@@ -97,13 +102,27 @@ impl From<NumError> for OrderError {
     }
 }
 
-/// The paves of `edge` in their proven order, one per meeting of a vertex with the edge.
+/// The paves of `edge` in their proven order, one per meeting of a vertex with the edge, read on
+/// an open domain: [`order_on`] with no join.
 ///
 /// # Errors
 ///
 /// [`OrderError::Undecided`] for two paves of different vertices whose enclosures meet;
 /// [`OrderError::Num`] for an enclosure that cannot be formed.
-pub fn order(edge: usize, mut paves: Vec<Pave>) -> Result<Vec<Pave>, OrderError> {
+pub fn order(edge: usize, paves: Vec<Pave>) -> Result<Vec<Pave>, OrderError> {
+    order_on(edge, paves, Seam::open((f64::NEG_INFINITY, f64::INFINITY)))
+}
+
+/// [`order`] with the paves read on `seam`, the edge's curve's ([`Seam::of_curve`]). On a whole
+/// turn an enclosure starts in the window and may run past its end, read modulo the turn
+/// (decision 32.104), so the last pave is also tried against the first: two of different
+/// vertices that meet modulo the turn fail, and two of one vertex are one pave, at the meet of
+/// their enclosures modulo the turn, written where the first pave stands.
+///
+/// # Errors
+///
+/// As [`order`].
+pub fn order_on(edge: usize, mut paves: Vec<Pave>, seam: Seam) -> Result<Vec<Pave>, OrderError> {
     paves.sort_by(along);
     let mut out: Vec<Pave> = Vec::with_capacity(paves.len());
     for pave in paves {
@@ -126,6 +145,38 @@ pub fn order(edge: usize, mut paves: Vec<Pave>) -> Result<Vec<Pave>, OrderError>
         let lo = greater(last.t.lo(), pave.t.lo());
         let hi = lesser(last.t.hi(), pave.t.hi());
         last.t = Interval::new(lo, hi)?;
+    }
+    // Round the join: the last pave, running past the end, against the first. The others are in
+    // proven order, so only the first can meet the last modulo the turn.
+    while let (Some(&first), Some(&last), true) = (out.first(), out.last(), out.len() > 1) {
+        if !seam
+            .meets(last.t, first.t)
+            .map_err(|_| NumError::NotFinite)?
+        {
+            break;
+        }
+        if last.vertex != first.vertex {
+            return Err(OrderError::Undecided(PaveError {
+                edge,
+                first: last,
+                second: first,
+            }));
+        }
+        // The stretch of the domain both cover, which lies at the window's start where the first
+        // pave stands; either enclosure alone holds the vertex, should rounding leave none.
+        let met = seam
+            .spans(last.t)
+            .into_iter()
+            .flatten()
+            .find_map(|(lo, hi)| {
+                let (lo, hi) = (greater(lo, first.t.lo()), lesser(hi, first.t.hi()));
+                Interval::new(lo, hi).ok()
+            })
+            .unwrap_or(first.t);
+        out.pop();
+        if let Some(head) = out.first_mut() {
+            head.t = met;
+        }
     }
     Ok(out)
 }

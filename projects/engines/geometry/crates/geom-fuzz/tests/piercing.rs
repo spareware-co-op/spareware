@@ -213,7 +213,8 @@ fn a_segment_along_a_plane_off_the_grid_is_a_closed_form() {
 /// 826,784, 946,148 and 832,796 units for one flagged item, and 1,048,577 for the budget's stop.
 /// Whether a line is parallel to a ruling is an exact sign now, and one with B and C zero lies
 /// along it (decision 32.107): one overlap by identity over all of it, t in [0, 1], at the
-/// enclosures of (u, v) given.
+/// enclosures of (u, v) given. On the cones of slope zero the ruling is on the cone's join, u = 0,
+/// held across it from just short of 2 (decision 32.104).
 const SEGMENTS_ALONG_A_RULING: [Pinned; 5] = [
     (
         &[
@@ -232,7 +233,7 @@ const SEGMENTS_ALONG_A_RULING: [Pinned; 5] = [
             0x00, 0x00,
         ],
         Some([
-            (0.0, 1.5e-323),
+            (1.999_999_999_999_999_8, 2.000_000_000_000_000_4),
             (-3.996_802_888_650_565e-15, 4.000_000_000_000_004),
         ]),
         1,
@@ -243,7 +244,7 @@ const SEGMENTS_ALONG_A_RULING: [Pinned; 5] = [
             0x00, 0x00,
         ],
         Some([
-            (0.0, 1.5e-323),
+            (1.999_999_999_999_999_8, 2.000_000_000_000_000_4),
             (-1.705_302_565_824_241e-13, 132.000_000_000_000_14),
         ]),
         1,
@@ -254,7 +255,7 @@ const SEGMENTS_ALONG_A_RULING: [Pinned; 5] = [
             0x43,
         ],
         Some([
-            (0.0, 1.5e-323),
+            (1.999_999_999_999_999_8, 2.000_000_000_000_000_4),
             (3.999_999_999_999_988_5, 12.000_000_000_000_009),
         ]),
         1,
