@@ -7,6 +7,10 @@
 //! the apex and on the cone's axis: they meet in the circle z = 1 of radius 1 and in the apex
 //! alone. And a ball of radius 1024 whose south pole sits a few doubles from the origin, read
 //! against a plane at 45 degrees to its axis that passes 4.5 · 2⁻⁴³ from that pole.
+//!
+//! How two enclosures meet is held too, in marches over pairs built by hand: an enclosure that
+//! reaches a pole's value at one end is not held on the pole, and one held at a closing
+//! parameter's end meets another across the seam only if that one is held at the other end.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,10 +23,12 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::general::subdivide;
-use geom_intersect::result::{Test, Unresolved};
+use geom_intersect::general::{Settled, Subdivided, subdivide};
+use geom_intersect::march::march;
+use geom_intersect::result::{CurveEnd, Test, Unresolved};
+use geom_num::interval::Interval;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cone, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind};
 
 #[test]
 fn a_ball_resting_on_a_cones_apex_keeps_the_apex() {
@@ -142,4 +148,140 @@ fn a_pole_wider_than_the_floor_is_not_read_onto_a_plane_two_floors_off() {
         found.flagged.iter().any(|f| f.first.1.0 == -0.5),
         "{found:?}"
     );
+}
+
+fn around(x: f64, half: f64) -> Interval {
+    Interval::new(x - half, x + half).unwrap()
+}
+
+fn pt(x: f64) -> Interval {
+    Interval::point(x).unwrap()
+}
+
+/// One settled pair, nothing flagged.
+fn one_pair(
+    first: ((f64, f64), (f64, f64)),
+    second: ((f64, f64), (f64, f64)),
+    starts: Vec<[Interval; 4]>,
+) -> Subdivided {
+    Subdivided {
+        settled: vec![Settled {
+            first,
+            second,
+            starts,
+        }],
+        flagged: Vec::new(),
+    }
+}
+
+#[test]
+fn an_end_whose_enclosure_reaches_the_apex_is_not_singular() {
+    // The plane x = 0 holds the line u = 1/2 of the double cone x² + y² = z², (0, v, v). A pair over
+    // v ≥ t holds it from (0, t, t), t = 1/16, over six floors from the apex, to (0, 4, 4). The low
+    // start's enclosure of v is [0, 2t]: it reaches the apex's value 0 but is not held there, and
+    // the branch's end at it is the pair's edge, not the apex.
+    let t = 1.0 / 16.0;
+    let cone = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            0.0,
+            1.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-4.0, 4.0)),
+        )
+        .unwrap(),
+    );
+    let wall = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        )
+        .unwrap(),
+    );
+    let low = [
+        pt(0.5),
+        Interval::new(0.0, 2.0 * t).unwrap(),
+        around(t, 1e-12),
+        around(t, 1e-12),
+    ];
+    let top = [pt(0.5), pt(4.0), pt(4.0), pt(4.0)];
+    for (starts, ends) in [
+        (vec![low, top], [CurveEnd::Flagged, CurveEnd::Boundary]),
+        (vec![top, low], [CurveEnd::Boundary, CurveEnd::Flagged]),
+    ] {
+        let found = one_pair(((0.25, 0.75), (t, 4.0)), ((-8.0, 8.0), (-8.0, 8.0)), starts);
+        let traced = march(
+            &cone,
+            &wall,
+            &found,
+            1.0 / 64.0,
+            1.0 / 64.0,
+            &mut WorkMeter::new(Budget::of_work(1 << 22)),
+        )
+        .unwrap();
+        assert!(traced.unproven.is_empty(), "{traced:?}");
+        assert_eq!(traced.branches.len(), 1, "{traced:?}");
+        assert_eq!(traced.branches[0].ends, ends, "{traced:?}");
+    }
+}
+
+#[test]
+fn an_arc_from_a_cylinders_seam_is_open_at_a_start_not_held_at_the_seams_other_end() {
+    // z = 0 meets the unit cylinder about z in its circle v = 0; a pair over u in [0, 2/5] holds the
+    // arc from (1, 0, 0), at u = 0 on the seam, to (cos 2π/5, sin 2π/5, 0). The starts' enclosures
+    // in the plane are wide enough to overlap, so only u tells them apart: u = 2/5 is not the seam's
+    // other end, and the arc is open, whichever start it is marched from.
+    let cyl = SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            1.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-1.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    let ground = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-2.0, 2.0), (-2.0, 2.0)),
+        )
+        .unwrap(),
+    );
+    let w = 0.75;
+    let a = [pt(0.0), pt(0.0), around(1.0, w), around(0.0, w)];
+    let turn = core::f64::consts::PI * 0.4;
+    let b = [
+        pt(0.4),
+        pt(0.0),
+        around(turn.cos(), w),
+        around(turn.sin(), w),
+    ];
+    for (starts, ends) in [
+        (vec![a, b], [CurveEnd::Boundary, CurveEnd::Flagged]),
+        (vec![b, a], [CurveEnd::Flagged, CurveEnd::Boundary]),
+    ] {
+        let found = one_pair(
+            ((0.0, 0.4), (-1.0, 1.0)),
+            ((-2.0, 2.0), (-2.0, 2.0)),
+            starts,
+        );
+        let traced = march(
+            &cyl,
+            &ground,
+            &found,
+            1e-3,
+            1e-3,
+            &mut WorkMeter::new(Budget::of_work(1 << 22)),
+        )
+        .unwrap();
+        assert!(traced.unproven.is_empty(), "{traced:?}");
+        assert_eq!(traced.branches.len(), 1, "{traced:?}");
+        let branch = &traced.branches[0];
+        assert_eq!(branch.ends, ends, "{branch:?}");
+        assert!(branch.vertices.len() > 2, "{branch:?}");
+    }
 }

@@ -332,13 +332,14 @@ fn a_cap_holds_one_branch_through_its_pole() {
 #[test]
 fn two_arms_of_a_hyperbola_end_at_their_own_starts_however_close() {
     // x = −g meets the cone x² + y² = z² in the hyperbola v cos πu = −g, y = v sin πu, z = v: over
-    // u near 1 its arm u < 1 has y > 0 and its arm u > 1 has y < 0. The patch v ≥ 0.064 cuts each arm
-    // once at the top, v = 4, and once at the bottom, where the arms are 2√(0.064² − g²) < 2 floors
-    // apart: both bottom starts are within twice the floor of where each arm ends, and each arm ends
-    // at its own, the nearer in parameters.
+    // u near 1 its arm u < 1 has y > 0 and its arm u > 1 has y < 0. The patch v ≥ 0.06251 cuts each
+    // arm once at the top, v = 4, and once at the bottom, where the arms are 2√(0.06251² − g²), a
+    // seventh of a floor, apart: as an arm comes within twice the floor of its own bottom start it
+    // is within twice the floor of the other's too, and it ends at its own, the nearer in
+    // parameters.
     let pi = core::f64::consts::PI;
     let g = 1.0 / 16.0;
-    let (low, high) = (0.064, 4.0);
+    let (low, high) = (0.06251, 4.0);
     let cone = SurfaceKind::Cone(
         Cone::new(
             [0.0; 3],
