@@ -1503,6 +1503,55 @@ fn a_long_line_all_but_tangent_to_a_small_circle_is_flagged_in_little_work() {
 }
 
 #[test]
+fn a_line_from_far_out_crosses_a_circle_within_a_step_of_where_it_does() {
+    // Issue 1156: the line from W = (-4484124354, 606509116481), 2^39 out, to the centre of a
+    // circle of radius 292,685 crosses it at right angles at R·W/|W|. The discriminant B² − AC,
+    // from terms some 10¹³ times its size, kept their rounding and spread that crossing's box
+    // over 17,060 steps of the line; taken as A less the square of the line's distance from the
+    // centre, it holds the crossing within a step or two.
+    let holds = |item: &Item, [x, y]: [f64; 2]| {
+        let Item::Point {
+            xyz,
+            contact: PointContact::Crossing,
+            ..
+        } = item
+        else {
+            panic!("{item:?}")
+        };
+        let (lo, hi) = (xyz.min(), xyz.max());
+        assert!(
+            hi.x.get() - lo.x.get() <= 2 && hi.y.get() - lo.y.get() <= 2,
+            "{xyz:?}"
+        );
+        lo.x.get() as f64 <= x
+            && x <= hi.x.get() as f64
+            && lo.y.get() as f64 <= y
+            && y <= hi.y.get() as f64
+    };
+    let (w, r) = ([-4_484_124_354.0_f64, 606_509_116_481.0_f64], 292_685.0);
+    let far = w[0].hypot(w[1]);
+    let got = meet(&segment(w, [0.0, 0.0]), &circle([0.0, 0.0], r));
+    let [one] = got.items() else {
+        panic!("{:?}", got.items())
+    };
+    assert!(holds(one, [r * w[0] / far, r * w[1] / far]), "{one:?}");
+    // Off the centre too, 3-4-5 scaled by 2^16, from 2^39 out either way: both crossings, each on
+    // the grid, each in a box a step or two wide.
+    let k = two_to(16);
+    let line = segment([-two_to(39), 3.0 * k], [two_to(39), 3.0 * k]);
+    let got = meet(&line, &circle([0.0, 0.0], 5.0 * k));
+    assert_eq!(got.items().len(), 2, "{:?}", got.items());
+    for x in [-4.0 * k, 4.0 * k] {
+        let n = got
+            .items()
+            .iter()
+            .filter(|i| holds(i, [x, 3.0 * k]))
+            .count();
+        assert_eq!(n, 1, "{x}: {:?}", got.items());
+    }
+}
+
+#[test]
 fn an_overlap_far_along_its_parameter_is_flagged_within_budget() {
     // One curve runs on parameters near 2^40, where a double's step is 2^-12, and covers 16,384
     // grid steps a unit: a side one step of a double wide still reaches 4 grid steps, past the
@@ -2153,11 +2202,13 @@ fn a_pair_s_route_is_on_the_record_only_when_a_closed_form_could_not_decide() {
             .iter()
             .any(|d| d.code == "closed-form-to-engine")
     };
-    // The line all but tangent to a circle, half a step off the grid: no exact sum holds its
-    // discriminant, which the coefficients' enclosures cannot sign.
-    let k = two_to(20);
+    // The line within about 1 / 2k² of the unit circle, at k = 2^26, half a step off the grid: no
+    // exact sum holds its discriminant, and Δ is 1, which neither form of it holds apart from zero
+    // there (issue 1156), so the roots are not parted. Only the piece of it by the circle, from
+    // (−k, −2) to (k, 0) moved half a step, so the engine's search is short.
+    let k = two_to(26);
     assert!(routed(
-        &infinite([k + 0.5, 0.0], [k, 1.0]),
+        &segment([0.5 - k, -2.0], [k + 0.5, 0.0]),
         &circle([0.5, 0.0], 1.0)
     ));
     let hump = bezier(&[[0.0, -1.0], [2.0, 3.0], [4.0, -1.0]]);
