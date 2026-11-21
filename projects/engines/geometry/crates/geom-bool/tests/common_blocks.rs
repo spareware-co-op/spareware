@@ -18,11 +18,14 @@
 )]
 
 use geom_bool::carrier::PointGeom;
-use geom_bool::common::Proof;
-use geom_bool::interfere::{Arrangement, EdgeIn, Interfered, VertexIn, interfere};
+use geom_bool::common::{DEEPEST, Proof, common_blocks};
+use geom_bool::interfere::{Arrangement, BuildError, EdgeIn, Interfered, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
+use geom_bool::pave::{Pave, PaveBlock};
+use geom_bool::rule::{ContactError, NearContact};
 use geom_curve::{Circle, CurveKind, Frame, Line, ParamCurve};
 use geom_num::P3;
+use geom_num::interval::Interval;
 use geom_run::{Budget, Exec, WorkMeter};
 
 fn meter() -> WorkMeter<'static> {
@@ -188,4 +191,139 @@ fn a_block_of_three_holds_the_weakest_proof_of_its_pairs() {
     let (members, widest) = proof_of(&out);
     assert_eq!(members, 3);
     assert!(2.85 < widest && widest < 3.0, "{widest}");
+}
+
+/// A closed circle of radius 1105 from (1105, 0) and a NURBS copy of its first quarter, to
+/// (0, 1105), of another operand, each one block between the vertices at the quarter's ends. The
+/// circle's block runs round the seam from the seam vertex's pave, whose enclosure is written
+/// from a little before the end and runs past it (decision 32.104). Inside its paves the block is
+/// one stretch, from where that pave ends modulo the turn to the quarter's pave, and the contact
+/// rule cuts only that stretch; a seam pave ending exactly on the end leaves nothing before the
+/// join, and the stretch from the domain's start. Both are one block with the copy, at the work
+/// the stretches take.
+#[test]
+fn a_block_from_a_seam_pave_past_the_end_is_one_stretch_inside_its_paves() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let circle = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 2.0)).unwrap();
+    let quarter = Circle::new([0.0, 0.0, 0.0], 1105.0, frame, (0.0, 0.5)).unwrap();
+    let copy = CurveKind::Circle(quarter)
+        .to_nurbs(&mut meter())
+        .unwrap()
+        .value
+        .curve;
+    let (s0, s1) = copy.domain();
+    let mut arr = Arrangement::default();
+    for (operand, curve) in [(0, CurveKind::Circle(circle)), (1, CurveKind::Nurbs(copy))] {
+        let curve = arr.carriers.add_curve(curve).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: None,
+            operand,
+        });
+    }
+    for [x, y] in [[1105, 0], [0, 1105]] {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, y, 0).unwrap()),
+            operand: 2,
+        });
+    }
+    let iv = |lo: f64, hi: f64| Interval::new(lo, hi).unwrap();
+    let pave = |vertex: usize, t: Interval| Some(Pave { vertex, t });
+    let common = |seam_end: f64| {
+        let blocks = [
+            PaveBlock {
+                edge: 0,
+                from: pave(0, iv(2.0 - 1.0 / 64.0, seam_end)),
+                to: pave(1, iv(0.5, 0.5)),
+                wraps: true,
+            },
+            PaveBlock {
+                edge: 1,
+                from: pave(0, iv(s0, s0)),
+                to: pave(1, iv(s1, s1)),
+                wraps: false,
+            },
+        ];
+        let mut m = meter();
+        let found = common_blocks(&arr, &blocks, &mut m).unwrap();
+        let members: Vec<Vec<usize>> = found.iter().map(|c| c.members.clone()).collect();
+        (members, m.used().work)
+    };
+    // Two savings that add: the one stretch from where the seam pave ends modulo the turn
+    // (decision 32.104) saves 443,095 where the pave runs past the end, and a circle's foot by its
+    // closed form (project_curve_over, issue 1102) saves 66,955 at both.
+    assert_eq!(
+        [common(2.0 + 1.0 / 64.0), common(2.0)],
+        [(vec![vec![0, 1]], 465_618), (vec![vec![0, 1]], 908_713)]
+    );
+}
+
+/// A line of half a step from (0.25, 0.25) to (−0.25, 0.25), and a NURBS copy of the half circle
+/// of 8 steps about the origin from (8, 0) to (−8, 0), of two operands, each one block between the
+/// same two vertices (given by hand: the contact rule reads only the blocks' curves and paves).
+/// Every piece of the line lies within a quarter step of the origin on each axis, so its ball is
+/// centred on the origin, from which every point of the copy is as far: the search on the copy is
+/// left undecided (`NonIsolated`) at every cut, and the first piece, at (0.25, 0.25), reaches the
+/// deepest cut with no decided distance. It fails with `NearContact`, and its enclosure is finite
+/// and true: from zero to the largest distance between the piece's box and the copy's, from the
+/// piece to the copy's box's corner at (−8, 8), a little over 11.319 steps (8.25 across, the low
+/// side's gap, and 7.75 up, the high side's), holding the piece's distance from the copy, about
+/// 7.65 steps. Not `NotFinite`, which names no number that failed.
+#[test]
+fn a_piece_with_no_decided_distance_at_the_deepest_cut_is_a_finite_near_contact() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let half = Circle::new([0.0, 0.0, 0.0], 8.0, frame, (0.0, 1.0)).unwrap();
+    let copy = CurveKind::Circle(half)
+        .to_nurbs(&mut meter())
+        .unwrap()
+        .value
+        .curve;
+    let (s0, s1) = copy.domain();
+    let line = Line::new([0.25, 0.25, 0.0], [-0.5, 0.0, 0.0], (0.0, 1.0)).unwrap();
+    let mut arr = Arrangement::default();
+    for (operand, curve) in [(0, CurveKind::Line(line)), (1, CurveKind::Nurbs(copy))] {
+        let curve = arr.carriers.add_curve(curve).unwrap();
+        arr.edges.push(EdgeIn {
+            curve,
+            ends: None,
+            operand,
+        });
+    }
+    for x in [8, -8] {
+        arr.vertices.push(VertexIn {
+            point: PointGeom::Grid(P3::new(x, 0, 0).unwrap()),
+            operand: 2,
+        });
+    }
+    let at = |t: f64| Interval::new(t, t).unwrap();
+    let block = |edge: usize, (t0, t1): (f64, f64)| PaveBlock {
+        edge,
+        from: Some(Pave {
+            vertex: 0,
+            t: at(t0),
+        }),
+        to: Some(Pave {
+            vertex: 1,
+            t: at(t1),
+        }),
+        wraps: false,
+    };
+    let blocks = [block(0, (0.0, 1.0)), block(1, (s0, s1))];
+    let found = common_blocks(&arr, &blocks, &mut meter());
+    let Err(BuildError::Contact(ContactError::NearContact(NearContact {
+        enclosure,
+        refinement,
+    }))) = found
+    else {
+        panic!("{found:?}");
+    };
+    assert_eq!(refinement, DEEPEST);
+    assert!(
+        enclosure.lo() <= 7.6 && 7.7 <= enclosure.hi(),
+        "{enclosure:?}"
+    );
+    assert!(
+        11.319 < enclosure.hi() && enclosure.hi() < 11.32,
+        "{enclosure:?}"
+    );
 }
