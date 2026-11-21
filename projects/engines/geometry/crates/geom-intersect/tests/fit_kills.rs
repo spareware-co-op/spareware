@@ -1,7 +1,7 @@
 //! The fit and the true point on inputs whose answers are known exactly: a profile that jumps at
 //! the end of its trimmed domain, exact planes far from the origin with bounds of zero, and a wide box
 //! about a point of a circle that holds the bowl's bottom, where the two surfaces are parallel but
-//! apart.
+//! apart, and a parabola that touches the edge of a trimmed plane.
 
 #![allow(
     clippy::unwrap_used,
@@ -14,13 +14,14 @@
 )]
 
 use geom_curve::{Basis as Leaf, IntersectionCurve, ParamCurve, Span, SurfaceRef, Trimmed};
+use geom_intersect::IntersectError;
 use geom_intersect::fit::{fit, true_point};
 use geom_intersect::march::Branch;
 use geom_intersect::result::CurveEnd;
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Extrusion, Plane, SurfaceKind};
+use geom_surface::{Extrusion, ParamSurface, Plane, SurfaceKind};
 
 const REFS: [SurfaceRef; 2] = [SurfaceRef(1), SurfaceRef(2)];
 const CEILING: f64 = 1.0 / 256.0;
@@ -186,4 +187,49 @@ fn a_true_point_in_a_box_over_the_bowls_bottom_is_still_proven() {
         );
     }
     assert!(holds(z[1], 0.0) && holds(z[3], 0.0), "{z:?}");
+}
+
+#[test]
+fn a_curve_that_touches_the_edge_of_a_trimmed_plane_never_leaves_it() {
+    // The sheet z = y − x²/4 (quadratic in x, linear in y over [−1, 1]²) meets the plane z = c in
+    // the parabola y = c + x²/4. The plane is read as (y, x) and trimmed to y ≥ c, so the parabola
+    // lies on it everywhere and touches its edge y = c at x = 0, the middle vertex. Every point of
+    // the true curve is in both domains, so a fitted curve's pcurves must be too: a pcurve point
+    // with y < c is off the trimmed plane. Where the fit cannot bound a span within both domains its
+    // answer is the refusal its contract gives, BudgetExceeded, never a curve.
+    let c = 0.125;
+    let along = Basis::new(2, vec![-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]).unwrap();
+    let across = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for (x, square) in [(-1.0, 1.0), (0.0, -1.0), (1.0, 1.0)] {
+        for y in [-1.0, 1.0] {
+            net.push([x, y, y - square / 4.0]);
+        }
+    }
+    let sheet = SurfaceKind::Nurbs(Surface::new(along, across, &net).unwrap());
+    let cut = plane(
+        [0.0, 0.0, c],
+        [0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0],
+        ((c, 4.0), (-4.0, 4.0)),
+    );
+    let at = |x: f64| {
+        let y = c + x * x / 4.0;
+        [y, x, x, y]
+    };
+    let three = branch(vec![at(-0.6), at(0.0), at(0.7)]);
+    match fit((&cut, &sheet), REFS, &three, 1.0 / 64.0, &mut meter()) {
+        Ok(curve) => {
+            for (p, s) in curve.pcurves().iter().zip([&cut, &sheet]) {
+                let ((u0, u1), (v0, v1)) = ParamSurface::domain(s);
+                let (lo, hi) = ParamCurve::domain(p);
+                for k in 0..=65_536 {
+                    let t = lo + (hi - lo) * f64::from(k) / 65_536.0;
+                    let [u, v] = ParamCurve::point(p, t, Limit::FromRight).unwrap();
+                    assert!(u0 <= u && u <= u1 && v0 <= v && v <= v1, "{t}: ({u}, {v})");
+                }
+            }
+        }
+        Err(e) => assert_eq!(e, IntersectError::BudgetExceeded),
+    }
 }
