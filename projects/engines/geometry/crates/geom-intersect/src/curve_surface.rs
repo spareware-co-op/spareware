@@ -477,12 +477,23 @@ fn in_plane(
     let (ou, ov) = plane_parameters(line, plane, Interval::point(0.0)?)?;
     let (pu, pv) = plane_parameters(line, plane, Interval::point(1.0)?)?;
     let one = Interval::point(1.0)?;
-    let stretch = |(lo, hi): (f64, f64), (o, p): (Interval, Interval), ends| {
-        let cut = on_stretch(span_t, (lo, hi), (o, p.sub(o)?), one, ends)?;
-        Ok::<_, IntersectError>(cut.unwrap_or(span_t))
-    };
-    let on_u = stretch((along_u.lo(), along_u.hi()), (ou, pu), domain.0)?;
-    let on_v = stretch((along_v.lo(), along_v.hi()), (ov, pv), domain.1)?;
+    let (du, dv) = (pu.sub(ou)?, pv.sub(ov)?);
+    let on_u = on_stretch(
+        span_t,
+        (along_u.lo(), along_u.hi()),
+        (ou, du),
+        one,
+        domain.0,
+    )?
+    .unwrap_or(span_t);
+    let on_v = on_stretch(
+        span_t,
+        (along_v.lo(), along_v.hi()),
+        (ov, dv),
+        one,
+        domain.1,
+    )?
+    .unwrap_or(span_t);
     let (from, to) = (larger(on_u.0, on_v.0), smaller(on_u.1, on_v.1));
     // Bounds that meet or cross say the line passes a corner of the domain outside it, each being
     // strictly past its exact value, as `within` reads a bound on an end.
