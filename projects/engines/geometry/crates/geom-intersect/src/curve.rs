@@ -58,6 +58,7 @@ use geom_run::WorkMeter;
 
 use crate::closed::{self, Meeting};
 use crate::error::IntersectError;
+use crate::level::meet;
 use crate::result::{
     Coincidence, Coverage, Diag, Intersection, Item, OverlapRegion, ParamBox, PointContact, Test,
     Unresolved,
@@ -1272,17 +1273,10 @@ fn conic_of<const D: usize>(
     }))
 }
 
-/// The roots of a·s² + 2b·s + c, in order, by the count `exact` gives or the discriminant's sign.
-/// `None` where an interval cannot tell.
-pub(crate) fn quadratic(
-    terms: [Interval; 3],
-    exact: Option<Meeting>,
-) -> Result<Option<Vec<Interval>>, IntersectError> {
-    quadratic_with(terms, exact, None)
-}
-
-/// As [`quadratic`], with `known` for the discriminant where an exact sum encloses it more
-/// tightly than the coefficients' enclosures do (decision 32.87).
+/// The roots of a·s² + 2b·s + c, in order, by the count `exact` gives or the discriminant's sign,
+/// with `known` for the discriminant where another form encloses it more tightly than b² − a·c
+/// from the coefficients' enclosures does: an exact sum (decision 32.87), or a form that does not
+/// cancel. `None` where an interval cannot tell.
 pub(crate) fn quadratic_with(
     [a, b, c]: [Interval; 3],
     exact: Option<Meeting>,
@@ -1364,7 +1358,20 @@ fn line_conic<const D: usize>(
             b0.square()?.sub(a0)?,
         ),
     };
-    let Some(roots) = quadratic([a, b, c], exact)? else {
+    // A turn's B² − AC is also A − (a0·b1 − b0·a1)², Lagrange's identity: the second term is the
+    // square of the line's distance from the centre, in the conic's units, times A. B² and AC are
+    // each about A·|W|², W = o − c in those units, so their difference keeps that much rounding:
+    // from an origin far out against the radius it spread a crossing at right angles over
+    // thousands of steps (issue 1156). The distance form loses only near a tangency, where the
+    // first may hold Δ the tighter, so Δ is held to what both enclose.
+    let known = match conic.shape {
+        Shape::Turn => Some(meet(
+            b.square()?.sub(a.mul(c)?)?,
+            a.sub(a0.mul(b1)?.sub(b0.mul(a1)?)?.square()?)?,
+        )?),
+        Shape::Branch | Shape::Arch => None,
+    };
+    let Some(roots) = quadratic_with([a, b, c], exact, known)? else {
         return Ok(None);
     };
     let tangent = exact == Some(Meeting::Tangent);
