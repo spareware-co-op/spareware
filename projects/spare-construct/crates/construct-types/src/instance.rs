@@ -72,6 +72,8 @@ impl Instance {
 
     /// Moves it from its type `from` to `to`, of the same category. It keeps each of its values
     /// whose parameter `to`'s elements also have, and returns the rest, which it no longer holds.
+    /// Only the category decides: two types of one category whose system blocks differ, or of
+    /// which one has none, are allowed, since an instance holds nothing of its type's block.
     ///
     /// # Errors
     /// [`TypeError::NotItsType`] if `from` is not its type; [`TypeError::OtherCategory`] if `to`

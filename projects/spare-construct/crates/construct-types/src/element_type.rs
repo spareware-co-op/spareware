@@ -4,9 +4,10 @@
 use crate::error::TypeError;
 use crate::parameters::Parameters;
 use crate::record::{
-    CATEGORY_KEY, PARAMS_KEY, TYPE_KIND, is_reserved, read_category, read_id, read_params,
-    type_recipe, write_category, write_params,
+    CATEGORY_KEY, PARAMS_KEY, SYSTEM_KEY_PREFIX, TYPE_KIND, is_reserved, read_category, read_id,
+    read_params, system_type_recipe, type_recipe, write_category, write_params,
 };
+use crate::system::SystemData;
 use construct_categories::{CategoryId, CategoryTable};
 use construct_model::element::{Element, Placement};
 use construct_params::{Definition, Holder, Value, Values};
@@ -36,6 +37,8 @@ pub struct ElementType {
     params: BTreeSet<Id>,
     /// Values of parameters the type holds; one it has no value for reads its default.
     values: Values,
+    /// A system type's own data, never read here.
+    system: Option<SystemData>,
 }
 
 impl ElementType {
@@ -60,7 +63,32 @@ impl ElementType {
             category,
             params: BTreeSet::new(),
             values: Values::new(),
+            system: None,
         })
+    }
+
+    /// Its system block, if it has one.
+    #[must_use]
+    pub fn system(&self) -> Option<&SystemData> {
+        self.system.as_ref()
+    }
+
+    /// The same type carrying `system` as its one system block, in place of any it had.
+    #[must_use]
+    pub fn with_system(self, system: SystemData) -> Self {
+        Self {
+            system: Some(system),
+            ..self
+        }
+    }
+
+    /// The same type with no system block.
+    #[must_use]
+    pub fn without_system(self) -> Self {
+        Self {
+            system: None,
+            ..self
+        }
     }
 
     /// Its permanent ID.
@@ -143,6 +171,15 @@ impl ElementType {
         let mut props = self.values.to_props();
         props.insert(CATEGORY_KEY.to_owned(), write_category(self.category));
         props.insert(PARAMS_KEY.to_owned(), write_params(&self.params));
+        let recipe = if let Some(system) = &self.system {
+            props.insert(
+                format!("{SYSTEM_KEY_PREFIX}{}", system.owner()),
+                system.data().to_owned(),
+            );
+            system_type_recipe()
+        } else {
+            type_recipe()
+        };
         Element {
             id: self.id.clone(),
             document: document.clone(),
@@ -150,7 +187,7 @@ impl ElementType {
             name: self.name.clone(),
             level: 0,
             placement: NO_PLACEMENT,
-            recipe: type_recipe(),
+            recipe,
             props,
             references: Vec::new(),
         }
@@ -173,8 +210,26 @@ impl ElementType {
         if record.kind != TYPE_KIND {
             return malformed("the record's kind is not \"type\"");
         }
-        if record.recipe != type_recipe() {
-            return malformed("a type record's recipe is the type recipe");
+        let mut blocks = record
+            .props
+            .iter()
+            .filter_map(|(key, data)| key.strip_prefix(SYSTEM_KEY_PREFIX).map(|o| (o, data)));
+        let system = match (blocks.next(), blocks.next()) {
+            (None, _) => None,
+            (Some((owner, data)), None) => Some(
+                SystemData::new(owner, data).map_err(|e| TypeError::Malformed(e.to_string()))?,
+            ),
+            (Some(_), Some(_)) => return malformed("a type record has at most one system block"),
+        };
+        let recipe = if system.is_some() {
+            system_type_recipe()
+        } else {
+            type_recipe()
+        };
+        if record.recipe != recipe {
+            return malformed(
+                "a type record's recipe is the type recipe, version 2 with a system block",
+            );
         }
         if record.level != 0 || record.placement != NO_PLACEMENT || !record.references.is_empty() {
             return malformed("a type record has no level, placement or references");
@@ -198,7 +253,7 @@ impl ElementType {
         }
         let mut values = Values::new();
         for (key, text) in &record.props {
-            if key == CATEGORY_KEY || key == PARAMS_KEY {
+            if key == CATEGORY_KEY || key == PARAMS_KEY || key.starts_with(SYSTEM_KEY_PREFIX) {
                 continue;
             }
             if is_reserved(key) {
@@ -222,6 +277,7 @@ impl ElementType {
             category,
             params: listed,
             values,
+            system,
         })
     }
 
