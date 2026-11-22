@@ -6,16 +6,21 @@
 //! server links. An exact engine of the kernel's own runs the same file on the day it arrives.
 //!
 //! The cases: a wall of 4000 by 200 by 2700 mm along x and along y, a door of 900 by 300 by 2100 mm
-//! and a block of 600 by 400 by 900 mm, each a recipe as the page and the seed write them.
+//! and a block of 600 by 400 by 900 mm, each a recipe as the page and the seed write them; and the
+//! wall with doors hosted in it, centred on its thickness as the seed places them (50 mm proud of
+//! each side): one door to the floor, a raised opening, two doors, and the cases at the edge. The
+//! cases that cut need an engine that subtracts; the refusals and the names do not reach the
+//! engine's subtraction, so a test engine that only extrudes runs them too.
 
 #![allow(
     dead_code,
     reason = "each test file that includes the suite runs the cases it needs"
 )]
 
-use construct_model::geometry::{Built, Geometry, Recipe};
-use construct_regen::kernel::{BLOCK_ROLES, ENGINE, Kernel, WALL_ROLES};
+use construct_model::geometry::{Built, Geometry, Mesh, Recipe};
+use construct_regen::kernel::{BLOCK_ROLES, ENGINE, Hosted, Kernel, WALL_ROLES};
 use engine_geometry::value::engine::Engine;
+use engine_geometry::value::grid::P3;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -107,7 +112,15 @@ pub fn a_straight_wall_is_its_plan_extruded<E: Engine + Send + 'static>(make: im
     reason = "the corners and edges of a triangle, as the formulas name them"
 )]
 pub fn closed_six_volume(b: &Built) -> i128 {
-    let mesh = &b.displays[0].mesh;
+    closed_mesh_six_volume(&b.displays[0].mesh)
+}
+
+/// [`closed_six_volume`] of any one mesh.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the corners and edges of a triangle, as the formulas name them"
+)]
+pub fn closed_mesh_six_volume(mesh: &Mesh) -> i128 {
     assert_eq!(mesh.positions.len() % 3, 0);
     assert_eq!(mesh.indices.len() % 3, 0);
     assert_ne!(mesh.indices, [] as [u32; 0]);
@@ -313,4 +326,525 @@ pub fn a_recipe_that_cant_build_says_why<E: Engine + Send + 'static>(make: impl 
         json!({ "width": 200_000_000, "depth": 1, "height": 1 }),
     );
     assert_eq!(k.build(&huge).unwrap_err().code, "TooBig");
+}
+
+/// The persistent names of the faces door `D-1`'s opening makes in a straight wall, by role, under
+/// `NameScheme v1`: `Created { op: the wall's, role: tool(D-1), from: [the opening's own face] }`.
+/// Recorded: a reference to a reveal lands only while these stay, so a change here is a new name
+/// scheme, never an edit.
+pub const D1_NAMES: [(&str, &str); 4] = [
+    ("tool(D-1).head", "d3d64ce857a2de69a72d29d028087078"),
+    ("tool(D-1).jamb.end", "b6350eac010b7c426896ceb28b0e4eb0"),
+    ("tool(D-1).jamb.start", "c604d634f5e0b6b6368855ff880da0ec"),
+    ("tool(D-1).sill", "3bb75a32a59ed9793f97b8538b6183ff"),
+];
+
+/// A door of `width` by 300 by `height` mm, along `axis`.
+pub fn door_of(width: i64, height: i64, axis: &str) -> Recipe {
+    recipe(
+        "door.single",
+        json!({ "width": width, "thickness": 300, "height": height, "axis": axis }),
+    )
+}
+
+/// The grid point `mm` millimetres from the wall's origin.
+fn at<E: Engine + Send + 'static>(k: &Kernel<E>, mm: [i64; 3]) -> P3 {
+    k.units().point(mm).unwrap()
+}
+
+/// The grid point `mm` millimetres and `steps` more steps along each axis from the wall's origin.
+fn at_plus<E: Engine + Send + 'static>(k: &Kernel<E>, mm: [i64; 3], steps: [i64; 3]) -> P3 {
+    let per = i64::try_from(k.units().steps_per_mm()).unwrap();
+    P3::new(
+        mm[0] * per + steps[0],
+        mm[1] * per + steps[1],
+        mm[2] * per + steps[2],
+    )
+    .unwrap()
+}
+
+fn hosted<'a>(key: &'a str, recipe: &'a Recipe, at: P3) -> Hosted<'a> {
+    Hosted { key, recipe, at }
+}
+
+fn hosting<E: Engine + Send + 'static>(
+    k: &Kernel<E>,
+    wall: &Recipe,
+    doors: &[Hosted<'_>],
+) -> Built {
+    k.build_hosting(wall, doors)
+        .unwrap_or_else(|e| panic!("the wall with its doors builds: {e}"))
+}
+
+/// Checks that `mesh` is closed and that six times its volume is `expected` (six times cubic
+/// millimetres), within the engine's stated tolerance over a surface of `surface` square
+/// millimetres.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a volume's difference set against a tolerance, both far under 2^53"
+)]
+fn holds<E: Engine + Send + 'static>(k: &Kernel<E>, mesh: &Mesh, expected: i128, surface: i128) {
+    let six = closed_mesh_six_volume(mesh);
+    let allowed = 6.0 * surface as f64 * tolerance_mm(k);
+    assert!(
+        ((six - expected).abs() as f64) <= allowed,
+        "six times the volume is {six}, not {expected} within {allowed}"
+    );
+}
+
+/// Six times the volume of a box, in cubic millimetres, and its surface.
+fn box_of([a, b, c]: [i128; 3]) -> (i128, i128) {
+    (6 * a * b * c, 2 * (a * b + b * c + a * c))
+}
+
+/// A door hosted in a wall cuts a real opening: the wall's finest mesh is closed and holds the
+/// wall less the opening, the door's width and height through the wall's thickness, whatever the
+/// door's own thickness; its bounds and outline are the wall's. A door to the floor (the common
+/// case) and a raised opening wholly inside the wall both build, along x and along y. The coarse
+/// level is the wall before its openings were cut, closed, straying by at most half the opening's
+/// width or half the wall's thickness.
+pub fn a_door_cuts_a_real_opening<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let (whole, surface) = box_of([4000, 200, 2700]);
+    for axis in ["x", "y"] {
+        let wall = wall(4000, axis);
+        let plain = built(&k, &wall);
+        let place = |along: i64, up: i64| {
+            if axis == "y" {
+                at(&k, [-50, along, up])
+            } else {
+                at(&k, [along, -50, up])
+            }
+        };
+        let to_floor = door_of(900, 2100, axis);
+        let raised = door_of(800, 1000, axis);
+        for (door, up, [w, h]) in [(&to_floor, 0, [900, 2100]), (&raised, 900, [800, 1000])] {
+            let cut = hosting(&k, &wall, &[hosted("D-1", door, place(1000, up))]);
+            assert_eq!(cut.bounds, plain.bounds, "{axis}: the wall's bounds");
+            assert_eq!(cut.displays.len(), 2);
+            assert_eq!(cut.displays[0].lod, 0);
+            assert_eq!(cut.displays[0].deviation, 0);
+            assert_eq!(cut.displays[0].outline, plain.displays[0].outline);
+            let reveals = 2 * 200 * (h + w);
+            holds(
+                &k,
+                &cut.displays[0].mesh,
+                whole - 6 * w * 200 * h,
+                surface + reveals,
+            );
+            assert_eq!(cut.displays[1].lod, 1);
+            assert_eq!(
+                cut.displays[1].mesh, plain.displays[1].mesh,
+                "{axis}: the coarse level"
+            );
+            holds(&k, &cut.displays[1].mesh, whole, surface);
+            assert_eq!(
+                i128::from(cut.displays[1].deviation),
+                (w / 2).max(100),
+                "{axis}"
+            );
+            assert_ne!(cut.body_id(), plain.body_id());
+        }
+    }
+}
+
+/// A wall with two doors cuts both, one after another in the order of their keys, so the same
+/// model gives the same bytes in whatever order the doors are given, and on a fresh builder: the
+/// body, the bounds, the names and every display record. The body records each cutter by its
+/// door's key, in that order; a wall with no doors writes none.
+pub fn a_wall_with_two_doors_cuts_both_in_the_order_of_their_keys<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let wall = wall(4000, "x");
+    let door = door();
+    let (one, two) = (at(&k, [500, -50, 0]), at(&k, [2500, -50, 0]));
+    let bytes = |b: &Built| {
+        let mut out = b.body.clone();
+        out.extend(serde_json::to_vec(&b.bounds).unwrap());
+        out.extend(serde_json::to_vec(&b.names).unwrap());
+        for d in &b.displays {
+            out.extend(d.bytes());
+        }
+        out
+    };
+    let forward = hosting(
+        &k,
+        &wall,
+        &[hosted("D-1", &door, one), hosted("D-2", &door, two)],
+    );
+    let backward = hosting(
+        &k,
+        &wall,
+        &[hosted("D-2", &door, two), hosted("D-1", &door, one)],
+    );
+    assert_eq!(bytes(&forward), bytes(&backward));
+    let fresh = kernel(make());
+    let again = hosting(
+        &fresh,
+        &wall,
+        &[hosted("D-1", &door, one), hosted("D-2", &door, two)],
+    );
+    assert_eq!(bytes(&forward), bytes(&again));
+    let (whole, surface) = box_of([4000, 200, 2700]);
+    holds(
+        &k,
+        &forward.displays[0].mesh,
+        whole - 2 * 6 * 900 * 200 * 2100,
+        surface + 2 * 2 * 200 * (900 + 2100),
+    );
+    let body: Value = serde_json::from_slice(&forward.body).unwrap();
+    let keys: Vec<&str> = body["subtract"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["D-1", "D-2"]);
+    let plain: Value = serde_json::from_slice(&built(&k, &wall).body).unwrap();
+    assert!(
+        plain.get("subtract").is_none(),
+        "a wall without openings keeps its bytes"
+    );
+}
+
+/// A cut wall keeps its six names, the recorded ones, and the faces each opening makes are named
+/// by its door: its jambs and head, and its sill when the opening stands above the base, the
+/// recorded names for door `D-1`. They stay when the wall is lengthened or turned and when another
+/// door is added; two doors name their faces apart. The names are the builder's own, so this runs
+/// on any engine whose subtraction answers, whatever shape it gives.
+pub fn the_walls_names_survive_its_openings<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let door = door();
+    let raised = door_of(800, 1000, "x");
+    let pinned = |names: &[(&str, &str)]| -> BTreeMap<String, String> {
+        names
+            .iter()
+            .map(|&(r, n)| (r.to_owned(), n.to_owned()))
+            .collect()
+    };
+    let (walls, d1) = (pinned(&WALL_NAMES), pinned(&D1_NAMES));
+    let floor = by_role(&hosting(
+        &k,
+        &wall(4000, "x"),
+        &[hosted("D-1", &door, at(&k, [1000, -50, 0]))],
+    ));
+    let mut expected = walls.clone();
+    expected.extend(d1.clone().into_iter().filter(|(r, _)| !r.ends_with("sill")));
+    assert_eq!(
+        floor, expected,
+        "a door to the floor: the wall's six and its jambs and head"
+    );
+    let up = by_role(&hosting(
+        &k,
+        &wall(4000, "x"),
+        &[hosted("D-1", &raised, at(&k, [1000, -50, 900]))],
+    ));
+    let mut expected = walls;
+    expected.extend(d1);
+    assert_eq!(up, expected, "a raised opening: its sill too");
+    let longer = by_role(&hosting(
+        &k,
+        &wall(5000, "x"),
+        &[hosted("D-1", &door, at(&k, [1000, -50, 0]))],
+    ));
+    assert_eq!(longer, floor, "lengthened");
+    let turned = by_role(&hosting(
+        &k,
+        &wall(4000, "y"),
+        &[hosted(
+            "D-1",
+            &door_of(900, 2100, "y"),
+            at(&k, [-50, 1000, 0]),
+        )],
+    ));
+    assert_eq!(turned, floor, "turned");
+    let two = by_role(&hosting(
+        &k,
+        &wall(4000, "x"),
+        &[
+            hosted("D-1", &door, at(&k, [1000, -50, 0])),
+            hosted("D-2", &door, at(&k, [2500, -50, 0])),
+        ],
+    ));
+    for (role, name) in &floor {
+        assert_eq!(two.get(role), Some(name), "{role} after another door");
+    }
+    let theirs: BTreeSet<&String> = two
+        .iter()
+        .filter(|(r, _)| r.starts_with("tool(D-2)."))
+        .map(|(_, n)| n)
+        .collect();
+    assert_eq!(theirs.len(), 3);
+    let names: BTreeSet<&String> = two.values().collect();
+    assert_eq!(names.len(), two.len(), "two faces share a name");
+}
+
+/// The cases at the edge that are not built are refused before the engine is asked, each with a
+/// code for its reason and a message that names the door: an opening touching or crossing either
+/// end, as tall as the wall or taller, reaching below its base, two openings that overlap or
+/// touch, an opening with a face within the engine's tolerance of a wall's face or of another
+/// opening's without being on it (named fault SC-4's case), one across its wall or beside it, one
+/// key twice, a host that is not a wall, a hosted element that is not a door, a door that can't
+/// build, and corners that are not whole millimetres. Nothing panics.
+#[allow(clippy::too_many_lines, reason = "one table of cases, each a line")]
+pub fn an_opening_at_the_edge_is_refused_with_its_door_and_reason<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    type Case<'a> = (&'a str, &'a Recipe, Vec<Hosted<'a>>, &'a str, Vec<&'a str>);
+    let k = kernel(make());
+    let wall = wall(4000, "x");
+    let door = door();
+    let full = door_of(900, 2700, "x");
+    let taller = door_of(900, 2800, "x");
+    let across = door_of(900, 2100, "y");
+    let block = block();
+    let bad = recipe("door.single", json!({ "thickness": 300, "height": 2100 }));
+    let mm = |x: i64, z: i64| at(&k, [x, -50, z]);
+    let step = |x: i64, z: i64, steps: [i64; 3]| at_plus(&k, [x, -50, z], steps);
+    let one = |key, recipe, at| vec![hosted(key, recipe, at)];
+    let cases: Vec<Case<'_>> = vec![
+        (
+            "touching end0",
+            &wall,
+            one("D-1", &door, mm(0, 0)),
+            "OpeningAtEnd",
+            vec!["D-1"],
+        ),
+        (
+            "touching end1",
+            &wall,
+            one("D-1", &door, mm(3100, 0)),
+            "OpeningAtEnd",
+            vec!["D-1"],
+        ),
+        (
+            "crossing end0",
+            &wall,
+            one("D-1", &door, mm(-100, 0)),
+            "OpeningPastEnd",
+            vec!["D-1"],
+        ),
+        (
+            "crossing end1",
+            &wall,
+            one("D-1", &door, mm(3500, 0)),
+            "OpeningPastEnd",
+            vec!["D-1"],
+        ),
+        (
+            "as tall as the wall",
+            &wall,
+            one("D-1", &full, mm(1000, 0)),
+            "OpeningTooTall",
+            vec!["D-1"],
+        ),
+        (
+            "taller than the wall",
+            &wall,
+            one("D-1", &taller, mm(1000, 0)),
+            "OpeningTooTall",
+            vec!["D-1"],
+        ),
+        (
+            "its head at the top",
+            &wall,
+            one("D-1", &door, mm(1000, 600)),
+            "OpeningTooTall",
+            vec!["D-1"],
+        ),
+        (
+            "below the base",
+            &wall,
+            one("D-1", &door, mm(1000, -10)),
+            "OpeningBelowBase",
+            vec!["D-1"],
+        ),
+        (
+            "overlapping",
+            &wall,
+            vec![
+                hosted("D-2", &door, mm(1500, 0)),
+                hosted("D-1", &door, mm(1000, 0)),
+            ],
+            "OpeningsOverlap",
+            vec!["D-1", "D-2", "overlap"],
+        ),
+        (
+            "touching",
+            &wall,
+            vec![
+                hosted("D-1", &door, mm(1000, 0)),
+                hosted("D-2", &door, mm(1900, 0)),
+            ],
+            "OpeningsOverlap",
+            vec!["D-1", "D-2", "touch"],
+        ),
+        (
+            "head a step under the top",
+            &wall,
+            one("D-1", &door, step(1000, 600, [0, 0, -1])),
+            "OpeningNearFace",
+            vec!["D-1", "head", "top"],
+        ),
+        (
+            "sill a step over the base",
+            &wall,
+            one("D-1", &door, step(1000, 0, [0, 0, 1])),
+            "OpeningNearFace",
+            vec!["D-1", "sill", "base"],
+        ),
+        (
+            "jamb a step from end0",
+            &wall,
+            one("D-1", &door, step(0, 0, [1, 0, 0])),
+            "OpeningNearFace",
+            vec!["D-1", "jamb.start", "end0"],
+        ),
+        (
+            "jamb a step past end1",
+            &wall,
+            one("D-1", &door, step(3100, 0, [1, 0, 0])),
+            "OpeningNearFace",
+            vec!["D-1", "jamb.end", "end1"],
+        ),
+        (
+            "two openings a step apart",
+            &wall,
+            vec![
+                hosted("D-1", &door, mm(1000, 0)),
+                hosted("D-2", &door, step(1900, 0, [1, 0, 0])),
+            ],
+            "OpeningNearFace",
+            vec!["D-1", "D-2"],
+        ),
+        (
+            "half a millimetre off",
+            &wall,
+            one("D-1", &door, step(1000, 0, [3200, 0, 0])),
+            "NotWholeMillimetres",
+            vec!["D-1"],
+        ),
+        (
+            "across its wall",
+            &wall,
+            one("D-1", &across, mm(1000, 0)),
+            "OpeningAcrossWall",
+            vec!["D-1"],
+        ),
+        (
+            "beside its wall",
+            &wall,
+            one("D-1", &door, at(&k, [1000, 500, 0])),
+            "OpeningNotInWall",
+            vec!["D-1"],
+        ),
+        (
+            "one key twice",
+            &wall,
+            vec![
+                hosted("D-1", &door, mm(500, 0)),
+                hosted("D-1", &door, mm(2500, 0)),
+            ],
+            "DuplicateOpening",
+            vec!["D-1"],
+        ),
+        (
+            "in a block",
+            &block,
+            one("D-1", &door, mm(100, 0)),
+            "NotAHost",
+            vec!["D-1"],
+        ),
+        (
+            "a block hosted",
+            &wall,
+            one("B-1", &block, mm(1000, 0)),
+            "NotAnOpening",
+            vec!["B-1"],
+        ),
+        (
+            "a door with no width",
+            &wall,
+            one("D-1", &bad, mm(1000, 0)),
+            "MissingArgument",
+            vec!["D-1"],
+        ),
+    ];
+    for (case, host, doors, code, words) in &cases {
+        let error = k.build_hosting(host, doors).expect_err(case);
+        assert_eq!(&error.code, code, "{case}: {}", error.message);
+        assert!(
+            error.message.starts_with("door "),
+            "{case}: {}",
+            error.message
+        );
+        for word in words {
+            assert!(error.message.contains(word), "{case}: {}", error.message);
+        }
+    }
+}
+
+/// Named fault SC-4's case asked of the engine itself, past the builder, which refuses it: a wall
+/// of 4000 by 200 by 2700 mm less a door's cutter whose head is one grid step under the wall's
+/// top, inside the engine's tolerance. What the engine answers today is pinned here: its
+/// subtraction keeps the sliver of one step over the head, the result's mesh closed and its six
+/// volume, in cubic steps, exactly the wall less the opening (the interim register's row says so).
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "mesh positions are whole steps under 2^40, which an i64 holds"
+)]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a box's length, thickness and height, and the engine"
+)]
+pub fn the_engine_keeps_a_sliver_within_its_tolerance<E: Engine>(mut e: E) {
+    use engine_geometry::value::engine::Profile;
+    let per = i64::try_from(
+        construct_regen::kernel::Units::on(e.edition().step)
+            .unwrap()
+            .steps_per_mm(),
+    )
+    .unwrap();
+    let p = |x: i64, y: i64, z: i64| P3::new(x, y, z).unwrap();
+    let rect = |x0: i64, y0: i64, x1: i64, y1: i64, z: i64| Profile {
+        outer: vec![p(x0, y0, z), p(x1, y0, z), p(x1, y1, z), p(x0, y1, z)],
+        holes: vec![],
+    };
+    let (l, t, h) = (4000 * per, 200 * per, 2700 * per);
+    let wall = e
+        .extrude(&rect(0, 0, l, t, 0), [0, 0, h])
+        .unwrap_or_else(|e| panic!("the wall: {e:?}"));
+    let (x0, x1) = (1000 * per, 1900 * per);
+    let head = h - 1;
+    let cutter = e
+        .extrude(
+            &rect(x0, -100 * per, x1, 300 * per, -100 * per),
+            [0, 0, head + 100 * per],
+        )
+        .unwrap_or_else(|e| panic!("the cutter: {e:?}"));
+    let cut = e.subtract(&wall, &cutter);
+    let cut = cut.unwrap_or_else(|e| panic!("the engine refused the cut: {e:?}"));
+    let mesh = e
+        .mesh(&cut)
+        .unwrap_or_else(|e| panic!("the cut's mesh: {e:?}"));
+    let positions = mesh
+        .positions
+        .iter()
+        .flat_map(|q| q.map(|c| c as i64))
+        .collect();
+    let indices = mesh.triangles.iter().flatten().copied().collect();
+    let six = closed_mesh_six_volume(&Mesh { positions, indices });
+    let (l, t, h, w, head) = (
+        i128::from(l),
+        i128::from(t),
+        i128::from(h),
+        i128::from(x1 - x0),
+        i128::from(head),
+    );
+    assert_eq!(
+        six,
+        6 * (l * t * h - w * t * head),
+        "the sliver is kept exactly"
+    );
 }

@@ -124,6 +124,20 @@ pub fn routes(app: Shared) -> Router {
             get(kind),
         )
         .route("/api/projects/{project}/models/{model}/claims", get(claims))
+        .route("/api/projects/{project}/models/{model}/undo", get(undo))
+        .route(
+            "/api/projects/{project}/models/{model}/parameters/{element}",
+            get(parameters),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/catalog",
+            get(catalog),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/project-parameters",
+            get(project_parameters),
+        )
+        .route("/api/projects/{project}/models/{model}/types", get(types))
         .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
@@ -414,6 +428,72 @@ async fn kind(
     Ok(Json(
         app.service
             .kind(&person, &id(&project)?, &id(&model)?, &id(&kind)?)
+            .await?,
+    ))
+}
+
+async fn parameters(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, element)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .parameters(&person, &id(&project)?, &id(&model)?, &id(&element)?)
+            .await?,
+    ))
+}
+
+async fn catalog(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .catalog(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn project_parameters(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .project_parameters(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct TypesQuery {
+    category: Option<u32>,
+}
+
+async fn types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+    Query(q): Query<TypesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .types(&person, &id(&project)?, &id(&model)?, q.category)
+            .await?,
+    ))
+}
+
+async fn undo(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .undo(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }
