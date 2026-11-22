@@ -24,7 +24,9 @@
 //! - **A curve along an edge.** Where every datum of a pcurve lies on one edge of its surface's
 //!   domain in a coordinate, the pcurve's control points are that edge there, the least-squares
 //!   fit without its rounding, and the pcurve is read there as the edge exactly: its rounded reads
-//!   reach past the edge, where the kinds read nothing, so no piece would have a bound.
+//!   reach past the edge, where the kinds read nothing, so no piece would have a bound. A point
+//!   that refinement adds between two data on an edge is held on it where the two surfaces'
+//!   points there, as the kinds enclose them, meet, so a curve along the edge stays on it.
 //! - **The curve bound.** C(t) is within d₁ of S₁ and d₂ of S₂. Within r of C(t), where the surfaces
 //!   cross at a sine of at least s and turn their normals by at most κ per unit length, the crossing
 //!   is within e/(s − 2κ·r₀) of C(t), e = d₁ + d₂ and r₀ = 2e/s, whenever s − 2κ·r₀ ≥ s/2: 12.2's
@@ -469,6 +471,29 @@ fn moved(e: f64, s: f64, kappa: f64) -> Result<Option<(f64, f64)>, IntersectErro
     Ok(Some((e.div(left)?.hi(), r0.hi())))
 }
 
+/// The speed that sizes the box about `b` in [`piece`]: σ over `b` ([`turning`]), or, where that
+/// has none, σ over `b` widened by half its widest side; `None` where neither has one. It only
+/// sizes that box, whose own σ [`piece`] then proves carries it, so a box that holds `b` may give
+/// it as well as `b`. A pcurve along an isoparameter line inside its domain is bounded over a
+/// piece in a strip a few steps of the double wide, wider than [`thick`] widens, and the NURBS
+/// kind's partials over that strip are rounding scaled by its degree over the width: |n| reads
+/// down to zero there (#1185: `S_v`, (0, 1, 1) on the sheet z = y − x²/2, read as about (±1.9,
+/// −1.3 to 3.2, −1.0 to 2.9) over v a strip 3·10⁻¹⁵ wide about 1/2), every piece of the span had
+/// no bound, and refinement, which cannot change rounding, ran out of rounds. Wherever σ over `b`
+/// is had, it is used unchanged.
+fn sizing(
+    surface: &SurfaceKind,
+    b: Region,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    if let Some((sigma, _)) = turning(surface, b, meter)? {
+        return Ok(Some(sigma));
+    }
+    let ((a, c), (d, e)) = b;
+    let wide = widened(b, larger(c - a, e - d) / 2.0, surface.domain());
+    Ok(turning(surface, wide, meter)?.map(|(sigma, _)| sigma))
+}
+
 /// The bounds of one piece of a span, or `None` where they cannot be had.
 fn piece(
     pair: [&SurfaceKind; 2],
@@ -496,7 +521,7 @@ fn piece(
         let mut wide = Vec::with_capacity(2);
         let mut kappa: f64 = 0.0;
         for ((surface, over), di) in pair.iter().zip(&boxes).zip(d) {
-            let Some((sigma, _)) = turning(surface, *over, meter)? else {
+            let Some(sigma) = sizing(surface, *over, meter)? else {
                 return Ok(None);
             };
             let by = 2.0 * up(reach, di)? / sigma;
@@ -1266,6 +1291,16 @@ pub fn fit(
 /// A point of the true curve near `guess`, in the plane halfway between the data points `x` and
 /// `y` across their chord, by Newton's method in doubles: fit data, which the bounds then judge;
 /// `None` where a step leaves either surface's domain or the slope cannot be inverted.
+///
+/// Where `x` and `y` both have a parameter on one edge of its domain, the point is first sought
+/// with that parameter held on the edge, and kept if the two surfaces' points there, as the kinds
+/// enclose them, meet in every coordinate, the test [`OnCorner::settled`] makes: the kinds cannot
+/// tell it from a point of the curve. A curve that runs along the edge has its points there
+/// exactly, and Newton's method left free puts them a rounding off it (v = 1 − 4·10⁻¹⁶ on the
+/// sheet z = y − x²/2 along its edge v = 1), so the data would not all lie on the edge,
+/// [`held_on_edges`] would not hold the pcurve there, and its reads would reach past the edge,
+/// where `gap` finds no bound, in every round. A curve that leaves the edge between `x` and `y`
+/// has no such point, its held points do not meet, and the point is found free, as before.
 fn settle_point(
     (first, second): (&SurfaceKind, &SurfaceKind),
     guess: [f64; 4],
@@ -1296,7 +1331,45 @@ fn settle_point(
         let ok = u1.0 <= a1 && a1 <= u1.1 && v1.0 <= b1 && b1 <= v1.1;
         ok && u2.0 <= a2 && a2 <= u2.1 && v2.0 <= b2 && b2 <= v2.1
     };
+    // Each parameter that `x` and `y` both have on one edge of its domain, and that edge.
+    let mut held = [None; 4];
+    for (((slot, a), b), (lo, hi)) in held.iter_mut().zip(x).zip(y).zip([u1, v1, u2, v2]) {
+        for edge in [lo, hi] {
+            if on(*a, edge) && on(*b, edge) {
+                *slot = Some(edge);
+            }
+        }
+    }
+    if held.iter().any(Option::is_some)
+        && let Some(z) = newton(&field, guess, held, inside, meter)?
+    {
+        let r = field.at(z, meter)?;
+        if r.iter().take(3).all(|d| d.lo() <= 0.0 && 0.0 <= d.hi()) {
+            return Ok(Some(z));
+        }
+    }
+    newton(&field, guess, [None; 4], inside, meter)
+}
+
+/// Newton's method on `field` from `guess`, in doubles, each parameter `held` put back on its edge
+/// after every step ([`settle_point`]); `None` where a step leaves the domains (`inside`) or the
+/// slope cannot be inverted.
+fn newton(
+    field: &Across<'_>,
+    guess: [f64; 4],
+    held: [Option<f64>; 4],
+    inside: impl Fn(&[f64; 4]) -> bool,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<[f64; 4]>, IntersectError> {
+    let put_back = |z: &mut [f64; 4]| {
+        for (w, h) in z.iter_mut().zip(held) {
+            if let Some(edge) = h {
+                *w = edge;
+            }
+        }
+    };
     let mut z = guess;
+    put_back(&mut z);
     for _ in 0..8 {
         if !inside(&z) {
             return Ok(None);
@@ -1316,6 +1389,7 @@ fn settle_point(
             }
             *w -= s;
         }
+        put_back(&mut z);
     }
     Ok(inside(&z).then_some(z))
 }

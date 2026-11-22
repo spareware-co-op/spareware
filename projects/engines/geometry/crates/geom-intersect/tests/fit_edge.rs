@@ -9,6 +9,12 @@
 //! the pcurve on the edge lies on it exactly, and the cache is within that pcurve's bound of the
 //! edge curve. The pcurve's reads reach a rounding past the edge, so without the edge held no
 //! piece had a bound and every round of refinement failed.
+//!
+//! A branch through only 2 points of the sheet's edge curve is refined (#1185): along v = ±1 the
+//! chord is 1/8 from the parabola at its middle. The points refinement adds are held on the edge,
+//! so the pcurve still is; found free, they came a rounding off it, and every round failed again.
+//! A curve that meets the edge only at its two vertices, the parabola y = 7/8 + x²/2 of the sheet
+//! and the plane z = 7/8 from (−1/2, 1) to (1/2, 1), is refined off the edge, where it runs.
 
 #![allow(
     clippy::unwrap_used,
@@ -195,5 +201,80 @@ fn a_line_along_an_edge_of_a_plane_is_fitted_on_that_edge() {
     for (held, edge) in EDGES {
         let edge = edge * 0.625;
         along_the_edge(&ground(held, edge), |_, _| 0.125, (held, edge));
+    }
+}
+
+#[test]
+fn a_curve_along_an_edge_of_a_sheet_through_two_points_is_refined_on_that_edge() {
+    let height = |x: f64, y: f64| y - x * x / 2.0;
+    for (held, edge) in EDGES {
+        let cut = upright(held, edge);
+        let sheet = sheet();
+        for edged_first in [true, false] {
+            let (first, second) = if edged_first {
+                (&sheet, &cut)
+            } else {
+                (&cut, &sheet)
+            };
+            for along in [[-0.5, 0.5], [0.5, -0.5]] {
+                fit_along((first, second), height, (held, edge), edged_first, &along);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_curve_that_meets_an_edge_only_at_its_ends_is_refined_off_it() {
+    // The sheet and the plane z = 7/8, read as (x, y), meet in y = 7/8 + x²/2: on the sheet's
+    // edge v = 1 at x = ±1/2, below it between.
+    let level = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, 0.875],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-4.0, 4.0), (-4.0, 4.0)),
+        )
+        .unwrap(),
+    );
+    let sheet = sheet();
+    for (sheet_first, (first, second)) in [(true, (&sheet, &level)), (false, (&level, &sheet))] {
+        for along in [[-0.5, 0.5], [0.5, -0.5]] {
+            let case = (sheet_first, along);
+            let branch = Branch {
+                vertices: along
+                    .iter()
+                    .map(|&x| [x, 1.0, x, 1.0].map(|q| Interval::point(q).unwrap()))
+                    .collect(),
+                ends: [CurveEnd::Boundary, CurveEnd::Boundary],
+                deviation: 0.0,
+                passes: Vec::new(),
+            };
+            let mut m = WorkMeter::new(Budget::of_work(1 << 20));
+            let curve = fit((first, second), REFS, &branch, 1.0 / 16.0, &mut m)
+                .unwrap_or_else(|e| panic!("{case:?}: {e:?}"));
+            assert_eq!(curve.chain().len(), 2, "{case:?}");
+            for span in curve.spans() {
+                assert!(span.curve <= 1.0 / 16.0, "{case:?}: {span:?}");
+                let (a, b) = span.at;
+                for i in 0..=16 {
+                    let t = if i == 16 {
+                        b
+                    } else {
+                        a + (b - a) * f64::from(i) / 16.0
+                    };
+                    let side = if t < b {
+                        Limit::FromRight
+                    } else {
+                        Limit::FromLeft
+                    };
+                    // On the parabola to within the span's bound: z exactly so, y within twice it
+                    // (its slope in x is at most a little over 1/2 there).
+                    let [x, y, z] = curve.cache().point(t, side).unwrap();
+                    assert!((z - 0.875).abs() <= span.curve, "{case:?}: {t} {z}");
+                    let off = (y - (0.875 + x * x / 2.0)).abs();
+                    assert!(off <= 2.0 * span.curve, "{case:?}: {t} ({x}, {y})");
+                }
+            }
+        }
     }
 }

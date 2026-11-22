@@ -433,8 +433,9 @@ fn a_trough_side_exactly_a_step_wide_is_not_widened() {
     // The same ridge and trough with the trough's u from 3 − 2⁻⁴⁸ to 3: over the whole span the
     // pcurve's box is its two held ends, so that side is exactly 4ε·(1 + 3) wide, a full step, and
     // is kept as it is. Over so thin a box the trough's normal cannot be bounded away from 0, so the
-    // first round's whole-span piece stops there; widened, it would read the surface over a wide box
-    // and stop later, at the angle, for more work. The work is the recorded count.
+    // speed that sizes a piece's box is read over that box widened by half its widest side instead
+    // (#1185), and the other reads stay on the thin box; widened, every read is over the wide box,
+    // for other work (1666 against 1684). The work is the recorded count.
     let line = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
     let (top, low) = (ridge(line, &[0.0, 1.0]), trough());
     let lo = 3.0 - 16.0 * f64::EPSILON;
@@ -442,7 +443,7 @@ fn a_trough_side_exactly_a_step_wide_is_not_widened() {
     let two = branch(vec![[0.25, 0.0, lo, 0.25], [0.75, 0.0, 3.0, 0.75]]);
     let mut m = meter();
     let curve = fit((&top, &low), REFS, &two, CEILING, &mut m).unwrap();
-    assert_eq!(m.used().work, 4379);
+    assert_eq!(m.used().work, 1684);
     assert!(curve.error() <= CEILING, "{}", curve.error());
     recorded("TROUGH_STEP", &bits(&top, &low, &curve), TROUGH_STEP);
 }
@@ -451,9 +452,9 @@ fn a_trough_side_exactly_a_step_wide_is_not_widened() {
 const TROUGH_STEP: &[u64] = &[
     0x0000_0000_0000_0000,
     0x3ff0_0000_0000_0000,
-    0x3d2e_07d0_c2ce_5d31,
-    0x3d0c_9a30_a407_90d4,
-    0x3d25_fb16_64f1_8991,
+    0x3d23_17f8_f006_4f88,
+    0x3d05_a809_8dc6_a401,
+    0x3d19_fc3a_bba3_e278,
     0x0000_0000_0000_0000,
     0x0000_0000_0000_0000,
     0x0000_0000_0000_0000,
@@ -463,9 +464,9 @@ const TROUGH_STEP: &[u64] = &[
 const TROUGH_THIN: &[u64] = &[
     0x0000_0000_0000_0000,
     0x3ff0_0000_0000_0000,
-    0x3d26_cef3_bbae_e5b6,
-    0x3d03_dccd_6c92_1ffa,
-    0x3d11_7057_5e22_0c9c,
+    0x3d21_60c5_e3cc_1eac,
+    0x3d05_a809_8dc6_a401,
+    0x3d16_a735_d847_46f1,
     0x0000_0000_0000_0000,
     0x0000_0000_0000_0000,
     0x0000_0000_0000_0000,
