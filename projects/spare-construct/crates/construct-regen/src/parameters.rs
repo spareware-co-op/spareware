@@ -29,10 +29,11 @@
 use construct_categories::{CategoryError, CategoryId, CategoryTable, category_of_kind};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
-use construct_params::{ProjectParams, Units, Value, Values};
-use construct_types::{ElementType, Instance, Parameters, Types, resolve};
+use construct_params::{Holder, ProjectParams, Units, Value, Values};
+use construct_types::{ElementType, Instance, Parameters, Source, Types, resolve};
 use kit_core::Id;
 use kit_store::{Place, Reader, StoreError, read_row};
+use serde::Serialize;
 use std::collections::BTreeMap;
 
 pub use construct_types::{CATEGORY_KEY, TYPE_KEY, TYPE_KIND};
@@ -255,6 +256,130 @@ impl Context {
             .cloned()
             .or_else(|| self.params.default_of(id).cloned()))
     }
+
+    /// What a page shows of an element: its category, its type, and every parameter its category
+    /// has with the value it reads, where that came from, and the value shown in units.
+    ///
+    /// # Errors
+    /// The refusal of a stored value or of the element's type, in words.
+    pub fn view(&self, element: &Element, ty: Option<&ElementType>) -> Result<ElementView, String> {
+        let category = match stored_category(element) {
+            Some(category) => Some(category),
+            None if has_shape(element) => category_of(&element.recipe).ok(),
+            None => None,
+        };
+        let mut parameters = Vec::new();
+        let applicable = category
+            .map(|category| self.table.parameters_of(&self.categories, category))
+            .unwrap_or_default();
+        let instance = match ty {
+            Some(ty) => Some(self.instance(element, ty)?),
+            None => None,
+        };
+        let own = self.own_values(element, None)?;
+        for parameter in applicable {
+            let def = parameter.definition;
+            let (value, from) = match (ty, &instance) {
+                (Some(ty), Some(instance)) => {
+                    let resolved =
+                        resolve(&self.params, ty, instance, def.id()).map_err(|e| e.to_string())?;
+                    let from = match resolved.from {
+                        Source::Instance => "instance",
+                        Source::Type => "type",
+                        Source::Default => "default",
+                        Source::Unset => "unset",
+                    };
+                    (resolved.value.cloned(), from)
+                }
+                _ => match (own.get(def.id()), parameter.default) {
+                    (Some(value), _) => (Some(value.clone()), "instance"),
+                    (None, Some(value)) => (Some(value.clone()), "default"),
+                    (None, None) => (None, "unset"),
+                },
+            };
+            let shown = match &value {
+                Some(value) => Some(def.format(value, &self.units).map_err(|e| e.to_string())?),
+                None => None,
+            };
+            parameters.push(ParameterView {
+                id: def.id().to_string(),
+                name: def.name().to_owned(),
+                kind: def.kind().to_string(),
+                holder: match parameter.holder {
+                    Holder::Instance => "instance",
+                    Holder::Type => "type",
+                },
+                value: value.map(|value| value.stored()),
+                shown,
+                from,
+            });
+        }
+        Ok(ElementView {
+            element: element.id.to_string(),
+            category: category.and_then(|id| {
+                self.categories.get(id).map(|found| CategoryView {
+                    id: id.0,
+                    name: found.name,
+                })
+            }),
+            element_type: ty.map(|ty| TypeView {
+                id: ty.id().to_string(),
+                name: ty.name().to_owned(),
+            }),
+            parameters,
+        })
+    }
+}
+
+/// What a page shows of an element ([`Context::view`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ElementView {
+    /// The element's ID.
+    pub element: String,
+    /// Its category, if it has one.
+    pub category: Option<CategoryView>,
+    /// Its type, if it has one.
+    #[serde(rename = "type")]
+    pub element_type: Option<TypeView>,
+    /// Every parameter its category has, by name.
+    pub parameters: Vec<ParameterView>,
+}
+
+/// A category, as a page shows it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct CategoryView {
+    /// Its permanent ID.
+    pub id: u32,
+    /// Its name.
+    pub name: String,
+}
+
+/// A type, as a page shows it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct TypeView {
+    /// Its permanent ID.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+}
+
+/// One parameter of an element, as a page shows it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ParameterView {
+    /// Its permanent ID.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// Its kind's tag, such as `length`.
+    pub kind: String,
+    /// `instance` or `type`: who holds its value.
+    pub holder: &'static str,
+    /// The value it reads, in its stored text; `None` when nothing holds one.
+    pub value: Option<String>,
+    /// The same value shown in the document's units, such as `820 mm`.
+    pub shown: Option<String>,
+    /// Where the value came from: `instance`, `type`, `default` or `unset`.
+    pub from: &'static str,
 }
 
 /// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`], which is the

@@ -463,13 +463,16 @@ name = "construct-api"
 version = "0.0.0"
 dependencies = [
  "construct-api",
+ "construct-categories",
  "construct-clash",
  "construct-elements",
  "construct-families",
  "construct-interop",
  "construct-model",
+ "construct-params",
  "construct-regen",
  "construct-transport",
+ "construct-types",
  "construct-versions",
  "construct-views",
  "engine-sim",
@@ -583,8 +586,11 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "construct-categories",
  "construct-model",
+ "construct-params",
  "construct-regen",
+ "construct-types",
  "hex",
  "kit-core",
  "kit-ops",

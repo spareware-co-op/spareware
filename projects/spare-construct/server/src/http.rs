@@ -125,6 +125,10 @@ pub fn routes(app: Shared) -> Router {
         )
         .route("/api/projects/{project}/models/{model}/claims", get(claims))
         .route(
+            "/api/projects/{project}/models/{model}/parameters/{element}",
+            get(parameters),
+        )
+        .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
         )
@@ -414,6 +418,18 @@ async fn kind(
     Ok(Json(
         app.service
             .kind(&person, &id(&project)?, &id(&model)?, &id(&kind)?)
+            .await?,
+    ))
+}
+
+async fn parameters(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, element)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .parameters(&person, &id(&project)?, &id(&model)?, &id(&element)?)
             .await?,
     ))
 }
