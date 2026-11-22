@@ -19,12 +19,13 @@
 //!   two; two partners run opposite ways along their edge and lie in one shell, so each shell is
 //!   closed (in a solid) and consistently oriented. A general body may be non-manifold: any number
 //!   of fins, in the radial order its operation recorded.
-//! - **Fans:** in a solid every vertex is one fan of one shell. A corner is where a fin ends and
-//!   the next fin of its loop starts, and two corners at a vertex are of one fan when a chain of
-//!   edges at the vertex, each used by both of two corners in the chain, joins them. A vertex
-//!   with corners in two shells, or in two fans of one shell, is where solids or parts of one
-//!   touch: the body is non-manifold there, of the kind General (chapter 8.1), as an edge of more
-//!   than two fins makes it.
+//! - **Fans:** in a solid or a sheet every vertex is one fan of one shell. A corner is where a fin
+//!   ends and the next fin of its loop starts, and two corners at a vertex are of one fan when a
+//!   chain of edges at the vertex, each used by both of two corners in the chain, joins them. A
+//!   vertex with corners in two shells, or in two fans of one shell, is where solids or sheets or
+//!   parts of one touch, like a bow tie: the body is non-manifold there, of the kind General
+//!   (chapter 8.1), as an edge of more than two fins makes it. A sheet's fan is closed round a
+//!   vertex inside it and open, from one boundary edge to another, at a vertex on its boundary.
 //! - **Shells:** every shell has faces, and they are one set connected through edges shared within
 //!   the shell.
 //! - **Regions:** a solid region has a shell; a solid body has a solid region, and each of its
@@ -570,22 +571,32 @@ fn slot(a: &Arenas, f: FinIx, at_end: bool) -> u32 {
     row.saturating_add(u32::from(at_end && start != end))
 }
 
-/// Each vertex of a solid is one fan of one shell. A vertex's corners are the corners of the fins
-/// that end at it ([`corner`]); two are of one fan when a chain of edges at the vertex, each used
-/// by both of two corners in the chain, joins them: the edges' ends at the vertex are joined
-/// through each corner, and the corners of one fan are those whose ends are one set. A vertex
-/// whose corners lie in two shells, or in two fans of one shell, is where solids or parts of one
-/// touch: the body is non-manifold there, a general body (chapter 8.1), never a solid. It is the
-/// rule `geom-solidcore`'s conversion gives a body its kind by, so the two agree.
+/// Each vertex of a solid or a sheet is one fan of one shell. A vertex's corners are the corners
+/// of the fins that end at it ([`corner`]); two are of one fan when a chain of edges at the
+/// vertex, each used by both of two corners in the chain, joins them: the edges' ends at the
+/// vertex are joined through each corner, and the corners of one fan are those whose ends are one
+/// set. A vertex whose corners lie in two shells, or in two fans of one shell, is where solids or
+/// sheets or parts of one touch: the body is non-manifold there, a general body (chapter 8.1),
+/// never a solid or a sheet. It is the rule `geom-solidcore`'s conversion gives a body its kind
+/// by, so the two agree.
+///
+/// A sheet is held to it as a solid is: a sheet is a surface with boundary, so round each vertex
+/// its faces make one fan, closed inside the sheet and open on its boundary, and faces touching
+/// only at a vertex, like a bow tie, are two fans there, whether in two shells or one.
+/// The sets need no change for it: in an open fan each corner joins the ends of its two edges,
+/// one shared with the corner before and one with the corner after, so its corners are one chain
+/// and one set, and the boundary edges at either end, one fin each, join nothing more.
 ///
 /// A solid whose checks so far found nothing (`sound`) is first walked fan by fan
 /// ([`one_fan_each`]); only one where that walk finds a vertex with a second fan is judged by the
-/// sets, so a body with no such vertex gets the faults (none) the sets would give it.
+/// sets, so a body with no such vertex gets the faults (none) the sets would give it. A sheet is
+/// always judged by the sets: the walk steps from a fin to its next fin's partner, and a fin on
+/// a sheet's boundary has none.
 ///
 /// Cost: on a sound solid, [`one_fan_each`]'s; when it finds a second fan, or the body is not
-/// sound, linear in the corners, at most one for each fin, plus each set operation's time with
-/// path halving, logarithmic amortised at worst (Tarjan and van Leeuwen); memory: two words per
-/// edge and two per vertex.
+/// sound or is a sheet, linear in the corners, at most one for each fin, plus each set
+/// operation's time with path halving, logarithmic amortised at worst (Tarjan and van Leeuwen);
+/// memory: two words per edge and two per vertex.
 fn fans(
     a: &Arenas,
     kind: BodyKind,
@@ -593,7 +604,9 @@ fn fans(
     scratch: &mut [u32],
     sink: &mut Sink<'_, '_>,
 ) -> Result<(), Stopped> {
-    if kind != BodyKind::Solid || (sound && one_fan_each(a, scratch, sink)?) {
+    if !matches!(kind, BodyKind::Solid | BodyKind::Sheet)
+        || (kind == BodyKind::Solid && sound && one_fan_each(a, scratch, sink)?)
+    {
         return Ok(());
     }
     // Each vertex's first corner and the first corner that differs from it, as the fin's row

@@ -477,7 +477,7 @@ fn a_vertex_two_shells_share_is_not_a_solids() {
     assert_eq!(f, [corner_in_two_shells()]);
     assert_eq!(
         f[0].to_string(),
-        "group 1, vertex 7: the vertex of a solid has corners in two shells (fin 27)"
+        "group 1, vertex 7: the vertex of a solid or a sheet has corners in two shells (fin 27)"
     );
     assert_eq!(faults(&r, BodyKind::General), []);
 }
@@ -519,7 +519,7 @@ fn a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids() {
         "{f:?}"
     );
     assert_eq!(f[0].at, Entity::Vertex(ix(v)));
-    let what = "the faces round the vertex of a solid make more than one fan";
+    let what = "the faces round the vertex of a solid or a sheet make more than one fan";
     assert!(
         f[0].to_string()
             .starts_with(&format!("group 1, vertex {v}: {what} (fin ")),
