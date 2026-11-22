@@ -242,6 +242,9 @@ fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("wall.straight"), Ok(WALLS));
     assert_eq!(category_of_kind("door.single"), Ok(DOORS));
     assert_eq!(category_of_kind("block"), Ok(GENERIC_MODELS));
+    assert_eq!(category_of_kind("workshop.part"), Ok(GENERIC_MODELS));
+    assert_eq!(category_of_kind("workshop.assembly"), Ok(GENERIC_MODELS));
+    assert!(category_of_kind("part").is_err());
     assert_eq!(
         category_of_kind("teapot"),
         Err(CategoryError::UnknownKind("teapot".to_string()))

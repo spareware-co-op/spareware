@@ -15,6 +15,9 @@ on:
       - "projects/spare-construct/demo/index.html"
       - "projects/spare-construct/demo/workshop/**"
       - "projects/spare-construct/clippy.toml"
+      - "projects/engines/geometry/geom-solidcore/**"
+      - "projects/engines/crates/engine-geometry/**"
+      - "projects/engines/geometry/crates/geom-op/**"
       - "tools/transport-truth/**"
       - "projects/kit/crates/kit-core/**"
       - "projects/kit/crates/kit-ops/**"
@@ -120,6 +123,75 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Tests, against the answers tools/transport-truth recorded from the prototype
         run: cargo test --locked -p construct-transport
+
+  kernel:
+    name: The server built and tested with the kernel engine
+    # The server's Cargo feature `kernel` links the geometry kernel's builder with solidcore's
+    # engine behind it (src/geometry.rs), chosen at run time by STACK_GEOMETRY=kernel. No other job
+    # builds it, so these are its checks: the build, clippy, and every test that needs no database
+    # (tests/kernel.rs runs the builder's suite on the engine; the checklist stays on the default
+    # build, as the checklist job runs it). One compile of solidcore takes 10 to 17 minutes and
+    # about 7 GB, so only a push to main saves the cache, as in kernel.yml's job `solidcore`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # solidcore's README asks for an 8 MiB stack.
+      RUST_MIN_STACK: "8388608"
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        working-directory: projects/spare-construct/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # The pinned commit of solidcore (geom-solidcore's Cargo.toml).
+          key: server-kernel-1d8e14b46dedccbb03572956e7c708782fef1b8f
+          workspaces: projects/spare-construct/server -> target
+          add-rust-environment-hash-key: false
+      - name: Build with the kernel feature
+        run: cargo build --locked --features kernel
+      - name: Clippy with the kernel feature
+        run: cargo clippy --locked --features kernel --all-targets -- -D warnings
+      - name: Tests that need no database, with the kernel feature
+        run: cargo test --locked --features kernel
+
+  kernel-browser:
+    name: The kernel engine builds for the browser's target
+    # The browser's page builds shapes with construct-regen, whose kernel builder (src/kernel.rs)
+    # sees only the engine seam; the crates job's check of construct-shapes and construct-wasm
+    # covers that. This checks the engine that answers behind it, geom-solidcore (its own
+    # workspace), for wasm32-unknown-unknown, which kernel.yml's wasm32-wasip1 job does not.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        working-directory: projects/engines/geometry/geom-solidcore
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: solidcore-browser-1d8e14b46dedccbb03572956e7c708782fef1b8f
+          workspaces: projects/engines/geometry/geom-solidcore -> target
+          add-rust-environment-hash-key: false
+      - name: Check geom-solidcore for wasm32-unknown-unknown
+        run: cargo check --locked --target wasm32-unknown-unknown
 
   checklist:
     name: The checklist on ARM Linux

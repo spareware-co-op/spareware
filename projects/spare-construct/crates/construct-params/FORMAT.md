@@ -2,6 +2,8 @@
 
 A published format under [EXTENDING.md](../../../../EXTENDING.md), section 3, read with the [cloud format](../construct-model/FORMAT.md) it sits in. **We may stop writing an old version. We never stop reading it.** [`src/value.rs`](src/value.rs), [`src/definition.rs`](src/definition.rs) and [`src/units.rs`](src/units.rs) are the reader library. Why every stored number is whole, and why a length counts the geometry kernel's grid steps: [note CON-A2-F3-P1](../../notes/CON-A2-F3-P1-stored-units.md).
 
+One units system: this crate owns the program's quantities, kinds, units, typed text and display. The formula language, [construct-formulas](../construct-formulas/FORMAT.md), works in this crate's kinds, units and values and depends on it, never the reverse.
+
 ## A value
 
 A value is stored as text, `<kind>:<payload>`. Each value has exactly one spelling: reading checks that writing the value again gives the same text, so the same values always give the same bytes and the same record hash.
@@ -45,12 +47,15 @@ A parameter's definition is a JSON row, its fields in this order:
 | `kind` | One of the tags above |
 | `holder` | `instance` (each element has its own value) or `type` (one value on the type) |
 | `choices` | For `choice` only, `[{"key","label"}]` in the order people see them, keys never empty, no key or label twice; empty for every other kind |
+| `formula` | Only when the parameter's value is given by a formula over other parameters of the same element or type: the formula's text in its one spelling ([construct-formulas' FORMAT.md](../construct-formulas/FORMAT.md)). Never empty, no space at either end, and only for a kind a formula gives: `length`, `area`, `volume`, `angle`, `slope`, `number`, `whole`, `yesno`. A row without a formula has no `formula` key, so every row written before it existed keeps its bytes. This crate keeps the text; construct-formulas checks its spelling and refuses any other when it reads it. |
 
 `{"id":"P1","name":"Height","kind":"length","holder":"instance","choices":[]}`
 
+`{"id":"P3","name":"Leaf","kind":"length","holder":"type","choices":[],"formula":"Opening - 2 * Frame"}`
+
 ## Display settings
 
-How values are shown is a JSON row of a project or view, one `{"unit","places"}` per measured kind, in this order: `length`, `area`, `volume`, `angle`, `slope`. Units: `mm`, `m`, `mm2`, `m2`, `mm3`, `m3`, `degree`, `percent`, `ratio`. Places: 0 to each unit's most, so that a shown value is always a whole number of steps and reads back: `mm` 2, `m` 5 (0.01 mm, the model tolerance), `mm2` 4, `mm3` 6, every other unit 9. A shown value is rounded half to even to its places. Typed text is never rounded to the grid: a length, area or volume that is not a whole number of steps (0.001 mm) is refused, naming the nearest value below and above. Display settings never change a stored value.
+How values are shown is a JSON row of a project or view, one `{"unit","places"}` per measured kind, in this order: `length`, `area`, `volume`, `angle`, `slope`. Units: `mm`, `m`, `mm2`, `m2`, `mm3`, `m3`, `degree`, `percent`, `ratio`. The unit table also holds `cm`, `in` and `ft`, each a whole number of grid steps (64,000, 162,560 and 1,950,720), for formulas written with them; they are not display units, so a row naming one is refused, and typed text does not read them. Places: 0 to each unit's most, so that a shown value is always a whole number of steps and reads back: `mm` 2, `m` 5 (0.01 mm, the model tolerance), `mm2` 4, `mm3` 6, every other unit 9. A shown value is rounded half to even to its places. Typed text is never rounded to the grid: a length, area or volume that is not a whole number of steps (0.001 mm) is refused, naming the nearest value below and above. A value a formula works out is not typed text: a length, area or volume it gives rounds to the nearest step (square, cubic step), a half to the even one ([construct-formulas' FORMAT.md](../construct-formulas/FORMAT.md)), so dividing a length into equal parts always gives a value. Display settings never change a stored value.
 
 ## Shared parameter file, version 1
 

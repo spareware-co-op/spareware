@@ -177,6 +177,15 @@ if (process.env.STACK_KILL) {
   await anna.reload();
   await anna.waitForSelector('g.element[data-id="D-102"]');
   check((await position(anna, 'D-102')).join() === a.join(), 'and a fresh load agrees');
+  // Anna's claim on the door outlives her reload: a claim lasts 30 s after her last edit, and the
+  // server turns back anyone else's change to the door until then. Ben changes this door's type
+  // further down, so Anna lets go of it the way a person does: she picks it, then clicks off it.
+  const held = await box(anna, 'D-102');
+  await anna.mouse.click(held.x + held.width / 2, held.y + held.height / 2);
+  await anna.waitForFunction(() => window.spare.claims.get('D-102')?.person === 'anna');
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await ben.waitForFunction(() => !window.spare.claims.has('D-102'));
+  pass('Anna lets go of the door, and Ben sees it free');
 }
 
 console.log('\n4. Arch v12 is shared, bridged and consumed, on the page');
@@ -260,6 +269,266 @@ const compared = await ben.evaluate(() => ({
 }));
 console.log(`      Ben's page compared ${compared.checked} bodies with the server's`);
 check(compared.mismatches.length === 0, "every body built in the browser matches the server's");
+
+console.log('\n   Parameters, through the edit log');
+// No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
+await ben.evaluate(() => {
+  const definition = { id: 'P-sill', name: 'Sill height', kind: 'length', holder: 'instance', choices: [] };
+  window.spare.edit('parameter.define', { definition });
+  window.spare.edit('parameter.bind', { parameter: 'P-sill', categories: [300], default: '0' });
+});
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+const doorAt = await box(ben, 'D-103');
+await ben.mouse.click(doorAt.x + doorAt.width / 2, doorAt.y + doorAt.height / 2);
+const sill = '#pv-side input[data-chg="stackparam"][data-a="P-sill"]';
+await ben.waitForSelector(sill);
+check((await ben.locator('#pv-side').textContent()).includes('Doors'), 'a selected door shows its category');
+check((await ben.locator(sill).inputValue()) === '0 mm', 'and its parameters in units, the default until one is set');
+// Typed and committed with Enter, the way a person does it: the field sends one change, and the page
+// then lets go of the field. (A made-up change event on top would send a second one when the field
+// loses focus, and an undo would then only take back that copy.)
+const setSill = async (value) => {
+  await ben.locator(sill).fill(value);
+  await ben.locator(sill).press('Enter');
+};
+await setSill('3 kg');
+await ben.waitForFunction(() => document.getElementById('toast-m').textContent.includes('Sill height'));
+pass("a wrong unit is turned back with the server's reason");
+await setSill('0.15 m');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
+pass("Anna's browser has Ben's value through the edit log, stored as its parameter's text");
+await ben.waitForFunction((field) => document.querySelector(field)?.value === '150 mm', sill);
+pass('and Ben sees it in units');
+await shot(ben, 'ben-parameters');
+
+console.log('\n   Undo and redo, through the edit log');
+await ben.waitForSelector('#qat [data-act="stackundo"]');
+pass("Ben's Undo is ready: his last change is his to undo");
+// Enter committed the value and the page let go of the field, so Ctrl+Z is the page's, not the field's.
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea'));
+await ben.keyboard.press('Control+z');
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+// What Ben's page saw of its undo: the state, the last toast and the newest lines of the edit log.
+console.log(
+  `      Ben's page after Ctrl+Z: ${JSON.stringify(
+    await ben.evaluate(() => ({
+      steps: window.spare.steps,
+      toast: document.getElementById('toast-m').textContent,
+      focus: document.activeElement?.tagName,
+      log: window.spare.log.slice(0, 3),
+    })),
+  )}`,
+);
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === undefined);
+pass("Ctrl+Z undoes his value, and Anna's browser follows");
+await ben.waitForSelector('#qat [data-act="stackredo"]');
+await ben.click('#qat [data-act="stackredo"]');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
+pass('his Redo button puts it back, for her too');
+await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
+pass('and then there is nothing to redo');
+// A second change, taken back with the quick bar's Undo button this time.
+await setSill('0.2 m');
+await anna.waitForFunction(() => {
+  const value = window.spare.elements.get('D-103')?.el.props['P-sill'];
+  return value !== undefined && value !== 'length:q0:960000';
+});
+await ben.click('#qat [data-act="stackundo"]');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
+pass("his Undo button takes back a second change, and Anna's browser follows");
+// Anna's own last change was deleting the wall she drew: her undo brings it back, for Ben too.
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
+pass("Anna's undo is her own: the wall she deleted is back on Ben's screen");
+// Her next is the door she placed on it. Ben takes the door first, so that undo is turned back.
+const newDoor = await ben.evaluate(() =>
+  [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
+);
+const doorBox = await box(ben, newDoor);
+await ben.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
+await anna.click('#qat [data-act="stackundo"]');
+await anna.waitForFunction(() =>
+  document.getElementById('toast-m').textContent.includes('Ben is working on this'),
+);
+check(
+  await anna.evaluate((id) => window.spare.elements.has(id), newDoor),
+  "an undo of what someone else is working on is turned back with the server's reason, and changes nothing",
+);
+await shot(anna, 'anna-undo-turned-back');
+
+console.log('\n   Types and parameters, on the page');
+// Ben manages them through the page's own dialogs and palette; Anna reads what the server says, from
+// her own sign-in, to see that it went through the log. Each step is then undone and redone once.
+const model = '/api/projects/example-1/models/arch-model';
+const asAnna = (path) => anna.evaluate((url) => fetch(url).then((r) => r.json()), `${model}/${path}`);
+async function until(read, ok, label) {
+  for (let tries = 0; tries < 60; tries += 1) {
+    const found = await read();
+    if (ok(found)) return found;
+    await ben.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}`);
+}
+const doorTypes = async () => (await asAnna('types?category=300')).types;
+const leafWidth = (view) => view.parameters.find((p) => p.name === 'Leaf width');
+const manager = '#stack-manage';
+const closeDialog = async () => {
+  await ben.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await ben.waitForSelector('#dlg', { state: 'hidden' });
+};
+const pick = async (id) => {
+  await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(ben, id);
+  await ben.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await ben.waitForSelector('#pv-side [data-act="stacktypes"]');
+};
+const openTypes = async () => {
+  await ben.locator('#pv-side [data-act="stacktypes"]').click();
+  await ben.waitForSelector(`${manager} select[data-key="type-category"]`);
+};
+const typeSection = (name) =>
+  ben.locator(`${manager} section[data-type]`).filter({ has: ben.locator(`input[value="${name}"]`) });
+const problemIs = async (where, label) => {
+  const shownText = await ben.locator(`${manager} [data-problem="${where}"]`).textContent();
+  const toast = await ben.locator('#toast-m').textContent();
+  check(shownText.length > 0 && toast === shownText, label);
+};
+// One undo and one redo of the step just made: `read` reads it from Anna's side.
+async function undoRedo(label, read, without, withIt) {
+  await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+  await until(read, without, `${label}: the undo`);
+  await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+  await until(read, withIt, `${label}: the redo`);
+  pass(`${label}: undo takes it back and redo puts it back, as Anna reads it`);
+}
+
+// Define a parameter and bind it to doors, from the Manage tab.
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+await ben.locator('#ribbon [data-act="stackparams"]').click();
+await ben.waitForSelector(`${manager} [data-key="def-name"]`);
+const catalog = await asAnna('catalog');
+check(
+  (await ben.locator(`${manager} [data-key="def-kind"] option`).count()) === catalog.kinds.length &&
+    (await ben.locator(`${manager} [data-key^="def-cat:"]`).count()) ===
+      catalog.categories.filter((c) => c.parent === null).length,
+  "the kinds and the categories to bind to are the server's, not the page's",
+);
+await ben.locator(`${manager} [data-key="def-name"]`).fill('Leaf width');
+await ben.locator(`${manager} [data-key="def-kind"]`).selectOption('length');
+await ben.locator(`${manager} [data-key="def-holder"]`).selectOption('type');
+await ben.locator(`${manager} [data-key="def-default"]`).fill('900');
+await ben.locator(`${manager} [data-key="def-cat:300"]`).check();
+await ben.locator(`${manager} [data-key="def-go"]`).click();
+await ben.waitForFunction(
+  (root) => document.querySelector(root).textContent.includes('Bound to Doors. Default: 900 mm.'),
+  manager,
+);
+pass('Leaf width is defined and bound to doors with a default, and the list says so in units');
+await ben.locator(`${manager} [data-key="def-name"]`).fill('Leaf width');
+await ben.locator(`${manager} [data-key="def-go"]`).click();
+await ben.waitForSelector(`${manager} [data-problem="define"]`);
+await problemIs('define', "a second parameter of that name is refused, in the server's words, beside the form");
+await closeDialog();
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const leaf = async () =>
+  (await asAnna('project-parameters')).parameters.find((p) => p.name === 'Leaf width');
+await undoRedo(
+  'Binding it',
+  leaf,
+  (found) => found && found.categories.length === 0,
+  (found) => found && found.categories.length === 1 && found.default === '900 mm',
+);
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await until(leaf, (found) => found && found.categories.length === 0, 'the bind is back before its define');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await until(leaf, (found) => found === undefined, 'the define goes');
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+await until(leaf, (found) => found && found.categories.length === 1, 'both are back');
+pass('Defining it: undo takes it away and redo brings it back, bound again');
+
+// Types of doors: make, refuse a clash, set a value, rename, copy, delete.
+await pick('D-103');
+await openTypes();
+check((await ben.locator(`${manager} [data-key="type-category"]`).inputValue()) === '300', "the dialog opens on the selected door's category");
+const make = async (name) => {
+  await ben.locator(`${manager} [data-key="new-type-name"]`).fill(name);
+  await ben.locator(`${manager} [data-key="new-type-make"]`).click();
+};
+await make('Flush');
+await ben.waitForSelector(`${manager} section[data-type]`);
+pass('a type of doors is made from a name');
+await make('Flush');
+await ben.waitForSelector(`${manager} [data-problem="new-type"]`);
+await problemIs('new-type', "a second type of that name is refused in the server's words, under the field");
+await closeDialog();
+await undoRedo('Making a type', doorTypes, (types) => types.length === 0, (types) => types.length === 1);
+
+await openTypes();
+const value = ben.locator(`${manager} section[data-type] input[data-key^="type-value:"]`).first();
+check((await value.inputValue()) === '900 mm', "a new type shows the parameter's default, in units");
+await value.fill('3 kg');
+await value.press('Tab');
+await ben.waitForSelector(`${manager} [data-problem^="type:"]`);
+await problemIs(await ben.locator(`${manager} [data-problem^="type:"]`).getAttribute('data-problem'), "a wrong unit on a type is refused in the server's words, beside the value");
+await value.fill('2.4 m');
+await value.press('Tab');
+await ben.waitForFunction((root) => document.querySelector(`${root} [data-key^="type-value:"]`)?.value === '2400 mm', manager);
+pass('a value typed in metres is shown as the server formats it');
+await closeDialog();
+const flushValue = async () => leafWidth((await doorTypes())[0]).shown;
+await undoRedo('Setting a value on a type', flushValue, (shown) => shown === '900 mm', (shown) => shown === '2400 mm');
+
+await openTypes();
+await ben.locator(`${manager} section[data-type] input[data-key^="type-name:"]`).fill('Flush door');
+await ben.locator(`${manager} section[data-type] input[data-key^="type-name:"]`).press('Tab');
+await ben.waitForFunction((root) => document.querySelector(`${root} [data-key^="type-name:"]`)?.value === 'Flush door', manager);
+await closeDialog();
+const names = async () => (await doorTypes()).map((t) => t.name);
+await undoRedo('Renaming a type', names, (found) => found.join() === 'Flush', (found) => found.join() === 'Flush door');
+
+await openTypes();
+await ben.locator(`${manager} section[data-type] [data-key^="type-copy:"]`).click();
+await ben.waitForFunction((root) => document.querySelectorAll(`${root} section[data-type]`).length === 2, manager);
+await closeDialog();
+await undoRedo('Copying a type', names, (found) => found.length === 1, (found) => found.length === 2);
+
+await openTypes();
+await typeSection('Flush door copy').locator('[data-key^="type-delete:"]').click();
+await ben.waitForFunction((root) => document.querySelectorAll(`${root} section[data-type]`).length === 1, manager);
+await closeDialog();
+await undoRedo('Deleting a type', names, (found) => found.length === 2, (found) => found.length === 1);
+
+// An element's type, from the palette; the type's value reaches it.
+await ben.locator('#pv-side select[data-key="element-type"]').selectOption({ label: 'Flush door' });
+const door = async (id) => asAnna(`parameters/${id}`);
+await until(() => door('D-103'), (view) => view.type?.name === 'Flush door' && leafWidth(view).shown === '2400 mm' && leafWidth(view).from === 'type', 'D-103 has the type');
+pass("a door's type is changed from the properties palette, and it reads the type's value");
+await ben.waitForFunction(() => /Leaf width\s*2400 mm/.test(document.querySelector('#pv-side').textContent));
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await undoRedo('Changing a door’s type', () => door('D-103'), (view) => view.type === null, (view) => view.type?.name === 'Flush door');
+
+// A type in use can't be deleted: the server says so. Then a change of value reaches every element of it.
+await pick('D-102');
+await ben.locator('#pv-side select[data-key="element-type"]').selectOption({ label: 'Flush door' });
+await until(() => door('D-102'), (view) => view.type?.name === 'Flush door', 'D-102 has the type');
+await openTypes();
+check((await typeSection('Flush door').locator('.small.faint').first().textContent()) === '2 elements', 'the type says how many elements are of it');
+await typeSection('Flush door').locator('[data-key^="type-delete:"]').click();
+await ben.waitForSelector(`${manager} [data-problem^="type:"]`);
+await problemIs(await ben.locator(`${manager} [data-problem^="type:"]`).getAttribute('data-problem'), "deleting a type that is in use is refused in the server's words, beside the type");
+check((await doorTypes()).length === 1, 'and the type is still there');
+const flush = ben.locator(`${manager} section[data-type] input[data-key^="type-value:"]`).first();
+await flush.fill('2.1 m');
+await flush.press('Tab');
+await until(() => door('D-103'), (view) => leafWidth(view).shown === '2100 mm', 'D-103 reads the new value');
+await until(() => door('D-102'), (view) => leafWidth(view).shown === '2100 mm', 'D-102 reads the new value');
+pass('one value changed on the type, and both doors of that type read it');
+await closeDialog();
+await ben.waitForFunction(() => /Leaf width\s*2100 mm/.test(document.querySelector('#pv-side').textContent));
+pass("and Ben's properties palette shows it without being asked");
+await shot(ben, 'ben-types');
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');

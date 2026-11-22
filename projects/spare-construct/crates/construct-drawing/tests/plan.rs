@@ -106,6 +106,10 @@ impl Engine for Boxes {
         Err(unsupported("subtract"))
     }
 
+    fn subtract_pieces(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Vec<Cuboid>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
     fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
         Err(unsupported("loft"))
     }

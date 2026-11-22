@@ -25,6 +25,7 @@ use engine_geometry::value::engine::{
     Volume,
 };
 use engine_geometry::value::grid::GridStep;
+use std::sync::{Arc, Mutex};
 
 /// A test engine: it answers only an extrusion of an upright rectangle, level and swept straight
 /// up, which it keeps as the box it is, and meshes as six faces of two triangles each. It is
@@ -101,6 +102,10 @@ impl Engine for Cuboids {
 
     fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
         Err(unsupported("subtract"))
+    }
+
+    fn subtract_pieces(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Vec<Cuboid>, EngineError> {
+        Err(unsupported("subtract_pieces"))
     }
 
     fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
@@ -192,6 +197,123 @@ fn a_recipe_that_cant_build_says_why() {
     kernel_suite::a_recipe_that_cant_build_says_why(|| Cuboids);
 }
 
+/// A test engine that answers as [`Cuboids`] does, and records every subtraction it is asked for
+/// by the tool's lowest corner, answering it with the target unchanged: it judges what the builder
+/// asks and names, not the shape a cut gives.
+#[derive(Clone, Default)]
+struct Recording {
+    tools: Arc<Mutex<Vec<[i64; 3]>>>,
+}
+
+impl Engine for Recording {
+    type Solid = Cuboid;
+
+    fn edition(&self) -> Edition {
+        Cuboids.edition()
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Cuboid, EngineError> {
+        Cuboids.extrude(profile, by)
+    }
+
+    fn subtract(&mut self, target: &Cuboid, tool: &Cuboid) -> Result<Cuboid, EngineError> {
+        self.tools.lock().unwrap().push(tool.lo);
+        Ok(target.clone())
+    }
+
+    fn subtract_pieces(
+        &mut self,
+        target: &Cuboid,
+        tool: &Cuboid,
+    ) -> Result<Vec<Cuboid>, EngineError> {
+        Cuboids.subtract_pieces(target, tool)
+    }
+
+    fn loft(&mut self, sections: &[Section]) -> Result<Cuboid, EngineError> {
+        Cuboids.loft(sections)
+    }
+
+    fn unite(&mut self, a: &Cuboid, b: &Cuboid) -> Result<Cuboid, EngineError> {
+        Cuboids.unite(a, b)
+    }
+
+    fn volume(&mut self, s: &Cuboid) -> Result<Volume, EngineError> {
+        Cuboids.volume(s)
+    }
+
+    fn mesh(&mut self, s: &Cuboid) -> Result<DisplayMesh, EngineError> {
+        Cuboids.mesh(s)
+    }
+
+    fn section(&mut self, s: &Cuboid, plane: &GridPlane) -> Result<Cut, EngineError> {
+        Cuboids.section(s, plane)
+    }
+}
+
+#[test]
+fn the_walls_names_survive_its_openings() {
+    kernel_suite::the_walls_names_survive_its_openings(Recording::default);
+}
+
+#[test]
+fn an_opening_at_the_edge_is_refused_with_its_door_and_reason() {
+    kernel_suite::an_opening_at_the_edge_is_refused_with_its_door_and_reason(|| Cuboids);
+}
+
+/// Each opening is asked of the engine as one cutter, one after another in the order of the
+/// doors' keys whatever order they come in: the door's width and height at its place along the
+/// wall, through the wall and 100 mm past each side, and from 100 mm under the base for a door to
+/// the floor; a raised opening from its own foot.
+#[test]
+fn the_openings_are_cut_in_the_order_of_their_keys() {
+    use construct_regen::kernel::{Hosted, Kernel};
+    let engine = Recording::default();
+    let tools = engine.tools.clone();
+    let k = Kernel::new(engine).unwrap();
+    let mm = |v: i64| v * 6400;
+    let at = |x: i64, z: i64| k.units().point([x, -50, z]).unwrap();
+    let (door, window) = (kernel_suite::door(), kernel_suite::door_of(800, 1000, "x"));
+    let wall = kernel_suite::wall(4000, "x");
+    let hosted = [
+        Hosted {
+            key: "D-b",
+            recipe: &window,
+            at: at(2500, 900),
+        },
+        Hosted {
+            key: "D-a",
+            recipe: &door,
+            at: at(500, 0),
+        },
+    ];
+    let built = k.build_hosting(&wall, &hosted).unwrap();
+    assert_eq!(
+        *tools.lock().unwrap(),
+        [[mm(500), mm(-100), mm(-100)], [mm(2500), mm(-100), mm(900)]]
+    );
+    let roles: Vec<&str> = built.names.iter().map(|n| n.role.as_str()).collect();
+    assert_eq!(roles.len(), 6 + 3 + 4, "{roles:?}");
+}
+
+/// A wall with no doors asks the engine for no subtraction, and its body's bytes are what the
+/// engine was asked for the extrusion alone.
+#[test]
+fn a_wall_without_doors_asks_for_no_cut() {
+    use construct_model::geometry::Geometry;
+    let engine = Recording::default();
+    let tools = engine.tools.clone();
+    let k = construct_regen::kernel::Kernel::new(engine).unwrap();
+    let built = k.build(&kernel_suite::wall(4000, "x")).unwrap();
+    assert!(tools.lock().unwrap().is_empty());
+    let body: serde_json::Value = serde_json::from_slice(&built.body).unwrap();
+    assert_eq!(
+        body.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["by", "extrude"]
+    );
+    assert_eq!(built.displays[0].mesh, built.displays[1].mesh);
+    assert_eq!(built.displays[1].deviation, 0);
+}
+
 /// An engine's refusal comes back as a shape that can't build, with the engine's words kept.
 #[test]
 fn an_engines_refusal_is_a_recipe_that_cant_build() {
@@ -210,6 +332,9 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
         }
         fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
             Err(unsupported("subtract"))
+        }
+        fn subtract_pieces(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Vec<Cuboid>, EngineError> {
+            Err(unsupported("subtract_pieces"))
         }
         fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
             Err(unsupported("loft"))

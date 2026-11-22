@@ -187,7 +187,7 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 136] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 142] = [
     ("aho-corasick", "Unlicense OR MIT", "MIT"),
     ("anstream", "MIT OR Apache-2.0", "MIT"),
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
@@ -203,6 +203,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 136] = [
     ("bitflags", "MIT OR Apache-2.0", "MIT"),
     ("block-buffer", "MIT OR Apache-2.0", "MIT"),
     ("borsh", "MIT OR Apache-2.0", "MIT"),
+    ("bumpalo", "MIT OR Apache-2.0", "MIT"),
     ("camino", "MIT OR Apache-2.0", "MIT"),
     ("cap", "MIT OR Apache-2.0", "MIT"),
     ("cargo-platform", "MIT OR Apache-2.0", "MIT"),
@@ -250,6 +251,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 136] = [
     ("indexmap", "Apache-2.0 OR MIT", "MIT"),
     ("is_terminal_polyfill", "MIT OR Apache-2.0", "MIT"),
     ("itoa", "MIT OR Apache-2.0", "MIT"),
+    ("js-sys", "MIT OR Apache-2.0", "MIT"),
     ("lazy_static", "MIT OR Apache-2.0", "MIT"),
     ("lcov", "MIT/Apache-2.0", "MIT"),
     ("libc", "MIT OR Apache-2.0", "MIT"),
@@ -338,6 +340,10 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 136] = [
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "MIT",
     ),
+    ("wasm-bindgen", "MIT OR Apache-2.0", "MIT"),
+    ("wasm-bindgen-macro", "MIT OR Apache-2.0", "MIT"),
+    ("wasm-bindgen-macro-support", "MIT OR Apache-2.0", "MIT"),
+    ("wasm-bindgen-shared", "MIT OR Apache-2.0", "MIT"),
     ("windows-link", "MIT OR Apache-2.0", "MIT"),
     ("windows-sys", "MIT OR Apache-2.0", "MIT"),
     (

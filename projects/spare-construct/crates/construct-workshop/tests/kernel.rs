@@ -282,6 +282,30 @@ fn a_parameter_can_be_a_formula_of_others_with_units() {
     );
 }
 
+#[test]
+fn a_length_divided_into_equal_parts_lands_on_the_nearest_step() {
+    // A third of 1000 mm is between grid steps: the formula gives the nearest stored step,
+    // 2,133,333 Q0 steps = 333.33328125 mm (before, the exact third, 333.333... mm). The plate
+    // is centred, and this builder puts each half on its Q1 grid as it always has: 166.666640625
+    // mm is 26,666,662.5 Q1 steps, landed 26,666,663 out either side, so 53,333,326 Q1 steps
+    // deep. Before it was 2 x 26,666,667 = 53,333,334, so the plate is 8 Q1 steps (50 nm) less
+    // deep, far inside the 0.01 mm tolerance.
+    let mut p = bracket();
+    p["params"][0]["value"] = json!(1000);
+    p["params"][1]["value"] = json!("width / 3");
+    let a = answer(&p);
+    assert_eq!(a["params"][1]["state"], "built");
+    let depth = a["params"][1]["value"].as_f64().unwrap();
+    assert!(close(depth, 333.333_281_25), "{depth}");
+    let plate_depth = 53_333_326.0 / 160_000.0;
+    assert!(close(
+        a["bodies"][0]["bbox"][1][1].as_f64().unwrap() * 2.0,
+        plate_depth
+    ));
+    let volume = a["bodies"][0]["volume"].as_f64().unwrap();
+    assert!(close(volume, 1000.0 * plate_depth * 8.0), "{volume}");
+}
+
 fn one_outline(pts: Value) -> Value {
     json!({ "params": [], "end": 2, "features": [
         { "id": "s", "type": "sketch", "name": "S", "shape": "outline", "pts": pts },
