@@ -464,6 +464,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-categories"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-clash"
 version = "0.0.0"
 dependencies = [
