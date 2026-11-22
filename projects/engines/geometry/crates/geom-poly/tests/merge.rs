@@ -414,6 +414,7 @@ fn a_cut_holds_a_seam_where_it_lies_along_a_face() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let seamed = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     closed(&seamed, &kept);
@@ -428,6 +429,7 @@ fn a_cut_that_stops_inside_a_face_leaves_it_whole() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let m = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     closed(&m, &kept);
@@ -443,6 +445,7 @@ fn a_cut_nowhere_near_changes_nothing() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let m = merge_with(&kept_pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     assert_eq!(counts(&m), [1, 6, 6, 12, 8]);
@@ -482,6 +485,7 @@ fn a_cut_on_a_face_holds_its_outline_and_not_where_the_boxes_parted_it() {
             let rules = Rules {
                 cuts: &cuts,
                 open: false,
+                crossing: &[],
             };
             let m = merge_with(&kept, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
             closed(&m, &kept);
@@ -507,6 +511,7 @@ fn a_wall_back_to_back_makes_two_cells_whichever_fin_comes_first() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let m = merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     assert_eq!(m.shells.len(), 2);
@@ -539,6 +544,7 @@ fn a_wall_back_to_back_makes_two_cells_whichever_fin_comes_first() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let m = merge_with(&turned, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     assert_eq!(m.shells.len(), 2);
@@ -563,6 +569,7 @@ fn a_wall_that_stops_short_has_one_cell_on_both_sides() {
     let rules = Rules {
         cuts: &cuts,
         open: false,
+        crossing: &[],
     };
     let m = merge_with(&pieces, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
     let back = kept.len();
@@ -582,6 +589,7 @@ fn an_open_merge_gives_a_sheet() {
     let rules = Rules {
         cuts: &[],
         open: true,
+        crossing: &[],
     };
     let one = [square([0, 0, 0], [4, 4, 1])];
     let m = merge_with(&one, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
@@ -602,6 +610,7 @@ fn faces_of_an_open_merge_that_share_an_edge_are_one_shell() {
     let rules = Rules {
         cuts: &[],
         open: true,
+        crossing: &[],
     };
     let opened: Vec<Outward> = pieces.iter().skip(1).cloned().collect();
     let m = merge_with(&opened, Merge::RemoveRedundant, rules, &mut meter()).unwrap();
@@ -1316,6 +1325,7 @@ fn a_sheet_s_rim_is_named_by_its_face_and_then_the_bounds_of_its_fins() {
     let rules = Rules {
         cuts: &[],
         open: true,
+        crossing: &[],
     };
     let sheet = |polygon: usize, leaf: usize| {
         let mut pieces = kept(&polygons, &WindingTest::unite(), leaf);
@@ -1470,6 +1480,7 @@ fn a_rim_on_a_block_s_face_takes_the_block_s_bounds_however_they_are_written() {
     let rules = Rules {
         cuts: &[],
         open: true,
+        crossing: &[],
     };
     let square = |plane: &Plane| plane.n().iter().filter(|v| **v != 0).count() == 1;
     for k in [1, 2] {
@@ -1804,7 +1815,11 @@ fn merged_again_with(
 ) -> (Result<Merged, MergeError>, usize) {
     let cap = budget.map_or(Budget::UNLIMITED, |work| Budget::new(work, u64::MAX));
     let mode = Merge::RemoveRedundant;
-    let rules = |cuts| Rules { cuts, open: false };
+    let rules = |cuts| Rules {
+        cuts,
+        open: false,
+        crossing: &[],
+    };
     let memo = merge_with_reusing(before, mode, rules(before_cuts), None, &mut meter());
     let memo = memo.map(|m| m.1);
     let mut fresh_meter = WorkMeter::new(cap);

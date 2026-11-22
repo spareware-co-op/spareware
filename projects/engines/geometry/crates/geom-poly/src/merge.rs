@@ -27,8 +27,9 @@
 //!   lie on fewer than three such planes, as at a seam's vertex, a sheet's rim or the end of a
 //!   section's curve, the bounds of its edges' fins come next, and at a curve's end the bounds of
 //!   the polygons' outlines that end there, which the boxes do not change either (#1177; tested).
-//!   A fin's bound along a line a cut ran along is the cutting polygon's plane, so where two
-//!   polygons' planes meet a face in one line, a rim's name can still be as the pieces were cut.
+//!   A fin's bound along a line a cut ran along is the plane of whichever polygon cut first, so
+//!   a sheet's rim there takes the lowest plane of the polygons given that lie along the line and
+//!   hold the point (#1182; tested).
 //! - **Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by
 //!   their Plücker coordinates, in at most 576 bits, and nothing is rounded.
 //! - **Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has
@@ -48,8 +49,9 @@
 //! <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge
 //! structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>.
 //!
-//! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
-//! meter one unit per side of a piece, per fin and per shell.
+//! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line; a sheet
+//! given pieces it may end on reads each of them once per edge at each point. Charges the meter
+//! one unit per side of a piece, per fin and per shell, and one per such reading.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::sync::Arc;
@@ -157,6 +159,10 @@ pub struct Rules<'p> {
     pub cuts: &'p [Piece],
     /// Whether the pieces are a sheet, whose edges may have one fin and whose shells bound nothing.
     pub open: bool,
+    /// Pieces of the polygons a sheet's kept part may end on, which name its rim: at a point, a
+    /// fin along a line where some of them lie and hold the point brings the lowest of their
+    /// planes in place of its bound.
+    pub crossing: &'p [Piece],
 }
 
 /// Why pieces could not be merged.
@@ -1661,17 +1667,63 @@ fn runs_at(runs: &[Run], used: &[usize], points: &Points<'_>) -> Vec<Vec<usize>>
     at
 }
 
-/// What the runs `here`, places in `runs`, bring the point they end at.
-fn brought(here: &[usize], runs: &[Run], held: &[Held<'_>]) -> Result<Brought, MergeError> {
+/// What the runs `here`, places in `runs`, bring the point `at` they end at: a run along a line
+/// where pieces of `crossing` lie and hold the point brings the lowest of their planes for each
+/// fin's bound ([`along`]).
+fn brought(
+    here: &[usize],
+    runs: &[Run],
+    held: &[Held<'_>],
+    (crossing, at): (&[Piece], &Tpi),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Brought, MergeError> {
     let mut out = Brought::default();
     for run in here.iter().filter_map(|e| runs.get(*e)) {
+        let lowest = along(run, held, (crossing, at), meter)?;
         for fin in &run.fins {
             let piece = held.get(fin.held).ok_or(MergeError::Open)?;
             out.faces.push(piece.face.plane);
-            out.bounds.push(fin.bound);
+            out.bounds.push(lowest.unwrap_or(fin.bound));
         }
     }
     Ok(out)
+}
+
+/// The lowest plane, in canonical form and plane order, of the pieces of `crossing` that lie along
+/// `run`'s line, on no face of its fins, and hold `at`, a point of the line; none where none do.
+fn along(
+    run: &Run,
+    held: &[Held<'_>],
+    (crossing, at): (&[Piece], &Tpi),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Plane>, MergeError> {
+    let [p, q] = run.on;
+    let mut lowest: Option<Plane> = None;
+    for piece in crossing {
+        meter.charge(1)?;
+        // A plane through a point of the line holds the line when its normal lies in the span of
+        // the normals of two planes through it.
+        let through = piece.face.side_of_tpi(at)? == Sign::Zero;
+        if !through || normals_sign(&p, &q, &piece.face)? != Sign::Zero {
+            continue;
+        }
+        let plane = canonical(&piece.face)?.plane;
+        let mut faces = run.fins.iter().filter_map(|fin| held.get(fin.held));
+        if faces.any(|entry| entry.face.plane == plane) {
+            continue;
+        }
+        let mut holds = true;
+        for bound in &piece.bounds {
+            if bound.side_of_tpi(at)? == Sign::Negative {
+                holds = false;
+                break;
+            }
+        }
+        if holds && lowest.is_none_or(|low| plane_order(&plane) < plane_order(&low)) {
+            lowest = Some(plane);
+        }
+    }
+    Ok(lowest)
 }
 
 /// A plane's place in plane order: its normal, then its offset.
@@ -1738,9 +1790,15 @@ fn first_meeting(list: &[Plane], meter: &mut WorkMeter<'_>) -> Result<Option<Tpi
 /// curve can have fewer. There the bounds the edges' fins stand on come after the faces' planes,
 /// each in canonical form and in plane order, leaving out the boxes' splits: at a rim or a seam
 /// that turns, edges on two lines end, and the face's plane and their two fins' bounds meet only
-/// there. A fin's bound on a polygon's outline is the polygon's own; one on a line a cut ran along
-/// is the plane of whichever polygon cut the piece there first, so where two polygons' planes
-/// meet the face in one line, that bound can still be as the pieces were cut.
+/// there. A fin's bound on a polygon's outline is the polygon's own. One on a line a cut ran along
+/// is the plane of whichever polygon cut the piece there first: the cuts run in the order given,
+/// a later plane through the same line finds the piece on one side of it, and a local cut runs
+/// across the whole piece, so that polygon can stop short of the point (#1182). So a sheet is
+/// given the pieces of the polygons its kept part may end on ([`Rules::crossing`]), and a fin
+/// along a line where some of them lie and hold the point brings the lowest of their planes
+/// instead ([`along`]). Whether a polygon holds a point is its own, whatever the boxes or the order
+/// of the cuts, and one always does where a cut line ends a sheet: the kept part ends there
+/// because a polygon along the line crosses the sheet, up to the point.
 ///
 /// At the end of a section's curve one edge ends, on two faces, and each fin's bound is the
 /// other's face, so neither names the point. The name once took its third plane from the planes
@@ -2612,7 +2670,8 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     let outline = outlines(&lines, &sides, &held, &used)?;
     let mut vertices = Vec::with_capacity(used.len());
     for ((id, here), through) in used.iter().zip(&ending).zip(outline) {
-        let mut ends = brought(here, &runs, &held)?;
+        let point = points.places.get(*id).ok_or(MergeError::Open)?.corner.point;
+        let mut ends = brought(here, &runs, &held, (&[], &point), meter)?;
         ends.outline = through;
         vertices.push(named(&points, *id, &ends, meter)?);
     }
@@ -2959,7 +3018,9 @@ fn merged(
     let ending = runs_at(&runs, &used, &points);
     let vertices = exec.try_map(meter, NAMES, RUNS, &used, |at, id, m| {
         let here = ending.get(at).ok_or(MergeError::Open)?;
-        named(&points, *id, &brought(here, &runs, &held)?, m)
+        let point = points.places.get(*id).ok_or(MergeError::Open)?.corner.point;
+        let ends = brought(here, &runs, &held, (rules.crossing, &point), m)?;
+        named(&points, *id, &ends, m)
     });
     let vertices = vertices.map_err(|e| phase_error(e, meter))?;
     // The memo: each piece's parts under its key, a last merge's as they came and this merge's
