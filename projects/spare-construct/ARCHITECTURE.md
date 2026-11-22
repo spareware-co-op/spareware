@@ -101,7 +101,7 @@ The model is a database of elements stored column by column, the way game engine
 
 - Storage: entity-component layout. Each component (transform, wall layers, parameters, bounding box, geometry handle) is its own column. Options: the bevy\_ecs crate used on its own, or our own. Lean: our own, because we need chunked storage and permanent IDs that game ECS libraries do not give.
 - IDs: 128-bit and time-ordered (UUID v7, or client ID plus counter), so two people working offline never collide. A compact 32-bit index is used in memory; the 128-bit ID goes to disk and over the wire.
-- Units: SI internally, metres in f64. Display units are a view setting. Revit stores decimal feet internally; we convert on import.
+- Units: stored values are exact whole units, lengths in whole millimetres; floats are only for display and sums ([note CON-A2-F3-P1](notes/CON-A2-F3-P1-stored-units.md)). Display units are a view setting. Revit stores decimal feet internally; we convert on import.
 - Coordinates: world positions in f64, which holds NZTM survey values (millions of metres) to about a millionth of a millimetre. Each building has a local origin. The GPU gets positions relative to the camera, so f32 rounding never shows as jitter.
 - Parameters: typed (length, area, volume, angle, number, integer, text, yes/no, choice, element reference, material, link). Formulas use a small, safe expression language. Shared parameters are keyed by GUID so they match across projects.
 - Materials: physical data (density, thermal) and drawing graphics (cut and surface patterns, colours), kept separate from render appearance.
