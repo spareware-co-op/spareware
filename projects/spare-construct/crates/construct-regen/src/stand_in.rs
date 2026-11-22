@@ -106,6 +106,7 @@ impl Geometry for Boxes {
             engine: "construct.stand-in".to_owned(),
             version: VERSION,
             name_scheme: 0,
+            report: None,
         }
     }
 
