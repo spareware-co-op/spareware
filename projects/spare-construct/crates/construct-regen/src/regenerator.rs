@@ -2,16 +2,24 @@
 //! leaves regeneration to this, as note A05 says, so a slow rebuild never holds up the log.
 //!
 //! Everything written here is derived: bodies and display records under their content IDs, what
-//! each element built to, and the area index. It isn't in any log, because the log can make it
-//! again. [`Regenerator::rebuild`] does exactly that, and the tests check it gives the same bytes.
+//! each element built to, the area index, each document's elements listed by kind, and which
+//! elements build from parameter values. It isn't in any log, because the log can make it again. [`Regenerator::rebuild`] does exactly that, and
+//! the tests check it gives the same bytes.
 //!
 //! Large records go to file storage, linked by hash, because a store holds small values well: note
 //! A06 measured a 16 MB record taking 60 ms to write, and a view rarely needs all of it.
 //!
 //! Note A05's checkpoints start here: each pass returns the bodies it built, and the server appends
 //! them to the log in a checkpoint entry, which every browser compares with what it built itself.
+//!
+//! Types and a document's parameter table have no shape: they are listed by kind and never built.
+//! A recipe that names a parameter is filled first ([`crate::parameters::filled`]), and such an
+//! element is listed under `reads`, so a change to its type or to the parameter table builds it
+//! again in the same pass. A shape is then the same however the log was reached.
 
+use crate::parameters::{self, Context};
 use construct_model::element::Element;
+use construct_model::geometry::Recipe;
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError};
 use construct_model::keys::{Place, list};
 use construct_model::rows::{BuiltElement, BuiltResult, DisplayRef, Model, Stored};
@@ -127,7 +135,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 
     /// Builds each element's recipe again and compares it with what is stored, bytes included.
-    /// Returns how many shapes it checked. A mismatch here is the failure checkpoints look for.
+    /// Returns how many shapes it checked: types and the parameter table have none, and are
+    /// passed over. A mismatch here is the failure checkpoints look for.
     ///
     /// # Errors
     ///
@@ -139,6 +148,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             .scan(&kit_list::all_pieces(project))
             .await
             .map_err(fault)?;
+        let mut checked = 0_usize;
         for (key, row) in &pairs {
             let Some(kit_store::Place::Piece {
                 document, piece, ..
@@ -155,6 +165,12 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 .await
                 .map_err(fault)?;
             let element = element.ok_or_else(|| format!("{piece}: its record is missing"))?;
+            if !parameters::has_shape(&element) {
+                continue;
+            }
+            let recipe = recipe_of(&mut snapshot, project, &document, &element)
+                .await
+                .map_err(fault)?;
             let place = Place::Built {
                 project: project.clone(),
                 document: document.clone(),
@@ -169,7 +185,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             let wanted = edition_of(&mut snapshot, project, &document)
                 .await
                 .map_err(fault)?;
-            match (self.make(&wanted, &element), row.result) {
+            match (self.make(&wanted, &element, recipe), row.result) {
                 (Ok((built, _)), BuiltResult::Shape { body, displays, .. }) => {
                     if built.body_id() != body.as_str() {
                         return Err(format!("{piece}: its body doesn't match its recipe"));
@@ -180,8 +196,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 (Err(error), BuiltResult::Failed { code, .. }) if error.code == code => {}
                 _ => return Err(format!("{piece}: it built differently this time")),
             }
+            checked = checked.saturating_add(1);
         }
-        Ok(pairs.len())
+        Ok(checked)
     }
 
     async fn verify_stored(
@@ -250,6 +267,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         &self,
         wanted: &Edition,
         element: &Element,
+        recipe: Result<Recipe, GeometryError>,
     ) -> Result<(Built, Vec<(i64, i64)>), GeometryError> {
         if *wanted != self.geometry.edition() {
             return Err(GeometryError {
@@ -260,7 +278,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 ),
             });
         }
-        let built = self.geometry.build(&element.recipe)?;
+        let built = self.geometry.build(&recipe?)?;
         let cells = occupied(element, &built).ok_or_else(|| GeometryError {
             code: "TooBig".to_owned(),
             message: format!("an element may cover {MOST_CELLS} cells at most"),
@@ -290,23 +308,11 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         for entry in &entries {
             for change in &entry.changes {
                 let result = self
-                    .regenerate(
-                        &mut txn,
-                        project,
-                        &entry.target,
-                        &change.piece,
-                        change.after.as_ref(),
-                    )
+                    .regenerate_with_readers(&mut txn, project, &entry.target, change, &mut built)
                     .await;
-                match result {
-                    Ok(Some(body)) => {
-                        built.push((entry.target.clone(), change.piece.clone(), Some(body)));
-                    }
-                    Ok(None) => built.push((entry.target.clone(), change.piece.clone(), None)),
-                    Err(e) => {
-                        let _ = txn.rollback().await;
-                        return Err(e);
-                    }
+                if let Err(e) = result {
+                    let _ = txn.rollback().await;
+                    return Err(e);
                 }
             }
         }
@@ -332,15 +338,74 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
     }
 
-    /// Rebuilds one element, returning its body if it has one.
+    /// Rebuilds the element a change names, and then, if it was a type or the parameter table,
+    /// every element whose shape reads it. Each body built goes on `built`.
+    async fn regenerate_with_readers(
+        &self,
+        txn: &mut K::Txn,
+        project: &Id,
+        document: &Id,
+        change: &kit_ops::Change,
+        built: &mut Vec<(Id, Id, Option<Id>)>,
+    ) -> Result<(), StoreError> {
+        let (body, fed) = self
+            .regenerate(
+                txn,
+                project,
+                document,
+                &change.piece,
+                change.before.as_ref(),
+                change.after.as_ref(),
+            )
+            .await?;
+        built.push((document.clone(), change.piece.clone(), body));
+        let Some(fed) = fed else {
+            return Ok(());
+        };
+        for (key, row) in txn.scan(&list::reads(project, document)).await? {
+            let Some(Place::Reads { element, .. }) = Place::parse(&key) else {
+                continue;
+            };
+            let type_id: Option<String> = from_row(&row)?;
+            if let Fed::Type(changed) = &fed
+                && type_id.as_deref() != Some(changed.as_str())
+            {
+                continue;
+            }
+            // Built from the record it had at this point in the log, which its built row names.
+            let place = Place::Built {
+                project: project.clone(),
+                document: document.clone(),
+                element: element.clone(),
+            };
+            let row: Option<BuiltElement> = read_row(txn, &place.key()).await?;
+            let Some(row) = row else { continue };
+            let hash = row.input;
+            let (body, _) = self
+                .regenerate(txn, project, document, &element, Some(&hash), Some(&hash))
+                .await?;
+            built.push((document.clone(), element, body));
+        }
+        Ok(())
+    }
+
+    /// Rebuilds one element, returning its body if it has one, and what it feeds if it is a type
+    /// or the parameter table.
     async fn regenerate(
         &self,
         txn: &mut K::Txn,
         project: &Id,
         document: &Id,
         element_id: &Id,
+        before: Option<&Id>,
         after: Option<&Id>,
-    ) -> Result<Option<Id>, StoreError> {
+    ) -> Result<(Option<Id>, Option<Fed>), StoreError> {
+        let reads = Place::Reads {
+            project: project.clone(),
+            document: document.clone(),
+            element: element_id.clone(),
+        };
+        txn.delete(reads.key()).await?;
         let place = Place::Built {
             project: project.clone(),
             document: document.clone(),
@@ -360,9 +425,22 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 txn.delete(cell.key()).await?;
             }
         }
+        // Records are never deleted, so the old one still says what kind it was. A record with no
+        // shape has no built row, so the change's own `before` names it.
+        if let Some(old) = old.as_ref().map(|old| &old.input).or(before) {
+            let record = kit_store::Place::Record {
+                project: project.clone(),
+                hash: old.clone(),
+            };
+            let before: Option<Element> = read_row(txn, &record.key()).await?;
+            let before = before.ok_or_else(|| damaged("an element's old record is missing"))?;
+            if let Some(kind) = kind_row(project, document, &before) {
+                txn.delete(kind.key()).await?;
+            }
+        }
         let Some(after) = after else {
             txn.delete(place.key()).await?;
-            return Ok(None);
+            return Ok((None, None));
         };
 
         let record = kit_store::Place::Record {
@@ -371,8 +449,25 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         };
         let element: Option<Element> = read_row(txn, &record.key()).await?;
         let element = element.ok_or_else(|| damaged("an element's record is missing"))?;
+        if let Some(kind) = kind_row(project, document, &element) {
+            txn.put(kind.key(), to_row(&after.as_str())?).await?;
+        }
+        if !parameters::has_shape(&element) {
+            txn.delete(place.key()).await?;
+            let fed = if element.kind == parameters::TABLE_KIND {
+                Fed::Table
+            } else {
+                Fed::Type(element.id.clone())
+            };
+            return Ok((None, Some(fed)));
+        }
+        if parameters::reads_parameters(&element.recipe) {
+            let type_id = parameters::type_of(&element).map(|t| t.to_string());
+            txn.put(reads.key(), to_row(&type_id)?).await?;
+        }
+        let recipe = recipe_of(txn, project, document, &element).await?;
         let edition = edition_of(txn, project, document).await?;
-        let (result, cells, body) = match self.make(&edition, &element) {
+        let (result, cells, body) = match self.make(&edition, &element, recipe) {
             Ok((built, cells)) => {
                 let body = id(&built.body_id())?;
                 let result = self.store_shape(txn, project, built).await?;
@@ -405,7 +500,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             result,
         };
         txn.put(place.key(), to_row(&row)?).await?;
-        Ok(body)
+        Ok((body, None))
     }
 
     async fn store_shape(
@@ -488,6 +583,49 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 }
 
+/// What a record with no shape feeds: the elements of one type, or every element that reads the
+/// parameter table.
+enum Fed {
+    Type(Id),
+    Table,
+}
+
+/// The recipe an element is built from: its own, with every argument that names a parameter
+/// filled ([`parameters::filled`]). A recipe that names none needs no read.
+async fn recipe_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    if !parameters::reads_parameters(&element.recipe) {
+        return Ok(Ok(element.recipe.clone()));
+    }
+    let bad = |why: String| GeometryError {
+        code: "BadParameter".to_owned(),
+        message: why,
+    };
+    let at = parameters::At::Regenerated;
+    let context: Context = match parameters::read_context_at(reader, project, document, at).await? {
+        Ok(context) => context,
+        Err(why) => return Ok(Err(bad(why))),
+    };
+    let ty = match parameters::type_of(element) {
+        None => None,
+        Some(type_id) => {
+            match parameters::read_type_at(reader, project, document, &type_id, &context, at)
+                .await?
+            {
+                Ok(ty) => Some(ty),
+                Err(why) => return Ok(Err(bad(why))),
+            }
+        }
+    };
+    Ok(parameters::filled(&element.recipe, |id| {
+        context.value_of(element, ty.as_ref(), id)
+    }))
+}
+
 /// The edition a document records.
 async fn edition_of<R: Reader>(
     reader: &mut R,
@@ -502,6 +640,17 @@ async fn edition_of<R: Reader>(
     Ok(model
         .ok_or_else(|| damaged("an element's document is missing"))?
         .edition)
+}
+
+/// Where an element is listed by its kind. Every element is, built or not; a kind that isn't a
+/// plain name (letters, digits, `.`, `_` and `-`) can't be part of a key, so it isn't listed.
+fn kind_row(project: &Id, document: &Id, element: &Element) -> Option<Place> {
+    Some(Place::Kind {
+        project: project.clone(),
+        document: document.clone(),
+        kind: Id::parse(&element.kind).ok()?,
+        element: element.id.clone(),
+    })
 }
 
 /// The cells an element's shape touches, unless there are too many.

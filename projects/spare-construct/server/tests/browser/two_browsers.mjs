@@ -261,6 +261,68 @@ const compared = await ben.evaluate(() => ({
 console.log(`      Ben's page compared ${compared.checked} bodies with the server's`);
 check(compared.mismatches.length === 0, "every body built in the browser matches the server's");
 
+console.log('\n   Parameters, through the edit log');
+// No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
+await ben.evaluate(() => {
+  const definition = { id: 'P-sill', name: 'Sill height', kind: 'length', holder: 'instance', choices: [] };
+  window.spare.edit('parameter.define', { definition });
+  window.spare.edit('parameter.bind', { parameter: 'P-sill', categories: [300], default: '0' });
+});
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+const doorAt = await box(ben, 'D-103');
+await ben.mouse.click(doorAt.x + doorAt.width / 2, doorAt.y + doorAt.height / 2);
+const sill = '#pv-side input[data-chg="stackparam"][data-a="P-sill"]';
+await ben.waitForSelector(sill);
+check((await ben.locator('#pv-side').textContent()).includes('Doors'), 'a selected door shows its category');
+check((await ben.locator(sill).inputValue()) === '0 mm', 'and its parameters in units, the default until one is set');
+const setSill = async (value) => {
+  await ben.locator(sill).fill(value);
+  await ben.locator(sill).evaluate((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+};
+await setSill('3 kg');
+await ben.waitForFunction(() => document.getElementById('toast-m').textContent.includes('Sill height'));
+pass("a wrong unit is turned back with the server's reason");
+await setSill('0.15 m');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+pass("Anna's browser has Ben's value through the edit log, stored as its parameter's text");
+await ben.waitForFunction((field) => document.querySelector(field)?.value === '150 mm', sill);
+pass('and Ben sees it in units');
+await shot(ben, 'ben-parameters');
+
+console.log('\n   Undo and redo, through the edit log');
+await ben.waitForSelector('#qat [data-act="stackundo"]');
+pass("Ben's Undo is ready: his last change is his to undo");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.keyboard.press('Control+z');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === undefined);
+pass("Ctrl+Z undoes his value, and Anna's browser follows");
+await ben.waitForSelector('#qat [data-act="stackredo"]');
+await ben.click('#qat [data-act="stackredo"]');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+pass('his Redo button puts it back, for her too');
+await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
+pass('and then there is nothing to redo');
+// Anna's own last change was deleting the wall she drew: her undo brings it back, for Ben too.
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
+pass("Anna's undo is her own: the wall she deleted is back on Ben's screen");
+// Her next is the door she placed on it. Ben takes the door first, so that undo is turned back.
+const newDoor = await ben.evaluate(() =>
+  [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
+);
+const doorBox = await box(ben, newDoor);
+await ben.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
+await anna.click('#qat [data-act="stackundo"]');
+await anna.waitForFunction(() =>
+  document.getElementById('toast-m').textContent.includes('Ben is working on this'),
+);
+check(
+  await anna.evaluate((id) => window.spare.elements.has(id), newDoor),
+  "an undo of what someone else is working on is turned back with the server's reason, and changes nothing",
+);
+await shot(anna, 'anna-undo-turned-back');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");
@@ -270,5 +332,58 @@ check(
   (await viewer.evaluate(() => window.spare.pending.length)) === 0,
   'and sends no edits: it is a viewer',
 );
+
+console.log('\n   Workshop');
+await anna.click('#b-disc');
+await anna.click('#disc-menu [data-a="workshop"]');
+await anna.frameLocator('#sc-workshop iframe').locator('#engine[data-engine="kernel"]').waitFor({ timeout: 30000 });
+const workshop = anna.frames().find((f) => f.url().endsWith('/workshop/'));
+const built = await workshop.evaluate(() => document.querySelector('#vinfo').textContent);
+console.log(`      ${built}`);
+check(/^6 bodies, 87,549\.28 mm³\. 2 features wait for the kernel\./.test(built), 'Workshop opens, and the geometry kernel builds its sample part in the browser');
+await shot(anna, 'anna-workshop');
+
+// Workshop's parts are elements of the model, through the same edit log as walls and doors.
+const openWorkshop = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="workshop"]');
+  await page.frameLocator('#sc-workshop iframe').locator('#engine[data-engine="kernel"]').waitFor({ timeout: 30000 });
+  return page.frames().find((f) => f.url().endsWith('/workshop/'));
+};
+const bracketWidth = (frame) =>
+  frame.evaluate(() => window.WorkshopFrame.project().parts.find((p) => p.name === 'Bracket').params[0].value);
+const storedWidth = (page) =>
+  page.evaluate(() => {
+    const part = window.spare.workshop.elements().find((e) => e.name === 'Bracket');
+    return part ? part.recipe.args.params[0].value : null;
+  });
+const setWidth = async (frame, value) => {
+  await frame.click('#left button.leaf:has-text("Bracket")');
+  const field = frame.locator('#left input[data-chg="param"][data-a="0"]');
+  await field.fill(String(value));
+  await field.evaluate((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+};
+check(
+  (await workshop.evaluate(() => window.WorkshopFrame.state().kept)) === 'sample',
+  'a model with no parts shows the sample, kept nowhere until it is changed',
+);
+await setWidth(workshop, 150);
+await anna.waitForFunction(() => window.spare.pending.length === 0 && window.spare.workshop.elements().length === 4);
+check((await storedWidth(anna)) === 150, "the first change keeps the sample's three parts and its assembly in the model");
+const benWorkshop = await openWorkshop(ben);
+await ben.waitForFunction(() => window.spare.workshop.state().loaded);
+check((await bracketWidth(benWorkshop)) === 150, "Ben's Workshop opens the parts Anna kept in the model");
+await setWidth(workshop, 135.5);
+await benWorkshop.waitForFunction(
+  () => window.WorkshopFrame.project().parts.find((p) => p.name === 'Bracket').params[0].value === 135.5,
+);
+check((await storedWidth(ben)) === '135.5', 'and sees her next change live; a fraction is kept as decimal text');
+await shot(ben, 'ben-workshop');
+await anna.reload();
+await anna.waitForSelector('#saved[data-state="live"]');
+const again = await openWorkshop(anna);
+await anna.waitForFunction(() => window.spare.workshop.state().loaded);
+await again.waitForFunction(() => window.WorkshopFrame.state().kept === 'model');
+check((await bracketWidth(again)) === 135.5, 'and after a reload the part comes back from the model');
 await browser.close();
 console.log('\nThe browser checks passed.');

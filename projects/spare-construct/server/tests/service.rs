@@ -127,6 +127,7 @@ async fn a_teams_wip_is_shut_to_everyone_else() {
         i(area.pieces.values().next().unwrap())
     };
     assert!(refused(s.area(&dan, &project, &model, &VIEW).await));
+    assert!(refused(s.kind(&dan, &project, &model, &i("wall")).await));
     assert!(refused(s.claims(&dan, &project, &model).await));
     assert!(refused(s.record(&dan, &project, &model, &hash).await));
     assert!(refused(
@@ -147,6 +148,204 @@ async fn a_teams_wip_is_shut_to_everyone_else() {
         .map(|f| f["kind"].clone())
         .collect();
     assert_eq!(kinds, [json!("shared"), json!("consumed")]);
+}
+
+/// Workshop keeps its parts as elements, through the same edit log as walls, and finds them by
+/// kind: they have no place in the plan, because this server's geometry doesn't build them.
+#[tokio::test(flavor = "multi_thread")]
+async fn workshop_parts_are_elements_listed_by_kind() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, project, model) = (i("anna"), i("ben"), i("example-1"), i("arch-model"));
+    let recipe = json!({ "owner": "workshop", "schema": 1, "op": "part", "op_version": 1,
+        "args": { "end": 0, "features": [], "material": "steel",
+                  "params": [{ "name": "width", "value": 120 }] } });
+    let args = json!({ "element": "WP-1", "kind": "workshop.part", "name": "Bracket", "level": 0,
+        "placement": { "x": 0, "y": 0, "z": 0 }, "recipe": recipe,
+        "props": { "category": "Workshop parts" } });
+    let seq = s
+        .edit(&anna, &project, &model, "element.create", args)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+
+    // Ben, on the same team, finds it, reads it and sees no place for it in the plan.
+    let parts = s
+        .kind(&ben, &project, &model, &i("workshop.part"))
+        .await
+        .unwrap();
+    assert!(parts.through >= seq);
+    let hash = i(&parts.pieces["WP-1"]);
+    let record = s.record(&ben, &project, &model, &hash).await.unwrap();
+    assert_eq!(record.recipe.owner, "workshop");
+    assert_eq!(record.name, "Bracket");
+    let area = s
+        .area(&ben, &project, &model, &View { level: 0, ..VIEW })
+        .await
+        .unwrap();
+    assert!(!area.pieces.contains_key("WP-1"));
+    let walls = s.kind(&ben, &project, &model, &i("wall")).await.unwrap();
+    assert!(!walls.pieces.is_empty() && !walls.pieces.contains_key("WP-1"));
+
+    // A change goes through the log like any other, and the list follows it.
+    let width = json!({ "element": "WP-1", "name": "Wide bracket" });
+    s.edit(&ben, &project, &model, "element.set", width)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+    let parts = s
+        .kind(&anna, &project, &model, &i("workshop.part"))
+        .await
+        .unwrap();
+    assert_ne!(parts.pieces["WP-1"], hash.to_string());
+}
+
+/// A parameter is defined, bound and set through the log like any edit, checked on the server
+/// with construct-params, and everyone on the team reads it with its category and units.
+#[tokio::test(flavor = "multi_thread")]
+async fn parameters_go_through_the_log_and_are_read_with_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let sill = json!({ "definition": { "id": "P-sill", "name": "Sill height", "kind": "length",
+                                       "holder": "instance", "choices": [] } });
+    s.edit(&anna, &project, &model, "parameter.define", sill)
+        .await
+        .unwrap();
+    let bind = json!({ "parameter": "P-sill", "categories": [300], "default": "0" });
+    s.edit(&anna, &project, &model, "parameter.bind", bind)
+        .await
+        .unwrap();
+    let set = |value: &str| json!({ "element": "D-101", "parameter": "P-sill", "value": value });
+    s.edit(&ben, &project, &model, "element.param", set("0.15 m"))
+        .await
+        .unwrap();
+
+    // A wrong unit is refused with construct-params' reason, and changes nothing.
+    let Err(Refusal::Refused(reason)) = s
+        .edit(&ben, &project, &model, "element.param", set("3 kg"))
+        .await
+    else {
+        panic!("a mass is no length");
+    };
+    assert!(reason.contains("Sill height"), "{reason}");
+
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let view = serde_json::to_value(view).unwrap();
+    assert_eq!(view["category"], json!({ "id": 300, "name": "Doors" }));
+    assert_eq!(view["type"], Value::Null);
+    let sill = &view["parameters"][0];
+    assert_eq!(sill["name"], "Sill height");
+    assert_eq!(sill["value"], "length:150");
+    assert_eq!(sill["shown"], "150 mm");
+    assert_eq!(sill["from"], "instance");
+    let other = s
+        .parameters(&anna, &project, &model, &i("D-102"))
+        .await
+        .unwrap();
+    assert_eq!(other.parameters[0].from, "default");
+
+    // The seed's own text is kept beside the value, and the record says its category.
+    s.regenerate(&project).await.unwrap();
+    let doors = s.kind(&anna, &project, &model, &i("door")).await.unwrap();
+    let hash = i(&doors.pieces["D-101"]);
+    let record = s.record(&anna, &project, &model, &hash).await.unwrap();
+    assert_eq!(record.props["fire rating"], "FD30");
+    assert_eq!(record.props["@category"], "300");
+    assert_eq!(record.props["P-sill"], "length:150");
+
+    // Someone who can't read the model can't read its parameters either.
+    assert!(refused(
+        s.parameters(&dan, &project, &model, &i("D-101")).await
+    ));
+    assert!(refused(
+        s.edit(&dan, &project, &model, "element.param", set("1"))
+            .await
+    ));
+}
+
+/// Where a wall of the model is now, as Anna reads it.
+async fn placed(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> construct_model::element::Placement {
+    s.regenerate(project).await.unwrap();
+    let walls = s
+        .kind(&i("anna"), project, model, &i("wall"))
+        .await
+        .unwrap();
+    let hash = i(&walls.pieces[wall]);
+    s.record(&i("anna"), project, model, &hash)
+        .await
+        .unwrap()
+        .placement
+}
+
+/// Undo is an edit like any other: through the log, behind the same access, and each person's
+/// own. What each person can undo is read back from the log alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn undo_and_redo_go_through_the_log_and_are_each_persons_own() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let start = placed(s, &project, &model, "W-101").await;
+
+    // Ben has made no change to this model, so he has nothing to undo; Anna's last is the seed's.
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!((state.undo, state.redo), (None, None));
+    let state = s.undo(&anna, &project, &model).await.unwrap();
+    assert_eq!(state.undo.unwrap().cmd, "element.create");
+
+    let seq = s
+        .edit(
+            &ben,
+            &project,
+            &model,
+            "element.move",
+            moved("W-101", 1000, 2000),
+        )
+        .await
+        .unwrap();
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!(state.undo.as_ref().map(|step| step.seq), Some(seq));
+    s.edit(&ben, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(placed(s, &project, &model, "W-101").await, start);
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!(state.undo, None);
+    assert_eq!(state.redo.unwrap().cmd, "edit.undo");
+    s.edit(&ben, &project, &model, "edit.redo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(placed(s, &project, &model, "W-101").await.x, 1000);
+
+    // Dan can't read this model, so he can't ask, and he can't undo in it.
+    assert!(refused(s.undo(&dan, &project, &model).await));
+    assert!(refused(
+        s.edit(&dan, &project, &model, "edit.undo", json!({})).await
+    ));
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    verify_log(&mut snapshot, &Scope::Project(project))
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]

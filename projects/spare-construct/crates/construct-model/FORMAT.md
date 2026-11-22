@@ -26,7 +26,7 @@ A recipe is the kernel's envelope (architecture chapter 24):
 | --- | --- |
 | `owner`, `schema` | Who owns the operation, and their schema version |
 | `op`, `op_version` | The operation, named for what it makes: `wall.straight`, `door.single`, `block` |
-| `args` | Its arguments, sorted by name. Numbers are whole |
+| `args` | Its arguments, sorted by name. Numbers are whole. An argument may instead name a parameter, `{"param":"<id>"}` (below) |
 
 A reference (chapter 20) points at part of a shape by persistent name, never by position in a list. A hosted door points at a face of a wall, not at the wall:
 
@@ -37,6 +37,33 @@ A reference (chapter 20) points at part of a shape by persistent name, never by 
 | `name`, `kind` | Its persistent name, and what it is, such as `face` |
 | `want` | `one`, `allpieces` or `carrier`, for when what it named has been split |
 | `signature` | Kept only to suggest a repair. Resolving never guesses from it |
+
+### Categories, types and parameter values
+
+Every record a command writes carries its category, and an element of a type names its type, in `props` under keys that start with `@`, which a permanent ID never does. The keys and the type record are [construct-types' format](../construct-types/FORMAT.md); the values are [construct-params' stored text](../construct-params/FORMAT.md).
+
+| `props` key | On | Value |
+| --- | --- | --- |
+| `@category` | Every record written from this version | The category's ID ([construct-categories](../construct-categories/FORMAT.md)) in decimal. An element's is its kind's: the recipe's `op`, with its `owner` in front when that is not `construct` (`workshop.part`). A type's is its own |
+| `@type` | An element of a type | The type's permanent ID. The type is of the element's category |
+| a parameter's ID | An element, or a type | Its value of that parameter, in its stored text (`length:820`). An element holds only parameters each instance holds; a type only those the type holds |
+
+Any other key is plain text, kept and read as it is, so a record written before this version still reads. An element reads a parameter from its own value, then its type's, then the binding's default ([construct-types' `resolve`](../construct-types/src/resolve.rs)). An element with no type has the instance parameters its category is bound to.
+
+A **type** is a record of kind `type`, written by construct-types; it lists every parameter bound to its category. A document's **parameters** are one record, element ID `parameters`, kind `parameters`, at level 0 and placement `{0,0,0}` with no references, recipe `{"owner":"construct","schema":1,"op":"parameters","op_version":1,"args":{}}`, and one `props` entry, `@parameters`: the project parameter table's stored bytes ([construct-params, "Project parameters"](../construct-params/FORMAT.md)). Neither has a shape: neither is built, and both are listed by kind. The [reader library](../construct-regen/src/parameters.rs) reads both strictly.
+
+A recipe argument `{"param":"<id>"}` is filled, before the shape is built, with the value the element reads for that parameter: a length as whole millimetres, a whole number as it is. Nothing holding a value is the build failure `UnsetParameter`; another kind of value, or an ID that is no parameter's, `BadParameter`. The type and the parameters are read as they stood at that point of the log, so a shape is the same however the log was reached.
+
+### Workshop's elements
+
+Workshop, the discipline for things that are made (feature map area CON-A27), keeps its parts and its assembly as elements like any other, changed by the same commands. They sit at level 0 and placement `{0,0,0}`: a part is a definition, like a type, and has no place in the plan of its own.
+
+| Kind | Recipe `op` | `args` |
+| --- | --- | --- |
+| `workshop.part` | `part` | `params` (each `{name, value, note}`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
+| `workshop.assembly` | `assembly` | `instances` (each `{id, part, name, at, grounded}`, where `part` is a `workshop.part` element's ID) and `joints` (each `{id, name, type, a, b, origin, axis, min, max, value, unit}`) |
+
+The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, the name of a parameter, or text: a number with a fraction is written as its decimal text (`"8.5"`), so no hash depends on how a float prints. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
 
 ## A document
 
@@ -61,6 +88,8 @@ A reference (chapter 20) points at part of a shape by persistent name, never by 
 | `p:<project>/body/<id>` | A body, named by the SHA-256 of its canonical bytes |
 | `p:<project>/display/<id>` | One level of detail of a body, named the same way |
 | `p:<project>/area/<document>/<level>/<x>/<y>/<element>` | The element's record hash, in each 5 m cell its shape touches |
+| `p:<project>/reads/<document>/<element>` | An element whose recipe names a parameter: the ID of its type, or `null`. A change to that type, or to the document's parameters, builds it again |
+| `p:<project>/kind/<document>/<kind>/<element>` | The element's record hash, under its kind, whether or not it built, so a page that works on one kind (Workshop's `workshop.part` and `workshop.assembly`) finds its elements without a place in the plan. A kind that isn't a plain name (letters, digits, `.`, `_`, `-`) isn't listed |
 | `p:<project>/regenerated` | How far regeneration has got through the log |
 
 A body or display row says where its bytes are: `{"here":{"hex":...}}`, or above 256 KiB `{"file":{"path":...,"size":...}}` in file storage, linked by hash. Reading one checks the bytes against the name. A body is opaque above the geometry interface: nothing outside the engine that wrote it reads inside. A display record is JSON in the published shape of [`Display`](src/geometry.rs): the level, how far it strays from the body, a mesh and an outline.
@@ -90,8 +119,35 @@ These rows are what Cedar reads. A row's presence is the fact. The rules are in 
 
 | In the log of | Commands |
 | --- | --- |
-| A project | `element.create`, `element.move`, `element.set`, `element.delete`, `element.claim`, `element.release`, `model.add`, `package.publish`, `package.bridge`, `package.take`, `link.add`, `document.checkpoint`, and `package.arrived`, written by a bridge in the receiving project |
+| A project | `element.create`, `element.move`, `element.set`, `element.delete`, `element.claim`, `element.release`, `element.param`, `element.type`, `parameter.define`, `parameter.bind`, `type.create`, `type.rename`, `type.duplicate`, `type.delete`, `type.set`, `edit.undo`, `edit.redo`, `model.add`, `package.publish`, `package.bridge`, `package.take`, `link.add`, `document.checkpoint`, and `package.arrived`, written by a bridge in the receiving project |
 | The directory | `hub.add`, `hub.user`, `hub.external`, `hub.permit`, `project.add`, `project.person`, `team.add`, `team.person`, beside the kit's people commands |
+
+The element, parameter and type commands, and undo and redo, are allowed to whoever may edit the model, and each takes the same claim on the piece it changes as `element.set`: another person's claim refuses it. A refusal is the command's result, in the words of the data crate that refused it. Every command fully applies or fully rolls back: what a command that is turned back had written is not stored, though its entry is in the log as turned back.
+
+| Command | Arguments | Writes |
+| --- | --- | --- |
+| `element.create` | as before, and `type` (optional) | `@category` from the kind (a kind with no category is refused) and `@type`. `props` may not hold an `@` key or a parameter's value |
+| `element.set` | as before | `@category` again from the recipe; a recipe of another category than the element's type is refused. `props` as for `element.create` |
+| `element.param` | `element`, `parameter`, `value` (typed text such as `2.4 m`) | That parameter's entry, replaced; other keys kept |
+| `element.type` | `element`, `type` | `@type`; its own values the new type lacks are dropped. Another category is refused |
+| `parameter.define` | `definition` (a construct-params definition row) | The parameters record |
+| `parameter.bind` | `parameter`, `categories` (top-level category IDs), `default` (typed text, or `null`) | The parameters record, and each type of those categories, which then lists the parameter |
+| `type.create` | `type`, `name`, `category` | A type record |
+| `type.rename`, `type.duplicate`, `type.set` | `type`, and `name`; `new` and `name`; `parameter` and `value` | The type record, or its copy |
+| `type.delete` | `type` | Its pointer goes. Refused while an element is of it |
+| `edit.undo` | none (`{}`) | Every piece the person's last step changed, put back as it was before it (below) |
+| `edit.redo` | none (`{}`) | Every piece the person's last undo changed, put back: the undo of that undo |
+
+`element.*` commands refuse a type or the parameters record: each has its own commands. Typed text is read with construct-params' metric display settings until a project keeps its own.
+
+### Undo and redo
+
+An undo is an entry like any other, after everything before it; nothing is ever taken out of the log. Which step it reverses is not in its arguments: it is read from the log, the same way every time, so a server that starts again or a replay of the log on an empty store gives the same answer ([`construct_api::cloud::undo`](../construct-api/src/cloud/undo.rs)).
+
+- **A step** is one applied entry, in that document, by that person, of `element.create`, `element.move`, `element.set`, `element.delete`, `element.param`, `element.type`, the seven parameter and type commands, `edit.undo` or `edit.redo`, with every change it records: a `parameter.bind` that wrote the parameters record and every type of its categories is one step. A run of `element.move` entries of one element by one person, with no other entry of theirs in that document between, is one step (one drag; the drag's `element.claim` starts the next run). Nothing else is a step, and nothing else is undone.
+- **The order is each person's own.** Ordinary steps and `edit.redo` go on the person's undo order, `edit.undo` takes the newest off; `edit.undo` goes on their redo order, `edit.redo` takes the newest off, and an ordinary step empties it. Other people's entries change neither. A turned-back entry is no step.
+- **What it writes.** For each piece the step changed, from the record before its first change of that piece to the record after its last: a column the step changed goes back to what it was, if it still holds what the step left; every other column keeps what it holds now. The columns are `kind`, `name`, `level`, `placement`, `recipe`, `references` and each `props` key, compared exactly. A piece the step made is deleted, and one it deleted comes back. The undo's own `changes` are these, before and after by content ID, as for any command. A redo is the undo of the undo, so it writes the same way.
+- **What turns it back**, whole, with nothing written: another person's live claim on a piece it would write (`"<name> is working on this."`); a column the step changed that someone has changed since, a piece someone deleted since, or a piece the step made that someone has changed since (`"<name> has changed <record's name> since."`); a record it writes that the document's rules can't read, such as an element whose type is gone (`"That can't be undone: "` and the reader's words; when it writes a type or the parameters record, every record of the document is read again); nothing to undo or redo (`"There is nothing of yours to undo in this model."`, and the same for redo).
 
 `document.checkpoint` is written by the server after regenerating. Its arguments are `{"through":n,"bodies":{element:body}}`, and it changes nothing: it is in the log so that every browser watching gets it in order with the edits it covers, and compares the bodies it built itself (note A05).
 

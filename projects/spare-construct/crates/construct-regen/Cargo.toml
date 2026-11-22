@@ -8,7 +8,14 @@ license.workspace = true
 [features]
 # The regenerator that keeps a server's derived shapes up to date. The browser needs only the
 # geometry, so its build leaves this out.
-server = ["dep:kit-store", "dep:kit-sync"]
+# It reads parameters and types to fill the recipes that name them, so those crates come with it.
+server = [
+    "dep:kit-store",
+    "dep:kit-sync",
+    "dep:construct-categories",
+    "dep:construct-params",
+    "dep:construct-types",
+]
 
 [dependencies]
 kit-core = { path = "../../../kit/crates/kit-core" }
@@ -16,6 +23,9 @@ kit-ops = { path = "../../../kit/crates/kit-ops" }
 kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
+construct-categories = { path = "../construct-categories", optional = true }
+construct-params = { path = "../construct-params", optional = true }
+construct-types = { path = "../construct-types", optional = true }
 hex = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
