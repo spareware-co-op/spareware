@@ -567,7 +567,7 @@
       {
        "id": "CON-A2-F3-P1",
        "name": "Units and display",
-       "what": "SI units inside in f64, with display units, rounding and formats as view and project settings.",
+       "what": "Stored values in exact whole units (whole millimetres; floats only for display and sums: note CON-A2-F3-P1), with display units, rounding and formats as view and project settings.",
        "kind": "library",
        "size": "small",
        "depends_on": [
