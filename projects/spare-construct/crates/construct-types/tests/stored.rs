@@ -21,7 +21,7 @@ const TYPE_ROW: &str = concat!(
     r#""placement":{"x":0,"y":0,"z":0},"#,
     r#""recipe":{"owner":"construct","schema":1,"op":"type","op_version":1,"args":{}},"#,
     r#""props":{"@category":"300","@params":"P-finish,P-height,P-mark,P-sill,P-width","#,
-    r#""P-width":"length:820"},"references":[]}"#
+    r#""P-width":"length:q0:5248000"},"references":[]}"#
 );
 
 fn record(types: &Types, type_id: &str) -> Element {
@@ -49,7 +49,7 @@ fn instance_props_pinned() {
     door.set(&params, ty, &id(MARK), text("D01")).unwrap();
     assert_eq!(
         serde_json::to_string(&door.to_props()).unwrap(),
-        r#"{"@type":"T-820","P-mark":"text:D01","P-sill":"length:150"}"#
+        r#"{"@type":"T-820","P-mark":"text:D01","P-sill":"length:q0:960000"}"#
     );
 }
 
@@ -189,16 +189,16 @@ fn type_record_refusals() {
         TypeError::UnknownParameter(id("P-nobody"))
     );
     assert_eq!(
-        read_changed(|r| set_prop(r, SILL, "length:5")).unwrap_err(),
+        read_changed(|r| set_prop(r, SILL, "length:q0:32000")).unwrap_err(),
         TypeError::HeldByInstance {
             parameter: "Sill height".to_owned(),
         }
     );
     assert_eq!(
-        read_changed(|r| set_prop(r, WIDTH, "length:0820")).unwrap_err(),
+        read_changed(|r| set_prop(r, WIDTH, "length:q0:05248000")).unwrap_err(),
         TypeError::Param(ParamError::BadStored {
             parameter: "Width".to_owned(),
-            text: "length:0820".to_owned(),
+            text: "length:q0:05248000".to_owned(),
         })
     );
 }
@@ -230,7 +230,7 @@ fn instance_props_refusals() {
         TypeError::UnknownType(id("T-none"))
     );
     assert_eq!(
-        read(&[("@type", "T-820"), (WIDTH, "length:1000")]).unwrap_err(),
+        read(&[("@type", "T-820"), (WIDTH, "length:q0:6400000")]).unwrap_err(),
         TypeError::HeldByType {
             parameter: "Width".to_owned(),
         }

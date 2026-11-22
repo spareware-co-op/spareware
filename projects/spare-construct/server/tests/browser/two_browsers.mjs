@@ -270,5 +270,58 @@ check(
   (await viewer.evaluate(() => window.spare.pending.length)) === 0,
   'and sends no edits: it is a viewer',
 );
+
+console.log('\n   Workshop');
+await anna.click('#b-disc');
+await anna.click('#disc-menu [data-a="workshop"]');
+await anna.frameLocator('#sc-workshop iframe').locator('#engine[data-engine="kernel"]').waitFor({ timeout: 30000 });
+const workshop = anna.frames().find((f) => f.url().endsWith('/workshop/'));
+const built = await workshop.evaluate(() => document.querySelector('#vinfo').textContent);
+console.log(`      ${built}`);
+check(/^6 bodies, 87,549\.28 mm³\. 2 features wait for the kernel\./.test(built), 'Workshop opens, and the geometry kernel builds its sample part in the browser');
+await shot(anna, 'anna-workshop');
+
+// Workshop's parts are elements of the model, through the same edit log as walls and doors.
+const openWorkshop = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="workshop"]');
+  await page.frameLocator('#sc-workshop iframe').locator('#engine[data-engine="kernel"]').waitFor({ timeout: 30000 });
+  return page.frames().find((f) => f.url().endsWith('/workshop/'));
+};
+const bracketWidth = (frame) =>
+  frame.evaluate(() => window.WorkshopFrame.project().parts.find((p) => p.name === 'Bracket').params[0].value);
+const storedWidth = (page) =>
+  page.evaluate(() => {
+    const part = window.spare.workshop.elements().find((e) => e.name === 'Bracket');
+    return part ? part.recipe.args.params[0].value : null;
+  });
+const setWidth = async (frame, value) => {
+  await frame.click('#left button.leaf:has-text("Bracket")');
+  const field = frame.locator('#left input[data-chg="param"][data-a="0"]');
+  await field.fill(String(value));
+  await field.evaluate((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+};
+check(
+  (await workshop.evaluate(() => window.WorkshopFrame.state().kept)) === 'sample',
+  'a model with no parts shows the sample, kept nowhere until it is changed',
+);
+await setWidth(workshop, 150);
+await anna.waitForFunction(() => window.spare.pending.length === 0 && window.spare.workshop.elements().length === 4);
+check((await storedWidth(anna)) === 150, "the first change keeps the sample's three parts and its assembly in the model");
+const benWorkshop = await openWorkshop(ben);
+await ben.waitForFunction(() => window.spare.workshop.state().loaded);
+check((await bracketWidth(benWorkshop)) === 150, "Ben's Workshop opens the parts Anna kept in the model");
+await setWidth(workshop, 135.5);
+await benWorkshop.waitForFunction(
+  () => window.WorkshopFrame.project().parts.find((p) => p.name === 'Bracket').params[0].value === 135.5,
+);
+check((await storedWidth(ben)) === '135.5', 'and sees her next change live; a fraction is kept as decimal text');
+await shot(ben, 'ben-workshop');
+await anna.reload();
+await anna.waitForSelector('#saved[data-state="live"]');
+const again = await openWorkshop(anna);
+await anna.waitForFunction(() => window.spare.workshop.state().loaded);
+await again.waitForFunction(() => window.WorkshopFrame.state().kept === 'model');
+check((await bracketWidth(again)) === 135.5, 'and after a reload the part comes back from the model');
 await browser.close();
 console.log('\nThe browser checks passed.');
