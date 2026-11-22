@@ -1,9 +1,12 @@
 # Spare Construct status
 
-**Stage: Mapping.** Roadmap phase 0 (Foundations) has not started.
+**Stage: Mapping, with the first code built.** The map is [ARCHITECTURE.md](ARCHITECTURE.md), 23 sections at high and low level, with its 21 open decisions and their status in a table near the end. The server and the browser page already run. See the [README](README.md) for what a person can do today.
 
-- Architecture map written: [ARCHITECTURE.md](ARCHITECTURE.md), 23 sections at high and low level.
-- 21 decisions open (table near the end of the map). No code yet.
+- **What is built.** A test server on the shared kit crates, with TiKV as the database. A browser page where people sign in, pick a hub and project, see a plan and a 3D view, draw walls, place doors, edit together live, and share, bridge and take in packages. Everything else in the page says it is not connected yet. See [server/README.md](server/README.md) and [app/README.md](app/README.md).
+- **Acceptance checklist.** Six checks on the whole stack, in [server/README.md](server/README.md). The README records all six passing, last run on 31 October 2026.
+- **Crates.** Real: `construct-model`, `construct-regen`, `construct-shapes`, `construct-api`, `construct-cli`, `construct-wasm`, `construct-transport`. Short placeholders with no code yet: `construct-elements`, `construct-families`, `construct-clash`, `construct-interop`, `construct-solver`, `construct-versions`, `construct-views`.
+- **Geometry today.** One trait (`Geometry` in `construct-model`), answered by a stand-in that makes boxes: walls, doors and blocks only. The kernel's interface, with solidcore behind it, is being joined to that trait now.
+- **The plan.** [FEATURES.md](FEATURES.md) is the full list. The build order is being worked wave by wave, starting with the element core.
 - **Traffic and public transport is further along.** A working browser prototype, the [Transport demo](https://spareware.app/spare-construct/#plan:transport) (open it from the discipline button in the Spare Construct demo), already runs a strategic traffic model and a microsimulation on a live map. It was made to help a traffic engineer, who hasn't used it yet, so nobody from the field has checked it. The product is built from the core up on the shared engines, using the prototype to learn from.
 - **Workshop, our mechanical and product design discipline, is mapped** as area [CON-A27](FEATURES.md#con-a27-workshop-parts-assemblies-and-drawings): parts drawn as sketches and built from features, a feature history to roll back and edit, parameters, assemblies whose joints move within limits, and drawings of both. Its browser prototype (A16) and its first slice in the app, built by the geometry kernel (A17), are on the board below. Much of it waits for the kernel (booleans, sweeps, fillets, shells, the sketch solver and hidden lines); every part that waits names the kernel pieces it waits for.
 - Design stage starts when an owner accepts decision notes for the first six decisions: kernel start, storage layout, entity store, incremental engine, renderer, multi-user.
