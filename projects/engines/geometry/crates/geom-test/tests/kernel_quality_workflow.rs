@@ -21,10 +21,12 @@
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
 //!   date; cargo-mutants, cargo-llvm-cov and cargo-nextest installed at exact versions with
-//!   `--locked`, and nothing installed another way.
+//!   `--locked`, but for the mutation shards' cargo-mutants, the release's own binary at that
+//!   version through install-action with no fallback; and nothing installed another way.
 //! - **Shards and partitions.** The mutation shards come from the plan, in as many jobs as
-//!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs `--shard k/n`
-//!   with the plan's count of the whole run; Miri's partitions are its plan's, in two jobs as the
+//!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs the plan's
+//!   crate and its shard of that crate's, `--package P --shard k/n --sharding round-robin`;
+//!   Miri's partitions are its plan's, in two jobs as the
 //!   shards are, `miri` and `miri-2`, the second the first word for word but for its matrix and
 //!   condition (32.105), shown by planted changes to it alone.
 //! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
@@ -582,6 +584,43 @@ fn toolchains_and_tools_are_pinned() {
     assert!(!all_runs.contains("curl ") && !all_runs.contains("wget "));
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_shards_take_the_released_cargo_mutants() {
+    let w = workflow();
+    // The mutation shards take cargo-mutants' own release binary at the pinned version, which
+    // install-action checks against its manifest's sha256, and build or fetch nothing else for it
+    // (no fallback, checksums on); no other job uses install-action, and the shards build no
+    // cargo-mutants.
+    let installing: Vec<(String, Yaml)> = steps(&w)
+        .into_iter()
+        .filter(|(_, s)| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("taiki-e/install-action@"))
+        })
+        .collect();
+    let jobs: Vec<&str> = installing.iter().map(|(j, _)| j.as_str()).collect();
+    assert_eq!(jobs, ["mutants", "mutants-2"]);
+    for (job, step) in &installing {
+        assert_eq!(
+            keys(&step["with"]),
+            ["tool", "fallback"],
+            "{job}: checksums stay on"
+        );
+        assert_eq!(
+            text(&step["with"]["tool"]),
+            "cargo-mutants@${{ env.CARGO_MUTANTS_VERSION }}",
+            "{job}"
+        );
+        assert_eq!(text(&step["with"]["fallback"]), "none", "{job}");
+        assert!(!runs(&w, job).contains("cargo install"), "{job}");
+    }
+}
+
 fn keys_or_empty(y: &Yaml) -> Vec<String> {
     if y.is_badvalue() { Vec::new() } else { keys(y) }
 }
@@ -675,18 +714,42 @@ fn every_shard_and_partition_runs_once() {
             text(&shards["strategy"]["matrix"]["shard"]),
             format!("${{{{ fromJSON(needs.mutants-plan.outputs.{list}) }}}}")
         );
-        // Shards are numbered in the whole run: every job divides by the plan's full count.
+        // Each shard runs the plan's crate and its shard of that crate's mutants, dealt in turn,
+        // exactly as the plan gives them (geom_test::mutants::shard_plan).
         assert_eq!(
-            text(&shards["env"]["SHARDS"]),
-            "${{ needs.mutants-plan.outputs.count }}"
+            text(&shards["env"]["PACKAGE"]),
+            "${{ matrix.shard.package }}"
         );
+        assert_eq!(
+            text(&shards["env"]["SHARD"]),
+            "${{ matrix.shard.k }}/${{ matrix.shard.n }}"
+        );
+        assert!(shards["env"]["SHARDS"].is_badvalue());
         assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
         let run = runs(&w, job);
         assert!(
-            run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
+            run.contains(
+                "cargo mutants \"${only[@]}\" --package \"$PACKAGE\" --shard \"$SHARD\" \
+                 --sharding round-robin \\\n"
+            ),
             "{run}"
         );
         assert!(run.contains("--no-shuffle"), "{run}");
+        // Each shard's report under its index in the whole run, as the judge downloads them.
+        let upload = shards["steps"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .find(|s| {
+                s["uses"]
+                    .as_str()
+                    .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+            })
+            .unwrap();
+        assert_eq!(
+            text(&upload["with"]["name"]),
+            "mutants-${{ matrix.shard.index }}"
+        );
         // The second job is the first, word for word, but for its matrix and condition.
         for key in ["runs-on", "timeout-minutes", "env", "defaults", "steps"] {
             assert_eq!(shards[key], w["jobs"]["mutants"][key], "{job} {key}");
@@ -932,7 +995,7 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     for needle in [
         "only=(--in-diff \"$RUNNER_TEMP/plan/pr.diff\")",
         "elif [ -n \"$FILES\" ]; then\n  only=(--re \"$FILES\")",
-        "cargo mutants \"${only[@]}\" --shard",
+        "cargo mutants \"${only[@]}\" --package \"$PACKAGE\" --shard",
         // A runaway mutant aborts its own test instead of shutting the runner down.
         "ulimit -d $((8 * 1024 * 1024))",
     ] {

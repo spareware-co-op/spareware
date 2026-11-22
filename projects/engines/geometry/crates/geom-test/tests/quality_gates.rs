@@ -662,8 +662,8 @@ fn known_entries_must_come_from_the_base_branch() {
 #[test]
 fn shard_plans_fit_the_budget_and_a_matrix() {
     use geom_test::mutants::{
-        MATRIX_JOBS, MAX_SHARDS, Mutant, SECONDS_PER_MUTANT, SHARD_JOBS, SHARD_MINUTES,
-        seconds_per_mutant, shard_count, shard_matrix,
+        MATRIX_JOBS, MAX_SHARDS, Mutant, SECONDS_PER_MUTANT, SHARD_JOBS, SHARD_MINUTES, Shard,
+        round_robin, seconds_per_mutant, shard_matrix, shard_plan, shard_seconds,
     };
     // `n` mutants of `package`, on lines 1 to `n`.
     let of = |package: &str, n: usize| -> Vec<Mutant> {
@@ -691,46 +691,53 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
     assert_eq!(MAX_SHARDS, MATRIX_JOBS * SHARD_JOBS);
     assert_eq!(MATRIX_JOBS, 256);
     // No mutant, no shard.
-    assert_eq!(shard_count(&[]), Ok(0));
+    assert_eq!(shard_plan(&[]), Ok(vec![]));
     // One crate: as many mutants to a shard as fit its budget, and no more.
     for (package, s) in SECONDS_PER_MUTANT {
         let per_shard = (budget / s) as usize;
-        assert_eq!(shard_count(&of(package, 1)), Ok(1), "{package}");
-        assert_eq!(shard_count(&of(package, per_shard)), Ok(1), "{package}");
-        assert_eq!(shard_count(&of(package, per_shard + 1)), Ok(2), "{package}");
+        let count = |n: usize| shard_plan(&of(package, n)).unwrap().len();
+        assert_eq!(count(1), 1, "{package}");
+        assert_eq!(count(per_shard), 1, "{package}");
+        assert_eq!(count(per_shard + 1), 2, "{package}");
     }
-    // cargo-mutants' slices (`--sharding slice`, its default; src/shard.rs at v27.1.0): shard k of
-    // n runs mutants k c to (k + 1) c - 1 of the list, c = ceil(len / n), the last fewer. The
-    // plan's `slice` is that rule, written out again here so a change to it shows.
-    let slices = |len: u64, n: u64| -> Vec<u64> {
-        let c = len.div_ceil(n);
-        (0..n)
-            .map(|k| len.min((k + 1) * c).saturating_sub(k * c))
-            .collect()
-    };
-    for (len, n) in [(10, 4), (9, 4), (17_589, 512), (1, 1), (7, 3)] {
-        let sizes: Vec<u64> = (0..n)
-            .map(|k| geom_test::mutants::slice(len, k, n).len() as u64)
-            .collect();
-        assert_eq!(sizes, slices(len as u64, n), "{len} in {n}");
+    // cargo-mutants' round robin (`--sharding round-robin`; src/shard.rs at v27.1.0): shard k of n
+    // runs the mutants of the list whose position leaves k over when divided by n. The plan's
+    // `round_robin` is that rule, written out again here so a change to it shows; the shards of n
+    // hold every position once, and neighbours fall to different shards.
+    for (len, n) in [
+        (10, 4),
+        (9, 4),
+        (17_589, 512),
+        (1, 1),
+        (7, 3),
+        (3, 7),
+        (5571, 429),
+    ] {
+        let mut seen = vec![0_u32; len];
+        for k in 0..n {
+            let held: Vec<usize> = round_robin(len, k, n).collect();
+            let rule: Vec<usize> = (0..len).filter(|i| *i as u64 % n == k).collect();
+            assert_eq!(held, rule, "{len} in {n}, shard {k}");
+            assert!(held.windows(2).all(|w| w[1] - w[0] == n as usize));
+            for i in held {
+                seen[i] += 1;
+            }
+        }
+        assert!(seen.iter().all(|&c| c == 1), "{len} in {n}");
     }
-    // Each shard's planned seconds: its own mutants at their own crates' rates.
-    let planned = |mutants: &[Mutant], n: u64| -> Vec<u64> {
-        (0..n)
-            .map(|k| {
-                mutants[geom_test::mutants::slice(mutants.len(), k, n)]
-                    .iter()
-                    .map(|m| seconds_per_mutant(&m.package))
-                    .sum()
-            })
-            .collect()
-    };
     let limit = geom_test::mutants::SHARD_LIMIT_MINUTES * 60;
     assert!(budget < limit);
+    // The fewest shards that hold `len` mutants at `rate` within `within` seconds each, dealt in
+    // turn: the largest holds ceil(len / n), so n = ceil(len / floor(within / rate)).
+    let fewest = |len: u64, rate: u64, within: u64| -> Option<u64> {
+        (within >= rate).then(|| len.div_ceil(within / rate))
+    };
     // Several crates, in cargo-mutants' order (by name): the kernel on 2026-10-29 (17557 mutants),
-    // a few small lists, and geom-num beside a fast crate. Every shard holds a mutant and is
-    // planned within the budget (within the job's limit for a run too large for 512 shards of the
-    // budget), and no fewer shards would do: the plan is by each shard's own mutants.
+    // the diff of pull request #862 (run 44881938610, 9034 mutants), a few small lists, and
+    // geom-num beside a fast crate. Each crate has shards of its own, numbered 0 to n - 1, that
+    // together hold each of its mutants once, every one holding a mutant; every shard is planned
+    // within the budget, and no fewer shards would do (within the job's limit for a run too large
+    // for 512 shards of the budget, and no plan of 512 has a slower shard planned faster).
     let kernel = [
         ("geom-bvh", 357),
         ("geom-curve", 5228),
@@ -742,8 +749,19 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
         ("geom-run", 252),
         ("geom-surface", 1272),
     ];
+    let pr_862 = [
+        ("geom-bool", 1322),
+        ("geom-check", 2),
+        ("geom-curve", 546),
+        ("geom-format", 13),
+        ("geom-intersect", 5571),
+        ("geom-num", 1338),
+        ("geom-nurbs", 111),
+        ("geom-surface", 131),
+    ];
     let lists: Vec<Vec<(&str, usize)>> = vec![
         kernel.to_vec(),
+        pr_862.to_vec(),
         vec![("geom-curve", 9000), ("geom-num", 1)],
         vec![("geom-curve", 7), ("geom-surface", 60)],
         vec![("geom-math", 61), ("geom-run", 6190)],
@@ -751,92 +769,163 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
     ];
     for list in lists {
         let mutants: Vec<Mutant> = list.iter().flat_map(|(p, n)| of(p, *n)).collect();
-        let len = mutants.len() as u64;
-        let shards = shard_count(&mutants).unwrap();
-        assert!((1..=MAX_SHARDS).contains(&shards), "{list:?}");
-        let fit = |n: u64, within: u64| {
-            slices(len, n).iter().all(|&size| size >= 1)
-                && planned(&mutants, n).iter().all(|&s| s <= within)
-        };
-        for (k, size) in slices(len, shards).into_iter().enumerate() {
-            assert!(size >= 1, "{list:?}: shard {k} of {shards} is empty");
+        let plan = shard_plan(&mutants).unwrap();
+        assert!((1..=MAX_SHARDS).contains(&(plan.len() as u64)), "{list:?}");
+        // Each crate's shards, in the plan's order, by crate.
+        let mut by_crate: Vec<(&str, u64)> = Vec::new();
+        for s in &plan {
+            match by_crate.last_mut() {
+                Some((p, n)) if *p == s.package => *n += 1,
+                _ => by_crate.push((s.package.as_str(), 1)),
+            }
         }
-        if fit(shards, budget) {
-            assert!(
-                (1..shards).all(|n| !fit(n, budget)),
-                "{list:?}: fewer than {shards} shards would do"
+        let crates: Vec<&str> = list.iter().map(|(p, _)| *p).collect();
+        assert_eq!(
+            by_crate.iter().map(|(p, _)| *p).collect::<Vec<_>>(),
+            crates,
+            "{list:?}"
+        );
+        for (s, i) in plan.iter().zip(0..) {
+            let start = plan.iter().position(|t| t.package == s.package).unwrap();
+            let n = by_crate.iter().find(|(p, _)| *p == s.package).unwrap().1;
+            assert_eq!((s.k, s.n), (i - start as u64, n), "{list:?}: {s:?}");
+        }
+        // Each shard's planned seconds: its share of its crate's mutants at the crate's rate.
+        let planned: Vec<u64> = plan
+            .iter()
+            .map(|s| {
+                let len = list.iter().find(|(p, _)| *p == s.package).unwrap().1;
+                round_robin(len, s.k, s.n).count() as u64 * seconds_per_mutant(&s.package)
+            })
+            .collect();
+        assert_eq!(
+            shard_seconds(&mutants, &plan),
+            planned.iter().map(|&s| Some(s)).collect::<Vec<_>>(),
+            "{list:?}"
+        );
+        assert!(planned.iter().all(|&s| s > 0), "{list:?}: an empty shard");
+        let need = |within: u64| -> Option<Vec<u64>> {
+            list.iter()
+                .map(|(p, len)| fewest(*len as u64, seconds_per_mutant(p), within))
+                .collect()
+        };
+        let total = |n: &[u64]| n.iter().sum::<u64>();
+        let ns: Vec<u64> = by_crate.iter().map(|(_, n)| *n).collect();
+        let worst = *planned.iter().max().unwrap();
+        if worst <= budget {
+            assert_eq!(
+                Some(ns.clone()),
+                need(budget),
+                "{list:?}: fewer shards would do"
             );
         } else {
-            // Too large for the budget in 512 shards: within the limit, and the slowest shard
-            // planned at least.
-            assert!((1..=MAX_SHARDS).all(|n| !fit(n, budget)), "{list:?}");
-            let slowest = |n: u64| planned(&mutants, n).into_iter().max().unwrap();
-            assert!(slowest(shards) <= limit, "{list:?}");
+            // Too large for the budget in 512 shards: within the limit, the slowest shard planned
+            // at least, and the fewest shards for it.
             assert!(
-                (1..=MAX_SHARDS)
-                    .filter(|&n| fit(n, u64::MAX))
-                    .all(|n| slowest(n) >= slowest(shards)),
+                need(budget).is_none_or(|n| total(&n) > MAX_SHARDS),
                 "{list:?}"
             );
+            assert!(worst <= limit, "{list:?}");
+            assert!(
+                need(worst - 1).is_none_or(|n| total(&n) > MAX_SHARDS),
+                "{list:?}: a plan of 512 plans its slowest shard faster"
+            );
+            assert_eq!(Some(ns.clone()), need(worst), "{list:?}");
         }
     }
-    // The planted case: a plan sized at the list's slowest crate (the plan before this one) gives
-    // the fast crate's mutants shards of their own, and the plan by each shard's own mutants
-    // needs fewer.
+    // Pull request #862's run, as this plan deals it: 511 shards, geom-intersect's 5571 mutants in
+    // 429 of them (13 each at most, planned at 1677 s).
+    let pr: Vec<Mutant> = pr_862.iter().flat_map(|(p, n)| of(p, *n)).collect();
+    let plan = shard_plan(&pr).unwrap();
+    let shards_of = |package: &str| plan.iter().filter(|s| s.package == package).count();
+    assert_eq!(plan.len(), 511);
+    assert_eq!(
+        pr_862.map(|(p, _)| shards_of(p)),
+        [20, 1, 2, 1, 429, 54, 2, 2]
+    );
+    assert_eq!(
+        shard_seconds(&pr, &plan).into_iter().max(),
+        Some(Some(1677))
+    );
+    // The planted case: a plan sized at the list's slowest crate gives the fast crate's mutants
+    // shards of their own, and the plan by each crate's own rate needs fewer.
     let mixed: Vec<Mutant> = [("geom-curve", 9000), ("geom-num", 1)]
         .iter()
         .flat_map(|(p, n)| of(p, *n))
         .collect();
     let by_slowest = 9001_u64.div_ceil(budget / seconds_per_mutant("geom-num"));
-    assert!(shard_count(&mixed).unwrap() < by_slowest);
+    assert!((shard_plan(&mixed).unwrap().len() as u64) < by_slowest);
     // A run too large for 512 shards within the job's limit fails, and names why.
     let per_shard = (limit / seconds_per_mutant("geom-num")) as usize;
     let most = of("geom-num", per_shard * MAX_SHARDS as usize);
-    assert_eq!(shard_count(&most), Ok(MAX_SHARDS));
+    assert_eq!(shard_plan(&most).map(|p| p.len() as u64), Ok(MAX_SHARDS));
     let too_many = of("geom-num", per_shard * MAX_SHARDS as usize + 1);
-    let why = shard_count(&too_many).unwrap_err();
+    let why = shard_plan(&too_many).unwrap_err();
     assert!(why.contains("more than the 512"), "{why}");
-    // The matrices: the first job's shards 0 to 255, the second's 256 on, each shard numbered in
-    // the whole run. A matrix may not be empty: a job with no shard lists its first all the same,
-    // and its count, 0, skips it.
-    let plan = |count: u64| -> Value { serde_json::from_str(&shard_matrix(count)).unwrap() };
+    // The matrices: the first job's shards 0 to 255, the second's 256 on, each numbered in the
+    // whole run and carrying its crate and its k of n. A matrix may not be empty: a job with no
+    // shard lists one of no crate all the same, and its count, 0, skips it.
+    let shards = |count: u64| -> Vec<Shard> {
+        (0..count)
+            .map(|k| Shard {
+                package: format!("geom-{}", k % 3),
+                k,
+                n: count,
+            })
+            .collect()
+    };
+    let matrix = |plan: &[Shard]| -> Value { serde_json::from_str(&shard_matrix(plan)).unwrap() };
     assert_eq!(
-        plan(3),
-        json!({"count": 3, "shards": [0, 1, 2], "count_2": 0, "shards_2": [256]})
+        matrix(&shards(2)),
+        json!({
+            "count": 2,
+            "shards": [
+                {"index": 0, "package": "geom-0", "k": 0, "n": 2},
+                {"index": 1, "package": "geom-1", "k": 1, "n": 2}
+            ],
+            "count_2": 0,
+            "shards_2": [{"index": 256, "package": "", "k": 0, "n": 1}]
+        })
     );
     assert_eq!(
-        plan(0),
-        json!({"count": 0, "shards": [0], "count_2": 0, "shards_2": [256]})
+        matrix(&[]),
+        json!({
+            "count": 0,
+            "shards": [{"index": 0, "package": "", "k": 0, "n": 1}],
+            "count_2": 0,
+            "shards_2": [{"index": 256, "package": "", "k": 0, "n": 1}]
+        })
     );
     assert_eq!(
-        plan(258)["shards_2"],
-        json!([256, 257]),
-        "{}",
-        shard_matrix(258)
+        matrix(&shards(258))["shards_2"],
+        json!([
+            {"index": 256, "package": "geom-1", "k": 256, "n": 258},
+            {"index": 257, "package": "geom-2", "k": 257, "n": 258}
+        ])
     );
     for count in 0..=MAX_SHARDS {
-        let p = plan(count);
-        let list = |key: &str| -> Vec<u64> {
-            p[key]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| v.as_u64().unwrap())
-                .collect()
-        };
+        let plan = shards(count);
+        let m = matrix(&plan);
+        let list = |key: &str| -> Vec<Value> { m[key].as_array().unwrap().clone() };
         let (first, second) = (list("shards"), list("shards_2"));
-        assert_eq!(p["count"], json!(count));
-        assert_eq!(p["count_2"], json!(count.saturating_sub(MATRIX_JOBS)));
+        assert_eq!(m["count"], json!(count));
+        assert_eq!(m["count_2"], json!(count.saturating_sub(MATRIX_JOBS)));
         assert!(first.len() as u64 <= MATRIX_JOBS && second.len() as u64 <= MATRIX_JOBS);
-        // The shards the two jobs run, each only when its count is not 0, are exactly 0 to n - 1.
-        let mut run: Vec<u64> = Vec::new();
+        // The shards the two jobs run, each only when its count is not 0, are exactly the plan's,
+        // numbered 0 to its length - 1.
+        let mut run: Vec<Value> = Vec::new();
         if count > 0 {
-            run.extend(&first);
+            run.extend(first);
         }
         if count > MATRIX_JOBS {
-            run.extend(&second);
+            run.extend(second);
         }
-        assert_eq!(run, (0..count).collect::<Vec<_>>(), "{count}");
+        let want: Vec<Value> = plan
+            .iter()
+            .enumerate()
+            .map(|(i, s)| json!({"index": i, "package": s.package, "k": s.k, "n": s.n}))
+            .collect();
+        assert_eq!(run, want, "{count}");
     }
 }
 
@@ -2205,15 +2294,23 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     assert!(text.contains("(no mutants)"), "{text}");
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", empty.to_str().unwrap()]);
     assert_eq!(code, 0, "{text}");
+    let none = |index: u64| json!([{"index": index, "package": "", "k": 0, "n": 1}]);
     assert_eq!(
-        text.trim(),
-        r#"{"count":0,"count_2":0,"shards":[0],"shards_2":[256]}"#
+        serde_json::from_str::<Value>(text.trim()).unwrap(),
+        json!({"count": 0, "count_2": 0, "shards": none(0), "shards_2": none(256)}),
+        "{text}"
     );
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", longer.to_str().unwrap()]);
     assert_eq!(code, 0, "{text}");
     assert_eq!(
-        text.trim(),
-        r#"{"count":1,"count_2":0,"shards":[0],"shards_2":[256]}"#
+        serde_json::from_str::<Value>(text.trim()).unwrap(),
+        json!({
+            "count": 1,
+            "count_2": 0,
+            "shards": [{"index": 0, "package": "geom-num", "k": 0, "n": 1}],
+            "shards_2": none(256)
+        }),
+        "{text}"
     );
     // Bad input: an unknown mode, a missing list, a run that is not whole.
     let (code, _) = kernel_quality(
