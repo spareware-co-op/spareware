@@ -1,0 +1,98 @@
+{
+  "format": 1,
+  "about": "The interim register of the engine seam (geom_op::engine::Engine, which programs reach through engine-geometry): one row for each operation of the trait and each case of its inputs that a different part answers, saying what answers it today in geom-solidcore's engine (SolidcoreEngine), the test of tests/engine.rs that pins today's answer, its known faults (ids of tests/named-faults.json), the tolerance it works to, and the kernel piece or chapter that will make it exact. Where the kernel's own exact operation answers a case, it does; solidcore answers only what the kernel cannot yet. case and answered_by are word for word what the engine's edition says. tests/engine.rs fails while an operation of the trait has no row here, a row names a test or fault that does not exist, or the edition answers otherwise. Every lane that adds an operation to the trait, or moves a case to another engine, adds or changes its row here. programs holds the interim places on a program's side of the seam: the place, what answers it today, the file and test that pin today's behaviour, its known faults, and what replaces it; the program's own test (for Spare Construct, the server's tests/kernel.rs) fails while a row names a file or test that does not exist.",
+  "operations": [
+    {
+      "operation": "edition",
+      "case": "every case",
+      "answered_by": "geom-solidcore's own record: the engine's name, solidcore's repository and pinned commit, the grid step, solidcore's default tolerances and the answers below",
+      "pinned_by": "the_engine_names_solidcore_and_its_pin",
+      "known_faults": [],
+      "tolerance": "none: it reports, it does not compute",
+      "exact_by": "stays: an exact engine of the kernel's own gives its own edition (chapter 26, versions and editions)"
+    },
+    {
+      "operation": "extrude",
+      "case": "a profile with no holes, level, swept straight up, which make.prism takes (strictly convex)",
+      "answered_by": "the kernel's make.prism (geom-make)",
+      "pinned_by": "each_extrusion_goes_to_the_part_that_answers_it",
+      "known_faults": [],
+      "tolerance": "exact: the kernel's own prism on the grid",
+      "exact_by": "already the kernel's exact make.prism (chapter 13)"
+    },
+    {
+      "operation": "extrude",
+      "case": "every other profile: holes, a profile not level or not swept straight up, or one make.prism refuses",
+      "answered_by": "solidcore's linear sweep (decision 32.91)",
+      "pinned_by": "each_extrusion_goes_to_the_part_that_answers_it",
+      "known_faults": ["SC-8"],
+      "tolerance": "solidcore's zone of 1e-5 m (0.01 mm); the body is converted to the grid, each flat face's plane written through its own grid corners, recorded Certified within that and a step, and checked by geom-check at its full level",
+      "exact_by": "geom-sweep's Extrude (chapter 13.4) on the kernel's exact grid; until then a profile with a round hole stays refused (SC-8)"
+    },
+    {
+      "operation": "subtract",
+      "case": "every case",
+      "answered_by": "the kernel's geom-bool (decision 32.70, rule 5)",
+      "pinned_by": "the_door_is_cut_by_geom_bool_from_either_wall",
+      "known_faults": [],
+      "tolerance": "exact: the arrangement of flat faces adds no error, and the result is as exact as the least exact operand",
+      "exact_by": "already the kernel's exact geom-bool (chapter 11); curved operands wait for chapter 11's certified curved booleans"
+    },
+    {
+      "operation": "volume",
+      "case": "every case",
+      "answered_by": "the kernel's exact six-volume (geom-topo)",
+      "pinned_by": "a_wall_with_a_door_is_the_box_less_the_opening",
+      "known_faults": [],
+      "tolerance": "exact for the body's rows (six times the volume in cubic steps); the body itself carries its exactness",
+      "exact_by": "already the kernel's (geom-topo query.volume); curved bodies wait for certified mass properties (geom-topo mass, chapter 19.2)"
+    },
+    {
+      "operation": "mesh",
+      "case": "every case",
+      "answered_by": "solidcore-tess's planar triangulation of each flat face",
+      "pinned_by": "the_mesh_is_closed_and_bounded_by_the_wall",
+      "known_faults": [],
+      "tolerance": "none on flat faces: every vertex is a corner of the body, so the mesh lies on it (delta 0, chapter 19.3); curved faces are refused as unsupported",
+      "exact_by": "geom-mesh's watertight tessellation and DisplayMesh (chapters 19.3 and 19.4); curved faces through solidcore-tess's planner meanwhile"
+    }
+  ],
+  "programs": [
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, the default builder (construct_regen::geometry), which the browser runs and the server runs unless its geometry setting is kernel",
+      "operation": "wall.straight, door.single and block",
+      "answered_by": "a box of the recipe's size, made by Spare Construct's own code with no engine: edition construct.stand-in",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/src/stand_in.rs",
+        "test": "the_stand_ins_bytes_never_change_within_an_edition"
+      },
+      "known_faults": ["no opening is cut, no layers, every shape a box"],
+      "replaced_by": "construct_regen::kernel::Kernel over the engine seam (piece A36, CON-A3-F1-P1), once the browser's build (construct-shapes, wasm32-unknown-unknown) can link the engine; until then the server's kernel setting is the only way to it"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::Kernel, a body's bytes",
+      "operation": "every recipe it builds",
+      "answered_by": "the engine's request (the plan profile and the vector, in grid steps) as canonical JSON, standing for the body, since the trait gives no record of a body",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "the_same_model_built_twice_gives_the_same_bytes"
+      },
+      "known_faults": [],
+      "replaced_by": "the kernel's body record (chapter 24.4) once the engine seam gives one"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::Kernel, levels of detail and the door",
+      "operation": "door.single, and every recipe's display levels",
+      "answered_by": "the door is a box in its wall's thickness, no opening cut in its host; both levels of detail are the engine's one mesh",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "a_straight_wall_is_its_plan_extruded"
+      },
+      "known_faults": [],
+      "replaced_by": "the next Construct job (kernel-seam-b, CON-A3-F1-P2 and P6): the door cut from its wall with Engine::subtract and a mesh per detail level"
+    }
+  ]
+}

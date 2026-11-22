@@ -4,12 +4,17 @@
 //! constraints". The order and caching wait on piece A03; for now every changed element is rebuilt
 //! in log order.
 //!
-//! - [`stand_in`]: makes boxes until the geometry kernel can. The only file that knows.
+//! - [`stand_in`]: makes boxes until the geometry kernel can. The only file that knows. Interim:
+//!   [`kernel`] replaces it once the browser can run the kernel's engine too.
+//! - [`kernel`]: builds through the geometry kernel's engine seam, over whichever engine the
+//!   program hands it. It names no engine.
 //! - [`regenerator`]: reads the log and keeps a project's derived shapes up to date.
 //!
-//! [`geometry`] is the one line that picks what builds shapes. The server and the browser both
-//! call it, so they can't differ, and it is the line that changes when the kernel arrives.
+//! [`geometry`] is the default builder, the stand-in, which the browser and the server both run
+//! today. A program that links an engine builds a [`kernel::Kernel`] over it in its own one place
+//! instead: the server picks between the two by a setting.
 
+pub mod kernel;
 #[cfg(feature = "server")]
 pub mod regenerator;
 pub mod stand_in;
@@ -17,7 +22,7 @@ pub mod stand_in;
 use construct_model::geometry::Geometry;
 use std::sync::Arc;
 
-/// What builds shapes.
+/// What builds shapes by default.
 #[must_use]
 pub fn geometry() -> Arc<dyn Geometry> {
     Arc::new(stand_in::Boxes)
