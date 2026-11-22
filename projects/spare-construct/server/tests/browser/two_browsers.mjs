@@ -530,6 +530,63 @@ await ben.waitForFunction(() => /Leaf width\s*2100 mm/.test(document.querySelect
 pass("and Ben's properties palette shows it without being asked");
 await shot(ben, 'ben-types');
 
+console.log('\n   Levels, on the page');
+// Ben makes and changes levels in the Manage tab's dialog and draws on one; Anna reads what the server says.
+const levels = async () => asAnna('levels');
+const levelSection = (name) =>
+  ben.locator(`${manager} section[data-level]`).filter({ has: ben.locator(`input[value="${name}"]`) });
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+await ben.locator('#ribbon [data-act="stacklevels"]').click();
+await ben.waitForSelector(`${manager} [data-key="new-level-name"]`);
+const listed = await levels();
+check(
+  (await ben.locator(`${manager} section[data-level]`).count()) === listed.length &&
+    (await ben.locator(`${manager} [data-key="level-elevation:1"]`).inputValue()) === listed.find((l) => l.id === '1').shown,
+  "the levels the old drawings stand on are listed, each elevation as the server formats it",
+);
+const makeLevel = async (name, elevation) => {
+  await ben.locator(`${manager} [data-key="new-level-name"]`).fill(name);
+  await ben.locator(`${manager} [data-key="new-level-elevation"]`).fill(elevation);
+  await ben.locator(`${manager} [data-key="new-level-make"]`).click();
+};
+await makeLevel('Roof', '6.2 m');
+await levelSection('Roof').waitFor();
+check(
+  (await levelSection('Roof').locator('[data-key^="level-elevation:"]').inputValue()) === '6200 mm',
+  'a level is made from a name and an elevation typed in metres, shown in millimetres',
+);
+await makeLevel('roof', '7 m');
+await ben.waitForSelector(`${manager} [data-problem="new-level"]`);
+await problemIs('new-level', "a second level of that name, whatever its case, is refused in the server's words");
+const roof = (await levels()).find((l) => l.name === 'Roof');
+const roofIs = (ok) => async () => ok((await levels()).find((l) => l.id === roof.id));
+const roofElevation = ben.locator(`${manager} [data-key="level-elevation:${roof.id}"]`);
+await roofElevation.fill('7 m');
+await roofElevation.press('Tab');
+await until(roofIs((found) => found.shown === '7000 mm'), (moved) => moved, 'the roof moves up');
+pass('a level moves by typing its elevation beside it');
+await ben.locator(`${manager} [data-key="level-delete:1"]`).click();
+await ben.waitForSelector(`${manager} [data-problem="level:1"]`);
+await problemIs('level:1', "deleting a level that elements are tied to is refused with the server's count");
+await levelSection('Roof').locator('[data-key^="level-show:"]').click();
+await closeDialog();
+await ben.waitForFunction(() => document.getElementById('h-view').textContent === 'Roof plan');
+await ben.waitForFunction(() => !document.querySelector('g.element[data-id="D-101"]'));
+pass("showing the roof shows its plan, without Level 1's doors");
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+const roofPlan = await ben.locator('#pv-canvas').boundingBox();
+await ben.mouse.click(roofPlan.x + roofPlan.width * 0.3, roofPlan.y + roofPlan.height * 0.4);
+await ben.mouse.click(roofPlan.x + roofPlan.width * 0.6, roofPlan.y + roofPlan.height * 0.4);
+await ben.keyboard.press('Escape');
+await until(roofIs((found) => found.tied === 1), (tied) => tied, 'the wall is on the roof');
+pass("a wall drawn on the roof's plan is tied to the roof, as Anna reads it");
+await undoRedo('Drawing on the roof', roofIs((found) => found.tied === 1), (tied) => !tied, (tied) => tied);
+await ben.click('#browser [data-act="view"][data-a="l1"]');
+await ben.waitForSelector('g.element[data-id="D-101"]');
+check((await ben.locator('#h-view').textContent()) === 'Level 1 plan', 'and Level 1 plan shows Level 1 again');
+await shot(ben, 'ben-levels');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");

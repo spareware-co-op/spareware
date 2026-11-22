@@ -61,7 +61,12 @@
   window.spare = C; // the browser test reads this
 
   const named = (person) => person[0].toUpperCase() + person.slice(1);
-  const levelOf = () => (S.view === 'l2' ? 2 : 1);
+  // The level the plan shows and a new element is tied to: one chosen in Levels, or the floor plan's own.
+  const levelOf = () => C.planLevel?.id ?? (S.view === 'l2' ? '2' : '1');
+  const planName = () => (C.planLevel ? `${C.planLevel.name} plan` : VIEWS[S.view]?.name);
+  /** The ID of the level a record stands on: its tie, or the level its old integer names (construct-levels' FORMAT.md). */
+  const levelIdOf = (record) =>
+    record.props?.['@level'] ?? (record.level > 0 ? String(record.level) : record.level < 0 ? `m${-record.level}` : null);
   const say = (text) => toast(esc(text));
   const initials = (name) => name.slice(0, 2).toUpperCase();
 
@@ -123,7 +128,7 @@
     );
     openPalette = () => say(NOT_YET);
     headerView = () => {
-      const name = S.screen === 'plan' ? VIEWS[S.view]?.name : viewName(S.screen);
+      const name = S.screen === 'plan' ? planName() : viewName(S.screen);
       $('#h-view').textContent = name || '';
       document.title = `Spare Construct: ${name || ''}`;
     };
@@ -148,8 +153,10 @@
 
     const demoView = ACT.view;
     ACT.view = (button) => {
-      if (FLOORV.includes(button.dataset.a)) demoView(button);
-      else say(NOT_YET);
+      if (FLOORV.includes(button.dataset.a)) {
+        C.planLevel = null;
+        demoView(button);
+      } else say(NOT_YET);
     };
     ACT.account = account;
     // The demo's Ctrl+Z and Ctrl+Y, and its command palette, call these.
@@ -227,6 +234,7 @@
       items: [
         { label: 'Types', icon: 'family', act: 'stacktypes', tip: 'The types of a category: make, rename, copy and delete them, and edit their values.', disabled: !C.model },
         { label: 'Project parameters', icon: 'props', act: 'stackparams', tip: 'The parameters of this project: define one and choose the categories that have it.', disabled: !C.model },
+        { label: 'Levels', icon: 'elev', act: 'stacklevels', tip: 'The levels of this model: make, rename, move and delete them, and choose the one the plan shows.', disabled: !C.model },
       ],
     });
 
@@ -596,7 +604,7 @@
 
   function showPackage(file) {
     for (const piece of file.elements) {
-      if (piece.element.level === levelOf()) C.elements.set(piece.element.id, packaged(piece));
+      if (levelIdOf(piece.element) === levelOf()) C.elements.set(piece.element.id, packaged(piece));
     }
   }
 
@@ -700,7 +708,7 @@
     if (!model) return;
     C.level = levelOf();
     const [x, y, w, h] = VB[S.view];
-    const area = `level=${C.level}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
+    const area = `level=${encodeURIComponent(C.level)}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
     const seen = await api(`${modelUrl(model)}/area?${area}`);
     // Regeneration can be behind the log, so ask for what came after what this shows.
     if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
@@ -726,7 +734,7 @@
       return;
     }
     const answer = await shapeFor(model, record);
-    if (record.level === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
   }
 
   async function loadClaims() {
@@ -879,11 +887,11 @@
       }
     }
     // A type or a parameter changed, or may have: what the selected element reads may have too.
-    if ((/^(type|parameter)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
+    if ((/^(type|parameter|level)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (/^(type|parameter)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
+    if (/^(type|parameter|level)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -911,6 +919,13 @@
     'type.duplicate': 'copied a type',
     'type.delete': 'deleted a type',
     'type.set': 'set a value of a type',
+    'level.create': 'made a level',
+    'level.rename': 'renamed a level',
+    'level.elevation': 'moved a level',
+    'level.storey': 'changed a level',
+    'level.delete': 'deleted a level',
+    'level.tie': 'tied to a level',
+    'level.top': 'tied the top of',
     'edit.undo': 'undid a change to',
     'edit.redo': 'redid a change to',
   };
@@ -968,6 +983,13 @@
     'type.duplicate': 'copying a type',
     'type.delete': 'deleting a type',
     'type.set': 'a value of a type',
+    'level.create': 'making a level',
+    'level.rename': 'renaming a level',
+    'level.elevation': 'moving a level',
+    'level.storey': 'a change to a level',
+    'level.delete': 'deleting a level',
+    'level.tie': 'a tie to a level',
+    'level.top': 'a tie of a top',
     'edit.redo': 'a redo',
   };
   const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
@@ -1020,7 +1042,7 @@
 
   const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
   function hasShape(record) {
-    return record.kind !== 'type' && record.kind !== 'parameters';
+    return record.kind !== 'type' && record.kind !== 'parameters' && record.kind !== 'level';
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1190,12 +1212,13 @@
     }
     const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
     C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
-    const title = which === 'types' ? 'Types' : 'Project parameters';
+    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels' }[which];
     openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
     loadManage();
   }
   ACT.stacktypes = () => openManage('types');
   ACT.stackparams = () => openManage('parameters');
+  ACT.stacklevels = () => openManage('levels');
 
   /** Reads what the open dialog shows from the server, then draws it. Does nothing when no dialog is open. */
   async function loadManage() {
@@ -1209,6 +1232,9 @@
       if (m.which === 'types') {
         if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
         m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
+      } else if (m.which === 'levels') {
+        m.data = { levels: await api(`${modelUrl(model)}/levels`) };
+        knowLevels(`${model}/${C.paramsEpoch}`, m.data.levels);
       } else {
         m.data = await api(`${modelUrl(model)}/project-parameters`);
       }
@@ -1225,7 +1251,7 @@
     if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
-    else html = m.which === 'types' ? typesHtml(m) : parametersHtml(m);
+    else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : parametersHtml(m);
     redraw(root, html);
     if (!m.shown) {
       m.shown = true;
@@ -1414,6 +1440,98 @@
     });
   };
 
+  // --- Levels ---
+  // A level is a record of the model with a name and an elevation, and an element is tied to one by
+  // its ID (construct-levels' FORMAT.md). The dialog lists them as the server reads them, lowest
+  // first, with each elevation as the server formats it; a change is one of the level commands
+  // through the same log, and a refusal is the server's reason beside the level. Show picks the level
+  // the plan shows and a newly drawn element is tied to.
+
+  C.planLevel = null; // { id, name } of a level chosen in the dialog; null is the floor plan's own
+  C.levelList = null; // { key, levels }: the open model's levels, for the properties palette
+
+  /** Keeps the levels the server listed, and the shown level's name with them. */
+  function knowLevels(key, levels) {
+    C.levelList = { key, levels };
+    const shown = C.planLevel && levels.find((level) => level.id === C.planLevel.id);
+    if (shown && shown.name !== C.planLevel.name) {
+      C.planLevel.name = shown.name;
+      headerView();
+    }
+  }
+
+  /** The name of the level a record stands on, from the server's list once it has come. */
+  function levelName(record) {
+    const id = levelIdOf(record);
+    if (!id) return 'None';
+    if (C.model) {
+      const key = `${C.model.id}/${C.paramsEpoch}`;
+      if (C.levelList?.key !== key && C.levelListLoading !== key) {
+        C.levelListLoading = key;
+        api(`${modelUrl(C.model.id)}/levels`)
+          .then((levels) => {
+            knowLevels(key, levels);
+            refreshSide();
+          })
+          .catch(() => {});
+      }
+    }
+    return C.levelList?.levels.find((level) => level.id === id)?.name ?? id;
+  }
+
+  function levelsHtml(m) {
+    const editable = canEdit();
+    const off = editable ? '' : ' disabled';
+    let html = '<p class="small muted">A level is a height in the building that elements stand on. Move a level and everything tied to it moves with it. Show a level to see its plan and draw on it.</p>';
+    if (!m.data.levels.length) html += '<p class="small faint">No levels yet.</p>';
+    for (const level of m.data.levels) {
+      const id = esc(level.id);
+      const label = esc(level.name);
+      const shown = S.screen === 'plan' && levelOf() === level.id;
+      html += `<section data-level="${id}"><div class="stack-line">`;
+      html += `<input class="inp" data-chg="stacklevelrename" data-level="${id}" data-key="level-name:${id}" value="${label}" aria-label="Name of ${label}"${off}>`;
+      html += `<input class="inp" data-chg="stacklevelelevation" data-level="${id}" data-key="level-elevation:${id}" value="${esc(level.shown)}" aria-label="Elevation of ${label}"${off}>`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stacklevelstorey" data-level="${id}" data-key="level-storey:${id}"${level.storey ? ' checked' : ''}${off}>Storey</label>`;
+      html += `<span class="small faint">${plural(level.tied, 'element')}</span>`;
+      html += `<button class="btn sm" data-act="stacklevelshow" data-a="${id}" data-key="level-show:${id}" aria-pressed="${shown}">${shown ? 'Shown' : 'Show'}</button>`;
+      html += `<button class="btn sm" data-act="stackleveldelete" data-a="${id}" data-key="level-delete:${id}" aria-label="Delete ${label}"${off}>Delete</button></div>`;
+      html += `${problem(`level:${level.id}`)}</section>`;
+    }
+    html += '<h3 class="mt2">New level</h3>';
+    html += `<div class="stack-line"><input class="inp" data-draft data-enter="stacknewlevel" data-key="new-level-name" placeholder="Name" aria-label="Name for a new level"${off}>`;
+    html += `<input class="inp" data-draft data-enter="stacknewlevel" data-key="new-level-elevation" placeholder="Elevation" aria-label="Elevation for a new level"${off}>`;
+    html += `<button class="btn pri sm" data-act="stacknewlevel" data-key="new-level-make"${off}>Make level</button></div>`;
+    html += problem('new-level');
+    return html;
+  }
+
+  const levelWhere = (control) => `level:${control.dataset.level ?? control.dataset.a}`;
+  CHG.stacklevelrename = (input) => manage('level.rename', { level: input.dataset.level, name: input.value }, levelWhere(input));
+  CHG.stacklevelelevation = (input) => manage('level.elevation', { level: input.dataset.level, elevation: input.value }, levelWhere(input));
+  CHG.stacklevelstorey = (box) => manage('level.storey', { level: box.dataset.level, storey: box.checked }, levelWhere(box));
+  ACT.stackleveldelete = (button) => manage('level.delete', { level: button.dataset.a }, levelWhere(button));
+  ACT.stacknewlevel = () => {
+    const args = { level: newId('L'), name: manageField('new-level-name').value, elevation: manageField('new-level-elevation').value };
+    manage('level.create', args, 'new-level', () => {
+      for (const key of ['new-level-name', 'new-level-elevation']) {
+        const again = manageField(key);
+        if (again) again.value = '';
+      }
+    });
+  };
+  ACT.stacklevelshow = (button) => {
+    const level = C.manage?.data?.levels.find((l) => l.id === button.dataset.a);
+    if (!level) return;
+    C.planLevel = { id: level.id, name: level.name };
+    if (S.screen === 'plan' && FLOORV.includes(S.view)) {
+      headerView();
+      followTheLevel();
+    } else {
+      go('plan:l1');
+    }
+    renderManage();
+  };
+
   // --- Workshop's elements ---
   // Workshop, a page of its own in a frame, keeps its parts and its assembly as elements of the open
   // model, through the same edit log as walls and doors (construct-model's FORMAT.md, "Workshop's
@@ -1549,7 +1667,7 @@
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1608,7 +1726,7 @@
     const scale = AS[S.scale] || 1;
     let shapes = '';
     const ghost = (piece) => {
-      if (piece.shape && piece.el.level === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
+      if (piece.shape && levelIdOf(piece.el) === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
     };
     for (const pieces of C.linked.values()) for (const piece of pieces.values()) ghost(piece);
     for (const pieces of C.fixed.values()) for (const piece of pieces) ghost(packaged(piece));

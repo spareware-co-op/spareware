@@ -15,6 +15,7 @@ use construct_model::rows::{
     Stored, Team,
 };
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
+use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
 use kit_accounts::rows::Person;
@@ -93,8 +94,9 @@ pub struct ShapeView {
 
 /// An area of a level.
 pub struct View {
-    /// The level.
-    pub level: i32,
+    /// The level, by its permanent ID. A level an old record's integer implies has that integer
+    /// as its ID (`1`), so a page that asks by the integer still finds what it found.
+    pub level: Id,
     /// One corner's x, in millimetres.
     pub x0: i64,
     /// One corner's y, in millimetres.
@@ -410,7 +412,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let mut snapshot = self.kv.snapshot().await?;
         let mut pieces = BTreeMap::new();
         for (x, y) in cells_between(view.x0, view.y0, view.x1, view.y1) {
-            let prefix = list::cell(project, model, view.level, x, y);
+            let prefix = list::cell(project, model, &view.level, x, y);
             for (key, hash) in snapshot.scan(&prefix).await? {
                 let Some(Place::Area { element, .. }) = Place::parse(&key) else {
                     continue;
@@ -547,6 +549,29 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await?;
         let mut snapshot = self.kv.snapshot().await?;
         catalog::read_types_view(&mut snapshot, project, model, category)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's levels, lowest first: each with its name, its elevation stored and shown in units,
+    /// whether it is a storey, whether an old record's integer implies it, and how many elements
+    /// are tied to it. The same reader the level commands check against
+    /// (`construct_regen::levels`).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a level record or a tie cannot be read, saying why.
+    pub async fn levels(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<LevelView>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        levels::read_views(&mut snapshot, project, model)
             .await?
             .map_err(Refusal::Bad)
     }

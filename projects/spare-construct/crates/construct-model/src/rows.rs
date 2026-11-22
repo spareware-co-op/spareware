@@ -217,12 +217,48 @@ pub struct BuiltElement {
     pub input: Id,
     /// What built it.
     pub edition: Edition,
-    /// The element's level.
-    pub level: i32,
+    /// The level its cells are indexed under: its base level's ID, or `None` on no level. A row
+    /// written when levels were integers holds the integer, which reads as its decimal text: the
+    /// text its cells' keys hold.
+    #[serde(
+        serialize_with = "kit_ops::id::option::serialize",
+        deserialize_with = "level_key::deserialize"
+    )]
+    pub level: Option<Id>,
+    /// How high its base sits above the project's zero, its level's elevation plus its offset, in
+    /// construct-params' stored length text (`length:q0:19200000`). `None` on no level, and in a
+    /// row written before levels were elements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elevation: Option<String>,
     /// The 5 m cells it was indexed under.
     pub cells: Vec<(i64, i64)>,
     /// The shape, or why there isn't one.
     pub result: BuiltResult,
+}
+
+/// Reads a built row's level: a level's ID, `null`, or the integer of a row written before
+/// levels were elements, as its decimal text when that is an ID (a negative one is not, and its
+/// cells name no level anyone can ask for).
+mod level_key {
+    use kit_core::Id;
+    use serde::{Deserialize, Deserializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Number(i64),
+        Text(String),
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Id>, D::Error> {
+        match Option::<Stored>::deserialize(deserializer)? {
+            None => Ok(None),
+            Some(Stored::Number(n)) => Ok(Id::parse(&n.to_string()).ok()),
+            Some(Stored::Text(text)) => {
+                Id::parse(&text).map(Some).map_err(serde::de::Error::custom)
+            }
+        }
+    }
 }
 
 /// A built shape, or why there isn't one. A failure is model state, the same on every machine.
