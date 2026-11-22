@@ -41,7 +41,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use geom_gen::files::{self, Status, output_path};
+use geom_gen::files::{self, Outcome, Status, output_path};
 use geom_gen::registry::{REGISTRY, workspace_root};
 use geom_gen::{Folder, GenError, Generate, Generator, Registry};
 use geom_test::{Seed, SplitMix64};
@@ -132,63 +132,117 @@ fn write_then_check_passes() {
     assert!(stdout.contains("every output is current"), "{stdout}");
 }
 
+/// `original` with one character changed on its fifth line.
+fn edit_fifth_line(original: &[u8]) -> Vec<u8> {
+    let mut edited = original.to_vec();
+    let fifth = edited
+        .iter()
+        .enumerate()
+        .filter(|&(_, &b)| b == b'\n')
+        .nth(3)
+        .map(|(i, _)| i + 1)
+        .unwrap();
+    edited[fifth] = if edited[fifth] == b'#' { b'%' } else { b'#' };
+    edited
+}
+
+/// The one outcome `outcomes` gives for `g`.
+fn outcome_of(outcomes: &[Outcome], g: &Generator) -> Outcome {
+    let mine: Vec<&Outcome> = outcomes.iter().filter(|o| o.name == Some(g.name)).collect();
+    assert_eq!(mine.len(), 1, "{}: {outcomes:?}", g.name);
+    mine[0].clone()
+}
+
+/// A hand edit to any output fails the check: the binary CI runs exits 1 and reports the file,
+/// with the first line that differs and both lengths; a change of line ends alone fails the
+/// library's check, on line 1; and writing repairs every file.
+///
+/// `check` compares each output with its own file and reports every file, so every output is
+/// edited at once and each step runs the registry once, not once per output, while each output
+/// is held to exactly the outcome an edit of it alone gives. The binary's line for a file is the
+/// library's outcome for it, described, so matching the whole line pins that outcome.
 #[cfg_attr(target_family = "wasm", ignore = "uses the host's file system")]
 #[test]
 fn a_hand_edited_output_fails_check() {
     let s = Scratch::new("hand-edited");
     files::write(&s.0, &REGISTRY).unwrap();
-    for g in REGISTRY.generators {
-        let path = output_path(&s.0, g.output).unwrap();
-        let original = std::fs::read(&path).unwrap();
+    let originals: Vec<(&Generator, PathBuf, Vec<u8>)> = REGISTRY
+        .generators
+        .iter()
+        .map(|g| {
+            let path = output_path(&s.0, g.output).unwrap();
+            let bytes = std::fs::read(&path).unwrap();
+            (g, path, bytes)
+        })
+        .collect();
 
-        // Change one character on the fifth line.
-        let mut edited = original.clone();
-        let fifth = edited
-            .iter()
-            .enumerate()
-            .filter(|&(_, &b)| b == b'\n')
-            .nth(3)
-            .map(|(i, _)| i + 1)
-            .unwrap();
-        edited[fifth] = if edited[fifth] == b'#' { b'%' } else { b'#' };
-        std::fs::write(&path, &edited).unwrap();
+    // Change one character on the fifth line of every output.
+    for (_, path, original) in &originals {
+        std::fs::write(path, edit_fifth_line(original)).unwrap();
+    }
+    let out = bin(&["check"], &s.0);
+    let stdout = text(&out.stdout);
+    let stderr = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
+    // Every output, and nothing else, is reported as not current.
+    let stale = format!(
+        "geom-gen check: {} file(s) differ from their generators",
+        originals.len()
+    );
+    assert!(stderr.contains(&stale), "{stale}\nis not in:\n{stderr}");
+    for (g, _, original) in &originals {
+        let differs = Outcome {
+            name: Some(g.name),
+            output: g.output.to_owned(),
+            seed: g.seed(),
+            status: Status::Differs {
+                line: 5,
+                committed: original.len(),
+                generated: original.len(),
+            },
+        };
+        // Each file that is not current is reported on a line of its own.
+        let reported = format!("geom-gen check: {}", differs.describe());
+        let line = stderr
+            .lines()
+            .find(|l| *l == reported)
+            .unwrap_or_else(|| panic!("{reported}\nis not among:\n{stderr}"));
+        assert!(line.contains(g.output), "{line}");
+        assert!(line.contains("DIFFERS"), "{line}");
+        assert!(line.contains("first on line 5"), "{line}");
+    }
 
-        let checked = files::check(&s.0, &REGISTRY).unwrap();
-        let o = checked.iter().find(|o| o.name == Some(g.name)).unwrap();
+    // Line ends alone are a difference: a checkout that converted them must fail.
+    let crlf = |original: &[u8]| text(original).replace('\n', "\r\n");
+    for (_, path, original) in &originals {
+        std::fs::write(path, crlf(original)).unwrap();
+    }
+    let checked = files::check(&s.0, &REGISTRY).unwrap();
+    for (g, _, original) in &originals {
+        let o = outcome_of(&checked, g);
         assert_eq!(
             o.status,
             Status::Differs {
-                line: 5,
-                committed: original.len(),
+                line: 1,
+                committed: crlf(original).len(),
                 generated: original.len()
-            }
+            },
+            "{}",
+            g.name
         );
         assert!(!o.is_current());
+    }
 
-        let out = bin(&["check"], &s.0);
-        let stdout = text(&out.stdout);
-        let stderr = text(&out.stderr);
-        assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
-        assert!(stderr.contains(g.output), "{stderr}");
-        assert!(stderr.contains("DIFFERS"), "{stderr}");
-        assert!(stderr.contains("first on line 5"), "{stderr}");
-
-        // Line ends alone are a difference: a checkout that converted them must fail.
-        let crlf = text(&original).replace('\n', "\r\n");
-        std::fs::write(&path, crlf).unwrap();
-        let checked = files::check(&s.0, &REGISTRY).unwrap();
-        assert!(matches!(
-            checked
-                .iter()
-                .find(|o| o.name == Some(g.name))
-                .unwrap()
-                .status,
-            Status::Differs { line: 1, .. }
-        ));
-
-        // Writing repairs it.
-        files::write(&s.0, &REGISTRY).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), original);
+    // Writing repairs every one.
+    let written = files::write(&s.0, &REGISTRY).unwrap();
+    for (g, path, original) in &originals {
+        assert_eq!(
+            outcome_of(&written, g).status,
+            Status::Written,
+            "{}",
+            g.name
+        );
+        assert!(std::fs::read(path).unwrap() == *original, "{}", g.name);
     }
 }
 

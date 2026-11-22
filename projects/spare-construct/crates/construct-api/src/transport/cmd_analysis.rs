@@ -6,7 +6,8 @@ use super::cmd_run::{held, pick};
 use super::helpers::val;
 use super::registry::{Registry, Sink};
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{Params, boolean, choice, integer, number, params, string, strings};
+use crate::transport::helpers::{put, scenario_at};
 use construct_transport::analysis::{
     DiffOpts, EconBase, ExtentOpts, SensOpts, dev_distribution, difference, extent_test, msm_check,
     sensitivity, with_without,
@@ -14,7 +15,7 @@ use construct_transport::analysis::{
 use construct_transport::assign::assign;
 use construct_transport::econ::{capital, econ};
 use construct_transport::edit::net;
-use construct_transport::jsnum::{Maybe, json_number};
+use construct_transport::jsnum::{Maybe, f64_to_usize, json_number};
 use construct_transport::project::{Project, Scenario, road_class};
 use construct_transport::results::{
     Convergence, Res, Results, export_ready, isochrone, lts, model_meta, model_status, select_link,
@@ -26,6 +27,13 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+    register_3(r);
+}
+
+/// Part 1 of [`register`]: `transport.analysis.travel` to `transport.analysis.with_without`.
+fn register_1(r: &mut Registry) {
     let sc = || string("Scenario id or name (default: the active scenario).");
     let per = || {
         choice(
@@ -89,7 +97,7 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc()), ("period", per())], &[]),
         |s, p| {
             let (i, period) = pick(s, p)?;
-            let sid = s.sid(i);
+            let sid = s.sid(i)?;
             Ok(val(&export_ready(s.result(&sid, &period))))
         },
     );
@@ -126,6 +134,20 @@ pub(super) fn register(r: &mut Registry) {
         ),
         analysis_with_without,
     );
+}
+
+/// Part 2 of [`register`]: `transport.analysis.extent_test` to `transport.model.status`.
+fn register_2(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
+    let base = || {
+        string("The base (do-minimum) scenario to compare against (default the project's base).")
+    };
     r.add(
         "transport.analysis.extent_test",
         "The extent of assessment: which roads and junctions change enough with the development to be included.",
@@ -156,7 +178,7 @@ pub(super) fn register(r: &mut Registry) {
         params(vec![("scenario", sc())], &[]),
         |s, p| {
             let i = s.pick_scenario(p, "scenario")?;
-            Ok(val(&capital(&s.project.scenarios[i], &s.project.settings)))
+            Ok(val(&capital(scenario_at(&s.project.scenarios, i)?, &s.project.settings)))
         },
     );
     r.add(
@@ -213,6 +235,17 @@ pub(super) fn register(r: &mut Registry) {
             Ok(val(&model_status(&s.project, &period)))
         },
     );
+}
+
+/// Part 3 of [`register`]: `transport.model.meta` to `transport.model.meta`.
+fn register_3(r: &mut Registry) {
+    let sc = || string("Scenario id or name (default: the active scenario).");
+    let per = || {
+        choice(
+            &["AM", "PM"],
+            "Peak hour (default the project's current period).",
+        )
+    };
     r.add(
         "transport.model.meta",
         "The metadata every result carries: model status, convergence, data vintages, base and scenario years, growth basis and junction methods.",
@@ -238,10 +271,10 @@ fn node_exists(sc: &Scenario, id: &str) -> bool {
 // ------------------------------------------------------------------ travel and catchments
 
 /// `pickPath` of ui.js: the route, the base scenario's route and whether the times are congested.
-fn analysis_travel(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, period) = pick(s, p)?;
+fn analysis_travel(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, period) = pick(s, p)?;
     let (from, to) = (p.str("from")?, p.str("to")?);
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, idx)?;
     for (k, id) in [("from", from), ("to", to)] {
         if !node_exists(sc, id) {
             return Err(ApiError::not_found(format!(
@@ -275,8 +308,8 @@ fn analysis_travel(s: &mut Session, p: &Params) -> ApiResult {
             base_route = v;
         }
     }
-    out["base"] = base_route;
-    out["congested"] = json!(res.is_some());
+    put(&mut out, "base", base_route);
+    put(&mut out, "congested", json!(res.is_some()));
     Ok(out)
 }
 
@@ -305,7 +338,7 @@ fn catchment(sc: &Scenario, from: &str, mode: &str) -> Value {
     } else {
         (4.8, false, "walk")
     };
-    let v = kmh / 3.6;
+    let speed = kmh / 3.6;
     let ids: Vec<&str> = sc.nodes.keys().collect();
     let ix: std::collections::HashMap<&str, usize> =
         ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
@@ -319,35 +352,47 @@ fn catchment(sc: &Scenario, from: &str, mode: &str) -> Value {
         if c.rank >= 5.0 || l.status.is("closed") {
             continue;
         }
-        let t = net::len(sc, l) / v;
-        if !oneway || l.lanes_ab.num() > 0.0 {
-            adj[a].push((b, t));
+        let t = net::len(sc, l) / speed;
+        // a and b index `adj`, which has one list per junction
+        if (!oneway || l.lanes_ab.num() > 0.0)
+            && let Some(out) = adj.get_mut(a)
+        {
+            out.push((b, t));
         }
-        if !oneway || l.lanes_ba.num() > 0.0 {
-            adj[b].push((a, t));
+        if (!oneway || l.lanes_ba.num() > 0.0)
+            && let Some(out) = adj.get_mut(b)
+        {
+            out.push((a, t));
         }
     }
     let mut best = vec![f64::INFINITY; ids.len()];
     let mut heap = BinaryHeap::new();
-    if let Some(&s0) = ix.get(from) {
-        best[s0] = 0.0;
+    if let Some(&s0) = ix.get(from)
+        && let Some(b0) = best.get_mut(s0)
+    {
+        *b0 = 0.0;
         heap.push(Item(0.0, s0));
     }
-    while let Some(Item(t, i)) = heap.pop() {
-        if t > best[i] {
+    while let Some(Item(t, at)) = heap.pop() {
+        if best.get(at).is_none_or(|b| t > *b) {
             continue;
         }
-        for &(j, w) in &adj[i] {
-            if t + w < best[j] {
-                best[j] = t + w;
+        let Some(edges) = adj.get(at) else {
+            continue;
+        };
+        for &(j, w) in edges {
+            if let Some(bj) = best.get_mut(j)
+                && t + w < *bj
+            {
+                *bj = t + w;
                 heap.push(Item(t + w, j));
             }
         }
     }
     let mut times = Map::new();
-    for (i, t) in best.iter().enumerate() {
+    for (id, t) in ids.iter().zip(&best) {
         if t.is_finite() {
-            times.insert(ids[i].to_string(), json_number(*t));
+            times.insert((*id).to_string(), json_number(*t));
         }
     }
     json!({
@@ -361,10 +406,10 @@ fn catchment(sc: &Scenario, from: &str, mode: &str) -> Value {
 }
 
 /// `isoFrom(nid)` of ui.js.
-fn analysis_isochrone(s: &mut Session, p: &Params) -> ApiResult {
+fn analysis_isochrone(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
     let from = p.str("from")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     if !node_exists(sc, from) {
         return Err(ApiError::not_found(format!(
             "There is no junction {from} in this scenario."
@@ -380,21 +425,25 @@ fn analysis_isochrone(s: &mut Session, p: &Params) -> ApiResult {
         ApiError::not_found(format!("There is no junction {from} in this scenario."))
     })?;
     let mut out = val(&r);
-    out["mode"] = json!("drive");
-    out["basis"] = json!(if res.is_some() {
-        "Driving, using congested peak-hour travel times from the model."
-    } else {
-        "Driving at free-flow speeds; run the model for congested times."
-    });
+    put(&mut out, "mode", json!("drive"));
+    put(
+        &mut out,
+        "basis",
+        json!(if res.is_some() {
+            "Driving, using congested peak-hour travel times from the model."
+        } else {
+            "Driving at free-flow speeds; run the model for congested times."
+        }),
+    );
     Ok(out)
 }
 
 /// The 'sla' action of the road panel: both directions of a road combined, as the app does.
-fn analysis_select_link(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, period) = pick(s, p)?;
-    let res = held(s, i, &period)?;
-    let sc = &s.project.scenarios[i];
-    let limit = p.opt_f64("limit")?.map_or(50, |x| x.max(0.0) as usize);
+fn analysis_select_link(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, period) = pick(s, p)?;
+    let res = held(s, idx, &period)?;
+    let sc = scenario_at(&s.project.scenarios, idx)?;
+    let limit = p.opt_f64("limit")?.map_or(50, |x| f64_to_usize(x.max(0.0)));
     let none = || {
         ApiError::invalid_state(
             "Run the model again to enable select-link analysis (this result has no stored paths).",
@@ -454,13 +503,13 @@ fn analysis_select_link(s: &mut Session, p: &Params) -> ApiResult {
     }))
 }
 
-fn analysis_lts(s: &mut Session, p: &Params) -> ApiResult {
+fn analysis_lts(s: &mut Session, p: Params<'_>) -> ApiResult {
     let (i, period) = pick(s, p)?;
-    let sid = s.sid(i);
+    let sid = s.sid(i)?;
     let res = s.result(&sid, &period);
     let only: Option<std::collections::HashSet<String>> =
         p.opt_strings("links")?.map(|v| v.into_iter().collect());
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let mut m = Map::new();
     for l in sc
         .links
@@ -474,16 +523,15 @@ fn analysis_lts(s: &mut Session, p: &Params) -> ApiResult {
 
 // ------------------------------------------------------------------ with and without
 
-fn pair(s: &Session, p: &Params, base_key: &str) -> ApiResult<(usize, usize, String)> {
-    let b = match p.opt_str(base_key)? {
-        Some(k) => s.scenario_index(k)?,
-        None => {
-            let pr = &s.project;
-            pr.base
-                .as_str()
-                .and_then(|id| pr.scenarios.iter().position(|x| x.id == id))
-                .unwrap_or(0)
-        }
+fn pair(s: &Session, p: Params<'_>, base_key: &str) -> ApiResult<(usize, usize, String)> {
+    let b = if let Some(k) = p.opt_str(base_key)? {
+        s.scenario_index(k)?
+    } else {
+        let pr = &s.project;
+        pr.base
+            .as_str()
+            .and_then(|id| pr.scenarios.iter().position(|x| x.id == id))
+            .unwrap_or(0)
     };
     let o = s.pick_scenario(p, "scenario")?;
     Ok((b, o, s.period_of(p)?))
@@ -494,10 +542,10 @@ fn both(s: &Session, b: usize, o: usize, period: &str) -> ApiResult<()> {
     need_results(s, o, period)
 }
 
-fn analysis_difference(s: &mut Session, p: &Params) -> ApiResult {
-    let (b, o, period) = pair(s, p, "base")?;
-    both(s, b, o, &period)?;
-    let (bid, oid) = (s.sid(b), s.sid(o));
+fn analysis_difference(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (base, o, period) = pair(s, p, "base")?;
+    both(s, base, o, &period)?;
+    let (bid, oid) = (s.sid(base)?, s.sid(o)?);
     let opts = DiffOpts {
         k: p.opt_f64("k")?,
         zoom: p.opt_f64("zoom")?,
@@ -507,26 +555,26 @@ fn analysis_difference(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "base": bid, "scenario": oid, "period": period, "difference": val(&d) }))
 }
 
-fn analysis_with_without(s: &mut Session, p: &Params) -> ApiResult {
-    let (b, o, period) = pair(s, p, "without")?;
-    both(s, b, o, &period)?;
-    let (bid, oid) = (s.sid(b), s.sid(o));
+fn analysis_with_without(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (base, o, period) = pair(s, p, "without")?;
+    both(s, base, o, &period)?;
+    let (bid, oid) = (s.sid(base)?, s.sid(o)?);
     let w = with_without(s.result(&bid, &period), s.result(&oid, &period), None)
         .ok_or_else(|| ApiError::invalid_state("Run both scenarios first."))?;
     Ok(json!({ "without": bid, "scenario": oid, "period": period, "withWithout": val(&w) }))
 }
 
-fn analysis_extent_test(s: &mut Session, p: &Params) -> ApiResult {
-    let (b, o, period) = pair(s, p, "without")?;
-    both(s, b, o, &period)?;
-    let (bid, oid) = (s.sid(b), s.sid(o));
+fn analysis_extent_test(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (base, o, period) = pair(s, p, "without")?;
+    both(s, base, o, &period)?;
+    let (bid, oid) = (s.sid(base)?, s.sid(o)?);
     let opts = ExtentOpts {
         floor: p.opt_f64("floor")?,
         decade: p.opt_str("decade")?,
-        sc_without: Some(&s.project.scenarios[b]),
+        sc_without: Some(scenario_at(&s.project.scenarios, base)?),
     };
     let t = extent_test(
-        &s.project.scenarios[o],
+        scenario_at(&s.project.scenarios, o)?,
         s.result(&bid, &period),
         s.result(&oid, &period),
         opts,
@@ -535,9 +583,9 @@ fn analysis_extent_test(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "without": bid, "scenario": oid, "period": period, "extentTest": val(&t) }))
 }
 
-fn analysis_dev_distribution(s: &mut Session, p: &Params) -> ApiResult {
+fn analysis_dev_distribution(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sid = s.sid(i);
+    let sid = s.sid(i)?;
     let list: Vec<&Res> = ["AM", "PM"]
         .iter()
         .filter_map(|per| s.result(&sid, per))
@@ -548,21 +596,21 @@ fn analysis_dev_distribution(s: &mut Session, p: &Params) -> ApiResult {
         ));
     }
     Ok(
-        json!({ "scenario": sid, "distribution": val(&dev_distribution(Some(&s.project.scenarios[i]), &list)) }),
+        json!({ "scenario": sid, "distribution": val(&dev_distribution(Some(scenario_at(&s.project.scenarios, i)?), &list)) }),
     )
 }
 
-fn analysis_econ(s: &mut Session, p: &Params) -> ApiResult {
-    let (b, o, period) = pair(s, p, "base")?;
-    let (bid, oid) = (s.sid(b), s.sid(o));
+fn analysis_econ(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (base, o, period) = pair(s, p, "base")?;
+    let (bid, oid) = (s.sid(base)?, s.sid(o)?);
     let empty = Results::new();
     let rb = s.results.get(&bid).unwrap_or(&empty);
     let ro = s.results.get(&oid).unwrap_or(&empty);
     let e = econ(
         &s.project.settings,
-        &s.project.scenarios[b],
+        scenario_at(&s.project.scenarios, base)?,
         rb,
-        &s.project.scenarios[o],
+        scenario_at(&s.project.scenarios, o)?,
         ro,
         &period,
     )
@@ -585,7 +633,7 @@ const KPI_ROWS: [(&str, &str, bool); 7] = [
 ];
 
 /// The Compare scenarios tab: a column per scenario with the headline numbers, their change against the base, capital and economics.
-fn analysis_compare(s: &mut Session, p: &Params) -> ApiResult {
+fn analysis_compare(s: &mut Session, p: Params<'_>) -> ApiResult {
     let period = s.period_of(p)?;
     let pr = &s.project;
     let base_i = pr
@@ -593,33 +641,35 @@ fn analysis_compare(s: &mut Session, p: &Params) -> ApiResult {
         .as_str()
         .and_then(|id| pr.scenarios.iter().position(|x| x.id == id))
         .unwrap_or(0);
-    let base_id = pr.scenarios[base_i].id.clone();
+    let base_id = scenario_at(&pr.scenarios, base_i)?.id.clone();
     let rb = s.result(&base_id, &period);
     let empty = Results::new();
     let mut cols: Vec<Value> = Vec::new();
     for (i, sc) in pr.scenarios.iter().enumerate() {
-        let r = s.result(&sc.id, &period);
+        let res = s.result(&sc.id, &period);
         let mut kpi = Map::new();
-        if let Some(r) = r {
-            let k = val(&r.kpi);
+        if let Some(res) = res {
+            let kpis = val(&res.kpi);
             for (key, label, lower) in KPI_ROWS {
-                let v = k.get(key).and_then(Value::as_f64);
-                let b = rb
+                let value = kpis.get(key).and_then(Value::as_f64);
+                let base_value = rb
                     .filter(|_| i != base_i)
-                    .and_then(|b| val(&b.kpi).get(key).and_then(Value::as_f64));
-                let dv = match (v, b) {
-                    (Some(v), Some(b)) => Some(v - b),
+                    .and_then(|base_value| val(&base_value.kpi).get(key).and_then(Value::as_f64));
+                let dv = match (value, base_value) {
+                    (Some(value), Some(base_value)) => Some(value - base_value),
                     _ => None,
                 };
                 let dir = match dv {
-                    Some(d) if d.abs() >= 1e-6 => {
-                        Some(if (d < 0.0) == lower { "down" } else { "up" })
-                    }
+                    Some(change) if change.abs() >= 1e-6 => Some(if (change < 0.0) == lower {
+                        "down"
+                    } else {
+                        "up"
+                    }),
                     _ => None,
                 };
                 kpi.insert(
                     key.to_string(),
-                    json!({ "label": label, "value": v, "change": dv, "direction": dir }),
+                    json!({ "label": label, "value": value, "change": dv, "direction": dir }),
                 );
             }
         }
@@ -628,12 +678,19 @@ fn analysis_compare(s: &mut Session, p: &Params) -> ApiResult {
         } else {
             let ro = s.results.get(&sc.id).unwrap_or(&empty);
             let rbase = s.results.get(&base_id).unwrap_or(&empty);
-            econ(&pr.settings, &pr.scenarios[base_i], rbase, sc, ro, &period)
-                .map_or(Value::Null, |x| val(&x))
+            econ(
+                &pr.settings,
+                scenario_at(&pr.scenarios, base_i)?,
+                rbase,
+                sc,
+                ro,
+                &period,
+            )
+            .map_or(Value::Null, |x| val(&x))
         };
         cols.push(json!({
             "scenario": sc.id, "name": sc.name.as_str(), "base": i == base_i,
-            "year": r.map_or_else(|| year_of(Some(sc), &pr.settings), |r| r.year), "run": r.is_some(), "stale": r.is_some_and(|r| r.stale),
+            "year": res.map_or_else(|| year_of(Some(sc), &pr.settings), |res| res.year), "run": res.is_some(), "stale": res.is_some_and(|res| res.stale),
             "kpi": kpi, "capital": val(&capital(sc, &pr.settings)), "econ": e,
         }));
     }
@@ -641,7 +698,7 @@ fn analysis_compare(s: &mut Session, p: &Params) -> ApiResult {
 }
 
 /// The sensitivity pack the way the Report tab runs it: no discount-rate row unless asked for.
-fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResult {
+fn analysis_sensitivity(s: &mut Session, p: Params<'_>, sink: Sink<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
     let wo_i = match p.opt_str("without")? {
         Some(k) => Some(s.scenario_index(k)?),
@@ -650,8 +707,8 @@ fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResul
     let with_econ = p.flag("withEcon")?;
     let names = p.opt_bool("junctionNames")?.unwrap_or(true);
     let (sid, sc_name) = (
-        s.sid(i),
-        s.project.scenarios[i]
+        s.sid(i)?,
+        scenario_at(&s.project.scenarios, i)?
             .name
             .as_str()
             .unwrap_or("")
@@ -669,7 +726,7 @@ fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResul
         project, results, ..
     } = &mut *s;
     let project: &Project = project;
-    let sc = &project.scenarios[i];
+    let sc = scenario_at(&project.scenarios, i)?;
     let name_of = |id: &str| -> String {
         let r = results.get(&sc.id).and_then(|m| m.values().next());
         match r {
@@ -690,8 +747,10 @@ fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResul
     };
     let econ_base = if with_econ {
         Some(EconBase {
-            sc: &project.scenarios[base_i],
-            res: results.get(&project.scenarios[base_i].id).unwrap_or(&empty),
+            sc: scenario_at(&project.scenarios, base_i)?,
+            res: results
+                .get(&scenario_at(&project.scenarios, base_i)?.id)
+                .unwrap_or(&empty),
             opt_res: results.get(&sid).unwrap_or(&empty),
         })
     } else {
@@ -700,7 +759,9 @@ fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResul
     let opts = SensOpts {
         periods: p.opt_strings("periods")?,
         tests: p.opt_strings("tests")?,
-        without: wo_i.map(|w| &project.scenarios[w]),
+        without: wo_i
+            .map(|w| scenario_at(&project.scenarios, w))
+            .transpose()?,
         econ_base,
         mode_share: match p.opt_f64("modeShare")? {
             Some(x) => construct_transport::jsnum::Num::number(x),
@@ -723,9 +784,9 @@ fn analysis_sensitivity(s: &mut Session, p: &Params, sink: Sink<'_>) -> ApiResul
     Ok(json!({ "scenario": sid, "name": sc_name, "sensitivity": val(&table) }))
 }
 
-fn analysis_msm_check(s: &mut Session, p: &Params) -> ApiResult {
-    let (b, o, period) = pair(s, p, "base")?;
-    let (bid, oid) = (s.sid(b), s.sid(o));
+fn analysis_msm_check(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (base, o, period) = pair(s, p, "base")?;
+    let (bid, oid) = (s.sid(base)?, s.sid(o)?);
     let msm = s.project.data.get().and_then(|d| d.msm.get());
     let m = msm_check(
         s.result(&bid, &period),
@@ -736,9 +797,9 @@ fn analysis_msm_check(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "base": bid, "scenario": oid, "period": period, "msmCheck": val(&m) }))
 }
 
-fn model_meta_cmd(s: &mut Session, p: &Params) -> ApiResult {
-    let (i, period) = pick(s, p)?;
-    let sid = s.sid(i);
+fn model_meta_cmd(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let (idx, period) = pick(s, p)?;
+    let sid = s.sid(idx)?;
     let c = match s.result(&sid, &period) {
         Some(r) => Convergence {
             converged: r.converged,
@@ -759,7 +820,7 @@ fn model_meta_cmd(s: &mut Session, p: &Params) -> ApiResult {
     };
     let m = model_meta(
         &s.project,
-        Some(&s.project.scenarios[i]),
+        Some(scenario_at(&s.project.scenarios, idx)?),
         &period,
         &s.project.settings,
         c,

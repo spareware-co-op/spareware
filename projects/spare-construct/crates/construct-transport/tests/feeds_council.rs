@@ -3,6 +3,25 @@
 //! presets that drop old counts, replacing what an earlier import of the layer put in the project).
 //! Recorded by tools/transport-truth/gen-feeds.mjs (expected/feeds-council.json, fixtures/data/council-*.json).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod feeds_support;
 mod support;
 
@@ -32,7 +51,7 @@ fn pasted_addresses_are_cleaned_as_recorded() {
             }
             (Err(m), Some(t)) => {
                 assert_eq!(m, t.as_str().unwrap(), "error for {url:?}");
-                assert!(rec["requests"].as_array().unwrap().is_empty());
+                assert_eq!(rec["requests"], json!([]), "no requests");
             }
             (g, t) => panic!("{url:?}: got {g:?}, recorded {t:?}"),
         }
@@ -81,9 +100,9 @@ fn layers_are_read_as_recorded() {
         if let Some(t) = rec.get("thrown") {
             let mut read = CouncilRead::new(url, 30_000.0, &MetaCache::new()).unwrap();
             let log = rec["requests"].as_array().unwrap();
-            let (used, res) = replay(&mut read, log, 0, &label);
+            let (used, outcome) = replay(&mut read, log, 0, &label);
             all_used(log, used, &label);
-            let err = match res {
+            let err = match outcome {
                 Err(m) => m,
                 Ok(()) => read.finish().expect_err("not a layer"),
             };
@@ -125,8 +144,8 @@ fn imports_match() {
         }
         all_used(log, k, &label);
         assert_eq!(json!(statuses), rec["statuses"], "{label}: status lines");
-        let res = imp.finish(&mut p);
-        assert_close(&serde_json::to_value(&res).unwrap(), &rec["result"], &format!("{label} result"));
+        let outcome = imp.finish(&mut p);
+        assert_close(&serde_json::to_value(&outcome).unwrap(), &rec["result"], &format!("{label} result"));
         assert_close(&p.data.get().unwrap().extra["counts"], &rec["counts"], &format!("{label} counts"));
         assert_close(&p.extra.get("feeds").cloned().unwrap_or_else(|| json!({ "vintage": {} })), &rec["feeds"], &format!("{label} feeds"));
     }

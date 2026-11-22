@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "id": "meshes/0002-union-measured-through-rounding",
+  "source": {
+    "oracle": {
+      "oracle": "manifold",
+      "signature": "mesh.union/manifold/unmeasured/tetrahedra",
+      "outcome": "ours"
+    }
+  },
+  "fixed_by": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
+  "speed": "fast",
+  "log": "d9d9f8da534b474643424f5286010101805834878201000001a70118400210031902800419190005190c800601073821831200007173706172652d6b69742066697874757265a01ab36d7aa3861401018059018f868150727272727272727272727272727272726a6d6573682e756e696f6e01805901597901567b226964223a313839312c2266616d696c79223a2274657472616865647261222c226f70223a22756e696f6e222c2261223a7b227665727469636573223a5b5b392c392c305d2c5b352c312c305d2c5b332c372c31315d2c5b352c31302c385d5d2c22747269616e676c6573223a5b5b302c322c315d2c5b302c312c335d2c5b312c322c335d2c5b302c332c325d5d7d2c2262223a7b227665727469636573223a5b5b342c342c365d2c5b382c342c365d2c5b382c31302c365d2c5b342c31302c365d2c5b342c342c385d2c5b382c342c385d2c5b382c31302c385d2c5b342c31302c385d5d2c22747269616e676c6573223a5b5b302c322c315d2c5b302c332c325d2c5b342c352c365d2c5b342c362c375d2c5b302c312c355d2c5b302c352c345d2c5b312c322c365d2c5b312c362c355d2c5b322c332c375d2c5b322c372c365d2c5b332c302c345d2c5b332c342c375d5d7d7d821bffffffffffffffff1bffffffffffffffff1a0fc7d5d486020101805824820258209db4385cbabaa2333d3e8f5dd11a796414f8d15e5d4b92bc05b79852cda1d0581a4cbd3fdd",
+  "expect": [
+    {
+      "edition": "pre-edition",
+      "operations": {
+        "mesh.union": 1
+      },
+      "expect": {
+        "ok": {
+          "hash": "d85bd84948a0d0c7c01a48b1496389233c0d87eaf8347b59e60bdc1562c90988",
+          "work": {
+            "work": 0,
+            "logical_bytes": 0
+          },
+          "measures": {
+            "volume6": null,
+            "area2": null,
+            "counts": {
+              "bodies": 0,
+              "shells": 0,
+              "faces": 0,
+              "edges": 0,
+              "vertices": 0
+            },
+            "box": null,
+            "exactness": "exact"
+          }
+        }
+      }
+    }
+  ],
+  "status": "pass",
+  "history": []
+}

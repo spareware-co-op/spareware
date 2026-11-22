@@ -27,7 +27,9 @@ use std::process::exit;
 
 use divan::Bencher;
 use divan::counter::ItemsCount;
-use geom_bench::catalogue::{Case, GrowthCase, Prepared, cases_in, growth_cases};
+use geom_bench::catalogue::{
+    Case, GrowthCase, Prepared, SCENARIOS, cases_in, full_scenario, growth_cases,
+};
 use geom_bench::golden;
 
 fn main() {
@@ -149,6 +151,36 @@ fn exact_sum(bencher: Bencher, case: Case) {
 #[divan::bench(args = cases_in("generated"))]
 fn generated(bencher: Bencher, case: Case) {
     time_case(bencher, case);
+}
+
+/// The flat boolean's scenarios as the count gates run them (piece G140).
+#[divan::bench(args = cases_in("scenario"), sample_count = 10)]
+fn scenario(bencher: Bencher, case: Case) {
+    time_case(bencher, case);
+}
+
+/// The flat boolean's scenarios at full size, the nightly run against Spare Construct's targets
+/// (28.14): a door moved in under 16 ms, 300 openings cut in under 20 ms. Each is first checked
+/// at its reduced size against `golden.txt`; at full size it has no digest, so one run must
+/// succeed before it is timed.
+#[divan::bench(args = SCENARIOS, sample_count = 3, sample_size = 1)]
+fn scenario_full(bencher: Bencher, op: &str) {
+    let reduced = format!("scenario/{op}/typical");
+    let Some(mut checked) = geom_bench::catalogue::prepare_named(&reduced) else {
+        eprintln!("geom-bench: no benchmark named {reduced}");
+        exit(2);
+    };
+    if let Err(message) = golden::check(&reduced, &checked.run()) {
+        eprintln!("geom-bench: golden digests differ: {message}");
+        exit(1);
+    }
+    let Some(mut prepared) = full_scenario(op) else {
+        eprintln!("geom-bench: scenario {op} at full size is unknown or did not succeed");
+        exit(1);
+    };
+    bencher
+        .counter(ItemsCount::new(prepared.len()))
+        .bench_local(|| prepared.pass());
 }
 
 /// The scale benchmarks at n, 2n and 4n limbs.

@@ -18,9 +18,9 @@
 //!   printed makes it return the same seed, and the generators in [`crate::rng`] then give the same
 //!   inputs on every target. A seed [`fixed`] printed replays by itself: the test always uses it.
 //! - **A seed is never invented here.** It is the test's fixed default or the value of
-//!   `SPAREKIT_SEED`; nothing reads a clock or the operating system's random source. Pull requests
-//!   run with the fixed defaults; a nightly job sets `SPAREKIT_SEED` to a fresh value, and the
-//!   printed line logs it (28.17).
+//!   `SPAREKIT_SEED`; nothing reads a clock or the operating system's random source. The suite
+//!   runs with the fixed defaults; an oracle job of `kernel-oracles.yml` sets `SPAREKIT_SEED` to its
+//!   run's number, and the printed line logs it (28.17).
 //! - **A malformed override is an error, never ignored.** A run that asked for one seed and silently
 //!   got another would replay the wrong case, so [`resolve`] returns [`SeedError`] instead.
 //!

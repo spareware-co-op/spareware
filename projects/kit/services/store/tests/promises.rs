@@ -124,6 +124,31 @@ async fn a_dropped_transaction_leaves_nothing_and_does_no_harm() {
     );
 }
 
+/// A writer that dies between the two phases of its commit leaves its locks behind until their
+/// time to live runs out: three seconds in tikv-client for a small transaction. A read that meets
+/// one waits for that and reads past it. Issue #762: a server killed mid-commit left its locks on
+/// a project's `head`, and the next page read gave up after tikv-client's default 1.5 s.
+#[tokio::test]
+#[ignore = "needs a running TiKV"]
+async fn a_read_waits_out_the_locks_of_a_writer_that_died() {
+    let store = tikv().await;
+    let scope = fresh("dead-writer");
+    let scenario = fail::FailScenario::setup();
+    // Stops each commit after its locks are written, as killing the writer there would.
+    fail::cfg("after-prewrite", "return").unwrap();
+    let mut txn = store.begin().await.unwrap();
+    txn.put(scope.head(), b"1".to_vec()).await.unwrap();
+    txn.put(scope.log(1), b"a".to_vec()).await.unwrap();
+    let died = txn.commit().await;
+    fail::remove("after-prewrite");
+    assert!(died.is_err(), "the commit should stop after its prewrite");
+
+    let mut snapshot = store.snapshot().await.unwrap();
+    assert_eq!(snapshot.get(&scope.head()).await, Ok(None));
+    assert_eq!(snapshot.scan(&list::log(&scope)).await, Ok(vec![]));
+    scenario.teardown();
+}
+
 #[tokio::test]
 #[ignore = "needs a running TiKV"]
 async fn garbage_collection_leaves_the_live_values() {

@@ -114,7 +114,7 @@ Section numbers match the decision note [G01](../../kit/notes/G01-geometry-kerne
 | [26. How it grows](architecture/26-how-it-grows.md) | What can be added and how, versions and editions, and the map for people and AI |
 | [27. Crates and folders](architecture/27-crates-folders.md) | Every crate, its one job, its dependencies, and the rules for readable code |
 | [28. Testing](architecture/28-testing.md) | Unit, property and fuzz tests, proofs, oracles, corpora, determinism hashes, benchmarks |
-| [29. Sources and licences](architecture/29-sources-licences.md) | What we may take from each source, under what conditions, and the patents to avoid |
+| [29. Sources and licences](architecture/29-sources-licences.md) | What we may take from each source, under what conditions, and the patents known |
 | [30. Build order](architecture/30-build-order.md) | Every build piece, in order, with what done means, and the gate closing each phase |
 | [31. Risks](architecture/31-risks.md) | What could go wrong, what we do about it, and every open technical question |
 | [32. Decisions for the owner](architecture/32-decisions.md) | The twelve choices the chapters raise for an owner to settle |

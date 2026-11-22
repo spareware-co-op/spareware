@@ -54,8 +54,11 @@ use crate::recursion::ty::{ClosureKey, ItemId, NodeId, Ty};
 
 /// How many copies of one function the graph holds before it is reported: a bound that keeps the
 /// graph finite, not a rule of the code. With the Phase 2 pieces through G62 the generic
-/// `IntoIterator::into_iter` passed 512 copies; 2048 leaves room for the kernel to grow.
-pub const MAX_COPIES: usize = 2048;
+/// `IntoIterator::into_iter` passed 512 copies, so the bound was set at 2048. The Phase 4 train
+/// with the Phase 7 intersection pieces up to G246 needs 2,135 copies of it (measured
+/// 2026-11-14); 8192 again leaves four times the room for the kernel to grow. Raising it changes
+/// no answer: every copy is still checked, and a function past the bound is still reported.
+pub const MAX_COPIES: usize = 8192;
 
 /// How many times one instance's body is checked before it is reported.
 pub const MAX_RUNS: usize = 64;

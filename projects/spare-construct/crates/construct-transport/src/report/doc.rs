@@ -5,11 +5,13 @@ use super::consts::{D1_SHORT, disclaimer_text};
 use super::shared::model_version;
 use super::texts::{CSP, CSS, DOC_SCRIPT};
 use super::Rep;
+use crate::jsnum::f64_to_i64;
 use crate::results::iso_day_of_ms;
 use crate::util::esc;
 
 /// `cssStr(s)`: a CSS string literal. '<' and '>' become CSS escapes, so a scenario name such as '</style>' cannot close the
 /// <style> element; control characters are dropped.
+#[must_use]
 pub fn css_str(s: &str) -> String {
     let s = s.replace('\\', "\\\\").replace('"', "\\\"");
     // /[\r\n\f]+/g becomes a space, then the other control characters go
@@ -32,16 +34,19 @@ pub fn css_str(s: &str) -> String {
 }
 
 /// `new Date(ms).toISOString().slice(0, 16).replace('T', ' ')`: the UTC date and time to the minute.
+#[must_use]
 pub fn iso_minute(ms: f64) -> String {
     let day = iso_day_of_ms(ms).unwrap_or_default();
     let t = ms.trunc().rem_euclid(86_400_000.0);
     let h = (t / 3_600_000.0).floor();
     let m = ((t - h * 3_600_000.0) / 60_000.0).floor();
-    format!("{day} {:02}:{:02}", h as i64, m as i64)
+    // h is a whole number in 0..24 and m in 0..60, which i64 holds exactly
+    format!("{day} {:02}:{:02}", f64_to_i64(h), f64_to_i64(m))
 }
 
-impl<'a> Rep<'a> {
+impl Rep<'_> {
     /// `fileBase(P)`: the project's name as a file-name part.
+    #[must_use]
     pub fn file_base(&self) -> String {
         let name = self.project.name.as_str().unwrap_or("");
         let name = if name.is_empty() { "project" } else { name };
@@ -64,21 +69,25 @@ impl<'a> Rep<'a> {
     }
 
     /// `ymd()`: today's date as YYYYMMDD.
+    #[must_use]
     pub fn ymd(&self) -> String {
         iso_day_of_ms(self.now_ms).unwrap_or_default().replace('-', "")
     }
 
     /// `reportName(P)`: the report's file name.
+    #[must_use]
     pub fn report_name(&self) -> String {
         format!("{}-ITA-report-{}.html", self.file_base(), self.ymd())
     }
 
     /// `packName(P)`: the data pack's file name.
+    #[must_use]
     pub fn pack_name(&self) -> String {
         format!("{}-ITA-datapack-{}.zip", self.file_base(), self.ymd())
     }
 
     /// `Report.html(P, opts)`: a complete standalone HTML document.
+    #[must_use]
     pub fn html(&self, opts: &BuildOpts) -> String {
         self.doc(&self.build(opts))
     }
@@ -90,7 +99,7 @@ impl<'a> Rep<'a> {
             .flat_map(|i| {
                 self.rep_periods(i)
                     .into_iter()
-                    .filter_map(move |p| self.results[i].get(p).map(|r| r.ts))
+                    .filter_map(move |p| self.results.get(i).and_then(|res| res.get(p)).map(|r| r.ts))
                     .collect::<Vec<_>>()
             })
             .filter(|t| *t != 0.0 && !t.is_nan())
@@ -137,7 +146,7 @@ impl<'a> Rep<'a> {
             foot_css = foot_css,
             block_css = block_css,
             file = esc(&self.report_name()),
-            d01 = if draft { 1 } else { 0 },
+            d01 = i32::from(draft),
             blocked = if why.is_some() { " data-blocked=\"1\"" } else { "" },
             bar = bar,
             wm = if draft { "<div class=\"rp-watermark\" aria-hidden=\"true\">DRAFT</div>" } else { "" },

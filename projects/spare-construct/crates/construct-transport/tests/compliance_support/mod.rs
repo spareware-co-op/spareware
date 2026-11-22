@@ -23,7 +23,6 @@ pub fn fixture(name: &str) -> V {
 
 /// `o[path] = v` for a dotted path: a step that is not there becomes an object, a step on an array is an index.
 pub fn set_path(root: &mut V, path: &str, value: V) {
-    let steps: Vec<&str> = path.split('.').collect();
     fn go(cur: &mut V, steps: &[&str], value: V) {
         let k = steps[0];
         if steps.len() == 1 {
@@ -62,6 +61,7 @@ pub fn set_path(root: &mut V, path: &str, value: V) {
             _ => v.set(k, value),
         }
     }
+    let steps: Vec<&str> = path.split('.').collect();
     go(root, &steps, value);
 }
 
@@ -110,7 +110,7 @@ pub fn expected(name: &str) -> Value {
 }
 
 /// The `ok` answer of a recorded case; panics with the recorded error when the prototype threw (use [`case_error`] for those).
-pub fn case_ok<'a>(case: &'a Value) -> &'a Value {
+pub fn case_ok(case: &Value) -> &Value {
     case.get("ok").unwrap_or_else(|| panic!("case {} has no ok answer: {}", case["id"], case))
 }
 

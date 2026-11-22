@@ -456,16 +456,26 @@ fn oracle_decimal(text: &str) -> Result<BigRational, DecimalError> {
     if value.is_zero() {
         return Ok(value);
     }
-    // The exponent in lowest terms: value = m·10^e with m not divisible by 10.
+    // The exponent in lowest terms: value = m·10^e with m not divisible by 10. The value is n/d in
+    // lowest terms (a rational is kept reduced). A whole number loses a factor 10 while it has one;
+    // otherwise e = −k for the least k with n·10^k whole, that is d | 10^k, n and d being coprime.
+    // Integer steps, not a rational divided or multiplied by 10 and reduced by a gcd at each step:
+    // those gcds of numbers of up to 1,400 bits were nearly all of this test's time.
+    let ten = BigInt::from(10);
     let mut e = 0i64;
-    let mut v = value.clone();
-    while v.is_integer() && (v.to_integer() % BigInt::from(10)).is_zero() {
-        v /= int(10);
-        e += 1;
-    }
-    while !v.is_integer() {
-        v *= int(10);
-        e -= 1;
+    if value.is_integer() {
+        let mut m = value.to_integer();
+        while m.is_multiple_of(&ten) {
+            m /= &ten;
+            e += 1;
+        }
+    } else {
+        let d = value.denom();
+        let mut p = BigInt::one();
+        while !p.is_multiple_of(d) {
+            p *= &ten;
+            e -= 1;
+        }
     }
     if !(-340..=340).contains(&e) {
         return Err(DecimalError::ExponentRange);
@@ -1094,8 +1104,39 @@ fn out_of_range_coordinates_carry_their_exact_value() {
     assert!(far > 50, "only {far} saturated values");
 }
 
-#[test]
-fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
+/// Values at the ends of i128 saturate exactly as documented: one test for the top, one for the
+/// bottom, and one for the frame's edge in each unit (decision 32.78: together they were too long
+/// for one Miri gate part).
+mod values_at_the_ends_of_i128_saturate_exactly_as_documented {
+    #[test]
+    fn at_the_top() {
+        super::ends_of_i128(0);
+    }
+
+    #[test]
+    fn at_the_bottom() {
+        super::ends_of_i128(1);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_metres() {
+        super::ends_of_i128(2);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_us_survey_feet() {
+        super::ends_of_i128(3);
+    }
+
+    #[test]
+    fn at_the_frames_edge_in_steps() {
+        super::ends_of_i128(4);
+    }
+}
+
+/// Part `part` of `values_at_the_ends_of_i128_saturate_exactly_as_documented`: 0 the top, 1 the
+/// bottom, 2 to 4 the frame's edge in metres, US survey feet and steps.
+fn ends_of_i128(part: usize) {
     // One unit is one step (1/6,400,000 m at q0), so x = k_d·E exactly in a Ground frame with no
     // rotation and k = 1/k_d. 2^128 − 3 = 76,439·4,451,685,225,093,714,772,084,598,273,548,427 puts
     // x on MAX − 1/2 for k_d = 76,439, whose even neighbour MAX − 1 is reported as it is; and
@@ -1123,7 +1164,7 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
     };
     let out = |value| Err(NumError::OutOfRange { value });
     let top = ground(76_439);
-    for (e, want) in [
+    let tops = [
         ("2225842612546857386042299136774213.5", out(i128::MAX - 1)),
         ("2225842612546857386042299136774213.6", out(i128::MAX)),
         (
@@ -1132,13 +1173,14 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
         ),
         ("2225842612546857386042299136774214", out(i128::MAX)),
         ("1e37", out(i128::MAX)),
-    ] {
+    ];
+    for (e, want) in tops.into_iter().filter(|_| part == 0) {
         let (g, w) = at(&top, e);
         assert_eq!(g, w, "{e}");
         assert_eq!(g, want, "{e}");
     }
     let bottom = ground(u64::MAX);
-    for (e, want) in [
+    let bottoms = [
         ("-9223372036854775808.5", out(i128::MIN)),
         // MAX + 1/2, a tie whose even neighbour MAX + 1 is beyond i128: saturated.
         ("9223372036854775808.5", out(i128::MAX)),
@@ -1148,13 +1190,15 @@ fn values_at_the_ends_of_i128_saturate_exactly_as_documented() {
         ),
         ("-9223372036854775809", out(i128::MIN)),
         ("1", out(i128::from(u64::MAX))),
-    ] {
+    ];
+    for (e, want) in bottoms.into_iter().filter(|_| part == 1) {
         let (g, w) = at(&bottom, e);
         assert_eq!(g, w, "{e}");
         assert_eq!(g, want, "{e}");
     }
     // One step from the frame's edge either way, in every unit.
-    for unit in [LinearUnit::METRE, LinearUnit::US_SURVEY_FOOT, one_step] {
+    let units = [LinearUnit::METRE, LinearUnit::US_SURVEY_FOOT, one_step];
+    for (_, unit) in units.into_iter().enumerate().filter(|(k, _)| part == 2 + k) {
         let g = FrameRecord::map(NZTM, GridStep::Q0, [5, -7, 11])
             .unwrap()
             .with_linear_unit(unit);

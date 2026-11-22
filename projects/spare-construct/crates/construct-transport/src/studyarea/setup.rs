@@ -4,7 +4,7 @@
 //! Each step is independent: one that fails (a map server that does not answer) is reported in the warnings and the others still run. The downloads go through
 //! the host's [`Net`]; nothing here waits or sleeps.
 
-use super::counts::{LoadOpts, counts_of, data_d, load_all};
+use super::counts::{LoadOpts, counts_of, crashes_of, data_d, load_all};
 use super::mapbox::{center, contains, extend, latlng_bounds, pad};
 use crate::assign::assign;
 use crate::calibrate::{FitOpts, fit, stored_res};
@@ -13,7 +13,7 @@ use crate::datahub::{Data, calibration, gateways_from_counts};
 use crate::edit::IdSource;
 use crate::edit::history::mark_stale;
 use crate::importers::{Bounds, OVERPASS, OsmOpts, OverpassOpts, auto_gateways, osm_to_scenario, overpass_query};
-use crate::jsnum::{Maybe, js_trim, json_number, math_max, math_round, number_to_js_string, value_truthy};
+use crate::jsnum::{Maybe, js_trim, json_number, math_max, math_round, number_to_js_string, usize_to_f64, value_truthy};
 use crate::landuse::{self, BuildOpts, StudyBox};
 use crate::project::{Project, Scenario};
 use crate::results::AssignOpts;
@@ -44,20 +44,23 @@ pub struct Estimate {
 
 impl Estimate {
     /// The estimate as JSON.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         json!({ "km2": json_number(self.km2), "warn": self.warn, "ok": self.ok, "minutes": json_number(self.minutes) })
     }
 }
 
 /// `estimate(bounds)`: the area of a box in km\u{b2}; warns above 36 km\u{b2} (with a rough time) and refuses above 120 km\u{b2}.
+#[must_use]
 pub fn estimate(b: &Bx) -> Estimate {
     let c = center(b);
-    let w = dist(&[c[0], b.w], &[c[0], b.e]);
-    let h = dist(&[b.s, c[1]], &[b.n, c[1]]);
-    let a = w * h / 1e6;
+    let width = dist(&[c[0], b.w], &[c[0], b.e]);
+    let height = dist(&[b.s, c[1]], &[b.n, c[1]]);
+    let a = width * height / 1e6;
     let km2 = if a < 1.0 { math_round(a * 100.0) / 100.0 } else { math_round(a * 10.0) / 10.0 };
     let mins = math_max(1.0, math_round(a / 12.0));
-    let warn = if !(a > 0.0) {
+    // !(a > 0): no size, NaN included
+    let warn = if a <= 0.0 || a.is_nan() {
         Some("The study area has no size. Draw a box around the area you want to model.".to_string())
     } else if a > MAX_KM2 {
         Some(format!("That area is {} km\u{b2}, too large to set up in one go (the limit is {} km\u{b2}). Zoom in or draw a smaller study area.", fmt::num(a, 0), number_to_js_string(MAX_KM2)))
@@ -77,6 +80,10 @@ pub fn estimate(b: &Bx) -> Estimate {
 
 /// What a setup is asked to do (the `opts` of `setup`): every step on, except service lanes and fitting to counts.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "the prototype's setup options: nine independent step switches, each read from its own key of the options"
+)]
 pub struct SetupOpts {
     /// Download the roads.
     pub roads: bool,
@@ -143,6 +150,7 @@ pub struct SetupOut {
 
 impl SetupOut {
     /// The answer as JSON, in the prototype's shape.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let obj = |l: &[(String, Value)]| Value::Object(l.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<Map<_, _>>());
         json!({
@@ -154,6 +162,10 @@ impl SetupOut {
 }
 
 /// `Importers.overpass(b, opts)`: downloads the roads of a box, trying the Overpass servers in turn. Gives the server's answer (`{ elements }`), or the last server's complaint.
+///
+/// # Errors
+///
+/// The last server's complaint when no Overpass server gives an answer.
 pub fn roads_download(net: &mut dyn Net, b: &Bx, opts: &OverpassOpts, status: &mut dyn FnMut(&str)) -> Result<Value, String> {
     let q = overpass_query(&Bounds { south: b.s, west: b.w, north: b.n, east: b.e }, opts);
     let body = format!("data={}", crate::census::encode_uri_component(&q));
@@ -177,13 +189,18 @@ fn in_bounds(b: &Bx, z: &crate::project::Zone) -> bool {
     lat.is_finite() && lng.is_finite() && contains(b, lat, lng)
 }
 
-fn res_object(sc: &mut Scenario) -> &mut Map<String, Value> {
-    if !matches!(sc.res, Maybe::Set(Value::Object(_))) {
-        sc.res = Maybe::Set(Value::Object(Map::new()));
-    }
-    match &mut sc.res {
-        Maybe::Set(Value::Object(m)) => m,
-        _ => unreachable!("made an object"),
+// sc.res as an object (anything else is replaced by {}), with res[period] = value when one is given
+fn set_res(sc: &mut Scenario, period: Option<&str>, value: Value) {
+    if let Maybe::Set(Value::Object(m)) = &mut sc.res {
+        if let Some(k) = period {
+            m.insert(k.to_string(), value);
+        }
+    } else {
+        let mut m = Map::new();
+        if let Some(k) = period {
+            m.insert(k.to_string(), value);
+        }
+        sc.res = Maybe::Set(Value::Object(m));
     }
 }
 
@@ -191,18 +208,48 @@ fn active_index(p: &Project) -> usize {
     p.active.as_str().and_then(|id| p.scenarios.iter().position(|s| s.id == id)).unwrap_or(0)
 }
 
-// `Engine.assign(sc, { period })`, stored as the scenario's result for the period
-fn run_period(p: &mut Project, idx: usize, period: &str, progress: Option<&mut dyn FnMut(f64, f64, &str)>) {
+// A model run's progress callback: (iteration, gap, message)
+type Progress<'a> = &'a mut (dyn FnMut(f64, f64, &str) + 'a);
+
+// `Engine.assign(sc, { period })`, stored as the scenario's result for the period (nothing for a scenario that is not there)
+fn run_period(p: &mut Project, idx: usize, period: &str, progress: Option<Progress<'_>>) {
     let opts = AssignOpts { period: Some(period.to_string()), ..Default::default() };
-    let s = p.settings.clone();
+    let settings = p.settings.clone();
     let mut adapt = progress;
     let mut cb = |it: u32, gap: f64, msg: &str| {
         if let Some(f) = adapt.as_deref_mut() {
             f(f64::from(it), gap, msg);
         }
     };
-    let res = assign(p, &p.scenarios[idx], &s, &opts, Some(&mut cb));
-    res_object(&mut p.scenarios[idx]).insert(period.to_string(), serde_json::to_value(&res).expect("a result serialises"));
+    let Some(sc) = p.scenarios.get(idx) else { return };
+    let res = assign(p, sc, &settings, &opts, Some(&mut cb));
+    // A result always serialises (serde_json writes a non-finite number as null), so the null fallback never happens
+    let value = serde_json::to_value(&res).unwrap_or(Value::Null);
+    if let Some(sc) = p.scenarios.get_mut(idx) {
+        set_res(sc, Some(period), value);
+    }
+}
+
+// The ids of the active scenario's nodes, links and zones before the setup changed it
+struct Before {
+    nodes: HashSet<String>,
+    links: HashSet<String>,
+    zones: HashSet<String>,
+}
+
+// What a setup carries from step to step
+struct Steps<'a> {
+    p: &'a mut Project,
+    ids: &'a mut dyn IdSource,
+    net: &'a mut dyn Net,
+    dl: &'a mut Downloads,
+    area: Bx,
+    opts: SetupOpts,
+    sc_idx: usize,
+    status: &'a mut dyn FnMut(&str, f64),
+    out: SetupOut,
+    changed: bool,
+    removed: Vec<String>,
 }
 
 /// `setup(bounds, opts, onStatus)`: builds a working model of an area in the current scenario. Roads from OpenStreetMap, then gateways, counts and crashes,
@@ -210,6 +257,10 @@ fn run_period(p: &mut Project, idx: usize, period: &str, progress: Option<&mut d
 /// inside the new box instead of adding to it.
 ///
 /// `status` is called with what is being done and how far along it is (0 to 1). Fails (nothing changed) when the area is empty or larger than 120 km\u{b2}.
+///
+/// # Errors
+///
+/// With nothing changed: the reason the area is refused (empty, or larger than 120 km\u{b2}), or that the project has no scenario.
 #[allow(clippy::too_many_arguments)]
 pub fn setup(
     p: &mut Project,
@@ -220,16 +271,20 @@ pub fn setup(
     opts: &SetupOpts,
     on_status: &mut dyn FnMut(&str, f64),
 ) -> Result<SetupOut, String> {
-    let b = bounds.clone();
-    let est = estimate(&b);
+    let area = bounds.clone();
+    let est = estimate(&area);
     if !est.ok {
         return Err(est.warn.unwrap_or_default());
     }
     let sc_idx = active_index(p);
     let multi = p.scenarios.len() > 1;
     let o = SetupOpts { all: Some(opts.all.unwrap_or(multi)), ..*opts };
-    res_object(&mut p.scenarios[sc_idx]);
-    let mut out = SetupOut {
+    // active_index gives a scenario's position, or 0, which only a project without scenarios lacks
+    let Some(sc) = p.scenarios.get_mut(sc_idx) else {
+        return Err("The project has no scenario to set up.".to_string());
+    };
+    set_res(sc, None, Value::Null);
+    let out = SetupOut {
         roads: 0.0,
         gateways: 0.0,
         gw_from_counts: 0.0,
@@ -246,307 +301,387 @@ pub fn setup(
         warnings: est.warn.into_iter().collect(),
         ms: 0.0,
     };
-    let mut status = |t: &str, f: f64| on_status(t, f.clamp(0.0, 1.0));
-    let before_n: HashSet<String> = p.scenarios[sc_idx].nodes.keys().map(str::to_string).collect();
-    let before_l: HashSet<String> = p.scenarios[sc_idx].links.keys().map(str::to_string).collect();
-    let before_z: HashSet<String> = p.scenarios[sc_idx].zones.keys().map(str::to_string).collect();
-    let mut removed: Vec<String> = Vec::new();
-    let mut changed = false;
+    let before = Before {
+        nodes: sc.nodes.keys().map(str::to_string).collect(),
+        links: sc.links.keys().map(str::to_string).collect(),
+        zones: sc.zones.keys().map(str::to_string).collect(),
+    };
+    let mut status = |text: &str, frac: f64| on_status(text, frac.clamp(0.0, 1.0));
+    let mut steps = Steps { p, ids, net, dl, area, opts: o, sc_idx, status: &mut status, out, changed: false, removed: Vec::new() };
 
+    steps.roads();
+    let local = steps.local_nodes(&before.nodes);
+    steps.gateways(&local);
+    steps.counts_and_crashes(&local);
+    steps.existing();
+    let others = steps.share(&before, multi);
+    // Count-to-road matches follow the network, so the results are marked out of date
+    if steps.changed
+        && let Some(sc) = steps.p.scenarios.get_mut(sc_idx)
+    {
+        mark_stale(sc);
+    }
+    steps.gateway_flows(&others);
+    let can_run = steps.p.scenarios.get(sc_idx).is_some_and(|sc| !sc.links.is_empty() && !sc.zones.is_empty());
+    steps.run(can_run);
+    if o.fit_counts {
+        steps.fit_counts(can_run);
+    }
+    steps.summary();
+    (steps.status)("Study area ready", 1.0);
+    Ok(steps.out)
+}
+
+impl Steps<'_> {
     /* 1 \u{b7} roads */
-    if o.roads {
-        status("Downloading roads from OpenStreetMap\u{2026}", 0.02);
-        let r = (|| -> Result<(), String> {
-            let data = roads_download(net, &b, &OverpassOpts { service: o.service, local: Some(o.local) }, &mut |t| status(t, 0.05))?;
-            status("Building the network\u{2026}", 0.2);
-            if data.is_null() {
-                return Err("Cannot read properties of null (reading 'elements')".to_string());
-            }
-            let n = osm_to_scenario(&mut p.scenarios[sc_idx], ids, &data, &OsmOpts::default());
-            out.roads = n as f64;
-            if n > 0 {
-                changed = true;
-            }
-            if p.scenarios[sc_idx].links.is_empty() {
-                out.warnings.push("No roads were found in this area. Check the box covers the roads you want to model.".to_string());
-            }
-            Ok(())
-        })();
-        if let Err(e) = r {
-            out.warnings.push(format!("Downloading roads from OpenStreetMap failed: {e}"));
+    fn roads(&mut self) {
+        if !self.opts.roads {
+            return;
+        }
+        (self.status)("Downloading roads from OpenStreetMap\u{2026}", 0.02);
+        if let Err(e) = self.import_roads() {
+            self.out.warnings.push(format!("Downloading roads from OpenStreetMap failed: {e}"));
         }
     }
 
+    fn import_roads(&mut self) -> Result<(), String> {
+        let osm = OverpassOpts { service: self.opts.service, local: Some(self.opts.local) };
+        let status = &mut *self.status;
+        let data = roads_download(self.net, &self.area, &osm, &mut |text| status(text, 0.05))?;
+        status("Building the network\u{2026}", 0.2);
+        if data.is_null() {
+            return Err("Cannot read properties of null (reading 'elements')".to_string());
+        }
+        // setup checked the scenario is there
+        let Some(sc) = self.p.scenarios.get_mut(self.sc_idx) else { return Ok(()) };
+        let added = osm_to_scenario(sc, self.ids, &data, &OsmOpts::default());
+        self.out.roads = usize_to_f64(added);
+        if added > 0 {
+            self.changed = true;
+        }
+        if sc.links.is_empty() {
+            self.out.warnings.push("No roads were found in this area. Check the box covers the roads you want to model.".to_string());
+        }
+        Ok(())
+    }
+
     // This area's roads: the ones this setup imported, else those around the box (never roads elsewhere)
-    let fresh: Vec<String> = p.scenarios[sc_idx].nodes.keys().filter(|id| !before_n.contains(*id)).map(str::to_string).collect();
-    let far = pad(&b, 2.0);
-    let local: Vec<String> = if !fresh.is_empty() {
-        fresh
-    } else {
-        p.scenarios[sc_idx].nodes.values().filter(|n| contains(&far, n.lat.num(), n.lng.num())).map(|n| n.id.clone()).collect()
-    };
-    let local_set: HashSet<String> = local.iter().cloned().collect();
+    fn local_nodes(&self, before: &HashSet<String>) -> Vec<String> {
+        let Some(sc) = self.p.scenarios.get(self.sc_idx) else { return Vec::new() };
+        let fresh: Vec<String> = sc.nodes.keys().filter(|id| !before.contains(*id)).map(str::to_string).collect();
+        let far = pad(&self.area, 2.0);
+        if fresh.is_empty() {
+            sc.nodes.values().filter(|n| contains(&far, n.lat.num(), n.lng.num())).map(|n| n.id.clone()).collect()
+        } else {
+            fresh
+        }
+    }
 
     /* 2 \u{b7} gateways where main roads leave the area */
-    if o.gateways && !p.scenarios[sc_idx].links.is_empty() {
-        status("Adding gateways\u{2026}", 0.25);
-        let n = auto_gateways(&mut p.scenarios[sc_idx], ids, &Bounds { south: b.s, west: b.w, north: b.n, east: b.e }, Some(&local_set));
-        out.gateways = n as f64;
-        if n > 0 {
-            changed = true;
+    fn gateways(&mut self, local: &[String]) {
+        if !self.opts.gateways {
+            return;
+        }
+        let Some(sc) = self.p.scenarios.get_mut(self.sc_idx) else { return };
+        if sc.links.is_empty() {
+            return;
+        }
+        (self.status)("Adding gateways\u{2026}", 0.25);
+        let local_set: HashSet<String> = local.iter().cloned().collect();
+        let area = &self.area;
+        let made = auto_gateways(sc, self.ids, &Bounds { south: area.s, west: area.w, north: area.n, east: area.e }, Some(&local_set));
+        self.out.gateways = usize_to_f64(made);
+        if made > 0 {
+            self.changed = true;
         }
     }
 
     /* 3 \u{b7} counts and crashes for the study box */
-    let mut which: Vec<&str> = Vec::new();
-    if o.counts {
-        which.extend(["nzta", "at"]);
+    fn counts_and_crashes(&mut self, local: &[String]) {
+        let mut which: Vec<&str> = Vec::new();
+        if self.opts.counts {
+            which.extend(["nzta", "at"]);
+        }
+        if self.opts.crashes {
+            which.push("cas");
+        }
+        if which.is_empty() {
+            return;
+        }
+        (self.status)("Downloading counts and crashes\u{2026}", 0.3);
+        if let Err(e) = self.download_data(&which, local) {
+            self.out.warnings.push(format!("Downloading counts and crashes failed: {e}"));
+        }
     }
-    if o.crashes {
-        which.push("cas");
-    }
-    if !which.is_empty() {
-        status("Downloading counts and crashes\u{2026}", 0.3);
-        let r = (|| -> Result<(), String> {
-            let mut area = latlng_bounds(&[[b.s, b.w], [b.n, b.e]]);
-            for id in &local {
-                if let Some(n) = p.scenarios[sc_idx].nodes.get(id) {
-                    extend(&mut area, n.lat.num(), n.lng.num());
+
+    fn download_data(&mut self, which: &[&str], local: &[String]) -> Result<(), String> {
+        let area = &self.area;
+        let mut wide = latlng_bounds(&[[area.s, area.w], [area.n, area.e]]);
+        if let Some(sc) = self.p.scenarios.get(self.sc_idx) {
+            for id in local {
+                if let Some(node) = sc.nodes.get(id) {
+                    extend(&mut wide, node.lat.num(), node.lng.num());
                 }
             }
-            let msgs = load_all(p, ids, net, &pad(&area, 0.05), &which, &mut |t| status(t, 0.35), &LoadOpts::default())?;
-            let failed: Vec<&str> = which.iter().copied().filter(|w| msgs.iter().any(|m| m.starts_with(&format!("{} failed", w.to_uppercase())))).collect();
-            for m in &msgs {
-                if m.contains(" failed ") {
-                    out.warnings.push(format!("Data download: {m}"));
-                }
+        }
+        let status = &mut *self.status;
+        let msgs = load_all(self.p, &*self.ids, self.net, &pad(&wide, 0.05), which, &mut |text| status(text, 0.35), &LoadOpts::default())?;
+        let failed: Vec<&str> = which.iter().copied().filter(|src| msgs.iter().any(|msg| msg.starts_with(&format!("{} failed", src.to_uppercase())))).collect();
+        for msg in &msgs {
+            if msg.contains(" failed ") {
+                self.out.warnings.push(format!("Data download: {msg}"));
             }
-            let d_counts = counts_of(p);
-            out.counts = d_counts
+        }
+        let d_counts = counts_of(self.p).map_or(&[] as &[Value], |c| c.as_slice());
+        self.out.counts = usize_to_f64(
+            d_counts
                 .iter()
                 .filter(|c| c.get("src").and_then(Value::as_str).is_some_and(|s| which.contains(&s)) && !failed.iter().any(|f| c.get("src").and_then(Value::as_str) == Some(*f)))
-                .count() as f64;
-            let cas_ok = which.contains(&"cas") && !failed.contains(&"cas");
-            out.crashes = if cas_ok { super::counts::crashes_of(p).len() as f64 } else { 0.0 };
-            Ok(())
-        })();
-        if let Err(e) = r {
-            out.warnings.push(format!("Downloading counts and crashes failed: {e}"));
-        }
+                .count(),
+        );
+        let cas_ok = which.contains(&"cas") && !failed.contains(&"cas");
+        self.out.crashes = if cas_ok { usize_to_f64(crashes_of(self.p).map_or(&[] as &[Value], |c| c.as_slice()).len()) } else { 0.0 };
+        Ok(())
     }
 
     /* 4 \u{b7} existing land use as zones: replaces what an earlier setup made inside this box */
-    if o.existing {
-        status("Downloading buildings and land use\u{2026}", 0.5);
-        let r = (|| -> Result<(), String> {
-            let els = crate::census::existing_land_use_download(net, &mut dl.good, &b, &mut |t| status(t, 0.55))?;
-            status("Grouping buildings into zones\u{2026}", 0.65);
-            let sbox = StudyBox { s: b.s, w: b.w, n: b.n, e: b.e };
-            let built = landuse::build(&Value::Array(els), Some(&sbox), ids, &BuildOpts { cell: None, links: landuse::road_lines(&p.scenarios[sc_idx]) });
-            let sc = &mut p.scenarios[sc_idx];
-            let doomed: Vec<String> = sc.zones.iter().filter(|(_, z)| from_lu(z) && in_bounds(&b, z)).map(|(k, _)| k.to_string()).collect();
-            for id in doomed {
-                sc.zones.remove(&id);
-                removed.push(id);
-            }
-            out.replaced = removed.len() as f64;
-            for mut z in built.zones {
-                if !(z.lat.num().is_finite() && z.lng.num().is_finite()) {
-                    continue;
-                }
-                let nm = js_trim(z.name.str_or("")).to_lowercase();
-                let zl = [z.lat.num(), z.lng.num()];
-                let dup = sc.zones.values().any(|y| !y.kind.is("gateway") && js_trim(y.name.str_or("")).to_lowercase() == nm && dist(&[y.lat.num(), y.lng.num()], &zl) < SAME_ZONE_M);
-                if dup {
-                    continue;
-                }
-                let id = if !z.id.is_empty() && !sc.zones.contains_key(&z.id) { z.id.clone() } else { ids.uid("z") };
-                z.id = id.clone();
-                if z.connectors.is_missing() {
-                    z.connectors = Maybe::Null;
-                }
-                if !z.lu.is_set() {
-                    z.lu = Maybe::Set(crate::project::OrderedMap::new());
-                }
-                z.kind = Maybe::Set("zone".to_string());
-                z.existing = true.into();
-                z.src = Maybe::Set(json!(SRC));
-                out.zones += 1.0;
-                let lu = z.lu.get().expect("lu");
-                out.dwellings += crate::jsnum::or_default(lu.num_at("residential").num(), 0.0) + crate::jsnum::or_default(lu.num_at("apartment").num(), 0.0);
-                sc.zones.insert(id, z);
-            }
-            out.dwellings = math_round(out.dwellings);
-            if out.zones > 0.0 || !removed.is_empty() {
-                changed = true;
-            }
-            let me_hit = !removed.is_empty()
-                && p.me.get().is_some_and(|me| {
-                    ["AM", "PM"].iter().any(|per| me.factors.get(*per).and_then(|f| f.get()).is_some_and(|f| f.keys().any(|k| removed.iter().any(|id| k.split('>').any(|part| part == id)))))
-                });
-            if me_hit {
-                out.warnings.push("Existing land use was replaced, so matrix estimation factors for the old zones no longer apply. Fit to counts again.".to_string());
-            }
-            Ok(())
-        })();
-        if let Err(e) = r {
-            out.warnings.push(format!("Downloading buildings and land use failed: {e}"));
+    fn existing(&mut self) {
+        if !self.opts.existing {
+            return;
+        }
+        (self.status)("Downloading buildings and land use\u{2026}", 0.5);
+        if let Err(e) = self.existing_zones() {
+            self.out.warnings.push(format!("Downloading buildings and land use failed: {e}"));
         }
     }
 
-    // Other scenarios get the same new roads, gateways and zones, and lose the replaced zones
-    let others: Vec<usize> = if o.all == Some(true) { (0..p.scenarios.len()).filter(|i| *i != sc_idx).collect() } else { Vec::new() };
-    if !others.is_empty() && changed {
-        let new_nodes: Vec<_> = p.scenarios[sc_idx].nodes.iter().filter(|(k, _)| !before_n.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
-        let new_links: Vec<_> = p.scenarios[sc_idx].links.iter().filter(|(k, _)| !before_l.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
-        let new_zones: Vec<_> = p.scenarios[sc_idx].zones.iter().filter(|(k, _)| !before_z.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
-        for &si in &others {
-            let s = &mut p.scenarios[si];
-            for id in &removed {
-                if s.zones.get(id).is_some_and(from_lu) {
-                    s.zones.remove(id);
-                }
+    fn existing_zones(&mut self) -> Result<(), String> {
+        let status = &mut *self.status;
+        let els = crate::census::existing_land_use_download(self.net, &mut self.dl.good, &self.area, &mut |text| status(text, 0.55))?;
+        status("Grouping buildings into zones\u{2026}", 0.65);
+        let area = &self.area;
+        let sbox = StudyBox { s: area.s, w: area.w, n: area.n, e: area.e };
+        // setup checked the scenario is there
+        let Some(sc) = self.p.scenarios.get_mut(self.sc_idx) else { return Ok(()) };
+        let built = landuse::build(&Value::Array(els), Some(&sbox), self.ids, &BuildOpts { cell: None, links: landuse::road_lines(sc) });
+        let doomed: Vec<String> = sc.zones.iter().filter(|(_, z)| from_lu(z) && in_bounds(area, z)).map(|(k, _)| k.to_string()).collect();
+        for id in doomed {
+            sc.zones.remove(&id);
+            self.removed.push(id);
+        }
+        self.out.replaced = usize_to_f64(self.removed.len());
+        for mut zone in built.zones {
+            if !(zone.lat.num().is_finite() && zone.lng.num().is_finite()) {
+                continue;
             }
-            for (k, v) in &new_nodes {
-                if !s.nodes.contains_key(k) {
-                    s.nodes.insert(k.clone(), v.clone());
-                }
+            let nm = js_trim(zone.name.str_or("")).to_lowercase();
+            let zl = [zone.lat.num(), zone.lng.num()];
+            let dup = sc.zones.values().any(|other| !other.kind.is("gateway") && js_trim(other.name.str_or("")).to_lowercase() == nm && dist(&[other.lat.num(), other.lng.num()], &zl) < SAME_ZONE_M);
+            if dup {
+                continue;
             }
-            for (k, v) in &new_links {
-                if !s.links.contains_key(k) {
-                    s.links.insert(k.clone(), v.clone());
-                }
+            let id = if !zone.id.is_empty() && !sc.zones.contains_key(&zone.id) { zone.id.clone() } else { self.ids.uid("z") };
+            zone.id.clone_from(&id);
+            if zone.connectors.is_missing() {
+                zone.connectors = Maybe::Null;
             }
-            for (k, v) in &new_zones {
-                if !s.zones.contains_key(k) {
-                    s.zones.insert(k.clone(), v.clone());
-                }
+            if !zone.lu.is_set() {
+                zone.lu = Maybe::Set(crate::project::OrderedMap::new());
             }
-            if let Maybe::Set(Value::Object(res)) = &mut s.res {
-                for r in res.values_mut() {
-                    if value_truthy(r) {
-                        if let Some(m) = r.as_object_mut() {
-                            m.insert("stale".to_string(), json!(true));
-                        }
+            zone.kind = Maybe::Set("zone".to_string());
+            zone.existing = true.into();
+            zone.src = Maybe::Set(json!(SRC));
+            self.out.zones += 1.0;
+            // The land use was set just above when it was not, so this always adds
+            if let Some(lu) = zone.lu.get() {
+                self.out.dwellings += crate::jsnum::or_default(lu.num_at("residential").num(), 0.0) + crate::jsnum::or_default(lu.num_at("apartment").num(), 0.0);
+            }
+            sc.zones.insert(id, zone);
+        }
+        self.out.dwellings = math_round(self.out.dwellings);
+        if self.out.zones > 0.0 || !self.removed.is_empty() {
+            self.changed = true;
+        }
+        let removed = &self.removed;
+        let me_hit = !removed.is_empty()
+            && self.p.me.get().is_some_and(|me| {
+                ["AM", "PM"].iter().any(|per| me.factors.get(per).and_then(|f| f.get()).is_some_and(|f| f.keys().any(|k| removed.iter().any(|id| k.split('>').any(|part| part == id)))))
+            });
+        if me_hit {
+            self.out.warnings.push("Existing land use was replaced, so matrix estimation factors for the old zones no longer apply. Fit to counts again.".to_string());
+        }
+        Ok(())
+    }
+
+    // Other scenarios get the same new roads, gateways and zones, and lose the replaced zones; gives the other scenarios
+    fn share(&mut self, before: &Before, multi: bool) -> Vec<usize> {
+        let sc_idx = self.sc_idx;
+        let others: Vec<usize> = if self.opts.all == Some(true) { (0..self.p.scenarios.len()).filter(|i| *i != sc_idx).collect() } else { Vec::new() };
+        if !others.is_empty() && self.changed {
+            // setup checked the scenario is there
+            let Some(sc) = self.p.scenarios.get(sc_idx) else { return others };
+            let new_nodes: Vec<_> = sc.nodes.iter().filter(|(k, _)| !before.nodes.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
+            let new_links: Vec<_> = sc.links.iter().filter(|(k, _)| !before.links.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
+            let new_zones: Vec<_> = sc.zones.iter().filter(|(k, _)| !before.zones.contains(*k)).map(|(k, v)| (k.to_string(), v.clone())).collect();
+            for &si in &others {
+                // others holds positions in the list, so this never skips one
+                let Some(other) = self.p.scenarios.get_mut(si) else { continue };
+                for id in &self.removed {
+                    if other.zones.get(id).is_some_and(from_lu) {
+                        other.zones.remove(id);
+                    }
+                }
+                for (k, v) in &new_nodes {
+                    if !other.nodes.contains_key(k) {
+                        other.nodes.insert(k.clone(), v.clone());
+                    }
+                }
+                for (k, v) in &new_links {
+                    if !other.links.contains_key(k) {
+                        other.links.insert(k.clone(), v.clone());
+                    }
+                }
+                for (k, v) in &new_zones {
+                    if !other.zones.contains_key(k) {
+                        other.zones.insert(k.clone(), v.clone());
+                    }
+                }
+                if let Maybe::Set(Value::Object(res)) = &mut other.res {
+                    for r in res.values_mut() {
+                        if value_truthy(r)
+                            && let Some(m) = r.as_object_mut() {
+                                m.insert("stale".to_string(), json!(true));
+                            }
                     }
                 }
             }
+            self.out.scenarios += usize_to_f64(others.len());
+        } else if multi && self.changed {
+            self.out.warnings.push("Only the current scenario was set up; the other scenarios are unchanged.".to_string());
         }
-        out.scenarios += others.len() as f64;
-    } else if multi && changed {
-        out.warnings.push("Only the current scenario was set up; the other scenarios are unchanged.".to_string());
-    }
-    // Count-to-road matches follow the network, so the results are marked out of date
-    if changed {
-        mark_stale(&mut p.scenarios[sc_idx]);
+        others
     }
 
     /* 5 \u{b7} gateway flows from counts (every scenario that got the new network) */
-    let has_gw = p.scenarios[sc_idx].zones.values().any(|z| z.kind.is("gateway"));
-    if has_gw && !counts_of(p).is_empty() {
-        status("Setting gateway flows from counts\u{2026}", 0.7);
-        let s = p.settings.clone();
-        let data = Data::read(p);
-        let n = gateways_from_counts(&mut p.scenarios[sc_idx], &s, &data);
-        out.gw_from_counts = n as f64;
-        for &si in &others {
-            let data = Data::read(p);
-            gateways_from_counts(&mut p.scenarios[si], &s, &data);
+    fn gateway_flows(&mut self, others: &[usize]) {
+        let has_gw = self.p.scenarios.get(self.sc_idx).is_some_and(|sc| sc.zones.values().any(|z| z.kind.is("gateway")));
+        if !has_gw || counts_of(self.p).map_or(&[] as &[Value], |c| c.as_slice()).is_empty() {
+            return;
         }
-        if n > 0 {
-            mark_stale(&mut p.scenarios[sc_idx]);
+        (self.status)("Setting gateway flows from counts\u{2026}", 0.7);
+        let settings = self.p.settings.clone();
+        let data = Data::read(self.p);
+        let Some(sc) = self.p.scenarios.get_mut(self.sc_idx) else { return };
+        let set = gateways_from_counts(sc, &settings, &data);
+        self.out.gw_from_counts = usize_to_f64(set);
+        for &si in others {
+            let data = Data::read(self.p);
+            if let Some(other) = self.p.scenarios.get_mut(si) {
+                gateways_from_counts(other, &settings, &data);
+            }
+        }
+        if set > 0
+            && let Some(sc) = self.p.scenarios.get_mut(self.sc_idx)
+        {
+            mark_stale(sc);
         }
     }
 
     /* 6 \u{b7} run the model */
-    let can_run = !p.scenarios[sc_idx].links.is_empty() && !p.scenarios[sc_idx].zones.is_empty();
-    if o.run && !can_run {
-        out.warnings.push(
-            if !p.scenarios[sc_idx].links.is_empty() { "There are no zones or gateways, so the model was not run." } else { "There are no roads, so the model was not run." }.to_string(),
-        );
-    }
-    // Fitting to counts runs the model itself, so the plain runs are only needed without it
-    let fit_on = o.fit_counts && !counts_of(p).is_empty() && can_run;
-    if o.run && can_run && !fit_on {
-        for (k, period) in ["AM", "PM"].iter().enumerate() {
-            let what = format!("Running the {period} peak");
-            status(&format!("{what}\u{2026}"), 0.75 + k as f64 * 0.08);
-            let mut prog = |it: f64, _gap: f64, msg: &str| {
-                let text = if msg.is_empty() { format!("iteration {}", number_to_js_string(it)) } else { msg.to_string() };
-                status(&format!("{period} peak \u{b7} {text}"), 0.75 + k as f64 * 0.08 + 0.06);
-            };
-            run_period(p, sc_idx, period, Some(&mut prog));
-            out.ran = true;
+    fn run(&mut self, can_run: bool) {
+        if self.opts.run && !can_run {
+            let no_roads = self.p.scenarios.get(self.sc_idx).is_none_or(|sc| sc.links.is_empty());
+            self.out.warnings.push(if no_roads { "There are no roads, so the model was not run." } else { "There are no zones or gateways, so the model was not run." }.to_string());
+        }
+        // Fitting to counts runs the model itself, so the plain runs are only needed without it
+        let fit_on = self.opts.fit_counts && !counts_of(self.p).map_or(&[] as &[Value], |c| c.as_slice()).is_empty() && can_run;
+        if self.opts.run && can_run && !fit_on {
+            for (k, period) in ["AM", "PM"].iter().enumerate() {
+                let what = format!("Running the {period} peak");
+                let status = &mut *self.status;
+                status(&format!("{what}\u{2026}"), 0.75 + usize_to_f64(k) * 0.08);
+                let mut prog = |it: f64, _gap: f64, msg: &str| {
+                    let text = if msg.is_empty() { format!("iteration {}", number_to_js_string(it)) } else { msg.to_string() };
+                    status(&format!("{period} peak \u{b7} {text}"), 0.75 + usize_to_f64(k) * 0.08 + 0.06);
+                };
+                run_period(self.p, self.sc_idx, period, Some(&mut prog));
+                self.out.ran = true;
+            }
         }
     }
 
     /* 7 \u{b7} fit the model to counts */
-    if o.fit_counts {
-        if counts_of(p).is_empty() {
-            out.warnings.push("No counts were loaded, so the model was not fitted to counts.".to_string());
+    fn fit_counts(&mut self, can_run: bool) {
+        if counts_of(self.p).map_or(&[] as &[Value], |c| c.as_slice()).is_empty() {
+            self.out.warnings.push("No counts were loaded, so the model was not fitted to counts.".to_string());
         } else if can_run {
             let mut cal: Vec<(String, Value)> = Vec::new();
-            for (k, period) in ["AM", "PM"].iter().enumerate() {
+            for (k, period) in ["AM", "PM"].into_iter().enumerate() {
                 let what = format!("Fitting the {period} peak to counts");
-                status(&format!("{what}\u{2026}"), 0.85 + k as f64 * 0.07);
-                let sc_id = p.scenarios[sc_idx].id.clone();
-                let date = ids.now_iso();
-                let r = (|| -> Result<(), String> {
-                    let mut prog = |_k: f64, _n: f64, _msg: &str| status(&format!("Fitting the {period} peak to counts\u{2026}"), 0.87 + k as f64 * 0.07);
-                    let res = fit(p, &sc_id, &FitOpts { period: Some(period), date: Some(&date), ..Default::default() }, Some(&mut prog))?;
-                    let kept_prev = res.res.is_none();
-                    let mut v = serde_json::to_value(&res).map_err(|e| e.to_string())?;
-                    null_non_finite(&mut v);
-                    // the fitted result itself is the scenario's own; the answer says whether there is one
-                    v["hasRes"] = json!(!kept_prev);
-                    cal.push((period.to_string(), v));
-                    // keep the stored results in step with the fitted matrix
-                    let stale_or_missing = match p.scenarios[sc_idx].res.get() {
-                        Some(Value::Object(m)) => m.get(*period).is_none_or(|r| !value_truthy(r) || r.get("stale").is_some_and(value_truthy)),
-                        _ => true,
-                    };
-                    if o.run && (kept_prev || stale_or_missing) {
-                        run_period(p, sc_idx, period, None);
-                    }
-                    out.ran = out.ran || p.scenarios[sc_idx].res.get().and_then(|m| m.get(*period)).is_some_and(value_truthy);
-                    Ok(())
-                })();
-                if let Err(e) = r {
-                    out.warnings.push(format!("{what} failed: {e}"));
+                (self.status)(&format!("{what}\u{2026}"), 0.85 + usize_to_f64(k) * 0.07);
+                if let Err(e) = self.fit_period(k, period, &mut cal) {
+                    self.out.warnings.push(format!("{what} failed: {e}"));
                 }
             }
-            out.calibration = if cal.is_empty() { None } else { Some(cal) };
+            self.out.calibration = if cal.is_empty() { None } else { Some(cal) };
         }
     }
 
-    // Only current results go in the summary; out-of-date ones are flagged instead
-    for period in ["AM", "PM"] {
-        let Some(r) = stored_res(&p.scenarios[sc_idx], period) else { continue };
-        if r.stale {
-            out.warnings.push(format!("The {period} peak results are out of date (not run in this setup). Run the model to update them."));
-            continue;
+    fn fit_period(&mut self, k: usize, period: &str, cal: &mut Vec<(String, Value)>) -> Result<(), String> {
+        // can_run held, so the scenario is there
+        let sc_id = self.p.scenarios.get(self.sc_idx).map(|sc| sc.id.clone()).unwrap_or_default();
+        let date = self.ids.now_iso();
+        let status = &mut *self.status;
+        let mut prog = |_k: f64, _n: f64, _msg: &str| status(&format!("Fitting the {period} peak to counts\u{2026}"), 0.87 + usize_to_f64(k) * 0.07);
+        let res = fit(self.p, &sc_id, &FitOpts { period: Some(period), date: Some(&date), ..Default::default() }, Some(&mut prog))?;
+        let kept_prev = res.res.is_none();
+        let mut answer = serde_json::to_value(&res).map_err(|e| e.to_string())?;
+        null_non_finite(&mut answer);
+        // the fitted result itself is the scenario's own; the answer says whether there is one (a fit result serialises as an object)
+        if let Some(obj) = answer.as_object_mut() {
+            obj.insert("hasRes".to_string(), json!(!kept_prev));
         }
-        out.kpi.push((period.to_string(), json!({ "trips": json_number(r.kpi.trips), "spd": json_number(r.kpi.spd), "over": json_number(r.kpi.over), "vht": json_number(r.kpi.vht) })));
-        let data = Data::read(p);
-        data_d(p);
-        let s = p.settings.clone();
-        if let Some(c) = calibration(&p.scenarios[sc_idx], Some(&r), period, &s, &data)
-            && c.n > 0
-        {
-            let st = c.stats.as_ref();
-            out.fit.push((
-                period.to_string(),
-                json!({
-                    "n": c.n,
-                    "pass": st.map_or(Value::Null, |x| json_number(x.pass)),
-                    "r2": st.and_then(|x| x.r2).map_or(Value::Null, json_number),
-                    "ratio": st.map_or(Value::Null, |x| if x.tot_obs > 0.0 { json_number(x.tot_mod / x.tot_obs) } else { Value::Null }),
-                }),
-            ));
+        cal.push((period.to_string(), answer));
+        // keep the stored results in step with the fitted matrix
+        let stale_or_missing = match self.p.scenarios.get(self.sc_idx).and_then(|sc| sc.res.get()) {
+            Some(Value::Object(m)) => m.get(period).is_none_or(|r| !value_truthy(r) || r.get("stale").is_some_and(value_truthy)),
+            _ => true,
+        };
+        if self.opts.run && (kept_prev || stale_or_missing) {
+            run_period(self.p, self.sc_idx, period, None);
+        }
+        self.out.ran = self.out.ran || self.p.scenarios.get(self.sc_idx).and_then(|sc| sc.res.get()).and_then(|stored| stored.get(period)).is_some_and(value_truthy);
+        Ok(())
+    }
+
+    // Only current results go in the summary; out-of-date ones are flagged instead
+    fn summary(&mut self) {
+        for period in ["AM", "PM"] {
+            let Some(res) = self.p.scenarios.get(self.sc_idx).and_then(|sc| stored_res(sc, period)) else { continue };
+            if res.stale {
+                self.out.warnings.push(format!("The {period} peak results are out of date (not run in this setup). Run the model to update them."));
+                continue;
+            }
+            self.out.kpi.push((period.to_string(), json!({ "trips": json_number(res.kpi.trips), "spd": json_number(res.kpi.spd), "over": json_number(res.kpi.over), "vht": json_number(res.kpi.vht) })));
+            let data = Data::read(self.p);
+            data_d(self.p);
+            let settings = self.p.settings.clone();
+            if let Some(cal) = self.p.scenarios.get(self.sc_idx).and_then(|sc| calibration(sc, Some(&res), period, &settings, &data))
+                && cal.n > 0
+            {
+                let st = cal.stats.as_ref();
+                self.out.fit.push((
+                    period.to_string(),
+                    json!({
+                        "n": cal.n,
+                        "pass": st.map_or(Value::Null, |x| json_number(x.pass)),
+                        "r2": st.and_then(|x| x.r2).map_or(Value::Null, json_number),
+                        "ratio": st.map_or(Value::Null, |x| if x.tot_obs > 0.0 { json_number(x.tot_mod / x.tot_obs) } else { Value::Null }),
+                    }),
+                ));
+            }
         }
     }
-    status("Study area ready", 1.0);
-    Ok(out)
 }
 
 fn null_non_finite(v: &mut Value) {
@@ -559,6 +694,7 @@ fn null_non_finite(v: &mut Value) {
 }
 
 /// A [`Failure`] as the text of its message for a download that has no label (re-exported so hosts can word their own failures the same way).
+#[must_use]
 pub fn failure_text(f: &Failure, url: &str) -> String {
     f.message(url)
 }

@@ -86,7 +86,7 @@ fn shells(shapes: &[(&[[i64; 3]], &[&[u32]])]) -> Body {
             })
             .unwrap();
         for q in *points {
-            a.points.push(p(q[0], q[1], q[2])).unwrap();
+            a.points.push(p(q[0], q[1], q[2]).into()).unwrap();
             a.vertices.push(Vertex { point: ix(vertex) }).unwrap();
             vertex += 1;
         }
@@ -258,7 +258,7 @@ fn a_loops_area_is_its_faces_and_a_vertex_is_its_point() {
     let v: VertexIx = ix(0);
     assert_eq!(
         point(&w, v).unwrap(),
-        w.arenas().points.get(ix(0)).copied().unwrap()
+        w.arenas().points.get(ix(0)).unwrap().grid().unwrap()
     );
 }
 

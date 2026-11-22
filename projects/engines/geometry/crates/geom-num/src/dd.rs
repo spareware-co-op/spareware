@@ -1189,11 +1189,35 @@ mod proofs {
         assert!(whole(0.0) == Some(0) && whole(-0.0) == Some(0));
     }
 
+    /// The class of `v` in the cut of [`from_i128_law`]'s proof: bit 0 is set for a negative
+    /// value, and the bits above it are the band of the magnitude's width in bits (0 for at most
+    /// 53 bits, 1 for 54 to 64, 2 for 65 to 106, 3 for more). Always under 8, which
+    /// [`from_i128_classes_cover_every_value`] proves.
+    fn from_i128_class(v: i128) -> u64 {
+        let width = u64::from(u128::BITS - v.unsigned_abs().leading_zeros());
+        let negative = u64::from(v < 0);
+        let band = match width {
+            0..=53 => 0,
+            54..=64 => 1,
+            65..=106 => 2,
+            _ => 3,
+        };
+        negative | (band << 1)
+    }
+
     /// [`DD::from_i128`] accepts exactly the magnitudes below 2^106, and its leading part is the
-    /// value rounded to nearest (Rust's `as f64`, ties to even).
-    #[kani::proof]
-    fn from_i128_accepts_exactly_below_2_106() {
+    /// value rounded to nearest (Rust's `as f64`, ties to even): the claim for every `i128` of
+    /// the class `class` of [`from_i128_class`].
+    ///
+    /// As one harness of every `i128` the claim was one solve of 18 to 20 minutes on a hosted
+    /// runner (runs 44020080291 and 44052487978). Each of the eight classes has its harness
+    /// below, and [`from_i128_classes_cover_every_value`] proves that every `i128` is in one of
+    /// them, so together they are the claim for every `i128`, as the one harness was.
+    fn from_i128_law(class: u64) {
         let v: i128 = kani::any();
+        if from_i128_class(v) != class {
+            return;
+        }
         match DD::from_i128(v) {
             Some(d) => {
                 assert!(v.unsigned_abs() < 1 << 106);
@@ -1203,5 +1227,61 @@ mod proofs {
             }
             None => assert!(v.unsigned_abs() >= 1 << 106),
         }
+    }
+
+    /// Every `i128` is in one of the eight classes, 0 to 7, of [`from_i128_class`]: the harnesses
+    /// of [`from_i128_law`] below, one for each class, leave no value out.
+    #[kani::proof]
+    fn from_i128_classes_cover_every_value() {
+        let v: i128 = kani::any();
+        assert!(from_i128_class(v) < 8);
+    }
+
+    /// [`from_i128_law`] for class 0: no sign, a magnitude of at most 53 bits.
+    #[kani::proof]
+    fn from_i128_of_a_non_negative_of_at_most_53_bits() {
+        from_i128_law(0);
+    }
+
+    /// [`from_i128_law`] for class 1: negative, a magnitude of at most 53 bits.
+    #[kani::proof]
+    fn from_i128_of_a_negative_of_at_most_53_bits() {
+        from_i128_law(1);
+    }
+
+    /// [`from_i128_law`] for class 2: no sign, a magnitude of 54 to 64 bits.
+    #[kani::proof]
+    fn from_i128_of_a_non_negative_of_54_to_64_bits() {
+        from_i128_law(2);
+    }
+
+    /// [`from_i128_law`] for class 3: negative, a magnitude of 54 to 64 bits.
+    #[kani::proof]
+    fn from_i128_of_a_negative_of_54_to_64_bits() {
+        from_i128_law(3);
+    }
+
+    /// [`from_i128_law`] for class 4: no sign, a magnitude of 65 to 106 bits.
+    #[kani::proof]
+    fn from_i128_of_a_non_negative_of_65_to_106_bits() {
+        from_i128_law(4);
+    }
+
+    /// [`from_i128_law`] for class 5: negative, a magnitude of 65 to 106 bits.
+    #[kani::proof]
+    fn from_i128_of_a_negative_of_65_to_106_bits() {
+        from_i128_law(5);
+    }
+
+    /// [`from_i128_law`] for class 6: no sign, a magnitude of over 106 bits (all refused).
+    #[kani::proof]
+    fn from_i128_of_a_non_negative_of_over_106_bits() {
+        from_i128_law(6);
+    }
+
+    /// [`from_i128_law`] for class 7: negative, a magnitude of over 106 bits (all refused).
+    #[kani::proof]
+    fn from_i128_of_a_negative_of_over_106_bits() {
+        from_i128_law(7);
     }
 }

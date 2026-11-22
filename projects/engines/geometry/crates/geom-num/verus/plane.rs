@@ -31,6 +31,10 @@
 //! projects/engines/geometry/crates/geom-num/verus/lib.rs`, with the Verus release `kernel-dev.yml`
 //! pins; its `verus` job does this on every pull request.
 
+use vstd::arithmetic::mul::{
+    lemma_mul_is_associative, lemma_mul_is_commutative, lemma_mul_is_distributive_add,
+    lemma_mul_unary_negation,
+};
 use vstd::prelude::*;
 
 use crate::model::*;
@@ -306,6 +310,37 @@ pub proof fn lemma_triple_cyclic(a: (int, int, int), b: (int, int, int), c: (int
     assert(c2 * (a0 * b1 - a1 * b0) == a0 * b1 * c2 - a1 * b0 * c2) by (nonlinear_arith);
 }
 
+/// A factor moves inside a product: n (p a) = p (n a), by vstd's associativity and commutativity.
+proof fn lemma_factor_moves_inside(n: int, p: int, a: int)
+    ensures
+        n * (p * a) == p * (n * a),
+{
+    lemma_mul_is_associative(n, p, a);
+    lemma_mul_is_commutative(n, p);
+    lemma_mul_is_associative(p, n, a);
+}
+
+/// One coordinate of the dot product's linearity:
+/// n · −(p a + q b + r c) = −(p (n a) + q (n b) + r (n c)).
+/// Every step is one of vstd's multiplication lemmas (negate, distribute, reassociate), so the
+/// solver has no products to expand by search and the proof does not depend on how far a search
+/// gets within its resource limit.
+proof fn lemma_scaled_negated_combination(n: int, p: int, a: int, q: int, b: int, r: int, c: int)
+    ensures
+        n * -(p * a + q * b + r * c) == -(p * (n * a) + q * (n * b) + r * (n * c)),
+{
+    let (x, y, z) = (p * a, q * b, r * c);
+    // Negate: n · −(x + y + z) = −(n (x + y + z)).
+    lemma_mul_unary_negation(n, x + y + z);
+    // Distribute: n (x + y + z) = n x + n y + n z.
+    lemma_mul_is_distributive_add(n, x + y, z);
+    lemma_mul_is_distributive_add(n, x, y);
+    // Reassociate: n (p a) = p (n a), and the same for q b and r c.
+    lemma_factor_moves_inside(n, p, a);
+    lemma_factor_moves_inside(n, q, b);
+    lemma_factor_moves_inside(n, r, c);
+}
+
 /// The dot product is linear: n · −(p u + q v + r t) = −(p (n · u) + q (n · v) + r (n · t)).
 pub proof fn lemma_dot_combination(n: (int, int, int), p: int, u: (int, int, int), q: int, v: (int, int, int), r: int, t: (int, int, int))
     ensures
@@ -313,9 +348,15 @@ pub proof fn lemma_dot_combination(n: (int, int, int), p: int, u: (int, int, int
             == -(p * dot_t(n, u) + q * dot_t(n, v) + r * dot_t(n, t)),
 {
     let (n0, n1, n2) = (n.0, n.1, n.2);
-    assert(n0 * -(p * u.0 + q * v.0 + r * t.0) == -(p * (n0 * u.0) + q * (n0 * v.0) + r * (n0 * t.0))) by (nonlinear_arith);
-    assert(n1 * -(p * u.1 + q * v.1 + r * t.1) == -(p * (n1 * u.1) + q * (n1 * v.1) + r * (n1 * t.1))) by (nonlinear_arith);
-    assert(n2 * -(p * u.2 + q * v.2 + r * t.2) == -(p * (n2 * u.2) + q * (n2 * v.2) + r * (n2 * t.2))) by (nonlinear_arith);
+    assert(n0 * -(p * u.0 + q * v.0 + r * t.0) == -(p * (n0 * u.0) + q * (n0 * v.0) + r * (n0 * t.0))) by {
+        lemma_scaled_negated_combination(n0, p, u.0, q, v.0, r, t.0);
+    }
+    assert(n1 * -(p * u.1 + q * v.1 + r * t.1) == -(p * (n1 * u.1) + q * (n1 * v.1) + r * (n1 * t.1))) by {
+        lemma_scaled_negated_combination(n1, p, u.1, q, v.1, r, t.1);
+    }
+    assert(n2 * -(p * u.2 + q * v.2 + r * t.2) == -(p * (n2 * u.2) + q * (n2 * v.2) + r * (n2 * t.2))) by {
+        lemma_scaled_negated_combination(n2, p, u.2, q, v.2, r, t.2);
+    }
     assert(p * (n0 * u.0 + n1 * u.1 + n2 * u.2) == p * (n0 * u.0) + p * (n1 * u.1) + p * (n2 * u.2)) by (nonlinear_arith);
     assert(q * (n0 * v.0 + n1 * v.1 + n2 * v.2) == q * (n0 * v.0) + q * (n1 * v.1) + q * (n2 * v.2)) by (nonlinear_arith);
     assert(r * (n0 * t.0 + n1 * t.1 + n2 * t.2) == r * (n0 * t.0) + r * (n1 * t.1) + r * (n2 * t.2)) by (nonlinear_arith);
@@ -701,6 +742,36 @@ impl Plane {
             Some(([0, 0, 0], _)) => Err(NumError::Degenerate),
             Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),
             _ => Err(NumError::BudgetExceeded),
+        }
+    }
+
+    /// The plane n · p + d = 0 from its coefficients, as a stored or reduced plane gives them.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] for a zero normal, and [`NumError::BudgetExceeded`] for a
+    /// coefficient over its budget (|`n_i`| ≥ 2^83 or |d| ≥ 2^125): chapter 6.2 has the type refuse
+    /// it here, so no plane over budget reaches an exact computation.
+    pub const fn new(n: [i128; 3], d: i128) -> (r: Result<Plane, NumError>)
+        ensures
+            match r {
+                Ok(pl) => pl.wf() && pl.normal() == (n@[0] as int, n@[1] as int, n@[2] as int)
+                    && pl.offset() == d as int && !(n@[0] == 0 && n@[1] == 0 && n@[2] == 0),
+                Err(e) => (e == NumError::Degenerate && n@[0] == 0 && n@[1] == 0 && n@[2] == 0)
+                    || (e == NumError::BudgetExceeded && !(n@[0] == 0 && n@[1] == 0 && n@[2] == 0)
+                        && !(-0x800000000000000000000 < n@[0] < 0x800000000000000000000
+                            && -0x800000000000000000000 < n@[1] < 0x800000000000000000000
+                            && -0x800000000000000000000 < n@[2] < 0x800000000000000000000
+                            && -0x20000000000000000000000000000000 < d
+                                < 0x20000000000000000000000000000000)),
+            },
+    {
+        if n[0] == 0 && n[1] == 0 && n[2] == 0 {
+            Err(NumError::Degenerate)
+        } else if within_budget(&n, d) {
+            Ok(Plane { n, d })
+        } else {
+            Err(NumError::BudgetExceeded)
         }
     }
 }

@@ -3,8 +3,8 @@
 //!
 //! The done-when: "Every predicate compared with a big-integer oracle (num-bigint and
 //! num-rational, or dashu, 28.6) on random, ±1-step-degenerate and filter-boundary inputs on every
-//! pull request; corner sets as above; perturbation laws; failures minimised into fixtures;
-//! nightly fresh seeds."
+//! pull request; corner sets as above; perturbation laws; failures minimised into fixtures; the
+//! seeded tests run in the suite on every change they reach."
 //!
 //! Most of it already runs in the predicates' own attack tests (G28, G29, G30 and the plane tests
 //! before them). This suite holds them together and adds what was missing:
@@ -38,9 +38,9 @@
 //!   is fixed (28.16). `a_failure_shrinks_into_a_fixture_that_catches_it` proves the route on a
 //!   predicate broken on purpose: the shrunk fixture fails the broken predicate and passes the
 //!   real one.
-//! - **Nightly fresh seeds**: `.github/workflows/kernel-nightly.yml` runs this suite and the
-//!   predicates' attack tests every night with `SPAREKIT_SEED` taken from the run, printed; on
-//!   pull requests every seed is the fixed default (28.17).
+//! - **Seeds**: this suite and the predicates' attack tests run from the fixed default seeds on
+//!   every change they reach; `SPAREKIT_SEED` replays another (28.17; decision 32.53 removed the
+//!   timed run that drew fresh ones).
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
 //! `SPAREKIT_SEED=<hex>` replays another. Case counts are a twentieth in debug builds.
@@ -64,14 +64,14 @@
     clippy::indexing_slicing
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use dashu_int::IBig;
 use dashu_ratio::RBig;
 use geom_num::crossing::Ssi;
 use geom_num::generated::{lpi_side, ssi_side, tpi_side};
 use geom_num::grid::{COORD_MAX, P2, P3};
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign};
 use geom_num::{NumError, Sign, perturb, predicate};
 use geom_test::prop;
 use geom_test::rust_source::references;
@@ -633,7 +633,7 @@ fn crossing(
 }
 
 /// F(n), the n-th Fibonacci number; F(58) is the last below 2^40.
-fn fibonacci(n: usize) -> i64 {
+fn fibonacci(n: u64) -> i64 {
     let (mut a, mut b) = (0i64, 1i64);
     for _ in 0..n {
         (a, b) = (b, a + b);
@@ -673,8 +673,15 @@ fn draws() -> impl Strategy<Value = (u32, i64, i64, i64)> {
 /// x0 + B and x0 + C has the value ±k at x0, while B and C, and so the plane's coefficients, are
 /// as large as n makes them: the cancellation that keeps a filter from deciding for small k, and
 /// lets it decide once k is large enough.
+///
+/// n is drawn as a `u64`, never a `usize`: proptest 1.12 samples a `usize` range as a `u64` on
+/// 64-bit targets and as a `u32` on wasm32 (`num.rs`, `sample_uniform!`), so a `usize` draw reads
+/// the stream at other offsets there and every later value differs, and the pinned counts of
+/// `side_of_tpi_filter_boundary_crossed_both_ways` held on x86-64 only. A `u64` range is sampled
+/// as a `u64` on every target: on 64-bit targets exactly as the `usize` range was, so the cases
+/// there are unchanged.
 fn cassini3() -> impl Strategy<Value = (Pt3, Pt3, Pt3, Pt3)> {
-    (3usize..=56, draws(), 0u8..6, any::<[bool; 3]>()).prop_map(|(n, (bits, r, s, t), o, flip)| {
+    (3u64..=56, draws(), 0u8..6, any::<[bool; 3]>()).prop_map(|(n, (bits, r, s, t), o, flip)| {
         let room = (COORD_MAX - fibonacci(n + 1)) / 2;
         let xm = (1i64 << bits).min(room);
         let x0 = [span(r, xm), span(s, xm), span(t, xm)];
@@ -762,18 +769,147 @@ fn made(planes: &[[Pt3; 3]]) -> Option<Vec<Plane>> {
         .collect()
 }
 
+/// Whether a plane has a coefficient past a machine word, so that `determinant_sign` skips its
+/// machine-word rung and its sign comes from the filter or the exact path.
+fn past_words(plane: &Plane) -> bool {
+    plane
+        .n()
+        .iter()
+        .chain([&plane.d()])
+        .any(|v| i64::try_from(*v).is_err())
+}
+
 /// `side_of_tpi` near its filter's bound: three planes through a grid point x0, and a fourth
-/// through x0 + k·e, x0 + B and x0 + C ([`cassini3`]), whose value at x0 is ±k.
-#[test]
-fn side_of_tpi_filter_boundary_crossed_both_ways() {
+/// through x0 + k·e, x0 + B and x0 + C ([`cassini3`]), whose value at x0 is ±k. The same inputs
+/// cross the bound for `determinant_sign`, whose sign times the weight is the side, wherever a
+/// coefficient is past a machine word, so the filter and not the word rung decides.
+///
+/// In quarters of its one stream of cases (decision 32.78: whole, it was too long for one Miri
+/// gate part): every quarter draws every case up to its last from the one seed, as `prop::run`
+/// draws them, and checks its own. The whole asked that inputs be found on both sides of the
+/// filter's bound and of the word rung: each quarter's counts are pinned, for the default seed in
+/// each build, and the join test holds the pins to the whole. The pins hold for the default seed
+/// only, so a native test runs the whole stream once for whatever seed is set and asks it of the
+/// whole.
+mod side_of_tpi_filter_boundary_crossed_both_ways {
+    /// Each quarter's (inside, outside) of the filter's bound and (inside, outside) of the word
+    /// rung, from the default seed: in a debug build (6 cases, as Miri runs it) and in a release
+    /// build (128).
+    pub const PINNED: [[[usize; 4]; 4]; 2] = [
+        [
+            [6, 8, 0, 0],
+            [13, 15, 87, 31],
+            [0, 7, 2, 8],
+            [9, 12, 115, 35],
+        ],
+        [
+            [201, 170, 1210, 274],
+            [196, 175, 1543, 424],
+            [228, 108, 1628, 203],
+            [229, 116, 1549, 279],
+        ],
+    ];
+
+    fn quarter(part: usize) {
+        let all = super::cases(128);
+        let index = u32::try_from(part).unwrap();
+        let counts = super::side_of_tpi_cases(all * index / 4..all * (index + 1) / 4);
+        let build = usize::from(!cfg!(debug_assertions));
+        if std::env::var_os("SPAREKIT_SEED").is_none() {
+            assert_eq!(counts, PINNED[build][part], "quarter {}", part + 1);
+        }
+    }
+
+    #[test]
+    fn quarter_1() {
+        quarter(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        quarter(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        quarter(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        quarter(3);
+    }
+
+    /// In each build the quarters together find inputs on both sides of the filter's bound and
+    /// of `determinant_sign`'s word rung, as the whole asked.
+    #[test]
+    fn the_quarters_join_to_the_whole() {
+        for pins in PINNED {
+            let total = |k: usize| pins.iter().map(|p| p[k]).sum::<usize>();
+            assert!(
+                total(0) > 0 && total(1) > 0,
+                "inside {} outside {}",
+                total(0),
+                total(1)
+            );
+            assert!(
+                total(2) > 0 && total(3) > 0,
+                "determinant_sign past its word rung: inside {} outside {}",
+                total(2),
+                total(3)
+            );
+        }
+    }
+
+    /// For whatever seed is set (`SPAREKIT_SEED`, or the default), the whole stream run once
+    /// finds inputs on both sides of the filter's bound and of `determinant_sign`'s word rung, as
+    /// the whole asked; from the default seed its counts are exactly the quarters' pins together.
+    #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "the whole stream, too long for one Miri gate part; Miri runs it in its quarters"
+    )]
+    fn the_whole_crosses_both_ways_for_any_seed() {
+        let [inside, outside, word_inside, word_outside] =
+            super::side_of_tpi_cases(0..super::cases(128));
+        assert!(
+            inside > 0 && outside > 0,
+            "inside {inside} outside {outside}"
+        );
+        assert!(
+            word_inside > 0 && word_outside > 0,
+            "determinant_sign past its word rung: inside {word_inside} outside {word_outside}"
+        );
+        let build = usize::from(!cfg!(debug_assertions));
+        if std::env::var_os("SPAREKIT_SEED").is_none() {
+            let total = |k: usize| PINNED[build].iter().map(|p| p[k]).sum::<usize>();
+            assert_eq!(
+                [inside, outside, word_inside, word_outside],
+                [total(0), total(1), total(2), total(3)]
+            );
+        }
+    }
+}
+
+/// The cases `run` of `side_of_tpi_filter_boundary_crossed_both_ways`'s one stream: every case up
+/// to the last drawn, those in `run` checked; their counts (inside, outside) of the filter's bound
+/// and (inside, outside) of the word rung.
+fn side_of_tpi_cases(run: std::ops::Range<u32>) -> [usize; 4] {
     let kinds = RefCell::new(Kinds::default());
+    let routed = Cell::new((0usize, 0usize));
     let strategy = (cassini3(), scaled3());
+    let drawn = Cell::new(0_u32);
     prop::run(
         "side_of_tpi_filter_boundary_crossed_both_ways",
         Seed(0x6734_0000_0000_0002),
-        cases(128),
+        run.end,
         &strategy,
         |((x0, e, bb, cc), (_, pts))| {
+            let at = drawn.get();
+            drawn.set(at + 1);
+            if !run.contains(&at) {
+                return Ok(());
+            }
             let planes = planes_through(x0, &pts);
             let Some(made) = made(&planes) else {
                 return Ok(());
@@ -802,6 +938,20 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
                     ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
                 )
                 .map(|v| v.mul(w));
+                let answer = plane.side_of_tpi(&t);
+                assert_eq!(
+                    determinant_sign(&made[0], &made[1], &made[2], &plane).map(|v| v.mul(w)),
+                    answer,
+                    "determinant_sign times the weight is the side"
+                );
+                if made.iter().chain([&plane]).any(past_words) {
+                    let (inside, outside) = routed.get();
+                    routed.set(if filter.is_none() {
+                        (inside + 1, outside)
+                    } else {
+                        (inside, outside + 1)
+                    });
+                }
                 let points = planes
                     .iter()
                     .chain(std::iter::once(&s))
@@ -810,7 +960,7 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
                     .collect();
                 Some(Member {
                     filter,
-                    answer: plane.side_of_tpi(&t),
+                    answer,
                     fixture: Fixture {
                         predicate: "side_of_tpi".to_owned(),
                         points,
@@ -827,12 +977,13 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
         "{} inputs inside the bound, decided by the exact path; {} outside, by the filter",
         kinds.inside, kinds.outside
     );
-    assert!(
-        kinds.inside > 0 && kinds.outside > 0,
-        "inside {} outside {}",
-        kinds.inside,
-        kinds.outside
-    );
+    let (inside, outside) = routed.get();
+    [
+        usize::try_from(kinds.inside).unwrap(),
+        usize::try_from(kinds.outside).unwrap(),
+        inside,
+        outside,
+    ]
 }
 
 /// `side_of_lpi` near its filter's bound: a line through a grid point x0 on a plane, and a second
@@ -1526,13 +1677,7 @@ fn implicit(
                     "random_inputs_at_every_scale_against_the_oracle",
                 ),
             ),
-            (
-                OneStep,
-                Test(
-                    "attack_g29.rs",
-                    "one_step_from_degenerate_is_decided_exactly",
-                ),
-            ),
+            (OneStep, Test("attack_g29.rs", "one_step_cases")),
             (Boundary, Test("verification.rs", boundary)),
             (
                 Corners,
@@ -1584,9 +1729,49 @@ fn perturbed(
     }
 }
 
+/// The rows of the determinants of plane coefficients: `plane::determinant_sign`, whose sign times
+/// the weight is a point's side, and `plane::normals_sign`, the weight's sign. The same tests serve
+/// every class but the boundary.
+fn determinants() -> [Row; 2] {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    let row = |predicate, call, boundary| Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test("plane.rs", "determinants_are_exact_at_any_length"),
+            ),
+            (OneStep, Test("plane.rs", "determinants_one_step_from_zero")),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test("plane.rs", "determinants_at_the_coefficient_corners"),
+            ),
+            (Laws, Test("plane.rs", "determinant_laws")),
+        ],
+    };
+    [
+        row(
+            "plane::determinant_sign",
+            "determinant_sign",
+            Test("verification.rs", "side_of_tpi_cases"),
+        ),
+        row(
+            "plane::normals_sign",
+            "normals_sign",
+            NotApplicable(
+                "it has no filter: checked machine words, else an exact cross and dot product in `Wide`",
+            ),
+        ),
+    ]
+}
+
 fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
+    let [determinant_sign, normals_sign] = determinants();
     vec![
         explicit("predicate::orient2d", "predicate::orient2d"),
         explicit("predicate::orient3d", "predicate::orient3d"),
@@ -1614,10 +1799,12 @@ fn matrix() -> Vec<Row> {
                 (Laws, Test("plane.rs", "plane_laws")),
             ],
         },
+        determinant_sign,
+        normals_sign,
         implicit(
             "plane::Plane::side_of_tpi",
             ".side_of_tpi",
-            "side_of_tpi_filter_boundary_crossed_both_ways",
+            "side_of_tpi_cases",
             ("plane.rs", "tpi_permutation_laws"),
         ),
         implicit(

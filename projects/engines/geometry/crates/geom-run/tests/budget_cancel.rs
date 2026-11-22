@@ -423,6 +423,42 @@ fn cancellation_is_asked_at_fixed_points() {
 }
 
 #[test]
+fn a_sort_asks_once_per_chunk_and_once_per_piece_of_each_round() {
+    // sort_stable's cost (geom_run::sort): one read of the cancellation per chunk and per piece of
+    // a round. A round merged a second time, by pairs, reads once more per pair, and only a
+    // broken `Ord` may need it: under a true order every piece's two co-ranks are in step.
+    let mut rng = SplitMix(29);
+    for len in [2_usize, 3, 7, 64, 65, 200, 1000] {
+        // Few distinct keys, so ties cross every piece boundary.
+        let items: Vec<u32> = (0..len).map(|_| rng.below(6) as u32).collect();
+        let mut expected_order: Vec<usize> = (0..len).collect();
+        expected_order.sort_by_key(|&i| items[i]);
+        for size in [1_usize, 2, 3, 7, 64] {
+            let chunks = len.div_ceil(size);
+            let mut rounds = 0;
+            let mut width = size;
+            while width < len {
+                rounds += 1;
+                width *= 2;
+            }
+            let expected = chunks + rounds * chunks;
+            for (name, exec) in execs() {
+                let never = Countdown::new(usize::MAX);
+                let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&never);
+                let got =
+                    exec.sort_stable::<_, _, (), _>(&mut meter, PHASE, plan(size), &items, |x| *x);
+                assert_eq!(
+                    got,
+                    Ok(expected_order.clone()),
+                    "len {len}, size {size}, {name}"
+                );
+                assert_eq!(never.asked(), expected, "len {len}, size {size}, {name}");
+            }
+        }
+    }
+}
+
+#[test]
 fn cancellation_during_a_phase_never_returns_partial_results() {
     let items: Vec<u64> = (0..2000).collect();
     for allowed in [0, 1, 5, 99] {

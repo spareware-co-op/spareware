@@ -1,0 +1,24 @@
+(* Inserted by fptaylor.sh into HOL Light's inequality verifier (Formal_ineqs/verifier/
+   m_verifier_main.hl), after mk_verification_functions, which it renames: the verifier
+   remembers what it built for each function, so the pieces of a term cut into pieces
+   (fptaylor_cut.hl), one function on different boxes, build the function's Taylor theorems
+   (its partial derivatives, first and second) once, not once a piece. What it builds is about
+   the function alone, whatever the box; the verifier still checks each box with it, so nothing
+   is proved that was not before. The parameters it may change are kept with it and set again.
+   It says when it builds, and how long that took, so a log shows which run built a function's
+   theorems and which only used them. *)
+let mk_verification_functions =
+  let built = ref [] in
+    fun params pp fun_tm ->
+      let key = (!params, pp, fun_tm) in
+	try
+	  let after, fs = assoc key !built in
+	    params := after; fs
+	with Failure _ ->
+	  let start = Unix.gettimeofday () in
+	  let fs = mk_verification_functions_uncached params pp fun_tm in
+	  let _ = Format.print_string
+	    (Printf.sprintf "Taylor theorems: built in %.0f s" (Unix.gettimeofday () -. start));
+	    Format.print_newline () in
+	    built := (key, (!params, fs)) :: !built; fs;;
+

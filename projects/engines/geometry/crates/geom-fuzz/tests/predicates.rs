@@ -4,13 +4,11 @@
 //!   `cargo test` it replays the files in `tests/__fuzz__/predicates/corpus` and `crashes`, if any,
 //!   then runs [`ITERATIONS`] random byte strings. bolero draws their seeds from the operating
 //!   system and prints the seed of a failing one as `BOLERO_RANDOM_SEED=<seed>`, which replays it;
-//!   `BOLERO_RANDOM_ITERATIONS` changes the count. Under
-//!   `cargo bolero test predicates_fuzz --package geom-fuzz` the same test is a libFuzzer target
-//!   (see the crate header for the command).
+//!   `BOLERO_RANDOM_ITERATIONS` changes the count.
 //! - `bolero_fails_on_a_finding` shows the wiring: a harness that returns a `Finding` fails the
 //!   bolero leg, not only one that panics. It catches bolero's panic itself rather than being a
-//!   `#[should_panic]` test, which would break `ClusterFuzzLite`'s build (the crate README, the
-//!   rules of the layout).
+//!   `#[should_panic]` test, which fails when bolero finds a test by its name (the crate README,
+//!   the rules of the layout).
 //! - `predicates_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed
 //!   seed (`SPAREKIT_SEED` replays it), so every pull request also runs a fixed set of cases, the
 //!   same on every target.
@@ -48,7 +46,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 10_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 20_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 20,000 cases in 0.076 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 530_000;
 
 /// The longest byte string the seeded leg draws. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (270) bytes (derived in `geom_fuzz::predicates`); the 50 more let some
@@ -78,10 +80,10 @@ fn predicates_fuzz() {
 /// bolero's test mode fails, with its panic "test failed", on a harness that returns a
 /// [`geom_fuzz::Finding`].
 ///
-/// Not a `#[should_panic]` test. cargo-bolero's `build-clusterfuzz` builds each test binary by
-/// running one of its bolero tests, the first it listed, with `CARGO_BOLERO_SELECT` set, where
+/// Not a `#[should_panic]` test. A tool that finds a bolero test by its name runs one of the
+/// binary's bolero tests, the first it listed, with `CARGO_BOLERO_SELECT` set, where
 /// `check!` returns without running its body (`bolero-engine`'s `TargetLocation::should_run`); a
-/// `#[should_panic]` test fails there, and the build with it. So this test notes whether the body
+/// `#[should_panic]` test fails there. So this test notes whether the body
 /// ran, and holds bolero to failing exactly when it did; a body that did not run is accepted only
 /// in cargo-bolero's selection mode.
 #[cfg_attr(

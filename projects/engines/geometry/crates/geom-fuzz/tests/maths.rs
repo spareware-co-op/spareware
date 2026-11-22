@@ -4,8 +4,7 @@
 //! - `maths_fuzz` wraps `geom_fuzz::maths::harness` in `bolero::check!`. Under `cargo test` it
 //!   replays the files in `tests/__fuzz__/maths/corpus` and `crashes`, if any, then runs
 //!   [`ITERATIONS`] random byte strings; bolero prints a failing one's seed as
-//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it. Under
-//!   `cargo bolero test maths_fuzz --package geom-fuzz` the same test is a libFuzzer target.
+//!   `BOLERO_RANDOM_SEED=<seed>`, which replays it.
 //! - `maths_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed seed
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 
@@ -29,7 +28,11 @@ use geom_test::Seed;
 const ITERATIONS: usize = 2_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 2_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 2,000 cases in 0.110 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 36_000;
 
 /// The longest byte string the fuzz target and the seeded leg try. The harness reads at most
 /// [`MAX_INPUT_BYTES`] (20) bytes; the rest let some strings carry bytes nobody reads.

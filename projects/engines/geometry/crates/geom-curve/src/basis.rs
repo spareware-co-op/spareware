@@ -106,7 +106,8 @@ impl<const D: usize> TryFrom<CurveKind<D>> for Basis<D> {
             CurveKind::Trimmed(_)
             | CurveKind::Composite(_)
             | CurveKind::Offset(_)
-            | CurveKind::OnSurface(_) => Err(CurveError::Defect),
+            | CurveKind::OnSurface(_)
+            | CurveKind::Intersection(_) => Err(CurveError::Defect),
         }
     }
 }

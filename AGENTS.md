@@ -79,7 +79,7 @@ Who has what, at a glance: [checked out](https://github.com/spareware-co-op/spar
 - Never decompile, disassemble or reverse-engineer proprietary software. Never use leaked or stolen source code.
 - Use open-source code only when its licence allows it. Keep its licence and credit, and list its source in the pull request. No GPL or AGPL code in the core.
 - Our products use their own names. Never use another company's product name for ours.
-- If a method might be patented, a data source's terms forbid our use, or a file format can only be read with inside knowledge, stop and raise it with an owner.
+- If a data source's terms forbid our use, or a file format can only be read with inside knowledge, stop and raise it with an owner. A patent is no reason to stop (owner, 2026-11-13; geometry decision 32.49).
 - If you are unsure whether something is allowed, stop and ask the contributor to raise it. Do not guess.
 
 ## 6. Finish or hand over
