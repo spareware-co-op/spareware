@@ -8,6 +8,12 @@ license.workspace = true
 [dependencies]
 kit-core = { path = "../../../kit/crates/kit-core" }
 kit-ops = { path = "../../../kit/crates/kit-ops" }
+# Bindings name categories by their permanent IDs.
+construct-categories = { path = "../construct-categories" }
+# A shared parameter's ID is a UUID in its one spelling: parsing and printing. MIT OR Apache-2.0.
+uuid = { version = "1.18.1", default-features = false }
+# The issue date is checked against the calendar (leap years). MIT OR Apache-2.0.
+time = { version = "0.3.44", default-features = false }
 # Definitions and unit settings are JSON rows, as construct-model's are. MIT OR Apache-2.0.
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
