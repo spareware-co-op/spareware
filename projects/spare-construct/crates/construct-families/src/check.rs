@@ -11,7 +11,7 @@ use crate::model::{
     Sketch, View,
 };
 use construct_categories::{CategoryId, CategoryTable};
-use construct_formulas::{Entry, Expr, FormulaError, Quantity, evaluate, parse, value_of};
+use construct_formulas::{Entry, Expr, FormulaError, evaluate, parse, value_of};
 use construct_materials::{MaterialId, Materials};
 use construct_params::{Definition, Holder, Kind, ParamError, Value};
 use kit_core::Id;
@@ -286,11 +286,9 @@ pub(crate) fn stored_value(def: &Definition, text: &str) -> Result<Value, ParamE
 }
 
 /// The formula kind of a parameter kind, if formulas can use it.
-fn formula_kind(kind: Kind) -> Option<construct_formulas::Kind> {
+fn formula_kind(kind: Kind) -> Option<Kind> {
     match kind {
-        Kind::Length => Some(construct_formulas::Kind::Length),
-        Kind::Angle => Some(construct_formulas::Kind::Angle),
-        Kind::Number | Kind::Whole => Some(construct_formulas::Kind::Count),
+        Kind::Length | Kind::Angle | Kind::Number | Kind::Whole => Some(kind),
         _ => None,
     }
 }
@@ -402,7 +400,7 @@ struct Param<'r> {
 #[derive(Clone)]
 enum Worked {
     /// Its value at the defaults.
-    Value(Quantity),
+    Value(Value),
     /// It fails because something it reads fails, which is reported there.
     Depends,
     /// Its own problems.
@@ -649,7 +647,7 @@ impl<'r> Checker<'r, '_> {
                 message: format!("{name} fails"),
             }),
         };
-        match value_of(text, construct_formulas::Kind::Length, &mut lookup) {
+        match value_of(text, Kind::Length, &mut lookup) {
             Err(e) if e.code != "Depends" => self.push(at, ProblemKind::Formula(e)),
             _ => {}
         }
@@ -1219,14 +1217,14 @@ mod tests {
         .unwrap();
         let value = Value::from_stored("length:q0:5248000").unwrap();
         let text = formula_text(&def, &value).unwrap();
-        let back = value_of(&text, construct_formulas::Kind::Length, &mut |_| {
+        let back = value_of(&text, Kind::Length, &mut |_| {
             Err(FormulaError {
                 code: "UnknownName",
                 message: String::new(),
             })
         })
         .unwrap();
-        assert_eq!(back.to_f64(), 820.0);
+        assert_eq!(back, value);
         let angle = Definition::new(
             Id::parse("P-2").unwrap(),
             "Swing",
@@ -1236,14 +1234,14 @@ mod tests {
         .unwrap();
         let value = Value::from_stored("angle:405000000").unwrap();
         let text = formula_text(&angle, &value).unwrap();
-        let back = value_of(&text, construct_formulas::Kind::Angle, &mut |_| {
+        let back = value_of(&text, Kind::Angle, &mut |_| {
             Err(FormulaError {
                 code: "UnknownName",
                 message: String::new(),
             })
         })
         .unwrap();
-        assert_eq!(back.to_f64(), 45.0);
+        assert_eq!(back, value);
     }
 
     #[test]
