@@ -1,0 +1,706 @@
+{
+  "format": 1,
+  "id": "01KAXF3M1Y0D00R5W1NG000001",
+  "name": "Single swing door",
+  "category": 300,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:820"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:2040"
+    },
+    {
+      "key": "frame",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.frame",
+        "name": "Frame width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:40"
+    },
+    {
+      "key": "frame_depth",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.frame_depth",
+        "name": "Frame depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:110"
+    },
+    {
+      "key": "panel",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.panel",
+        "name": "Panel thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:35"
+    },
+    {
+      "key": "panel_material",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.panel_material",
+        "name": "Panel material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-white-oak"
+    },
+    {
+      "key": "swing",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.swing",
+        "name": "Swing",
+        "kind": "choice",
+        "holder": "instance",
+        "choices": [
+          {
+            "key": "left",
+            "label": "Hinged on the left"
+          },
+          {
+            "key": "right",
+            "label": "Hinged on the right"
+          }
+        ]
+      },
+      "default": "choice:left"
+    },
+    {
+      "key": "opening_width",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.opening_width",
+        "name": "Opening width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "width + 2 * frame"
+    },
+    {
+      "key": "opening_height",
+      "definition": {
+        "id": "01KAXF3M1Y0D00R5W1NG000001.opening_height",
+        "name": "Opening height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "height + frame"
+    }
+  ],
+  "planes": [
+    {
+      "key": "centre",
+      "base": "xz",
+      "offset": "0 mm"
+    },
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "elevation",
+      "plane": "centre",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:0",
+          "y": "length:0"
+        },
+        {
+          "key": "e",
+          "x": "length:1000",
+          "y": "length:0"
+        },
+        {
+          "key": "o1",
+          "x": "length:-450",
+          "y": "length:0"
+        },
+        {
+          "key": "i1",
+          "x": "length:-410",
+          "y": "length:0"
+        },
+        {
+          "key": "i2",
+          "x": "length:410",
+          "y": "length:0"
+        },
+        {
+          "key": "o2",
+          "x": "length:450",
+          "y": "length:0"
+        },
+        {
+          "key": "i3",
+          "x": "length:410",
+          "y": "length:2040"
+        },
+        {
+          "key": "i4",
+          "x": "length:-410",
+          "y": "length:2040"
+        },
+        {
+          "key": "o3",
+          "x": "length:450",
+          "y": "length:2080"
+        },
+        {
+          "key": "o4",
+          "x": "length:-450",
+          "y": "length:2080"
+        },
+        {
+          "key": "al",
+          "x": "length:-410",
+          "y": "length:1020"
+        },
+        {
+          "key": "ar",
+          "x": "length:410",
+          "y": "length:1020"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "foot_left",
+          "start": "o1",
+          "end": "i1"
+        },
+        {
+          "key": "inner_left",
+          "start": "i1",
+          "end": "i4"
+        },
+        {
+          "key": "inner_head",
+          "start": "i4",
+          "end": "i3"
+        },
+        {
+          "key": "inner_right",
+          "start": "i3",
+          "end": "i2"
+        },
+        {
+          "key": "foot_right",
+          "start": "i2",
+          "end": "o2"
+        },
+        {
+          "key": "outer_right",
+          "start": "o2",
+          "end": "o3"
+        },
+        {
+          "key": "outer_head",
+          "start": "o3",
+          "end": "o4"
+        },
+        {
+          "key": "outer_left",
+          "start": "o4",
+          "end": "o1"
+        },
+        {
+          "key": "sill",
+          "start": "o1",
+          "end": "o2"
+        },
+        {
+          "key": "panel_foot",
+          "start": "i1",
+          "end": "i2"
+        },
+        {
+          "key": "mark_left_low",
+          "start": "i2",
+          "end": "al"
+        },
+        {
+          "key": "mark_left_high",
+          "start": "al",
+          "end": "i3"
+        },
+        {
+          "key": "mark_right_low",
+          "start": "i1",
+          "end": "ar"
+        },
+        {
+          "key": "mark_right_high",
+          "start": "ar",
+          "end": "i4"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "o1",
+          "line": "base"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "i1",
+          "line": "base"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "i2",
+          "line": "base"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "o2",
+          "line": "base"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "i1",
+          "length": "width / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "i2",
+          "length": "width / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "i1",
+          "b": "o1",
+          "length": "frame"
+        },
+        {
+          "kind": "distance",
+          "a": "i2",
+          "b": "o2",
+          "length": "frame"
+        },
+        {
+          "kind": "vertical",
+          "line": "inner_left"
+        },
+        {
+          "kind": "distance",
+          "a": "i1",
+          "b": "i4",
+          "length": "height"
+        },
+        {
+          "kind": "horizontal",
+          "line": "inner_head"
+        },
+        {
+          "kind": "vertical",
+          "line": "inner_right"
+        },
+        {
+          "kind": "vertical",
+          "line": "outer_right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o3",
+          "line": "inner_head",
+          "length": "frame",
+          "side": "left"
+        },
+        {
+          "kind": "horizontal",
+          "line": "outer_head"
+        },
+        {
+          "kind": "vertical",
+          "line": "outer_left"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "al",
+          "line": "inner_left"
+        },
+        {
+          "kind": "distance",
+          "a": "i1",
+          "b": "al",
+          "length": "height / 2"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "ar",
+          "line": "inner_right"
+        },
+        {
+          "kind": "distance",
+          "a": "i2",
+          "b": "ar",
+          "length": "height / 2"
+        }
+      ]
+    },
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:0",
+          "y": "length:0"
+        },
+        {
+          "key": "m",
+          "x": "length:0",
+          "y": "length:55"
+        },
+        {
+          "key": "hl",
+          "x": "length:-410",
+          "y": "length:55"
+        },
+        {
+          "key": "hr",
+          "x": "length:410",
+          "y": "length:55"
+        },
+        {
+          "key": "ll",
+          "x": "length:-410",
+          "y": "length:875"
+        },
+        {
+          "key": "lr",
+          "x": "length:410",
+          "y": "length:875"
+        }
+      ],
+      "lines": [
+        {
+          "key": "centre_line",
+          "start": "o",
+          "end": "m"
+        },
+        {
+          "key": "shut",
+          "start": "hl",
+          "end": "hr"
+        },
+        {
+          "key": "leaf_left",
+          "start": "hl",
+          "end": "ll"
+        },
+        {
+          "key": "leaf_right",
+          "start": "hr",
+          "end": "lr"
+        }
+      ],
+      "arcs": [
+        {
+          "key": "arc_left",
+          "centre": "hl",
+          "start": "hr",
+          "end": "ll",
+          "radius": "length:820"
+        },
+        {
+          "key": "arc_right",
+          "centre": "hr",
+          "start": "lr",
+          "end": "hl",
+          "radius": "length:820"
+        }
+      ],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "vertical",
+          "line": "centre_line"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "m",
+          "length": "frame_depth / 2"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "m",
+          "line": "shut"
+        },
+        {
+          "kind": "horizontal",
+          "line": "shut"
+        },
+        {
+          "kind": "distance",
+          "a": "m",
+          "b": "hl",
+          "length": "width / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "m",
+          "b": "hr",
+          "length": "width / 2"
+        },
+        {
+          "kind": "vertical",
+          "line": "leaf_left"
+        },
+        {
+          "kind": "distance",
+          "a": "hl",
+          "b": "ll",
+          "length": "width"
+        },
+        {
+          "kind": "vertical",
+          "line": "leaf_right"
+        },
+        {
+          "kind": "distance",
+          "a": "hr",
+          "b": "lr",
+          "length": "width"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "frame",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "foot_left",
+        "inner_left",
+        "inner_head",
+        "inner_right",
+        "foot_right",
+        "outer_right",
+        "outer_head",
+        "outer_left"
+      ],
+      "holes": [],
+      "start": "-frame_depth / 2",
+      "end": "frame_depth / 2",
+      "subcategory": 302,
+      "material": {
+        "fixed": "timber-douglas-fir"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "panel",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "panel_foot",
+        "inner_right",
+        "inner_head",
+        "inner_left"
+      ],
+      "holes": [],
+      "start": "frame_depth / 2 - panel",
+      "end": "frame_depth / 2",
+      "subcategory": 301,
+      "material": {
+        "parameter": "panel_material"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "swing_left",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "leaf_left",
+        "arc_left"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:left"
+      }
+    },
+    {
+      "key": "swing_right",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "leaf_right",
+        "arc_right"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:right"
+      }
+    },
+    {
+      "key": "mark_left",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "mark_left_low",
+        "mark_left_high"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:left"
+      }
+    },
+    {
+      "key": "mark_right",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "mark_right_low",
+        "mark_right_high"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:right"
+      }
+    }
+  ],
+  "hosting": {
+    "host": "wall",
+    "opening": {
+      "sketch": "elevation",
+      "profile": [
+        "sill",
+        "outer_right",
+        "outer_head",
+        "outer_left"
+      ]
+    }
+  },
+  "types": [
+    {
+      "key": "d720",
+      "name": "720 x 2040",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:720"
+        },
+        {
+          "parameter": "height",
+          "value": "length:2040"
+        }
+      ]
+    },
+    {
+      "key": "d820",
+      "name": "820 x 2040",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:820"
+        },
+        {
+          "parameter": "height",
+          "value": "length:2040"
+        }
+      ]
+    },
+    {
+      "key": "d920",
+      "name": "920 x 2040",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:920"
+        },
+        {
+          "parameter": "height",
+          "value": "length:2040"
+        }
+      ]
+    }
+  ]
+}

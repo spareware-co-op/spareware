@@ -1,0 +1,604 @@
+{
+  "format": 1,
+  "id": "01KAXF3M1Y0F1XEDW1ND000002",
+  "name": "Fixed window",
+  "category": 400,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:1200"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:1200"
+    },
+    {
+      "key": "frame",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.frame",
+        "name": "Frame width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:50"
+    },
+    {
+      "key": "frame_depth",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.frame_depth",
+        "name": "Frame depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:100"
+    },
+    {
+      "key": "glazing",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.glazing",
+        "name": "Glazing thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:24"
+    },
+    {
+      "key": "frame_material",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.frame_material",
+        "name": "Frame material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:aluminium-6061"
+    },
+    {
+      "key": "sill_height",
+      "definition": {
+        "id": "01KAXF3M1Y0F1XEDW1ND000002.sill_height",
+        "name": "Sill height",
+        "kind": "length",
+        "holder": "instance",
+        "choices": []
+      },
+      "default": "length:900"
+    }
+  ],
+  "planes": [
+    {
+      "key": "centre",
+      "base": "xz",
+      "offset": "0 mm"
+    },
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "elevation",
+      "plane": "centre",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:0",
+          "y": "length:0"
+        },
+        {
+          "key": "s",
+          "x": "length:0",
+          "y": "length:900"
+        },
+        {
+          "key": "f1",
+          "x": "length:-600",
+          "y": "length:900"
+        },
+        {
+          "key": "f2",
+          "x": "length:600",
+          "y": "length:900"
+        },
+        {
+          "key": "f3",
+          "x": "length:600",
+          "y": "length:2100"
+        },
+        {
+          "key": "f4",
+          "x": "length:-600",
+          "y": "length:2100"
+        },
+        {
+          "key": "g1",
+          "x": "length:-550",
+          "y": "length:950"
+        },
+        {
+          "key": "g2",
+          "x": "length:550",
+          "y": "length:950"
+        },
+        {
+          "key": "g3",
+          "x": "length:550",
+          "y": "length:2050"
+        },
+        {
+          "key": "g4",
+          "x": "length:-550",
+          "y": "length:2050"
+        }
+      ],
+      "lines": [
+        {
+          "key": "rise",
+          "start": "o",
+          "end": "s"
+        },
+        {
+          "key": "bottom",
+          "start": "f1",
+          "end": "f2"
+        },
+        {
+          "key": "right",
+          "start": "f2",
+          "end": "f3"
+        },
+        {
+          "key": "top",
+          "start": "f3",
+          "end": "f4"
+        },
+        {
+          "key": "left",
+          "start": "f4",
+          "end": "f1"
+        },
+        {
+          "key": "clear_bottom",
+          "start": "g1",
+          "end": "g2"
+        },
+        {
+          "key": "clear_right",
+          "start": "g2",
+          "end": "g3"
+        },
+        {
+          "key": "clear_top",
+          "start": "g3",
+          "end": "g4"
+        },
+        {
+          "key": "clear_left",
+          "start": "g4",
+          "end": "g1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "vertical",
+          "line": "rise"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "s",
+          "length": "sill_height"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "s",
+          "line": "bottom"
+        },
+        {
+          "kind": "horizontal",
+          "line": "bottom"
+        },
+        {
+          "kind": "distance",
+          "a": "s",
+          "b": "f1",
+          "length": "width / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "s",
+          "b": "f2",
+          "length": "width / 2"
+        },
+        {
+          "kind": "vertical",
+          "line": "right"
+        },
+        {
+          "kind": "distance",
+          "a": "f2",
+          "b": "f3",
+          "length": "height"
+        },
+        {
+          "kind": "horizontal",
+          "line": "top"
+        },
+        {
+          "kind": "vertical",
+          "line": "left"
+        },
+        {
+          "kind": "horizontal",
+          "line": "clear_bottom"
+        },
+        {
+          "kind": "vertical",
+          "line": "clear_right"
+        },
+        {
+          "kind": "horizontal",
+          "line": "clear_top"
+        },
+        {
+          "kind": "vertical",
+          "line": "clear_left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "g1",
+          "line": "bottom",
+          "length": "frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "g2",
+          "line": "right",
+          "length": "frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "g3",
+          "line": "top",
+          "length": "frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "g4",
+          "line": "left",
+          "length": "frame",
+          "side": "left"
+        }
+      ]
+    },
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:0",
+          "y": "length:0"
+        },
+        {
+          "key": "c1",
+          "x": "length:-600",
+          "y": "length:0"
+        },
+        {
+          "key": "c2",
+          "x": "length:600",
+          "y": "length:0"
+        },
+        {
+          "key": "a1",
+          "x": "length:-600",
+          "y": "length:-50"
+        },
+        {
+          "key": "a2",
+          "x": "length:600",
+          "y": "length:-50"
+        },
+        {
+          "key": "b1",
+          "x": "length:-600",
+          "y": "length:50"
+        },
+        {
+          "key": "b2",
+          "x": "length:600",
+          "y": "length:50"
+        }
+      ],
+      "lines": [
+        {
+          "key": "glass_line",
+          "start": "c1",
+          "end": "c2"
+        },
+        {
+          "key": "face_out",
+          "start": "a1",
+          "end": "a2"
+        },
+        {
+          "key": "face_in",
+          "start": "b1",
+          "end": "b2"
+        },
+        {
+          "key": "end_left",
+          "start": "a1",
+          "end": "b1"
+        },
+        {
+          "key": "end_right",
+          "start": "a2",
+          "end": "b2"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "o",
+          "line": "glass_line"
+        },
+        {
+          "kind": "horizontal",
+          "line": "glass_line"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "c1",
+          "length": "width / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "o",
+          "b": "c2",
+          "length": "width / 2"
+        },
+        {
+          "kind": "vertical",
+          "line": "end_left"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "c1",
+          "line": "end_left"
+        },
+        {
+          "kind": "vertical",
+          "line": "end_right"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "c2",
+          "line": "end_right"
+        },
+        {
+          "kind": "distance",
+          "a": "c1",
+          "b": "a1",
+          "length": "frame_depth / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "c1",
+          "b": "b1",
+          "length": "frame_depth / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "c2",
+          "b": "a2",
+          "length": "frame_depth / 2"
+        },
+        {
+          "kind": "distance",
+          "a": "c2",
+          "b": "b2",
+          "length": "frame_depth / 2"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "block",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "bottom",
+        "right",
+        "top",
+        "left"
+      ],
+      "holes": [],
+      "start": "-frame_depth / 2",
+      "end": "frame_depth / 2",
+      "subcategory": 401,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "clear",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "clear_bottom",
+        "clear_right",
+        "clear_top",
+        "clear_left"
+      ],
+      "holes": [],
+      "start": "-frame_depth / 2",
+      "end": "frame_depth / 2",
+      "subcategory": 401,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "frame",
+      "op": "subtract",
+      "target": "block",
+      "tool": "clear",
+      "subcategory": 401,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "glass",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "clear_bottom",
+        "clear_right",
+        "clear_top",
+        "clear_left"
+      ],
+      "holes": [],
+      "start": "-glazing / 2",
+      "end": "glazing / 2",
+      "subcategory": 403,
+      "material": {
+        "fixed": "glass-plate"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "face_out",
+        "face_in",
+        "glass_line",
+        "end_left",
+        "end_right"
+      ],
+      "subcategory": 400,
+      "visibility": {
+        "coarse": true,
+        "medium": false,
+        "fine": false
+      }
+    }
+  ],
+  "hosting": {
+    "host": "wall",
+    "opening": {
+      "sketch": "elevation",
+      "profile": [
+        "bottom",
+        "right",
+        "top",
+        "left"
+      ]
+    }
+  },
+  "types": [
+    {
+      "key": "w600",
+      "name": "600 x 900",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:600"
+        },
+        {
+          "parameter": "height",
+          "value": "length:900"
+        }
+      ]
+    },
+    {
+      "key": "w1200",
+      "name": "1200 x 1200",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:1200"
+        },
+        {
+          "parameter": "height",
+          "value": "length:1200"
+        }
+      ]
+    },
+    {
+      "key": "w1800",
+      "name": "1800 x 1200",
+      "values": [
+        {
+          "parameter": "width",
+          "value": "length:1800"
+        },
+        {
+          "parameter": "height",
+          "value": "length:1200"
+        }
+      ]
+    }
+  ]
+}
