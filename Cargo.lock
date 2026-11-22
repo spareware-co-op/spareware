@@ -683,6 +683,7 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-types",
+ "construct-walls",
  "engine-geometry",
  "hex",
  "kit-core",
