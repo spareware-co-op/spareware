@@ -69,6 +69,7 @@
 # GitHub measuring run 44867854907 (miri_measure=all on fix/coincidence-far-line at f20e72332, miri_measure_tests naming the 2 tests #1156 added and the route test it changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44870980124 (miri_measure=all on fix/coincidence-far-line at b187535bf, miri_measure_tests naming the route test #1156 changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44588260301 (miri_measure=new on train/phase6-1 at f720c650d).
+# GitHub measuring run 44886321872 (miri_measure=all on measure/phase6-miri-cuts at 95a227eb8, miri_measure_tests naming Phase 6's 14 tests over 375 s, each cut under cfg(miri)), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 4	geom-2d	arrange::piece::tests::one_curve_has_no_quartic
 4	geom-2d	arrange::piece::tests::x_falls_rises_or_stays
 4	geom-2d	arrange::tests::a_sort_keeps_the_first_refusal_and_goes_on
@@ -123,7 +124,7 @@ native-only over 601	geom-2d::attack_g193	a_fillet_of_a_line_and_an_ellipse_join
 native-only over 601	geom-2d::attack_g193	a_small_fillet_at_an_ellipse_is_made_down_to_its_budget
 native-only over 601	geom-2d::attack_g193	caps_on_opposite_sides_of_the_circle_are_clear
 11	geom-2d::attack_g193	caps_too_near_to_tell_apart_are_refused
-578	geom-2d::attack_g193	common_tangents_of_every_kind_at_every_scale
+176	geom-2d::attack_g193	common_tangents_of_every_kind_at_every_scale
 native-only over 601	geom-2d::attack_g193	every_construction_makes_what_it_made
 native-only over 601	geom-2d::attack_g193	every_corner_of_a_hundred_thousand
 21	geom-2d::attack_g193	every_rational_corner_is_exact_in_every_turn
@@ -207,7 +208,7 @@ native-only over 601	geom-2d::attack_g196_arcs	the_arrangement_of_arcs_does_not_
 45	geom-2d::attack_g196b_ellipses	a_vertical_line_at_an_extreme_touches_it_there
 native-only over 601	geom-2d::attack_g196b_ellipses	an_arc_whose_circle_meets_the_ellipse_only_elsewhere_is_arranged
 38	geom-2d::attack_g196b_ellipses	an_axis_aligned_ellipse_has_its_extremes_on_its_axis
-486	geom-2d::attack_g196b_ellipses	an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays_exact
+353	geom-2d::attack_g196b_ellipses	an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays_exact
 80	geom-2d::attack_g196b_ellipses	an_ellipse_beside_a_circle_it_does_not_meet_is_arranged
 native-only over 601	geom-2d::attack_g196b_ellipses	an_ellipse_crossing_a_circle_or_another_ellipse_is_refused
 25	geom-2d::attack_g196b_ellipses	an_ellipse_is_two_edges_between_its_leftmost_and_rightmost_points
@@ -359,7 +360,7 @@ native-only over 601	geom-2d::update	every_piece_runs_from_its_lower_end_to_its_
 3	geom-2d::update	from_noded_takes_segments_either_way_round_and_skips_those_of_no_length
 native-only over 601	geom-2d::update	incremental_equals_batch_for_any_order
 native-only over 601	geom-2d::update	location_agrees_with_point_in_polygon_over_the_sweeps_cycles
-518	geom-2d::update	location_and_face_walks_cross_chunks
+151	geom-2d::update	location_and_face_walks_cross_chunks
 3	geom-2d::update	same_as_tells_every_difference
 67	geom-analysis::attack_g346	a_capped_run_is_still_certified
 4	geom-analysis::attack_g346	a_run_past_its_budget_stops
@@ -3249,11 +3250,11 @@ native-only over 1033	geom-num::attack_g166	two_double_roots_of_rank_two_on_irra
 82	geom-num::attack_g187	order_and_turn_change_sign_as_they_should
 5	geom-num::attack_g187	order_filter_boundary_crossed_both_ways
 11	geom-num::attack_g187	orient_filter_boundary_crossed_both_ways
-586	geom-num::attack_g187	random_inputs_at_every_scale_match_the_oracle
+206	geom-num::attack_g187	random_inputs_at_every_scale_match_the_oracle
 7	geom-num::attack_g187	side_filter_boundary_crossed_both_ways
 2	geom-num::attack_g187	the_budget_and_the_degenerate_inputs_are_refused
 84	geom-num::attack_g187	the_extreme_values_reach_every_width_and_every_step_fits
-446	geom-num::attack_g187	the_filters_never_contradict_the_exact_paths_and_both_outcomes_occur
+224	geom-num::attack_g187	the_filters_never_contradict_the_exact_paths_and_both_outcomes_occur
 2	geom-num::attack_g187	the_largest_value_each_expression_can_take_is_inside_its_width
 149	geom-num::attack_g188	a_chord_of_any_kind_puts_both_ends_on_the_circle
 2	geom-num::attack_g188	a_chord_puts_the_centre_on_the_side_its_sweep_says
@@ -3267,7 +3268,7 @@ native-only over 601	geom-num::attack_g188	random_inputs_at_every_scale_match_th
 2	geom-num::attack_g188	tangency_is_exactly_zero_and_one_step_is_not
 1	geom-num::attack_g188	the_budget_and_the_degenerate_inputs_are_refused
 66	geom-num::attack_g188	the_extreme_values_reach_every_width_and_every_step_fits
-507	geom-num::attack_g189	a_crossing_lies_exactly_on_its_carrier_and_its_circle
+256	geom-num::attack_g189	a_crossing_lies_exactly_on_its_carrier_and_its_circle
 24	geom-num::attack_g189	a_rational_centre_gives_crossings_on_its_circle
 6	geom-num::attack_g189	a_rational_point_compares_with_a_crossing
 9	geom-num::attack_g189	a_tangency_is_one_point_and_k_is_exactly_zero
@@ -3344,7 +3345,7 @@ native-only over 601	geom-num::attack_g193	every_narrowed_root_holds_its_crossin
 native-only over 601	geom-num::attack_g193	one_step_from_a_disc_or_a_fine_line_is_decided_by_the_exact_path
 12	geom-num::attack_g196	a_circle_written_as_an_ellipse_has_the_circle_s_ends
 9	geom-num::attack_g196	a_whole_circle_about_a_grid_point_ends_at_grid_points
-589	geom-num::attack_g196	an_ellipse_s_ends_are_on_it_either_side_of_its_centre_and_beyond_every_crossing
+284	geom-num::attack_g196	an_ellipse_s_ends_are_on_it_either_side_of_its_centre_and_beyond_every_crossing
 native-only over 601	geom-num::attack_g196	each_end_is_on_the_circle_level_with_the_centre_and_beyond_every_crossing
 8	geom-num::attack_g196	the_widest_circle_in_the_budget_still_has_both_ends_exactly
 48	geom-num::attack_g196	the_widest_ellipse_in_the_budget_still_has_both_ends_exactly
@@ -9365,13 +9366,13 @@ native-only over 564	geom-run::properties	try_map_follows_the_phase_rule
 5	geom-sketch	place::tests::the_ground_is_never_moved_and_bad_input_places_nothing
 4	geom-sketch	place::tests::three_dimensions_work_the_same_way
 5	geom-sketch::attack_g219	a_point_inside_or_outside_an_ellipse_reads_with_the_sign_of_the_side
-538	geom-sketch::attack_g219	a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radius
+228	geom-sketch::attack_g219	a_point_on_an_ellipse_is_scaled_by_its_size_whatever_its_axis_and_minor_radius
 6	geom-sketch::attack_g219	a_row_scaled_where_its_size_is_nothing_takes_the_scale_one
 native-only over 601	geom-sketch::attack_g219	a_tangency_is_scaled_by_its_normals_and_its_curvature_wherever_its_point_is
 3	geom-sketch::attack_g219	an_ellipse_of_no_minor_radius_adds_no_curvature_to_a_tangencys_scale
 2	geom-sketch::attack_g219	an_ellipse_whose_axis_is_its_minor_radius_has_no_axis_direction
 8	geom-sketch::attack_g219	an_elliptical_arc_keeps_each_end_at_its_parameter
-472	geom-sketch::attack_g219	an_elliptical_arcs_length_is_its_quadrature
+109	geom-sketch::attack_g219	an_elliptical_arcs_length_is_its_quadrature
 26	geom-sketch::attack_g219	curves_tangent_at_a_point_read_how_far_their_normals_turn
 27	geom-sketch::attack_g219	each_kind_reads_what_it_should_off_its_solution
 13	geom-sketch::attack_g219	each_row_acts_as_a_length_at_its_solution
@@ -9391,7 +9392,7 @@ native-only over 601	geom-sketch::attack_g219	a_tangency_is_scaled_by_its_normal
 17	geom-sketch::catalogue	a_row_acts_as_a_length_at_its_solution
 3	geom-sketch::catalogue	a_rule_on_lines_of_no_length_is_scaled_by_one
 9	geom-sketch::catalogue	a_scale_past_the_doubles_is_refused
-582	geom-sketch::catalogue	a_variable_twice_in_a_rule_adds_up
+247	geom-sketch::catalogue	a_variable_twice_in_a_rule_adds_up
 7	geom-sketch::catalogue	an_arc_whose_ends_meet_sweeps_nothing
 8	geom-sketch::catalogue	an_offset_chain_ties_each_piece_to_its_copy
 71	geom-sketch::catalogue	catalogue_golden_hash_is_the_same_on_every_target
@@ -9399,7 +9400,7 @@ native-only over 601	geom-sketch::attack_g219	a_tangency_is_scaled_by_its_normal
 58	geom-sketch::catalogue	each_kind_has_its_commit_class
 141	geom-sketch::catalogue	each_kind_reads_what_it_should_off_its_solution
 39	geom-sketch::catalogue	every_dimension_measures
-476	geom-sketch::catalogue	every_jacobian_entry_is_the_derivative_of_its_residual
+253	geom-sketch::catalogue	every_jacobian_entry_is_the_derivative_of_its_residual
 15	geom-sketch::catalogue	every_kind_is_zero_where_it_holds
 302	geom-sketch::catalogue	every_name_in_every_kind_is_checked
 52	geom-sketch::catalogue	every_singular_set_is_refused_naming_the_constraint
@@ -9666,10 +9667,10 @@ native-only over 601	geom-sketch::solved_splines_determinism	solved_splines_gold
 7	geom-sketch::spline	only_a_spline_a_constraint_can_read_is_accepted
 4	geom-sketch::spline	the_ends_derivatives_are_those_of_the_curve
 5	geom-sketch::spline	the_text_form_reads_back_exactly
-548	geom-sketch::spline_determinism	spline_golden_hash_is_the_same_on_every_target
+135	geom-sketch::spline_determinism	spline_golden_hash_is_the_same_on_every_target
 14	geom-sketch::spline_more	a_cubic_leaves_a_line_with_the_curvature_of_a_line_and_not_its_rate
 10	geom-sketch::spline_more	a_fit_point_spline_passes_through_its_fit_points
-396	geom-sketch::spline_more	a_length_rule_reads_the_error_of_the_stated_length
+200	geom-sketch::spline_more	a_length_rule_reads_the_error_of_the_stated_length
 282	geom-sketch::spline_more	a_loop_needs_more_panels_and_still_has_its_length_within_the_bound
 199	geom-sketch::spline_more	a_named_length_is_solved_for_as_well_as_driven
 5	geom-sketch::spline_more	a_point_pinned_to_a_spline_reads_the_miss
@@ -9682,7 +9683,7 @@ native-only over 601	geom-sketch::solved_splines_determinism	solved_splines_gold
 6	geom-sketch::spline_more	an_arc_laid_over_its_spline_is_tangent_but_not_a_continuation
 native-only over 601	geom-sketch::spline_more	every_jacobian_entry_is_the_derivative_of_its_residual
 native-only over 601	geom-sketch::spline_more	every_spline_rule_has_the_slopes_and_jets_of_its_jacobian
-438	geom-sketch::spline_more	every_spline_rule_is_enclosed_around_the_residual_it_stores
+226	geom-sketch::spline_more	every_spline_rule_is_enclosed_around_the_residual_it_stores
 2	geom-sketch::spline_more	fit_data_the_interpolation_refuses_is_refused
 4	geom-sketch::spline_more	moving_a_fit_point_moves_the_reinterpolation
 279	geom-sketch::spline_more	panels_off_zero_cover_their_span_too
