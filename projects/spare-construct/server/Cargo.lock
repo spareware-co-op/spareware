@@ -721,8 +721,10 @@ dependencies = [
 name = "construct-formulas"
 version = "0.0.0"
 dependencies = [
+ "construct-params",
  "dashu-int",
  "dashu-ratio",
+ "kit-core",
  "winnow 0.7.15",
 ]
 
