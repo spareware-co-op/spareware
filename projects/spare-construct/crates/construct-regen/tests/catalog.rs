@@ -133,7 +133,7 @@ fn a_type_shows_the_values_it_holds_in_units_and_where_each_comes_from() {
         .unwrap();
     assert_eq!(
         (width.from, width.value.as_deref(), width.shown.as_deref()),
-        ("type", Some("length:2400"), Some("2400 mm"))
+        ("type", Some("length:q0:15360000"), Some("2400 mm"))
     );
     // Another category has none of these types.
     let walls = context.types_view(Some(WALLS), &held, &counts).unwrap();

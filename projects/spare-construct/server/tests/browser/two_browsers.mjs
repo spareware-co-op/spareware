@@ -298,7 +298,7 @@ await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P
 pass("Ctrl+Z undoes his value, and Anna's browser follows");
 await ben.waitForSelector('#qat [data-act="stackredo"]');
 await ben.click('#qat [data-act="stackredo"]');
-await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
 pass('his Redo button puts it back, for her too');
 await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
 pass('and then there is nothing to redo');
