@@ -144,17 +144,6 @@ struct WallBody {
     height: i64,
 }
 
-/// `steps` of the building grid to the nearest whole millimetre, a half away from zero, and
-/// whether that is exact.
-fn nearest_mm(steps: i64) -> (i64, bool) {
-    let per = Length::STEPS_PER_MM;
-    let floor = steps.checked_div_euclid(per).unwrap_or(0);
-    let rest = steps.checked_rem_euclid(per).unwrap_or(0);
-    let twice = rest.saturating_mul(2);
-    let up = twice > per || (twice == per && floor >= 0);
-    (if up { floor.saturating_add(1) } else { floor }, rest == 0)
-}
-
 /// A layered wall as one box of its whole thickness: the prism on its outer outline, the strip
 /// from its exterior face to its interior face ([`crate::wall_plan`]), each corner the nearest
 /// whole millimetre, from its base to its top. Its bounds are rounded outward.
@@ -164,7 +153,7 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     let (corners, _) = wall.plan.strip(exterior, interior)?;
     let mut rounded = false;
     let mut near = |steps: i64| {
-        let (mm, exact) = nearest_mm(steps);
+        let (mm, exact) = wall_plan::nearest_mm(steps);
         rounded |= !exact;
         mm
     };

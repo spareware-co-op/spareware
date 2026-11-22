@@ -14,6 +14,9 @@
 //!   value the element reads for that parameter: through construct-types' [`resolve`] (its own
 //!   value, then its type's, then the default) when it has a type, else its own value, then the
 //!   default. A length goes in as the whole millimetres the stand-in's recipes take.
+//! - A recipe argument written `{"wall":"type"}` is filled in the same read with the layers of
+//!   the element's wall type ([`crate::walls`]), so [`recipe_at`] is the one place a recipe that
+//!   reads records is filled.
 //! - Records of kind `type` and [`TABLE_KIND`] have no shape ([`has_shape`]).
 //!
 //! Depends on construct-model (records), construct-categories, construct-params and
@@ -662,12 +665,14 @@ pub async fn read_document<R: Reader>(
 }
 
 /// The recipe `element` is built from, as the document is `at` that state: its own, with every
-/// argument that names a parameter filled ([`filled`]). A recipe that names none needs no read.
-/// The regenerator builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
+/// argument that names a parameter filled ([`filled`]), and every argument that reads its wall
+/// type's layers ([`crate::walls::filled`]). A recipe that reads neither needs no read. The
+/// regenerator builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
 ///
 /// # Errors
 /// A [`StoreError`] when the store fails. The inner error is the build failure: `BadParameter`
-/// when the document's parameters or the element's type cannot be read, or [`filled`]'s own.
+/// when the document's parameters or the element's type cannot be read, or [`filled`]'s own, or
+/// [`crate::walls::filled`]'s.
 pub async fn recipe_at<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -675,7 +680,7 @@ pub async fn recipe_at<R: Reader>(
     element: &Element,
     at: At,
 ) -> Result<Result<Recipe, GeometryError>, StoreError> {
-    if !reads_parameters(&element.recipe) {
+    if !reads_records(&element.recipe) {
         return Ok(Ok(element.recipe.clone()));
     }
     let bad = |why: String| failure("BadParameter", why);
@@ -694,5 +699,15 @@ pub async fn recipe_at<R: Reader>(
     };
     Ok(filled(&element.recipe, |id| {
         context.value_of(element, ty.as_ref(), id)
-    }))
+    })
+    .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref())))
+}
+
+/// Whether a recipe reads the document's parameter table and the element's type: it names a
+/// parameter ([`reads_parameters`]) or reads its wall type's layers
+/// ([`crate::walls::reads_type`]). Its `reads` row lists both, so a change to either builds it
+/// again.
+#[must_use]
+pub fn reads_records(recipe: &Recipe) -> bool {
+    reads_parameters(recipe) || crate::walls::reads_type(recipe)
 }

@@ -58,6 +58,20 @@ fn too_big() -> GeometryError {
     fault("TooBig", "a length is beyond the kernel's grid")
 }
 
+/// `steps` of the building grid to the nearest whole millimetre, a half away from zero, and
+/// whether that is exact: how a placement or a display in whole millimetres holds a corner of a
+/// layered wall, which need not lie on one.
+#[must_use]
+pub fn nearest_mm(steps: i64) -> (i64, bool) {
+    let per = Length::STEPS_PER_MM;
+    let floor = steps.checked_div_euclid(per).unwrap_or(0);
+    let rest = steps.checked_rem_euclid(per).unwrap_or(0);
+    // 0 <= rest < 6,400, so twice it is well within an i64.
+    let twice = rest.saturating_mul(2);
+    let up = twice > per || (twice == per && floor >= 0);
+    (if up { floor.saturating_add(1) } else { floor }, rest == 0)
+}
+
 /// Whether `recipe` is a layered wall's.
 #[must_use]
 pub fn is_layered(recipe: &Recipe) -> bool {

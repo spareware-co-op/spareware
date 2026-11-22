@@ -922,13 +922,14 @@ async fn hosted_in<R: Reader>(
 }
 
 /// Every record an element's shape or place reads, by ID: the parameter table and its type when
-/// its recipe names a parameter, and its levels ([`levels::levels_read`]). Its `reads` row.
+/// its recipe names a parameter or reads its wall type's layers ([`parameters::reads_records`]),
+/// and its levels ([`levels::levels_read`]). Its `reads` row.
 fn reads_of(element: &Element) -> BTreeSet<String> {
     let mut read: BTreeSet<String> = levels::levels_read(element)
         .into_iter()
         .map(|id| id.to_string())
         .collect();
-    if parameters::reads_parameters(&element.recipe) {
+    if parameters::reads_records(&element.recipe) {
         read.insert(parameters::TABLE_ID.to_owned());
         if let Some(type_id) = parameters::type_of(element) {
             read.insert(type_id.to_string());

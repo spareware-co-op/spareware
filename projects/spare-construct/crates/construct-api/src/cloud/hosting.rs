@@ -34,6 +34,7 @@ use construct_model::rows::Model;
 use construct_params::{Definition, Holder, Kind, Length, Units, Value};
 use construct_regen::hosting::{self, Hosting};
 use construct_regen::kernel;
+use construct_regen::levels;
 use construct_regen::parameters::{self as records, At, CATEGORY_KEY};
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -131,16 +132,13 @@ async fn host_for<T: Txn>(
             "There is no element {host} in this model to host it."
         )));
     };
-    if !records::has_shape(&record)
-        || record.recipe.owner != "construct"
-        || record.recipe.op != hosting::HOST_OP
-    {
+    if !records::has_shape(&record) || !hosting::is_host(&record.recipe) {
         return Ok(Err(format!(
             "{} is not a wall: only a wall hosts a door.",
             record.name
         )));
     }
-    let recipe = match records::recipe_at(txn, project, document, &record, At::Now).await? {
+    let recipe = match levels::recipe_at(txn, project, document, &record, At::Now).await? {
         Ok(recipe) => recipe,
         Err(e) => {
             return Ok(Err(format!(
@@ -174,7 +172,7 @@ async fn frame_at<T: Txn>(
     element: &Element,
     hosting: &Hosting,
 ) -> Result<Result<(Recipe, Placement), String>, StoreError> {
-    let recipe = match records::recipe_at(txn, project, document, element, At::Now).await? {
+    let recipe = match levels::recipe_at(txn, project, document, element, At::Now).await? {
         Ok(recipe) => recipe,
         Err(e) => {
             return Ok(Err(format!(

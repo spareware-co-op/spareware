@@ -15,6 +15,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("block", GENERIC_MODELS),
     ("door.single", DOORS),
     ("level", LEVELS),
+    ("wall.layered", WALLS),
     ("wall.straight", WALLS),
     ("workshop.assembly", GENERIC_MODELS),
     ("workshop.part", GENERIC_MODELS),
