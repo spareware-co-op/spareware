@@ -51,3 +51,18 @@ A parameter's definition is a JSON row, its fields in this order:
 ## Display settings
 
 How values are shown is a JSON row of a project or view, one `{"unit","places"}` per measured kind, in this order: `length`, `area`, `volume`, `angle`, `slope`. Units: `mm`, `m`, `mm2`, `m2`, `mm3`, `m3`, `degree`, `percent`, `ratio`. Places: 0 to each unit's most, so that a shown value is always a whole number of steps and reads back: `mm` 2, `m` 5 (0.01 mm, the model tolerance), `mm2` 4, `mm3` 6, every other unit 9. A shown value is rounded half to even to its places. Typed text is never rounded to the grid: a length, area or volume that is not a whole number of steps (0.001 mm) is refused, naming the nearest value below and above. Display settings never change a stored value.
+
+## Shared parameter file, version 1
+
+[`src/shared.rs`](src/shared.rs) is the reader library. A shared parameter's permanent ID is a UUID in its one spelling: 36 characters, lower case, hyphenated, not all zero. The caller gives it; nothing here makes one. The file is JSON, its fields in this order: `format` (1) and `parameters`, each `{"group","definition"}` with the definition's own row (above). Parameters are ordered by group, then name, then ID (byte order). Reading checks that writing the parsed file gives the same bytes, so another spelling, another order or a repeated ID is refused. The same ID met again with another kind is refused; with the same fields it changes nothing.
+
+`{"format":1,"parameters":[{"group":"Fire","definition":{"id":"6f1d2c3a-4b5e-4f60-8a71-92b3c4d5e6f7","name":"Fire rating","kind":"text","holder":"instance","choices":[]}}]}`
+
+## Project parameters, version 1
+
+[`src/project.rs`](src/project.rs) is the reader library. Fields in order: `format` (1), `parameters` (each `{"group","definition"}`, `group` null for a parameter only the project has, ordered by ID) and `bindings` (each `{"parameter","holder","default","categories"}`, ordered by parameter ID). `holder` is `instance` or `type`; `default` is null or a stored value of the parameter's kind (above); `categories` are top-level category IDs of construct-categories, ascending, at least one. Reading checks every rule again (no subcategory, a category that can hold the holder, a default of the right kind) against the project's category table, and that writing gives the same bytes.
+
+## Project information, version 1
+
+[`src/info.rs`](src/info.rs) is the reader library. Fields in order: `format` (1), `extras` (definition rows, ordered by ID) and `values` (parameter ID to stored value, ordered by ID). The built-in fields are text parameters with these permanent IDs: `project-info.name`, `project-info.number`, `project-info.client`, `project-info.address`, `project-info.stage`, `project-info.issue-date`. The issue date is stored as `text:YYYY-MM-DD`, a real calendar date. Reading refuses a value under any ID that is not a built-in field or an extra.
+

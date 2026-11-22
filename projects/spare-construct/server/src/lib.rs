@@ -4,6 +4,7 @@
 
 pub mod backup;
 pub mod directory;
+pub mod geometry;
 pub mod http;
 pub mod seed;
 pub mod service;

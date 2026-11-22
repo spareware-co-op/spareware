@@ -1,0 +1,14 @@
+[package]
+name = "construct-formulas"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# The parser, on a well-known parser crate rather than by hand, as note A07 asks (and as Zoo's KCL
+# parses). MIT.
+winnow = "=0.7.15"
+# Exact rationals, the same crates the geometry kernel uses for its exact numbers. MIT OR Apache-2.0.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
