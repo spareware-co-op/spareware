@@ -106,6 +106,26 @@ fn an_opening_at_the_edge_is_refused_with_its_door_and_reason() {
 }
 
 #[test]
+fn a_layered_wall_is_one_solid_per_layer() {
+    kernel_suite::a_layered_wall_is_one_solid_per_layer(engine);
+}
+
+#[test]
+fn a_door_cuts_every_layer_of_a_layered_wall() {
+    kernel_suite::a_door_cuts_every_layer_of_a_layered_wall(engine);
+}
+
+#[test]
+fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
+    kernel_suite::a_door_in_a_layered_wall_is_refused_as_in_the_box(engine);
+}
+
+#[test]
+fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
+    kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(engine);
+}
+
+#[test]
 fn the_engine_keeps_a_sliver_within_its_tolerance() {
     kernel_suite::the_engine_keeps_a_sliver_within_its_tolerance(engine());
 }

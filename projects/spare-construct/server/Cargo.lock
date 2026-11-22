@@ -4193,6 +4193,7 @@ dependencies = [
  "clap",
  "construct-api",
  "construct-model",
+ "construct-params",
  "construct-regen",
  "engine-geometry",
  "flate2",
