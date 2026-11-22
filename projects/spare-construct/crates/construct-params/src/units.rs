@@ -116,7 +116,7 @@ impl Unit {
 
     /// The most decimal places a value in this unit is shown to: as fine as 0.01 mm (the model
     /// tolerance) for lengths, 0.0001 mm² and 0.000001 mm³ for areas and volumes, and never more
-    /// than [`MAX_PLACES`]. Each of these is a whole number of grid steps, square steps or cubic
+    /// than nine. Each of these is a whole number of grid steps, square steps or cubic
     /// steps, so a value shown always reads back.
     #[must_use]
     pub const fn max_places(self) -> u8 {
