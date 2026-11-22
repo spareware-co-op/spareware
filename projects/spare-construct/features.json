@@ -514,7 +514,7 @@
       {
        "id": "CON-A2-F2-P3",
        "name": "Shared parameters",
-       "what": "Parameters keyed by GUID so they match across projects, families and schedules.",
+       "what": "Parameters keyed by GUID so they match across projects, families and schedules, and a shared parameter can be bound to chosen categories.",
        "kind": "data",
        "size": "small",
        "depends_on": [
