@@ -180,21 +180,24 @@ fn a_cylinders_end_circle_lying_in_a_strip_of_a_plane_is_two_arcs_along_the_edge
     // The cylinder's end circle v = 0 lies in z = 0; the plane's strip sin π/8 ≤ y ≤ sin 3π/8 holds
     // the arcs u in [1/8, 3/8] and [5/8, 7/8], each a piece along the cylinder's edge from one start
     // to the nearest other on it.
+    // Each sine and cosine is taken once and shared by the starts it gives: Miri adds its own
+    // small error to every call of the platform's sin and cos, so two calls for one value can
+    // differ in the last place and put a start's middle just outside the strip.
     let pi = core::f64::consts::PI;
-    let (y0, y1) = ((pi * 0.125).sin(), (pi * 0.375).sin());
+    let (c0, s0) = ((pi * 0.125).cos(), (pi * 0.125).sin());
+    let (c1, s1) = ((pi * 0.375).cos(), (pi * 0.375).sin());
+    let w = 1.0 / 1_073_741_824.0;
+    let start = |u: f64, x: f64, y: f64| [around(u, w), pt(0.0), around(x, 1e-6), around(y, 1e-6)];
+    let starts = vec![
+        start(0.375, c1, s1),
+        start(0.125, c0, s0),
+        start(0.625, -c1, s1),
+        start(0.875, -c0, s0),
+    ];
+    // The strip's edges are the starts' own middles, so each start lies on an edge exactly.
+    let (y0, y1) = (mid(starts[1][3]), mid(starts[0][3]));
     let plane = ground(((-2.0, 2.0), (y0, y1)));
     let cyl = tube(((0.0, 1.0), (0.0, 1.0)));
-    let w = 1.0 / 1_073_741_824.0;
-    let start = |u: f64| {
-        let a = pi * u;
-        [
-            around(u, w),
-            pt(0.0),
-            around(a.cos(), 1e-6),
-            around(a.sin(), 1e-6),
-        ]
-    };
-    let starts = vec![start(0.375), start(0.125), start(0.625), start(0.875)];
     let found = one_pair(
         ((0.1, 0.9), (0.0, 1.0)),
         ((-2.0, 2.0), (y0, y1)),
