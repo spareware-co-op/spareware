@@ -569,6 +569,7 @@ name = "construct-styles"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "construct-categories",
  "serde",
  "serde_json",
 ]
