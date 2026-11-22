@@ -790,7 +790,7 @@
         },
         {
           "id": "geom-mesh/minkowski",
-          "what": "Minkowski sums of geom-mesh (piece G150): six seeded pairs of boxes, a triangular prism and a box, and a box and a tetrahedron by one hull; three seeded L prisms with tetrahedra and an L with a box by the union of hulls; a cut pyramid with corners off the grid with a box and with an L; two pairs whose sums reach the frame's last step each way; and the refusals one step past the frame and of an open mesh in both orders. Every array of each sum's mesh, its runs, its volume and its class, and each refusal, in canonical order.",
+          "what": "Minkowski sums of geom-mesh (piece G150): six seeded pairs of boxes, a triangular prism and a box, and a box and a tetrahedron by one hull; two seeded L prisms, each with a tetrahedron, by the union of hulls; a cut pyramid with corners off the grid with a box; two pairs whose sums reach the frame's last step each way; and the refusals one step past the frame and of an open mesh in both orders. Every array of each sum's mesh, its runs, its volume and its class, and each refusal, in canonical order.",
           "check": {
             "crate": "geom-mesh",
             "test": "minkowski_determinism",
@@ -807,6 +807,16 @@
             "function": "bounds_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "6a2a5376b80f507ebde283f1985ee498891eeea8a38a7cec234913c8f7da9f8f"
+        },
+        {
+          "id": "geom-bool/local",
+          "what": "The arrangement step of local operations of geom-bool (piece G144): local_step on 33 seeded targets and tools, three of each of eleven kinds (on both paths, an extrusion on a whole face, the same box subtracted, a box apart, a box level with a face, a boss on part of a face and extrusions on both ends of an axis; arranged, a groove, a slab through the middle, a cap over an end, a box over an end intersected and a corner cut off by a half-space), and a pyramid's apex cut off three ways and a holed block plugged blind and through, one step in three with one change class not allowed. Each step's path and canonical output: the result body by its native format, the names it made, its history with every topology change, its exactness and its diagnostics, or its refusal's kind, entities, evidence and text, in order.",
+          "check": {
+            "crate": "geom-bool",
+            "test": "local_determinism",
+            "function": "local_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "123e6cb4660e930203e59c1cfe2a8455ac9af39ddb4fb4ae04d7787649f2f94a"
         }
       ]
     }
