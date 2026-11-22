@@ -56,6 +56,7 @@
     viewing: false, // this browser can't build the open model, so it draws what's stored
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
+    steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
   };
   window.spare = C; // the browser test reads this
 
@@ -150,6 +151,9 @@
       else say(NOT_YET);
     };
     ACT.account = account;
+    // The demo's Ctrl+Z and Ctrl+Y, and its command palette, call these.
+    ACT.undo = () => ACT.stackundo();
+    ACT.redo = () => ACT.stackredo();
 
     // a discipline whose view is its own page (Workshop's) keeps the demo's way of opening it
     const framePlan = R.plan;
@@ -203,6 +207,18 @@
     set('col', 'Share with other firms', [
       { label: 'Share this model', icon: 'up', act: 'stackshare', a: C.model?.id, tip: 'Publish the open model as the next numbered package in your team’s Shared folder.', disabled: !C.model },
     ]);
+
+    // The quick access bar's Undo and Redo: this person's own steps in the open model, from the server.
+    const editable = Boolean(C.model) && !C.readOnly;
+    for (const item of config.quick || []) {
+      if (item.act === 'undo') {
+        const step = editable && C.steps.undo;
+        Object.assign(item, { act: 'stackundo', disabled: !step, tip: step ? `Undo: ${stepWords(step)}` : 'Nothing of yours to undo' });
+      } else if (item.act === 'redo') {
+        const step = editable && C.steps.redo;
+        Object.assign(item, { act: 'stackredo', disabled: !step, tip: step ? 'Redo what you undid' : 'Nothing of yours to redo' });
+      }
+    }
 
     const piece = C.elements.get(S.sel);
     if (piece && !C.readOnly && S.screen === 'plan') {
@@ -524,6 +540,7 @@
     C.elements.clear();
     C.claims.clear();
     C.links = [];
+    C.steps = { undo: null, redo: null };
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -542,6 +559,7 @@
     await loadClaims();
     await loadLinks();
     await loadWorkshop();
+    await loadSteps();
   }
 
   async function openPackage(team, folder, id) {
@@ -812,6 +830,7 @@
       return;
     }
     const mine = entry.client === C.client;
+    if (entry.author === C.me.person.id && entry.target === C.model?.id) loadSteps();
     logEntry(entry);
     if (entry.failed) {
       if (mine) turnBack(entry.counter, entry.failed);
@@ -820,9 +839,11 @@
     if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now() });
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
+    // This page drew its own edits ahead of the log, but not an undo: the server works that out.
+    const drawn = mine && !UNDOING.has(entry.cmd);
     for (const change of entry.changes) {
       if (entry.target === C.model?.id && WS.elements.has(change.piece)) {
-        workshopEntry(entry, change, mine);
+        workshopEntry(entry, change, drawn);
         continue;
       }
       const piece = into.get(change.piece);
@@ -836,14 +857,14 @@
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, mine).then(() => {
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn).then(() => {
           queueDraw();
           if (change.piece === S.sel) refreshSide();
         });
       }
     }
-    // A type or a parameter changed: what the selected element reads may have too.
-    if (/^(type|parameter)\./.test(entry.cmd) && entry.target === C.model?.id) {
+    // A type or a parameter changed, or may have: what the selected element reads may have too.
+    if ((/^(type|parameter)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
     }
@@ -865,11 +886,14 @@
     'element.release': 'let go of',
     'element.param': 'set a value of',
     'element.type': 'changed the type of',
+    'edit.undo': 'undid a change to',
+    'edit.redo': 'redid a change to',
   };
 
   function logEntry(entry) {
     if (!WORDS[entry.cmd]) return;
-    const what = entry.failed ? `turned back: ${entry.failed}` : `${WORDS[entry.cmd]} ${entry.args.element}`;
+    const which = entry.args.element ?? entry.changes.map((change) => change.piece).join(', ');
+    const what = entry.failed ? `turned back: ${entry.failed}` : `${WORDS[entry.cmd]} ${which}`;
     C.log.unshift(`<li><span class="mono faint">#${entry.seq}</span> ${esc(named(entry.author))} ${esc(what)}</li>`);
     C.log.length = Math.min(C.log.length, 14);
     const list = $('#stack-log');
@@ -896,6 +920,64 @@
       edit('element.release', { element: id });
     }
   }
+
+  // --- Undo and redo ---
+  // An undo is an edit like any other: `edit.undo` goes up the same socket, and the server finds this
+  // person's last step from the log, puts back what it changed, and turns it back with its reason if
+  // someone else has changed the same value since (construct-model's FORMAT.md, "Undo and redo").
+  // What there is to undo comes from the server too, so every tab of one person agrees.
+
+  const UNDOING = new Set(['edit.undo', 'edit.redo']);
+  const STEP_WORDS = {
+    'element.create': 'adding an element',
+    'element.move': 'a move',
+    'element.set': 'a change',
+    'element.delete': 'a delete',
+    'element.param': 'a value',
+    'element.type': 'a change of type',
+    'edit.redo': 'a redo',
+  };
+  const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
+
+  let stepsAsked = null; // the model being asked about, while a request is out
+  let stepsAgain = false;
+  async function loadSteps() {
+    const model = C.model?.id;
+    if (!model) return;
+    if (stepsAsked) {
+      stepsAgain = true;
+      return;
+    }
+    stepsAsked = model;
+    try {
+      const steps = await api(`${modelUrl(model)}/undo`);
+      if (C.model?.id === model) C.steps = steps;
+    } catch (error) {
+      console.warn(`What there is to undo couldn't be read: ${error.message}`);
+    } finally {
+      stepsAsked = null;
+    }
+    renderRibbon();
+    if (stepsAgain) {
+      stepsAgain = false;
+      loadSteps();
+    }
+  }
+
+  function undoOrRedo(cmd, which) {
+    if (!C.model || C.readOnly) {
+      say('Open a model in your team’s WIP to undo in it.');
+      return;
+    }
+    // An edit still on its way may be the step: the server decides.
+    if (!C.steps[which] && !C.pending.length) {
+      say(`There is nothing of yours to ${which} in this model.`);
+      return;
+    }
+    edit(cmd, {});
+  }
+  ACT.stackundo = () => undoOrRedo('edit.undo', 'undo');
+  ACT.stackredo = () => undoOrRedo('edit.redo', 'redo');
 
   // --- Parameters ---
   // The selected element's category, type and parameters come from the server, which reads them

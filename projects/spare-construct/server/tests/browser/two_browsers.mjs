@@ -289,6 +289,40 @@ await ben.waitForFunction((field) => document.querySelector(field)?.value === '1
 pass('and Ben sees it in units');
 await shot(ben, 'ben-parameters');
 
+console.log('\n   Undo and redo, through the edit log');
+await ben.waitForSelector('#qat [data-act="stackundo"]');
+pass("Ben's Undo is ready: his last change is his to undo");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.keyboard.press('Control+z');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === undefined);
+pass("Ctrl+Z undoes his value, and Anna's browser follows");
+await ben.waitForSelector('#qat [data-act="stackredo"]');
+await ben.click('#qat [data-act="stackredo"]');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+pass('his Redo button puts it back, for her too');
+await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
+pass('and then there is nothing to redo');
+// Anna's own last change was deleting the wall she drew: her undo brings it back, for Ben too.
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
+pass("Anna's undo is her own: the wall she deleted is back on Ben's screen");
+// Her next is the door she placed on it. Ben takes the door first, so that undo is turned back.
+const newDoor = await ben.evaluate(() =>
+  [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
+);
+const doorBox = await box(ben, newDoor);
+await ben.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
+await anna.click('#qat [data-act="stackundo"]');
+await anna.waitForFunction(() =>
+  document.getElementById('toast-m').textContent.includes('Ben is working on this'),
+);
+check(
+  await anna.evaluate((id) => window.spare.elements.has(id), newDoor),
+  "an undo of what someone else is working on is turned back with the server's reason, and changes nothing",
+);
+await shot(anna, 'anna-undo-turned-back');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");

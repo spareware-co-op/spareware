@@ -1,9 +1,12 @@
 //! A project's commands: what the orderer runs for this program, and Cedar's say on each. A
 //! command that isn't listed in `permit` is refused, so a new command can't arrive unguarded.
+//! Each runs on a staged transaction ([`transaction`](crate::cloud::transaction)): what a command
+//! that is turned back wrote is dropped, so every command fully applies or fully rolls back.
 
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
-use crate::cloud::{elements, params};
+use crate::cloud::transaction::Staged;
+use crate::cloud::{elements, params, undo};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -129,7 +132,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
-            cmd if params::is_command(cmd) => {
+            cmd if params::is_command(cmd) || undo::is_command(cmd) => {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
@@ -177,10 +180,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter and type edit of a model has the same answer, so a batch asks
-    /// Cedar once.
+    /// Every element, parameter and type edit of a model, and every undo and redo, has the same
+    /// answer, so a batch asks Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
-        if edit.cmd.starts_with("element.") || params::is_command(&edit.cmd) {
+        if edit.cmd.starts_with("element.")
+            || params::is_command(&edit.cmd)
+            || undo::is_command(&edit.cmd)
+        {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
             format!("{}/{}/{}/{}", edit.person, edit.cmd, edit.target, edit.args)
@@ -196,14 +202,21 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         let Scope::Project(project) = context.scope else {
             return Ok(Err("These commands act on a project.".to_owned()));
         };
-        if params::is_command(&edit.cmd) {
-            params::apply(txn, project, context, edit, self.claim_ms).await
+        let mut staged = Staged::new(txn);
+        let outcome = if params::is_command(&edit.cmd) {
+            params::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if undo::is_command(&edit.cmd) {
+            undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
-            elements::apply(txn, project, context, edit, self.claim_ms).await
+            elements::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd == "document.checkpoint" {
-            Ok(elements::checkpoint(edit))
+            elements::checkpoint(edit)
         } else {
-            spaces::apply(txn, project, context, edit, &self.edition).await
+            spaces::apply(&mut staged, project, context, edit, &self.edition).await?
+        };
+        if outcome.is_ok() {
+            staged.keep().await?;
         }
+        Ok(outcome)
     }
 }

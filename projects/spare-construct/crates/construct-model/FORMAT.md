@@ -119,10 +119,10 @@ These rows are what Cedar reads. A row's presence is the fact. The rules are in 
 
 | In the log of | Commands |
 | --- | --- |
-| A project | `element.create`, `element.move`, `element.set`, `element.delete`, `element.claim`, `element.release`, `element.param`, `element.type`, `parameter.define`, `parameter.bind`, `type.create`, `type.rename`, `type.duplicate`, `type.delete`, `type.set`, `model.add`, `package.publish`, `package.bridge`, `package.take`, `link.add`, `document.checkpoint`, and `package.arrived`, written by a bridge in the receiving project |
+| A project | `element.create`, `element.move`, `element.set`, `element.delete`, `element.claim`, `element.release`, `element.param`, `element.type`, `parameter.define`, `parameter.bind`, `type.create`, `type.rename`, `type.duplicate`, `type.delete`, `type.set`, `edit.undo`, `edit.redo`, `model.add`, `package.publish`, `package.bridge`, `package.take`, `link.add`, `document.checkpoint`, and `package.arrived`, written by a bridge in the receiving project |
 | The directory | `hub.add`, `hub.user`, `hub.external`, `hub.permit`, `project.add`, `project.person`, `team.add`, `team.person`, beside the kit's people commands |
 
-The element, parameter and type commands are allowed to whoever may edit the model, and each takes the same claim on the piece it changes as `element.set`: another person's claim refuses it. A refusal is the command's result, in the words of the data crate that refused it.
+The element, parameter and type commands, and undo and redo, are allowed to whoever may edit the model, and each takes the same claim on the piece it changes as `element.set`: another person's claim refuses it. A refusal is the command's result, in the words of the data crate that refused it. Every command fully applies or fully rolls back: what a command that is turned back had written is not stored, though its entry is in the log as turned back.
 
 | Command | Arguments | Writes |
 | --- | --- | --- |
@@ -135,8 +135,19 @@ The element, parameter and type commands are allowed to whoever may edit the mod
 | `type.create` | `type`, `name`, `category` | A type record |
 | `type.rename`, `type.duplicate`, `type.set` | `type`, and `name`; `new` and `name`; `parameter` and `value` | The type record, or its copy |
 | `type.delete` | `type` | Its pointer goes. Refused while an element is of it |
+| `edit.undo` | none (`{}`) | Every piece the person's last step changed, put back as it was before it (below) |
+| `edit.redo` | none (`{}`) | Every piece the person's last undo changed, put back: the undo of that undo |
 
 `element.*` commands refuse a type or the parameters record: each has its own commands. Typed text is read with construct-params' metric display settings until a project keeps its own.
+
+### Undo and redo
+
+An undo is an entry like any other, after everything before it; nothing is ever taken out of the log. Which step it reverses is not in its arguments: it is read from the log, the same way every time, so a server that starts again or a replay of the log on an empty store gives the same answer ([`construct_api::cloud::undo`](../construct-api/src/cloud/undo.rs)).
+
+- **A step** is one applied entry, in that document, by that person, of `element.create`, `element.move`, `element.set`, `element.delete`, `element.param`, `element.type`, the seven parameter and type commands, `edit.undo` or `edit.redo`, with every change it records: a `parameter.bind` that wrote the parameters record and every type of its categories is one step. A run of `element.move` entries of one element by one person, with no other entry of theirs in that document between, is one step (one drag; the drag's `element.claim` starts the next run). Nothing else is a step, and nothing else is undone.
+- **The order is each person's own.** Ordinary steps and `edit.redo` go on the person's undo order, `edit.undo` takes the newest off; `edit.undo` goes on their redo order, `edit.redo` takes the newest off, and an ordinary step empties it. Other people's entries change neither. A turned-back entry is no step.
+- **What it writes.** For each piece the step changed, from the record before its first change of that piece to the record after its last: a column the step changed goes back to what it was, if it still holds what the step left; every other column keeps what it holds now. The columns are `kind`, `name`, `level`, `placement`, `recipe`, `references` and each `props` key, compared exactly. A piece the step made is deleted, and one it deleted comes back. The undo's own `changes` are these, before and after by content ID, as for any command. A redo is the undo of the undo, so it writes the same way.
+- **What turns it back**, whole, with nothing written: another person's live claim on a piece it would write (`"<name> is working on this."`); a column the step changed that someone has changed since, a piece someone deleted since, or a piece the step made that someone has changed since (`"<name> has changed <record's name> since."`); a record it writes that the document's rules can't read, such as an element whose type is gone (`"That can't be undone: "` and the reader's words; when it writes a type or the parameters record, every record of the document is read again); nothing to undo or redo (`"There is nothing of yours to undo in this model."`, and the same for redo).
 
 `document.checkpoint` is written by the server after regenerating. Its arguments are `{"through":n,"bodies":{element:body}}`, and it changes nothing: it is in the log so that every browser watching gets it in order with the edits it covers, and compares the bodies it built itself (note A05).
 

@@ -124,6 +124,7 @@ pub fn routes(app: Shared) -> Router {
             get(kind),
         )
         .route("/api/projects/{project}/models/{model}/claims", get(claims))
+        .route("/api/projects/{project}/models/{model}/undo", get(undo))
         .route(
             "/api/projects/{project}/models/{model}/parameters/{element}",
             get(parameters),
@@ -430,6 +431,18 @@ async fn parameters(
     Ok(Json(
         app.service
             .parameters(&person, &id(&project)?, &id(&model)?, &id(&element)?)
+            .await?,
+    ))
+}
+
+async fn undo(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .undo(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

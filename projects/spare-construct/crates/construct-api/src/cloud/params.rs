@@ -28,8 +28,9 @@
 //!
 //! Later, with their places: unbinding and removing a parameter (construct-params' `unbind`
 //! counts the values that go); clearing a value back to its default (construct-types' `clear`);
-//! undo (job 4.6) as new entries through these same commands; schedules (job 7.9) read the
-//! values through [`construct_regen::parameters::Context::value_of`]; formulas (job 2.5).
+//! schedules (job 7.9) read the values through
+//! [`construct_regen::parameters::Context::value_of`]; formulas (job 2.5). Undo and redo of
+//! these commands are [`crate::cloud::undo`].
 
 use crate::cloud::elements::write_record;
 use construct_categories::CategoryId;
