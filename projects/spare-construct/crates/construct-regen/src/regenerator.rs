@@ -12,10 +12,13 @@
 //! Note A05's checkpoints start here: each pass returns the bodies it built, and the server appends
 //! them to the log in a checkpoint entry, which every browser compares with what it built itself.
 //!
-//! Types and a document's parameter table have no shape: they are listed by kind and never built.
-//! A recipe that names a parameter is filled first ([`crate::parameters::filled`]), and such an
-//! element is listed under `reads`, so a change to its type or to the parameter table builds it
-//! again in the same pass. A shape is then the same however the log was reached.
+//! Types, a document's parameter table and its levels have no shape: they are listed by kind and
+//! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
+//! and one that reads its top tie next ([`crate::levels::filled`]); an element's place is its
+//! base level's ([`crate::levels::placed`]). Each element is listed under `reads` with every
+//! record it reads (the parameter table, its type, its levels), so a change to any of them, or
+//! its deletion, builds it again in the same pass. A shape is then the same however the log was
+//! reached.
 //!
 //! A host is built with what is hosted on it ([`Geometry::build_hosting`]): a wall with each door
 //! whose record names it as host ([`crate::hosting`]), in the order of their keys, each where its
@@ -27,6 +30,7 @@
 //! names, as the elements of a changed type are.
 
 use crate::hosting::{self, Hosting};
+use crate::levels;
 use crate::parameters::{self, At};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
@@ -37,7 +41,7 @@ use kit_ops::sha256_hex;
 use kit_store::key::list as kit_list;
 use kit_store::{FileStore, Kv, Reader, Scope, StoreError, Txn, from_row, read_row, to_row};
 use kit_sync::read_log;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// Entries taken in one transaction.
@@ -376,9 +380,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
     }
 
-    /// Rebuilds the element a change names, and then what reads it: if it was a type or the
-    /// parameter table, every element whose shape reads it; if it has a shape, the hosts it had and
-    /// has, and the elements hosted on it. Each body built goes on `built`.
+    /// Rebuilds the element a change names, and then what reads it: if it is a record with no
+    /// shape (a type, the parameter table, a level), every element listed as reading it; if it has
+    /// a shape, the hosts it had and has, and the elements hosted on it. Each body built goes on
+    /// `built`.
     async fn regenerate_with_readers(
         &self,
         txn: &mut K::Txn,
@@ -398,26 +403,21 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             )
             .await?;
         built.push((document.clone(), change.piece.clone(), body));
-        let fed = match fed {
+        let read = match fed {
             None => return Ok(()),
             Some(Fed::Shape { hosts, hosted }) => {
                 return self
                     .dependents(txn, project, document, hosts.iter().chain(&hosted), built)
                     .await;
             }
-            Some(fed) => fed,
+            Some(Fed::Read(read)) => read,
         };
         for (key, row) in txn.scan(&list::reads(project, document)).await? {
             let Some(Place::Reads { element, .. }) = Place::parse(&key) else {
                 continue;
             };
             let reads: Reads = from_row(&row)?;
-            if !reads.parameters {
-                continue;
-            }
-            if let Fed::Type(changed) = &fed
-                && reads.type_id.as_deref() != Some(changed.as_str())
-            {
+            if !reads.reads(read.as_str()) {
                 continue;
             }
             let Some((body, fed)) = self.again(txn, project, document, &element).await? else {
@@ -473,8 +473,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         Ok(())
     }
 
-    /// Rebuilds one element, returning its body if it has one, and what it feeds: for a type or
-    /// the parameter table, its readers; for an element with a shape, its hosts and what it hosts.
+    /// Rebuilds one element, returning its body if it has one, and what it feeds: for a record
+    /// with no shape, its readers; for an element with a shape, its hosts and what it hosts.
     #[allow(
         clippy::too_many_lines,
         reason = "one element's derived rows, written in the order a reader of them needs"
@@ -503,22 +503,17 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             element: element_id.clone(),
         };
         let old: Option<BuiltElement> = read_row(txn, &place.key()).await?;
-        if let Some(old) = &old {
-            for (x, y) in &old.cells {
-                let cell = Place::Area {
-                    project: project.clone(),
-                    document: document.clone(),
-                    level: old.level,
-                    x: *x,
-                    y: *y,
-                    element: element_id.clone(),
-                };
+        if let Some(old) = &old
+            && let Some(level) = &old.level
+        {
+            for cell in area_of(project, document, level, &old.cells, element_id) {
                 txn.delete(cell.key()).await?;
             }
         }
         // Records are never deleted, so the old one still says what kind it was. A record with no
         // shape has no built row, so the change's own `before` names it.
         let mut old_host = None;
+        let mut was_read = None;
         if let Some(old) = old.as_ref().map(|old| &old.input).or(before) {
             let record = kit_store::Place::Record {
                 project: project.clone(),
@@ -530,9 +525,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 txn.delete(kind.key()).await?;
             }
             old_host = hosting::host_of(&before);
+            if !parameters::has_shape(&before) {
+                was_read = Some(before.id);
+            }
         }
         let Some(after) = after else {
             txn.delete(place.key()).await?;
+            // Whatever read a record that is gone reads what stands in its place now.
+            if let Some(read) = was_read {
+                return Ok((None, Some(Fed::Read(read))));
+            }
             if let Some(host) = &old_host {
                 list_hosted(txn, project, document, host, element_id, false).await?;
             }
@@ -565,12 +567,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
         if !parameters::has_shape(&element) {
             txn.delete(place.key()).await?;
-            let fed = if element.kind == parameters::TABLE_KIND {
-                Fed::Table
-            } else {
-                Fed::Type(element.id.clone())
-            };
-            return Ok((None, Some(fed)));
+            return Ok((None, Some(Fed::Read(element.id.clone()))));
         }
         let new_host = hosting::host_of(&element);
         if let Some(host) = &old_host
@@ -581,12 +578,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         if let Some(host) = &new_host {
             list_hosted(txn, project, document, host, element_id, true).await?;
         }
-        let reads_parameters = parameters::reads_parameters(&element.recipe);
         let row = Reads {
-            parameters: reads_parameters,
-            type_id: parameters::type_of(&element)
-                .filter(|_| reads_parameters)
-                .map(|t| t.to_string()),
+            records: reads_of(&element),
             host: new_host.as_ref().map(ToString::to_string),
             hosted: hosted.clone(),
         };
@@ -595,8 +588,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
         let edition = edition_of(txn, project, document).await?;
         let inputs = inputs(txn, project, document, &edition, &element, &hosted).await?;
-        let (result, cells, body) = match self.make(&edition, &inputs) {
+        let made = self.make(&edition, &inputs);
+        let placed = inputs.placed;
+        let (result, cells, body) = match made {
+            // An element on no level has a shape and no place in any plan.
             Ok((built, cells)) => {
+                let cells = if placed.level.is_some() {
+                    cells
+                } else {
+                    Vec::new()
+                };
                 let body = id(&built.body_id())?;
                 let result = self.store_shape(txn, project, built).await?;
                 (result, cells, Some(body))
@@ -609,21 +610,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 (result, Vec::new(), None)
             }
         };
-        for (x, y) in &cells {
-            let cell = Place::Area {
-                project: project.clone(),
-                document: document.clone(),
-                level: element.level,
-                x: *x,
-                y: *y,
-                element: element_id.clone(),
-            };
-            txn.put(cell.key(), to_row(&after.as_str())?).await?;
+        if let Some(level) = &placed.level {
+            for cell in area_of(project, document, level, &cells, element_id) {
+                txn.put(cell.key(), to_row(&after.as_str())?).await?;
+            }
         }
         let row = BuiltElement {
             input: after.clone(),
             edition,
-            level: element.level,
+            level: placed.level.clone(),
+            elevation: placed.elevation,
             cells,
             result,
         };
@@ -719,11 +715,11 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 }
 
-/// What a record feeds: for a type, the elements of it; for the parameter table, every element
-/// that reads it; for an element with a shape, the hosts it had and has, and what is hosted on it.
+/// What a record feeds: for a record with no shape (a type, the parameter table, a level), every
+/// element whose `reads` row lists it; for an element with a shape, the hosts it had and has, and
+/// what is hosted on it.
 enum Fed {
-    Type(Id),
-    Table,
+    Read(Id),
     Shape {
         /// The elements it was or is hosted on.
         hosts: Vec<Id>,
@@ -776,16 +772,19 @@ struct HostedInput {
     at: Placement,
 }
 
-/// What an element is built from: its recipe, the elements hosted on it and where it sits.
+/// What an element is built from: its recipe, the elements hosted on it, where it sits, and the
+/// level and base height its built row records.
 struct Inputs {
     recipe: Result<Recipe, GeometryError>,
     placement: Result<Placement, GeometryError>,
     hosted: Result<Vec<HostedInput>, GeometryError>,
+    placed: Placed,
 }
 
-/// What `element` is built from, as regeneration has reached: its filled recipe, where it sits
-/// (its own placement, or for an element hosted on a face, read from its host) and each element
-/// `hosted` lists as hosted on it. A failure of any is the element's build failure.
+/// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`]),
+/// where it sits (its own placement, or for an element hosted on a face, read from its host),
+/// each element `hosted` lists as hosted on it, and its level. A failure of any is the element's
+/// build failure.
 async fn inputs<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -794,7 +793,7 @@ async fn inputs<R: Reader>(
     element: &Element,
     hosted: &[String],
 ) -> Result<Inputs, StoreError> {
-    let recipe = recipe_of(reader, project, document, element).await?;
+    let (recipe, placed) = input_of(reader, project, document, element).await?;
     let (placement, hosted) = match &recipe {
         Ok(own) => (
             placement_of(reader, project, document, edition, element, own).await?,
@@ -806,6 +805,7 @@ async fn inputs<R: Reader>(
         recipe,
         placement,
         hosted,
+        placed,
     })
 }
 
@@ -864,7 +864,7 @@ async fn placement_of<R: Reader>(
             ),
         }));
     };
-    let host_recipe = match recipe_of(reader, project, document, &host).await? {
+    let host_recipe = match input_of(reader, project, document, &host).await?.0 {
         Ok(recipe) => recipe,
         Err(e) => {
             return Ok(Err(GeometryError {
@@ -900,7 +900,7 @@ async fn hosted_in<R: Reader>(
             Ok(Some(hosting)) if *hosting.host() == host.id => hosting,
             _ => continue,
         };
-        let recipe = match recipe_of(reader, project, document, &record).await? {
+        let recipe = match input_of(reader, project, document, &record).await?.0 {
             Ok(recipe) => recipe,
             Err(e) => {
                 return Ok(Err(GeometryError {
@@ -919,6 +919,70 @@ async fn hosted_in<R: Reader>(
         }
     }
     Ok(Ok(found))
+}
+
+/// Every record an element's shape or place reads, by ID: the parameter table and its type when
+/// its recipe names a parameter, and its levels ([`levels::levels_read`]). Its `reads` row.
+fn reads_of(element: &Element) -> BTreeSet<String> {
+    let mut read: BTreeSet<String> = levels::levels_read(element)
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect();
+    if parameters::reads_parameters(&element.recipe) {
+        read.insert(parameters::TABLE_ID.to_owned());
+        if let Some(type_id) = parameters::type_of(element) {
+            read.insert(type_id.to_string());
+        }
+    }
+    read
+}
+
+/// Where a built row says an element stands: the level its cells are under, and its base height
+/// in stored length text.
+struct Placed {
+    level: Option<Id>,
+    elevation: Option<String>,
+}
+
+/// What an element is built from and where it stands, as of how far regeneration has got: its
+/// recipe with every argument that names a parameter or a tie filled, and its level and base
+/// height. A failure to read its levels is its shape's failure; its level is then still the one
+/// its tie names, where that can be read.
+async fn input_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+) -> Result<(Result<Recipe, GeometryError>, Placed), StoreError> {
+    let at = parameters::At::Regenerated;
+    let placed = levels::placed(reader, project, document, element, at).await?;
+    let recipe = recipe_of(reader, project, document, element).await?;
+    Ok(match placed {
+        Ok(placed) => {
+            let recipe = recipe.and_then(|recipe| levels::filled(&recipe, &placed));
+            let elevation = placed.stored_elevation();
+            (
+                recipe,
+                Placed {
+                    level: placed.level,
+                    elevation,
+                },
+            )
+        }
+        Err(why) => {
+            let level = construct_levels::base_of(element)
+                .ok()
+                .flatten()
+                .map(|tie| tie.level);
+            (
+                Err(why),
+                Placed {
+                    level,
+                    elevation: None,
+                },
+            )
+        }
+    })
 }
 
 /// The recipe an element is built from: its own, with every argument that names a parameter
@@ -950,6 +1014,24 @@ async fn edition_of<R: Reader>(
 
 /// Where an element is listed by its kind. Every element is, built or not; a kind that isn't a
 /// plain name (letters, digits, `.`, `_` and `-`) can't be part of a key, so it isn't listed.
+/// The plan index rows of an element in `cells` on `level`.
+fn area_of<'a>(
+    project: &'a Id,
+    document: &'a Id,
+    level: &'a Id,
+    cells: &'a [(i64, i64)],
+    element: &'a Id,
+) -> impl Iterator<Item = Place> + 'a {
+    cells.iter().map(move |&(x, y)| Place::Area {
+        project: project.clone(),
+        document: document.clone(),
+        level: level.clone(),
+        x,
+        y,
+        element: element.clone(),
+    })
+}
+
 fn kind_row(project: &Id, document: &Id, element: &Element) -> Option<Place> {
     Some(Place::Kind {
         project: project.clone(),

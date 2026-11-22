@@ -301,7 +301,11 @@ async fn a_door_is_placed_on_a_face_and_its_wall_is_built_with_it() {
         .unwrap();
     let (_, door) = stack.record("D-1").await.unwrap();
     assert_eq!(door.kind, "door");
-    assert_eq!(door.level, 1);
+    // On its wall's level: tied as the wall's base is, and on no level by number.
+    let (_, wall) = stack.record("W-1").await.unwrap();
+    assert_eq!(door.level, 0);
+    assert_eq!(door.props["@level"], wall.props["@level"]);
+    assert_eq!(door.props["@level.offset"], wall.props["@level.offset"]);
     assert_eq!(
         serde_json::to_value(&door.references).unwrap(),
         json!([{ "doc": null, "element": "W-1", "name": "box.exterior", "kind": "face",

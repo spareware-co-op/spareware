@@ -310,12 +310,18 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
     };
     let mut props = BTreeMap::new();
     props.insert(CATEGORY_KEY.to_owned(), records::write_category(category));
+    // On its host's level: tied as its host's base is, and on no level by number.
+    let base = match construct_levels::base_of(&host.record) {
+        Ok(base) => base,
+        Err(e) => return Ok(Err(e.to_string())),
+    };
+    construct_levels::write_base(&mut props, base.as_ref());
     let mut element = Element {
         id: id.clone(),
         document: document.clone(),
         kind,
         name: args.name.unwrap_or_else(|| id.to_string()),
-        level: host.record.level,
+        level: 0,
         placement: host.record.placement,
         recipe,
         props,

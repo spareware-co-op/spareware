@@ -8,13 +8,15 @@ license.workspace = true
 [features]
 # The regenerator that keeps a server's derived shapes up to date. The browser needs only the
 # geometry, so its build leaves this out.
-# It reads parameters and types to fill the recipes that name them, so those crates come with it.
+# It reads parameters, types and levels to fill the recipes that name them, so those crates come
+# with it.
 server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
     "dep:construct-params",
     "dep:construct-types",
+    "dep:construct-levels",
 ]
 
 [dependencies]
@@ -26,6 +28,8 @@ construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
 construct-params = { path = "../construct-params", optional = true }
 construct-types = { path = "../construct-types", optional = true }
+# An element's place and a top-tied wall's height read its levels.
+construct-levels = { path = "../construct-levels", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }
