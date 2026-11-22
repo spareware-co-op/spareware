@@ -1,6 +1,6 @@
 # CON-A3-F1-P2, P6 (used): door openings cut from walls, and two levels of detail
 
-Part of CON-A3-F1-P2 (booleans) and CON-A3-F1-P6 (tessellation), as Spare Construct uses them through the kernel's engine seam ([FEATURES.md](../FEATURES.md)). Piece A42. Status: built in `construct-regen` (`src/kernel.rs`, `src/kernel/opening.rs`); not yet wired into the regenerator.
+Part of CON-A3-F1-P2 (booleans) and CON-A3-F1-P6 (tessellation), as Spare Construct uses them through the kernel's engine seam ([FEATURES.md](../FEATURES.md)). Piece A42. Status: built in `construct-regen` (`src/kernel.rs`, `src/kernel/opening.rs`); the regenerator builds a stored wall with its doors through it since piece A49 ([CON-A4-F3-P1](CON-A4-F3-P1-hosting.md)).
 
 ## The question
 
@@ -18,6 +18,6 @@ A door hosted in a wall must cut a real opening, the same model must give the sa
 
 ## Not done here
 
-- The regenerator and the server's commands do not yet cut a stored wall (decision 1).
+- The regenerator and the server's commands cut a stored wall since piece A49 ([CON-A4-F3-P1](CON-A4-F3-P1-hosting.md)).
 - One opening per door; windows, plain openings and shafts are CON-A4-F3-P2.
 - No layer of a layered wall is cut; walls are one solid until CON-A4-F2-P1.

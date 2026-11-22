@@ -657,3 +657,39 @@ pub async fn read_document<R: Reader>(
     }
     Ok(found)
 }
+
+/// The recipe `element` is built from, as the document is `at` that state: its own, with every
+/// argument that names a parameter filled ([`filled`]). A recipe that names none needs no read.
+/// The regenerator builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
+///
+/// # Errors
+/// A [`StoreError`] when the store fails. The inner error is the build failure: `BadParameter`
+/// when the document's parameters or the element's type cannot be read, or [`filled`]'s own.
+pub async fn recipe_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    at: At,
+) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    if !reads_parameters(&element.recipe) {
+        return Ok(Ok(element.recipe.clone()));
+    }
+    let bad = |why: String| failure("BadParameter", why);
+    let context: Context = match read_context_at(reader, project, document, at).await? {
+        Ok(context) => context,
+        Err(why) => return Ok(Err(bad(why))),
+    };
+    let ty = match type_of(element) {
+        None => None,
+        Some(type_id) => {
+            match read_type_at(reader, project, document, &type_id, &context, at).await? {
+                Ok(ty) => Some(ty),
+                Err(why) => return Ok(Err(bad(why))),
+            }
+        }
+    };
+    Ok(filled(&element.recipe, |id| {
+        context.value_of(element, ty.as_ref(), id)
+    }))
+}

@@ -228,22 +228,38 @@ await ben.waitForFunction(() =>
 pass('and so does a door placed on it');
 const hosted = await ben.evaluate(() => {
   const door = [...window.spare.elements.values()].find((p) => /^D-[0-9a-f]{8}$/.test(p.el.id));
-  return door.el.references[0];
+  return { id: door.el.id, face: door.el.references[0], along: door.el.props['@host.along'] };
 });
 check(
-  hosted.element === wallId && hosted.kind === 'face',
-  'hosted on a named face of that wall, not on the wall',
+  hosted.face.element === wallId && hosted.face.kind === 'face' && /^length:q0:/.test(hosted.along),
+  'hosted on a named face of that wall at an offset along it, not on the wall',
 );
 await anna.keyboard.press('Escape');
 const wallBoxAgain = await box(anna, wallId);
 await anna.mouse.click(wallBoxAgain.x + 20, wallBoxAgain.y + wallBoxAgain.height / 2);
 await anna.waitForSelector('#ribbon >> text=Delete');
 await anna.keyboard.press('Delete');
+await anna.waitForFunction(() =>
+  document.getElementById('toast-m').textContent.includes('still hosts 1 element'),
+);
+pass('a wall with a door on it is not deleted, and the server says why');
+const doorBox = await box(anna, hosted.id);
+await anna.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction(
+  (id) => !document.querySelector(`g.element[data-id="${id}"]`),
+  hosted.id,
+);
+const wallBoxLast = await box(anna, wallId);
+await anna.mouse.click(wallBoxLast.x + 20, wallBoxLast.y + wallBoxLast.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
 await ben.waitForFunction(
   (id) => !document.querySelector(`g.element[data-id="${id}"]`),
   wallId,
 );
-pass("deleting it takes it off Ben's screen");
+pass("deleting the door and then the wall takes them off Ben's screen");
 
 console.log('\n   The 3D view');
 await anna.click('#browser [data-act="go"][data-a="3d"]');
@@ -331,12 +347,18 @@ pass("his Undo button takes back a second change, and Anna's browser follows");
 await anna.click('#qat [data-act="stackundo"]');
 await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
 pass("Anna's undo is her own: the wall she deleted is back on Ben's screen");
-// Her next is the door she placed on it. Ben takes the door first, so that undo is turned back.
+// Her next is deleting the door she had placed on it: undone, it is back on its wall.
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction(() =>
+  [...window.spare.elements.keys()].some((id) => /^D-[0-9a-f]{8}$/.test(id)),
+);
+pass('her next undo puts the door back on its wall');
+// Her next is placing the door. Ben takes the door first, so that undo is turned back.
 const newDoor = await ben.evaluate(() =>
   [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
 );
-const doorBox = await box(ben, newDoor);
-await ben.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+const claimedBox = await box(ben, newDoor);
+await ben.mouse.click(claimedBox.x + claimedBox.width / 2, claimedBox.y + claimedBox.height / 2);
 await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
 await anna.click('#qat [data-act="stackundo"]');
 await anna.waitForFunction(() =>
