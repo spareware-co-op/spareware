@@ -173,7 +173,7 @@ A reader checks the index against its chunks before anything is built: each list
 
 ## 11. Geometry kinds
 
-Each surface, curve and pcurve is an array `[code, fields…]`, its fields the values the kind's constructor takes; reading rebuilds it through that constructor. Doubles are written in their shortest exact width (section 3), lists of doubles as `f64` columns (RFC 8746, tag 86), an absent value as `[]` and a present one as `[value]`, a flag as 0 or 1, σ as the integer 1 or −1, and a round kind's axial factor as the integer 1 or −1 or, once a similarity has multiplied it by its scale, as the double. An interval is `[start, end]`, an end that is infinite on its own side (a ray's or a line's) written `[]`. A frame is `[x, normal]`; axes are `[0, frame, a, b]` or `[1, u, v]`; helix axes `[0, frame, radius, pitch]` or `[1, u, v, w]`. A swept surface's placement is `[c, L]`, L's nine entries by rows. An offset's fitted NURBS cache is not stored: the `cached` flag says whether it was there, and reading fits it again, with the same bits (23.1). A curve on a surface keeps its 3D curve, which defines it.
+Each surface, curve and pcurve is an array `[code, fields…]`, its fields the values the kind's constructor takes; reading rebuilds it through that constructor. Doubles are written in their shortest exact width (section 3), lists of doubles as `f64` columns (RFC 8746, tag 86), an absent value as `[]` and a present one as `[value]`, a flag as 0 or 1, σ as the integer 1 or −1, and a round kind's axial factor as the integer 1 or −1 or, once a similarity has multiplied it by its scale, as the double. An interval is `[start, end]`, an end that is infinite on its own side (a ray's or a line's) written `[]`. A frame is `[x, normal]`; axes are `[0, frame, a, b]` or `[1, u, v]`; helix axes `[0, frame, radius, pitch]` or `[1, u, v, w]`. A swept surface's placement is `[c, L]`, L's nine entries by rows. An offset's fitted NURBS cache is not stored: the `cached` flag says whether it was there, and reading fits it again, with the same bits (23.1). A curve on a surface keeps its 3D curve, which defines it. An intersection curve keeps its definition and its caches (24.4's procedural caches): the two surfaces' references; the marched chain as one `f64` column, nine doubles a point (u₁, v₁, u₂ and v₂ each as its interval's two ends, then t); the 3D cache as NURBS fields; the two trimmed pcurves; and the spans as one `f64` column, five doubles a span (its two ends, the bound of the 3D cache, then each pcurve's). Reading rebuilds it through its constructor, which refuses spans that do not tile the cache's domain and a chain out of order.
 
 The curve kinds:
 
@@ -195,6 +195,7 @@ The curve kinds:
 | 13 | offset | trimmed basis, offset law, cached |
 | 14 | on a surface | trimmed pcurve, surface, 3D curve (NURBS fields), error |
 | 15 | transition | start, direction, length, curvature law, window, reversed |
+| 16 | intersection | surfaces, marched chain, 3D cache (NURBS fields), trimmed pcurves, spans |
 <!-- end generated -->
 
 The surface kinds:

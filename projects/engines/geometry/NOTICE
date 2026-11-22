@@ -1623,10 +1623,40 @@ shuffling-allocator
 
 solidcore
   Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/45d6111b909487e94edaec309a7673a3b73d4ae5/crates/solidcore/src/boolean/topology_intersector/p1.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/interfere.rs
+      for the order of the vertex, edge and face intersections and the lowest-dimension solution; its tolerance growth on relating entities is not taken. No code copied.
+
+solidcore
+  Licence:      Apache-2.0
   Link:         https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/surface/procedural_sweep/path.rs
   Consulted by:
     projects/engines/geometry/crates/geom-surface/src/frame_rule.rs
       for the rotation-minimising frame's closed form on lines and circular arcs, each span starting from the frame the last one ended with. No code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/ae70d1c03d8664e3392bd7c38dd2a8e51a7bf845/crates/solidcore/src/topology/trimming_tools.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/picture.rs
+      for how seams are treated; no code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/face.rs
+      for the order of the vertex, edge and face stages; no code copied.
+    projects/engines/geometry/crates/geom-bool/src/inside.rs
+      and <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/query/loop.rs>, for the order of the vertex-in-face tests; no code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/split.rs
+      for the order round a vertex and the grouping of outer loops and holes; no code copied.
 
 solidcore
   Licence:      Apache-2.0
@@ -1635,12 +1665,34 @@ solidcore
     projects/engines/geometry/crates/geom-analysis/src/continuity.rs
       for `continuity_along`, which measures an edge at even stations and keeps the stations that answer; replaced here by a certified bound over every piece. No code copied.
 
+`SolidCraft`
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcraft/tree/6029a38ea05da8f37517da6b06624a8bec18adf5/tools/oracle-analytic
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/truth/oracle.rs
+      for the shapes, parameters and method formulas of its 70 analytic oracle cases, which are re-derived here; its stored values are used only to cross-check the derivation. No code copied.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/map/classes.rs
       to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences.
+
+ssi-corpus
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/bin/ssi-runner.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/case.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/cover.rs
+      for its case schema, its runner contract and its scoring rules.
+    projects/engines/geometry/crates/geom-test/src/ssi/output.rs
+      for its case schema, its runner contract and its scoring rules.
 
 the Model Context Protocol specification
   Licence:      Apache-2.0 AND MIT

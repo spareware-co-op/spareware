@@ -446,19 +446,7 @@ impl<const D: usize> BernsteinCurve<D> {
             above.push(s.minus(w.times(iv(slab.lo)?)?)?.hi());
             below.push(w.times(iv(slab.hi)?)?.minus(s)?.hi());
         }
-        let (Some(a), Some(b)) = (nonnegative_range(&above)?, nonnegative_range(&below)?) else {
-            return Ok(None);
-        };
-        let (t0, t1) = (larger(a.0, b.0), smaller(a.1, b.1));
-        if t0 > t1 {
-            return Ok(None);
-        }
-        let (lo, hi) = self.domain;
-        let width = iv(hi)?.minus(iv(lo)?)?;
-        let start = iv(lo)?.plus(iv(t0)?.times(width)?)?.lo();
-        let end = iv(lo)?.plus(iv(t1)?.times(width)?)?.hi();
-        // Outward rounding may step past the domain; the clip never does.
-        Ok(Some((start.clamp(lo, hi), end.clamp(lo, hi))))
+        clipped_span(&above, &below, self.domain)
     }
 
     /// `self` − `other`, two nonrational pieces of one degree and domain.
@@ -484,6 +472,27 @@ impl<const D: usize> BernsteinCurve<D> {
             weights: None,
         })
     }
+}
+
+/// The part of `domain` where a polynomial with coefficients at most `above`, and its partner at
+/// most `below`, can both be nonnegative, or `None` if nowhere.
+fn clipped_span(
+    above: &[f64],
+    below: &[f64],
+    (lo, hi): (f64, f64),
+) -> Result<Option<(f64, f64)>, NurbsError> {
+    let (Some(a), Some(b)) = (nonnegative_range(above)?, nonnegative_range(below)?) else {
+        return Ok(None);
+    };
+    let (t0, t1) = (larger(a.0, b.0), smaller(a.1, b.1));
+    if t0 > t1 {
+        return Ok(None);
+    }
+    let width = iv(hi)?.minus(iv(lo)?)?;
+    let start = iv(lo)?.plus(iv(t0)?.times(width)?)?.lo();
+    let end = iv(lo)?.plus(iv(t1)?.times(width)?)?.hi();
+    // Outward rounding may step past the domain; the clip never does.
+    Ok(Some((start.clamp(lo, hi), end.clamp(lo, hi))))
 }
 
 /// The range [t0, t1] ⊂ [0, 1] outside which the Bernstein polynomial with coefficients at most
@@ -788,6 +797,69 @@ impl<const D: usize> BernsteinPatch<D> {
             lo,
             hi,
         })
+    }
+
+    /// The ranges of u and v outside which the patch lies outside `slab`, or `None` if it lies
+    /// outside the slab everywhere: one step of the Interval Projected Polyhedron solver
+    /// (Sherbrooke and Patrikalakis 1993). A patch's value at (u, v) is a Bernstein sum in u of
+    /// Bernstein sums in v, so the largest coefficient of each row bounds it as a polynomial in u,
+    /// and of each column in v.
+    ///
+    /// # Errors
+    ///
+    /// [`NurbsError::NotFinite`]; [`NurbsError::Stopped`].
+    #[allow(
+        clippy::type_complexity,
+        reason = "two parameter ranges, named by the patch's own domain"
+    )]
+    pub fn clip(
+        &self,
+        slab: &Slab<D>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<((f64, f64), (f64, f64))>, NurbsError> {
+        let (p, q) = self.degrees;
+        let (rows, columns) = (add(p, 1)?, add(q, 1)?);
+        let count = mul(rows, columns)?;
+        // As for a curve: w·(n·(x − o) − lo) ≥ 0 and w·hi − n·(w·x − w·o) ≥ 0.
+        let mut above = vec_for(meter, count)?;
+        let mut below = vec_for(meter, count)?;
+        for (k, x) in self.points.iter().enumerate() {
+            let w = match &self.weights {
+                Some(ws) => get(ws, k)?,
+                None => iv(1.0)?,
+            };
+            let mut s = iv(0.0)?;
+            for ((&nd, &od), xd) in slab.normal.iter().zip(&slab.origin).zip(x) {
+                s = s.plus(iv(nd)?.times(xd.minus(w.times(iv(od)?)?)?)?)?;
+            }
+            above.push(s.minus(w.times(iv(slab.lo)?)?)?.hi());
+            below.push(w.times(iv(slab.hi)?)?.minus(s)?.hi());
+        }
+        let largest = |c: &[f64], outer: usize, inner: usize, by_row: bool| {
+            let mut out = alloc::vec![f64::NEG_INFINITY; outer];
+            for (i, slot) in out.iter_mut().enumerate() {
+                for j in 0..inner {
+                    let k = if by_row {
+                        i.saturating_mul(columns).saturating_add(j)
+                    } else {
+                        j.saturating_mul(columns).saturating_add(i)
+                    };
+                    *slot = larger(*slot, c.get(k).copied().unwrap_or(f64::NEG_INFINITY));
+                }
+            }
+            out
+        };
+        let in_u = clipped_span(
+            &largest(&above, rows, columns, true),
+            &largest(&below, rows, columns, true),
+            self.u,
+        )?;
+        let in_v = clipped_span(
+            &largest(&above, columns, rows, false),
+            &largest(&below, columns, rows, false),
+            self.v,
+        )?;
+        Ok(in_u.zip(in_v))
     }
 
     /// `self` − `other`, two nonrational patches of one degree and domain.

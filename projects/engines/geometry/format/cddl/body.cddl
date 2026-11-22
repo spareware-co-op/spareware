@@ -64,7 +64,7 @@ nurbs-fields = (degree: uint, knots: f64-column, points: f64-column, weights: op
 placement = [c: [3*3 real], l: [9*9 real]]
 
 ; Curve kinds.
-curve = leaf / trimmed / composite / offset-curve / on-surface
+curve = leaf / trimmed / composite / offset-curve / on-surface / intersection-curve
 leaf = nurbs-curve / line / circle / ellipse / hyperbola / parabola / helix / polynomial
      / involute / bulge / transition
 nurbs-curve = [1, nurbs-fields]
@@ -84,6 +84,10 @@ offset-curve = [13, basis: trimmed, law: offset-law, cached: flag]
 on-surface = [14, pcurve: trimmed, surface-ref: uint, curve3d: [nurbs-fields], error: real]
 transition = [15, start: vec, direction: vec, length: real, law: curvature-law,
               window: interval, reversed: flag]
+; The chain: nine doubles a marched point (u1, v1, u2, v2 as intervals' ends, then t); the spans:
+; five a span (its ends, the 3D cache's bound, each pcurve's).
+intersection-curve = [16, surfaces: [uint, uint], chain: f64-column, curve3d: [nurbs-fields],
+                      pcurves: [trimmed, trimmed], spans: f64-column]
 offset-law = [1, distance: real] / [2, distance: real, direction: [3*3 real]]
            / [3, stations: f64-column]
 curvature-law = [1..5, start: real, end: real]

@@ -60,6 +60,7 @@ use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
 use geom_test::oracle::geomdl::{self, Compared};
 use geom_test::oracle::meshes;
+use geom_test::oracle::smlib;
 use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
 use geom_test::seed::Seed;
 
@@ -224,7 +225,7 @@ fn check(repository: Option<&Path>, root: &Root) -> Result<ExitCode, String> {
 }
 
 fn known(oracle: &str) -> Result<(), String> {
-    if oracle == geomdl::ID || meshes::holds(oracle) {
+    if oracle == geomdl::ID || oracle == smlib::ID || meshes::holds(oracle) {
         Ok(())
     } else {
         Err(format!("no jobs for {oracle}"))
@@ -258,6 +259,9 @@ fn jobs(
         printed(&jobs)?;
     } else if cases != meshes::SEEDED {
         return Err(format!("{oracle} has only seeded jobs, not {cases}"));
+    } else if oracle == smlib::ID {
+        let (seed, count) = seeded.ok_or("SMLib's jobs need --seed and --count")?;
+        printed(&smlib::jobs(seed, count))?;
     } else {
         let (seed, count) = seeded.ok_or("geomdl's jobs need --seed and --count")?;
         printed(&geomdl::jobs(seed, count))?;
@@ -356,8 +360,9 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
     } else if cases != meshes::SEEDED {
         return Err(format!("{oracle} has only seeded jobs, not {cases}"));
     } else {
+        // geomdl and SMLib's NLib write the same job and answer lines, each judged for its oracle.
         judged(&jobs, &answers, |job: &geomdl::Job, answer| {
-            Ok((job.id, geomdl::judge(job, answer)?))
+            Ok((job.id, geomdl::judge_for(oracle, job, answer)?))
         })?
     };
     let register = Register::embedded().map_err(|e| e.to_string())?;

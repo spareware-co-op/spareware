@@ -1,0 +1,447 @@
+//! Common blocks: pave blocks of different edges that lie on one curve, such as collinear wall
+//! edges or two cylinders sharing a line (11.4 step 3, G243).
+//!
+//! What it does: [`common_blocks`] groups the pave blocks of an arrangement's edges that run
+//! between the same two vertices, and in each group proves which blocks are one stretch of curve.
+//! Two straight blocks on grid data are compared exactly: their lines are one when their
+//! directions and the gap between their origins are parallel, in whole numbers. Any other pair is
+//! held to the contact rule over its whole length, both ways: block A is cut into pieces, each
+//! piece's box is measured from block B by the certified projection on B's own stretch of its
+//! curve (`geom_intersect::project::project_curve_over`), and the pair is one only when no piece
+//! is proven apart and every piece, at the finest refinement, lies within the contact radius. So a
+//! circle stored as a circle and a NURBS close to it form a common block only by the contact rule,
+//! and a circle and a line through the same two vertices never do. A block that runs round a
+//! closed edge's seam is two stretches of its parameter, one each side of the seam, and is
+//! measured and cut on both; so the two halves of a closed circle cut at two vertices, and of a
+//! NURBS copy of it, are two common blocks, each half with its copy and not with the other half.
+//!
+//! Guarantees:
+//!
+//! - **Exact within one analytic kind on grid data.** Two lines whose origins and directions are
+//!   whole numbers of steps are one or not by an exact test in 128-bit integers, with no
+//!   enclosure; the common block says [`Proof::Exact`].
+//! - **The contact rule across kinds.** Any other pair is one only when every piece of each is
+//!   proven within the contact radius of the other at the finest refinement, and is apart as soon
+//!   as one piece is proven apart; a piece neither apart nor touching at the deepest cut fails with
+//!   [`crate::rule::NearContact`]. A piece whose distance the search leaves undecided is neither,
+//!   and is cut again; one still so at the deepest cut fails with `NearContact` too, its enclosure
+//!   from zero to the largest distance between its box and the other block's box. Never a sampled
+//!   check.
+//! - **Blocks of one operand are never common.** An operand's own edges meet only at their
+//!   vertices, so only blocks of different operands are compared.
+//! - **Deterministic.** Groups are taken in the order of their end vertices, blocks within a group
+//!   in edge order, and each common block lists its members in that order.
+//!
+//! Method: chapter 11.4, "Common blocks"
+//! (`projects/engines/geometry/architecture/11-booleans.md`), the common blocks of `OpenCascade`'s
+//! General Fuse studied for method only
+//! (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`), decided exactly within one
+//! analytic kind and by the contact rule across kinds. The distance of a block from another is
+//! bounded both ways on the boxes of its pieces: a ball round each box, and the certified distance
+//! of the ball's centre from the other block, the nearest of its stretches.
+//!
+//! Cost: one exact test per straight pair; otherwise at most 2^`DEEPEST` pieces each way, each a
+//! box and one certified projection per stretch of the other block (at most two), all charged to
+//! the meter. No recursion.
+
+use alloc::vec::Vec;
+
+use geom_intersect::project::{Projection, project_curve_over};
+use geom_intersect::{IntersectError, Seam};
+use geom_num::interval::Interval;
+use geom_num::math::round_ties_even;
+use geom_num::{NumError, Sign};
+use geom_run::WorkMeter;
+use geom_topo::{CurveKind, ParamCurve};
+
+use crate::distance::floor_at;
+use crate::interfere::{Arrangement, BuildError, Entity};
+use crate::pave::PaveBlock;
+use crate::rule::{ContactError, NearContact, REFINEMENTS, Verdict, greater, judge, lesser};
+
+/// The deepest a block is cut, in halvings, before a piece that is neither apart nor touching
+/// fails.
+pub const DEEPEST: u32 = 24;
+
+/// What proves that blocks are one.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Proof {
+    /// Their carriers are one, by an exact test.
+    Exact,
+    /// Every piece of each lies within the contact radius of the other: the widest enclosure of a
+    /// piece's distance from the other block.
+    Contact(Interval),
+}
+
+/// Pave blocks of different edges that are one stretch of curve.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommonBlock {
+    /// The blocks, by index into the list given, in edge order.
+    pub members: Vec<usize>,
+    /// What proves them one: the weakest proof among the pairs that joined them.
+    pub proof: Proof,
+}
+
+/// A double that is a whole number, as an integer.
+fn whole(x: f64) -> Option<i128> {
+    let r = round_ties_even(x).ok()?.get();
+    if r != x || r.abs() > 9.0e15 {
+        return None;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a whole number below 2^53 in size, which an integer holds exactly"
+    )]
+    Some(i128::from(r as i64))
+}
+
+/// Three doubles as whole numbers, if all are.
+fn whole3(v: [f64; 3]) -> Option<[i128; 3]> {
+    let [x, y, z] = v;
+    Some([whole(x)?, whole(y)?, whole(z)?])
+}
+
+/// The cross product of two integer vectors, if it holds in 128 bits.
+fn cross(a: [i128; 3], b: [i128; 3]) -> Option<[i128; 3]> {
+    let [a0, a1, a2] = a;
+    let [b0, b1, b2] = b;
+    let m = |p: i128, q: i128, r: i128, s: i128| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+    Some([m(a1, b2, a2, b1)?, m(a2, b0, a0, b2)?, m(a0, b1, a1, b0)?])
+}
+
+/// Whether two lines on grid data are one line: `Some(true)` or `Some(false)` exactly, `None` when
+/// either is not on grid data or a product passes 128 bits.
+fn same_line(a: &CurveKind<3>, b: &CurveKind<3>) -> Option<bool> {
+    let (CurveKind::Line(la), CurveKind::Line(lb)) = (a, b) else {
+        return None;
+    };
+    let (oa, da) = (whole3(la.origin())?, whole3(la.direction())?);
+    let (ob, db) = (whole3(lb.origin())?, whole3(lb.direction())?);
+    let [o0, o1, o2] = oa;
+    let [p0, p1, p2] = ob;
+    let gap = [
+        p0.checked_sub(o0)?,
+        p1.checked_sub(o1)?,
+        p2.checked_sub(o2)?,
+    ];
+    let parallel = cross(da, db)? == [0, 0, 0];
+    let through = cross(gap, da)? == [0, 0, 0];
+    Some(parallel && through)
+}
+
+/// What a one-sided distance came to.
+enum Side {
+    /// Some piece is proven apart from the other block.
+    Apart,
+    /// Every piece is within the contact radius: the widest enclosure.
+    Touch(Interval),
+}
+
+/// An edge's curve and the stretches of its parameter a block covers: one, or two for a block that
+/// runs round a closed curve's seam.
+type Span<'a> = (&'a CurveKind<3>, Vec<(f64, f64)>);
+
+/// The edge curve and parameter stretches of a block: `inner` gives them inside the end paves'
+/// enclosures, otherwise covering them. A block that runs round the seam, from the last pave of a
+/// closed edge to its first, is two stretches: from the last pave to the domain's end, and from
+/// the domain's start to the first pave. Where that pave stands at the start itself, the second
+/// would be the one point at the start, which on a closed curve is the end of the first, so the
+/// block is the first alone.
+fn span_of<'a>(
+    arr: &'a Arrangement,
+    block: &PaveBlock,
+    inner: bool,
+) -> Result<Option<Span<'a>>, BuildError> {
+    let edge = arr
+        .edges
+        .get(block.edge)
+        .ok_or(BuildError::Missing(Entity::Edge(block.edge)))?;
+    let curve = arr
+        .carriers
+        .curve(edge.curve)
+        .ok_or(BuildError::Missing(Entity::Edge(block.edge)))?;
+    let (Some(from), Some(to)) = (block.from, block.to) else {
+        return Ok(None);
+    };
+    let (a, b) = curve.domain();
+    let (start, end) = if inner {
+        (lesser(from.t.hi(), b), greater(to.t.lo(), a))
+    } else {
+        (greater(from.t.lo(), a), lesser(to.t.hi(), b))
+    };
+    // Each stretch runs forward: an edge's paves are in proven order, each enclosure ending before
+    // the next begins (`crate::pave::order_on`), and a block runs between two neighbours, or from
+    // the last round to the first. Inside the paves, a last pave whose enclosure runs past the end
+    // leaves nothing before the join, and the stretch after it starts where that enclosure ends,
+    // read modulo the turn (decision 32.104).
+    let stretches = if block.wraps && inner && from.t.hi() > b {
+        alloc::vec![(Seam::of_curve(curve).wrapped(from.t.hi()), end)]
+    } else if block.wraps && end > a {
+        alloc::vec![(start, b), (a, end)]
+    } else if block.wraps {
+        alloc::vec![(start, b)]
+    } else {
+        alloc::vec![(start, end)]
+    };
+    Ok(Some((curve, stretches)))
+}
+
+/// The grid-aligned centre of a box and the radius of a ball about it holding the box.
+fn ball(lo: [f64; 3], hi: [f64; 3]) -> Result<([f64; 3], f64), NumError> {
+    let mut centre = [0.0; 3];
+    let mut sum = 0.0_f64;
+    for ((c, &a), &b) in centre.iter_mut().zip(&lo).zip(&hi) {
+        *c = round_ties_even(a / 2.0 + b / 2.0)?.get();
+        // Each difference and product rounded up, so the sum is at least the true one.
+        let reach = greater(b - *c, *c - a).next_up();
+        sum = ((reach * reach).next_up() + sum).next_up();
+    }
+    let radius = Interval::point(sum)?.sqrt()?.hi();
+    Ok((centre, radius))
+}
+
+/// A box, as its lowest and highest corners.
+type Corners = ([f64; 3], [f64; 3]);
+
+/// The box of a block: on each axis, the least low and the greatest high of its stretches' boxes.
+fn box_of(side: &Span<'_>, meter: &mut WorkMeter<'_>) -> Result<Corners, BuildError> {
+    let (curve, stretches) = side;
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for &stretch in stretches {
+        let bounds = curve.bound(stretch, meter).map_err(IntersectError::from)?;
+        for (l, &x) in lo.iter_mut().zip(&bounds.lo) {
+            *l = lesser(*l, x);
+        }
+        for (h, &x) in hi.iter_mut().zip(&bounds.hi) {
+            *h = greater(*h, x);
+        }
+    }
+    Ok((lo, hi))
+}
+
+/// The largest distance between a point of box `a` and a point of box `b`: on each axis the
+/// greater of the two ends' gaps, each difference and product rounded up, so it is at least the
+/// true one.
+fn farthest(a: &Corners, b: &Corners) -> Result<f64, NumError> {
+    let ((a_lo, a_hi), (b_lo, b_hi)) = (a, b);
+    let mut sum = 0.0_f64;
+    for (((&p, &q), &r), &s) in a_lo.iter().zip(a_hi).zip(b_lo).zip(b_hi) {
+        let gap = greater(s - p, q - r).next_up();
+        sum = ((gap * gap).next_up() + sum).next_up();
+    }
+    Ok(Interval::point(sum)?.sqrt()?.hi())
+}
+
+/// The distance of `centre` from a block: the nearest of its stretches of the curve, each searched
+/// on its own, so a nearest point of the curve outside the block is never taken for one of the
+/// block's. A stretch whose search is left undecided (`NonIsolated`) gives no upper end and holds
+/// the lower one at zero at most, so the distance is `None`, undecided, when no stretch's search is
+/// decided.
+fn from_block(
+    far_side: &Span<'_>,
+    centre: &[f64; 3],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Interval>, BuildError> {
+    let (curve, stretches) = far_side;
+    let mut lo = f64::INFINITY;
+    let mut hi: Option<f64> = None;
+    for &stretch in stretches {
+        let d = match project_curve_over(curve, stretch, centre, floor, meter)? {
+            // The nearest point found: of those whose distance starts lowest, the first.
+            Projection::Points(found) => found
+                .iter()
+                .map(|x| x.distance)
+                .min_by(|x, y| x.lo().total_cmp(&y.lo()))
+                .ok_or(IntersectError::Internal)?,
+            Projection::Set { distance, .. } => distance,
+            Projection::NonIsolated { .. } => {
+                lo = lesser(lo, 0.0);
+                continue;
+            }
+        };
+        lo = lesser(lo, d.lo());
+        hi = Some(hi.map_or(d.hi(), |h| lesser(h, d.hi())));
+    }
+    Ok(match hi {
+        Some(hi) => Some(Interval::new(lo, hi)?),
+        None => None,
+    })
+}
+
+/// The one-sided distance of block `a` (its inner stretches) from block `b` (its outer ones), held
+/// to the contact rule piece by piece.
+fn one_side(
+    near_side: &Span<'_>,
+    far_side: &Span<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Side, BuildError> {
+    let (curve_a, stretches) = near_side;
+    let mut widest: Option<Interval> = None;
+    let mut stack: Vec<(f64, f64, u32)> =
+        stretches.iter().map(|&(a0, a1)| (a0, a1, 0u32)).collect();
+    while let Some((lo, hi, depth)) = stack.pop() {
+        meter.charge(1).map_err(IntersectError::from)?;
+        let bounds = curve_a
+            .bound((lo, hi), meter)
+            .map_err(IntersectError::from)?;
+        let (centre, reach) = ball(bounds.lo, bounds.hi)?;
+        // The distance of every point of the piece from the other block: at least the centre's
+        // distance from the block less the radius, and at most that distance plus the radius. It
+        // is read by the contact rule: above zero is apart, and at the finest refinement, holding
+        // zero within `ε_fit` touches (the enclosure's upper end is then its largest size, since
+        // the lower is above minus the radius). A distance left undecided is neither: the piece is
+        // cut again with the finer floor, as an undecided enclosure is.
+        let near = from_block(far_side, &centre, floor_at(depth.min(REFINEMENTS)), meter)?;
+        let enclosure = match near {
+            Some(near) => {
+                let enclosure = Interval::new(near.lo() - reach, near.hi() + reach)?;
+                let verdict = judge(enclosure);
+                if verdict == Verdict::Decided(Sign::Positive) {
+                    return Ok(Side::Apart);
+                }
+                if depth >= REFINEMENTS && verdict == Verdict::Touch {
+                    widest = Some(match widest {
+                        Some(w) if w.hi() >= enclosure.hi() => w,
+                        _ => enclosure,
+                    });
+                    continue;
+                }
+                Some(enclosure)
+            }
+            None => None,
+        };
+        if depth >= DEEPEST {
+            // Still undecided at the deepest cut: the contact rule's refusal, with the finest
+            // enclosure reached. A distance the search left undecided has no upper end of its
+            // own; every point of the piece lies in its box and every point of the other block in
+            // that block's box, so the largest distance between the two boxes is one, and a
+            // distance is never below zero.
+            let enclosure = match enclosure {
+                Some(enclosure) => enclosure,
+                None => Interval::new(
+                    0.0,
+                    farthest(&(bounds.lo, bounds.hi), &box_of(far_side, meter)?)?,
+                )?,
+            };
+            return Err(ContactError::NearContact(NearContact {
+                enclosure,
+                refinement: depth,
+            })
+            .into());
+        }
+        let mid = lo / 2.0 + hi / 2.0;
+        stack.push((mid, hi, depth.saturating_add(1)));
+        stack.push((lo, mid, depth.saturating_add(1)));
+    }
+    Ok(Side::Touch(widest.ok_or(IntersectError::Internal)?))
+}
+
+/// Whether two blocks of different edges, between the same two vertices, are one stretch of curve.
+fn coincide(
+    arr: &Arrangement,
+    a: &PaveBlock,
+    b: &PaveBlock,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Proof>, BuildError> {
+    let (Some(outer_a), Some(outer_b)) = (span_of(arr, a, false)?, span_of(arr, b, false)?) else {
+        return Ok(None);
+    };
+    if let Some(one) = same_line(outer_a.0, outer_b.0) {
+        return Ok(one.then_some(Proof::Exact));
+    }
+    let (Some(inner_a), Some(inner_b)) = (span_of(arr, a, true)?, span_of(arr, b, true)?) else {
+        return Ok(None);
+    };
+    let there = one_side(&inner_a, &outer_b, meter)?;
+    let back = one_side(&inner_b, &outer_a, meter)?;
+    match (there, back) {
+        (Side::Touch(x), Side::Touch(y)) => {
+            Ok(Some(Proof::Contact(if x.hi() >= y.hi() { x } else { y })))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// The weaker of two proofs.
+fn weaker(a: Proof, b: Proof) -> Proof {
+    match (a, b) {
+        (Proof::Exact, other) | (other, Proof::Exact) => other,
+        (Proof::Contact(x), Proof::Contact(y)) => {
+            Proof::Contact(if x.hi() >= y.hi() { x } else { y })
+        }
+    }
+}
+
+/// The common blocks among `blocks`: groups of blocks of different operands' edges, between the
+/// same two vertices, proven one stretch of curve.
+///
+/// # Errors
+///
+/// [`BuildError::Contact`] for a pair the contact rule cannot decide, or a stopped meter;
+/// [`BuildError::Missing`] for a block of an edge that is not there.
+pub fn common_blocks(
+    arr: &Arrangement,
+    blocks: &[PaveBlock],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<CommonBlock>, BuildError> {
+    let mut keyed: Vec<((usize, usize), usize, usize)> = Vec::new();
+    for (i, block) in blocks.iter().enumerate() {
+        if let Some(ends) = block.ends() {
+            keyed.push((ends, block.edge, i));
+        }
+    }
+    keyed.sort_unstable();
+    let operand = |b: &PaveBlock| arr.edges.get(b.edge).map(|e| e.operand);
+    let mut out: Vec<CommonBlock> = Vec::new();
+    // Each run of blocks with the same two ends is a group, begun where the ends change: one walk
+    // over the sorted list, which ends with it however the runs are cut.
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut last: Option<(usize, usize)> = None;
+    for &(ends, _, i) in &keyed {
+        if last != Some(ends) {
+            groups.push(Vec::new());
+            last = Some(ends);
+        }
+        if let Some(group) = groups.last_mut() {
+            group.push(i);
+        }
+    }
+    for group in groups {
+        // Join the blocks proven one, each to the first of its group it is one with.
+        let mut joined: Vec<Option<(usize, Proof)>> = alloc::vec![None; group.len()];
+        for (j, &bj) in group.iter().enumerate() {
+            let block_j = blocks.get(bj).ok_or(IntersectError::Internal)?;
+            for (k, &bk) in group.iter().enumerate().take(j) {
+                let block_k = blocks.get(bk).ok_or(IntersectError::Internal)?;
+                if operand(block_j) == operand(block_k) {
+                    continue;
+                }
+                if let Some(proof) = coincide(arr, block_k, block_j, meter)? {
+                    let root = joined.get(k).copied().flatten().map_or(k, |(r, _)| r);
+                    if let Some(slot) = joined.get_mut(j) {
+                        *slot = Some((root, proof));
+                    }
+                    break;
+                }
+            }
+        }
+        for (r, &br) in group.iter().enumerate() {
+            if joined.get(r).copied().flatten().is_some() {
+                continue;
+            }
+            let mut members = alloc::vec![br];
+            let mut proof = Proof::Exact;
+            for (j, slot) in joined.iter().enumerate() {
+                if let Some((_, p)) = slot.filter(|(root, _)| *root == r) {
+                    members.push(group.get(j).copied().ok_or(IntersectError::Internal)?);
+                    proof = weaker(proof, p);
+                }
+            }
+            if members.len() > 1 {
+                out.push(CommonBlock { members, proof });
+            }
+        }
+    }
+    Ok(out)
+}
