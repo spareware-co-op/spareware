@@ -5,7 +5,8 @@
 //! What it does: re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points
 //! and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]),
 //! bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]),
-//! and an operation's context and output ([`op`]). Anything not re-exported here is internal.
+//! an operation's context and output ([`op`]), and the engine seam a program codes against
+//! ([`engine`]). Anything not re-exported here is internal.
 //!
 //! Guarantees:
 //!
@@ -74,4 +75,12 @@ pub mod error {
 pub mod op {
     pub use geom_op::{Diagnostic, Label, OpContext, OpId, OpOutput, OpPath, Precision};
     pub use geom_run::Budget;
+}
+
+/// The engine seam: what a program asks of the engine that answers its geometry, and the engine's
+/// own record of what it is, so the engine behind it can change and the program does not (25).
+pub mod engine {
+    pub use geom_op::engine::{
+        Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Tolerance, Volume,
+    };
 }
