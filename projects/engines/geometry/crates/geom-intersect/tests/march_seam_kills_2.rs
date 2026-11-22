@@ -3,7 +3,7 @@
 //! a pole it is not held on, and the branches the march gives are the curve's own: how many, which
 //! starts each joins, and whether the pair is left unproven.
 //!
-//! Every case's curve is known exactly: two coordinate planes meet in a line, the plane z = 80y
+//! Every case's curve is known exactly: two planes meet in a line, the plane z = 80y
 //! meets the unit cylinder about z in an ellipse, a plane through the apex of the cone
 //! x² + y² = z² meets it in two of its rulings, and the plane x = z + 1024 through the south pole
 //! of the sphere of radius 1024 meets it in a circle through that pole.
@@ -163,6 +163,61 @@ fn a_step_whose_image_ends_on_its_boxs_own_end_is_not_proven() {
         let (traced, starts) = two_planes(side, 9.0);
         assert!(traced.unproven.is_empty(), "x = {side}: {traced:?}");
         assert_eq!(joins(&traced, &starts), [[0, 1]], "x = {side}: {traced:?}");
+    }
+}
+
+#[test]
+fn a_march_exactly_twice_its_step_past_the_last_start_goes_on_and_reaches_it() {
+    // z = 0 and the plane through y = x and the z axis meet in the line y = x, z = 0. One pair
+    // holds its piece from (3, 3) to (3.5, 3.5): the first start exact, the second given wide, the
+    // one point it holds at the middle of its x, but the middle of its y 21/16 to one side of the
+    // line. The floor is 9/16, more than the 1/2 between the starts, and the first step 1/16: the
+    // first vertex stands at x = 3 + 9/16 + 1/16, past the second start by twice the step exactly,
+    // and over twice the floor from that start's middle in y; the next vertex stands within it.
+    // Past every start by more than twice its step a march has nothing left to reach, but at
+    // exactly twice it goes on, and here ends at the second start.
+    let one = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 16.0), (0.0, 16.0)),
+        )
+        .unwrap(),
+    );
+    // As (x, z).
+    let two = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            ((0.0, 16.0), (-4.0, 4.0)),
+        )
+        .unwrap(),
+    );
+    let starts = vec![
+        [pt(3.0), pt(3.0), pt(3.0), pt(0.0)],
+        [
+            Interval::new(3.25, 3.75).unwrap(),
+            Interval::new(3.3125, 6.3125).unwrap(),
+            pt(3.5),
+            pt(0.0),
+        ],
+    ];
+    let found = one_pair(
+        ((2.0, 8.0), (2.0, 8.0)),
+        ((2.0, 8.0), (-1.0, 1.0)),
+        starts.clone(),
+    );
+    let traced = march(&one, &two, &found, 0.5625, 1.0, &mut meter()).unwrap();
+    assert!(traced.unproven.is_empty(), "{traced:?}");
+    assert_eq!(joins(&traced, &starts), [[0, 1]], "{traced:?}");
+    // The one vertex between the starts is the line's point at x = 3.625.
+    let branch = &traced.branches[0];
+    assert_eq!(branch.vertices.len(), 3, "{branch:?}");
+    let [x, y, s, z] = branch.vertices[1].map(mid);
+    for (got, want) in [(x, 3.625), (y, 3.625), (s, 3.625), (z, 0.0)] {
+        assert!((got - want).abs() <= 1e-9, "{branch:?}");
     }
 }
 
