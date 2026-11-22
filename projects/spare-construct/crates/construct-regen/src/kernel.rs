@@ -733,12 +733,14 @@ impl<E: Engine> Kernel<E> {
                 deviation: 0,
                 mesh: fine,
                 outline: outline.clone(),
+                parts: Vec::new(),
             },
             Display {
                 lod: 1,
                 deviation: opening::deviation(&cuts, units),
                 mesh: coarse,
                 outline,
+                parts: Vec::new(),
             },
         ];
         Ok(Built {

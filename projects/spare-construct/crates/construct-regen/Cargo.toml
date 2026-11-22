@@ -14,7 +14,6 @@ server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
-    "dep:construct-params",
     "dep:construct-types",
     "dep:construct-levels",
 ]
@@ -26,7 +25,9 @@ kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
-construct-params = { path = "../construct-params", optional = true }
+# Stored lengths: a layered wall's recipe holds its lengths in their stored spelling
+# (src/wall_plan.rs), which both builders read. Same workspace.
+construct-params = { path = "../construct-params" }
 construct-types = { path = "../construct-types", optional = true }
 # An element's place and a top-tied wall's height read its levels.
 construct-levels = { path = "../construct-levels", optional = true }
@@ -40,8 +41,6 @@ serde_json = "1.0.154"
 [dev-dependencies]
 # Fuzz harnesses: see kit-store's tests/fuzz_keys.rs. MIT.
 bolero = "0.13.7"
-# The stored length's steps per millimetre, which Units must agree with. This repository's own.
-construct-params = { path = "../construct-params" }
 construct-regen = { path = ".", features = ["server"] }
 kit-store = { path = "../../../kit/crates/kit-store", features = ["memory"] }
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

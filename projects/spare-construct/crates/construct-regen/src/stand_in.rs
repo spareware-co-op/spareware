@@ -150,6 +150,7 @@ impl Geometry for Boxes {
                 deviation: 0,
                 mesh: mesh(size),
                 outline: outline.clone(),
+                parts: Vec::new(),
             })
             .collect();
         Ok(Built {

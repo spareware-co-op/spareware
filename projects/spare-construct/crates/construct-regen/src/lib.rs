@@ -17,6 +17,9 @@
 //! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
 //!   project's parameters with where they are bound, and the types with their values in units.
 //!
+//! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
+//!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1, being built).
+//!
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
 //!   doors through it, and the server's commands check through it, so the two cannot differ.
@@ -38,6 +41,7 @@ pub mod parameters;
 #[cfg(feature = "server")]
 pub mod regenerator;
 pub mod stand_in;
+pub mod wall_plan;
 
 use construct_model::geometry::{Edition, FaceName, Geometry, GeometryError, Recipe};
 use std::sync::Arc;
