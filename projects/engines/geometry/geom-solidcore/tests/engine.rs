@@ -121,14 +121,14 @@ fn the_sliver_unions_are_as_recorded() {
     assert_eq!(found, expected);
 }
 
-/// Each loft and union goes to the part that answers it: a strip is solidcore's skin, Certified;
+/// Each loft and union goes to the part that answers it: a strip is the engine's own rows, Exact;
 /// the union of two flat-faced strips is the kernel's geom-bool, as exact as the strips.
 #[test]
 fn each_loft_and_union_goes_to_the_part_that_answers_it() {
     let mut e = engine();
     let a = suite::strip(&mut e, (0, 0), (10_000, 0), 0, (0, 1), 2).expect("a strip");
     assert_eq!(a.made_by(), BY_LOFT);
-    assert!(matches!(a.exactness(), Exactness::Certified { .. }));
+    assert_eq!(a.exactness(), Exactness::Exact);
     let b = suite::strip(&mut e, (10_000, 0), (20_000, 0), 0, (0, 1), 2).expect("a strip");
     let u = e.unite(&a, &b).expect("the strips united");
     assert_eq!(u.made_by(), BY_BOOL);
@@ -136,11 +136,11 @@ fn each_loft_and_union_goes_to_the_part_that_answers_it() {
 }
 
 /// A loft whose walls cross (the second section half a turn round from the first, each wall a
-/// flat crossed quadrilateral through the strip's axis) is skinned by solidcore and refused, today
-/// by solidcore's own validity check (its pointer test, which every result passes before the
-/// kernel's checker): an error, never a solid.
+/// flat crossed quadrilateral through the strip's axis) is refused as it is written: each crossed
+/// wall's two halves turn opposite ways and cancel, so the wall has no area and no plane faces
+/// out of it. An error, never a solid.
 #[test]
-fn a_crossed_loft_is_refused_by_solidcore_s_own_check() {
+fn a_crossed_loft_is_refused_for_walls_with_no_area() {
     let mut e = engine();
     let square = |x: i64| {
         vec![
@@ -157,7 +157,7 @@ fn a_crossed_loft_is_refused_by_solidcore_s_own_check() {
         matches!(
             &found,
             Err(EngineError::Refused { operation: "loft", reason })
-                if reason.starts_with("loft: the result failed its check: solidcore's own check")
+                if reason == "a face with no area"
         ),
         "{:?}",
         found.err()
@@ -389,82 +389,59 @@ fn every_engine_operation_has_a_row_in_the_interim_register() {
     assert_eq!(answered, registered);
 }
 
-/// A loft over ground that bends between stations by less than solidcore's angle tolerance
-/// (0.5 degrees) is refused today, as the replay of a real site found for every loft of more than
-/// two sections: three sections 500 mm apart with the middle one raised 2 mm (the walls bend by
-/// 0.46 degrees) come back with an edge solidcore writes as one bent B-spline across the sections,
-/// which the kernel has no kind for; raised 5 mm (1.15 degrees) the walls stay separate faces and
-/// the loft is a closed solid of the profile's area times its length, as a shear keeps volume.
-/// Recorded as it is: no retry, heal or nudge. Two sections at a time, as strips, always loft.
+/// A loft over ground that bends between stations by less than half a degree, which solidcore's
+/// skin joined into one bent face the kernel could not take in (the replay of a real site found it
+/// for every loft of more than two stations), is one closed solid of one face per wall.
 #[test]
-fn a_loft_whose_walls_bend_less_than_half_a_degree_is_refused() {
+fn a_loft_whose_walls_bend_less_than_half_a_degree_is_one_face_per_wall() {
+    suite::a_loft_whose_walls_bend_less_than_half_a_degree_is_one_face_per_wall(engine());
+}
+
+/// A section two of whose sides turn by less than half a degree, which solidcore's skin joined
+/// into one bent face (the replay found it for every strip of a void whose last side is carried on
+/// along its slope and its corners then put on the grid), lofts to one face per side.
+#[test]
+fn a_section_whose_sides_turn_less_than_half_a_degree_lofts_to_one_face_per_side() {
+    suite::a_section_whose_sides_turn_less_than_half_a_degree_lofts_to_one_face_per_side(engine());
+}
+
+#[test]
+fn a_loft_over_uneven_ground_is_its_profile_times_its_length() {
+    suite::a_loft_over_uneven_ground_is_its_profile_times_its_length(engine());
+}
+
+#[test]
+fn the_same_loft_gives_the_same_bytes() {
+    suite::the_same_loft_gives_the_same_bytes(engine);
+}
+
+/// Two solids that touch only along an edge, as two envelopes cut at a corner of the site meet
+/// along its vertical line (the replay of a real site found it for the four of ten unions of its
+/// cut envelopes that were refused), or only at a point, have no solid union: the kernel's
+/// geom-bool makes the exact non-manifold body, and the engine refuses it saying so.
+#[test]
+fn a_union_of_solids_touching_only_along_an_edge_or_at_a_point_is_refused_by_name() {
+    use suite::Touch;
     let mut e = engine();
-    let over = |e: &mut SolidcoreEngine, raised: i64| {
-        e.loft(&[
-            suite::section(0, 0, 0, (0, 1)),
-            suite::section(500, 0, raised, (0, 1)),
-            suite::section(1000, 0, 0, (0, 1)),
-        ])
-    };
-    let found = over(&mut e, 2);
-    assert!(
-        matches!(
-            &found,
-            Err(EngineError::Refused { operation: "loft", reason })
-                if reason == "loft: the result holds a spline curve, which the kernel has no kind for"
-        ),
-        "{:?}",
-        found.err()
-    );
-    let closed = over(&mut e, 5).expect("a bend of 1.15 degrees");
-    let six = |mm3: i128| I256::from_i128(6 * mm3 * i128::from(mm(1)).pow(3));
-    let area = i128::from(suite::RISE * suite::DEPTH + suite::DEPTH * suite::DEPTH / 2);
+    let edge = suite::united_touching(&mut e, Touch::AlongAnEdge);
     assert_eq!(
-        e.volume(&closed).expect("its volume"),
-        Volume::SixTimes {
-            cubic_steps: six(area * 1000),
-            exactness: closed.exactness(),
+        edge,
+        EngineError::Refused {
+            operation: "unite",
+            reason: "the result is not a solid: solids in it touch along an edge without sharing a face there (1 edges where more than two faces meet), so it is non-manifold, which no solid is".to_owned(),
+        }
+    );
+    let point = suite::united_touching(&mut e, Touch::AtAPoint);
+    assert_eq!(
+        point,
+        EngineError::Refused {
+            operation: "unite",
+            reason: "the result is not a solid: solids in it touch at a point (a vertex where the faces meet in more than one fan), so it is non-manifold, which no solid is".to_owned(),
         }
     );
 }
 
-/// A section two of whose sides turn by less than solidcore's angle tolerance (0.5 degrees) is
-/// refused today, as the replay of a real site found for every strip of a void whose profile's
-/// last side is carried on along its own slope and its corners then put on the grid: a section
-/// rising 3 m, then at 45 degrees to 6 m in, then on to 12 m in turning by 0.05 degrees, lofted
-/// 500 mm, comes back with the two sloped walls joined into one face whose edge solidcore writes
-/// as a bent B-spline, which the kernel has no kind for. With the sides exactly in line the loft is
-/// a closed solid of the section's area times its length. Recorded as it is: no retry, heal or
-/// nudge.
 #[test]
-fn a_section_whose_sides_turn_less_than_half_a_degree_is_refused() {
-    let mut e = engine();
-    let strip = |e: &mut SolidcoreEngine, top: i64| {
-        let section = |x: i64| Section {
-            corners: [(0, 0), (0, 3000), (6000, 9000), (12_000, top), (12_000, 0)]
-                .iter()
-                .map(|&(r, h)| at(x, r, h))
-                .collect(),
-        };
-        e.loft(&[section(0), section(500)])
-    };
-    let found = strip(&mut e, 15_010);
-    assert!(
-        matches!(
-            &found,
-            Err(EngineError::Refused { operation: "loft", reason })
-                if reason == "loft: the result holds a spline curve, which the kernel has no kind for"
-        ),
-        "{:?}",
-        found.err()
-    );
-    let closed = strip(&mut e, 15_000).expect("sides exactly in line");
-    let six = |mm3: i128| I256::from_i128(6 * mm3 * i128::from(mm(1)).pow(3));
-    assert_eq!(
-        e.volume(&closed).expect("its volume"),
-        Volume::SixTimes {
-            cubic_steps: six(12_000 * (3000 + 15_000) / 2 * 500),
-            exactness: closed.exactness(),
-        }
-    );
+fn a_strip_cut_in_two_leaves_two_pieces_in_order() {
+    suite::a_strip_cut_in_two_leaves_two_pieces_in_order(engine());
 }

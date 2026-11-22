@@ -42,8 +42,9 @@
 //! role (chapter 20) yet.
 //!
 //! For programs: [`engine::SolidcoreEngine`] answers the kernel's engine seam (`geom_op::engine`,
-//! which programs reach through `engine-geometry`), extruding and lofting by solidcore, and
-//! subtracting and uniting flat-faced solids by the kernel's own `geom-bool`.
+//! which programs reach through `engine-geometry`), extruding by solidcore where the kernel's
+//! prism does not, lofting flat walls as rows of its own, and subtracting and uniting flat-faced
+//! solids by the kernel's own `geom-bool`.
 //!
 //! Method: solidcore at commit 1d8e14b46dedccbb03572956e7c708782fef1b8f of the project's fork of
 //! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's. Its record of a body is written
@@ -669,75 +670,8 @@ impl Modeller {
     /// refuses; [`Error::CheckFailed`] and [`Error::Unconverted`] as every result.
     pub fn loft(&mut self, sections: &[Vec<Corner>]) -> Result<Solid, Error> {
         const OP: &str = "loft";
-        let invalid = |what: &str| Error::Invalid {
-            operation: OP,
-            what: what.to_owned(),
-        };
-        let [first, second, ..] = sections else {
-            return Err(invalid("fewer than two sections"));
-        };
-        let count = first.len();
-        if count < 3 {
-            return Err(invalid("a section of fewer than three corners"));
-        }
-        if sections.iter().any(|s| s.len() != count) {
-            return Err(invalid(
-                "sections of different corner counts: corner i of each is joined to corner i of the next",
-            ));
-        }
-        for s in sections {
-            let n = newell(s);
-            if n.iter().all(Zero::is_zero) {
-                return Err(invalid("a section with no area"));
-            }
-            let o = s[0].exact();
-            if s.iter().any(|&p| !dot(&n, &diff(&p.exact(), &o)).is_zero()) {
-                return Err(invalid("a section's corner off its plane"));
-            }
-        }
-        // Each section's centre times its count, exactly: the sign of the way ahead is the same.
-        let sum = |s: &[Corner]| {
-            s.iter().fold(
-                [
-                    BigRational::zero(),
-                    BigRational::zero(),
-                    BigRational::zero(),
-                ],
-                |a, p| {
-                    let e = p.exact();
-                    [&a[0] + &e[0], &a[1] + &e[1], &a[2] + &e[2]]
-                },
-            )
-        };
-        let ahead = dot(&newell(first), &diff(&sum(second), &sum(first)));
-        if ahead.is_zero() {
-            return Err(invalid(
-                "a second section whose centre lies on the first one's plane",
-            ));
-        }
-        let reversed = ahead.is_negative();
-        // The loft runs one way: every corner of each section lies strictly ahead of the plane of
-        // the one before it, ahead being the way the first section's normal turns towards the
-        // second. A section behind, or listed the other way round, folds the loft back.
-        for (k, pair) in sections.windows(2).enumerate() {
-            let n = newell(&pair[0]);
-            let o = pair[0][0].exact();
-            let behind = pair[1].iter().any(|p| {
-                let d = dot(&n, &diff(&p.exact(), &o));
-                if reversed {
-                    !d.is_negative()
-                } else {
-                    !d.is_positive()
-                }
-            });
-            if behind {
-                return Err(invalid(&format!(
-                    "the loft folds back: section {} is not wholly ahead of section {}'s plane, or not listed the same way round",
-                    k + 2,
-                    k + 1
-                )));
-            }
-        }
+        let reversed = loft_reversed(sections)?;
+        let count = sections.first().map_or(0, Vec::len);
         let mut curves: Vec<Curve> = Vec::new();
         for s in sections {
             let mut q = s.clone();
@@ -868,6 +802,91 @@ impl Modeller {
                 .collect(),
         })
     }
+}
+
+/// Whether `sections` are a loft [`Modeller::loft`] takes, and if so whether they run reversed:
+/// whether the first section's corners turn negatively about the way from it to the second, so
+/// that each must be listed the other way round to turn positively about the way ahead. The
+/// checks, each exact on the corners' fractions of steps: at least two sections, each of at least
+/// three corners, with an area and every corner on its plane, all of one corner count, the second
+/// section's centre off the first one's plane, and every section wholly ahead of the plane of the
+/// one before it (no fold).
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for sections that fail a check, naming it.
+pub fn loft_reversed(sections: &[Vec<Corner>]) -> Result<bool, Error> {
+    const OP: &str = "loft";
+    let invalid = |what: &str| Error::Invalid {
+        operation: OP,
+        what: what.to_owned(),
+    };
+    let [first, second, ..] = sections else {
+        return Err(invalid("fewer than two sections"));
+    };
+    let count = first.len();
+    if count < 3 {
+        return Err(invalid("a section of fewer than three corners"));
+    }
+    if sections.iter().any(|s| s.len() != count) {
+        return Err(invalid(
+            "sections of different corner counts: corner i of each is joined to corner i of the next",
+        ));
+    }
+    for s in sections {
+        let n = newell(s);
+        if n.iter().all(Zero::is_zero) {
+            return Err(invalid("a section with no area"));
+        }
+        let o = s[0].exact();
+        if s.iter().any(|&p| !dot(&n, &diff(&p.exact(), &o)).is_zero()) {
+            return Err(invalid("a section's corner off its plane"));
+        }
+    }
+    // Each section's centre times its count, exactly: the sign of the way ahead is the same.
+    let sum = |s: &[Corner]| {
+        s.iter().fold(
+            [
+                BigRational::zero(),
+                BigRational::zero(),
+                BigRational::zero(),
+            ],
+            |a, p| {
+                let e = p.exact();
+                [&a[0] + &e[0], &a[1] + &e[1], &a[2] + &e[2]]
+            },
+        )
+    };
+    let ahead = dot(&newell(first), &diff(&sum(second), &sum(first)));
+    if ahead.is_zero() {
+        return Err(invalid(
+            "a second section whose centre lies on the first one's plane",
+        ));
+    }
+    let reversed = ahead.is_negative();
+    // The loft runs one way: every corner of each section lies strictly ahead of the plane of
+    // the one before it, ahead being the way the first section's normal turns towards the
+    // second. A section behind, or listed the other way round, folds the loft back.
+    for (k, pair) in sections.windows(2).enumerate() {
+        let n = newell(&pair[0]);
+        let o = pair[0][0].exact();
+        let behind = pair[1].iter().any(|p| {
+            let d = dot(&n, &diff(&p.exact(), &o));
+            if reversed {
+                !d.is_negative()
+            } else {
+                !d.is_positive()
+            }
+        });
+        if behind {
+            return Err(invalid(&format!(
+                "the loft folds back: section {} is not wholly ahead of section {}'s plane, or not listed the same way round",
+                k + 2,
+                k + 1
+            )));
+        }
+    }
+    Ok(reversed)
 }
 
 #[cfg(test)]
