@@ -524,6 +524,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-materials"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-params",
+ "construct-styles",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-model"
 version = "0.0.0"
 dependencies = [
@@ -583,6 +595,16 @@ name = "construct-solver"
 version = "0.0.0"
 dependencies = [
  "kit-core",
+]
+
+[[package]]
+name = "construct-styles"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
