@@ -388,3 +388,42 @@ fn every_engine_operation_has_a_row_in_the_interim_register() {
         .collect();
     assert_eq!(answered, registered);
 }
+
+/// A loft over ground that bends between stations by less than solidcore's angle tolerance
+/// (0.5 degrees) is refused today, as the replay of a real site found for every loft of more than
+/// two sections: three sections 500 mm apart with the middle one raised 2 mm (the walls bend by
+/// 0.46 degrees) come back with an edge solidcore writes as one bent B-spline across the sections,
+/// which the kernel has no kind for; raised 5 mm (1.15 degrees) the walls stay separate faces and
+/// the loft is a closed solid of the profile's area times its length, as a shear keeps volume.
+/// Recorded as it is: no retry, heal or nudge. Two sections at a time, as strips, always loft.
+#[test]
+fn a_loft_whose_walls_bend_less_than_half_a_degree_is_refused() {
+    let mut e = engine();
+    let over = |e: &mut SolidcoreEngine, raised: i64| {
+        e.loft(&[
+            suite::section(0, 0, 0, (0, 1)),
+            suite::section(500, 0, raised, (0, 1)),
+            suite::section(1000, 0, 0, (0, 1)),
+        ])
+    };
+    let found = over(&mut e, 2);
+    assert!(
+        matches!(
+            &found,
+            Err(EngineError::Refused { operation: "loft", reason })
+                if reason == "loft: the result holds a spline curve, which the kernel has no kind for"
+        ),
+        "{:?}",
+        found.err()
+    );
+    let closed = over(&mut e, 5).expect("a bend of 1.15 degrees");
+    let six = |mm3: i128| I256::from_i128(6 * mm3 * i128::from(mm(1)).pow(3));
+    let area = i128::from(suite::RISE * suite::DEPTH + suite::DEPTH * suite::DEPTH / 2);
+    assert_eq!(
+        e.volume(&closed).expect("its volume"),
+        Volume::SixTimes {
+            cubic_steps: six(area * 1000),
+            exactness: closed.exactness(),
+        }
+    );
+}
