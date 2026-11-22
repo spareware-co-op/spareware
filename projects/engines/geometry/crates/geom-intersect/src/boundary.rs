@@ -28,7 +28,9 @@
 //!
 //! Method: the parametric Krawczyk test is Kearfott and Xing's
 //! (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares
-//! start for the middle of a piece is Gauss-Newton on the three residuals. The box of a piece is
+//! start for the middle of a piece is Gauss-Newton on the three residuals, from the middle of the
+//! patch of the other surface the run is for, so an edge on two sheets of it is proven on the
+//! sheet the patch holds (issue #1167). The box of a piece is
 //! one length on the other surface, a little more than the edge's travel over the piece, and each
 //! of `(s, r)` takes it in its own unit, by the surface's speed along that parameter, as the
 //! march's step box does: a turn and a height, or a plane's two vectors of different lengths, are
@@ -49,7 +51,7 @@ use geom_curve::tight::{larger, smaller};
 use geom_num::interval::Interval;
 use geom_num::newton::inverse;
 use geom_run::WorkMeter;
-use geom_surface::ParamSurface;
+use geom_surface::ParamBox as Region;
 
 use crate::IntersectError;
 use crate::general::{Edge, partials, point};
@@ -167,13 +169,16 @@ fn pace(slope: &[[Interval; 3]; 3]) -> Result<f64, IntersectError> {
 }
 
 /// The `(s, r)` at the middle of `t`, by Gauss-Newton on the three residuals, from the middle of
-/// the other surface's domain; `None` where it does not settle or is not defined.
+/// `patch`, the part of the other surface the run is for; `None` where it does not settle or is
+/// not defined. Where the edge lies on two sheets of the other surface, the start picks the sheet:
+/// one from the middle of the whole domain reaches one sheet only, whatever patch it is for.
 fn middle(
     edge: &Edge<'_>,
     tm: f64,
+    patch: Region,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<[f64; 2]>, IntersectError> {
-    let ((s0, s1), (r0, r1)) = edge.other.domain();
+    let ((s0, s1), (r0, r1)) = patch;
     let (mut ms, mut mr) = (s0 / 2.0 + s1 / 2.0, r0 / 2.0 + r1 / 2.0);
     for _ in 0..NEWTON {
         let whole = [point(tm)?, point(ms)?, point(mr)?];
@@ -211,10 +216,11 @@ fn middle(
 fn piece(
     edge: &Edge<'_>,
     (a, b): (f64, f64),
+    patch: Region,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<[Interval; 2]>, IntersectError> {
     let t = Interval::new(a, b)?;
-    let Some([m0, m1]) = middle(edge, a / 2.0 + b / 2.0, meter)? else {
+    let Some([m0, m1]) = middle(edge, a / 2.0 + b / 2.0, patch, meter)? else {
         return Ok(None);
     };
     let here = [point(a / 2.0 + b / 2.0)?, point(m0)?, point(m1)?];
@@ -345,7 +351,8 @@ fn meet(a: [Interval; 2], b: [Interval; 2]) -> Option<[Interval; 2]> {
 }
 
 /// Proves that the edge lies in the other surface for every `t` from `lo` to `hi`, piece by piece,
-/// each piece within `ceiling` of its chord; `None` where it cannot.
+/// each piece within `ceiling` of its chord; `None` where it cannot. Each piece's `(s, r)` is sought
+/// from the middle of `patch`, the part of the other surface the run is for.
 ///
 /// # Errors
 ///
@@ -353,6 +360,7 @@ fn meet(a: [Interval; 2], b: [Interval; 2]) -> Option<[Interval; 2]> {
 pub(crate) fn lies_in(
     edge: &Edge<'_>,
     (lo, hi): (f64, f64),
+    patch: Region,
     ceiling: f64,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Run>, IntersectError> {
@@ -368,7 +376,7 @@ pub(crate) fn lies_in(
         meter.charge(1)?;
         let bow = bowed(edge, (a, b), meter)?;
         let proof = match bow {
-            Some(d) if d <= ceiling => piece(edge, (a, b), meter)?,
+            Some(d) if d <= ceiling => piece(edge, (a, b), patch, meter)?,
             _ => None,
         };
         if let (Some(x), Some(d)) = (proof, bow) {
@@ -457,7 +465,7 @@ mod tests {
     use super::*;
     use geom_curve::Frame;
     use geom_run::Budget;
-    use geom_surface::{Cylinder, Plane, SurfaceKind};
+    use geom_surface::{Cylinder, ParamSurface, Plane, SurfaceKind};
 
     const UNIT: f64 = 1024.0;
 
@@ -632,7 +640,9 @@ mod tests {
         let other = other(((10.0, 12.0), (10.0, 12.0)));
         let own = own((10.25, 11.75), (0.0, 1.0));
         let e = edge_of(&own, &other);
-        let [s, r] = middle(&e, 0.5, &mut meter()).unwrap().unwrap();
+        let [s, r] = middle(&e, 0.5, e.other.domain(), &mut meter())
+            .unwrap()
+            .unwrap();
         assert!(
             (s - 10.75).abs() < 1e-12 && (r - 11.25).abs() < 1e-12,
             "({s}, {r})"
@@ -655,7 +665,10 @@ mod tests {
             ((0.0, 1.0), (0.0, 1.0)),
         );
         let e = edge_of(&far, &big);
-        assert_eq!(middle(&e, 0.5, &mut meter()).unwrap(), None);
+        assert_eq!(
+            middle(&e, 0.5, e.other.domain(), &mut meter()).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -668,7 +681,9 @@ mod tests {
         let own = own((-11.0, 33.0), (10.0, 12.0));
         let e = edge_of(&own, &other);
         let (a, b) = (10.0, 10.0625);
-        let [k0, k1] = piece(&e, (a, b), &mut meter()).unwrap().unwrap();
+        let [k0, k1] = piece(&e, (a, b), e.other.domain(), &mut meter())
+            .unwrap()
+            .unwrap();
         let (s, r) = ((a - 11.0, b - 11.0), (33.0 - b, 33.0 - a));
         assert!(
             holds_all(k0, s.0, s.1) && holds_all(k1, r.0, r.1),
@@ -690,7 +705,9 @@ mod tests {
         let own = own((m, m), (0.0, 1.0));
         let e = edge_of(&own, &other);
         let (a, b) = (0.5, 0.5 + 2.0_f64.powi(-33));
-        let [k0, k1] = piece(&e, (a, b), &mut meter()).unwrap().unwrap();
+        let [k0, k1] = piece(&e, (a, b), e.other.domain(), &mut meter())
+            .unwrap()
+            .unwrap();
         assert!(
             holds_all(k0, m + a, m + b) && holds_all(k1, m - b, m - a),
             "{k0:?} {k1:?}"
@@ -708,13 +725,13 @@ mod tests {
         let e = edge_of(&own, &other);
         for (lo, hi) in [(f64::NAN, 1.0), (0.0, f64::NAN), (1.0, 1.0), (1.0, 0.5)] {
             assert_eq!(
-                lies_in(&e, (lo, hi), 10.24, &mut meter()).unwrap(),
+                lies_in(&e, (lo, hi), e.other.domain(), 10.24, &mut meter()).unwrap(),
                 None,
                 "{lo} to {hi}"
             );
         }
         // The same edge over its whole length is proven, from end to end.
-        let run = lies_in(&e, (0.0, 1.0), 10.24, &mut meter())
+        let run = lies_in(&e, (0.0, 1.0), e.other.domain(), 10.24, &mut meter())
             .unwrap()
             .unwrap();
         assert_eq!(
@@ -750,7 +767,7 @@ mod tests {
         let (least, most) = bows_at_4096ths(&e);
         assert!(4.0 * least > 1.02 * most, "{least} {most}");
         let ceiling = 1.01 * most;
-        let run = lies_in(&e, (0.0, 1.0), ceiling, &mut meter())
+        let run = lies_in(&e, (0.0, 1.0), e.other.domain(), ceiling, &mut meter())
             .unwrap()
             .unwrap();
         assert_eq!(run.pieces.len(), 4096);
@@ -766,7 +783,7 @@ mod tests {
             }
         }
         assert_eq!(
-            lies_in(&e, (0.0, 1.0), 0.99 * least, &mut meter()).unwrap(),
+            lies_in(&e, (0.0, 1.0), e.other.domain(), 0.99 * least, &mut meter()).unwrap(),
             None
         );
     }
@@ -785,10 +802,15 @@ mod tests {
         let reach = |k: f64| other(((m - k * spacing, m + k * spacing), (0.0, 1.0)));
         let wide = reach(8.0);
         let e = edge_of(&own, &wide);
-        let [k0, k1] = piece(&e, (a, b), &mut meter()).unwrap().unwrap();
+        let [k0, k1] = piece(&e, (a, b), e.other.domain(), &mut meter())
+            .unwrap()
+            .unwrap();
         assert!(holds_all(k0, m, m) && holds_all(k1, a, b), "{k0:?} {k1:?}");
         let narrow = reach(7.0);
         let e = edge_of(&own, &narrow);
-        assert_eq!(piece(&e, (a, b), &mut meter()).unwrap(), None);
+        assert_eq!(
+            piece(&e, (a, b), e.other.domain(), &mut meter()).unwrap(),
+            None
+        );
     }
 }

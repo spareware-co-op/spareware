@@ -3,10 +3,7 @@
 //! across an end can hold only the edge continued past it, where a run proven over the edge alone
 //! meets none of its `(s, r)`. The run that explains the flagged boxes is proven over that room
 //! too, where the other plane holds it, and the pair gives its one branch, the floor's edge u = 0.
-//! And a box the run must not explain: the floor's edge lies on two sheets of a swept profile that
-//! crosses itself along it, and the run follows one sheet, so the other sheet's boxes are no run's
-//! and stay flagged; nothing is guessed. Run at the scale of the SSI corpus (1024 steps to the unit,
-//! floor 8, ceiling 10.24).
+//! Run at the scale of the SSI corpus (1024 steps to the unit, floor 8, ceiling 10.24).
 
 #![allow(
     clippy::unwrap_used,
@@ -21,7 +18,6 @@ use geom_intersect::general::subdivide;
 use geom_intersect::march::march;
 use geom_intersect::result::CurveEnd;
 use geom_num::interval::Interval;
-use geom_nurbs::{Basis, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
 
@@ -140,75 +136,5 @@ fn the_room_a_run_is_proven_over_is_a_sixteenth_of_the_edge_past_each_end() {
     let floor = floor_plane((0.0, 2.0), (1.0, 2.0));
     for y in [(0.9375, 2.5), (0.96875, 2.25), (0.9375, 2.125)] {
         one_branch(&floor, &wall(y, (-1.0, 1.0)), (1.0, 2.0));
-    }
-}
-
-/// A Bézier basis of degree `p` over [0, 1].
-fn basis(p: usize) -> Basis {
-    let mut knots = vec![0.0; p + 1];
-    knots.extend(vec![1.0; p + 1]);
-    Basis::new(p, knots).unwrap()
-}
-
-/// A cubic profile in (x, z), in steps, swept along y from −512 to 1536: it comes up from below
-/// through the origin at u = 1/2, loops over it and goes down through it again at u = 9/10, so the
-/// line x = 0, z = 0 lies on two sheets of the surface, crossing at an angle. Its control points are
-/// the cubic with P2 = P1 + 13·(P0 − P3)/9 (which crosses itself at 1/4 and 3/4), moved to put the
-/// crossing at the origin and read over [−3/8, 7/8], every number exact: the crossing is at the
-/// middle of u's domain, where the run's Gauss-Newton starts. Elsewhere on x ≥ −300 the profile is
-/// below or above z = 0, never on it.
-fn sheets() -> SurfaceKind {
-    let profile = [
-        (-8100.0, -84375.0 / 16.0),
-        (8475.0 / 2.0, 3125.0 / 16.0),
-        (-1675.0, 28125.0 / 16.0),
-        (825.0 / 2.0, -9375.0 / 16.0),
-    ];
-    let mut net = Vec::new();
-    for (x, z) in profile {
-        for y in [-512.0, 1536.0] {
-            net.push([x, y, z]);
-        }
-    }
-    SurfaceKind::Nurbs(Surface::new(basis(3), basis(1), &net).unwrap())
-}
-
-/// The floor meets the swept profile in its edge u = 0, the line from y = 0 to 1 unit, on both
-/// sheets: at the profile's u = 1/2 and at 9/10. The run along the edge is proven on the first
-/// sheet, from the middle of the profile's domain. The edge system's boxes on the second sheet hold
-/// its zeros there, which are not the run's: they are no explained doubt, and the part of the pair
-/// that holds them stays flagged, in either order. The first sheet's branch is traced from corner
-/// to corner of the floor, every vertex on the line at u = 1/2.
-#[test]
-fn a_box_on_a_second_sheet_through_the_edge_is_not_the_runs() {
-    let floor = floor_plane((0.0, 2.0), (0.0, 1.0));
-    let swept = sheets();
-    for floor_first in [true, false] {
-        let (a, b) = if floor_first {
-            (&floor, &swept)
-        } else {
-            (&swept, &floor)
-        };
-        let (floor_u, floor_v, sheet_u, _) = places(floor_first);
-        let found = subdivide(a, b, FLOOR, &mut meter()).unwrap();
-        let second = |pair: &((f64, f64), (f64, f64))| (pair.0.0..=pair.0.1).contains(&0.9);
-        assert!(
-            found.flagged.iter().any(|f| {
-                let profile = if floor_first { &f.second } else { &f.first };
-                second(profile)
-            }),
-            "{floor_first}: {:#?}",
-            found.flagged
-        );
-        let traced = march(a, b, &found, FLOOR, CEILING, &mut meter()).unwrap();
-        let [branch] = traced.branches.as_slice() else {
-            panic!("{floor_first}: {:#?}", traced.branches);
-        };
-        assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
-        for v in &branch.vertices {
-            assert!(near(v[floor_u], 0.0) && near(v[sheet_u], 0.5), "{v:?}");
-        }
-        let (low, high) = reach(&branch.vertices, floor_v);
-        assert!(near(low, 0.0) && near(high, 1.0), "{low:?} {high:?}");
     }
 }

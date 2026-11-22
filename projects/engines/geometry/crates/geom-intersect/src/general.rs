@@ -360,7 +360,10 @@ pub(crate) enum Starts {
 /// Whether a flagged box of `edge`'s system is the edge's own: the edge is on an end of its
 /// surface's domain, lies in the other surface for all of `length`, and the box, less than a floor
 /// across, meets the run that proves it. `ends` are the ends of the own surface's parameter that is
-/// held. The run is proven once, into `lies`.
+/// held, and `there` the patch of the other surface the boxes are cut to, from whose middle the run
+/// is sought: where the edge lies on two sheets of the other surface, the run follows the sheet
+/// the patch holds, and a patch that holds only the second sheet explains that sheet's boxes. The
+/// run is proven once, into `lies`.
 ///
 /// The boxes were searched in the room past the edge's ends as well ([`roomy`]), so a box across
 /// an end may hold only the edge continued past it, whose `(s, r)` no piece over `length` meets.
@@ -369,7 +372,7 @@ pub(crate) enum Starts {
 /// not hold that room, it is not proven, and the box stays refused.
 fn runs_along(
     edge: &Edge<'_>,
-    (length, ends): ((f64, f64), (f64, f64)),
+    (length, ends, there): ((f64, f64), (f64, f64), Region),
     lies: &mut Lying,
     region: &[Interval; 3],
     meter: &mut WorkMeter<'_>,
@@ -379,7 +382,7 @@ fn runs_along(
     }
     if !lies.tried {
         lies.tried = true;
-        lies.run = lies_in(edge, length, f64::MAX, meter)?;
+        lies.run = lies_in(edge, length, there, f64::MAX, meter)?;
     }
     let Some(run) = &lies.run else {
         return Ok(false);
@@ -391,7 +394,7 @@ fn runs_along(
         lies.widened = true;
         let (lo, hi) = length;
         let room = (hi - lo) / ROOM;
-        lies.wide = lies_in(edge, (lo - room, hi + room), f64::MAX, meter)?;
+        lies.wide = lies_in(edge, (lo - room, hi + room), there, f64::MAX, meter)?;
     }
     Ok(lies.wide.as_ref().is_some_and(|run| run.holds(region)))
 }
@@ -480,7 +483,13 @@ pub(crate) fn starts_of(
                 for flagged in &found.flagged {
                     let [t, ..] = flagged.region;
                     let explained = (at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0)
-                        || runs_along(&edge, (length, held), &mut lies, &flagged.region, meter)?;
+                        || runs_along(
+                            &edge,
+                            (length, held, there),
+                            &mut lies,
+                            &flagged.region,
+                            meter,
+                        )?;
                     if !explained {
                         return Ok(Starts::Undecided);
                     }

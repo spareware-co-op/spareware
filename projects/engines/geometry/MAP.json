@@ -7685,7 +7685,7 @@
             "links": [
               "https://doi.org/10.1137/0731048"
             ],
-            "text": "the parametric Krawczyk test is Kearfott and Xing's (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares start for the middle of a piece is Gauss-Newton on the three residuals. The box of a piece is one length on the other surface, a little more than the edge's travel over the piece, and each of `(s, r)` takes it in its own unit, by the surface's speed along that parameter, as the march's step box does: a turn and a height, or a plane's two vectors of different lengths, are not one unit."
+            "text": "the parametric Krawczyk test is Kearfott and Xing's (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares start for the middle of a piece is Gauss-Newton on the three residuals, from the middle of the patch of the other surface the run is for, so an edge on two sheets of it is proven on the sheet the patch holds (issue #1167). The box of a piece is one length on the other surface, a little more than the edge's travel over the piece, and each of `(s, r)` takes it in its own unit, by the surface's speed along that parameter, as the march's step box does: a turn and a height, or a plane's two vectors of different lengths, are not one unit."
           },
           "path": "geom_intersect::boundary",
           "provenance": [],

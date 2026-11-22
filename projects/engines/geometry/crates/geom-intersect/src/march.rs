@@ -679,12 +679,15 @@ fn along_an_edge(
                     fixed_u,
                     floor,
                 };
+                // Sought from the middle of the pair's patch, as subdivide's run that explained
+                // the pair was: on the sheet of the other surface the patch holds.
                 let Some(run) = lies_in(
                     &edge,
                     (
                         larger(smaller(ta, tb), run_lo),
                         smaller(larger(ta, tb), run_hi),
                     ),
+                    there,
                     ceiling,
                     meter,
                 )?
