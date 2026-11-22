@@ -12,6 +12,17 @@
 //!   through its own grid corners ([`on_its_corners`]);
 //! - `subtract`: the kernel's exact `geom-bool` (`combine` with one subtract selection), since
 //!   flat-faced booleans stay the kernel's (32.70, rule 5);
+//! - `loft`: solidcore's skin through the sections ([`Modeller::loft`]), for sections whose walls
+//!   are flat (each wall's four corners exactly on one plane, decided here on the grid before
+//!   solidcore is reached), its body converted and checked as the kernel's and each flat face's
+//!   plane written through its own grid corners as the extrusion's is; a wall that is not flat is
+//!   unsupported, as the kernel has no kind for a ruled surface yet. solidcore has no check that a
+//!   skin does not fold back or cross itself, and the kernel's checker, which every result
+//!   passes, refuses such a body: a folded or crossed loft is an error, never a solid;
+//! - `unite`: the kernel's exact `geom-bool` (`combine` with the unite selection) when both
+//!   solids are flat-faced (32.70, rule 5), and solidcore's boolean union ([`Modeller::union`])
+//!   otherwise, on the solidcore bodies the engine keeps of the solids solidcore made; a curved
+//!   operand united with one solidcore holds no body of is unsupported;
 //! - `volume`: the kernel's exact six-volume of the body's rows (`geom_topo::query_ops::six_volume`);
 //! - `mesh`: each flat face's loops filled by solidcore-tess's planar triangulation
 //!   (`solidcore_tess::triangulate_planar`), the face's own corners and no point added, so faces
@@ -20,15 +31,17 @@
 //!   tolerances as its kernel holds them, and the list above.
 //!
 //! An [`EngineSolid`] is the kernel's checked body, its exactness and what made it
-//! ([`EngineSolid::made_by`]); no solidcore type is in it.
+//! ([`EngineSolid::made_by`]), and, privately, solidcore's own body of it when solidcore made it;
+//! no solidcore type is in its interface.
 //!
-//! Not yet: a curved face is not meshed (solidcore-tess's planner works on solidcore's record of a
+//! Not yet: a loft wall that is not flat is not made, a curved face is not meshed (solidcore-tess's planner works on solidcore's record of a
 //! body, and a body `geom-bool` made has none), and a subtraction whose result is more than one
 //! solid is refused as unsupported.
 //!
 //! SPDX-License-Identifier: Apache-2.0
 
 use std::fmt::Display;
+use std::sync::Arc;
 
 use geom_bool::combine::combine;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
@@ -36,7 +49,7 @@ use geom_check::{Level, check};
 use geom_make::{PrismInput, prism};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Tolerance, Volume,
+    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
 };
 use geom_op::{OpContext, OpId, OpPath};
 use geom_poly::merge::Merge;
@@ -48,7 +61,7 @@ use geom_topo::{
 };
 use solidcore::KernelOptions;
 
-use crate::{Corner, Hole, Modeller};
+use crate::{Corner, Hole, Modeller, Solid};
 
 /// The engine's name in its [`Edition`].
 pub const ENGINE: &str = "geom-solidcore";
@@ -59,12 +72,22 @@ pub const SOLIDCORE: &str = "solidcore https://github.com/spareware-co-op/solidc
 /// The operation path the engine's kernel calls run under.
 const PATH: [u8; 16] = *b"geom-solidcore-e";
 
-/// A solid of the engine: the kernel's checked body and the exactness it carries.
-#[derive(Clone, Debug, PartialEq)]
+/// A solid of the engine: the kernel's checked body and the exactness it carries, and solidcore's
+/// own body of it when solidcore made it, which only solidcore's union reads.
+#[derive(Clone, Debug)]
 pub struct EngineSolid {
     body: Body,
     exactness: Exactness,
     made_by: &'static str,
+    solidcore: Option<Arc<Solid>>,
+}
+
+/// Two solids are equal when their kernel bodies, exactness and makers are: solidcore's body of a
+/// solid is a copy of the same shape, kept for solidcore's own operations.
+impl PartialEq for EngineSolid {
+    fn eq(&self, other: &EngineSolid) -> bool {
+        (&self.body, self.exactness, self.made_by) == (&other.body, other.exactness, other.made_by)
+    }
 }
 
 /// The extrusions the kernel's prism takes.
@@ -86,6 +109,23 @@ pub const BY_SWEEP: &str = "solidcore's linear sweep (decision 32.91)";
 /// What made a solid: the kernel's exact boolean.
 pub const BY_BOOL: &str = "the kernel's geom-bool (decision 32.70, rule 5)";
 
+/// The lofts the engine makes.
+pub const LOFT_CASE: &str = "sections whose walls are flat: each wall's four corners on one plane";
+
+/// What made a solid: solidcore's skin.
+pub const BY_LOFT: &str =
+    "solidcore's skin of degree 1 through the sections (create_skin_primitive)";
+
+/// The unions the kernel's boolean takes.
+pub const FLAT_CASE: &str = "both solids flat-faced";
+
+/// The unions solidcore takes.
+pub const CURVED_CASE: &str =
+    "a solid with a curved face, united with one solidcore made (it keeps solidcore's body of it)";
+
+/// What made a solid: solidcore's boolean union.
+pub const BY_UNION: &str = "solidcore's boolean union";
+
 impl EngineSolid {
     /// What made it, as the engine's edition names it: [`BY_PRISM`], [`BY_SWEEP`] or
     /// [`BY_BOOL`].
@@ -104,6 +144,25 @@ impl EngineSolid {
     #[must_use]
     pub fn exactness(&self) -> Exactness {
         self.exactness
+    }
+
+    /// The same solid, keeping solidcore's body `made` of it.
+    fn keeping(self, made: Solid) -> EngineSolid {
+        EngineSolid {
+            solidcore: Some(Arc::new(made)),
+            ..self
+        }
+    }
+
+    /// Whether every face of the body is flat.
+    fn flat(&self) -> bool {
+        let a = self.body.arenas();
+        (0..a.faces.len()).all(|row| {
+            FaceIx::new(row)
+                .and_then(|f| a.faces.get(f))
+                .and_then(|f| a.surfaces.get(f.surface))
+                .is_some_and(|s| matches!(s, SurfaceKind::Plane(_)))
+        })
     }
 }
 
@@ -166,6 +225,7 @@ fn accepted(
         body,
         exactness,
         made_by,
+        solidcore: None,
     })
 }
 
@@ -363,17 +423,17 @@ fn whole(p: P3) -> [i128; 3] {
     clippy::cast_precision_loss,
     reason = "whole steps under 2^41, which an f64 holds exactly, and a direction's sign"
 )]
-fn on_its_corners(body: &Body) -> Result<Body, EngineError> {
-    const OP: &str = "extrude";
+fn on_its_corners(operation: &'static str, body: &Body) -> Result<Body, EngineError> {
     let a = body.arenas();
     let mut b = Builder::new();
     b.arenas = a.clone();
     for row in 0..a.faces.len() {
-        let face = FaceIx::new(row).ok_or_else(|| refused(OP, "a face row past the index"))?;
+        let face =
+            FaceIx::new(row).ok_or_else(|| refused(operation, "a face row past the index"))?;
         let f = a
             .faces
             .get(face)
-            .ok_or_else(|| refused(OP, "a face out of its arena"))?;
+            .ok_or_else(|| refused(operation, "a face out of its arena"))?;
         let Some(SurfaceKind::Plane(flat)) = a.surfaces.get(f.surface) else {
             return Ok(body.clone());
         };
@@ -400,7 +460,10 @@ fn on_its_corners(body: &Body) -> Result<Body, EngineError> {
                 .map(|v| (u, v))
         });
         let Some((u, v)) = across else {
-            return Err(refused(OP, "a flat face whose corners lie on one line"));
+            return Err(refused(
+                operation,
+                "a flat face whose corners lie on one line",
+            ));
         };
         let (_, fu, fv) = flat.vectors();
         let wrote = [
@@ -431,15 +494,15 @@ fn on_its_corners(body: &Body) -> Result<Body, EngineError> {
             sv = (sv.0.min(y - 1.0), sv.1.max(y + 1.0));
         }
         let plane = FlatSurface::new(o.map(|c| c as f64), uf, vf, (su, sv))
-            .map_err(|e| refused(OP, format!("{e:?}")))?;
+            .map_err(|e| refused(operation, format!("{e:?}")))?;
         b.arenas
             .surfaces
             .set(f.surface, SurfaceKind::Plane(plane))
-            .map_err(|e| refused(OP, format!("{e:?}")))?;
+            .map_err(|e| refused(operation, format!("{e:?}")))?;
     }
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     b.publish(body.kind(), body.outside(), &mut meter)
-        .map_err(|e| refused(OP, format!("{e:?}")))
+        .map_err(|e| refused(operation, format!("{e:?}")))
 }
 
 impl Engine for SolidcoreEngine {
@@ -471,6 +534,9 @@ impl Engine for SolidcoreEngine {
                 answer("extrude", PRISM_CASE, BY_PRISM),
                 answer("extrude", SWEEP_CASE, BY_SWEEP),
                 answer("subtract", EVERY_CASE, BY_BOOL),
+                answer("loft", LOFT_CASE, BY_LOFT),
+                answer("unite", FLAT_CASE, BY_BOOL),
+                answer("unite", CURVED_CASE, BY_UNION),
                 answer(
                     "volume",
                     EVERY_CASE,
@@ -510,7 +576,95 @@ impl Engine for SolidcoreEngine {
             },
             other => refused(OP, other),
         })?;
-        accepted(OP, (on_its_corners(s.body())?, s.exactness()), BY_SWEEP)
+        accepted(OP, (on_its_corners(OP, s.body())?, s.exactness()), BY_SWEEP)
+            .map(|made| made.keeping(s))
+    }
+
+    fn loft(&mut self, sections: &[Section]) -> Result<EngineSolid, EngineError> {
+        const OP: &str = "loft";
+        for pair in sections.windows(2) {
+            let (a, b) = (&pair[0].corners, &pair[1].corners);
+            if a.len() != b.len() {
+                // The modeller refuses it by name below.
+                break;
+            }
+            for i in 0..a.len() {
+                let j = (i + 1) % a.len();
+                let o = whole(a[i]);
+                let less = |p: P3| {
+                    let q = whole(p);
+                    [q[0] - o[0], q[1] - o[1], q[2] - o[2]]
+                };
+                let (u, v, w) = (less(a[j]), less(b[i]), less(b[j]));
+                // Each difference is under 2^41, each product of the cross under 2^83 and the dot
+                // of three under 2^126: exact in i128.
+                let c = cross(v, w);
+                if u[0] * c[0] + u[1] * c[1] + u[2] * c[2] != 0 {
+                    return Err(unsupported(
+                        OP,
+                        "a wall whose four corners are not on one plane (the kernel has no kind for a ruled surface yet)",
+                    ));
+                }
+            }
+        }
+        let given: Vec<Vec<Corner>> = sections
+            .iter()
+            .map(|s| s.corners.iter().map(|&p| Corner::from(p)).collect())
+            .collect();
+        let s = self.modeller.loft(&given).map_err(|e| match e {
+            crate::Error::Invalid { what, .. } => EngineError::Invalid {
+                operation: OP,
+                what,
+            },
+            other => refused(OP, other),
+        })?;
+        accepted(OP, (on_its_corners(OP, s.body())?, s.exactness()), BY_LOFT)
+            .map(|made| made.keeping(s))
+    }
+
+    fn unite(&mut self, a: &EngineSolid, b: &EngineSolid) -> Result<EngineSolid, EngineError> {
+        const OP: &str = "unite";
+        if a.flat() && b.flat() {
+            let (ka, kb) = (OperandKey([1; 16]), OperandKey([2; 16]));
+            fn operand(key: OperandKey, s: &EngineSolid) -> Operand<'_> {
+                Operand {
+                    key,
+                    body: &s.body,
+                    kind: OperandKind::Solid,
+                    exactness: s.exactness,
+                }
+            }
+            let would = a
+                .exactness
+                .combine(b.exactness)
+                .ok_or_else(|| unsupported(OP, "operands whose exactness has no common class"))?;
+            let input = BooleanInput {
+                operands: vec![operand(ka, a), operand(kb, b)],
+                select: vec![Selection::Unite],
+                merge: Merge::RemoveRedundant,
+                accept: Some(would),
+            };
+            let out = combine(&context(), &Exec::serial(), &input).map_err(|e| refused(OP, e))?;
+            let exactness = out.exactness;
+            let mut lists = out.result;
+            let mut bodies = lists.pop().unwrap_or_default();
+            if bodies.len() != 1 || !lists.is_empty() {
+                return Err(unsupported(OP, "a result that is not one solid"));
+            }
+            let body = bodies
+                .pop()
+                .map(|c| c.body)
+                .ok_or_else(|| refused(OP, "no body"))?;
+            return accepted(OP, (body, exactness), BY_BOOL);
+        }
+        let (Some(x), Some(y)) = (&a.solidcore, &b.solidcore) else {
+            return Err(unsupported(
+                OP,
+                "a solid with a curved face united with one solidcore holds no body of",
+            ));
+        };
+        let s = self.modeller.union(x, y).map_err(|e| refused(OP, e))?;
+        accepted(OP, (s.body().clone(), s.exactness()), BY_UNION).map(|made| made.keeping(s))
     }
 
     fn subtract(
@@ -628,6 +782,77 @@ mod tests {
                 &found,
                 Err(EngineError::Refused { operation: "test", reason })
                     if reason.starts_with("the kernel's checker refused the result")
+            ),
+            "{found:?}"
+        );
+    }
+
+    /// A cylinder of radius 500 and height 1000 mm on the origin, made by solidcore and kept as
+    /// the engine keeps every solid solidcore makes.
+    fn cylinder(e: &mut SolidcoreEngine) -> EngineSolid {
+        let c = e
+            .modeller
+            .cylinder(
+                P3::new(0, 0, 0).expect("the origin"),
+                Steps(500 * MM.unsigned_abs()),
+                Steps(1000 * MM.unsigned_abs()),
+            )
+            .expect("a cylinder");
+        accepted("test", (c.body().clone(), c.exactness()), BY_SWEEP)
+            .expect("the cylinder passes the checker")
+            .keeping(c)
+    }
+
+    /// A curved solid is united by solidcore's boolean union, on the bodies the engine keeps of
+    /// what solidcore made: the cylinder with a box solidcore swept, standing on the box's top
+    /// face. What it gives today is recorded as it is: solidcore unites them, and the kernel's
+    /// checker refuses the result, having no certified test yet of a pair the circle's arcs make
+    /// with the box's faces (the checker's gap CK-3), so the union is an error, never a solid.
+    #[test]
+    fn a_curved_solid_is_united_by_solidcore() {
+        let mut e = SolidcoreEngine::new(GridStep::Q0);
+        let c = cylinder(&mut e);
+        assert!(!c.flat());
+        let p = |x: i64, y: i64, z: i64| P3::new(x * MM, y * MM, z * MM).expect("a grid point");
+        let side = Profile {
+            outer: vec![
+                p(-1000, -1000, -400),
+                p(1000, -1000, -400),
+                p(1000, -1000, 0),
+                p(-1000, -1000, 0),
+            ],
+            holes: vec![],
+        };
+        let block = e.extrude(&side, [0, 2000 * MM, 0]).expect("a swept box");
+        assert_eq!(block.made_by(), BY_SWEEP);
+        let found = e.unite(&c, &block);
+        assert!(
+            matches!(
+                &found,
+                Err(EngineError::Refused { operation: "unite", reason })
+                    if reason.starts_with("union: the result failed its check: geom-check found")
+                        && reason.contains("no certified test of this pair exists yet")
+            ),
+            "{found:?}"
+        );
+    }
+
+    /// A curved solid united with one solidcore holds no body of (a box the kernel's prism made)
+    /// is unsupported: neither the kernel's boolean nor solidcore's can take that pair.
+    #[test]
+    fn a_curved_solid_with_a_kernel_made_one_is_unsupported() {
+        let mut e = SolidcoreEngine::new(GridStep::Q0);
+        let c = cylinder(&mut e);
+        let b = cuboid(&mut e);
+        assert_eq!(b.made_by(), BY_PRISM);
+        let found = e.unite(&c, &b);
+        assert!(
+            matches!(
+                &found,
+                Err(EngineError::Unsupported {
+                    operation: "unite",
+                    ..
+                })
             ),
             "{found:?}"
         );

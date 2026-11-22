@@ -39,6 +39,36 @@
       "exact_by": "already the kernel's exact geom-bool (chapter 11); curved operands wait for chapter 11's certified curved booleans"
     },
     {
+      "operation": "loft",
+      "case": "sections whose walls are flat: each wall's four corners on one plane",
+      "answered_by": "solidcore's skin of degree 1 through the sections (create_skin_primitive)",
+      "pinned_by": "each_loft_and_union_goes_to_the_part_that_answers_it",
+      "known_faults": [],
+      "tolerance": "solidcore's zone of 1e-5 m (0.01 mm); the skin's straight B-spline edges are read as the lines they are within solidcore's tolerance of each edge, the body converted to the grid, each flat face's plane written through its own grid corners, recorded Certified within that and a step, and checked by geom-check at its full level",
+      "recorded": "solidcore has no check that a skin does not fold back: it skins a folded section order and its own validity check passes it (lib.rs, solidcore_skins_a_folded_order_without_complaint), so geom-solidcore refuses a section not wholly ahead of the one before it as an invalid input before solidcore is reached (a_loft_that_folds_back_is_a_fault_not_a_solid). A loft whose walls cross (a section half a turn round) is refused today by solidcore's own pointer check (a_crossed_loft_is_refused_by_solidcore_s_own_check). A wall that is not flat is unsupported (a_loft_wall_that_is_not_flat_is_unsupported): the kernel has no kind for a ruled surface yet. Sections of different corner counts are refused: the caller pairs the corners, and solidcore's own matching (sweep::loft_sections) is not used, since it adds corners on no grid. A loft of three or more sections whose walls bend between sections by less than solidcore's angle tolerance (0.5 degrees) is refused today, 'the result holds a spline curve': solidcore writes the edge across those sections as one bent B-spline, which the kernel has no kind for (a_loft_whose_walls_bend_less_than_half_a_degree_is_refused; a replay of a real site's envelope found it for every loft of more than two stations over its ground). Two sections at a time loft unless a section's own sides turn by less than that tolerance: then the two walls are joined into one face whose edge is a bent B-spline, refused the same way (a_section_whose_sides_turn_less_than_half_a_degree_is_refused); sides exactly in line loft",
+      "exact_by": "geom-sweep's ruled loft (chapter 13.6): one face per matched edge pair, a plane where its four corners are coplanar by an exact orient3d test, so the loft is Exact; ruled faces otherwise, Certified"
+    },
+    {
+      "operation": "unite",
+      "case": "both solids flat-faced",
+      "answered_by": "the kernel's geom-bool (decision 32.70, rule 5)",
+      "pinned_by": "each_loft_and_union_goes_to_the_part_that_answers_it",
+      "known_faults": [],
+      "tolerance": "exact: the arrangement of flat faces adds no error, and the result's bound is the operands' combined",
+      "recorded": "no retry, heal or nudge. Two strips sharing a face exactly unite into one solid with the face count of the whole strip. At slivers of 0.5, 1 and 3 mm (the second strip raised by the sliver, overlapping by it, or apart by it) every union is a closed body of the closed form's volume: one shell when raised or overlapping, two shells when apart, the gap kept exactly as wide (the_sliver_unions_are_as_recorded)",
+      "exact_by": "already the kernel's exact geom-bool (chapter 11)"
+    },
+    {
+      "operation": "unite",
+      "case": "a solid with a curved face, united with one solidcore made (it keeps solidcore's body of it)",
+      "answered_by": "solidcore's boolean union",
+      "pinned_by": "the_engine_names_solidcore_and_its_pin",
+      "known_faults": ["CK-3"],
+      "tolerance": "solidcore's zone of 1e-5 m (0.01 mm), merging faces closer than it (SC-1's cause); the result converted and checked by geom-check at its full level",
+      "recorded": "a cylinder standing on a swept box is united by solidcore and the result refused by the kernel's checker, which has no certified test yet of the pairs the circle's arcs make (engine.rs module test a_curved_solid_is_united_by_solidcore); a curved solid with one solidcore holds no body of (made by the kernel's prism or geom-bool) is unsupported (a_curved_solid_with_a_kernel_made_one_is_unsupported). No solid the seam makes today has a curved face: extrude takes polygons and loft refuses walls that are not flat",
+      "exact_by": "chapter 11's certified curved booleans (geom-bool), after geom-check's certified tests of arcs (CK-3)"
+    },
+    {
       "operation": "volume",
       "case": "every case",
       "answered_by": "the kernel's exact six-volume (geom-topo)",
