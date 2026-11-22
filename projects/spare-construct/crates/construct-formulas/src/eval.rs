@@ -5,8 +5,10 @@
 //! steps, a volume in cubic steps, an angle in the kernel's angle units (9,000,000 to the degree),
 //! anything else plain. A length times a length is then square steps, an area's own unit, so no
 //! step converts anything. The rationals never leave: a parameter's value comes in as a
-//! [`Value`] and the answer goes out as one, landed by [`land`] with the rule its kind has for
-//! typed text.
+//! [`Value`] and the answer goes out as one, landed by [`land`]: a length, area or volume rounds
+//! to the nearest grid step (square, cubic step), ties to even, as the sketch solver rounds a
+//! solved point and as an angle rounds to its unit. Only typed text is refused off the grid
+//! (`construct-params`' rule); a formula divides a length into equal parts.
 
 use crate::parse::{Expr, Op, parse, unit_of};
 use crate::types::{self, Dim, Ty, bare};
@@ -291,13 +293,12 @@ fn too_large(kind: Kind) -> FormulaError {
     )
 }
 
-/// `value` as a whole number, if it is one; else the whole numbers either side.
-fn whole_or_near(value: &RBig) -> Result<IBig, (IBig, IBig)> {
-    if value.denominator().is_one() {
-        Ok(value.numerator().clone())
-    } else {
-        Err((value.floor(), value.ceil()))
-    }
+/// `value` as a whole number, if it is one.
+fn whole_number(value: &RBig) -> Option<IBig> {
+    value
+        .denominator()
+        .is_one()
+        .then(|| value.numerator().clone())
 }
 
 fn to_i64(n: &IBig, kind: Kind) -> Result<i64, FormulaError> {
@@ -308,29 +309,9 @@ fn to_i128(n: &IBig, kind: Kind) -> Result<i128, FormulaError> {
     i128::try_from(n).map_err(|_| too_large(kind))
 }
 
-/// The refusal of a length, area or volume between grid steps, naming the two either side, as
-/// `construct-params` names them for typed text.
-fn off_grid(kind: Kind, below: Value, above: Value) -> FormulaError {
-    let show = |v: &Value| match v {
-        Value::Length(l) => l.to_string(),
-        Value::Area(a) => a.to_string(),
-        Value::Volume(v) => v.to_string(),
-        other => other.stored(),
-    };
-    let (a, b) = (show(&below), show(&above));
-    let mut e = FormulaError::new(
-        "OffGrid",
-        format!(
-            "This works out to {kind} that is not a whole number of grid steps (1/6400 mm); the \
-             nearest are {a} and {b}. Round it, such as round(x, 0.01 mm)."
-        ),
-    );
-    e.nearest = Some((below, above));
-    e
-}
-
-/// `value` rounded to the nearest whole number, a half to the even one: the rule
-/// `construct-params` rounds a typed angle by.
+/// `value` rounded to the nearest whole number, a half to the even one: the rule the kernel
+/// rounds onto its grid by, the sketch solver rounds a solved point by, and `construct-params`
+/// rounds a typed angle by.
 fn round_half_even(value: &RBig) -> IBig {
     let floor = value.floor();
     let rest = value.clone() - RBig::from(floor.clone());
@@ -365,10 +346,10 @@ fn exact_decimal(value: &RBig) -> Option<Decimal> {
     Decimal::try_from_i128_with_scale(mantissa, places).ok()
 }
 
-/// Lands a worked-out value on `kind`, by the rule each kind has for typed text: a length, area
-/// or volume is a whole number of grid steps or is refused naming the nearest values below and
-/// above; an angle rounds half to even to the kernel's angle unit; a number is an exact decimal;
-/// a whole number is whole; a slope is a ratio of two 64-bit whole numbers.
+/// Lands a worked-out value on `kind`: a length, area or volume rounds to the nearest grid step
+/// (square step, cubic step), a half to the even one; an angle rounds the same way to the
+/// kernel's angle unit; a number is an exact decimal; a whole number is whole; a slope is a ratio
+/// of two 64-bit whole numbers. A value too large to store is refused.
 pub(crate) fn land(kind: Kind, val: Val) -> Result<Value, FormulaError> {
     let value = match val {
         Val::Truth(t) if kind == Kind::YesNo => return Ok(Value::YesNo(t)),
@@ -381,37 +362,28 @@ pub(crate) fn land(kind: Kind, val: Val) -> Result<Value, FormulaError> {
         }
     };
     match kind {
-        Kind::Length => match whole_or_near(&value) {
-            Ok(n) => Ok(Value::Length(Length::from_steps(to_i64(&n, kind)?))),
-            Err((lo, hi)) => Err(off_grid(
-                kind,
-                Value::Length(Length::from_steps(to_i64(&lo, kind)?)),
-                Value::Length(Length::from_steps(to_i64(&hi, kind)?)),
-            )),
-        },
-        Kind::Area => match whole_or_near(&value) {
-            Ok(n) => Ok(Value::Area(Area::from_square_steps(to_i128(&n, kind)?))),
-            Err((lo, hi)) => Err(off_grid(
-                kind,
-                Value::Area(Area::from_square_steps(to_i128(&lo, kind)?)),
-                Value::Area(Area::from_square_steps(to_i128(&hi, kind)?)),
-            )),
-        },
-        Kind::Volume => match whole_or_near(&value) {
-            Ok(n) => Ok(Value::Volume(Volume::from_cubic_steps(to_i128(&n, kind)?))),
-            Err((lo, hi)) => Err(off_grid(
-                kind,
-                Value::Volume(Volume::from_cubic_steps(to_i128(&lo, kind)?)),
-                Value::Volume(Volume::from_cubic_steps(to_i128(&hi, kind)?)),
-            )),
-        },
+        // A worked-out size rounds to the nearest grid step (square, cubic step), ties to even, as
+        // the sketch solver rounds a solved point: at most half a step, 78 nm, from the exact
+        // answer, far inside the 0.01 mm model tolerance. Only typed text is refused off the grid.
+        Kind::Length => Ok(Value::Length(Length::from_steps(to_i64(
+            &round_half_even(&value),
+            kind,
+        )?))),
+        Kind::Area => Ok(Value::Area(Area::from_square_steps(to_i128(
+            &round_half_even(&value),
+            kind,
+        )?))),
+        Kind::Volume => Ok(Value::Volume(Volume::from_cubic_steps(to_i128(
+            &round_half_even(&value),
+            kind,
+        )?))),
         Kind::Angle => Ok(Value::Angle(Angle::from_units(to_i64(
             &round_half_even(&value),
             kind,
         )?))),
-        Kind::Whole => match whole_or_near(&value) {
-            Ok(n) => Ok(Value::Whole(to_i64(&n, kind)?)),
-            Err(_) => Err(FormulaError::new(
+        Kind::Whole => match whole_number(&value) {
+            Some(n) => Ok(Value::Whole(to_i64(&n, kind)?)),
+            None => Err(FormulaError::new(
                 "NotWhole",
                 format!(
                     "This works out to {value}, and it should be a whole number. Round it, such \
@@ -567,25 +539,51 @@ mod tests {
     }
 
     #[test]
-    fn a_length_off_the_grid_is_refused_naming_the_nearest() {
-        let e = value_of("1000 mm / 3", Kind::Length, &mut none).unwrap_err();
-        assert_eq!(e.code, "OffGrid");
-        assert_eq!(
-            e.nearest,
-            Some((
-                Value::Length(Length::from_steps(2_133_333)),
-                Value::Length(Length::from_steps(2_133_334)),
-            ))
-        );
-        assert!(
-            e.message
-                .contains("the nearest are 333.33328125 mm and 333.3334375 mm"),
-            "{}",
-            e.message
-        );
+    fn a_size_between_grid_steps_rounds_to_the_nearest() {
+        // Three equal panes of a 1000 mm opening: 6,400,000 / 3 = 2,133,333.33 steps, so
+        // 2,133,333 (333.33328125 mm). Each pane is within half a step of the exact third, so
+        // three are within one and a half steps of 1000 mm, and being whole steps, within one
+        // step: 1/6400 mm, 156.25 nm.
+        let pane = steps("1000 mm / 3");
+        assert_eq!(pane, 2_133_333);
+        assert!((3 * pane - 1000 * 6400).abs() <= 1, "{pane}");
+        assert_eq!(steps("2000 mm / 3"), 4_266_667, "4,266,666.67 rounds up");
         assert_eq!(steps("round(1000 mm / 3, 0.01 mm)"), 2_133_312);
-        let e = value_of("1 mm * 1 mm / 3", Kind::Area, &mut none).unwrap_err();
-        assert_eq!(e.code, "OffGrid");
+        // An area and a volume round to the nearest square and cubic step.
+        assert_eq!(
+            value_of("1 mm * 1 mm / 3", Kind::Area, &mut none),
+            Ok(Value::Area(Area::from_square_steps(13_653_333)))
+        );
+        assert_eq!(
+            value_of("1 mm * 1 mm * 1 mm / 7", Kind::Volume, &mut none),
+            Ok(Value::Volume(Volume::from_cubic_steps(37_449_142_857)))
+        );
+    }
+
+    #[test]
+    fn a_half_step_rounds_to_the_even_step() {
+        // 0.00015625 mm is one step: half of it is a tie, which goes to the even step, 0.
+        assert_eq!(steps("0.00015625 mm / 2"), 0);
+        assert_eq!(steps("0.00046875 mm / 2"), 2, "1.5 steps");
+        assert_eq!(steps("-0.00046875 mm / 2"), -2, "-1.5 steps");
+        assert_eq!(
+            steps("0.0007813 mm / 2"),
+            3,
+            "2.50016 steps, just past the tie"
+        );
+        // Too large to store, and dividing by zero, are still refused.
+        assert_eq!(
+            value_of("1000000000000 m * 1000", Kind::Length, &mut none)
+                .unwrap_err()
+                .code,
+            "TooLarge"
+        );
+        assert_eq!(
+            value_of("1 mm / (2 - 2)", Kind::Length, &mut none)
+                .unwrap_err()
+                .code,
+            "DivideByZero"
+        );
     }
 
     #[test]

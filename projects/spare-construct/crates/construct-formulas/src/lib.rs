@@ -31,9 +31,11 @@
 //!   the kinds of the parameters a formula uses.
 //! - **Exact numbers**: literals and arithmetic are exact rationals (`dashu-ratio`, the crate the
 //!   kernel uses), in `construct-params`' stored units, and they never leave: an answer is landed
-//!   on its kind by the rule that kind has for typed text. A length, area or volume must be a
-//!   whole number of grid steps or is refused naming the nearest values either side; an angle
-//!   rounds half to even to the kernel's angle unit; a number is an exact decimal. `sqrt` and the
+//!   on its kind. A length, area or volume rounds to the nearest grid step (square, cubic step),
+//!   a half to the even one, as the sketch solver rounds a solved point, so `1000 mm / 3` is
+//!   333.33328125 mm; an angle rounds the same way to the kernel's angle unit; a number is an
+//!   exact decimal. Only text a person types is refused off the grid, by `construct-params`. A
+//!   value too large to store, and a division by zero, are refused. `sqrt` and the
 //!   trigonometric functions aren't here, because they aren't exact: they wait for the kernel's
 //!   certified functions.
 //!
@@ -63,20 +65,17 @@ pub use eval::value_of;
 pub use parse::{Expr, Op, canonical, parse};
 pub use table::{Entry, check, define, evaluate, work_out};
 
-use construct_params::Value;
 use std::fmt;
 
 /// Why a formula can't be read or worked out. `code` is for programs, `message` for people.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormulaError {
     /// `Syntax`, `UnknownName`, `Units`, `Type`, `Name`, `Circular`, `Depends`, `Holder`,
-    /// `Missing`, `DivideByZero`, `TooLarge`, `NotExact`, `NotWhole`, `OffGrid`, `Spelling` or
+    /// `Missing`, `DivideByZero`, `TooLarge`, `NotExact`, `NotWhole`, `Spelling` or
     /// `Definition`.
     pub code: &'static str,
     /// What went wrong, in words.
     pub message: String,
-    /// For `OffGrid`: the nearest values below and above, each a whole number of grid steps.
-    pub nearest: Option<(Value, Value)>,
 }
 
 impl FormulaError {
@@ -86,7 +85,6 @@ impl FormulaError {
         Self {
             code,
             message: message.into(),
-            nearest: None,
         }
     }
 }

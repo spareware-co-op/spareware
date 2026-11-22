@@ -20,7 +20,7 @@
 //! `construct_params::Value`, and a length there is the program's one stored `Length`, whole
 //! steps of the kernel's `Q0` grid (6,400 to the millimetre). One `Q0` step is exactly 25 `Q1`
 //! steps, so every parameter length lands on the part grid with nothing lost; a formula whose
-//! length falls between `Q0` steps is refused naming the nearest two, as typed text is. The
+//! exact length falls between `Q0` steps gives the nearest one (ties to even). The
 //! part's own sizes on `Q1` are geometry, not stored parameter values, and stay this crate's.
 //!
 //! An assembly is posed by the kernel too ([`assembly`]): each part's bodies are moved and turned

@@ -182,22 +182,28 @@ fn missing_values_and_doubled_names_are_named() {
 }
 
 #[test]
-fn a_length_off_the_grid_is_refused_naming_the_nearest() {
+fn a_length_between_grid_steps_rounds_to_the_nearest_step() {
+    // Three equal panes of a 1000 mm opening: each the nearest step to the exact third.
     let defs = vec![
         plain("W", "Width", Kind::Length, Holder::Instance),
-        with("T", "Third", Kind::Length, Holder::Instance, "Width / 3"),
+        with("T", "Pane", Kind::Length, Holder::Instance, "Width / 3"),
+        with(
+            "R",
+            "Rest",
+            Kind::Length,
+            Holder::Instance,
+            "Width - 3 * Pane",
+        ),
     ];
     let mut given = Values::new();
     given.set(&defs[0], mm(1000)).unwrap();
-    let e = work_out(&defs, &given)[&id("T")].clone().unwrap_err();
-    assert_eq!(e.code, "OffGrid");
+    let out = work_out(&defs, &given);
     assert_eq!(
-        e.nearest,
-        Some((
-            Value::Length(Length::from_steps(2_133_333)),
-            Value::Length(Length::from_steps(2_133_334)),
-        ))
+        out[&id("T")],
+        Ok(Value::Length(Length::from_steps(2_133_333)))
     );
+    // What the three leave over is one step, 1/6400 mm: within the bound of one step.
+    assert_eq!(out[&id("R")], Ok(Value::Length(Length::from_steps(1))));
 }
 
 #[test]
