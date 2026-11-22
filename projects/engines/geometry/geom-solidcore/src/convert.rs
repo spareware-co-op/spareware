@@ -6,7 +6,9 @@
 //! and writes one `geom-topo` row for each, with every list linked, each edge's fins in one radial
 //! ring in the order the loops use them; each vertex is the grid point nearest solidcore's point;
 //! each surface and curve is the `geom-surface` or `geom-curve` kind of the same shape, in grid
-//! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns). A seam,
+//! steps, on the parameters `geom-surface` and `geom-curve` fix (angles in half-turns), a B-spline
+//! curve whose control points lie on its chord within solidcore's tolerance of the edge being the
+//! line it is (`straight`: how a lofted wall's edges come). A seam,
 //! where solidcore cuts a face that runs the whole way round a cylinder, cone or sphere, is left
 //! out as the kernel's own bodies have none, and a circle's or ellipse's vertex with it when
 //! nothing else meets there (`form`): no point, curve or surface moves. An edge or vertex that
@@ -305,6 +307,39 @@ fn curve(
         r::Curve::Spline { .. } | r::Curve::RationalSpline { .. } => Err(no("a spline curve")),
         r::Curve::SurfaceIntersection { .. } => Err(no("a surface intersection curve")),
     }
+}
+
+/// The line `k` lies on, as the record's line from its first control point to its last, when `k`
+/// is a B-spline curve (not rational) whose control points all lie within `tolerance` (metres,
+/// solidcore's own tolerance of the edge) of that chord and run along it without turning back:
+/// a B-spline lies in the hull of its control points and turns back no more often than they do,
+/// so such a curve is that segment, within the tolerance the body's bound already holds. A
+/// lofted wall's edges come so: solidcore's skin writes each edge across its sections as a
+/// B-spline of degree 1 through the sections' corners. Anything else is `None`, and stays the
+/// spline curve the kernel has no kind for.
+fn straight(k: &r::Curve, tolerance: f64) -> Option<r::Curve> {
+    let r::Curve::Spline { points, .. } = k else {
+        return None;
+    };
+    let (&start, &end) = (points.first()?, points.last()?);
+    let d = less(end, start);
+    let length = dot(d, d).sqrt();
+    // A chord no longer than the tolerance, or not a number, is no line to read it as.
+    if length.partial_cmp(&tolerance) != Some(core::cmp::Ordering::Greater) {
+        return None;
+    }
+    let slack = tolerance / length;
+    let mut before = -slack;
+    for &p in points {
+        let q = less(p, start);
+        let t = dot(q, d) / (length * length);
+        let off = less(q, d.map(|c| c * t));
+        if dot(off, off).sqrt() > tolerance || t < before - slack || t > 1.0 + slack {
+            return None;
+        }
+        before = before.max(t);
+    }
+    Some(r::Curve::Line { start, end })
 }
 
 /// The record's closed curve the whole way round, for a closed edge left with no vertex (see
@@ -822,7 +857,11 @@ pub fn body_of(
         let (c, bx) = match ends {
             // A closed edge left with no vertex (see `form`): the full turn.
             [None, None] => full(&s, &e.curve)?,
-            [Some(_), Some(_)] => curve(&s, &e.curve, end(a)?, end(b)?, a == b)?,
+            [Some(_), Some(_)] => {
+                let line = straight(&e.curve, e.tolerance.max(rec.tolerance));
+                let k = line.as_ref().unwrap_or(&e.curve);
+                curve(&s, k, end(a)?, end(b)?, a == b)?
+            }
             _ => return Err(no("an edge with one end left out")),
         };
         curves.push(c);
@@ -1306,5 +1345,33 @@ mod tests {
             body_of(&rec, &order, GridStep::Q1).map(|_| ()),
             Err(Unconverted("a polyline".into()))
         );
+    }
+
+    /// A B-spline edge whose control points run along their chord is the line it is; one that
+    /// turns back along it (a fold), or bends off it by more than the tolerance, is not, and stays
+    /// the spline curve the kernel has no kind for.
+    #[test]
+    fn a_straight_spline_is_its_line_and_a_folded_or_bent_one_is_not() {
+        let spline = |points: Vec<[f64; 3]>| r::Curve::Spline {
+            knots: vec![0.0, 0.0, 0.5, 1.0, 1.0],
+            points,
+        };
+        let tol = 1e-5;
+        assert_eq!(
+            straight(
+                &spline(vec![[0.0; 3], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+                tol
+            ),
+            Some(r::Curve::Line {
+                start: [0.0; 3],
+                end: [2.0, 0.0, 0.0]
+            })
+        );
+        let near = [1.0, 0.5e-5, 0.0];
+        assert!(straight(&spline(vec![[0.0; 3], near, [2.0, 0.0, 0.0]]), tol).is_some());
+        let folded = spline(vec![[0.0; 3], [2.0, 0.0, 0.0], [1.0, 0.0, 0.0]]);
+        assert_eq!(straight(&folded, tol), None);
+        let bent = spline(vec![[0.0; 3], [1.0, 2e-5, 0.0], [2.0, 0.0, 0.0]]);
+        assert_eq!(straight(&bent, tol), None);
     }
 }

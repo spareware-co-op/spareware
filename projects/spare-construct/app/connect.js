@@ -1,7 +1,7 @@
 // Connects the Spare Construct demo page to its server. The server sends the demo's own file
 // unchanged, so its ribbon, docks, view tabs and status bar are the real ones; this script runs
 // after it and puts live data where the sample was: the plan and 3D views, the project browser,
-// the properties palette and the status bar. The page keeps only what is in view; whatever it
+// the properties palette, the Types and Project parameters dialogs and the status bar. The page keeps only what is in view; whatever it
 // fetched by hash stays in the browser's cache. Edits go up the socket and are drawn at once, then
 // confirmed or turned back by the log.
 //
@@ -56,6 +56,7 @@
     viewing: false, // this browser can't build the open model, so it draws what's stored
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
+    steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
   };
   window.spare = C; // the browser test reads this
 
@@ -141,6 +142,7 @@
     const demoSelect = select;
     select = (id) => {
       if (S.sel && S.sel !== id) letGo(S.sel);
+      clearProblems(/^(param:|element-type)/);
       demoSelect(id);
     };
 
@@ -150,6 +152,9 @@
       else say(NOT_YET);
     };
     ACT.account = account;
+    // The demo's Ctrl+Z and Ctrl+Y, and its command palette, call these.
+    ACT.undo = () => ACT.stackundo();
+    ACT.redo = () => ACT.stackredo();
 
     // a discipline whose view is its own page (Workshop's) keeps the demo's way of opening it
     const framePlan = R.plan;
@@ -203,6 +208,27 @@
     set('col', 'Share with other firms', [
       { label: 'Share this model', icon: 'up', act: 'stackshare', a: C.model?.id, tip: 'Publish the open model as the next numbered package in your team’s Shared folder.', disabled: !C.model },
     ]);
+
+    // The quick access bar's Undo and Redo: this person's own steps in the open model, from the server.
+    const editable = Boolean(C.model) && !C.readOnly;
+    for (const item of config.quick || []) {
+      if (item.act === 'undo') {
+        const step = editable && C.steps.undo;
+        Object.assign(item, { act: 'stackundo', disabled: !step, tip: step ? `Undo: ${stepWords(step)}` : 'Nothing of yours to undo' });
+      } else if (item.act === 'redo') {
+        const step = editable && C.steps.redo;
+        Object.assign(item, { act: 'stackredo', disabled: !step, tip: step ? 'Redo what you undid' : 'Nothing of yours to redo' });
+      }
+    }
+
+    // Manage: the project's parameters and the types, in dialogs (see "Types and parameters" below).
+    config.tabs.find((t) => t.id === 'man')?.panels.push({
+      label: 'Types and parameters',
+      items: [
+        { label: 'Types', icon: 'family', act: 'stacktypes', tip: 'The types of a category: make, rename, copy and delete them, and edit their values.', disabled: !C.model },
+        { label: 'Project parameters', icon: 'props', act: 'stackparams', tip: 'The parameters of this project: define one and choose the categories that have it.', disabled: !C.model },
+      ],
+    });
 
     const piece = C.elements.get(S.sel);
     if (piece && !C.readOnly && S.screen === 'plan') {
@@ -524,6 +550,10 @@
     C.elements.clear();
     C.claims.clear();
     C.links = [];
+    C.steps = { undo: null, redo: null };
+    C.params = C.typeList = C.manage = null;
+    C.problems.clear();
+    C.asked.clear();
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -542,6 +572,7 @@
     await loadClaims();
     await loadLinks();
     await loadWorkshop();
+    await loadSteps();
   }
 
   async function openPackage(team, folder, id) {
@@ -688,6 +719,8 @@
 
   async function loadPiece(model, id, hash, seq, into, mine = false) {
     const record = await api(`${modelUrl(model)}/record/${hash}`);
+    // A type or the parameter table has no place in the plan: the properties palette reads them.
+    if (!hasShape(record)) return;
     if (isWorkshop(record)) {
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
@@ -791,6 +824,7 @@
     const edit = C.pending.find((e) => e.counter === counter);
     C.pending = C.pending.filter((e) => e.counter !== counter);
     say(reason);
+    refused(counter, reason);
     if (edit && (WS.elements.has(edit.args.element) || isWorkshop(edit.args))) {
       await workshopTurnBack(edit, reason);
       return;
@@ -810,17 +844,21 @@
       return;
     }
     const mine = entry.client === C.client;
+    if (entry.author === C.me.person.id && entry.target === C.model?.id) loadSteps();
     logEntry(entry);
     if (entry.failed) {
       if (mine) turnBack(entry.counter, entry.failed);
       return;
     }
+    if (mine) done(entry.counter);
     if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now() });
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
+    // This page drew its own edits ahead of the log, but not an undo: the server works that out.
+    const drawn = mine && !UNDOING.has(entry.cmd);
     for (const change of entry.changes) {
       if (entry.target === C.model?.id && WS.elements.has(change.piece)) {
-        workshopEntry(entry, change, mine);
+        workshopEntry(entry, change, drawn);
         continue;
       }
       const piece = into.get(change.piece);
@@ -834,8 +872,19 @@
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, mine).then(queueDraw);
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn).then(() => {
+          queueDraw();
+          if (change.piece === S.sel) refreshSide();
+        });
       }
+    }
+    // A type or a parameter changed, or may have: what the selected element reads may have too.
+    if ((/^(type|parameter)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
+      C.paramsEpoch += 1;
+      refreshSide();
+    }
+    if (/^(type|parameter)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
+      if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
@@ -853,11 +902,23 @@
     'element.delete': 'deleted',
     'element.claim': 'took',
     'element.release': 'let go of',
+    'element.param': 'set a value of',
+    'element.type': 'changed the type of',
+    'parameter.define': 'defined a parameter',
+    'parameter.bind': 'bound a parameter to categories',
+    'type.create': 'made a type',
+    'type.rename': 'renamed a type',
+    'type.duplicate': 'copied a type',
+    'type.delete': 'deleted a type',
+    'type.set': 'set a value of a type',
+    'edit.undo': 'undid a change to',
+    'edit.redo': 'redid a change to',
   };
 
   function logEntry(entry) {
     if (!WORDS[entry.cmd]) return;
-    const what = entry.failed ? `turned back: ${entry.failed}` : `${WORDS[entry.cmd]} ${entry.args.element}`;
+    const which = entry.args.element ?? entry.changes.map((change) => change.piece).join(', ');
+    const what = entry.failed ? `turned back: ${entry.failed}` : `${WORDS[entry.cmd]} ${which}`;
     C.log.unshift(`<li><span class="mono faint">#${entry.seq}</span> ${esc(named(entry.author))} ${esc(what)}</li>`);
     C.log.length = Math.min(C.log.length, 14);
     const list = $('#stack-log');
@@ -877,6 +938,7 @@
     };
     C.pending.push(message);
     send(message);
+    return message.counter;
   }
 
   function letGo(id) {
@@ -885,12 +947,471 @@
     }
   }
 
+  // --- Undo and redo ---
+  // An undo is an edit like any other: `edit.undo` goes up the same socket, and the server finds this
+  // person's last step from the log, puts back what it changed, and turns it back with its reason if
+  // someone else has changed the same value since (construct-model's FORMAT.md, "Undo and redo").
+  // What there is to undo comes from the server too, so every tab of one person agrees.
+
+  const UNDOING = new Set(['edit.undo', 'edit.redo']);
+  const STEP_WORDS = {
+    'element.create': 'adding an element',
+    'element.move': 'a move',
+    'element.set': 'a change',
+    'element.delete': 'a delete',
+    'element.param': 'a value',
+    'element.type': 'a change of type',
+    'parameter.define': 'defining a parameter',
+    'parameter.bind': 'binding a parameter',
+    'type.create': 'making a type',
+    'type.rename': 'renaming a type',
+    'type.duplicate': 'copying a type',
+    'type.delete': 'deleting a type',
+    'type.set': 'a value of a type',
+    'edit.redo': 'a redo',
+  };
+  const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
+
+  let stepsAsked = null; // the model being asked about, while a request is out
+  let stepsAgain = false;
+  async function loadSteps() {
+    const model = C.model?.id;
+    if (!model) return;
+    if (stepsAsked) {
+      stepsAgain = true;
+      return;
+    }
+    stepsAsked = model;
+    try {
+      const steps = await api(`${modelUrl(model)}/undo`);
+      if (C.model?.id === model) C.steps = steps;
+    } catch (error) {
+      console.warn(`What there is to undo couldn't be read: ${error.message}`);
+    } finally {
+      stepsAsked = null;
+    }
+    renderRibbon();
+    if (stepsAgain) {
+      stepsAgain = false;
+      loadSteps();
+    }
+  }
+
+  function undoOrRedo(cmd, which) {
+    if (!C.model || C.readOnly) {
+      say('Open a model in your team’s WIP to undo in it.');
+      return;
+    }
+    // An edit still on its way may be the step: the server decides.
+    if (!C.steps[which] && !C.pending.length) {
+      say(`There is nothing of yours to ${which} in this model.`);
+      return;
+    }
+    edit(cmd, {});
+  }
+  ACT.stackundo = () => undoOrRedo('edit.undo', 'undo');
+  ACT.stackredo = () => undoOrRedo('edit.redo', 'redo');
+
+  // --- Parameters ---
+  // The selected element's category, type and parameters come from the server, which reads them
+  // the way it checks a change and builds a shape (construct-model's FORMAT.md, "Categories, types
+  // and parameter values"). A change is the `element.param` edit, through the same log as a move:
+  // the server parses the typed text with its units, and a refusal comes back as its reason.
+
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  function hasShape(record) {
+    return record.kind !== 'type' && record.kind !== 'parameters';
+  }
+  C.params = null; // { key, view } of the selected element
+  C.paramsEpoch = 0; // goes up when a type or a parameter changes
+  C.edit = edit; // the browser test defines parameters through the page's own edit path
+
+  function paramsFor(piece) {
+    if (!C.model) return null;
+    const key = `${piece.el.id}/${piece.hash}/${C.paramsEpoch}`;
+    if (C.params?.key !== key && C.paramsLoading !== key) {
+      C.paramsLoading = key;
+      api(`${modelUrl(C.model.id)}/parameters/${piece.el.id}`)
+        .then((view) => {
+          C.params = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.params?.view.element === piece.el.id ? C.params.view : null;
+  }
+
+  function parametersTable(view) {
+    const editable = !C.readOnly && !C.viewing;
+    let html = '<span class="lbl">Parameters</span><table class="props">';
+    for (const p of view.parameters) {
+      const value = p.shown ?? '';
+      const field =
+        p.holder === 'instance' && editable
+          ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" data-key="param:${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
+          : esc(value);
+      html += prow(esc(p.name), field + problem(`param:${p.id}`), FROM[p.from] || '');
+    }
+    return `${html}</table>`;
+  }
+
+  /** Draws the properties palette again, unless someone is typing in it. */
+  function refreshSide() {
+    const typing = document.activeElement?.tagName === 'INPUT';
+    for (const side of ['#pv-side', '#iso-side']) {
+      const el = $(side);
+      if (el && !(typing && el.contains(document.activeElement))) redraw(el, propertiesPalette());
+    }
+  }
+
+  CHG.stackparam = (input) => {
+    if (S.sel && C.model && !C.readOnly) {
+      manage('element.param', { element: S.sel, parameter: input.dataset.a, value: input.value }, `param:${input.dataset.a}`);
+      input.blur();
+    }
+  };
+
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
       edit('element.delete', { element: S.sel });
       S.sel = null;
       refresh();
     }
+  };
+
+  // --- Types and parameters ---
+  // A person manages the project's parameters and the types of a category in two dialogs, and changes
+  // an element's type in the properties palette. Everything is one of the nine commands through the
+  // same log (construct-model's FORMAT.md, "Categories, types and parameter values"): the page sends
+  // what was typed and shows what the server answers. The lists (kinds, categories, parameters, types)
+  // are read from the server, values are shown as the server formats them, and a refusal is shown in
+  // the server's own words beside what caused it. Nothing is checked here.
+
+  C.catalog = null; // { model, kinds, categories }
+  C.typeList = null; // { key, view }: the types of the selected element's category
+  C.manage = null; // the open dialog: { which, category, open, data, error }
+  C.problems = new Map(); // where -> the server's reason, until that is tried again
+  C.asked = new Map(); // edit counter -> { where, after }
+
+  const canEdit = () => Boolean(C.model) && !C.readOnly && !C.viewing;
+  const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+  const topLevel = (catalog) => catalog.categories.filter((category) => category.parent === null);
+  const newId = (tag) => `${tag}-${crypto.randomUUID().slice(0, 8)}`;
+  const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+  /** The server's reason an edit was refused, in a slot beside what caused it. */
+  function problem(where) {
+    const text = C.problems.get(where);
+    return text ? `<div class="note bad small" role="alert" data-problem="${esc(where)}">${esc(text)}</div>` : '';
+  }
+
+  function clearProblems(which) {
+    for (const where of [...C.problems.keys()]) {
+      if (which.test(where)) C.problems.delete(where);
+    }
+  }
+
+  /** Sends one of the nine commands, and remembers where to show the reason if it is turned back. */
+  function manage(cmd, args, where, after) {
+    if (!C.model || C.readOnly) {
+      say('Open a model in your team’s WIP to change it.');
+      return;
+    }
+    C.problems.delete(where);
+    const counter = edit(cmd, args);
+    C.asked.set(counter, { where, after });
+    showProblems();
+  }
+
+  /** An edit of the page's own was turned back: its reason goes where it was asked. */
+  function refused(counter, reason) {
+    const ask = C.asked.get(counter);
+    C.asked.delete(counter);
+    if (!ask) return;
+    C.problems.set(ask.where, reason);
+    showProblems();
+  }
+
+  /** An edit of the page's own was applied. */
+  function done(counter) {
+    const ask = C.asked.get(counter);
+    C.asked.delete(counter);
+    if (ask?.after) ask.after();
+  }
+
+  function showProblems() {
+    renderManage();
+    refreshSide();
+  }
+
+  // --- The element's type, in the properties palette ---
+
+  function typesOfCategory(category) {
+    if (!C.model || !category) return null;
+    const key = `${category.id}/${C.paramsEpoch}`;
+    if (C.typeList?.key !== key && C.typeListLoading !== key) {
+      C.typeListLoading = key;
+      api(`${modelUrl(C.model.id)}/types?category=${category.id}`)
+        .then((view) => {
+          C.typeList = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.typeList?.view.category?.id === category.id ? C.typeList.view : null;
+  }
+
+  function typeCell(view) {
+    const list = typesOfCategory(view.category);
+    const none = esc(view.type?.name || 'None');
+    if (!view.category || !canEdit() || !list || !list.types.length) {
+      const hint = view.category && list && !list.types.length ? '<div class="f">No types of this category yet.</div>' : '';
+      return `${none}${hint}${problem('element-type')}`;
+    }
+    const options = list.types.map((type) => `<option value="${esc(type.id)}"${view.type?.id === type.id ? ' selected' : ''}>${esc(type.name)}</option>`);
+    const first = view.type ? '' : '<option value="" selected disabled>None</option>';
+    return `<select class="inp" data-chg="stackelementtype" data-key="element-type" aria-label="Type">${first}${options.join('')}</select>${problem('element-type')}`;
+  }
+
+  CHG.stackelementtype = (select) => {
+    if (S.sel && select.value) manage('element.type', { element: S.sel, type: select.value }, 'element-type');
+  };
+
+  // --- The dialogs ---
+
+  function selectedCategory() {
+    return C.params?.view.element === S.sel ? (C.params.view.category?.id ?? null) : null;
+  }
+
+  function openManage(which) {
+    if (!C.model) {
+      say('Open a model in your team’s WIP first.');
+      return;
+    }
+    const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
+    C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
+    const title = which === 'types' ? 'Types' : 'Project parameters';
+    openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
+    loadManage();
+  }
+  ACT.stacktypes = () => openManage('types');
+  ACT.stackparams = () => openManage('parameters');
+
+  /** Reads what the open dialog shows from the server, then draws it. Does nothing when no dialog is open. */
+  async function loadManage() {
+    const m = C.manage;
+    if (!m || !C.model || !$('#stack-manage') || $('#dlg').hidden) return;
+    const model = C.model.id;
+    m.seq += 1;
+    const seq = m.seq;
+    try {
+      if (C.catalog?.model !== model) C.catalog = { model, ...(await api(`${modelUrl(model)}/catalog`)) };
+      if (m.which === 'types') {
+        if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
+        m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
+      } else {
+        m.data = await api(`${modelUrl(model)}/project-parameters`);
+      }
+      m.error = null;
+    } catch (error) {
+      m.error = error.message;
+    }
+    if (C.manage === m && m.seq === seq) renderManage();
+  }
+
+  function renderManage() {
+    const m = C.manage;
+    const root = $('#stack-manage');
+    if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
+    let html;
+    if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
+    else html = m.which === 'types' ? typesHtml(m) : parametersHtml(m);
+    redraw(root, html);
+    if (!m.shown) {
+      m.shown = true;
+      $('select, input', root)?.focus();
+    }
+  }
+
+  /** Replaces what a container shows, keeping what is typed in it, where the cursor is and how far it is scrolled. */
+  function redraw(root, html) {
+    const active = document.activeElement;
+    const key = root.contains(active) ? active.dataset.key : null;
+    const cursor = key && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+    const drafts = new Map($$('[data-draft]', root).map((input) => [input.dataset.key, input.type === 'checkbox' ? input.checked : input.value]));
+    const scroller = root.closest('.dlg-b');
+    const scrolled = scroller?.scrollTop;
+    root.innerHTML = html;
+    for (const input of $$('[data-draft]', root)) {
+      if (!drafts.has(input.dataset.key)) continue;
+      if (input.type === 'checkbox') input.checked = drafts.get(input.dataset.key);
+      else input.value = drafts.get(input.dataset.key);
+    }
+    if (scroller) scroller.scrollTop = scrolled;
+    if (key) {
+      const again = $$('[data-key]', root).find((el) => el.dataset.key === key);
+      if (again) {
+        again.focus();
+        if (cursor && typeof again.setSelectionRange === 'function') again.setSelectionRange(...cursor);
+      }
+    }
+  }
+
+  function typesHtml(m) {
+    const editable = canEdit();
+    const off = editable ? '' : ' disabled';
+    const options = topLevel(C.catalog).map((c) => `<option value="${c.id}"${c.id === m.category ? ' selected' : ''}>${esc(c.name)}</option>`);
+    let html = `<label class="fld"><span>Category</span><select class="inp" data-chg="stacktypecat" data-key="type-category">${options.join('')}</select></label>`;
+    html += '<p class="small muted">A type holds the values that every element of that type shares. Change a value on a type and every element of it changes.</p>';
+    const name = esc(m.data.category?.name || 'This category');
+    if (!m.data.types.length) html += `<p class="small faint">${name} has no types yet.</p>`;
+    for (const type of m.data.types) {
+      const label = esc(type.name);
+      html += `<section data-type="${esc(type.id)}"><div class="stack-line">`;
+      html += `<input class="inp" data-chg="stacktyperename" data-type="${esc(type.id)}" data-key="type-name:${esc(type.id)}" value="${label}" aria-label="Name of the type ${label}"${off}>`;
+      html += `<span class="small faint">${plural(type.elements, 'element')}</span>`;
+      html += `<button class="btn sm" data-act="stacktypecopy" data-a="${esc(type.id)}" data-key="type-copy:${esc(type.id)}" aria-label="Copy the type ${label}"${off}>Copy</button>`;
+      html += `<button class="btn sm" data-act="stacktypedelete" data-a="${esc(type.id)}" data-key="type-delete:${esc(type.id)}" aria-label="Delete the type ${label}"${off}>Delete</button></div>`;
+      if (type.parameters.length) {
+        html += '<table class="props">';
+        for (const p of type.parameters) {
+          const settable = p.holder === 'type' && editable;
+          const control = p.holder !== 'type'
+            ? 'Each element has its own'
+            : settable
+              ? `<input class="inp" data-chg="stacktypeset" data-type="${esc(type.id)}" data-a="${esc(p.id)}" data-key="type-value:${esc(type.id)}:${esc(p.id)}" value="${esc(p.shown ?? '')}" aria-label="${label}: ${esc(p.name)}">`
+              : esc(p.shown ?? '');
+          html += prow(esc(p.name), control, FROM[p.from] || '');
+        }
+        html += '</table>';
+      } else {
+        html += '<p class="small faint">No parameters are bound to this category yet. Project parameters adds them.</p>';
+      }
+      html += `${problem(`type:${type.id}`)}</section>`;
+    }
+    html += '<h3 class="mt2">New type</h3>';
+    html += `<div class="stack-line"><input class="inp" data-draft data-enter="stacknewtype" data-key="new-type-name" placeholder="Name" aria-label="Name for a new type of ${name}"${off}><button class="btn pri sm" data-act="stacknewtype" data-key="new-type-make"${off}>Make type</button></div>`;
+    html += problem('new-type');
+    return html;
+  }
+
+  CHG.stacktypecat = (select) => {
+    C.manage.category = Number(select.value);
+    C.manage.data = null;
+    loadManage();
+  };
+  CHG.stacktyperename = (input) => manage('type.rename', { type: input.dataset.type, name: input.value }, `type:${input.dataset.type}`);
+  CHG.stacktypeset = (input) => manage('type.set', { type: input.dataset.type, parameter: input.dataset.a, value: input.value }, `type:${input.dataset.type}`);
+  ACT.stacktypecopy = (button) => {
+    const type = C.manage?.data?.types.find((t) => t.id === button.dataset.a);
+    if (type) manage('type.duplicate', { type: type.id, new: newId('T'), name: `${type.name} copy` }, `type:${type.id}`);
+  };
+  ACT.stacktypedelete = (button) => manage('type.delete', { type: button.dataset.a }, `type:${button.dataset.a}`);
+  ACT.stacknewtype = () => {
+    const input = $('#stack-manage [data-key="new-type-name"]');
+    manage('type.create', { type: newId('T'), name: input.value, category: C.manage.category }, 'new-type', () => {
+      const again = $('#stack-manage [data-key="new-type-name"]');
+      if (again) again.value = '';
+    });
+  };
+
+  function parametersHtml(m) {
+    const editable = canEdit();
+    const off = editable ? '' : ' disabled';
+    const categories = topLevel(C.catalog);
+    const holderWords = { instance: 'Each element holds its own value', type: 'The type holds one value for all its elements' };
+    let html = '<p class="small muted">A parameter is a named value. It belongs to the categories you bind it to, and every element of those categories has it.</p>';
+    if (!m.data.parameters.length) html += '<p class="small faint">No parameters are defined yet.</p>';
+    for (const p of m.data.parameters) {
+      const bound = new Set(p.categories.map((c) => c.id));
+      html += `<section data-param="${esc(p.id)}"><div class="stack-line"><b>${esc(p.name)}</b><span class="badge n">${esc(capital(p.kind_label))}</span><span class="small faint">${esc(holderWords[p.holder])}</span></div>`;
+      const where = p.categories.length ? `Bound to ${esc(p.categories.map((c) => c.name).join(', '))}.` : 'Not bound to any category yet.';
+      const standard = p.default === null ? '' : ` Default: ${esc(p.default)}.`;
+      const choices = p.choices.length ? ` Choices: ${esc(p.choices.map((c) => c.label).join(', '))}.` : '';
+      html += `<p class="small">${where}${standard}${choices}</p>`;
+      html += `<details data-open="${esc(p.id)}"${m.open.has(p.id) ? ' open' : ''}><summary>Bind to categories</summary><div class="stack-checks">`;
+      for (const c of categories) {
+        const on = bound.has(c.id);
+        html += `<label class="chk"><input type="checkbox" data-draft data-key="bind:${esc(p.id)}:${c.id}" value="${c.id}"${on ? ' checked disabled' : off}>${esc(c.name)}${on ? ' <span class="small faint">(bound)</span>' : ''}</label>`;
+      }
+      html += '</div>';
+      html += `<label class="fld mt"><span>Default for the categories you choose (optional)</span><input class="inp" data-draft data-enter="stackbind" data-a="${esc(p.id)}" data-key="bind-default:${esc(p.id)}" aria-label="Default for ${esc(p.name)}"${off}></label>`;
+      html += `<button class="btn sm" data-act="stackbind" data-a="${esc(p.id)}" data-key="bind-go:${esc(p.id)}"${off}>Bind</button>${problem(`bind:${p.id}`)}</details></section>`;
+    }
+    html += '<h3 class="mt2">Define a parameter</h3>';
+    const kinds = C.catalog.kinds.map((k) => `<option value="${esc(k.tag)}">${esc(capital(k.label))}</option>`);
+    const holders = Object.entries(holderWords).map(([value, label]) => `<option value="${value}">${esc(label)}</option>`);
+    html += '<div class="grid2">';
+    html += `<label class="fld"><span>Name</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-name"${off}></label>`;
+    html += `<label class="fld"><span>Kind of value</span><select class="inp" data-draft data-key="def-kind"${off}>${kinds.join('')}</select></label>`;
+    html += `<label class="fld"><span>Who holds the value</span><select class="inp" data-draft data-key="def-holder"${off}>${holders.join('')}</select></label>`;
+    html += `<label class="fld"><span>Choices, for a choice only, separated by commas</span><input class="inp" data-draft data-key="def-choices"${off}></label>`;
+    html += `<label class="fld"><span>Default (optional)</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-default"${off}></label>`;
+    html += '</div>';
+    html += '<div class="lbl">Bind it to (optional)</div><div class="stack-checks">';
+    for (const c of categories) {
+      html += `<label class="chk"><input type="checkbox" data-draft data-key="def-cat:${c.id}" value="${c.id}"${off}>${esc(c.name)}</label>`;
+    }
+    html += `</div><div class="stack-line mt"><button class="btn pri sm" data-act="stackdefine" data-key="def-go"${off}>Define parameter</button></div>${problem('define')}`;
+    return html;
+  }
+
+  document.addEventListener(
+    'toggle',
+    (event) => {
+      const open = event.target.dataset?.open;
+      if (open && C.manage) {
+        if (event.target.open) C.manage.open.add(open);
+        else C.manage.open.delete(open);
+      }
+    },
+    true,
+  );
+
+  // Enter in a field does what its button does.
+  document.addEventListener('keydown', (event) => {
+    const act = event.key === 'Enter' && event.target.dataset?.enter;
+    if (act && ACT[act]) {
+      event.preventDefault();
+      ACT[act](event.target);
+    }
+  });
+
+  const manageField = (key) => $(`#stack-manage [data-key="${key}"]`);
+  const chosen = (root) => $$('input[type="checkbox"]:checked:not(:disabled)', root).map((box) => Number(box.value));
+
+  ACT.stackbind = (source) => {
+    const id = source.dataset.a;
+    const section = $(`#stack-manage section[data-param="${id}"]`);
+    const text = manageField(`bind-default:${id}`).value;
+    manage('parameter.bind', { parameter: id, categories: chosen(section), default: text === '' ? null : text }, `bind:${id}`);
+  };
+
+  ACT.stackdefine = () => {
+    const id = newId('P');
+    const labels = manageField('def-choices').value.split(',').map((text) => text.trim()).filter(Boolean);
+    const definition = {
+      id,
+      name: manageField('def-name').value,
+      kind: manageField('def-kind').value,
+      holder: manageField('def-holder').value,
+      choices: labels.map((label) => ({ key: label, label })),
+    };
+    const categories = $$('#stack-manage [data-key^="def-cat:"]:checked').map((box) => Number(box.value));
+    const text = manageField('def-default').value;
+    const clear = () => {
+      for (const el of $$('#stack-manage [data-key^="def-"]')) {
+        if (el.type === 'checkbox') el.checked = false;
+        else if (el.tagName === 'INPUT') el.value = '';
+      }
+    };
+    manage('parameter.define', { definition }, 'define', () => {
+      if (!categories.length) {
+        clear();
+        return;
+      }
+      manage('parameter.bind', { parameter: id, categories, default: text === '' ? null : text }, 'define', clear);
+    });
   };
 
   // --- Workshop's elements ---
@@ -1027,7 +1548,9 @@
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
+      const view = paramsFor(piece);
       html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
         html += prow('Size', `${max[0] - min[0]} × ${max[1] - min[1]} × ${max[2] - min[2]} mm`);
@@ -1036,9 +1559,14 @@
         html += prow('Shape', esc(failed?.message || 'Not built yet'));
       }
       for (const host of e.references) html += prow('Hosted on', esc(host.element));
-      for (const [key, value] of Object.entries(e.props)) html += prow(esc(key), esc(value));
+      const shown = new Set((view?.parameters || []).map((p) => p.id));
+      for (const [key, value] of Object.entries(e.props)) {
+        if (!key.startsWith('@') && !shown.has(key)) html += prow(esc(key), esc(value));
+      }
       html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
       html += '</table>';
+      if (view?.parameters.length) html += parametersTable(view);
+      if (view) html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
     } else {
       const view = VIEWS[S.view];
       html += typeSel('plan', esc(view?.kind || ''), `<b>${esc(C.model?.name || view?.name || '')}</b>`);

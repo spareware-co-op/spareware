@@ -15,11 +15,11 @@
 
 use construct_solver::{
     Budget, Constraint, ConstraintId, FreePoint, Point, PointId, Reach, Sketch, SolveError,
-    Verdict, drag, solve,
+    Verdict, drag, mm, solve,
 };
 
-fn p(x_mm: i64, y_mm: i64) -> Point {
-    Point { x_mm, y_mm }
+fn p(x_mm: i32, y_mm: i32) -> Point {
+    Point::mm(x_mm, y_mm)
 }
 
 fn add(sketch: &mut Sketch, constraint: Constraint) -> ConstraintId {
@@ -30,7 +30,7 @@ fn add(sketch: &mut Sketch, constraint: Constraint) -> ConstraintId {
 fn solved(sketch: &Sketch) -> Sketch {
     let answer = solve(sketch, Budget::DEFAULT).unwrap();
     sketch
-        .with_positions(&answer.points, &answer.radii_mm)
+        .with_positions(&answer.points, &answer.radii)
         .unwrap()
 }
 
@@ -51,7 +51,7 @@ fn rectangle(dimensioned: bool) -> Sketch {
     ];
     let ends: Vec<PointId> = corners
         .iter()
-        .map(|(x, y)| sketch.add_point(*x, *y).unwrap())
+        .map(|(x, y)| sketch.add_point(mm(*x), mm(*y)).unwrap())
         .collect();
     let lines: Vec<_> = (0..4)
         .map(|i| sketch.add_line(ends[2 * i], ends[2 * i + 1]).unwrap())
@@ -68,13 +68,13 @@ fn rectangle(dimensioned: bool) -> Sketch {
         );
     }
     if dimensioned {
-        for (a, b, mm) in [(0, 1, 4_000), (6, 7, 3_000)] {
+        for (a, b, length_mm) in [(0, 1, 4_000), (6, 7, 3_000)] {
             add(
                 &mut sketch,
                 Constraint::Distance {
                     a: ends[a],
                     b: ends[b],
-                    mm,
+                    steps: mm(length_mm),
                 },
             );
         }
@@ -139,10 +139,10 @@ fn a_fully_constrained_point_will_not_move() {
 /// Points: line start 0, line end and arc start 1, centre 2, arc end 3.
 fn tangent_arc() -> (Sketch, ConstraintId) {
     let mut sketch = Sketch::new();
-    let start = sketch.add_point(0, 0).unwrap();
-    let join = sketch.add_point(1_000, 0).unwrap();
-    let centre = sketch.add_point(1_000, 500).unwrap();
-    let end = sketch.add_point(1_500, 500).unwrap();
+    let start = sketch.add_point(mm(0), mm(0)).unwrap();
+    let join = sketch.add_point(mm(1_000), mm(0)).unwrap();
+    let centre = sketch.add_point(mm(1_000), mm(500)).unwrap();
+    let end = sketch.add_point(mm(1_500), mm(500)).unwrap();
     let line = sketch.add_line(start, join).unwrap();
     let arc = sketch.add_arc(centre, join, end).unwrap();
     add(&mut sketch, Constraint::Fixed(start));
@@ -152,7 +152,7 @@ fn tangent_arc() -> (Sketch, ConstraintId) {
         Constraint::Distance {
             a: start,
             b: join,
-            mm: 1_000,
+            steps: mm(1_000),
         },
     );
     let side = sketch.side_of(centre, line).unwrap();
@@ -168,7 +168,7 @@ fn tangent_arc() -> (Sketch, ConstraintId) {
         &mut sketch,
         Constraint::Radius {
             curve: arc,
-            mm: 500,
+            steps: mm(500),
         },
     );
     (sketch, radius)
@@ -187,7 +187,7 @@ fn a_tangent_arcs_end_slides_round_its_circle() {
         dragged.solved.points,
         vec![p(0, 0), p(1_000, 0), p(1_000, 500), p(1_300, 900)]
     );
-    assert_eq!(dragged.solved.radii_mm, vec![500]);
+    assert_eq!(dragged.solved.radii, vec![mm(500)]);
     assert_eq!(
         dragged.solved.verdict,
         Verdict::UnderConstrained {

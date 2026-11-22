@@ -2,8 +2,17 @@
 //!
 //! The one small, safe expression language for parameter values, shared by families and Workshop
 //! (map: "Data model", "Formulas use a small, safe expression language"; feature map parts
-//! CON-A27-F4-P2 and CON-A7-F1-P1). A value is written as text, such as `width / 2 - 4 mm`,
-//! `2 ft 8 in` or `count > 3 ? 12 mm : 8 mm`, and evaluated exactly, with its units checked.
+//! CON-A2-F2-P2, CON-A27-F4-P2 and CON-A7-F1-P1). A value is written as text, such as
+//! `width / 2 - 4 mm`, `2 ft 8 in` or `count > 3 ? 12 mm : 8 mm`, type-checked, and evaluated
+//! exactly.
+//!
+//! One units system. This crate owns the language only: reading a formula, checking its types and
+//! working it out. Quantities, kinds, units, typed text and display are `construct-params`':
+//! a formula's inputs and its answer are `construct_params::Value`s of a `construct_params::Kind`,
+//! a unit after a number is a `construct_params::Unit` with its exact factor, and a length is the
+//! one `Length`, in the geometry kernel's grid steps. This crate depends on `construct-params`,
+//! never the reverse. The decision is note CON-A2-F3-P1; the stored form of a formula is
+//! FORMAT.md beside this crate.
 //!
 //! Why our own language and not a library: note A07 looked for one and recommends this. The
 //! well-known expression crates work in doubles and have no units (CEL and its Rust implementation,
@@ -18,47 +27,61 @@
 //!   nesting, and the size of the numbers it makes, so a shared recipe can't hang the app.
 //! - **KCL's units in the types**: every number carries a dimension. Lengths add only to lengths,
 //!   `820 mm` and `2 ft 8 in` are both lengths, a length times a length is an area, and a length
-//!   over a length is a plain number.
+//!   over a length is a plain number. The type check runs before any value is worked out, from
+//!   the kinds of the parameters a formula uses.
 //! - **Exact numbers**: literals and arithmetic are exact rationals (`dashu-ratio`, the crate the
-//!   kernel uses), rounded once, to the nearest double, when a value leaves for a geometry step.
-//!   `sqrt` and the trigonometric functions aren't here, because they aren't exact: they wait for
-//!   the kernel's certified functions.
+//!   kernel uses), in `construct-params`' stored units, and they never leave: an answer is landed
+//!   on its kind. A length, area or volume rounds to the nearest grid step (square, cubic step),
+//!   a half to the even one, as the sketch solver rounds a solved point, so `1000 mm / 3` is
+//!   333.33328125 mm; an angle rounds the same way to the kernel's angle unit; a number is an
+//!   exact decimal. Only text a person types is refused off the grid, by `construct-params`. A
+//!   value too large to store, and a division by zero, are refused. `sqrt` and the
+//!   trigonometric functions aren't here, because they aren't exact: they wait for the kernel's
+//!   certified functions.
 //!
 //! What it holds:
 //!
-//! - [`parse`]: text to an [`Expr`], or a [`FormulaError`] saying where it stopped.
-//! - [`Quantity`] and [`Dim`]: an exact value and its dimension; [`Kind`]: what a parameter or a
-//!   field is (a length, an angle or a count).
-//! - [`value_of`]: one value, read in the light of the names it can see.
-//! - [`evaluate`]: a whole parameter table, in any order, with circular formulas refused.
+//! - [`parse`]: text to an [`Expr`], or a [`FormulaError`] saying where it stopped; [`canonical`]:
+//!   a formula's one spelling, the form it is stored in.
+//! - [`value_of`]: one value of a kind, read in the light of the values it can see.
+//! - [`evaluate`]: a whole table of texts ([`Entry`]), in any order, with loops refused.
+//! - [`define`], [`check`] and [`work_out`]: a parameter definition that carries a formula, the
+//!   type check of a set of them, and their values worked out over the other parameters of the
+//!   same element or type (CON-A2-F2-P2). Pure functions: storing the results goes through the
+//!   edit log elsewhere.
 //!
-//! Lengths are held in millimetres and angles in degrees; `in` is 25.4 mm and `ft` 304.8 mm,
-//! exactly. A number with no unit standing alone as a whole value is in the value's own unit, so a
-//! length parameter of `120` is 120 mm, as Workshop and families have always read it.
+//! A number with no unit standing alone as a whole value is in its kind's own unit, fixed and
+//! never the display setting: millimetres for a length (a length of `120` is 120 mm, as Workshop
+//! and families have always read it), square and cubic millimetres, degrees, or a plain number.
+//! Nothing here is interim. Depends on `construct-params`, `kit-core` (parameter IDs), `winnow`
+//! and `dashu`.
 
 mod eval;
 mod parse;
-mod quantity;
 mod table;
+mod types;
 
 pub use eval::value_of;
-pub use parse::{Expr, Op, parse};
-pub use quantity::{Dim, Kind, Quantity};
-pub use table::{Entry, evaluate};
+pub use parse::{Expr, Op, canonical, parse};
+pub use table::{Entry, check, define, evaluate, work_out};
 
 use std::fmt;
 
 /// Why a formula can't be read or worked out. `code` is for programs, `message` for people.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormulaError {
-    /// `Syntax`, `UnknownName`, `Units`, `Circular`, `Depends`, `DivideByZero`, `TooLarge`,
-    /// `NotExact`, `Type` or `Name`.
+    /// `Syntax`, `UnknownName`, `Units`, `Type`, `Name`, `Circular`, `Depends`, `Holder`,
+    /// `Missing`, `DivideByZero`, `TooLarge`, `NotExact`, `NotWhole`, `Spelling` or
+    /// `Definition`.
     pub code: &'static str,
+    /// What went wrong, in words.
     pub message: String,
 }
 
 impl FormulaError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
+    /// A refusal with its code and message.
+    #[must_use]
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
