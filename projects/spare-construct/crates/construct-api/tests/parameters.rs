@@ -68,6 +68,7 @@ impl Geometry for Wedges {
             engine: "test.wedges".to_owned(),
             version: 7,
             name_scheme: 2,
+            report: None,
         }
     }
 
@@ -727,7 +728,7 @@ async fn concurrent_sets_follow_the_claim_rule() {
         .unwrap();
     let door = stack.record("D-1").await;
     assert_eq!(door.props["P-mark"], "text:D01");
-    assert_eq!(door.props["P-sill"], "length:150");
+    assert_eq!(door.props["P-sill"], "length:q0:960000");
 
     // Ben, while Anna works on it.
     assert_eq!(
@@ -749,7 +750,7 @@ async fn concurrent_sets_follow_the_claim_rule() {
         .unwrap();
     let door = stack.record("D-1").await;
     assert_eq!(door.props["P-mark"], "text:B01");
-    assert_eq!(door.props["P-sill"], "length:150");
+    assert_eq!(door.props["P-sill"], "length:q0:960000");
 }
 
 #[tokio::test]
@@ -766,7 +767,7 @@ async fn types_are_renamed_duplicated_and_deleted_through_the_log() {
     let copy = stack.record("T-900").await;
     assert_eq!(copy.name, "Single 900");
     assert_eq!(
-        copy.props["P-width"], "length:820",
+        copy.props["P-width"], "length:q0:5248000",
         "a copy keeps the values"
     );
     stack

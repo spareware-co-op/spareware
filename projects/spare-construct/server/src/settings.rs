@@ -1,6 +1,7 @@
 //! Settings. Moving from one free server to three paid ones changes these and no code:
 //! `STACK_PD` lists three addresses, and `STACK_FILES_URL` names S3 or Google Cloud Storage.
 
+use crate::geometry::Builder;
 use clap::Args;
 
 /// The server's settings, from its command line or its environment.
@@ -52,4 +53,8 @@ pub struct Settings {
     /// How long an automatic claim lasts after the last edit, in milliseconds.
     #[arg(long, env = "STACK_CLAIM_MS", default_value_t = 30_000)]
     pub claim_ms: u64,
+    /// What builds shapes: `stand-in`, as the browser does, or `kernel`, which needs a server
+    /// built with the `kernel` feature.
+    #[arg(long, env = "STACK_GEOMETRY", value_enum, default_value_t = Builder::StandIn)]
+    pub geometry: Builder,
 }

@@ -16,7 +16,7 @@ The kit's `p:<project>/record/<hash>` holds an element, named by the SHA-256 of 
 | --- | --- |
 | `id`, `document` | Its permanent ID, and the document it belongs to |
 | `kind`, `name`, `level`, `props` | What it is |
-| `placement` | `{x,y,z}` in whole millimetres. Outside the recipe, so a move rebuilds nothing and every door of one type shares one body |
+| `placement` | `{x,y,z}` in whole millimetres, each exactly 6,400 of the geometry kernel's grid steps, the unit every other Construct length is stored in ([note CON-A2-F3-P1](../../notes/CON-A2-F3-P1-stored-units.md)). Outside the recipe, so a move rebuilds nothing and every door of one type shares one body |
 | `recipe` | How to build it |
 | `references` | What it is hosted on or built against |
 
@@ -26,7 +26,7 @@ A recipe is the kernel's envelope (architecture chapter 24):
 | --- | --- |
 | `owner`, `schema` | Who owns the operation, and their schema version |
 | `op`, `op_version` | The operation, named for what it makes: `wall.straight`, `door.single`, `block` |
-| `args` | Its arguments, sorted by name. Numbers are whole. An argument may instead name a parameter, `{"param":"<id>"}` (below) |
+| `args` | Its arguments, sorted by name. Numbers are whole; the stand-in recipes (`op_version` 1) give lengths in whole millimetres, exact multiples of the grid step, and a recipe that needs a finer length gives grid steps under a new `op_version`. An argument may instead name a parameter, `{"param":"<id>"}` (below) |
 
 A reference (chapter 20) points at part of a shape by persistent name, never by position in a list. A hosted door points at a face of a wall, not at the wall:
 
@@ -46,7 +46,7 @@ Every record a command writes carries its category, and an element of a type nam
 | --- | --- | --- |
 | `@category` | Every record written from this version | The category's ID ([construct-categories](../construct-categories/FORMAT.md)) in decimal. An element's is its kind's: the recipe's `op`, with its `owner` in front when that is not `construct` (`workshop.part`). A type's is its own |
 | `@type` | An element of a type | The type's permanent ID. The type is of the element's category |
-| a parameter's ID | An element, or a type | Its value of that parameter, in its stored text (`length:820`). An element holds only parameters each instance holds; a type only those the type holds |
+| a parameter's ID | An element, or a type | Its value of that parameter, in its stored text (`length:q0:5248000`). An element holds only parameters each instance holds; a type only those the type holds |
 
 Any other key is plain text, kept and read as it is, so a record written before this version still reads. An element reads a parameter from its own value, then its type's, then the binding's default ([construct-types' `resolve`](../construct-types/src/resolve.rs)). An element with no type has the instance parameters its category is bound to.
 
@@ -60,14 +60,14 @@ Workshop, the discipline for things that are made (feature map area CON-A27), ke
 
 | Kind | Recipe `op` | `args` |
 | --- | --- | --- |
-| `workshop.part` | `part` | `params` (each `{name, value, note}`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
+| `workshop.part` | `part` | `params` (each `{name, value, note, kind}`, where `kind` is `length`, the default, `angle` or `count`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
 | `workshop.assembly` | `assembly` | `instances` (each `{id, part, name, at, grounded}`, where `part` is a `workshop.part` element's ID) and `joints` (each `{id, name, type, a, b, origin, axis, min, max, value, unit}`) |
 
-The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, the name of a parameter, or text: a number with a fraction is written as its decimal text (`"8.5"`), so no hash depends on how a float prints. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
+The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, or text: a number with a fraction written as its decimal text (`"8.5"`), so no hash depends on how a float prints, a parameter's name, or a formula of parameters with units, such as `"width / 2 - 4 mm"`, in the formula language of [`construct-formulas`](../construct-formulas/src/lib.rs). A formula is stored as written. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
 
 ## A document
 
-`p:<project>/model/<model>` holds a document's header, including `edition`: `{engine, version, name_scheme}`, what builds its shapes. A document runs one edition. Moving to another is an ordered operation that reports what changed; a server or browser without that edition doesn't build it, because it would give different bytes under the same recipe. A browser in that position is a viewer of the stored shapes.
+`p:<project>/model/<model>` holds a document's header, including `edition`: `{engine, version, name_scheme}`, what builds its shapes, and, when a geometry engine of the kernel builds them, `report`: the engine's own account of itself, `{engine, version, steps_per_mm, tolerances, answers}` (its name, its version or pinned source, its grid step in steps per millimetre, each tolerance as `{name, value, unit}` with the value as decimal text, and which part answers each operation as `{operation, case, by}`). An edition without an engine, such as the stand-in's, has no `report` key, so editions written before it existed read and compare as they did. Two editions are the same only when every field, the report's included, is the same. A document runs one edition. Moving to another is an ordered operation that reports what changed; a server or browser without that edition doesn't build it, because it would give different bytes under the same recipe. A browser in that position is a viewer of the stored shapes.
 
 ## A project's tables
 

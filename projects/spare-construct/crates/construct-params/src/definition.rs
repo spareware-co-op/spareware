@@ -14,11 +14,11 @@ use std::fmt;
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
-    /// A length, kept in whole millimetres.
+    /// A length, kept in whole grid steps of the geometry kernel (1/6,400 mm).
     Length,
-    /// An area, kept in whole square millimetres.
+    /// An area, kept in whole square grid steps.
     Area,
-    /// A volume, kept in whole cubic millimetres.
+    /// A volume, kept in whole cubic grid steps.
     Volume,
     /// An angle, kept in whole angle units of the geometry kernel.
     Angle,

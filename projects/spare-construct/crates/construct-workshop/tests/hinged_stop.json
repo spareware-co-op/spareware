@@ -1,0 +1,49 @@
+{
+ "parts": [
+  {
+   "id": "arm", "name": "Arm", "material": "aluminium",
+   "params": [
+    { "name": "length", "value": 110 },
+    { "name": "arm_width", "value": 20 },
+    { "name": "arm_thickness", "value": 8 },
+    { "name": "eye_radius", "value": 12 }
+   ],
+   "features": [
+    { "id": "a1", "type": "sketch", "name": "Arm outline", "z": 0, "shape": "rect", "w": "length", "h": "arm_width", "cx": 55, "cy": 0 },
+    { "id": "a2", "type": "extrude", "name": "Arm bar", "sketch": "a1", "depth": "arm_thickness", "op": "new" },
+    { "id": "a3", "type": "sketch", "name": "Eye", "z": 0, "shape": "circle", "r": "eye_radius", "cx": 0, "cy": 0 },
+    { "id": "a4", "type": "extrude", "name": "Eye", "sketch": "a3", "depth": "arm_thickness", "op": "new" },
+    { "id": "a5", "type": "sketch", "name": "Tip outline", "z": 0, "shape": "outline", "pts": [[100, -10], [118, -6], [118, 6], [100, 10]] },
+    { "id": "a6", "type": "extrude", "name": "Tip", "sketch": "a5", "depth": "arm_thickness", "op": "new" },
+    { "id": "a7", "type": "hole", "name": "Pivot hole", "note": "A 10 mm hole through the eye" }
+   ],
+   "end": 7
+  },
+  {
+   "id": "block", "name": "Slide block", "material": "nylon",
+   "params": [
+    { "name": "block_length", "value": 30 },
+    { "name": "block_width", "value": 16 },
+    { "name": "block_height", "value": 16 }
+   ],
+   "features": [
+    { "id": "b1", "type": "sketch", "name": "Block outline", "z": 0, "shape": "rect", "w": "block_length", "h": "block_width", "cx": 0, "cy": 0 },
+    { "id": "b2", "type": "extrude", "name": "Block", "sketch": "b1", "depth": "block_height", "op": "new" },
+    { "id": "b3", "type": "chamfer", "name": "Lead-in chamfer", "note": "1 mm on the top edges" }
+   ],
+   "end": 3
+  }
+ ],
+ "assembly": {
+  "name": "Hinged stop",
+  "instances": [
+   { "id": "i1", "part": "bracket", "name": "Bracket", "at": [0, 0, 0], "grounded": true },
+   { "id": "i2", "part": "arm", "name": "Arm", "at": [0, 0, 0] },
+   { "id": "i3", "part": "block", "name": "Slide block", "at": [0, 0, 0] }
+  ],
+  "joints": [
+   { "id": "j1", "name": "Arm hinge", "type": "hinge", "a": "i1", "b": "i2", "origin": [40, 0, 38], "axis": "z", "min": -30, "max": 120, "value": 35, "unit": "deg" },
+   { "id": "j2", "name": "Block slide", "type": "slider", "a": "i1", "b": "i3", "origin": [-30, 21, 8], "axis": "x", "min": -12, "max": 8, "value": 0, "unit": "mm" }
+  ]
+ }
+}

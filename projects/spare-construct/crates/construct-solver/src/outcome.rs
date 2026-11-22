@@ -1,14 +1,18 @@
-//! What a solve gives back: the solved points in whole millimetres with the sketch's verdict, or
-//! an error the caller can read. Both serialise to the same bytes on every machine.
+//! What a solve gives back: the solved points and radii in whole grid steps with the sketch's
+//! verdict, or an error the caller can read; and what a drag gives back, the same with how far
+//! the dragged point got. All serialise to the same bytes on every machine.
 
-use crate::sketch::{ConstraintId, Point, PointId};
+use crate::sketch::{ConstraintId, CurveId, Point, PointId};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// The model tolerance, in millimetres (main's ruling, 22 Nov 2026). A solved sketch is accepted
-/// only if every constraint still holds within it after its points are rounded to whole
-/// millimetres.
+/// only if every constraint still holds within it after its points and radii are rounded to the
+/// grid ([`MODEL_TOLERANCE_STEPS`], the same tolerance in grid steps, is what is compared).
 pub const MODEL_TOLERANCE_MM: f64 = 0.01;
+
+/// The model tolerance in grid steps: 0.01 mm is exactly 64 steps of 1/6,400 mm.
+pub const MODEL_TOLERANCE_STEPS: i64 = 64;
 
 /// How much work one solve may do, counted in steps, never in time. A step is one evaluation of
 /// the constraints with one factorisation, or one trial move. Running out is
@@ -64,7 +68,7 @@ pub enum Verdict {
 /// A solved sketch.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Solved {
-    /// Every point, in authoring order, in whole millimetres. Fixed points are as drawn.
+    /// Every point, in authoring order, in whole grid steps. Fixed points are as drawn.
     pub points: Vec<Point>,
     /// Fully or under-constrained.
     pub verdict: Verdict,
@@ -74,6 +78,45 @@ pub struct Solved {
     pub redundant: Vec<ConstraintId>,
     /// The steps used.
     pub steps: u32,
+    /// Every curve's radius, in authoring order, in whole grid steps (the same rounding rule as
+    /// the points). Written only when the sketch has curves, so a sketch of points and lines
+    /// keeps its bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub radii: Vec<i64>,
+    /// The curves whose radius can still change, in authoring order: the radii that carry part of
+    /// [`Verdict::UnderConstrained`]'s `dof`, as `free` lists the points. Empty when the sketch
+    /// is fully constrained or every radius is held.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub free_radii: Vec<CurveId>,
+}
+
+/// How far a drag got.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum Reach {
+    /// The dragged point is at the target and every constraint holds.
+    Target,
+    /// The constraints do not let the point reach the target: it stopped at the nearest place
+    /// they allow, found by least change from the target. `blocking` names the constraints that
+    /// stop it, in authoring order.
+    Limit {
+        /// The constraints that stop it.
+        blocking: Vec<ConstraintId>,
+    },
+    /// The constraints do not let the point move at all: the sketch is as it was.
+    Refused {
+        /// The constraints that hold it, in authoring order.
+        blocking: Vec<ConstraintId>,
+    },
+}
+
+/// A dragged sketch: the solve of the sketch with the dragged point moved, and how far it got.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Dragged {
+    /// The sketch solved after the drag, as [`crate::solve`] gives it. For
+    /// [`Reach::Refused`] these are the positions it started from. `steps` counts the whole drag.
+    pub solved: Solved,
+    /// How far the point got.
+    pub reach: Reach,
 }
 
 /// A constraint the solve could not meet, and by how much it misses, in millimetres.
@@ -106,9 +149,10 @@ pub enum SolveError {
         /// The steps used.
         steps: u32,
     },
-    /// The solved sketch, rounded to whole millimetres by the stated rule (`crate::solve`), no
-    /// longer meets this constraint within [`MODEL_TOLERANCE_MM`]. The sketch is refused rather
-    /// than stored loose.
+    /// The solved sketch, rounded to the grid by the stated rule (`crate::solve`), no longer meets
+    /// this constraint within [`MODEL_TOLERANCE_MM`]: no grid points near the answer meet it, as
+    /// for a line a fraction of a micrometre long held parallel to a long sloped one. The sketch
+    /// is refused rather than stored loose.
     RoundingRefused {
         /// The first constraint, in authoring order, that rounding breaks.
         constraint: ConstraintId,
@@ -136,6 +180,27 @@ pub enum SolveError {
     },
     /// The matrix decomposition did not settle within its own iteration cap.
     Decomposition,
+    /// The solved sketch, rounded to the grid, leaves an end of this arc off its circle
+    /// by more than [`MODEL_TOLERANCE_MM`]: the end's exact distance from the stored centre,
+    /// less the stored radius. The sketch is refused rather than stored loose.
+    ArcEndRefused {
+        /// The arc.
+        curve: CurveId,
+        /// How far the end is off the circle after rounding, in millimetres.
+        residual_mm: f64,
+    },
+    /// A curve with no size or no direction to work from: an arc's end drawn at its centre, a
+    /// radius solved to zero or less, or an arc whose two ends solve to one place (neither no arc
+    /// nor a whole circle is meant).
+    DegenerateCurve {
+        /// The curve.
+        curve: CurveId,
+    },
+    /// A drag named a point that is not in the sketch.
+    UnknownPoint {
+        /// The point.
+        point: PointId,
+    },
 }
 
 impl fmt::Display for SolveError {
@@ -157,7 +222,7 @@ impl fmt::Display for SolveError {
                 residual_mm,
             } => write!(
                 f,
-                "constraint {} misses by {residual_mm} mm after rounding to whole millimetres",
+                "constraint {} misses by {residual_mm} mm after rounding to the grid",
                 constraint.0
             ),
             SolveError::Degenerate { constraint } => {
@@ -173,9 +238,24 @@ impl fmt::Display for SolveError {
                 constraints.len()
             ),
             SolveError::OutOfRange { point } => {
-                write!(f, "point {} is solved beyond 1,000 km", point.0)
+                write!(
+                    f,
+                    "point {} is solved beyond 171.8 km (2^40 grid steps)",
+                    point.0
+                )
             }
             SolveError::Decomposition => f.write_str("the matrix decomposition did not settle"),
+            SolveError::ArcEndRefused { curve, residual_mm } => write!(
+                f,
+                "an end of arc {} is {residual_mm} mm off its circle after rounding to the grid",
+                curve.0
+            ),
+            SolveError::DegenerateCurve { curve } => {
+                write!(f, "curve {} has no size or direction to work from", curve.0)
+            }
+            SolveError::UnknownPoint { point } => {
+                write!(f, "point {} is not in the sketch", point.0)
+            }
         }
     }
 }

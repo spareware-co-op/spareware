@@ -25,6 +25,10 @@ solidcore = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e1
 # OR Apache-2.0), already in the tree.
 solidcore-convert = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
 solidcore-record = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
+# solidcore's mesher (solidcore-tess, Apache-2.0), from the same repository at the same commit: its
+# planar triangulation fills each flat face of a display mesh (`engine`). It adds spade (MIT OR
+# Apache-2.0), its constrained Delaunay triangulation, and rayon (MIT OR Apache-2.0) off wasm32.
+solidcore-tess = { git = "https://github.com/spareware-co-op/solidcore", rev = "1d8e14b46dedccbb03572956e7c708782fef1b8f" }
 # The kernel's own crates the converted body is made of and checked by (Apache-2.0, this
 # repository).
 geom-check = { path = "../crates/geom-check" }
@@ -34,6 +38,14 @@ geom-num = { path = "../crates/geom-num" }
 geom-run = { path = "../crates/geom-run" }
 geom-surface = { path = "../crates/geom-surface" }
 geom-topo = { path = "../crates/geom-topo" }
+# The engine seam (`engine`): geom-op declares the `Engine` trait the program codes against and
+# gives the operation context; geom-make's exact make.prism answers the extrusions it takes; and
+# geom-bool, with geom-poly's merge rule, answers the flat-faced subtraction, which stays the
+# kernel's (decision 32.70, rule 5). This repository's own, Apache-2.0.
+geom-bool = { path = "../crates/geom-bool" }
+geom-make = { path = "../crates/geom-make" }
+geom-op = { path = "../crates/geom-op" }
+geom-poly = { path = "../crates/geom-poly" }
 # Exact fractions for a profile's corners (decision 32.97): num-rational's ratio of num-bigint's
 # integers, whose conversion to f64 is correctly rounded, and num-traits' traits for them (each
 # MIT OR Apache-2.0). num-bigint and num-traits are in the tree already (bigdecimal's).

@@ -2,8 +2,13 @@
 //!
 //! "What is in this box, or this view?" answered from the boxes the model already stores, without
 //! reading every element. The index holds, for each element id, its axis-aligned box in whole
-//! millimetres (the repository's stored unit, [`construct_model::geometry::Bounds`]) and
-//! optionally a [`Scope`], a level or a document. It offers:
+//! millimetres ([`construct_model::geometry::Bounds`], the box regeneration stores) and
+//! optionally a [`Scope`], a level or a document. Lengths elsewhere are stored in the geometry
+//! kernel's grid steps (1/6,400 mm, note CON-A2-F3-P1); a box stays in whole millimetres because
+//! it is a cache for finding candidates, not a measurement: a box made from grid geometry is
+//! rounded outward (its low corner down and its high corner up to whole millimetres), so it still
+//! holds its shape and no query misses an element, and a caller that needs the exact answer
+//! checks the few candidates against their shapes. It offers:
 //!
 //! - [`SpatialIndex::insert`], [`SpatialIndex::update`] (an element moved or resized) and
 //!   [`SpatialIndex::remove`];

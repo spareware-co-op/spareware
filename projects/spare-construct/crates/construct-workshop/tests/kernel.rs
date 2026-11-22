@@ -227,6 +227,61 @@ fn a_parameter_drives_every_feature_that_names_it() {
     );
 }
 
+#[test]
+fn a_parameter_can_be_a_formula_of_others_with_units() {
+    let mut p = bracket();
+    // depth is defined from width, which comes before it or after it alike
+    p["params"][1]["value"] = json!("width / 2 + 0.5 in");
+    p["params"][2]["value"] = json!("round(depth / 10, 0.5 mm)");
+    let a = answer(&p);
+    assert_eq!(a["params"][1]["value"], json!(72.7));
+    assert_eq!(a["params"][1]["formula"], json!(true));
+    assert_eq!(a["params"][2]["value"], json!(7.5));
+    assert!(close(
+        a["bodies"][0]["volume"].as_f64().unwrap(),
+        120.0 * 72.7 * 7.5
+    ));
+    // a field takes a formula too
+    p["features"][1]["depth"] = json!("thickness * 2");
+    let a = answer(&p);
+    assert!(close(a["bodies"][0]["height"].as_f64().unwrap(), 15.0));
+
+    // units that don't agree, and a loop, are refused, and say why
+    p["params"][1]["value"] = json!("width + 5");
+    let a = answer(&p);
+    assert_eq!(a["params"][1]["state"], "failed");
+    let why = a["params"][1]["message"].as_str().unwrap();
+    assert!(why.contains("give the number a unit"), "{why}");
+    assert_eq!(a["params"][2]["state"], "failed", "thickness uses depth");
+    p["params"][0]["value"] = json!("depth * 2");
+    p["params"][1]["value"] = json!("width / 2");
+    let a = answer(&p);
+    let why = a["params"][0]["message"].as_str().unwrap();
+    assert!(
+        why.contains("width, depth are defined from each other"),
+        "{why}"
+    );
+    assert_eq!(states(&a)[0], "failed");
+
+    // a count is a count: a length won't do for the number of sides
+    let mut p = bracket();
+    p["params"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "name": "sides", "value": 8, "kind": "count" }));
+    p["features"][5]["n"] = json!("sides - 2");
+    let a = answer(&p);
+    assert_eq!(states(&a)[5], "built");
+    assert_eq!(a["params"][7]["kind"], json!("count"));
+    p["features"][5]["n"] = json!("lug_pitch");
+    let a = answer(&p);
+    let why = a["features"][5]["message"].as_str().unwrap();
+    assert!(
+        why.contains("a length, and it should be a plain number"),
+        "{why}"
+    );
+}
+
 fn one_outline(pts: Value) -> Value {
     json!({ "params": [], "end": 2, "features": [
         { "id": "s", "type": "sketch", "name": "S", "shape": "outline", "pts": pts },
