@@ -8,8 +8,10 @@
 //! stands in the domains, where neither the interior system nor one edge's can prove it. With
 //! every parameter on an edge held, the system has more equations than unknowns; the end is proven
 //! to within the rounding of the kinds' reads, in either operand order and at either end of the
-//! curve. A branch that ends on a corner the true curve misses has no true point there, and says
-//! so at once.
+//! curve: the two surfaces' points there, as the kinds enclose them, meet. Two planes whose reads
+//! at the corner are exact, and so meet only at their ends, are proven so too. A branch that ends
+//! on a corner the true curve misses, by 1/1024 or by 2⁻⁴⁰, has no true point there, and says so
+//! at once.
 
 #![allow(
     clippy::unwrap_used,
@@ -117,14 +119,77 @@ fn the_true_point_at_a_curves_end_on_a_corner_is_proven_there() {
 }
 
 #[test]
+fn the_true_point_on_a_corner_of_two_planes_is_their_exact_reads_touching() {
+    // The plane z = 1/8, read as (x, y) to x = 1 and y = 5/8, meets the wall y = x − 3/8, read as
+    // (s, r) at (0, −3/8, 0) + s·(0, 0, 1) + r·(1, 1, 1), along the line y = x − 3/8, z = 1/8,
+    // where the wall's (s, r) is (1/8 − x, x). The line reaches the first plane's corner at x = 1,
+    // where the wall's r = 1 is on its edge, and its s = −7/8 too when it starts there. The
+    // planes' reads at (1, 5/8, 1/8) are exact, so the two points' enclosures there are one point
+    // each in some coordinates, and meet only at their ends.
+    let ground = level(1.0, 0.625);
+    for low in [-0.875, -4.0] {
+        let wall = SurfaceKind::Plane(
+            Plane::new(
+                [0.0, -0.375, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+                ((low, 4.0), (-4.0, 1.0)),
+            )
+            .unwrap(),
+        );
+        for (first, second, wall_first) in [(&ground, &wall, false), (&wall, &ground, true)] {
+            let truth = if wall_first {
+                [-0.875, 1.0, 1.0, 0.625]
+            } else {
+                [1.0, 0.625, -0.875, 1.0]
+            };
+            for (xs, at_end) in [([0.25, 1.0], 1), ([1.0, 0.25], 0)] {
+                let at = |x: f64| {
+                    let (g, w) = ([x, x - 0.375], [0.125 - x, x]);
+                    let [a, b] = if wall_first { [w, g] } else { [g, w] };
+                    [a[0], a[1], b[0], b[1]].map(|v| Interval::point(v).unwrap())
+                };
+                let branch = Branch {
+                    vertices: xs.map(at).to_vec(),
+                    ends: [CurveEnd::Boundary, CurveEnd::Boundary],
+                    deviation: 0.0,
+                    passes: Vec::new(),
+                };
+                let mut m = WorkMeter::new(Budget::of_work(1 << 20));
+                let curve = fit((first, second), REFS, &branch, 1.0 / 16.0, &mut m).unwrap();
+                let (lo, hi) = ParamCurve::domain(&curve);
+                let t = [lo, hi][at_end];
+                let mut m = WorkMeter::new(Budget::of_work(1 << 16));
+                let x = true_point(first, second, &curve, t, &mut m)
+                    .unwrap()
+                    .unwrap_or_else(|| panic!("{low} {xs:?}: no true point"));
+                for (i, q) in x.iter().zip(truth) {
+                    assert!(i.lo() <= q && q <= i.hi(), "{low} {xs:?}: {x:?}");
+                    assert!(i.hi() - i.lo() <= 1e-12, "{low} {xs:?}: {x:?}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn a_branch_ending_on_a_corner_the_curve_misses_has_no_true_point_there() {
-    // The sheet's y ends at 5/8 − 1/1024, so the parabola leaves through that edge just short of
-    // x = 1, and the corner (1, 5/8 − 1/1024) is 1/1024 below the plane: not on the true curve.
-    let edge = 0.625 - 1.0 / 1024.0;
-    let (bent, flat) = (sheet(edge), level(4.0, 4.0));
-    for (first, second) in [(&bent, &flat), (&flat, &bent)] {
-        for (ends, at_end) in [([on(0.3), [1.0, edge]], 1), ([[1.0, edge], on(0.3)], 0)] {
-            assert_eq!(end_point(first, second, ends, at_end), None, "{ends:?}");
+    // The sheet's y ends at 5/8 − d, so the parabola leaves through that edge just short of x = 1,
+    // and the corner (1, 5/8 − d) is d below the plane: not on the true curve. At d = 2⁻⁴⁰ that is
+    // some 10⁻¹² in space, a thousand steps of the double: past the rounding of the reads there
+    // (some 10⁻¹⁴), but inside any tolerance of a thousand steps or more, so the corner is settled
+    // by the reads alone.
+    for miss in [1.0 / 1024.0, 1.0 / 1_099_511_627_776.0] {
+        let edge = 0.625 - miss;
+        let (bent, flat) = (sheet(edge), level(4.0, 4.0));
+        for (first, second) in [(&bent, &flat), (&flat, &bent)] {
+            for (ends, at_end) in [([on(0.3), [1.0, edge]], 1), ([[1.0, edge], on(0.3)], 0)] {
+                assert_eq!(
+                    end_point(first, second, ends, at_end),
+                    None,
+                    "{miss} {ends:?}"
+                );
+            }
         }
     }
 }

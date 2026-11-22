@@ -36,10 +36,11 @@
 //!   no Krawczyk step can prove it. At an end on a corner, two or more parameters on edges, all of
 //!   them are held there, and S₁ − S₂ has more equations than unknowns: as the start search does at
 //!   an end of a domain (`general`'s `at_the_ends`), the rows that best determine the rest are
-//!   proven to have one zero in the face, and the others must hold zero over it with each
-//!   surface's point there within `SETTLED` steps, so the end is the corner to within the rounding
-//!   of the kinds' reads. A corner that is not on the curve so, or that no choice of rows decides,
-//!   has no true point: `None`, never a run to the budget.
+//!   proven to have one zero in the face, refined as far as the kinds' rounding lets it, and the
+//!   two surfaces' points there, as the kinds enclose them, must meet: the end is the corner to
+//!   within the rounding of the kinds' reads, with no tolerance chosen. A corner that is not on the
+//!   curve so, or that no choice of rows decides, has no true point: `None`, never a run to the
+//!   budget.
 //! - **The definition kept.** The curve's chain is the branch's vertices, each with its parameter
 //!   on the caches; points added in refinement are fit data only.
 //!
@@ -714,12 +715,6 @@ struct OnCorner<'a, const N: usize> {
     floor: f64,
 }
 
-/// How many steps of the double each surface's point may reach at a curve's end on a corner, for
-/// the rows left out to say anything: past the rounding of a kind's read at a point, which for a
-/// NURBS patch is several steps (7 to 13 for the quadratic sheet of `tests/true_point_corner.rs`),
-/// and far inside any bound a fit certifies. A power of two.
-const SETTLED: f64 = 64.0;
-
 /// The choices of rows an end's system on a corner could keep, of each size.
 const ROW_SETS: [&[usize]; 6] = [&[0, 1], &[0, 2], &[1, 2], &[0], &[1], &[2]];
 
@@ -765,8 +760,15 @@ impl<const N: usize> OnCorner<'_, N> {
     }
 
     /// Whether the four parameters `whole`, a zero of the kept rows, are the curve's end to within
-    /// the rounding of the kinds' reads: every row left out holds zero over them, and each
-    /// surface's point there reaches no more than [`SETTLED`] steps.
+    /// the rounding of the kinds' reads: the two surfaces' points over them, as the kinds enclose
+    /// them, meet in every coordinate. The kept rows' zero is proven in `whole`, so they meet in
+    /// those rows already, and the test is that the rows left out hold zero there too.
+    ///
+    /// No tolerance is chosen. `whole` is the enclosure [`solve`] gives a proven zero, refined by
+    /// the operator until it reaches under a step or stops narrowing, which it does only where
+    /// the residuals' own rounding is all that is left. So each point's enclosure is as wide as
+    /// the kind's evaluation makes it there and no wider, and two points that meet are ones the
+    /// kinds cannot tell apart; the one-edge path takes its zero at that same refinement.
     fn settled(
         &self,
         whole: &[Interval; 4],
@@ -782,13 +784,10 @@ impl<const N: usize> OnCorner<'_, N> {
         let ([s1, ..], [s2, ..]) = (p.as_slice(), q.as_slice()) else {
             return Err(IntersectError::Internal);
         };
-        let holds = minus_box(s1, s2)?
+        Ok(s1
             .iter()
-            .enumerate()
-            .filter(|(k, _)| !self.rows.contains(k))
-            .all(|(_, r)| r.lo() <= 0.0 && 0.0 <= r.hi());
-        let most = SETTLED * self.floor;
-        Ok(holds && image(s1) <= most && image(s2) <= most)
+            .zip(s2)
+            .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi()))
     }
 
     /// How well the kept rows determine the free parameters over `x`: the least their N by N
