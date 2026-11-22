@@ -10,6 +10,13 @@ license = "Apache-2.0"
 [workspace]
 members = ["."]
 
+# The geometry kernel's builder with solidcore's engine behind it (src/geometry.rs), chosen by the
+# `geometry` setting. Off by default: solidcore is about a million lines and one compile of it takes
+# 10 to 17 minutes and about 7 GB (geom-solidcore's Cargo.toml), so a default build of the server,
+# and the checklist's, stays as it was.
+[features]
+kernel = ["dep:geom-solidcore"]
+
 # Every version is pinned here and by Cargo.lock; deny.toml checks every licence.
 [dependencies]
 construct-api = { path = "../crates/construct-api", features = ["cloud"] }
@@ -21,6 +28,9 @@ kit-ops = { path = "../../kit/crates/kit-ops" }
 kit-store = { path = "../../kit/crates/kit-store" }
 kit-store-tikv = { path = "../../kit/services/store" }
 kit-sync = { path = "../../kit/crates/kit-sync" }
+# solidcore behind the kernel's engine seam, from its own workspace (decision 32.70): the engine the
+# `kernel` feature links. Its Cargo.lock's pins are this one's for the crates it adds. Apache-2.0.
+geom-solidcore = { path = "../../engines/geometry/geom-solidcore", optional = true }
 axum = { version = "=0.8.9", features = ["ws"] }  # MIT
 axum-extra = { version = "=0.12.6", features = ["cookie"] }  # MIT
 base64 = "=0.22.1"                 # MIT OR Apache-2.0
@@ -40,6 +50,9 @@ tracing-subscriber = { version = "=0.3.20", features = ["env-filter"] }  # MIT
 
 [dev-dependencies]
 kit-store = { path = "../../kit/crates/kit-store", features = ["memory"] }
+# The kernel's facade, for the kernel builder's suite (construct-regen's tests/kernel_suite), which
+# tests/kernel.rs runs on solidcore's engine. This repository's own, Apache-2.0.
+engine-geometry = { path = "../../engines/crates/engine-geometry" }
 chrono = "=0.4.45"                 # MIT OR Apache-2.0
 openidconnect = { version = "=4.0.1", default-features = false }   # MIT
 reqwest = { version = "=0.13.1", default-features = false, features = ["rustls", "cookies", "json"] }  # MIT OR Apache-2.0
