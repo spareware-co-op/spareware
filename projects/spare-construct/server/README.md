@@ -17,7 +17,7 @@ Elements are recipes, and shapes are built from them. Boxes are a stand-in behin
 
 - **One interface.** [`Geometry`](../crates/construct-model/src/geometry.rs) is the one join: a recipe goes in, and a body, bounds, named faces and display meshes come out. The stand-in is [one implementation](../crates/construct-regen/src/stand_in.rs), and [`construct_regen::geometry`](../crates/construct-regen/src/lib.rs) is the one line that picks it.
 - **Inputs are the truth.** An element's record holds its recipe, and edits carry inputs and before and after values. A built shape is a derived record named by the content ID of its canonical bytes: delete them all and the log makes the same bytes again.
-- **The server and the browser both build through it.** The browser runs the same code compiled to WebAssembly ([`construct-shapes`](../crates/construct-shapes)). After each pass the server writes a checkpoint of the bodies it built into the log, and every browser compares them with its own, so a mismatch is caught from day one (note A05).
+- **The server and the browser both build through it.** The browser runs the same code compiled to WebAssembly ([`construct-shapes`](../crates/construct-shapes)). After each pass the server writes a checkpoint of the bodies it built into the log, and every browser compares them with its own, so a mismatch is caught from day one (note A05). A server built with the `kernel` feature and run with `STACK_GEOMETRY=kernel` builds with the geometry kernel's builder over solidcore's engine, and the page builds such a document with the same builder over the same engine, its own package ([`shapes-kernel`](shapes-kernel)), loaded the first time a document's edition names the kernel; the same bytes natively and in the browser is [tests/browser/same_bytes.mjs](tests/browser/same_bytes.mjs)'s check ([note](../notes/CON-A3-F1-P1-kernel-in-the-browser.md)).
 - **Shapes per body, display meshes by level of detail,** with large ones in file storage, linked by hash.
 - **Room for what comes next:** a door is hosted on a face of a wall by persistent name, each document records its kernel edition, and links go by document reference. A browser that can't run a document's edition is a viewer of the stored shapes.
 
@@ -40,6 +40,7 @@ Elements are recipes, and shapes are built from them. Boxes are a stand-in behin
 | [`construct-regen`](../crates/construct-regen) | The stand-in, the regenerator that keeps derived shapes up to date, and how records hold categories, types and parameter values, which the commands read the same way | Unit tests, and [shapes.rs](../crates/construct-api/tests/shapes.rs) and [parameters.rs](../crates/construct-api/tests/parameters.rs), on two generators |
 | [`construct-api`](../crates/construct-api) | With its `cloud` feature: Cedar's rules, element commands, parameter and type commands, level commands, undo and redo, folders, packages, bridges, links, hubs, projects and teams | [shapes.rs](../crates/construct-api/tests/shapes.rs), [parameters.rs](../crates/construct-api/tests/parameters.rs), [undo.rs](../crates/construct-api/tests/undo.rs), [levels.rs](../crates/construct-api/tests/levels.rs), [directory.rs](tests/directory.rs) |
 | [`construct-shapes`](../crates/construct-shapes) | The geometry for the browser | Unit tests, and every browser's checkpoints |
+| [`shapes-kernel`](shapes-kernel) | The geometry kernel's builder for the browser, for a document on the kernel; its own workspace, since it links solidcore | [package.rs](shapes-kernel/tests/package.rs), [same_bytes.mjs](tests/browser/same_bytes.mjs), and every browser's checkpoints |
 | [`construct-workshop`](../crates/construct-workshop) | Workshop's parts, built by the geometry kernel, for the browser; this server serves its page at `/workshop/` | [kernel.rs](../crates/construct-workshop/tests/kernel.rs) |
 | [app](../app) | The browser app on the demo's layout | [Real browsers](tests/browser/two_browsers.mjs) |
 | This folder | The web layer, the live channel, seed data, deployment | [Rules in-memory](tests/service.rs), [the swap](tests/swap.rs), [the checklist](tests/checklist.rs) |
@@ -85,6 +86,16 @@ node two_browsers.mjs
 The kit's and Construct's crates are tested from the repository root: `cargo test -p kit-core -p kit-ops -p kit-store -p kit-sync`, and `cargo test -p construct-model -p construct-regen -p construct-shapes -p construct-api --all-features`. The kit's services are their own workspace, `projects/kit/services`.
 
 After changing what the geometry builds, run `bash scripts/build-shapes.sh` and commit `app/pkg`. It needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.118.
+
+The kernel's package is not committed: it is about 29 MB (7.2 MB gzipped), and only a server built with the `kernel` feature serves it, from `app/pkg-kernel` or the folder `STACK_SHAPES_KERNEL` names, read when the page asks. Build it with `bash scripts/build-shapes-kernel.sh` (the same tools; a few minutes). To see it give the server's bytes, without a browser:
+
+```bash
+cd shapes-kernel
+cargo run --release --example answers -- tests/cases.json > /tmp/native-answers.txt
+node ../tests/browser/same_bytes.mjs /tmp/native-answers.txt
+```
+
+To run the checklist and the browser test on the kernel, build the package, then set `STACK_GEOMETRY=kernel` for `run-checklist.sh`, `run-browser-test.sh` and `two_browsers.mjs`: the scripts then build the server with its `kernel` feature.
 
 Run `cargo fmt` here, never `cargo fmt --all`: it follows the path dependencies back into the root workspace and reformats every other project.
 

@@ -5,6 +5,7 @@
 //   STACK_KILL   a command that kills the server the hard way
 //   STACK_START  a command that starts it again
 //   SHOTS        a folder for screenshots
+//   STACK_GEOMETRY  kernel when the server runs on the geometry kernel, as the page must then too
 import { execSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
@@ -285,6 +286,14 @@ const compared = await ben.evaluate(() => ({
 }));
 console.log(`      Ben's page compared ${compared.checked} bodies with the server's`);
 check(compared.mismatches.length === 0, "every body built in the browser matches the server's");
+const building = await ben.evaluate(() => ({
+  viewing: window.spare.viewing,
+  engine: window.spare.model.edition.engine,
+}));
+check(!building.viewing, `Ben's page builds the model's shapes itself, on the edition ${building.engine}`);
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  check(building.engine === 'construct.kernel', "on the geometry kernel's edition, with the kernel's own package");
+}
 
 console.log('\n   Parameters, through the edit log');
 // No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
