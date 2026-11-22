@@ -68,7 +68,7 @@
         "test": "the_stand_ins_bytes_never_change_within_an_edition"
       },
       "known_faults": ["no opening is cut, no layers, every shape a box"],
-      "replaced_by": "construct_regen::kernel::Kernel over the engine seam (piece A36, CON-A3-F1-P1), once the browser's build (construct-shapes, wasm32-unknown-unknown) can link the engine; until then the server's kernel setting is the only way to it"
+      "replaced_by": "construct_regen::kernel::Kernel over the engine seam (piece A36, CON-A3-F1-P1), which the browser runs too for a document on the kernel's edition (the server's shapes-kernel package, piece A51); the server's default moves to it once the checklist's kernel job is green on main"
     },
     {
       "program": "spare-construct",
@@ -129,6 +129,30 @@
       },
       "known_faults": [],
       "replaced_by": "the hosting job (CON-A4-F3-P1): Construct's Geometry trait builds a host with its hosted elements, and the regenerator rebuilds a wall when a door hosted in it changes"
+    },
+    {
+      "program": "spare-construct",
+      "place": "the browser's kernel package (the server's shapes-kernel), a wall's hosted doors",
+      "operation": "wall.straight with a door hosted on it, in the page",
+      "answered_by": "the page builds each element from its own recipe (build), as the regenerator does, so a wall it builds has no openings cut; the package's build_hosting cuts them, the same bytes as the server's kernel builder, for a caller that hands it the doors",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/shapes-kernel/tests/package.rs",
+        "test": "a_wall_with_two_doors_builds_as_the_kernel_builder_does"
+      },
+      "known_faults": [],
+      "replaced_by": "the hosting job (CON-A4-F3-P1): the page hands a wall its doors as the regenerator does"
+    },
+    {
+      "program": "spare-construct",
+      "place": "app/connect.js, the page's check of the shapes it builds against the server's checkpoints, for a document on the kernel's edition",
+      "operation": "every recipe the page builds with the kernel's package",
+      "answered_by": "the page compares body names, which are made of what the engine was asked, not of the solid it gave (the row for a body's bytes), so a display mesh that differs between the server and the browser is not caught there; the server's tests/browser/same_bytes.mjs compares every answer, meshes included, byte for byte, on the recipes of shapes-kernel/tests/cases.json",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/shapes-kernel/tests/package.rs",
+        "test": "a_recipe_builds_as_the_kernel_builder_does"
+      },
+      "known_faults": [],
+      "replaced_by": "the kernel's body record (chapter 24.4), whose name is made of the solid itself, so a checkpoint compares what was built"
     }
   ]
 }

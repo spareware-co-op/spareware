@@ -8,10 +8,13 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$here"
 . config/local.env
 target="${CARGO_TARGET_DIR:-$here/target}"
+# A server on the geometry kernel (STACK_GEOMETRY=kernel) is built with its kernel feature.
+features=()
+if [ "${STACK_GEOMETRY:-}" = kernel ]; then features=(--features kernel); fi
 
 services="$here/../../kit/services/Cargo.toml"
 
-cargo build --release -p spare-server --bins --examples
+cargo build --release -p spare-server --bins --examples "${features[@]}"
 pkill -u "$(id -u)" -x spare-server || true
 bash scripts/stack-wipe.sh
 # Pass or fail, end with how long TiKV took to sync its Raft log, to tell a slow disk from a slow
@@ -24,4 +27,4 @@ sleep 1
 "$target/release/spare-server" seed
 cargo test --release --manifest-path "$services" -p kit-store-tikv --test promises -- --ignored --test-threads=1
 cargo test --release --manifest-path "$services" -p kit-store-tikv --test load -- --ignored --nocapture
-cargo test --release -p spare-server --test checklist -- --ignored --nocapture --test-threads=1
+cargo test --release -p spare-server --test checklist "${features[@]}" -- --ignored --nocapture --test-threads=1

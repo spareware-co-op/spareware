@@ -51,8 +51,7 @@
     journeys: [], // the same, split: to the server, on to this page, then onto the screen
     log: [],
     three: null,
-    geometry: null, // the shape builder, or null if this browser couldn't load it
-    edition: null, // what it is
+    builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
     viewing: false, // this browser can't build the open model, so it draws what's stored
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
@@ -531,10 +530,11 @@
   }
 
   async function openModel(team, model) {
+    const builder = await builderFor(model);
     forgetTheOpenModel();
     C.model = model;
     C.team = team;
-    C.viewing = !canBuild(model);
+    C.viewing = !builder;
     C.readOnly = C.viewing;
     C.watching.add(model.id);
     send({ t: 'watch', document: model.id, since: C.head });
@@ -571,34 +571,53 @@
 
   // --- Shapes ---
 
-  async function loadGeometry() {
+  // Two packages build shapes, chosen by the engine a document's edition names: the geometry
+  // kernel's for a document built on it, the stand-in's otherwise. The stand-in's loads with the
+  // page; the kernel's, far larger, the first time a document names it. Each loads once.
+  const KERNEL = 'construct.kernel';
+  const STAND_IN_PACKAGE = '/shapes/construct_shapes.js';
+  const KERNEL_PACKAGE = '/shapes/kernel/construct_shapes_kernel.js';
+
+  function loadGeometry(edition) {
+    const path = edition?.engine === KERNEL ? KERNEL_PACKAGE : STAND_IN_PACKAGE;
+    if (!C.builders.has(path)) C.builders.set(path, loadPackage(path));
+    return C.builders.get(path);
+  }
+
+  async function loadPackage(path) {
     try {
-      const shapes = await import('/shapes/construct_shapes.js');
+      const shapes = await import(path);
       await shapes.default();
-      C.edition = JSON.parse(shapes.edition());
-      C.geometry = shapes;
+      // built: recipe text -> what it builds to, which never changes
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
+      return null;
     }
   }
 
-  function canBuild(model) {
-    const wanted = model.edition;
-    const have = C.edition;
-    return (
-      C.geometry !== null &&
-      wanted.engine === have.engine &&
-      wanted.version === have.version &&
-      wanted.name_scheme === have.name_scheme
+  /** A value as text with every object's keys in order, so two editions compare field by field. */
+  const canonical = (value) =>
+    JSON.stringify(value, (_, v) =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : v,
     );
+
+  /**
+   * The package that builds `model`'s edition, or null: then this browser shows what's stored. Two
+   * editions are the same only when every field is, the engine's report included (FORMAT.md, "A
+   * document").
+   */
+  async function builderFor(model) {
+    const builder = await loadGeometry(model.edition);
+    return builder && canonical(builder.edition) === canonical(model.edition) ? builder : null;
   }
 
-  const built = new Map(); // recipe text -> what it builds to, which never changes
-
-  function buildShape(recipe) {
+  function buildShape(builder, recipe) {
     const text = JSON.stringify(recipe);
-    if (!built.has(text)) built.set(text, JSON.parse(C.geometry.build(text)));
-    return built.get(text);
+    if (!builder.built.has(text)) builder.built.set(text, JSON.parse(builder.shapes.build(text)));
+    return builder.built.get(text);
   }
 
   /** What the server stored, as `buildShape` gives it. */
@@ -617,9 +636,10 @@
     }
   }
 
-  function shapeFor(model, record) {
+  async function shapeFor(model, record) {
     const row = C.models.get(model);
-    return row && canBuild(row) ? buildShape(record.recipe) : storedShape(model, record.id);
+    const builder = row && (await builderFor(row));
+    return builder ? buildShape(builder, record.recipe) : storedShape(model, record.id);
   }
 
   /** The box around a piece in the model. */
