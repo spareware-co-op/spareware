@@ -21,7 +21,8 @@
 mod kernel_suite;
 
 use engine_geometry::value::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
+    Answer, Cut, DisplayMesh, Edition, Engine, EngineError, GridPlane, Profile, Section, Tolerance,
+    Volume,
 };
 use engine_geometry::value::grid::GridStep;
 use std::sync::{Arc, Mutex};
@@ -160,6 +161,10 @@ impl Engine for Cuboids {
         }
         Ok(mesh)
     }
+
+    fn section(&mut self, _: &Cuboid, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
 }
 
 #[test]
@@ -238,6 +243,10 @@ impl Engine for Recording {
 
     fn mesh(&mut self, s: &Cuboid) -> Result<DisplayMesh, EngineError> {
         Cuboids.mesh(s)
+    }
+
+    fn section(&mut self, s: &Cuboid, plane: &GridPlane) -> Result<Cut, EngineError> {
+        Cuboids.section(s, plane)
     }
 }
 
@@ -338,6 +347,9 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
         }
         fn mesh(&mut self, _: &Cuboid) -> Result<DisplayMesh, EngineError> {
             Err(unsupported("mesh"))
+        }
+        fn section(&mut self, _: &Cuboid, _: &GridPlane) -> Result<Cut, EngineError> {
+            Err(unsupported("section"))
         }
     }
     let k = construct_regen::kernel::Kernel::new(Refusing).unwrap();
