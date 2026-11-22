@@ -14,6 +14,7 @@ server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
+    "dep:construct-formulas",
     "dep:construct-params",
     "dep:construct-types",
     "dep:construct-levels",
@@ -26,6 +27,8 @@ kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
+# The one formula language: a parameter with a formula is worked out when it is read.
+construct-formulas = { path = "../construct-formulas", optional = true }
 construct-params = { path = "../construct-params", optional = true }
 construct-types = { path = "../construct-types", optional = true }
 # An element's place and a top-tied wall's height read its levels.

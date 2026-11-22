@@ -618,6 +618,81 @@ await ben.waitForSelector('g.element[data-id="D-101"]');
 check((await ben.locator('#h-view').textContent()) === 'Level 1 plan', 'and Level 1 plan shows Level 1 again');
 await shot(ben, 'ben-levels');
 
+console.log('\n   Formulas, on the page');
+// A parameter given by a formula of others: defined in the Project parameters dialog, worked out by
+// the server wherever it is read, shown read-only with its formula, and following its inputs.
+const openParams = async () => {
+  await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+  await ben.locator('#ribbon [data-act="stackparams"]').click();
+  await ben.waitForSelector(`${manager} [data-key="def-name"]`);
+};
+const define = async (name, holder, { standard = '', formula = '' } = {}) => {
+  await ben.locator(`${manager} [data-key="def-name"]`).fill(name);
+  await ben.locator(`${manager} [data-key="def-kind"]`).selectOption('length');
+  await ben.locator(`${manager} [data-key="def-holder"]`).selectOption(holder);
+  await ben.locator(`${manager} [data-key="def-default"]`).fill(standard);
+  await ben.locator(`${manager} [data-key="def-formula"]`).fill(formula);
+  await ben.locator(`${manager} [data-key="def-cat:300"]`).check();
+  await ben.locator(`${manager} [data-key="def-go"]`).click();
+};
+const parameterNamed = async (name) => (await asAnna('project-parameters')).parameters.find((p) => p.name === name);
+// Once it is defined and bound, the page empties the form for the next one.
+const formEmpty = () => ben.waitForFunction((root) => document.querySelector(`${root} [data-key="def-name"]`)?.value === '', manager);
+await openParams();
+await define('Jamb', 'type', { standard: '40' });
+await until(() => parameterNamed('Jamb'), (found) => found && found.categories.length === 1, 'Jamb is bound');
+await formEmpty();
+await define('Clear', 'instance', { formula: '2*Jamb+820mm' });
+const clearDef = await until(() => parameterNamed('Clear'), (found) => found && found.categories.length === 1, 'Clear is bound');
+await formEmpty();
+check(clearDef.formula === '2 * Jamb + 820 mm', 'a formula typed in the dialog is stored in its one spelling, by the server');
+await ben.waitForFunction(
+  ([root, id]) => document.querySelector(`${root} [data-formula="${id}"]`)?.textContent === 'Formula: 2 * Jamb + 820 mm',
+  [manager, clearDef.id],
+);
+pass('and the dialog shows it');
+await define('Bad', 'instance', { formula: 'Nope + 1 mm' });
+await ben.waitForSelector(`${manager} [data-problem="define"]`);
+check((await ben.locator(`${manager} [data-problem="define"]`).textContent()) === 'There is no parameter called Nope.', "a formula naming no parameter is refused in the server's words");
+await problemIs('define', 'beside the form');
+await closeDialog();
+
+const clear = (view) => view.parameters.find((p) => p.name === 'Clear');
+await until(() => door('D-103'), (view) => clear(view)?.shown === '900 mm' && clear(view).from === 'formula', 'D-103 reads its clear width');
+pass("the server works the formula out for a door, as Anna reads it: 2 * 40 mm + 820 mm");
+await pick('D-103');
+await ben.waitForFunction((id) => document.querySelector(`#pv-side [data-formula="${id}"]`)?.textContent === '= 2 * Jamb + 820 mm', clearDef.id);
+check((await ben.locator(`#pv-side input[data-a="${clearDef.id}"]`).count()) === 0, "Ben's palette shows the formula's value read-only, with its formula");
+
+// An input the formula reads changes on the type: the value follows, for both of them.
+const jambDef = await parameterNamed('Jamb');
+await openTypes();
+const jamb = typeSection('Flush door').locator(`input[data-key$=":${jambDef.id}"]`);
+await jamb.fill('50');
+await jamb.press('Enter');
+await until(() => door('D-103'), (view) => clear(view).shown === '920 mm', 'the clear width follows the jamb');
+pass('a value the formula reads, set on the type, reaches the formula of each door of it');
+await closeDialog();
+await ben.waitForFunction(() => /Clear\s*920 mm/.test(document.querySelector('#pv-side').textContent));
+pass("and Ben's palette shows the new value without being asked");
+await undoRedo('Setting a value a formula reads', () => door('D-103'), (view) => clear(view).shown === '900 mm', (view) => clear(view).shown === '920 mm');
+
+// The formula itself changes in the dialog; one the server can't work out is refused beside it.
+await openParams();
+const formulaField = ben.locator(`${manager} [data-key="formula:${clearDef.id}"]`);
+await formulaField.fill('2 * Jamb + 1 m');
+await formulaField.press('Enter');
+await until(() => door('D-103'), (view) => clear(view).shown === '1100 mm', 'the new formula reaches the door');
+pass('a changed formula reaches every door that reads it');
+await formulaField.fill('Jamb / 0');
+await formulaField.press('Enter');
+await ben.waitForSelector(`${manager} [data-problem="formula:${clearDef.id}"]`);
+await problemIs(`formula:${clearDef.id}`, "a formula that can't be worked out is refused in the server's words, beside the formula");
+check((await door('D-103').then(clear)).shown === '1100 mm', 'and changes nothing');
+await closeDialog();
+await undoRedo('Changing a formula', () => door('D-103'), (view) => clear(view).shown === '920 mm', (view) => clear(view).shown === '1100 mm');
+await shot(ben, 'ben-formulas');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");

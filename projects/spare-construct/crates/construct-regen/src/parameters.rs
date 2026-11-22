@@ -15,21 +15,29 @@
 //!   value, then its type's, then the default) when it has a type, else its own value, then the
 //!   default. A length goes in as the whole millimetres the stand-in's recipes take.
 //! - Records of kind `type` and [`TABLE_KIND`] have no shape ([`has_shape`]).
+//! - A parameter whose definition carries a formula is worked out whenever it is read, never
+//!   stored: [`Context::worked`] for an element, [`Context::type_worked`] for a type, with
+//!   construct-formulas' `work_out` over the values of the holder's other parameters, in the order
+//!   they depend on each other. [`Context::value_of`] and [`Context::view`] answer with it, so a
+//!   shape, the properties panel and a command read the same value; a formula that can't be
+//!   worked out is its reason, and a shape that reads it is the build failure `BadParameter`.
+//!   A formula's inputs are the element's own record, its type's and the parameter table, which
+//!   are what the regenerator's `reads` table already rebuilds an element on.
 //!
-//! Depends on construct-model (records), construct-categories, construct-params and
-//! construct-types. Interim: [`recipe_number`] turns a length into the stand-in's whole-millimetre
+//! Depends on construct-model (records), construct-categories, construct-params,
+//! construct-formulas and construct-types. Interim: [`recipe_number`] turns a length into the stand-in's whole-millimetre
 //! recipe number; it changes with the kernel's recipes (piece A39 makes lengths the kernel's grid
 //! unit, job 1.1 the kernel seam), and nothing else here knows the stand-in's units.
 //!
 //! Not here yet, with their places: the document's own subcategories (the categories command, a
 //! later job, feeds [`Context::categories`]); display settings per project (typed text is read
-//! with construct-params' metric [`Units`] default, [`Context::units`]); formulas (job 2.5) fill
-//! a parameter from others before [`value_of`] answers.
+//! with construct-params' metric [`Units`] default, [`Context::units`]).
 
 use construct_categories::{CategoryError, CategoryId, CategoryTable, category_of_kind};
+use construct_formulas::{FormulaError, work_out};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
-use construct_params::{Holder, ProjectParams, Units, Value, Values};
+use construct_params::{Definition, Holder, ProjectParams, Units, Value, Values};
 use construct_types::{ElementType, Instance, Parameters, Source, Types, resolve};
 use kit_core::Id;
 use kit_store::{Place, Reader, StoreError, read_row};
@@ -233,13 +241,19 @@ impl Context {
         Instance::from_props(&props, &self.params, &types).map_err(|e| e.to_string())
     }
 
-    /// The value an element reads for a parameter: through construct-types' [`resolve`] (its own,
-    /// then its type's, then the default) when it has a type; else its own, then the default.
-    /// `None` when nothing holds one.
-    ///
-    /// # Errors
-    /// The refusal, in words: a parameter that is not defined, or one its type lacks.
-    pub fn value_of(
+    /// The category an element is in: the one it records, else its kind's.
+    #[must_use]
+    pub fn category_of_element(element: &Element) -> Option<CategoryId> {
+        match stored_category(element) {
+            Some(category) => Some(category),
+            None if has_shape(element) => category_of(&element.recipe).ok(),
+            None => None,
+        }
+    }
+
+    /// The value an element reads for a parameter as it is stored, before any formula: its own,
+    /// then its type's, then the default.
+    fn stored_value_of(
         &self,
         element: &Element,
         ty: Option<&ElementType>,
@@ -260,17 +274,108 @@ impl Context {
             .or_else(|| self.params.default_of(id).cloned()))
     }
 
+    /// Every parameter with a formula that an element of its category has, worked out with
+    /// construct-formulas' `work_out` over the values it reads for the others (its own, its
+    /// type's, the defaults), in the order they depend on each other: each one's value, or why
+    /// its formula gives none (one that uses a parameter whose formula fails says so, by name).
+    ///
+    /// # Errors
+    /// The refusal of a stored value or of the element's type, in words.
+    pub fn worked(
+        &self,
+        element: &Element,
+        ty: Option<&ElementType>,
+    ) -> Result<BTreeMap<Id, Result<Value, FormulaError>>, String> {
+        let Some(category) = Self::category_of_element(element) else {
+            return Ok(BTreeMap::new());
+        };
+        let applicable = self.table.parameters_of(&self.categories, category);
+        if applicable.iter().all(|a| a.definition.formula().is_none()) {
+            return Ok(BTreeMap::new());
+        }
+        let mut given = Values::new();
+        let mut defs: Vec<Definition> = Vec::with_capacity(applicable.len());
+        for parameter in applicable {
+            let def = parameter.definition;
+            if def.formula().is_none()
+                && let Some(value) = self.stored_value_of(element, ty, def.id())?
+            {
+                given.set(def, value).map_err(|e| e.to_string())?;
+            }
+            defs.push(def.clone());
+        }
+        Ok(work_out(&defs, &given))
+    }
+
+    /// Every parameter with a formula that a type holds, worked out over the values the type
+    /// holds for the others, or their defaults. A type parameter's formula uses only type
+    /// parameters (construct-formulas' rule), so this is the value every element of the type
+    /// reads.
+    ///
+    /// # Errors
+    /// The refusal of a stored value, in words, which a type construct-types read never gives.
+    pub fn type_worked(
+        &self,
+        ty: &ElementType,
+    ) -> Result<BTreeMap<Id, Result<Value, FormulaError>>, String> {
+        let held: Vec<Definition> = self
+            .table
+            .parameters_of(&self.categories, ty.category())
+            .into_iter()
+            .filter(|a| a.holder == Holder::Type)
+            .map(|a| a.definition.clone())
+            .collect();
+        if held.iter().all(|def| def.formula().is_none()) {
+            return Ok(BTreeMap::new());
+        }
+        let mut given = Values::new();
+        for def in held.iter().filter(|def| def.formula().is_none()) {
+            let value = ty
+                .value(def.id())
+                .or_else(|| self.params.default_of(def.id()));
+            if let Some(value) = value {
+                given.set(def, value.clone()).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(work_out(&held, &given))
+    }
+
+    /// The value an element reads for a parameter: worked out from its formula when it has one
+    /// ([`Context::worked`]); else through construct-types' [`resolve`] (its own, then its
+    /// type's, then the default) when it has a type; else its own, then the default. `None` when
+    /// nothing holds one.
+    ///
+    /// # Errors
+    /// The refusal, in words: a parameter that is not defined, one its type lacks, or why its
+    /// formula gives no value.
+    pub fn value_of(
+        &self,
+        element: &Element,
+        ty: Option<&ElementType>,
+        id: &Id,
+    ) -> Result<Option<Value>, String> {
+        if self
+            .params
+            .definition(id)
+            .is_some_and(|def| def.formula().is_some())
+        {
+            return match self.worked(element, ty)?.remove(id) {
+                Some(Ok(value)) => Ok(Some(value)),
+                Some(Err(why)) => Err(why.message),
+                None => Err(format!("parameter {id} is not one of this element's")),
+            };
+        }
+        self.stored_value_of(element, ty, id)
+    }
+
     /// What a page shows of an element: its category, its type, and every parameter its category
     /// has with the value it reads, where that came from, and the value shown in units.
     ///
     /// # Errors
     /// The refusal of a stored value or of the element's type, in words.
     pub fn view(&self, element: &Element, ty: Option<&ElementType>) -> Result<ElementView, String> {
-        let category = match stored_category(element) {
-            Some(category) => Some(category),
-            None if has_shape(element) => category_of(&element.recipe).ok(),
-            None => None,
-        };
+        let category = Self::category_of_element(element);
+        let mut worked = self.worked(element, ty)?;
         let mut parameters = Vec::new();
         let applicable = category
             .map(|category| self.table.parameters_of(&self.categories, category))
@@ -282,8 +387,14 @@ impl Context {
         let own = self.own_values(element, None)?;
         for parameter in applicable {
             let def = parameter.definition;
-            let (value, from) = match (ty, &instance) {
-                (Some(ty), Some(instance)) => {
+            let mut reason = None;
+            let (value, from) = match (worked.remove(def.id()), ty, &instance) {
+                (Some(Ok(value)), _, _) => (Some(value), "formula"),
+                (Some(Err(why)), _, _) => {
+                    reason = Some(why.message);
+                    (None, "formula")
+                }
+                (None, Some(ty), Some(instance)) => {
                     let resolved =
                         resolve(&self.params, ty, instance, def.id()).map_err(|e| e.to_string())?;
                     let from = match resolved.from {
@@ -294,7 +405,7 @@ impl Context {
                     };
                     (resolved.value.cloned(), from)
                 }
-                _ => match (own.get(def.id()), parameter.default) {
+                (None, ..) => match (own.get(def.id()), parameter.default) {
                     (Some(value), _) => (Some(value.clone()), "instance"),
                     (None, Some(value)) => (Some(value.clone()), "default"),
                     (None, None) => (None, "unset"),
@@ -315,6 +426,8 @@ impl Context {
                 value: value.map(|value| value.stored()),
                 shown,
                 from,
+                formula: def.formula().map(str::to_owned),
+                reason,
             });
         }
         Ok(ElementView {
@@ -381,8 +494,14 @@ pub struct ParameterView {
     pub value: Option<String>,
     /// The same value shown in the document's units, such as `820 mm`.
     pub shown: Option<String>,
-    /// Where the value came from: `instance`, `type`, `default` or `unset`.
+    /// Where the value came from: `instance`, `type`, `default` or `unset`; `formula` when its
+    /// formula gives it, which a person can't set.
     pub from: &'static str,
+    /// Its formula, in its one spelling, when it has one.
+    pub formula: Option<String>,
+    /// Why its formula gives no value, in construct-formulas' words: one it uses that fails is
+    /// named ("Width fails: ..."), so a parameter waiting on another says which.
+    pub reason: Option<String>,
 }
 
 /// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`] and its level

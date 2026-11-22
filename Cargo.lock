@@ -514,6 +514,7 @@ dependencies = [
  "construct-clash",
  "construct-elements",
  "construct-families",
+ "construct-formulas",
  "construct-interop",
  "construct-levels",
  "construct-model",
@@ -678,6 +679,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-formulas",
  "construct-levels",
  "construct-model",
  "construct-params",

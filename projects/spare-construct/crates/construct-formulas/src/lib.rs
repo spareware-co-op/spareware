@@ -42,7 +42,8 @@
 //! What it holds:
 //!
 //! - [`parse`]: text to an [`Expr`], or a [`FormulaError`] saying where it stopped; [`canonical`]:
-//!   a formula's one spelling, the form it is stored in.
+//!   a formula's one spelling, the form it is stored in; [`rename`]: a formula with a parameter it
+//!   uses renamed, in that spelling, so renaming a parameter can rewrite the formulas that use it.
 //! - [`value_of`]: one value of a kind, read in the light of the values it can see.
 //! - [`evaluate`]: a whole table of texts ([`Entry`]), in any order, with loops refused.
 //! - [`define`], [`check`] and [`work_out`]: a parameter definition that carries a formula, the
@@ -62,7 +63,7 @@ mod table;
 mod types;
 
 pub use eval::value_of;
-pub use parse::{Expr, Op, canonical, parse};
+pub use parse::{Expr, Op, canonical, parse, rename};
 pub use table::{Entry, check, define, evaluate, work_out};
 
 use std::fmt;
