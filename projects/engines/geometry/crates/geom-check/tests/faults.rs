@@ -477,7 +477,7 @@ fn a_vertex_two_shells_share_is_not_a_solids() {
     assert_eq!(f, [corner_in_two_shells()]);
     assert_eq!(
         f[0].to_string(),
-        "group 1, vertex 7: the vertex of a solid has corners in two shells (fin 27)"
+        "group 1, vertex 7: the vertex of a solid or a sheet has corners in two shells (fin 27)"
     );
     assert_eq!(faults(&r, BodyKind::General), []);
 }
@@ -519,7 +519,7 @@ fn a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids() {
         "{f:?}"
     );
     assert_eq!(f[0].at, Entity::Vertex(ix(v)));
-    let what = "the faces round the vertex of a solid make more than one fan";
+    let what = "the faces round the vertex of a solid or a sheet make more than one fan";
     assert!(
         f[0].to_string()
             .starts_with(&format!("group 1, vertex {v}: {what} (fin ")),
@@ -550,6 +550,105 @@ fn fans_are_all_that_is_wrong_with_a_shell_pinched_twice() {
         assert!(has(&f, FaultKind::VertexFans, at), "{p:?}: {f:?}");
     }
     assert_eq!(faults(&r, BodyKind::General), []);
+}
+
+/// A bow tie: two triangles of a sheet touching only at vertex 0, each the one face of a shell
+/// of its own in the outside void. Each shell is a disc, so each alone is a sheet; vertex 0's
+/// first corner is where fin 2, the first triangle's last, ends, and the first of the second's
+/// where fin 5 ends.
+fn bow_tie() -> Rows {
+    let mut r = Rows::empty();
+    for p in [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, 10, 0],
+        [-10, 0, 0],
+        [-10, -10, 0],
+    ] {
+        r.vertex(p);
+    }
+    let (one, two) = (r.shell(0), r.shell(0));
+    faces_into(&mut r, one, &[&[0, 1, 2]]);
+    faces_into(&mut r, two, &[&[0, 3, 4]]);
+    r
+}
+
+/// The rows of a sheet of squares of side 10 in the plane z = 0, each named by its least corner
+/// in squares and counter-clockwise from above, in one shell in the outside void.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    reason = "test code: a few squares near the origin, and a few dozen rows"
+)]
+fn squares(cells: &[[i64; 2]]) -> Rows {
+    let mut points: Vec<[i64; 3]> = Vec::new();
+    let mut faces: Vec<Vec<u32>> = Vec::new();
+    for &[x, y] in cells {
+        let ring = [[0, 0], [1, 0], [1, 1], [0, 1]].map(|[i, j]| {
+            let p = [10 * (x + i), 10 * (y + j), 0];
+            let k = points.iter().position(|&q| q == p).unwrap_or_else(|| {
+                points.push(p);
+                points.len() - 1
+            });
+            k as u32
+        });
+        faces.push(ring.to_vec());
+    }
+    let mut r = Rows::empty();
+    for &p in &points {
+        r.vertex(p);
+    }
+    let s = r.shell(0);
+    let rings: Vec<&[u32]> = faces.iter().map(Vec::as_slice).collect();
+    faces_into(&mut r, s, &rings);
+    r
+}
+
+/// Seven squares in a strip whose first and last touch only at a corner, (10, 10, 0): one shell
+/// of a sheet, whose faces round that corner make two fans.
+const PINCHED_SHEET: [[i64; 2]; 7] = [[0, 0], [0, -1], [1, -1], [2, -1], [2, 0], [2, 1], [1, 1]];
+
+#[test]
+fn a_vertex_two_shells_of_a_sheet_share_is_not_a_sheets() {
+    // Two discs touching at one vertex make the sheet non-manifold there (chapter 8.1, mixed and
+    // non-manifold), as two solids touching at one do: the body is general, never a sheet.
+    let r = bow_tie();
+    let f = faults(&r, BodyKind::Sheet);
+    assert_eq!(
+        f,
+        [Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(0))).with(Entity::Fin(ix(5)))]
+    );
+    assert_eq!(
+        f[0].to_string(),
+        "group 1, vertex 0: the vertex of a solid or a sheet has corners in two shells (fin 5)"
+    );
+    assert_eq!(faults(&r, BodyKind::General), []);
+}
+
+#[test]
+fn a_sheet_whose_faces_make_two_fans_at_a_vertex_is_not_a_sheets() {
+    // One shell of a sheet pinched at one vertex: its two fans there make the body general. Its
+    // characteristic plus its boundary cycles is odd too, as one pinch makes it.
+    let r = squares(&PINCHED_SHEET);
+    let v = vertex_at(&r, [10, 10, 0]);
+    let f = faults(&r, BodyKind::Sheet);
+    assert_eq!(
+        kinds(&f),
+        [FaultKind::VertexFans, FaultKind::Euler],
+        "{f:?}"
+    );
+    assert_eq!(f[0].at, Entity::Vertex(ix(v)));
+    assert_eq!(faults(&r, BodyKind::General), []);
+}
+
+#[test]
+fn a_sheet_whose_every_vertex_is_one_fan_passes() {
+    // The strip without its last square does not pinch: each vertex on its boundary is one open
+    // fan. Four squares round a vertex are one closed fan there, inside the sheet.
+    assert_eq!(faults(&squares(&PINCHED_SHEET[..6]), BodyKind::Sheet), []);
+    let r = squares(&[[0, 0], [1, 0], [1, 1], [0, 1]]);
+    assert_eq!(r.vertices.len(), 9);
+    assert_eq!(faults(&r, BodyKind::Sheet), []);
 }
 
 #[test]
