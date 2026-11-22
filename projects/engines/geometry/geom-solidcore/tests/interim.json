@@ -120,15 +120,17 @@
     },
     {
       "program": "spare-construct",
-      "place": "construct-regen's regenerator, a wall's hosted doors",
-      "operation": "wall.straight with a door hosted on it, through the server",
-      "answered_by": "the regenerator builds each element from its own recipe (Geometry::build), so a stored wall has no openings cut yet; Kernel::build_hosting cuts them for a caller that hands it the doors",
+      "place": "construct-regen's stand_in::Boxes, a wall built with its hosted doors (Geometry::build_hosting)",
+      "operation": "wall.straight with doors hosted on it, through the regenerator",
+      "answered_by": "the stand-in builds the wall alone, byte for byte as Geometry::build does, and cuts no opening; on the kernel's edition the regenerator's same call is Kernel::build_hosting, which cuts them (the server's tests/kernel.rs, two_doors_placed_through_commands_cut_their_wall_and_move_with_it)",
       "pinned_by": {
-        "file": "projects/spare-construct/server/tests/kernel.rs",
-        "test": "the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face"
+        "file": "projects/spare-construct/crates/construct-regen/src/stand_in.rs",
+        "test": "a_wall_with_a_door_is_the_wall_alone"
       },
-      "known_faults": [],
-      "replaced_by": "the hosting job (CON-A4-F3-P1): Construct's Geometry trait builds a host with its hosted elements, and the regenerator rebuilds a wall when a door hosted in it changes"
+      "known_faults": [
+        "no opening is cut in a model on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel, as the stand-in's own row says, once the browser's build can link the engine"
     }
   ]
 }
