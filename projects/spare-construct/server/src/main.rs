@@ -5,6 +5,7 @@
 
 use clap::{Parser, Subcommand};
 use construct_api::cloud::{POLICY, ProjectCommands, SCHEMA};
+use construct_model::geometry::Geometry;
 use construct_model::keys::list;
 use construct_model::rows::Project;
 use construct_regen::regenerator::Regenerator;
@@ -58,11 +59,15 @@ fn plain(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-fn build(settings: Settings, kv: Tikv, files: Files) -> Result<Shared, StoreError> {
+fn build(
+    settings: Settings,
+    kv: Tikv,
+    files: Files,
+    geometry: Arc<dyn Geometry>,
+) -> Result<Shared, StoreError> {
     let cedar = Cedar::new(POLICY, SCHEMA).map_err(StoreError::Damaged)?;
     let access: Arc<Access<Tikv>> = Arc::new(Access::new(kv.clone(), cedar));
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-    let geometry = construct_regen::geometry();
     let directory = Orderers::new(
         kv.clone(),
         Arc::new(DirectoryCommands::new(access.clone())),
@@ -116,8 +121,8 @@ async fn serve(app: Shared, kv: Tikv) -> Result<(), String> {
 }
 
 /// Checks the directory's log and every project's, and rebuilds every shape to compare it.
-async fn verify(kv: &Tikv, files: Files) -> Result<(), String> {
-    let regen = Regenerator::new(kv.clone(), files, construct_regen::geometry());
+async fn verify(kv: &Tikv, files: Files, geometry: Arc<dyn Geometry>) -> Result<(), String> {
+    let regen = Regenerator::new(kv.clone(), files, geometry);
     let mut snapshot = kv.snapshot().await.map_err(plain)?;
     let check = verify_log(&mut snapshot, &Scope::Directory).await?;
     println!("directory: {} edits, ok", check.entries);
@@ -159,19 +164,20 @@ async fn run(cli: Cli) -> Result<(), String> {
     let kv = Tikv::connect(&settings.pd).await.map_err(plain)?;
     let files = Files::open(&settings.files_url).map_err(plain)?;
     let backups = Files::open(&settings.backup_url).map_err(plain)?;
+    let geometry = spare_server::geometry::geometry(settings.geometry)?;
     match cli.command {
         Command::Serve => {
-            let app = build(settings, kv.clone(), files).map_err(plain)?;
+            let app = build(settings, kv.clone(), files, geometry).map_err(plain)?;
             serve(app, kv).await
         }
         Command::Seed => {
-            let app = build(settings, kv.clone(), files).map_err(plain)?;
+            let app = build(settings, kv.clone(), files, geometry).map_err(plain)?;
             seed::seed(&kv, &app.service).await.map_err(plain)
         }
-        Command::Verify => verify(&kv, files).await,
+        Command::Verify => verify(&kv, files, geometry).await,
         Command::Regenerate { project } => {
             let project = Id::parse(&project).map_err(plain)?;
-            let regen = Regenerator::new(kv.clone(), files, construct_regen::geometry());
+            let regen = Regenerator::new(kv.clone(), files, geometry);
             let pass = regen.rebuild(&project).await.map_err(plain)?;
             println!("{project}: regenerated through {}", pass.through);
             Ok(())
