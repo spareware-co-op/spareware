@@ -245,7 +245,7 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
     assert_eq!(view["type"], Value::Null);
     let sill = &view["parameters"][0];
     assert_eq!(sill["name"], "Sill height");
-    assert_eq!(sill["value"], "length:150");
+    assert_eq!(sill["value"], "length:q0:960000");
     assert_eq!(sill["shown"], "150 mm");
     assert_eq!(sill["from"], "instance");
     let other = s
@@ -261,7 +261,7 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
     let record = s.record(&anna, &project, &model, &hash).await.unwrap();
     assert_eq!(record.props["fire rating"], "FD30");
     assert_eq!(record.props["@category"], "300");
-    assert_eq!(record.props["P-sill"], "length:150");
+    assert_eq!(record.props["P-sill"], "length:q0:960000");
 
     // Someone who can't read the model can't read its parameters either.
     assert!(refused(

@@ -46,7 +46,7 @@ Every record a command writes carries its category, and an element of a type nam
 | --- | --- | --- |
 | `@category` | Every record written from this version | The category's ID ([construct-categories](../construct-categories/FORMAT.md)) in decimal. An element's is its kind's: the recipe's `op`, with its `owner` in front when that is not `construct` (`workshop.part`). A type's is its own |
 | `@type` | An element of a type | The type's permanent ID. The type is of the element's category |
-| a parameter's ID | An element, or a type | Its value of that parameter, in its stored text (`length:820`). An element holds only parameters each instance holds; a type only those the type holds |
+| a parameter's ID | An element, or a type | Its value of that parameter, in its stored text (`length:q0:5248000`). An element holds only parameters each instance holds; a type only those the type holds |
 
 Any other key is plain text, kept and read as it is, so a record written before this version still reads. An element reads a parameter from its own value, then its type's, then the binding's default ([construct-types' `resolve`](../construct-types/src/resolve.rs)). An element with no type has the instance parameters its category is bound to.
 

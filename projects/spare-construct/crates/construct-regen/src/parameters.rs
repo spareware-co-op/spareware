@@ -418,12 +418,23 @@ pub fn reads_parameters(recipe: &Recipe) -> bool {
 }
 
 /// A value as the number a stand-in recipe takes: a length in whole millimetres, a whole number
-/// as it is. Interim (see the module header): the one place that knows the recipe's unit.
-fn recipe_number(value: &Value) -> Option<i64> {
+/// as it is. Interim (see the module header): the one place that knows the recipe's unit. A
+/// length that is not a whole number of millimetres is a build failure naming the parameter.
+fn recipe_number(value: &Value, name: &str, id: &Id) -> Result<i64, GeometryError> {
     match value {
-        Value::Length(length) => Some(length.mm()),
-        Value::Whole(n) => Some(*n),
-        _ => None,
+        Value::Length(length) => length.whole_mm().ok_or_else(|| {
+            failure(
+                "BadParameter",
+                format!(
+                    "{name} reads parameter {id}, which is {length}: the stand-in builder takes whole millimetres only"
+                ),
+            )
+        }),
+        Value::Whole(n) => Ok(*n),
+        _ => Err(failure(
+            "BadParameter",
+            format!("{name} reads parameter {id}, which is not a length or a whole number"),
+        )),
     }
 }
 
@@ -463,12 +474,7 @@ pub fn filled(
                 format!("{name} reads parameter {id}, which has no value"),
             ));
         };
-        let Some(number) = recipe_number(&value) else {
-            return Err(failure(
-                "BadParameter",
-                format!("{name} reads parameter {id}, which is not a length or a whole number"),
-            ));
-        };
+        let number = recipe_number(&value, name, &id)?;
         *arg = serde_json::Value::from(number);
     }
     Ok(out)

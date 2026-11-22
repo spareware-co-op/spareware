@@ -283,7 +283,7 @@ await setSill('3 kg');
 await ben.waitForFunction(() => document.getElementById('toast-m').textContent.includes('Sill height'));
 pass("a wrong unit is turned back with the server's reason");
 await setSill('0.15 m');
-await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
 pass("Anna's browser has Ben's value through the edit log, stored as its parameter's text");
 await ben.waitForFunction((field) => document.querySelector(field)?.value === '150 mm', sill);
 pass('and Ben sees it in units');
