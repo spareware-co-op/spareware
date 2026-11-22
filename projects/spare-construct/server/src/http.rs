@@ -130,6 +130,15 @@ pub fn routes(app: Shared) -> Router {
             get(parameters),
         )
         .route(
+            "/api/projects/{project}/models/{model}/catalog",
+            get(catalog),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/project-parameters",
+            get(project_parameters),
+        )
+        .route("/api/projects/{project}/models/{model}/types", get(types))
+        .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
         )
@@ -431,6 +440,48 @@ async fn parameters(
     Ok(Json(
         app.service
             .parameters(&person, &id(&project)?, &id(&model)?, &id(&element)?)
+            .await?,
+    ))
+}
+
+async fn catalog(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .catalog(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn project_parameters(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .project_parameters(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct TypesQuery {
+    category: Option<u32>,
+}
+
+async fn types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+    Query(q): Query<TypesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .types(&person, &id(&project)?, &id(&model)?, q.category)
             .await?,
     ))
 }

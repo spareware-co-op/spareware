@@ -535,3 +535,13 @@ fn the_default_is_in_the_stored_form_and_read_back_checked() {
         Err(ProjectError::BadDefault(_))
     ));
 }
+
+#[test]
+fn every_parameter_is_listed_bound_or_not_by_name() {
+    let table_with = with_params()
+        .bind(&table(), &id("mark"), &[WALLS], Holder::Instance, None)
+        .unwrap();
+    let names: Vec<&str> = table_with.definitions().iter().map(|d| d.name()).collect();
+    assert_eq!(names, ["cost code", "Fire rating", "Mark"]);
+    assert_eq!(ProjectParams::new().definitions().len(), 0);
+}
