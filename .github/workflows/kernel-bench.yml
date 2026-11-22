@@ -140,8 +140,10 @@ env:
   # Gungraun's soft limits for the measures it gates itself (geom_bench::CALLGRIND_LIMITS and
   # DHAT_LIMITS; a test checks they agree). They replace the tree's own. The miss counts are not
   # here: geom-bench-counts lists them from the summaries and judges them through estimated cycles.
+  # DHAT's heap peak is "At t-gmax"; Gungraun's "Maximum bytes" is a sum of moments, not a peak,
+  # so it is listed but not gated (decision 32.110).
   CALLGRIND_LIMITS: "ir=5%,estimatedcycles=5%"
-  DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
+  DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%"
   # What is compared: a pull request's base branch and head, or the main a push replaced and the
   # main it made.
   BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}

@@ -959,7 +959,7 @@ fn the_gate_is_five_percent_on_every_measure() {
     assert_eq!(GATED_METRICS[2..], misses);
     assert_eq!(
         GATED_HEAP_METRICS,
-        ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"]
+        ["TotalBytes", "TotalBlocks", "AtTGmaxBytes"]
     );
     // A bare local run gates every measure at a plain 5%. The workflow's limits replace these and
     // gate instructions and estimated cycles; the miss counts are judged from Gungraun's summaries
@@ -1001,6 +1001,30 @@ fn the_gate_is_five_percent_on_every_measure() {
     );
     assert!(GATE.contains("callgrind.args([ZERO_BEFORE]);"));
     assert!(ZERO_BEFORE.starts_with("--zero-before="));
+}
+
+/// Decision 32.110: the heap gate judges DHAT's peak, "At t-gmax", and never Gungraun's "Maximum
+/// bytes", which adds up each allocation site's bytes at a different moment and so is no moment's
+/// heap. Every run of the workflow that gates heap passes [`DHAT_LIMITS`]; the only other DHAT
+/// limits it writes are the 1% listing's, which list changes and gate nothing.
+#[test]
+fn the_heap_gate_judges_the_peak_not_the_sum_of_site_maxima() {
+    assert!(GATED_HEAP_METRICS.contains(&"AtTGmaxBytes"));
+    assert!(!GATED_HEAP_METRICS.contains(&"MaximumBytes"));
+    assert!(DHAT_LIMITS.contains("attgmaxbytes=5%"));
+    assert!(!DHAT_LIMITS.contains("maximumbytes"));
+    let limits: Vec<&str> = WORKFLOW
+        .lines()
+        .filter(|line| line.contains("--dhat-limits="))
+        .collect();
+    assert!(!limits.is_empty());
+    for line in limits {
+        assert!(
+            line.contains("--dhat-limits=\"$DHAT_LIMITS\"")
+                || line.contains("--dhat-limits=\"totalbytes=${limit}%,"),
+            "{line}"
+        );
+    }
 }
 
 #[test]
