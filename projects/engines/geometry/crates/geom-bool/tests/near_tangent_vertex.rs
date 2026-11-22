@@ -20,7 +20,7 @@
 //! piece and by area. With the record taken away the tangents' order contradicts the arrangement,
 //! and the split refuses the triangle (`Uncovered`) rather than return no faces for it, as it did;
 //! a piece said to lie inside a face that lies outside it is refused the same way. A seeded sweep
-//! runs both ways over radii from 53 up and sides up to 2^26 or 64 R.
+//! runs both ways over radii from 53 up and sides up to 2^21 R or the grid's edge.
 
 #![allow(
     clippy::unwrap_used,
@@ -771,13 +771,15 @@ fn a_long_side_by_a_small_disc_meets_its_rim_in_little_work() {
 }
 
 /// The side from V a hair outside the rim and a hair into the disc, at radii R = m² + 4 from 53
-/// (m = 7) to about 6.7e7 (m = 8191) and lengths |D| from 2^20, or R, to 2^26 or 64 R, both
-/// seeded: each case splits as [`checked`] holds a split to. Up to these radii the edge stage
-/// settles the meeting of the side and the rim, and at the grid's largest too
+/// (m = 7) to about 6.7e7 (m = 8191) and lengths |D| from 2^20, or R, to 2^21 R or the grid's
+/// edge, whichever is less, both seeded: each case splits as [`checked`] holds a split to. From
+/// R about 2^19 up the side may reach the grid's edge, |D| about 2^40, where sin θ = 1 / (|D| R)
+/// is down to about 1.4e-20 and the second crossing 2^-39 steps from V. Up to these radii the edge
+/// stage settles the meeting of the side and the rim, and at the grid's largest too
 /// ([`at_the_largest_radii_the_edge_stage_settles_such_a_meeting`]). A longer side into a small
-/// disc is split right too ([`a_long_side_by_a_small_disc_meets_its_rim_in_little_work`]), but at
-/// m = 541 and |D| about 2^39 the edge stage refuses the side outside the rim
-/// (`CoincidenceChain`), so the sweep stops short of such lengths.
+/// disc is split right too ([`a_long_side_by_a_small_disc_meets_its_rim_in_little_work`]), and the
+/// sweep's case at m = 541 and |D| about 2^39 outside the rim is a test of its own
+/// ([`a_side_from_far_out_to_the_centre_meets_the_rim_where_it_crosses`]).
 #[test]
 fn near_tangent_sides_split_at_the_rim_both_ways_at_seeded_sizes() {
     const CASES: usize = 32;
@@ -789,7 +791,7 @@ fn near_tangent_sides_split_at_the_rim_both_ways_at_seeded_sizes() {
         let m = spread(&mut rng, 7, MOST_M) | 1;
         let r = m * m + 4;
         // W = V ± D stays inside the grid.
-        let longest = (r << 6).max(1 << 26).min((1 << 40) - 1 - 2 * r);
+        let longest = (r << 21).min((1 << 40) - 1 - 2 * r);
         let reach = spread(&mut rng, r.max(1 << 20), longest);
         for inward in [false, true] {
             let case = rim_and_triangle(m, reach, inward);
