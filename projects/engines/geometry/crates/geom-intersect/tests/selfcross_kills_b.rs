@@ -336,13 +336,30 @@ fn a_tall_fan_round_most_of_a_turn_is_clean_either_way_round() {
     }
 }
 
+/// The plane U whose arms lie 8 steps of the doubles apart is one to one, and the search proves
+/// it whole: the boxes of its two inner sides end at one double, each bound widened past the
+/// points it holds, so the sides they hold are apart. Nothing to report, and no pair left at the
+/// floor.
+#[test]
+fn a_u_whose_arms_lie_8_steps_apart_is_clean() {
+    let found = self_intersect(&u_shape(8.0), FLOOR, CEILING, &mut meter()).unwrap();
+    assert_eq!(
+        found,
+        SelfCrossing {
+            branches: Vec::new(),
+            unproven: Vec::new(),
+            flagged: Vec::new(),
+        }
+    );
+}
+
 /// The exact work each search takes, with how many branches, unproven pairs and flags it leaves,
 /// for surfaces whose pairs are held clean, or split, by regions the other tests do not reach: the
 /// pinched ramps and the fan, whose pole line touches pieces on one side or both; the spindles,
 /// glued across their seam; a turned arch and a bent graph, whose axes or boundaries lie off
 /// the coordinate planes; and a U whose arms lie 8 steps of the doubles apart, so that the boxes
 /// of their sides, each bound rounded outward, end at one double: boxes that only share an end are
-/// not counted apart, and the U is split at its gap down to the floor.
+/// counted apart, and the U is held clean whole, with nothing left at the floor.
 #[test]
 fn each_surface_takes_its_recorded_work() {
     let surfaces = [
@@ -375,7 +392,7 @@ fn each_surface_takes_its_recorded_work() {
         ("spindle transposed", 202_328, 0, 0, 0),
         ("turned arch", 12_854, 0, 0, 0),
         ("bent graph", 1058, 0, 0, 0),
-        ("arms 8 steps apart", 1_009_879, 0, 0, 37),
+        ("arms 8 steps apart", 3832, 0, 0, 0),
     ];
     for ((name, surface, floor), want) in surfaces.iter().zip(want) {
         let mut m = meter();

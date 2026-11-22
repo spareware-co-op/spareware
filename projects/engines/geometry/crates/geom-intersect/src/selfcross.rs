@@ -32,8 +32,9 @@
 //!   multiple of `S_u` × `S_v`) proven positive. The boundary is cut into stretches, each proven to move
 //!   strictly one way along some direction of the plane (so it does not meet itself); each two in a
 //!   row proven to move along one shared direction (so they meet only where they join); and every
-//!   two others proven apart, their boxes disjoint. A stretch that will not prove is halved; past
-//!   [`STRETCHES`] stretches, or at the floor, the region is not clean.
+//!   two others proven apart, their boxes disjoint but for perhaps a shared end, which holds none
+//!   of their points, since each bound is widened past them. A stretch that will not prove is
+//!   halved; past [`STRETCHES`] stretches, or at the floor, the region is not clean.
 //! - **Nothing is dropped.** A pair of pieces is proven apart, held clean, settled and marched,
 //!   split, or flagged at the floor: a piece not proven clean there is flagged as a pair with a
 //!   piece it touches, and where a crossing meets the domain's edge on both sheets at once, as a
@@ -370,11 +371,17 @@ fn middle(t: &[Interval; 2]) -> [f64; 2] {
     t.map(|x| x.lo() / 2.0 + x.hi() / 2.0)
 }
 
-/// Whether two boxes of the plane are apart.
+/// Whether two boxes of the plane that [`see`] reads are apart: on some coordinate, one ends at or
+/// before the other begins. Boxes that only share an end count. The proof: each coordinate of such
+/// a box is a [`dot`], whose last step is an [`Interval::add`], and that moves both of its rounded
+/// bounds one step outward. Round to nearest is faithful, so the widened lower bound lies strictly
+/// below the exact lower bound of that sum, and the upper strictly above the exact upper: every
+/// point of the stretch lies strictly inside its box. So x.hi ≤ y.lo gives p < x.hi ≤ y.lo < q for
+/// every p of one stretch and q of the other, and nothing finer is known of them.
 fn apart(a: &[Interval; 2], b: &[Interval; 2]) -> bool {
     a.iter()
         .zip(b)
-        .any(|(x, y)| x.hi() < y.lo() || y.hi() < x.lo())
+        .any(|(x, y)| x.hi() <= y.lo() || y.hi() <= x.lo())
 }
 
 /// The first stretch a boundary's check fails on, to halve: one not moving one way, the wider
