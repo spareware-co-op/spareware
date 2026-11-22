@@ -1,5 +1,7 @@
 //! The kernel builder on solidcore's engine, the composition the server's `kernel` feature links:
-//! the builder's suite (construct-regen's `tests/kernel_suite`) on `SolidcoreEngine`, the whole
+//! the builder's suite (construct-regen's `tests/kernel_suite`) on `SolidcoreEngine`, its doors
+//! cut from their walls (one door, a raised opening, a wall with two doors, the cases at the edge
+//! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened, and
 //! a document of one edition reported, not rebuilt, by a server of another. Built and run only
 //! with `--features kernel`.
@@ -79,6 +81,31 @@ fn the_edition_carries_the_engines_report() {
 #[test]
 fn a_recipe_that_cant_build_says_why() {
     kernel_suite::a_recipe_that_cant_build_says_why(engine);
+}
+
+#[test]
+fn a_door_cuts_a_real_opening() {
+    kernel_suite::a_door_cuts_a_real_opening(engine);
+}
+
+#[test]
+fn a_wall_with_two_doors_cuts_both_in_the_order_of_their_keys() {
+    kernel_suite::a_wall_with_two_doors_cuts_both_in_the_order_of_their_keys(engine);
+}
+
+#[test]
+fn the_walls_names_survive_its_openings() {
+    kernel_suite::the_walls_names_survive_its_openings(engine);
+}
+
+#[test]
+fn an_opening_at_the_edge_is_refused_with_its_door_and_reason() {
+    kernel_suite::an_opening_at_the_edge_is_refused_with_its_door_and_reason(engine);
+}
+
+#[test]
+fn the_engine_keeps_a_sliver_within_its_tolerance() {
+    kernel_suite::the_engine_keeps_a_sliver_within_its_tolerance(engine());
 }
 
 /// The server's `kernel` setting is this builder: the engine's report names solidcore at its pin.
@@ -200,6 +227,9 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     };
     assert_ne!(grown, bounds, "the wall is longer");
     assert!(now.contains(&face), "the door's face is gone: {now:?}");
+    // Interim (the register's row): the regenerator builds the wall from its own recipe, so its
+    // hosted door cuts no opening in the stored shape yet.
+    assert!(now.iter().all(|n| !n.role.starts_with("tool(")), "{now:?}");
     let hosted = s
         .shape(&anna, &project, &model, &i("D-900"), None)
         .await

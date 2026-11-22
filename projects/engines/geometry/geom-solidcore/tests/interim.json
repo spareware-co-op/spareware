@@ -84,15 +84,51 @@
     },
     {
       "program": "spare-construct",
-      "place": "construct-regen's kernel::Kernel, levels of detail and the door",
-      "operation": "door.single, and every recipe's display levels",
-      "answered_by": "the door is a box in its wall's thickness, no opening cut in its host; both levels of detail are the engine's one mesh",
+      "place": "construct-regen's kernel::Kernel, levels of detail",
+      "operation": "every recipe's display levels",
+      "answered_by": "level 0 is the engine's mesh of the body, its openings cut, straying by nothing; level 1 is the engine's mesh of the extrusion before its openings were cut, its deviation a bound (half the widest opening or half the wall's thickness, whichever is larger, rounded up to a millimetre); a shape with no openings has one mesh at both levels",
       "pinned_by": {
         "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
-        "test": "a_straight_wall_is_its_plan_extruded"
+        "test": "a_door_cuts_a_real_opening"
       },
       "known_faults": [],
-      "replaced_by": "the next Construct job (kernel-seam-b, CON-A3-F1-P2 and P6): the door cut from its wall with Engine::subtract and a mesh per detail level"
+      "replaced_by": "tessellation split by on-screen error and cached per type and detail level (CON-A3-F1-P6, geom-mesh, chapters 19.3 and 19.4)"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::opening, the names of a cut wall's faces",
+      "operation": "wall.straight with doors hosted in it (Kernel::build_hosting)",
+      "answered_by": "written by the builder from the recipe and its doors, as chapter 11.9 names a tool's faces, not read from the body, since the engine seam reports no face of a result; the pieces a door to the floor cuts the base into share the base's one name, where chapter 20.2 names each piece Split",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "the_walls_names_survive_its_openings"
+      },
+      "known_faults": [],
+      "replaced_by": "the engine seam's body record with its names and history (chapters 20.3 and 24.4), so the kernel's geom-bool names the result itself (CON-A3-F1-P2)"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::opening, an opening with a face within the engine's tolerance of a wall's face or another opening's without being on it",
+      "operation": "wall.straight with doors hosted in it (Kernel::build_hosting)",
+      "answered_by": "refused by the builder before the engine is asked (OpeningNearFace, naming the door and the two faces); asked directly, the engine's subtraction, the kernel's exact geom-bool, keeps a sliver of one grid step exactly (the server's tests/kernel.rs, the_engine_keeps_a_sliver_within_its_tolerance), so SC-4, which is solidcore's own difference, is not on this path at this pin",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "an_opening_at_the_edge_is_refused_with_its_door_and_reason"
+      },
+      "known_faults": ["SC-4"],
+      "replaced_by": "built, once Construct's lengths and display meshes are on the kernel's grid (piece A39) and the engine is the kernel's exact one"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's regenerator, a wall's hosted doors",
+      "operation": "wall.straight with a door hosted on it, through the server",
+      "answered_by": "the regenerator builds each element from its own recipe (Geometry::build), so a stored wall has no openings cut yet; Kernel::build_hosting cuts them for a caller that hands it the doors",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face"
+      },
+      "known_faults": [],
+      "replaced_by": "the hosting job (CON-A4-F3-P1): Construct's Geometry trait builds a host with its hosted elements, and the regenerator rebuilds a wall when a door hosted in it changes"
     }
   ]
 }
