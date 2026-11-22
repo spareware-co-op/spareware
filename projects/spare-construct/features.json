@@ -3201,7 +3201,7 @@
       {
        "id": "CON-A8-F3-P1",
        "name": "Object and line styles",
-       "what": "Line weights by scale, line patterns, object styles and colours as project data.",
+       "what": "Line weights by scale, line patterns, object styles and colours as project data. A pen is a named number with a width per view scale.",
        "kind": "data",
        "size": "small",
        "depends_on": [

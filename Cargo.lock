@@ -557,6 +557,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-styles"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-transport"
 version = "0.0.0"
 dependencies = [
