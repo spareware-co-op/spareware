@@ -11,10 +11,24 @@
 //! order. Coincidences, horizontals and verticals therefore hold exactly; every other kind holds
 //! within the tolerance (chapter 15.10's "bounded" row; its exact carrier forms are the kernel's
 //! work).
+//!
+//! Curves. A radius is stored as a whole number of millimetres, like every length, rounded by the
+//! same rule from an origin of zero; an arc's centre and ends are ordinary whole-millimetre
+//! points. Before the constraints, every arc is measured: each end's distance from the centre,
+//! from the exact integer squared distance and one square root, must be within the model
+//! tolerance of the stored radius, or the solve is refused with [`SolveError::ArcEndRefused`]. An
+//! arc whose ends round to one place, or onto its centre, is degenerate. So a stored arc's ends
+//! are on its stored circle within 0.01 mm. Chapter 15.10's exact arc form (the centre a rational
+//! point on the ends' bisector) is the kernel's work; until it answers, an arc whose ends cannot
+//! fall on whole millimetres near its circle is refused rather than stored loose. A tangency is
+//! measured as a distance (the centre from the line's carrier, or the centres from each other,
+//! against the radii on the stored side or way), whichever residual form the solver used, so a
+//! tangency that solved to the other side shows as a miss of about twice the radius.
 
 use crate::outcome::{MODEL_TOLERANCE_MM, SolveError};
 use crate::sketch::{
-    COORD_LIMIT_MM, Constraint, ConstraintId, Point, PointId, Side, Sketch, cross, diff, dot,
+    COORD_LIMIT_MM, Constraint, ConstraintId, Curve, CurveId, Point, PointId, Side, Sketch, Touch,
+    cross, diff, dot,
 };
 
 /// An exact integer as the nearest double. Every value here is below 2^127.
@@ -53,8 +67,36 @@ fn length(u: (i128, i128)) -> Option<f64> {
     Some(real(dot(u, u)?).sqrt())
 }
 
+/// A curve's stored centre and radius.
+fn circle(sketch: &Sketch, points: &[Point], radii: &[i64], id: CurveId) -> Option<(Point, f64)> {
+    let curve = sketch.curve(id)?;
+    let r = *radii.get(usize::try_from(id.0).ok()?)?;
+    Some((point(points, curve.centre())?, real(i128::from(r))))
+}
+
+/// The signed distance of `p` from a line's carrier (positive to the left); `Err` for a line of
+/// no length.
+fn signed_from_line(start: Point, end: Point, p: Point) -> Option<Result<f64, ()>> {
+    let direction = diff(start, end)?;
+    let along = length(direction)?;
+    if along > 0.0 {
+        Some(Ok(real(cross(direction, diff(start, p)?)?) / along))
+    } else {
+        Some(Err(()))
+    }
+}
+
 /// How far one constraint is from holding on whole-millimetre points, in millimetres.
-fn miss(sketch: &Sketch, points: &[Point], constraint: Constraint) -> Option<Result<f64, ()>> {
+#[expect(
+    clippy::too_many_lines,
+    reason = "one arm per constraint kind, side by side so each kind reads in one place"
+)]
+fn miss(
+    sketch: &Sketch,
+    points: &[Point],
+    radii: &[i64],
+    constraint: Constraint,
+) -> Option<Result<f64, ()>> {
     let two_lines = |a, b| -> Option<((i128, i128), (i128, i128))> {
         let (a0, a1) = line(sketch, points, a)?;
         let (b0, b1) = line(sketch, points, b)?;
@@ -117,15 +159,96 @@ fn miss(sketch: &Sketch, points: &[Point], constraint: Constraint) -> Option<Res
             }
         }
         Constraint::Fixed(_) => Ok(0.0),
+        Constraint::PointOnLine(held, l) => {
+            let (start, end) = line(sketch, points, l)?;
+            signed_from_line(start, end, point(points, held)?)?.map(f64::abs)
+        }
+        Constraint::PointOnCurve(held, c) => {
+            let (centre, r) = circle(sketch, points, radii, c)?;
+            Ok((length(diff(centre, point(points, held)?)?)? - r).abs())
+        }
+        Constraint::Concentric(a, b) => {
+            let (ca, _) = circle(sketch, points, radii, a)?;
+            let (cb, _) = circle(sketch, points, radii, b)?;
+            let (dx, dy) = diff(ca, cb)?;
+            Ok(real(dx.abs().max(dy.abs())))
+        }
+        Constraint::EqualRadius(a, b) => {
+            let (_, ra) = circle(sketch, points, radii, a)?;
+            let (_, rb) = circle(sketch, points, radii, b)?;
+            Ok((ra - rb).abs())
+        }
+        Constraint::Radius { curve, mm } => {
+            let (_, r) = circle(sketch, points, radii, curve)?;
+            Ok((r - real(i128::from(mm))).abs())
+        }
+        Constraint::Diameter { curve, mm } => {
+            let (_, r) = circle(sketch, points, radii, curve)?;
+            Ok((2.0 * r - real(i128::from(mm))).abs())
+        }
+        Constraint::TangentLine {
+            line: l,
+            curve,
+            side,
+        } => {
+            let (start, end) = line(sketch, points, l)?;
+            let (centre, r) = circle(sketch, points, radii, curve)?;
+            let signed = match side {
+                Side::Left => r,
+                Side::Right => -r,
+            };
+            signed_from_line(start, end, centre)?.map(|d| (d - signed).abs())
+        }
+        Constraint::TangentCurves { a, b, touch } => {
+            let (ca, ra) = circle(sketch, points, radii, a)?;
+            let (cb, rb) = circle(sketch, points, radii, b)?;
+            let gap = length(diff(ca, cb)?)?;
+            let wanted = match touch {
+                Touch::Outside => ra + rb,
+                Touch::FirstInside => rb - ra,
+                Touch::SecondInside => ra - rb,
+            };
+            Ok((gap - wanted).abs())
+        }
     })
 }
 
-/// Checks whole-millimetre points against every constraint, or refuses them. `points` holds
-/// every point in authoring order, rounded by the rule above.
-pub(super) fn check(sketch: &Sketch, points: &[Point]) -> Result<(), SolveError> {
+/// How far an arc's ends are off its circle on whole-millimetre points, in millimetres; `Err`
+/// for an arc whose ends are one place or at its centre. `None` for a circle.
+fn arc_miss(points: &[Point], radius_mm: i64, curve: Curve) -> Option<Result<f64, ()>> {
+    let (start, end) = curve.ends()?;
+    let centre = point(points, curve.centre())?;
+    let (s, e) = (point(points, start)?, point(points, end)?);
+    if s == e || s == centre || e == centre {
+        return Some(Err(()));
+    }
+    let r = real(i128::from(radius_mm));
+    let off_start = (length(diff(centre, s)?)? - r).abs();
+    let off_end = (length(diff(centre, e)?)? - r).abs();
+    Some(Ok(off_start.max(off_end)))
+}
+
+/// Checks whole-millimetre points and radii against every arc and then every constraint, or
+/// refuses them. `points` holds every point and `radii` every curve's radius in authoring order,
+/// rounded by the rule above.
+pub(super) fn check(sketch: &Sketch, points: &[Point], radii: &[i64]) -> Result<(), SolveError> {
+    for (index, (curve, r)) in sketch.curves().iter().zip(radii).enumerate() {
+        let id = CurveId(u32::try_from(index).map_err(|_| SolveError::Decomposition)?);
+        match arc_miss(points, *r, *curve) {
+            None => {}
+            Some(Ok(residual_mm)) if residual_mm <= MODEL_TOLERANCE_MM => {}
+            Some(Ok(residual_mm)) => {
+                return Err(SolveError::ArcEndRefused {
+                    curve: id,
+                    residual_mm,
+                });
+            }
+            Some(Err(())) => return Err(SolveError::DegenerateCurve { curve: id }),
+        }
+    }
     for (index, constraint) in sketch.constraints().iter().enumerate() {
         let id = ConstraintId(u32::try_from(index).map_err(|_| SolveError::Decomposition)?);
-        match miss(sketch, points, *constraint) {
+        match miss(sketch, points, radii, *constraint) {
             Some(Ok(residual_mm)) if residual_mm <= MODEL_TOLERANCE_MM => {}
             Some(Ok(residual_mm)) => {
                 return Err(SolveError::RoundingRefused {

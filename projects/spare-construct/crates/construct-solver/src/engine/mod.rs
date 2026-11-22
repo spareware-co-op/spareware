@@ -1,13 +1,16 @@
-//! The interim solving engine behind [`crate::solve`]. Private to this crate: callers see only
-//! the sketch and outcome types, so replacing this module changes nothing they call.
+//! The interim solving engine behind [`crate::solve`] and [`crate::drag`]. Private to this crate:
+//! callers see only the sketch and outcome types, so replacing this module changes nothing they
+//! call.
 //!
 //! Interim: the kernel's `geom-sketch` (pieces G216 to G228, the solver CON-A27-F1-P2 names) will
 //! answer behind the same types through `engine-geometry` when it lands, and this module then
 //! goes. Until then it follows the kernel's chapter 15 method (projects/engines/geometry/
 //! architecture/15-sketches.md), in its simplest form, in our own code:
 //!
-//! - Variables: x and y of every point that is not fixed, in authoring order. Fixed points are
-//!   ground: constants, never moved (15.18).
+//! - Variables: x and y of every point that is not fixed, in authoring order, then every curve's
+//!   radius, in authoring order (15.2). Fixed points are ground: constants, never moved (15.18).
+//!   An arc's two ends are kept on its circle by two equations the arc owns; they are not
+//!   constraints and are never named as one.
 //! - Scaling (15.4): the block is moved by a whole number of millimetres to sit at the origin and
 //!   divided by a power of two at least its size, both exact in floating point.
 //! - Residuals (15.3, 15.4): `residual.rs`, derivatives by forward-mode dual numbers.
@@ -19,14 +22,19 @@
 //! - Diagnosis (15.8): rank from the singular values with chapter 15.8's derived thresholds
 //!   (independent at 2^-12 and above, dependent at 1/(64 S) and below for a block S mm across,
 //!   between them "cannot tell", never rounded either way). The free motions are the right null
-//!   space, and the dependency groups the left null space: a group holds (redundant) or not
-//!   (conflicting). Both are read through their projectors, which do not depend on the basis the
-//!   decomposition picked.
+//!   space, read per point and per radius, and the dependency groups the left null space: a group
+//!   holds (redundant) or not (conflicting). Both are read through their projectors, which do not
+//!   depend on the basis the decomposition picked.
+//! - Dragging (15.9): the dragged point is held at the target as ground and the rest projected
+//!   back onto the constraints by the least-change steps; if the constraints cannot hold with it
+//!   held, it is released and the whole sketch projected from the target, so it stops at the
+//!   nearest place the constraints allow. Constraints are never softened, and nothing is
+//!   weighted.
 //! - Commit (15.10): `commit.rs`.
 //!
 //! Not yet here, and in the kernel's design: decomposition into independent blocks (15.5), root
-//! choices other than the point-to-line side, continuation (15.7), dragging (15.9) and
-//! certificates (15.10).
+//! choices checked along the way rather than at commit, continuation (15.7), a drag's frames and
+//! its logged path (15.9: here one call is one frame) and certificates (15.10).
 //!
 //! Linear algebra is nalgebra's SVD with its default features off. Its source was read for
 //! determinism (nalgebra 0.35.0: `linalg/svd.rs`, `bidiagonal.rs`, `householder.rs`,
@@ -42,12 +50,15 @@
 mod commit;
 mod residual;
 
-use crate::outcome::{Budget, FreePoint, SolveError, Solved, Unmet, Verdict};
-use crate::sketch::{Constraint, ConstraintId, LineId, Point, PointId, Side, Sketch, diff, dot};
+use crate::outcome::{Budget, Dragged, FreePoint, Reach, SolveError, Solved, Unmet, Verdict};
+use crate::sketch::{
+    COORD_LIMIT_MM, Constraint, ConstraintId, Curve, CurveId, LineId, Point, PointId, Side, Sketch,
+    Touch, diff, dot,
+};
 use nalgebra::DMatrix;
 use nalgebra::linalg::SVD;
 use num_dual::Dual64;
-use residual::{Kind, Row};
+use residual::{Kind, Owner, Row};
 
 /// Converged when every residual is within this, in millimetres.
 const TAU_MM: f64 = 1.0 / 65_536.0;
@@ -76,10 +87,14 @@ struct Block {
     var_of: Vec<Option<usize>>,
     /// Every point's scaled position as drawn.
     drawn: Vec<(f64, f64)>,
-    /// The constraints with equations, in authoring order.
+    /// For each curve, the index of its radius variable.
+    radius_var: Vec<usize>,
+    /// Every curve's scaled radius as drawn.
+    drawn_radius: Vec<f64>,
+    /// The arcs' own equations, then the constraints with equations, in authoring order.
     rows: Vec<Row>,
-    /// For each equation, its constraint.
-    owner: Vec<ConstraintId>,
+    /// For each equation, whose it is.
+    owner: Vec<Owner>,
     /// The number of variables.
     n: usize,
     /// Points fixed more than once: the repeats.
@@ -104,7 +119,33 @@ fn power_of_two_above(value: f64) -> f64 {
     power
 }
 
+/// For each point, the first point in authoring order it is tied to by coincidences.
+fn coincidence_classes(sketch: &Sketch) -> Vec<usize> {
+    let mut class: Vec<usize> = (0..sketch.points().len()).collect();
+    for constraint in sketch.constraints() {
+        if let Constraint::Coincident(a, b) = *constraint {
+            let (Some(a), Some(b)) = (
+                index(a.0).and_then(|a| class.get(a)).copied(),
+                index(b.0).and_then(|b| class.get(b)).copied(),
+            ) else {
+                continue;
+            };
+            let (keep, merge) = (a.min(b), a.max(b));
+            for c in &mut class {
+                if *c == merge {
+                    *c = keep;
+                }
+            }
+        }
+    }
+    class
+}
+
 impl Block {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one pass per list of the sketch, in order; splitting it hides the order"
+    )]
     fn new(sketch: &Sketch) -> Result<Block, SolveError> {
         let points = sketch.points();
         let ox = points.iter().map(|p| p.x_mm).min().unwrap_or(0);
@@ -123,15 +164,28 @@ impl Block {
             drawn.push((x - left, y - bottom));
         }
         for constraint in sketch.constraints() {
-            if let Constraint::Distance { mm, .. } | Constraint::PointLineDistance { mm, .. } =
-                *constraint
+            if let Constraint::Distance { mm, .. }
+            | Constraint::PointLineDistance { mm, .. }
+            | Constraint::Radius { mm, .. }
+            | Constraint::Diameter { mm, .. } = *constraint
             {
                 extent = extent.max(real_mm(mm).unwrap_or(0.0));
             }
         }
+        let mut drawn_radius = Vec::with_capacity(sketch.curves().len());
+        for (i, curve) in sketch.curves().iter().enumerate() {
+            let curve_id = CurveId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
+            let r = real_mm(curve.radius_mm())
+                .ok_or(SolveError::DegenerateCurve { curve: curve_id })?;
+            extent = extent.max(r);
+            drawn_radius.push(r);
+        }
         let scale = power_of_two_above(extent);
         for at in &mut drawn {
             *at = (at.0 / scale, at.1 / scale);
+        }
+        for r in &mut drawn_radius {
+            *r /= scale;
         }
 
         let mut fixed = vec![false; points.len()];
@@ -158,36 +212,72 @@ impl Block {
                 n = n.checked_add(2).ok_or(SolveError::Decomposition)?;
             }
         }
+        let mut radius_var = Vec::with_capacity(sketch.curves().len());
+        for _ in sketch.curves() {
+            radius_var.push(n);
+            n = n.checked_add(1).ok_or(SolveError::Decomposition)?;
+        }
 
         let mut block = Block {
             origin: (left, bottom),
             scale,
             var_of,
             drawn,
+            radius_var,
+            drawn_radius,
             rows: Vec::new(),
             owner: Vec::new(),
             n,
             repeated_fixings,
         };
+        for (i, curve) in sketch.curves().iter().enumerate() {
+            let curve_id = CurveId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
+            let degenerate = SolveError::DegenerateCurve { curve: curve_id };
+            if let Curve::Arc {
+                centre, start, end, ..
+            } = *curve
+            {
+                let c = sketch.point(centre).ok_or(degenerate.clone())?;
+                for end_point in [start, end] {
+                    if sketch.point(end_point).ok_or(degenerate.clone())? == c {
+                        return Err(degenerate);
+                    }
+                    let owner = Owner::Arc(curve_id);
+                    block.owner.push(owner);
+                    block.rows.push(Row {
+                        owner,
+                        kind: Kind::OnCircle {
+                            p: index(end_point.0).ok_or(degenerate.clone())?,
+                            centre: index(centre.0).ok_or(degenerate.clone())?,
+                            curve: i,
+                        },
+                    });
+                }
+            }
+        }
+        let class = coincidence_classes(sketch);
         for (i, constraint) in sketch.constraints().iter().enumerate() {
             let id = ConstraintId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
-            if let Some(kind) = block.prepare(sketch, id, *constraint)? {
+            if let Some(kind) = block.prepare(sketch, &class, id, *constraint)? {
+                let owner = Owner::Constraint(id);
                 for _ in 0..kind.equations() {
-                    block.owner.push(id);
+                    block.owner.push(owner);
                 }
-                block.rows.push(Row {
-                    constraint: id,
-                    kind,
-                });
+                block.rows.push(Row { owner, kind });
             }
         }
         Ok(block)
     }
 
     /// A constraint in the solver's terms, or `None` for a fixing (it has no equations).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per constraint kind, side by side so each kind reads in one place"
+    )]
     fn prepare(
         &self,
         sketch: &Sketch,
+        class: &[usize],
         id: ConstraintId,
         constraint: Constraint,
     ) -> Result<Option<Kind>, SolveError> {
@@ -218,6 +308,24 @@ impl Block {
             real_mm(mm)
                 .map(|v| v / self.scale)
                 .ok_or(degenerate.clone())
+        };
+        let curve = |c: CurveId| -> Result<(Curve, usize), SolveError> {
+            let i = index(c.0).ok_or(degenerate.clone())?;
+            Ok((sketch.curve(c).ok_or(degenerate.clone())?, i))
+        };
+        // Whether two points are one point or tied by coincidences.
+        let same = |p: PointId, q: PointId| {
+            let of = |x: PointId| index(x.0).and_then(|x| class.get(x)).copied();
+            p == q || (of(p).is_some() && of(p) == of(q))
+        };
+        // The squared distance between two points as drawn, exactly.
+        let apart = |p: PointId, q: PointId| -> Result<i128, SolveError> {
+            let u = diff(
+                sketch.point(p).ok_or(degenerate.clone())?,
+                sketch.point(q).ok_or(degenerate.clone())?,
+            )
+            .ok_or(degenerate.clone())?;
+            dot(u, u).ok_or(degenerate.clone())
         };
         Ok(Some(match constraint {
             Constraint::Coincident(a, b) => Kind::Coincident {
@@ -285,24 +393,127 @@ impl Block {
                 }
             }
             Constraint::Fixed(_) => return Ok(None),
+            Constraint::PointOnLine(p, l) => {
+                let (line, squared) = line(l)?;
+                if squared == 0 {
+                    return Err(degenerate);
+                }
+                Kind::PointLine {
+                    p: point(p)?,
+                    line,
+                    signed: 0.0,
+                }
+            }
+            Constraint::PointOnCurve(p, c) => {
+                let (shape, i) = curve(c)?;
+                if apart(p, shape.centre())? == 0 {
+                    return Err(degenerate);
+                }
+                Kind::OnCircle {
+                    p: point(p)?,
+                    centre: point(shape.centre())?,
+                    curve: i,
+                }
+            }
+            Constraint::Concentric(a, b) => Kind::Coincident {
+                p: point(curve(a)?.0.centre())?,
+                q: point(curve(b)?.0.centre())?,
+            },
+            Constraint::EqualRadius(a, b) => Kind::EqualRadius {
+                a: curve(a)?.1,
+                b: curve(b)?.1,
+            },
+            Constraint::Radius { curve: c, mm } => Kind::RadiusIs {
+                curve: curve(c)?.1,
+                value: scaled(mm)?,
+            },
+            Constraint::Diameter { curve: c, mm } => Kind::RadiusIs {
+                curve: curve(c)?.1,
+                value: scaled(mm)? / 2.0,
+            },
+            Constraint::TangentLine {
+                line: l,
+                curve: c,
+                side,
+            } => {
+                let (ends, squared) = line(l)?;
+                if squared == 0 {
+                    return Err(degenerate);
+                }
+                let (shape, i) = curve(c)?;
+                let drawn = sketch.line(l).ok_or(degenerate.clone())?;
+                let shared = shape.ends().and_then(|(start, end)| {
+                    [drawn.start, drawn.end]
+                        .into_iter()
+                        .find(|p| same(*p, start) || same(*p, end))
+                });
+                let centre = point(shape.centre())?;
+                match shared {
+                    Some(at) => Kind::LineTangentAt {
+                        line: ends,
+                        at: point(at)?,
+                        centre,
+                        inv_len: self.scale / power_of_two_above(commit::real(squared).sqrt()),
+                    },
+                    None => Kind::LineTangent {
+                        line: ends,
+                        centre,
+                        curve: i,
+                        sign: match side {
+                            Side::Left => 1.0,
+                            Side::Right => -1.0,
+                        },
+                    },
+                }
+            }
+            Constraint::TangentCurves { a, b, touch } => {
+                let (first, i) = curve(a)?;
+                let (second, j) = curve(b)?;
+                let gap = apart(first.centre(), second.centre())?;
+                if gap == 0 {
+                    return Err(degenerate);
+                }
+                let centres = [point(first.centre())?, point(second.centre())?];
+                let shared = if let (Some((s0, e0)), Some((s1, e1))) = (first.ends(), second.ends())
+                {
+                    [s0, e0].into_iter().find(|p| same(*p, s1) || same(*p, e1))
+                } else {
+                    None
+                };
+                if let Some(at) = shared {
+                    Kind::CurvesTangentAt {
+                        centres,
+                        at: point(at)?,
+                        inv_len: self.scale / power_of_two_above(commit::real(gap).sqrt()),
+                    }
+                } else {
+                    let (sign_a, sign_b) = match touch {
+                        Touch::Outside => (1.0, 1.0),
+                        Touch::FirstInside => (-1.0, 1.0),
+                        Touch::SecondInside => (1.0, -1.0),
+                    };
+                    Kind::CurvesTangent {
+                        centres,
+                        curves: [i, j],
+                        sign_a,
+                        sign_b,
+                    }
+                }
+            }
         }))
     }
 
     /// The residuals at `x`, and the Jacobian (one row per equation) when `with_jacobian`.
-    /// `Err` names the first constraint whose value is not a finite number.
-    fn evaluate(
-        &self,
-        x: &[f64],
-        with_jacobian: bool,
-    ) -> Result<(Vec<f64>, Vec<Vec<f64>>), ConstraintId> {
+    /// `Err` names the first owner whose value is not a finite number.
+    fn evaluate(&self, x: &[f64], with_jacobian: bool) -> Result<(Vec<f64>, Vec<Vec<f64>>), Owner> {
+        let tangent = |seed: Option<usize>, var: usize| if seed == Some(var) { 1.0 } else { 0.0 };
         let at = |seed: Option<usize>| {
             move |point: usize| -> Option<(Dual64, Dual64)> {
                 if let Some(v) = *self.var_of.get(point)? {
                     let w = v.checked_add(1)?;
-                    let tangent = |var: usize| if seed == Some(var) { 1.0 } else { 0.0 };
                     Some((
-                        Dual64::new(*x.get(v)?, tangent(v)),
-                        Dual64::new(*x.get(w)?, tangent(w)),
+                        Dual64::new(*x.get(v)?, tangent(seed, v)),
+                        Dual64::new(*x.get(w)?, tangent(seed, w)),
                     ))
                 } else {
                     let (dx, dy) = *self.drawn.get(point)?;
@@ -310,24 +521,38 @@ impl Block {
                 }
             }
         };
+        let radius = |seed: Option<usize>| {
+            move |curve: usize| -> Option<Dual64> {
+                let v = *self.radius_var.get(curve)?;
+                Some(Dual64::new(*x.get(v)?, tangent(seed, v)))
+            }
+        };
         let mut r = Vec::with_capacity(self.owner.len());
         let mut jacobian = Vec::new();
         for row in &self.rows {
-            let bad = row.constraint;
-            let value = row.kind.eval(&at(None)).ok_or(bad)?;
+            let bad = row.owner;
+            let value = row.kind.eval(&at(None), &radius(None)).ok_or(bad)?;
             let mut first = vec![0.0; if with_jacobian { self.n } else { 0 }];
             let mut second = first.clone();
             if with_jacobian {
+                let mut vars = Vec::new();
                 for point in row.kind.points() {
-                    let Some(v) = *self.var_of.get(point).ok_or(bad)? else {
-                        continue;
-                    };
-                    for var in [v, v.checked_add(1).ok_or(bad)?] {
-                        let seeded = row.kind.eval(&at(Some(var))).ok_or(bad)?;
-                        *first.get_mut(var).ok_or(bad)? = seeded.first.eps;
-                        if let (Some(slot), Some(eq)) = (second.get_mut(var), seeded.second) {
-                            *slot = eq.eps;
-                        }
+                    if let Some(v) = *self.var_of.get(point).ok_or(bad)? {
+                        vars.push(v);
+                        vars.push(v.checked_add(1).ok_or(bad)?);
+                    }
+                }
+                for curve in row.kind.curves() {
+                    vars.push(*self.radius_var.get(curve).ok_or(bad)?);
+                }
+                for var in vars {
+                    let seeded = row
+                        .kind
+                        .eval(&at(Some(var)), &radius(Some(var)))
+                        .ok_or(bad)?;
+                    *first.get_mut(var).ok_or(bad)? = seeded.first.eps;
+                    if let (Some(slot), Some(eq)) = (second.get_mut(var), seeded.second) {
+                        *slot = eq.eps;
                     }
                 }
             }
@@ -350,6 +575,14 @@ impl Block {
             }
         }
         Ok((r, jacobian))
+    }
+}
+
+/// The error for an owner whose value or derivative is not a finite number.
+fn degenerate(owner: Owner) -> SolveError {
+    match owner {
+        Owner::Constraint(constraint) => SolveError::Degenerate { constraint },
+        Owner::Arc(curve) => SolveError::DegenerateCurve { curve },
     }
 }
 
@@ -433,12 +666,9 @@ impl Decomposition {
     }
 }
 
-/// Each constraint's share of a per-equation score, in authoring order, keeping the largest.
-fn per_constraint(
-    owner: &[ConstraintId],
-    score: impl Fn(usize) -> f64,
-) -> Vec<(ConstraintId, f64)> {
-    let mut out: Vec<(ConstraintId, f64)> = Vec::new();
+/// Each owner's share of a per-equation score, in equation order, keeping the largest.
+fn per_owner(owner: &[Owner], score: impl Fn(usize) -> f64) -> Vec<(Owner, f64)> {
+    let mut out: Vec<(Owner, f64)> = Vec::new();
     for (i, id) in owner.iter().copied().enumerate() {
         let value = score(i);
         match out.last_mut() {
@@ -449,9 +679,24 @@ fn per_constraint(
     out
 }
 
+/// The constraints among `scored` that pass `keep`, in authoring order. An arc's own equations
+/// are never named: they belong to the arc, which no one can remove.
+fn constraints_where(
+    scored: Vec<(Owner, f64)>,
+    keep: impl Fn(f64) -> bool,
+) -> Vec<(ConstraintId, f64)> {
+    let mut out: Vec<(ConstraintId, f64)> = scored
+        .into_iter()
+        .filter(|(_, score)| keep(*score))
+        .filter_map(|(owner, score)| owner.constraint().map(|id| (id, score)))
+        .collect();
+    out.sort_by_key(|(id, _)| *id);
+    out
+}
+
 /// The constraints whose equations lie in the left singular vectors `columns`.
-fn touched(d: &Decomposition, owner: &[ConstraintId], columns: &[usize]) -> Vec<ConstraintId> {
-    per_constraint(owner, |i| {
+fn touched(d: &Decomposition, owner: &[Owner], columns: &[usize]) -> Vec<ConstraintId> {
+    let scored = per_owner(owner, |i| {
         columns
             .iter()
             .map(|c| {
@@ -459,11 +704,21 @@ fn touched(d: &Decomposition, owner: &[ConstraintId], columns: &[usize]) -> Vec<
                 e * e
             })
             .sum()
-    })
-    .into_iter()
-    .filter(|(_, share)| *share > SPREAD)
-    .map(|(id, _)| id)
-    .collect()
+    });
+    constraints_where(scored, |share| share > SPREAD)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// How much of the right null space lies on one variable.
+fn null_share(dec: &Decomposition, null: &[usize], var: usize) -> f64 {
+    null.iter()
+        .map(|column| {
+            let along = at(&dec.v_t, *column, var);
+            along * along
+        })
+        .sum()
 }
 
 /// How many independent ways each point can move, from the right null space's projector.
@@ -498,6 +753,17 @@ fn free_points(dec: &Decomposition, block: &Block, null: &[usize]) -> Vec<FreePo
     free
 }
 
+/// The curves whose radius can change, from the right null space's projector.
+fn free_radii(dec: &Decomposition, block: &Block, null: &[usize]) -> Vec<CurveId> {
+    block
+        .radius_var
+        .iter()
+        .enumerate()
+        .filter(|(_, var)| null_share(dec, null, **var) > SPREAD)
+        .filter_map(|(i, _)| u32::try_from(i).ok().map(CurveId))
+        .collect()
+}
+
 /// Counts one step against the budget.
 fn take(steps: &mut u32, budget: Budget) -> Result<(), SolveError> {
     if *steps >= budget.get() {
@@ -519,6 +785,13 @@ struct Reached {
     converged: bool,
 }
 
+/// What a converged solve's diagnosis gives.
+struct Diagnosis {
+    verdict: Verdict,
+    redundant: Vec<ConstraintId>,
+    free_radii: Vec<CurveId>,
+}
+
 impl Block {
     /// The variables as drawn.
     fn start(&self) -> Vec<f64> {
@@ -533,6 +806,11 @@ impl Block {
                 }
             }
         }
+        for (var, drawn) in self.radius_var.iter().zip(&self.drawn_radius) {
+            if let Some(slot) = vars.get_mut(*var) {
+                *slot = *drawn;
+            }
+        }
         vars
     }
 
@@ -542,7 +820,6 @@ impl Block {
         let equations = self.owner.len();
         let tau = TAU_MM / self.scale;
         let sigma_dep = 1.0 / (64.0 * self.scale);
-        let degenerate = |constraint| SolveError::Degenerate { constraint };
         let mut vars = self.start();
         take(steps, budget)?;
         let (mut residuals, mut jacobian) = self.evaluate(&vars, true).map_err(degenerate)?;
@@ -621,12 +898,11 @@ impl Block {
             .collect();
         let most = largest(&shares);
         if most > tau {
-            let conflicting =
-                per_constraint(&self.owner, |i| shares.get(i).map_or(0.0, |v| v.abs()))
-                    .into_iter()
-                    .filter(|(_, share)| *share >= GROUP_RATIO * most)
-                    .map(|(id, _)| id)
-                    .collect();
+            let scored = per_owner(&self.owner, |i| shares.get(i).map_or(0.0, |v| v.abs()));
+            let conflicting = constraints_where(scored, |share| share >= GROUP_RATIO * most)
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
             return SolveError::OverConstrained { conflicting };
         }
         if !unclear.is_empty() {
@@ -634,9 +910,9 @@ impl Block {
                 constraints: touched(dec, &self.owner, &unclear),
             };
         }
-        let unmet = per_constraint(&self.owner, |i| residuals.get(i).map_or(0.0, |v| v.abs()))
+        let scored = per_owner(&self.owner, |i| residuals.get(i).map_or(0.0, |v| v.abs()));
+        let unmet = constraints_where(scored, |residual| residual > tau)
             .into_iter()
-            .filter(|(_, residual)| *residual > tau)
             .map(|(constraint, residual)| Unmet {
                 constraint,
                 residual_mm: residual * self.scale,
@@ -645,8 +921,8 @@ impl Block {
         SolveError::NotConverged { unmet }
     }
 
-    /// The verdict and the redundant constraints of a converged solve.
-    fn verdict(&self, dec: &Decomposition) -> Result<(Verdict, Vec<ConstraintId>), SolveError> {
+    /// The verdict, the redundant constraints and the free radii of a converged solve.
+    fn verdict(&self, dec: &Decomposition) -> Result<Diagnosis, SolveError> {
         let sigma_dep = 1.0 / (64.0 * self.scale);
         let (null, unclear) = dec.split(sigma_dep);
         if !unclear.is_empty() {
@@ -668,7 +944,16 @@ impl Block {
                 free: free_points(dec, self, &null),
             }
         };
-        Ok((verdict, redundant))
+        let free_radii = if dof == 0 {
+            Vec::new()
+        } else {
+            free_radii(dec, self, &null)
+        };
+        Ok(Diagnosis {
+            verdict,
+            redundant,
+            free_radii,
+        })
     }
 
     /// Every point in whole millimetres, by the rounding rule (`commit.rs`).
@@ -694,25 +979,125 @@ impl Block {
         }
         Ok(points)
     }
+
+    /// Every curve's radius in whole millimetres, by the same rounding rule from an origin of
+    /// zero. A radius that rounds to zero or less, or beyond the sketch's range, is degenerate.
+    fn rounded_radii(&self, vars: &[f64]) -> Result<Vec<i64>, SolveError> {
+        let mut radii = Vec::with_capacity(self.radius_var.len());
+        for (i, var) in self.radius_var.iter().enumerate() {
+            let curve = CurveId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
+            let r = vars
+                .get(*var)
+                .and_then(|value| commit::to_mm(0.0, *value, self.scale))
+                .filter(|r| *r > 0)
+                .ok_or(SolveError::DegenerateCurve { curve })?;
+            radii.push(r);
+        }
+        Ok(radii)
+    }
 }
 
-/// Solves a sketch: see [`crate::solve`].
-pub(crate) fn solve(sketch: &Sketch, budget: Budget) -> Result<Solved, SolveError> {
+/// Solves a sketch, counting into `steps`: see [`crate::solve`].
+fn solve_counted(sketch: &Sketch, budget: Budget, steps: &mut u32) -> Result<Solved, SolveError> {
     let block = Block::new(sketch)?;
-    let mut steps: u32 = 0;
-    let reached = block.iterate(budget, &mut steps)?;
-    take(&mut steps, budget)?;
+    let reached = block.iterate(budget, steps)?;
+    take(steps, budget)?;
     let dec = decompose(&reached.jacobian, block.owner.len(), block.n)?;
     if !reached.converged {
         return Err(block.failure(&dec, &reached.residuals));
     }
-    let (verdict, redundant) = block.verdict(&dec)?;
+    let diagnosis = block.verdict(&dec)?;
     let points = block.rounded(sketch, &reached.vars)?;
-    commit::check(sketch, &points)?;
+    let radii_mm = block.rounded_radii(&reached.vars)?;
+    commit::check(sketch, &points, &radii_mm)?;
     Ok(Solved {
         points,
-        verdict,
-        redundant,
-        steps,
+        verdict: diagnosis.verdict,
+        redundant: diagnosis.redundant,
+        steps: *steps,
+        radii_mm,
+        free_radii: diagnosis.free_radii,
     })
+}
+
+/// Solves a sketch: see [`crate::solve`].
+pub(crate) fn solve(sketch: &Sketch, budget: Budget) -> Result<Solved, SolveError> {
+    let mut steps: u32 = 0;
+    solve_counted(sketch, budget, &mut steps)
+}
+
+/// Drags one point towards a target: see [`crate::drag`].
+pub(crate) fn drag(
+    sketch: &Sketch,
+    point: PointId,
+    target: Point,
+    budget: Budget,
+) -> Result<Dragged, SolveError> {
+    let slot = index(point.0)
+        .filter(|i| *i < sketch.points().len())
+        .ok_or(SolveError::UnknownPoint { point })?;
+    let range = -COORD_LIMIT_MM..=COORD_LIMIT_MM;
+    if !range.contains(&target.x_mm) || !range.contains(&target.y_mm) {
+        return Err(SolveError::OutOfRange { point });
+    }
+    let mut steps: u32 = 0;
+    let fixings: Vec<ConstraintId> = sketch
+        .constraints()
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| **c == Constraint::Fixed(point))
+        .filter_map(|(i, _)| u32::try_from(i).ok().map(ConstraintId))
+        .collect();
+    if !fixings.is_empty() {
+        let solved = solve_counted(sketch, budget, &mut steps)?;
+        return Ok(Dragged {
+            solved,
+            reach: Reach::Refused { blocking: fixings },
+        });
+    }
+    let radii: Vec<i64> = sketch.curves().iter().map(Curve::radius_mm).collect();
+    let mut points = sketch.points().to_vec();
+    if let Some(at) = points.get_mut(slot) {
+        *at = target;
+    }
+    let moved = sketch
+        .with_positions(&points, &radii)
+        .map_err(|_| SolveError::OutOfRange { point })?;
+
+    // Held at the target as ground, the rest projected back by least change.
+    let mut held = moved.clone();
+    let holding = held
+        .add_constraint(Constraint::Fixed(point))
+        .map_err(|_| SolveError::Decomposition)?;
+    let blocking: Vec<ConstraintId> = match solve_counted(&held, budget, &mut steps) {
+        Ok(found) => {
+            // The same sketch released at the place found, so the verdict is the sketch's own.
+            let settled = moved
+                .with_positions(&found.points, &found.radii_mm)
+                .map_err(|_| SolveError::OutOfRange { point })?;
+            let solved = solve_counted(&settled, budget, &mut steps)?;
+            let reach = if solved.points.get(slot) == Some(&target) {
+                Reach::Target
+            } else {
+                Reach::Limit {
+                    blocking: Vec::new(),
+                }
+            };
+            return Ok(Dragged { solved, reach });
+        }
+        Err(SolveError::OverConstrained { conflicting }) => conflicting,
+        Err(SolveError::NotConverged { unmet }) => unmet.iter().map(|u| u.constraint).collect(),
+        Err(other) => return Err(other),
+    };
+    let blocking: Vec<ConstraintId> = blocking.into_iter().filter(|id| *id != holding).collect();
+
+    // Released: the whole sketch projected from the target, so the point stops at the nearest
+    // place the constraints allow.
+    let solved = solve_counted(&moved, budget, &mut steps)?;
+    let reach = if solved.points == sketch.points() && solved.radii_mm == radii {
+        Reach::Refused { blocking }
+    } else {
+        Reach::Limit { blocking }
+    };
+    Ok(Dragged { solved, reach })
 }
