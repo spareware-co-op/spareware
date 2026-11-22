@@ -706,6 +706,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "construct-walls",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-solver"
 version = "0.0.0"
 dependencies = [
