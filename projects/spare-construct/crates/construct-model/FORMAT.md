@@ -38,6 +38,17 @@ A reference (chapter 20) points at part of a shape by persistent name, never by 
 | `want` | `one`, `allpieces` or `carrier`, for when what it named has been split |
 | `signature` | Kept only to suggest a repair. Resolving never guesses from it |
 
+### Workshop's elements
+
+Workshop, the discipline for things that are made (feature map area CON-A27), keeps its parts and its assembly as elements like any other, changed by the same commands. They sit at level 0 and placement `{0,0,0}`: a part is a definition, like a type, and has no place in the plan of its own.
+
+| Kind | Recipe `op` | `args` |
+| --- | --- | --- |
+| `workshop.part` | `part` | `params` (each `{name, value, note, kind}`, where `kind` is `length`, the default, `angle` or `count`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
+| `workshop.assembly` | `assembly` | `instances` (each `{id, part, name, at, grounded}`, where `part` is a `workshop.part` element's ID) and `joints` (each `{id, name, type, a, b, origin, axis, min, max, value, unit}`) |
+
+The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, or text: a number with a fraction written as its decimal text (`"8.5"`), so no hash depends on how a float prints, a parameter's name, or a formula of parameters with units, such as `"width / 2 - 4 mm"`, in the formula language of [`construct-formulas`](../construct-formulas/src/lib.rs). A formula is stored as written. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
+
 ## A document
 
 `p:<project>/model/<model>` holds a document's header, including `edition`: `{engine, version, name_scheme}`, what builds its shapes. A document runs one edition. Moving to another is an ordered operation that reports what changed; a server or browser without that edition doesn't build it, because it would give different bytes under the same recipe. A browser in that position is a viewer of the stored shapes.
@@ -61,6 +72,7 @@ A reference (chapter 20) points at part of a shape by persistent name, never by 
 | `p:<project>/body/<id>` | A body, named by the SHA-256 of its canonical bytes |
 | `p:<project>/display/<id>` | One level of detail of a body, named the same way |
 | `p:<project>/area/<document>/<level>/<x>/<y>/<element>` | The element's record hash, in each 5 m cell its shape touches |
+| `p:<project>/kind/<document>/<kind>/<element>` | The element's record hash, under its kind, whether or not it built, so a page that works on one kind (Workshop's `workshop.part` and `workshop.assembly`) finds its elements without a place in the plan. A kind that isn't a plain name (letters, digits, `.`, `_`, `-`) isn't listed |
 | `p:<project>/regenerated` | How far regeneration has got through the log |
 
 A body or display row says where its bytes are: `{"here":{"hex":...}}`, or above 256 KiB `{"file":{"path":...,"size":...}}` in file storage, linked by hash. Reading one checks the bytes against the name. A body is opaque above the geometry interface: nothing outside the engine that wrote it reads inside. A display record is JSON in the published shape of [`Display`](src/geometry.rs): the level, how far it strays from the body, a mesh and an outline.

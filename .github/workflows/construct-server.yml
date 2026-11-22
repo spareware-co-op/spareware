@@ -13,6 +13,7 @@ on:
       - "projects/spare-construct/app/**"
       - "projects/spare-construct/crates/**"
       - "projects/spare-construct/demo/index.html"
+      - "projects/spare-construct/demo/workshop/**"
       - "projects/spare-construct/clippy.toml"
       - "tools/transport-truth/**"
       - "projects/kit/crates/kit-core/**"
@@ -94,9 +95,14 @@ jobs:
         env:
           CRATES: ${{ steps.crates.outputs.tests }}
         run: cargo test --locked $CRATES --all-features
+      # A release build runs only the kernel's cheap checker groups after each operation, as the
+      # browser's does, so Workshop's assembly is held to the same answers there too.
+      - name: Workshop's assembly, posed as the browser's release build poses it
+        run: cargo test --locked --release -p construct-workshop --test assembly
       - name: The browser's builds stay free of the store
         run: >-
           cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm
+          -p construct-workshop
 
   transport:
     name: Transport's core against the prototype's answers
@@ -211,7 +217,8 @@ jobs:
           sudo mkdir -p /opt/spare-stack/src /etc/spare-stack
           git archive HEAD Cargo.toml rust-toolchain.toml projects/spare-construct/server \
             projects/spare-construct/app projects/spare-construct/crates \
-            projects/spare-construct/demo/index.html projects/kit/crates projects/kit/services \
+            projects/spare-construct/demo/index.html projects/spare-construct/demo/workshop \
+            projects/kit/crates projects/kit/services \
             projects/engines/crates projects/engines/geometry/crates design/ribbon \
             | sudo tar -x -C /opt/spare-stack/src
           sudo tee /etc/spare-stack/owner.env <<'EOF'
