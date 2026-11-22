@@ -610,7 +610,9 @@ fn crossing(p: P3, a: P3, b: P3, c: P3) -> Result<i64, NumError> {
 /// surface, so the signed count of the ray's crossings is the point's winding number whichever
 /// loops are holes and however they turn. A point on a face away from its vertices is classified
 /// as the moved point is, so a caller must know the shell does not pass through it: the checker
-/// asks only of bodies group 3 has passed.
+/// asks only of bodies group 3 has passed. The move is along the axes of the body asked, so a
+/// placed instance is asked through `crate::placed::side_of_shell`, which moves it along the
+/// placed body's.
 ///
 /// # Errors
 ///
@@ -622,6 +624,23 @@ pub fn side_of_shell(
     p: P3,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Side>, QueryError> {
+    side_of_placed_shell(body, s, p, Ok, meter)
+}
+
+/// [`side_of_shell`] of `p` against shell `s` with each of its vertices sent by `place`, counted
+/// in the frame `place` sends them to, so a tie on a face falls as it does on the body made by
+/// `place`, with the same charges.
+///
+/// # Errors
+///
+/// [`side_of_shell`]'s, and a vertex `place` refuses as [`QueryError::Overflow`].
+pub(crate) fn side_of_placed_shell(
+    body: &Body,
+    s: ShellIx,
+    p: P3,
+    place: impl Fn(P3) -> Result<P3, NumError>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Side>, QueryError> {
     let mut count = 0_i64;
     let mut faces = faces_of(body, s)?;
     while let Some(face) = next_face(body, &mut faces, meter)? {
@@ -630,7 +649,7 @@ pub fn side_of_shell(
             let mut ring = ring_of(body, l)?;
             let mut ends: Option<(P3, P3)> = None;
             while let Some(fin) = next_fin(body, &mut ring, meter)? {
-                let q = polygon_point(body, fin)?;
+                let q = place(polygon_point(body, fin)?)?;
                 if q == p {
                     return Ok(None);
                 }

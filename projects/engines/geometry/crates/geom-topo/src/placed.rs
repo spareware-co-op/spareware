@@ -7,8 +7,8 @@
 //! permutations, held packed; any other is an index into the document's side table of general
 //! transforms. On an exact placement the queries here move the question into the definition's frame
 //! and answer it there: [`to_shared`] and [`from_shared`] carry a point across, [`face_area`] and
-//! [`six_volume`] read the shared body, [`side_of_shell`] takes the point back first, and [`faces`]
-//! lists the shared rows with a mirror's senses turned. A general placement has no query here: its
+//! [`six_volume`] read the shared body, [`side_of_shell`] counts the shared shell's crossings with
+//! each vertex sent across, and [`faces`] lists the shared rows with a mirror's senses turned. A general placement has no query here: its
 //! geometry is its materialisation, the body rounded to the grid and re-validated, which needs the
 //! operations above this crate (`geom_make::placed`), and each of these answers
 //! [`PlacedError::General`] for it.
@@ -22,7 +22,8 @@
 //!   every query to it for all 48 permutations. Twice a face's area vector turns with the body and
 //!   ignores the shift; a mirror reverses the loops it reflects, so outward stays outward and the
 //!   area vector is the plain image; six times the volume is unchanged; a side of a shell is
-//!   unchanged.
+//!   unchanged, a point on a face included, because its tie is broken along the placed body's
+//!   axes, not the definition's.
 //! - **The box is held once and holds the body.** An exact placement's box is the definition's box
 //!   moved, exact where that box is; a general one's holds every exact image of the definition's
 //!   box and every rounding of it, one step out.
@@ -347,11 +348,14 @@ pub fn six_volume(
     Ok(query::volume(shared, meter)?)
 }
 
-/// Which side of shell `s` of the placed instance `p` lies on.
+/// Which side of shell `s` of the placed instance `p` lies on, a point on a face included: the
+/// shared shell's crossings are counted with each vertex sent across exactly, so the query's tie
+/// falls along the placed body's axes, as on its materialisation.
 ///
 /// # Errors
 ///
-/// [`PlacedError::General`] for a general placement, a point out of range, and the query's errors.
+/// [`PlacedError::General`] for a general placement, a point the placement sends back out of
+/// range, and the query's errors.
 pub fn side_of_shell(
     shared: &Body,
     placed: &Placed,
@@ -359,10 +363,13 @@ pub fn side_of_shell(
     p: P3,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Side>, PlacedError> {
-    Ok(query::side_of_shell(
+    let t = placed.placement.grid()?;
+    t.inverse()?.apply(p)?;
+    Ok(query::side_of_placed_shell(
         shared,
         s,
-        to_shared(placed, p)?,
+        p,
+        |q| t.apply(q),
         meter,
     )?)
 }

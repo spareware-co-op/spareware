@@ -820,13 +820,13 @@
         },
         {
           "id": "geom-make/placed",
-          "what": "Placed instances (piece G145), geom_topo::placed's queries and geom-make's materialisation, over three seeded boxes, three seeded skewed prisms and a seeded cylinder: four exact placements of each, one of the 48 signed permutations by its packed number with a seeded shift (the packed placement and its box, every face row and twice its area, six times the volume, seeded points off the faces and a vertex's image in the shared frame with their side, and the materialised body, every answer held to the same query on it); for each flat definition two rotations from a side table of six through a Library that accepts a certified body within 64 steps (the materialised body, the library's answers and how many bodies it holds), one it may not round and one past the table; and the refusals of packed permutations past 47, a box sent past the grid and a scale. Each body by its native format with its names, history, exactness and diagnostics, and each refusal's kind, entities, evidence and text, in order.",
+          "what": "Placed instances (piece G145), geom_topo::placed's queries and geom-make's materialisation, over three seeded boxes, three seeded skewed prisms and a seeded cylinder: four exact placements of each, one of the 48 signed permutations by its packed number with a seeded shift (the packed placement and its box, every face row and twice its area, six times the volume, seeded points, half of them on the plane of a face, and a vertex's image in the shared frame with their side, and the materialised body, every answer held to the same query on it); for each flat definition two rotations from a side table of six through a Library that accepts a certified body within 64 steps (the materialised body, the library's answers and how many bodies it holds), one it may not round and one past the table; and the refusals of packed permutations past 47, a box sent past the grid and a scale. Each body by its native format with its names, history, exactness and diagnostics, and each refusal's kind, entities, evidence and text, in order.",
           "check": {
             "crate": "geom-make",
             "test": "placed_determinism",
             "function": "placed_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0a7aee0fa016e712fe01140b71fae54fc97936ea147ceddd4d78f65c6adfa4aa"
+          "sha256": "c107e81f9e00f2c486e1b479c19d16279194168906ec331917034bc352974f19"
         }
       ]
     }

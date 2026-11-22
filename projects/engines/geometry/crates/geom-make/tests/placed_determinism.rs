@@ -9,9 +9,9 @@
 //!
 //! - **Exact placements:** four for each definition, each one of the 48 signed permutations by its
 //!   packed number with a seeded shift. Written: the packed placement and its box, every face row
-//!   and twice its area vector, six times the volume, and for seeded points round the box and the
-//!   image of a corner of the shared box, the point in the shared frame and its side of the shell;
-//!   then the materialised body's canonical output.
+//!   and twice its area vector, six times the volume, and for seeded points round the box, half of
+//!   them on the plane of a face, and the image of a corner of the shared box, the point in the
+//!   shared frame and its side of the shell; then the materialised body's canonical output.
 //! - **General placements:** for each flat definition, two rotations drawn from a side table of
 //!   six (about each axis, by Pythagorean directions), answered through a `Library` that accepts a
 //!   certified body within 64 steps: the box, the materialised body's canonical output, the library's
@@ -127,9 +127,8 @@ struct Def {
     bound: Box3,
     /// Whether every face is flat, so it can be placed by a general rotation.
     flat: bool,
-    /// The planes of its flat faces, each as `n` and `c` of n·p = c: a point on a face is
-    /// classified as the moved point is (`geom_topo::query::side_of_shell`), which a placement may
-    /// move another way, so the points asked are kept off them.
+    /// The planes of its flat faces, each as `n` and `c` of n·p = c: half the points asked lie on
+    /// one, where a side is decided by the query's tie, which must fall as on the materialised body.
     planes: Vec<([i64; 3], i64)>,
 }
 
@@ -345,10 +344,14 @@ fn exact(rec: &mut Record, rng: &mut SplitMix64, next: &mut u32, d: u32, def: &D
     rec.answer("areas", &areas);
     let six = shared(topo::six_volume(body, &instance, &mut meter()));
     rec.answer("volume", &six.as_ref().map(|v| v.to_le_limbs()));
+    // Half on the plane of a face, half off every one.
     let mut asked = Vec::new();
+    let mut on = 0;
     while asked.len() < POINTS {
         let q = point(rng, instance.bound());
-        if !def.on_a_face(topo::to_shared(&instance, q).unwrap()) {
+        let face = def.on_a_face(topo::to_shared(&instance, q).unwrap());
+        if face == (on < POINTS / 2) {
+            on += usize::from(face);
             asked.push(q);
         }
     }
