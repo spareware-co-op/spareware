@@ -85,6 +85,16 @@
       "known_faults": [],
       "tolerance": "none on flat faces: every vertex is a corner of the body, so the mesh lies on it (delta 0, chapter 19.3); curved faces are refused as unsupported",
       "exact_by": "geom-mesh's watertight tessellation and DisplayMesh (chapters 19.3 and 19.4); curved faces through solidcore-tess's planner meanwhile"
+    },
+    {
+      "operation": "section",
+      "case": "a flat-faced solid and a plane square to a grid axis",
+      "answered_by": "the kernel's geom-bool prepare and geom-poly local_cuts and section, joined into loops by geom-solidcore",
+      "pinned_by": "the_wall_with_its_door_cut_in_plan_has_the_gap",
+      "known_faults": [],
+      "tolerance": "exact: every point the meeting of three planes the solid and the cut hold, as a fraction of steps in lowest terms; the cut carries the solid's exactness",
+      "recorded": "geom-solidcore's own code (src/cut.rs) decides from the solid's corners whether the plane misses or only touches it (no loops), names each edge's face by its plane (the carrier, normal out of the solid), turns each edge with the material on its left seen from the plane's normal, joins the edges into loops one edge per face in a row, checks each closed and orders them from their least points. Unsupported, as values: a curved face, a plane not square to a grid axis, a corner of the solid on the plane (chapter 18.4's tie rules: a face in the plane is never a cut, touching loops at a saddle), a point where more than two edges of the cut meet, a point whose exact fraction does not fit 128 bits (a_plane_the_engine_does_not_cut_yet_is_a_value). solidcore's plane section (Modeller::plane_section) is not the answer: it cuts only the solids solidcore made (the kernel's prism and geom-bool keep no solidcore body), its curves are doubles and name no face; it is the oracle on the walls solidcore's sweep makes, agreeing within a step (the_cut_agrees_with_solidcore_s_plane_section). Pull request 1041 (WR-1, a plane on no grid) is not on main and does not bite a plane square to a grid axis",
+      "exact_by": "the kernel's exact sections of every body kind (piece G389, chapter 18.4), with the tie rules; then Spare Construct's plans read it through the same trait (note A12, build-order step 3)"
     }
   ],
   "programs": [
@@ -123,6 +133,18 @@
       },
       "known_faults": [],
       "replaced_by": "the next Construct job (kernel-seam-b, CON-A3-F1-P2 and P6): the door cut from its wall with Engine::subtract and a mesh per detail level"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-drawing's plan::plan, the cut of a view, and construct-regen's Kernel::solid naming each face by its plane",
+      "operation": "a plan or grid-axis section of built elements: each element's cut loops as named cut lines and its cut region",
+      "answered_by": "Spare Construct's own code over Engine::section: the view's plane moved into each element's frame, each cut edge named by the element's face on the same plane (its carrier), since the seam carries no persistent names yet; nothing seen below the plane, no hidden lines, no merged regions",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-drawing/tests/plan.rs",
+        "test": "two_walls_at_a_corner_give_their_cut_outlines_exactly"
+      },
+      "known_faults": ["two faces of one element on one plane cannot be told apart by a cut edge: the first named one is taken (none of today's recipes has two)"],
+      "replaced_by": "the kernel's draw (geom-draw, pieces G387, G389 and G394 to G402) with its Source and LineRef names (chapter 18.8), under the same tests; note A12's build-order steps 4 to 11 meanwhile"
     }
   ]
 }

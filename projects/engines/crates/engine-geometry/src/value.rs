@@ -81,6 +81,7 @@ pub mod op {
 /// own record of what it is, so the engine behind it can change and the program does not (25).
 pub mod engine {
     pub use geom_op::engine::{
-        Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
+        Answer, Cut, CutEdge, CutLoop, CutPoint, DisplayMesh, Edition, Engine, EngineError,
+        GridPlane, Profile, Section, Tolerance, Volume,
     };
 }

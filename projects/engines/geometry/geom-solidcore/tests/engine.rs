@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use geom_num::{Exactness, I256};
 use geom_op::engine::{Engine, EngineError, Profile, Section, Volume};
 use geom_solidcore::engine::{
-    BY_BOOL, BY_LOFT, BY_PRISM, BY_SWEEP, BY_UNION, EngineSolid, SOLIDCORE, SolidcoreEngine,
+    BY_BOOL, BY_CUT, BY_LOFT, BY_PRISM, BY_SWEEP, BY_UNION, EngineSolid, SOLIDCORE, SolidcoreEngine,
 };
 use geom_topo::Body;
 use serde_json::Value;
@@ -30,6 +30,26 @@ fn engine() -> SolidcoreEngine {
 #[test]
 fn a_wall_with_a_door_is_the_box_less_the_opening() {
     suite::a_wall_with_a_door_is_the_box_less_the_opening(engine());
+}
+
+#[test]
+fn a_box_cut_at_mid_height_is_one_rectangle_on_its_four_sides() {
+    suite::a_box_cut_at_mid_height_is_one_rectangle_on_its_four_sides(engine());
+}
+
+#[test]
+fn the_wall_with_its_door_cut_in_plan_has_the_gap() {
+    suite::the_wall_with_its_door_cut_in_plan_has_the_gap(engine());
+}
+
+#[test]
+fn a_plane_that_touches_or_misses_cuts_nothing() {
+    suite::a_plane_that_touches_or_misses_cuts_nothing(engine());
+}
+
+#[test]
+fn a_plane_the_engine_does_not_cut_yet_is_a_value() {
+    suite::a_plane_the_engine_does_not_cut_yet_is_a_value(engine());
 }
 
 #[test]
@@ -287,6 +307,7 @@ fn the_engine_names_solidcore_and_its_pin() {
     assert_eq!(by("unite"), [BY_BOOL, BY_UNION]);
     assert!(by("volume").iter().all(|b| b.contains("six-volume")));
     assert!(by("mesh").iter().all(|b| b.contains("solidcore-tess")));
+    assert_eq!(by("section"), [BY_CUT]);
 }
 
 /// Whole millimetres become steps exactly, once, at the program's seam: 1 mm is 6,400 steps of
@@ -304,6 +325,63 @@ fn whole_millimetres_become_steps_exactly() {
         [metres(mm(4000)), metres(mm(2700)), metres(mm(200))],
         [4.0, 2.7, 0.2]
     );
+}
+
+/// solidcore's own plane section is the oracle of the engine's exact cut, on the walls solidcore's
+/// sweep makes (drawn in elevation, whole and with the door as a hole of the profile), cut 1000 mm
+/// up: it gives as many curves as the cut has edges, and each curve's two ends are an edge's two
+/// ends within one step (solidcore's curves are doubles in metres, read back in steps). The
+/// engine's answer is exact; solidcore's agrees within its floating point.
+#[test]
+fn the_cut_agrees_with_solidcore_s_plane_section() {
+    use geom_solidcore::{Corner, Hole, Modeller};
+    let xz = |x0: i64, z0: i64, x1: i64, z1: i64| {
+        vec![at(x0, 0, z0), at(x1, 0, z0), at(x1, 0, z1), at(x0, 0, z1)]
+    };
+    let corners = |ps: &[geom_num::P3]| ps.iter().map(|&p| Corner::from(p)).collect::<Vec<_>>();
+    for holes in [vec![], vec![xz(1550, 300, 2450, 2400)]] {
+        let mut e = engine();
+        let profile = Profile {
+            outer: xz(0, 0, 4000, 2700),
+            holes: holes.clone(),
+        };
+        let wall = e.extrude(&profile, [0, mm(200), 0]).expect("the wall");
+        assert_eq!(wall.made_by(), BY_SWEEP);
+        let cut = e
+            .section(&wall, &suite::axis_plane(2, 1000, true))
+            .expect("the cut");
+        let ours: Vec<[[f64; 3]; 2]> = suite::loops_of(&cut)
+            .iter()
+            .flatten()
+            .map(|(a, b, _)| {
+                let f = |p: &geom_op::engine::CutPoint| p.num.map(|c| c as f64 / p.den as f64);
+                [f(a), f(b)]
+            })
+            .collect();
+        let mut m = Modeller::new(STEP);
+        let theirs = geom_solidcore::Profile {
+            outer: corners(&profile.outer),
+            holes: holes.iter().map(|h| Hole::Polygon(corners(h))).collect(),
+        };
+        let s = m
+            .extrude(&theirs, [0, mm(200), 0])
+            .expect("solidcore's wall");
+        let pieces = m
+            .plane_section(&s, at(0, 0, 1000), [0.0, 0.0, 1.0])
+            .expect("solidcore's section");
+        assert_eq!(pieces.len(), ours.len(), "holes {holes:?}");
+        let near = |p: [f64; 3], q: [f64; 3]| p.iter().zip(q).all(|(a, b)| (a - b).abs() <= 1.0);
+        for piece in &pieces {
+            let (t0, t1) = piece.span();
+            let a = piece.point_at(&m, t0).expect("a point");
+            let b = piece.point_at(&m, t1).expect("a point");
+            assert!(
+                ours.iter()
+                    .any(|[p, q]| (near(a, *p) && near(b, *q)) || (near(a, *q) && near(b, *p))),
+                "solidcore's curve {a:?} to {b:?} is no edge of the cut {ours:?}"
+            );
+        }
+    }
 }
 
 /// The methods of the trait `Engine`, read from its declaration in geom-op.

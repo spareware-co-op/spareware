@@ -27,6 +27,11 @@
 //! - `mesh`: each flat face's loops filled by solidcore-tess's planar triangulation
 //!   (`solidcore_tess::triangulate_planar`), the face's own corners and no point added, so faces
 //!   that share an edge share its points bit for bit;
+//! - `section`: a flat-faced solid cut by a plane square to a grid axis, exactly, by the kernel's
+//!   own convex pieces of its faces (`geom_bool::operand::prepare`), cut by the plane's piece
+//!   (`geom_poly::cut::local_cuts`) and met with it (`geom_poly::merge::section`), the meeting
+//!   curves joined into loops here ([`crate::cut`]); a curved solid, another plane, and a corner of
+//!   the solid on the plane are unsupported;
 //! - `edition`: the engine's name, solidcore's pinned commit, the grid step, solidcore's
 //!   tolerances as its kernel holds them, and the list above.
 //!
@@ -49,7 +54,8 @@ use geom_check::{Level, check};
 use geom_make::{PrismInput, prism};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
+    Answer, Cut, DisplayMesh, Edition, Engine, EngineError, GridPlane, Profile, Section, Tolerance,
+    Volume,
 };
 use geom_op::{OpContext, OpId, OpPath};
 use geom_poly::merge::Merge;
@@ -125,6 +131,12 @@ pub const CURVED_CASE: &str =
 
 /// What made a solid: solidcore's boolean union.
 pub const BY_UNION: &str = "solidcore's boolean union";
+
+/// The sections the engine answers.
+pub const CUT_CASE: &str = "a flat-faced solid and a plane square to a grid axis";
+
+/// What answers a section: the kernel's own pieces and meeting curves, joined here.
+pub const BY_CUT: &str = "the kernel's geom-bool prepare and geom-poly local_cuts and section, joined into loops by geom-solidcore";
 
 impl EngineSolid {
     /// What made it, as the engine's edition names it: [`BY_PRISM`], [`BY_SWEEP`] or
@@ -547,6 +559,7 @@ impl Engine for SolidcoreEngine {
                     EVERY_CASE,
                     "solidcore-tess's planar triangulation of each flat face",
                 ),
+                answer("section", CUT_CASE, BY_CUT),
             ],
         }
     }
@@ -724,6 +737,10 @@ impl Engine for SolidcoreEngine {
             mesh_face(&solid.body, face, &mut out)?;
         }
         Ok(out)
+    }
+
+    fn section(&mut self, solid: &EngineSolid, plane: &GridPlane) -> Result<Cut, EngineError> {
+        crate::cut::section(&solid.body, solid.exactness, plane)
     }
 }
 
