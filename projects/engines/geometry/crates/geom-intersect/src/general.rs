@@ -821,16 +821,19 @@ fn across((a, b): (f64, f64), share: f64) -> Option<f64> {
     (a < m && m < b).then_some(m)
 }
 
-/// `region` cut across its longer side in space, or `None` if it has no room.
+/// `region` cut across its longer side in space, or `None` if it has no room: where that side holds
+/// no double strictly inside it, the patch is as small as its parameters' doubles let it be. Cut
+/// across its shorter side instead, each piece would be as long as the patch along the side that
+/// cannot be cut, never nearer the floor, and cut again and again the shorter side would shrink to
+/// widths at which a patch's partials can no longer be bounded (a span far from zero, where the
+/// doubles stand further apart on the surface than the floor).
 fn halved(region: Region, speed: [f64; 2], share: f64) -> Option<(Region, Region)> {
     let ((a, b), (c, d)) = region;
     let [su, sv] = speed;
-    let cut_u = || across((a, b), share).map(|m| (((a, m), (c, d)), ((m, b), (c, d))));
-    let cut_v = || across((c, d), share).map(|m| (((a, b), (c, m)), ((a, b), (m, d))));
     if (b - a) * su >= (d - c) * sv {
-        cut_u().or_else(cut_v)
+        across((a, b), share).map(|m| (((a, m), (c, d)), ((m, b), (c, d))))
     } else {
-        cut_v().or_else(cut_u)
+        across((c, d), share).map(|m| (((a, b), (c, m)), ((a, b), (m, d))))
     }
 }
 
