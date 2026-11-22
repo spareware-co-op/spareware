@@ -11,7 +11,8 @@
 //! the log, by the rule below, the same way on every run.
 //!
 //! **Steps.** A person's steps in a document are their entries there that applied, of the
-//! commands in [`STEPS`]. One entry is one step, however many records it wrote: a
+//! commands in [`is_step`], and changed a record: a move to where an element already is (the page
+//! sends one when an element is clicked to select it) is no step. One entry is one step, however many records it wrote: a
 //! `parameter.bind` that rewrote the table and every type of its categories is undone at once. A
 //! run of `element.move` entries of one element, with no other entry of that person in that
 //! document between, is one step: a drag sends a move every few milliseconds after the claim it
@@ -141,6 +142,17 @@ struct Run {
     wanted: bool,
 }
 
+/// Whether an entry is a change at all: an undo or a redo always is, so each person's orders stay
+/// in step; any other entry only if it changed a record. Clicking an element to select it sends a
+/// move to where it already is, which changes nothing and is no step.
+fn changed_something(entry: &Entry) -> bool {
+    is_command(&entry.cmd)
+        || entry
+            .changes
+            .iter()
+            .any(|change| change.before != change.after)
+}
+
 /// The one piece a move changed.
 fn moved(entry: &Entry) -> Option<&Id> {
     if entry.cmd == MOVE {
@@ -200,7 +212,7 @@ pub async fn find<R: Reader>(
                 }
                 run = None;
             }
-            if !is_step(&entry.cmd) {
+            if !is_step(&entry.cmd) || !changed_something(&entry) {
                 continue;
             }
             match (which, entry.cmd.as_str()) {
