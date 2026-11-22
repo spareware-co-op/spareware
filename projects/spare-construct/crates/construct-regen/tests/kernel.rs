@@ -103,6 +103,10 @@ impl Engine for Cuboids {
         Err(unsupported("subtract"))
     }
 
+    fn subtract_pieces(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Vec<Cuboid>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
     fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
         Err(unsupported("loft"))
     }
@@ -212,6 +216,14 @@ impl Engine for Recording {
         Ok(target.clone())
     }
 
+    fn subtract_pieces(
+        &mut self,
+        target: &Cuboid,
+        tool: &Cuboid,
+    ) -> Result<Vec<Cuboid>, EngineError> {
+        Cuboids.subtract_pieces(target, tool)
+    }
+
     fn loft(&mut self, sections: &[Section]) -> Result<Cuboid, EngineError> {
         Cuboids.loft(sections)
     }
@@ -311,6 +323,9 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
         }
         fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
             Err(unsupported("subtract"))
+        }
+        fn subtract_pieces(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Vec<Cuboid>, EngineError> {
+            Err(unsupported("subtract_pieces"))
         }
         fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
             Err(unsupported("loft"))
