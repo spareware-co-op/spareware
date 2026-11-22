@@ -18,19 +18,29 @@
 //! Changes are pure functions that return a new table (`with_pen_widths`, `with_pattern`, and
 //! so on). Putting them through the edit log is a later job.
 //!
-//! The next job (CON-A8-F3-P1, second half: object styles) adds the line weight, colour and
-//! pattern each category and subcategory draws with. It belongs beside [`stored::LineStyles`] as
-//! its own module and its own table, naming a pen by its number and a pattern by its
-//! [`patterns::PatternId`]; nothing here has to change for it.
+//! Object styles (CON-A8-F3-P1, second half) sit beside [`stored::LineStyles`] in their own
+//! table, naming a pen by its number and a pattern by its [`patterns::PatternId`]:
+//!
+//! - [`object_styles`]: [`object_styles::ObjectStyles`], for each category and subcategory the
+//!   pen in projection, the pen where a view cuts it (none if it cannot be cut), a colour and a
+//!   pattern; the inheritance rule for a subcategory with no entry; the lookup the drawing code
+//!   calls; pure changes; and the stored form.
+//! - [`object_default`]: our default object styles for every built-in category, and why.
+//!
+//! Wiring the changes into the edit log, and the per-view graphics rules (CON-A8-F3-P2), are
+//! later jobs.
 
 pub mod default;
 pub mod error;
+pub mod object_default;
+pub mod object_styles;
 pub mod patterns;
 pub mod pens;
 pub mod stored;
 pub mod units;
 
 pub use error::StyleError;
+pub use object_styles::{Colour, Edge, EdgeStyle, ObjectStyle, ObjectStyleError, ObjectStyles};
 pub use patterns::{LinePattern, PatternId, PatternTable, Segment};
 pub use pens::{AnnotationPen, AnnotationPens, Pen, PenTable};
 pub use stored::LineStyles;
