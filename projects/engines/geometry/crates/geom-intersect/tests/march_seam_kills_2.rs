@@ -4,7 +4,8 @@
 //! starts each joins, and whether the pair is left unproven.
 //!
 //! Every case's curve is known exactly: two coordinate planes meet in a line, the plane z = 80y
-//! meets the unit cylinder about z in an ellipse, and the plane x = z + 1024 through the south pole
+//! meets the unit cylinder about z in an ellipse, a plane through the apex of the cone
+//! x² + y² = z² meets it in two of its rulings, and the plane x = z + 1024 through the south pole
 //! of the sphere of radius 1024 meets it in a circle through that pole.
 
 #![allow(
@@ -24,7 +25,7 @@ use geom_intersect::march::{Traced, march};
 use geom_num::interval::Interval;
 use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1 << 24))
@@ -221,6 +222,69 @@ fn two_starts_level_on_a_patchs_edge_each_end_their_own_arc() {
     assert_eq!(joins(&traced, &starts), [[0, 1], [2, 3]], "{traced:?}");
     on_the_curve((&ramp, &post), &traced, 0.125, |[x, y, _]| {
         x * x + y * y - 1.0
+    });
+}
+
+#[test]
+fn a_start_level_with_an_edges_own_start_is_not_the_next_along_that_edge() {
+    // The plane x = −z cos π/64 passes through the apex of the cone x² + y² = z² and holds its
+    // rulings at the angles π(1 ∓ 1/64). The cone's domain begins at the first, so that ruling is
+    // an edge of the cone lying in the plane, and the second runs inside. One pair holds both from
+    // z = 2 to z = 3: two starts on each, level in twos. The inner ruling's lower start is given
+    // wide, its u reaching the edge, where it stands level with the edge's own lower start. A
+    // piece along an edge runs to the nearest start further along it, never to one level with its
+    // own, so the edge's two starts are joined along it and the inner ruling's two by the march.
+    let g = 1.0 / 64.0;
+    let pi = core::f64::consts::PI;
+    let (c, s) = ((pi * g).cos(), (pi * g).sin());
+    let cone = SurfaceKind::Cone(
+        Cone::new(
+            [0.0, 0.0, 1.0],
+            1.0,
+            1.0,
+            Frame::standard().unwrap(),
+            ((1.0 - g, 1.25), (0.0, 4.0)),
+        )
+        .unwrap(),
+    );
+    // As (y, z).
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [0.0, 1.0, 0.0],
+            [-c, 0.0, 1.0],
+            ((-1.0, 1.0), (0.0, 5.0)),
+        )
+        .unwrap(),
+    );
+    let e = 1e-9;
+    let floor = 1.0 / 64.0;
+    let starts = vec![
+        [pt(1.0 - g), pt(1.0), around(2.0 * s, e), around(2.0, e)],
+        [
+            Interval::new(1.0 - g, 1.0 + 3.0 * g).unwrap(),
+            pt(1.0),
+            around(-2.0 * s, e),
+            around(2.0, e),
+        ],
+        [pt(1.0 - g), pt(2.0), around(3.0 * s, e), around(3.0, e)],
+        [
+            around(1.0 + g, e),
+            pt(2.0),
+            around(-3.0 * s, e),
+            around(3.0, e),
+        ],
+    ];
+    let found = one_pair(
+        ((1.0 - g, 1.0 + 4.0 * g), (1.0, 2.0)),
+        ((-0.5, 0.5), (1.5, 3.5)),
+        starts.clone(),
+    );
+    let traced = march(&cone, &plane, &found, floor, floor, &mut meter()).unwrap();
+    assert!(traced.unproven.is_empty(), "{traced:?}");
+    assert_eq!(joins(&traced, &starts), [[0, 2], [1, 3]], "{traced:?}");
+    on_the_curve((&cone, &plane), &traced, floor, |[x, y, z]| {
+        (x + c * z).abs() + (y.abs() - s * z).abs()
     });
 }
 
