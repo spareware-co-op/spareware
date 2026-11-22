@@ -20,6 +20,9 @@ pub const CATEGORY_KEY: &str = "@category";
 pub const PARAMS_KEY: &str = "@params";
 /// On an instance's record: the permanent ID of its type.
 pub const TYPE_KEY: &str = "@type";
+/// On a type record of version 2: the start of the key of its one system block, followed by the
+/// block's owner tag (`@system.wall`); the value is the owner's data.
+pub const SYSTEM_KEY_PREFIX: &str = "@system.";
 
 /// What every reserved key starts with.
 const RESERVED: char = '@';
@@ -29,6 +32,16 @@ const RESERVED: char = '@';
 #[must_use]
 pub fn type_recipe() -> Recipe {
     Recipe::construct(TYPE_KIND, BTreeMap::new())
+}
+
+/// The recipe of a type record of version 2, one that carries a system block: as
+/// [`type_recipe`] with `op_version` 2.
+#[must_use]
+pub fn system_type_recipe() -> Recipe {
+    Recipe {
+        op_version: 2,
+        ..type_recipe()
+    }
 }
 
 /// Whether a `props` key is one of this crate's reserved keys, known or not.

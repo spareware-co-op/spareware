@@ -67,6 +67,8 @@ pub enum TypeError {
     },
     /// A value was refused by its parameter's definition.
     Param(ParamError),
+    /// A system block's owner tag or data is not well formed; the text says why.
+    BadSystem(String),
     /// A stored record or `props` entry is not one this crate writes; the text says why.
     Malformed(String),
 }
@@ -119,6 +121,7 @@ impl fmt::Display for TypeError {
                 "type {type_name:?} cannot be deleted: {count} instances use it"
             ),
             Self::Param(error) => error.fmt(f),
+            Self::BadSystem(why) => write!(f, "not a system block: {why}"),
             Self::Malformed(why) => write!(f, "not a stored type or instance: {why}"),
         }
     }

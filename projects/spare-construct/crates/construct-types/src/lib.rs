@@ -30,8 +30,10 @@
 //! - Family types (job 3.6): a type made from a family recipe. Its record is a type record whose
 //!   `recipe` names the family recipe and its type row in place of the plain type recipe, read
 //!   by a new arm in [`ElementType::from_record`]; the parameter and value rules stay as they are.
-//! - System types with layers (job 3.4): a wall type's layer list is type data kept on the type's
-//!   record by construct-walls, beside the parameters this crate holds.
+//! - System types with layers (job 3.4) and other system data: a type may carry one
+//!   [`SystemData`] block, an owner tag (such as `wall`) and that owner's canonical text, which
+//!   this crate stores, returns and compares byte for byte and never reads inside. The layers
+//!   themselves are the owning crate's (construct-walls); nothing of them is here.
 //! - Type catalogues: rows of a supplier's sizes, each read into [`ElementType::new`] and
 //!   [`ElementType::set`]; no new stored form.
 //! - Default values on definitions: [`Parameters::add`] takes a definition and an optional
@@ -44,12 +46,17 @@ mod instance;
 mod parameters;
 mod record;
 mod resolve;
+mod system;
 mod types;
 
 pub use element_type::ElementType;
 pub use error::TypeError;
 pub use instance::{Instance, users};
 pub use parameters::Parameters;
-pub use record::{CATEGORY_KEY, PARAMS_KEY, TYPE_KEY, TYPE_KIND, type_recipe};
+pub use record::{
+    CATEGORY_KEY, PARAMS_KEY, SYSTEM_KEY_PREFIX, TYPE_KEY, TYPE_KIND, system_type_recipe,
+    type_recipe,
+};
 pub use resolve::{Resolved, Source, resolve};
+pub use system::SystemData;
 pub use types::Types;
