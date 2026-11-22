@@ -1,0 +1,935 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:spareware:spare-construct:family-recipe:1",
+  "title": "Spare Construct family recipe, format 1",
+  "description": "A family: its parameters, planes, sketches, solid steps, 2D symbols, visibility by detail level, hosting and built-in types. This schema gives the document's shape; what the shape means (formulas that work out, references that exist, ids that are known) is checked by the reader library, construct-families. See FORMAT.md beside this file's crate.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "The format version: 1.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "id": {
+      "description": "The family's permanent id.",
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "$ref": "#/$defs/name"
+    },
+    "category": {
+      "description": "The family's category, a construct-categories id.",
+      "$ref": "#/$defs/category"
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "planes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/plane"
+      }
+    },
+    "sketches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sketch"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "symbols": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/symbol"
+      }
+    },
+    "hosting": {
+      "$ref": "#/$defs/hosting"
+    },
+    "types": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/type"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "id",
+    "name",
+    "category",
+    "parameters",
+    "planes",
+    "sketches",
+    "steps",
+    "symbols",
+    "hosting",
+    "types"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "key": {
+      "description": "A name within the recipe: a lowercase letter, then up to 63 lowercase letters, digits and underscores. A parameter's key is its name in formulas.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/key"
+      }
+    },
+    "id": {
+      "description": "A permanent id: a letter or digit, then up to 63 letters, digits, dots, underscores and dashes.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "name": {
+      "description": "A name people see.",
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "description": "A construct-categories id.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "formula": {
+      "description": "A construct-formulas formula, such as `width / 2 - frame` or `45 mm`.",
+      "type": "string",
+      "minLength": 1
+    },
+    "stored": {
+      "description": "A value in construct-params' stored text, such as `length:q0:5248000` or `choice:left`.",
+      "type": "string",
+      "minLength": 1
+    },
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "definition": {
+          "$ref": "#/$defs/definition"
+        },
+        "default": {
+          "$ref": "#/$defs/stored"
+        },
+        "formula": {
+          "$ref": "#/$defs/formula"
+        }
+      },
+      "required": [
+        "key",
+        "definition"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "default"
+          ]
+        },
+        {
+          "required": [
+            "formula"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "definition": {
+      "description": "A construct-params definition, with the fields its own JSON has.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "enum": [
+            "length",
+            "area",
+            "volume",
+            "angle",
+            "slope",
+            "number",
+            "whole",
+            "text",
+            "yesno",
+            "choice",
+            "element",
+            "material",
+            "link"
+          ]
+        },
+        "holder": {
+          "enum": [
+            "instance",
+            "type"
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "holder",
+        "choices"
+      ],
+      "additionalProperties": false
+    },
+    "plane": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "base": {
+          "description": "The family plane it is parallel to: xy (normal +z), xz (normal +y) or yz (normal +x).",
+          "enum": [
+            "xy",
+            "xz",
+            "yz"
+          ]
+        },
+        "offset": {
+          "$ref": "#/$defs/formula"
+        }
+      },
+      "required": [
+        "key",
+        "base",
+        "offset"
+      ],
+      "additionalProperties": false
+    },
+    "sketch": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "plane": {
+          "$ref": "#/$defs/key"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/key"
+              },
+              "x": {
+                "$ref": "#/$defs/stored"
+              },
+              "y": {
+                "$ref": "#/$defs/stored"
+              }
+            },
+            "required": [
+              "key",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/key"
+              },
+              "start": {
+                "$ref": "#/$defs/key"
+              },
+              "end": {
+                "$ref": "#/$defs/key"
+              }
+            },
+            "required": [
+              "key",
+              "start",
+              "end"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "arcs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/key"
+              },
+              "centre": {
+                "$ref": "#/$defs/key"
+              },
+              "start": {
+                "$ref": "#/$defs/key"
+              },
+              "end": {
+                "$ref": "#/$defs/key"
+              },
+              "radius": {
+                "$ref": "#/$defs/stored"
+              }
+            },
+            "required": [
+              "key",
+              "centre",
+              "start",
+              "end",
+              "radius"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "circles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/key"
+              },
+              "centre": {
+                "$ref": "#/$defs/key"
+              },
+              "radius": {
+                "$ref": "#/$defs/stored"
+              }
+            },
+            "required": [
+              "key",
+              "centre",
+              "radius"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/constraint"
+          }
+        }
+      },
+      "required": [
+        "key",
+        "plane",
+        "points",
+        "lines",
+        "arcs",
+        "circles",
+        "constraints"
+      ],
+      "additionalProperties": false
+    },
+    "side": {
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "touch": {
+      "enum": [
+        "outside",
+        "first_inside",
+        "second_inside"
+      ]
+    },
+    "constraint": {
+      "description": "One of construct-solver's constraints, by the same name; a length is a formula.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/two_keys",
+          "properties": {
+            "kind": {
+              "enum": [
+                "coincident",
+                "parallel",
+                "perpendicular",
+                "equal_length",
+                "concentric",
+                "equal_radius"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            "line": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "kind",
+            "line"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "distance"
+            },
+            "a": {
+              "$ref": "#/$defs/key"
+            },
+            "b": {
+              "$ref": "#/$defs/key"
+            },
+            "length": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "kind",
+            "a",
+            "b",
+            "length"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "point_line_distance"
+            },
+            "point": {
+              "$ref": "#/$defs/key"
+            },
+            "line": {
+              "$ref": "#/$defs/key"
+            },
+            "length": {
+              "$ref": "#/$defs/formula"
+            },
+            "side": {
+              "$ref": "#/$defs/side"
+            }
+          },
+          "required": [
+            "kind",
+            "point",
+            "line",
+            "length",
+            "side"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "fixed"
+            },
+            "point": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "kind",
+            "point"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "point_on_line"
+            },
+            "point": {
+              "$ref": "#/$defs/key"
+            },
+            "line": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "kind",
+            "point",
+            "line"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "point_on_curve"
+            },
+            "point": {
+              "$ref": "#/$defs/key"
+            },
+            "curve": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "kind",
+            "point",
+            "curve"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "radius",
+                "diameter"
+              ]
+            },
+            "curve": {
+              "$ref": "#/$defs/key"
+            },
+            "length": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "kind",
+            "curve",
+            "length"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tangent_line"
+            },
+            "line": {
+              "$ref": "#/$defs/key"
+            },
+            "curve": {
+              "$ref": "#/$defs/key"
+            },
+            "side": {
+              "$ref": "#/$defs/side"
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "curve",
+            "side"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tangent_curves"
+            },
+            "a": {
+              "$ref": "#/$defs/key"
+            },
+            "b": {
+              "$ref": "#/$defs/key"
+            },
+            "touch": {
+              "$ref": "#/$defs/touch"
+            }
+          },
+          "required": [
+            "kind",
+            "a",
+            "b",
+            "touch"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "two_keys": {
+      "type": "object",
+      "properties": {
+        "kind": true,
+        "a": {
+          "$ref": "#/$defs/key"
+        },
+        "b": {
+          "$ref": "#/$defs/key"
+        }
+      },
+      "required": [
+        "kind",
+        "a",
+        "b"
+      ],
+      "additionalProperties": false
+    },
+    "visibility": {
+      "description": "Whether it shows at each detail level.",
+      "type": "object",
+      "properties": {
+        "coarse": {
+          "type": "boolean"
+        },
+        "medium": {
+          "type": "boolean"
+        },
+        "fine": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "coarse",
+        "medium",
+        "fine"
+      ],
+      "additionalProperties": false
+    },
+    "material": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "parameter": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "parameter"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fixed": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "fixed"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "step": {
+      "description": "One solid step: an extrusion of a sketch profile along its plane's normal, or one earlier step less another, or two earlier steps as one.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            },
+            "op": {
+              "const": "extrude"
+            },
+            "sketch": {
+              "$ref": "#/$defs/key"
+            },
+            "profile": {
+              "$ref": "#/$defs/keys"
+            },
+            "holes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/keys"
+              }
+            },
+            "start": {
+              "$ref": "#/$defs/formula"
+            },
+            "end": {
+              "$ref": "#/$defs/formula"
+            },
+            "subcategory": {
+              "$ref": "#/$defs/category"
+            },
+            "material": {
+              "$ref": "#/$defs/material"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            }
+          },
+          "required": [
+            "key",
+            "op",
+            "sketch",
+            "profile",
+            "holes",
+            "start",
+            "end",
+            "subcategory",
+            "material",
+            "visibility"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            },
+            "op": {
+              "const": "subtract"
+            },
+            "target": {
+              "$ref": "#/$defs/key"
+            },
+            "tool": {
+              "$ref": "#/$defs/key"
+            },
+            "subcategory": {
+              "$ref": "#/$defs/category"
+            },
+            "material": {
+              "$ref": "#/$defs/material"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            }
+          },
+          "required": [
+            "key",
+            "op",
+            "target",
+            "tool",
+            "subcategory",
+            "material",
+            "visibility"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            },
+            "op": {
+              "const": "unite"
+            },
+            "a": {
+              "$ref": "#/$defs/key"
+            },
+            "b": {
+              "$ref": "#/$defs/key"
+            },
+            "subcategory": {
+              "$ref": "#/$defs/category"
+            },
+            "material": {
+              "$ref": "#/$defs/material"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            }
+          },
+          "required": [
+            "key",
+            "op",
+            "a",
+            "b",
+            "subcategory",
+            "material",
+            "visibility"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "symbol": {
+      "description": "2D lines drawn in one kind of view: chosen edges of a sketch.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "view": {
+          "enum": [
+            "plan",
+            "elevation"
+          ]
+        },
+        "sketch": {
+          "$ref": "#/$defs/key"
+        },
+        "edges": {
+          "$ref": "#/$defs/keys"
+        },
+        "subcategory": {
+          "$ref": "#/$defs/category"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "when": {
+          "description": "Drawn only while a yes or no, or choice, parameter has this stored value.",
+          "type": "object",
+          "properties": {
+            "parameter": {
+              "$ref": "#/$defs/key"
+            },
+            "is": {
+              "$ref": "#/$defs/stored"
+            }
+          },
+          "required": [
+            "parameter",
+            "is"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "key",
+        "view",
+        "sketch",
+        "edges",
+        "subcategory",
+        "visibility"
+      ],
+      "additionalProperties": false
+    },
+    "opening": {
+      "description": "The closed profile, on a plane parallel to the wall (base xz), cut through the host's whole thickness.",
+      "type": "object",
+      "properties": {
+        "sketch": {
+          "$ref": "#/$defs/key"
+        },
+        "profile": {
+          "$ref": "#/$defs/keys"
+        }
+      },
+      "required": [
+        "sketch",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "hosting": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "host": {
+              "enum": [
+                "unhosted",
+                "floor",
+                "face"
+              ]
+            }
+          },
+          "required": [
+            "host"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "host": {
+              "const": "wall"
+            },
+            "opening": {
+              "$ref": "#/$defs/opening"
+            }
+          },
+          "required": [
+            "host",
+            "opening"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "type": {
+      "description": "A built-in type: its name and its values of parameters the type holds.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parameter": {
+                "$ref": "#/$defs/key"
+              },
+              "value": {
+                "$ref": "#/$defs/stored"
+              }
+            },
+            "required": [
+              "parameter",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "values"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

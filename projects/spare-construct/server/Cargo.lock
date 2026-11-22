@@ -705,10 +705,25 @@ dependencies = [
 name = "construct-families"
 version = "0.0.0"
 dependencies = [
- "construct-model",
- "construct-regen",
+ "construct-categories",
+ "construct-formulas",
+ "construct-materials",
+ "construct-params",
  "construct-solver",
- "engine-geometry",
+ "construct-types",
+ "hex",
+ "kit-core",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "construct-formulas"
+version = "0.0.0"
+dependencies = [
+ "dashu-int",
+ "dashu-ratio",
+ "winnow 0.7.15",
 ]
 
 [[package]]
@@ -717,6 +732,17 @@ version = "0.0.0"
 dependencies = [
  "construct-elements",
  "construct-model",
+]
+
+[[package]]
+name = "construct-materials"
+version = "0.0.0"
+dependencies = [
+ "construct-params",
+ "construct-styles",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -771,6 +797,15 @@ dependencies = [
  "nalgebra",
  "num-dual",
  "serde",
+]
+
+[[package]]
+name = "construct-styles"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1010,6 +1045,37 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "dashu-base"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "861a614e79388a4c72aa66b0bdabc91e3a4f30d53e0c8d962953e207d75884d0"
+dependencies = [
+ "num-modular",
+]
+
+[[package]]
+name = "dashu-int"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a0490b40a6a3f6427970035f17f76fd59c01d3cd9f9140809672863a0d64c8"
+dependencies = [
+ "cfg-if",
+ "dashu-base",
+ "num-modular",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb0b7e2610ae7f28b2ab8b09229afedc9cbc7a32e7c647b916a3a49ca00123c1"
+dependencies = [
+ "dashu-base",
+ "dashu-int",
 ]
 
 [[package]]
@@ -2733,6 +2799,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-modular"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd8e500409e6cd603b03e477c26a6caecdc27ac58979a53e881c75eafc079f44"
+
+[[package]]
 name = "num-rational"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4177,6 +4249,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "string_cache"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4484,7 +4562,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime",
  "toml_parser",
- "winnow",
+ "winnow 1.0.5",
 ]
 
 [[package]]
@@ -4493,7 +4571,7 @@ version = "1.1.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6769c452d71ba30696c6b37770c439a9cc9110f47f7d5cdbeda79840ef5ea31"
 dependencies = [
- "winnow",
+ "winnow 1.0.5",
 ]
 
 [[package]]
@@ -5150,6 +5228,15 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winnow"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "winnow"
