@@ -19,6 +19,8 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
+mod miri;
+
 use geom_curve::Frame;
 use geom_intersect::general::{Settled, Subdivided, subdivide};
 use geom_intersect::march::{Traced, march};
@@ -292,9 +294,15 @@ fn a_cap_holds_one_branch_through_its_pole() {
     // The cap v ≤ `top` of the sphere of radius 1024 meets x = 0 in one arc over the pole: down
     // u = 1/2 from a, through the pole, up u = 3/2 to b. Two starts at the pole, p1 and p2, are the
     // one point the branch passes, whichever is given first, and at the plane's scale of 1 or 10⁻⁴.
+    // Under Miri each march is minutes, so it marches one of the same cases: the smaller cap
+    // v ≤ −0.45 at scale 1 (the shortest arc, 19 vertices to the larger cap's 49), with p1 given
+    // first; the arc still runs through the pole from both starts held on it.
     let pi = core::f64::consts::PI;
     let r = 1024.0;
-    for (top, scale) in [(-0.25, 1.0), (-0.45, 1.0), (-0.25, 1e-4), (-0.45, 1e-4)] {
+    for &(top, scale) in miri::rounds(
+        &[(-0.25, 1.0), (-0.45, 1.0), (-0.25, 1e-4), (-0.45, 1e-4)],
+        &[(-0.45, 1.0)],
+    ) {
         let ball = ball((-0.5, top));
         let big = 2048.0 / scale;
         let side = wall(0.0, scale, ((-big, big), (-big, big)));
@@ -309,7 +317,8 @@ fn a_cap_holds_one_branch_through_its_pole() {
         ];
         let p1 = [pt(0.5), pt(-0.5), pt(0.0), pt(-r / scale)];
         let p2 = [pt(1.5), pt(-0.5), pt(0.0), pt(-r / scale)];
-        for starts in [vec![a, b, p1, p2], vec![a, b, p2, p1]] {
+        let orders = [vec![a, b, p1, p2], vec![a, b, p2, p1]];
+        for starts in orders.into_iter().take(miri::sized(2, 1)) {
             let found = one_pair(
                 ((0.25, 1.75), (-0.5, top)),
                 ((-big, big), (-big, big)),
