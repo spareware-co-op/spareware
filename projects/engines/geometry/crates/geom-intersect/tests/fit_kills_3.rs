@@ -13,6 +13,8 @@
     reason = "test code: a failure should stop loudly; the names are chapter 12.12's"
 )]
 
+mod miri;
+
 use geom_curve::{Basis as Leaf, Frame, IntersectionCurve, ParamCurve, Span, SurfaceRef, Trimmed};
 use geom_intersect::fit::{fit, true_point};
 use geom_intersect::march::Branch;
@@ -156,7 +158,9 @@ fn an_arc_on_a_cone_whose_domain_ends_just_above_the_apex_is_still_fitted() {
     // the cone moves far too slowly with u for that box to hold the reach, and the bound on how
     // fast its normal turns, which grows as 1/v² towards the apex, is more than half the largest
     // double. Such a piece has no bound of its own: it is halved until its boxes stay by the arc,
-    // which they soon do.
+    // which they soon do. Under Miri, where the fit is minutes, the arc is the middle half of that
+    // one, from u = 3/16 to 5/16: its first piece's wide box still runs down to the edge, and the
+    // piece is still halved, three times where the longer arc's is four.
     let low = 13.0 * pow2(-512);
     let domain = ((0.0625, 0.4375), (low, 1.0));
     let cone = Cone::new([0.0; 3], 0.0, 1.0, Frame::standard().unwrap(), domain).unwrap();
@@ -171,15 +175,17 @@ fn an_arc_on_a_cone_whose_domain_ends_just_above_the_apex_is_still_fitted() {
         let (cos, sin) = (cospi(u).unwrap().get(), sinpi(u).unwrap().get());
         [u, 0.25, 0.25 * cos, 0.25 * sin]
     };
-    let arc = branch(vec![at(0.125), at(0.25), at(0.375)]);
+    let (u0, u1) = miri::case((0.125, 0.375), (0.1875, 0.3125));
+    let arc = branch(vec![at(u0), at(u0 / 2.0 + u1 / 2.0), at(u1)]);
     let ceiling = 0.0625;
     let mut meter = WorkMeter::new(Budget::of_work(1 << 20));
     let curve = fit((&cone, &flat), REFS, &arc, ceiling, &mut meter)
         .unwrap_or_else(|e| panic!("{e:?} for an arc the surfaces cross cleanly"));
     let e = curve.error();
     assert!(e <= ceiling, "{e}");
-    // Along the arc x and y both stay between cos(3π/8)/4 and cos(π/8)/4.
-    let (least, most) = (at(0.375)[2], at(0.125)[2]);
+    // Along the arc x and y both stay between the cosines of its ends, a quarter of each: between
+    // cos(3π/8)/4 and cos(π/8)/4 for the longer arc.
+    let (least, most) = (at(u1)[2], at(u0)[2]);
     let (lo, hi) = ParamCurve::domain(&curve);
     for k in 0..=64 {
         let t = lo + (hi - lo) * f64::from(k) / 64.0;

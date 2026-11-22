@@ -181,20 +181,23 @@ fn the_circle_of_a_plane_and_a_cylinder_leaves_a_patch_in_two_arcs() {
 fn a_cylinders_end_circle_lying_in_a_strip_of_a_plane_is_two_arcs_along_the_edge() {
     // The cylinder's end circle v = 0 lies in z = 0; the plane's strip sin π/8 ≤ y ≤ sin 3π/8 holds
     // the arcs u in [1/8, 3/8] and [5/8, 7/8], each a piece along the cylinder's edge from one start
-    // to the nearest other on it.
+    // to the nearest other on it. Under Miri, where the two pieces are minutes, the strip is the
+    // narrower sin π/4 ≤ y ≤ sin 3π/8: the arcs u in [1/4, 3/8] and [5/8, 3/4], the same two
+    // pieces along the edge at half the length.
     // Each sine and cosine is taken once and shared by the starts it gives: Miri adds its own
     // small error to every call of the platform's sin and cos, so two calls for one value can
     // differ in the last place and put a start's middle just outside the strip.
     let pi = core::f64::consts::PI;
-    let (c0, s0) = ((pi * 0.125).cos(), (pi * 0.125).sin());
-    let (c1, s1) = ((pi * 0.375).cos(), (pi * 0.375).sin());
+    let (lo, hi) = miri::case((0.125, 0.375), (0.25, 0.375));
+    let (c0, s0) = ((pi * lo).cos(), (pi * lo).sin());
+    let (c1, s1) = ((pi * hi).cos(), (pi * hi).sin());
     let w = 1.0 / 1_073_741_824.0;
     let start = |u: f64, x: f64, y: f64| [around(u, w), pt(0.0), around(x, 1e-6), around(y, 1e-6)];
     let starts = vec![
-        start(0.375, c1, s1),
-        start(0.125, c0, s0),
-        start(0.625, -c1, s1),
-        start(0.875, -c0, s0),
+        start(hi, c1, s1),
+        start(lo, c0, s0),
+        start(1.0 - hi, -c1, s1),
+        start(1.0 - lo, -c0, s0),
     ];
     // The strip's edges are the starts' own middles, so each start lies on an edge exactly.
     let (y0, y1) = (mid(starts[1][3]), mid(starts[0][3]));
@@ -294,14 +297,14 @@ fn a_cap_holds_one_branch_through_its_pole() {
     // The cap v ≤ `top` of the sphere of radius 1024 meets x = 0 in one arc over the pole: down
     // u = 1/2 from a, through the pole, up u = 3/2 to b. Two starts at the pole, p1 and p2, are the
     // one point the branch passes, whichever is given first, and at the plane's scale of 1 or 10⁻⁴.
-    // Under Miri each march is minutes, so it marches one of the same cases: the smaller cap
-    // v ≤ −0.45 at scale 1 (the shortest arc, 19 vertices to the larger cap's 49), with p1 given
-    // first; the arc still runs through the pole from both starts held on it.
+    // Under Miri each march is minutes, so it marches one smaller case of the same kind: the cap
+    // v ≤ −0.49 at scale 1, a shorter arc than either cap's here, with p1 given first; the arc
+    // still runs through the pole from both starts held on it.
     let pi = core::f64::consts::PI;
     let r = 1024.0;
-    for &(top, scale) in miri::rounds(
-        &[(-0.25, 1.0), (-0.45, 1.0), (-0.25, 1e-4), (-0.45, 1e-4)],
-        &[(-0.45, 1.0)],
+    for &(top, scale) in miri::case(
+        &[(-0.25, 1.0), (-0.45, 1.0), (-0.25, 1e-4), (-0.45, 1e-4)][..],
+        &[(-0.49, 1.0)][..],
     ) {
         let ball = ball((-0.5, top));
         let big = 2048.0 / scale;

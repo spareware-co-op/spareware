@@ -27,6 +27,8 @@
     reason = "test code: a failure should stop loudly, and platform maths may judge the kernel's"
 )]
 
+mod miri;
+
 use geom_curve::Frame;
 use geom_intersect::general::{Settled, Subdivided, subdivide};
 use geom_intersect::known::{Known, KnownContact, subdivide_known};
@@ -361,10 +363,11 @@ fn a_start_whose_box_reaches_a_pole_it_is_not_held_on_is_not_the_pole() {
     // thirty-second of a half turn up from it. That point's start is given wide: its v reaches
     // down to the pole line and its place on the plane reaches the pole's, though its u does not.
     // Only a start held exactly on the pole line is the pole, whatever its u, so these are two
-    // points and the one branch joins them.
+    // points and the one branch joins them. Under Miri, where the march is minutes, the arc ends a
+    // ninety-sixth of a half turn up: a shorter arc of the same circle, its far start as wide.
     let r = 1024.0;
     let pi = core::f64::consts::PI;
-    let t = 1.0 / 32.0;
+    let t = miri::case(1.0 / 32.0, 1.0 / 96.0);
     let a = pi * t;
     let ball = SurfaceKind::Sphere(
         Sphere::new(
