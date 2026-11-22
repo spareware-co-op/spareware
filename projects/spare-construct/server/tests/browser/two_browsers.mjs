@@ -275,9 +275,12 @@ const sill = '#pv-side input[data-chg="stackparam"][data-a="P-sill"]';
 await ben.waitForSelector(sill);
 check((await ben.locator('#pv-side').textContent()).includes('Doors'), 'a selected door shows its category');
 check((await ben.locator(sill).inputValue()) === '0 mm', 'and its parameters in units, the default until one is set');
+// Typed and committed with Enter, the way a person does it: the field sends one change, and the page
+// then lets go of the field. (A made-up change event on top would send a second one when the field
+// loses focus, and an undo would then only take back that copy.)
 const setSill = async (value) => {
   await ben.locator(sill).fill(value);
-  await ben.locator(sill).evaluate((el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+  await ben.locator(sill).press('Enter');
 };
 await setSill('3 kg');
 await ben.waitForFunction(() => document.getElementById('toast-m').textContent.includes('Sill height'));
@@ -292,8 +295,21 @@ await shot(ben, 'ben-parameters');
 console.log('\n   Undo and redo, through the edit log');
 await ben.waitForSelector('#qat [data-act="stackundo"]');
 pass("Ben's Undo is ready: his last change is his to undo");
-await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+// Enter committed the value and the page let go of the field, so Ctrl+Z is the page's, not the field's.
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea'));
 await ben.keyboard.press('Control+z');
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+// What Ben's page saw of its undo: the state, the last toast and the newest lines of the edit log.
+console.log(
+  `      Ben's page after Ctrl+Z: ${JSON.stringify(
+    await ben.evaluate(() => ({
+      steps: window.spare.steps,
+      toast: document.getElementById('toast-m').textContent,
+      focus: document.activeElement?.tagName,
+      log: window.spare.log.slice(0, 3),
+    })),
+  )}`,
+);
 await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === undefined);
 pass("Ctrl+Z undoes his value, and Anna's browser follows");
 await ben.waitForSelector('#qat [data-act="stackredo"]');
@@ -302,6 +318,15 @@ await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P
 pass('his Redo button puts it back, for her too');
 await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
 pass('and then there is nothing to redo');
+// A second change, taken back with the quick bar's Undo button this time.
+await setSill('0.2 m');
+await anna.waitForFunction(() => {
+  const value = window.spare.elements.get('D-103')?.el.props['P-sill'];
+  return value !== undefined && value !== 'length:q0:960000';
+});
+await ben.click('#qat [data-act="stackundo"]');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
+pass("his Undo button takes back a second change, and Anna's browser follows");
 // Anna's own last change was deleting the wall she drew: her undo brings it back, for Ben too.
 await anna.click('#qat [data-act="stackundo"]');
 await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
