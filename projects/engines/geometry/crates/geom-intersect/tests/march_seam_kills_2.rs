@@ -7,6 +7,14 @@
 //! meets the unit cylinder about z in an ellipse, a plane through the apex of the cone
 //! x² + y² = z² meets it in two of its rulings, and the plane x = z + 1024 through the south pole
 //! of the sphere of radius 1024 meets it in a circle through that pole.
+//!
+//! And the uniqueness proof the march lends to known curves (12.11), where an entry of I − Y·J is
+//! further below zero than above it: a sheet whose slope steepens across the line it shares with
+//! a plane, so that every cell tried reads that entry past −1 and none is proven.
+//!
+//! And a pole read exactly a floor from the other surface (12.10): the tip of a flat triangle on a
+//! plane whose parameters place the tip's foot no finer than their own steps, at the floor that
+//! reading stands exactly at.
 
 #![allow(
     clippy::unwrap_used,
@@ -20,10 +28,13 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::general::{Settled, Subdivided};
+use geom_intersect::general::{Settled, Subdivided, subdivide};
+use geom_intersect::known::{Known, KnownContact, subdivide_known};
 use geom_intersect::march::{Traced, march};
+use geom_intersect::project::{Projection, project_surface};
+use geom_intersect::result::{Degeneracy, Unresolved};
 use geom_num::interval::Interval;
-use geom_nurbs::Limit;
+use geom_nurbs::{Basis, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamSurface, Plane, Sphere, SurfaceKind};
 
@@ -395,4 +406,127 @@ fn a_start_whose_box_reaches_a_pole_it_is_not_held_on_is_not_the_pole() {
     assert!(traced.unproven.is_empty(), "{traced:?}");
     assert_eq!(joins(&traced, &starts), [[0, 1]], "{traced:?}");
     on_the_curve((&ball, &plane), &traced, 8.0, |[x, _, z]| x - z - r);
+}
+
+/// The sheet (u, 3v, (v + c)³ − c³), c = 1/64, over u and v in [−1, 1]: it crosses the plane
+/// z = 0 along v = 0 and nowhere else, and its slope across that line is 3·(v + c)².
+fn steepening_sheet() -> SurfaceKind {
+    // The Bézier heights of (v + c)³ − c³ over [−1, 1], each a whole number of 2⁻¹⁸.
+    let heights = [-250_048.0, 257_984.0, -266_176.0, 274_624.0].map(|h: f64| h / 262_144.0);
+    let across = Basis::new(3, vec![-1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let along = Basis::new(1, vec![-1.0, -1.0, 1.0, 1.0]).unwrap();
+    let mut net = Vec::new();
+    for x in [-1.0, 1.0] {
+        for (y, z) in [-3.0, -1.0, 1.0, 3.0].into_iter().zip(heights) {
+            net.push([x, y, z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(along, across, &net).unwrap())
+}
+
+#[test]
+fn a_known_curve_whose_cells_read_a_slope_past_twice_their_middles_is_searched() {
+    // A cell reaching w either side of the line v = 0 reads a slope between (1 − w/c)² and
+    // (1 + w/c)² of its middle's, so the one entry of I − Y·J that is not zero lies between
+    // 1 − (1 + w/c)² and 1 − (1 − w/c)²: under 1 for every w < c, and down to −1 once
+    // w = (√2 − 1)·c. At a floor of 1/32 the narrowest cell tried has w = 0.46·c and reads that
+    // entry down to −1.14, so the matrix is not proven regular and no cell is taken out: the line
+    // is searched as it is with no known curve, every pair along it settled and none flagged.
+    let sheet = steepening_sheet();
+    let wall = SurfaceKind::Plane(
+        Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 3.0, 0.0],
+            ((-8.0, 8.0), (-8.0, 8.0)),
+        )
+        .unwrap(),
+    );
+    let line: Vec<[Interval; 4]> = (-2..=2)
+        .map(|k| {
+            let x = f64::from(k) / 4.0;
+            [pt(x), pt(0.0), pt(x), pt(0.0)]
+        })
+        .collect();
+    let known = Known {
+        vertices: line,
+        bound: 0.0,
+        contact: KnownContact::Crossing,
+    };
+    let floor = 1.0 / 32.0;
+    let found = subdivide_known(&sheet, &wall, &[known], floor, &mut meter()).unwrap();
+    let plain = subdivide_known(&sheet, &wall, &[], floor, &mut meter()).unwrap();
+    assert!(found.flagged.is_empty(), "{:?}", found.flagged);
+    assert_eq!(found, plain);
+    // The settled pairs hold the whole line, from one edge of the sheet to the other.
+    let ends = found
+        .settled
+        .iter()
+        .fold((1.0_f64, -1.0_f64), |(lo, hi), s| {
+            let ((a, b), (c, d)) = s.first;
+            assert!(c < 0.0 && 0.0 < d, "{s:?}");
+            (lo.min(a), hi.max(b))
+        });
+    assert_eq!(ends, (-1.0, 1.0));
+}
+
+#[test]
+fn a_pole_read_exactly_a_floor_from_the_other_surface_is_read_as_on_it() {
+    // A flat triangle with its tip, a collapsed first row of its net, at (1, 1, 0): z = u − 1,
+    // so the tip is all of it that the plane z = 0 holds. The plane's parameters run a million
+    // past the tip, so they place its foot no finer than their own steps there.
+    let basis = || Basis::new(1, vec![1.0, 1.0, 2.0, 2.0]).unwrap();
+    let tip = [1.0, 1.0, 0.0];
+    let net = [tip, tip, [2.0, 0.0, 1.0], [2.0, 2.0, 1.0]];
+    let tent = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
+    let (far, w) = (1_048_576.0, 1.0 / 1024.0);
+    let c = far + 1.0;
+    let plane = SurfaceKind::Plane(
+        Plane::new(
+            [-far, -far, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((c - w, c + w), (c - w, c + w)),
+        )
+        .unwrap(),
+    );
+    // The pole's reading (12.10): its enclosure's widest side, and how far its middle is from
+    // its foot on the plane, the foot found to an eighth of the floor. The floor is the one that
+    // reading stands exactly at, the far end of the distance and the spread together.
+    let sides = (Limit::FromRight, Limit::FromRight);
+    let read = tent
+        .partials_over(((1.0, 1.0), (1.0, 1.0)), sides, 0, &mut meter())
+        .unwrap();
+    let pole = read[0];
+    let spread = pole.iter().map(|x| x.hi() - x.lo()).fold(0.0, f64::max);
+    let reading = |floor: f64| {
+        let found = project_surface(&plane, &pole.map(mid), floor / 8.0, &mut meter()).unwrap();
+        let Projection::Points(feet) = found else {
+            panic!("{found:?}");
+        };
+        assert_eq!(feet.len(), 1, "{feet:?}");
+        assert!(feet[0].distance.lo() <= spread, "{feet:?}");
+        feet[0].distance.hi() + spread
+    };
+    let floor = reading(reading(2.0 * spread));
+    assert_eq!(reading(floor), floor);
+    // On the plane to within the floor, with no way out of the tip along the plane: every pair
+    // left holds the tip on both surfaces and says a pole stands there alone.
+    let found = subdivide(&tent, &plane, floor, &mut meter()).unwrap();
+    assert!(found.settled.is_empty(), "{found:?}");
+    assert!(!found.flagged.is_empty(), "{found:?}");
+    for pair in &found.flagged {
+        let (((u, _), _), ((s0, s1), (r0, r1))) = (pair.first, pair.second);
+        assert_eq!(
+            pair.why,
+            Unresolved::NonSmooth {
+                at: Degeneracy::Pole
+            },
+            "{pair:?}"
+        );
+        assert!(
+            u == 1.0 && s0 <= c && c <= s1 && r0 <= c && c <= r1,
+            "{pair:?}"
+        );
+    }
 }
