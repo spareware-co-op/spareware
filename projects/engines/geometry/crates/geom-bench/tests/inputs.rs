@@ -2898,6 +2898,62 @@ fn bounds_typical_batches_all_succeed() {
     }
 }
 
+/// Every typical batch of the local step's benchmarks (piece G144) succeeds on its path, and the
+/// two paths give one body and one history: the wall and its lifts become one block, the top
+/// lift's top face added and each side merged.
+#[test]
+fn local_step_typical_batches_all_succeed() {
+    use geom_bench::inputs::scenario as m;
+    use geom_bench::kernels::scenario as k;
+    use geom_bool::local::{Path, Plan, local_step};
+    use geom_op::history::ChangeClass;
+    let (arranged, glued) = (
+        m::raised(Typical, Plan::Arrange),
+        m::raised(Typical, Plan::Glued),
+    );
+    assert_eq!((arranged.len(), glued.len()), (1, 1));
+    assert!(
+        arranged
+            .iter()
+            .chain(&glued)
+            .all(|r| r.lifts.len() == m::LIFTS)
+    );
+    all_ok("local_full", k::raised, &arranged);
+    all_ok("local_fast", k::raised, &glued);
+    let ctx = geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([4; 16])),
+        geom_run::Budget::UNLIMITED,
+    );
+    let serial = geom_run::Exec::serial();
+    for (one, other) in arranged.iter().zip(&glued) {
+        let full = local_step(&ctx, &serial, &m::step_of(one)).unwrap().result;
+        let fast = local_step(&ctx, &serial, &m::step_of(other))
+            .unwrap()
+            .result;
+        assert_eq!((full.path, fast.path), (Path::Arranged, Path::Fast));
+        assert_eq!(full.body, fast.body);
+        assert_eq!(full.history, fast.history);
+        assert_eq!(fast.body.arenas().faces.len(), 6);
+        let classes: Vec<ChangeClass> = fast.history.changes().iter().map(|c| c.class()).collect();
+        assert_eq!(
+            classes
+                .iter()
+                .filter(|c| **c == ChangeClass::FaceAdded)
+                .count(),
+            1,
+            "{classes:?}"
+        );
+        assert_eq!(
+            classes
+                .iter()
+                .filter(|c| **c == ChangeClass::FacesMerged)
+                .count(),
+            4,
+            "{classes:?}"
+        );
+    }
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {

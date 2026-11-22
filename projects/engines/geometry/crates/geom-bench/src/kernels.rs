@@ -3196,10 +3196,12 @@ pub mod helper {
 
 /// The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): whole jobs a
 /// building model gives `geom-bool`, each run as a program runs it, under an unlimited budget, on
-/// one thread so the counts do not depend on scheduling.
+/// one thread so the counts do not depend on scheduling. The raised wall runs a local operation's
+/// arrangement step (piece G144, 13.1) on each of its two paths.
 pub mod scenario {
     use geom_bool::batch::{BatchRule, CutResult, cut};
     use geom_bool::combine::{Combined, combine, unite};
+    use geom_bool::local::{Local, local_step};
     use geom_bool::operand::{BooleanInput, Selection, Term};
     use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
     use geom_poly::merge::Merge;
@@ -3208,7 +3210,7 @@ pub mod scenario {
 
     use super::run;
     use crate::inputs::scenario::{
-        Host, Many, Picks, Recut, Storey, cut_of, seeds, selections, solid,
+        Host, Many, Picks, Raise, Recut, Storey, cut_of, seeds, selections, solid, step_of,
     };
 
     /// A context of one operation, under no limit.
@@ -3333,6 +3335,27 @@ pub mod scenario {
                 accept: None,
             };
             picked_counts(combine(&ctx, &Exec::serial(), &input))
+        });
+    }
+
+    /// A local step's body and history read: the body's faces, edges and vertices, and how many
+    /// topology changes its history records.
+    fn local_counts(out: Result<OpOutput<Local>, OpError>) -> Result<[u32; 4], OpError> {
+        out.map(|done| {
+            let [faces, edges, vertices, _] = counts([&done.result.body]);
+            let changes = u32::try_from(done.result.history.changes().len()).unwrap_or(u32::MAX);
+            [faces, edges, vertices, changes]
+        })
+    }
+
+    /// Each wall raised by its lifts in one local step, on the path its plan names: arranged
+    /// (13.1's full path), or on the plan's proof that they meet only on whole shared faces, the
+    /// arrangement skipped (the fast path).
+    #[inline(never)]
+    pub fn raised(batch: &[Raise], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |raise| {
+            local_counts(local_step(&ctx, &Exec::serial(), &step_of(raise)))
         });
     }
 }

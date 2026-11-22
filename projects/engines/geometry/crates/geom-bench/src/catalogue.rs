@@ -609,9 +609,15 @@ pub static OPS: &[Op] = &[
     Op { group: "scenario", name: "one_selection", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("one_selection", c, inputs::scenario::reduced()) },
     Op { group: "scenario", name: "three_selections", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("three_selections", c, inputs::scenario::reduced()) },
     Op { group: "scenario", name: "storey", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("storey", c, inputs::scenario::reduced()) },
+    // A local operation's arrangement step (piece G144, 13.1): a wall raised by its lifts in one
+    // step, arranged (the full path), and on the plan's proof that they meet only on whole shared
+    // faces (the fast path). One size only, so neither is in SCENARIOS.
+    Op { group: "scenario", name: "local_full", measures: "geom_bool::local::local_step", classes: T, prepare: |c| bind(inputs::scenario::raised(c, geom_bool::local::Plan::Arrange), kernels::scenario::raised) },
+    Op { group: "scenario", name: "local_fast", measures: "geom_bool::local::local_step", classes: T, prepare: |c| bind(inputs::scenario::raised(c, geom_bool::local::Plan::Glued), kernels::scenario::raised) },
 ];
 
-/// The scenarios' names, as the operations of the scenario group name them.
+/// The scenarios' names, as the operations of the scenario group name them, but the local step's
+/// two, which have no full size.
 pub const SCENARIOS: [&str; 7] = [
     "openings",
     "moved_door",

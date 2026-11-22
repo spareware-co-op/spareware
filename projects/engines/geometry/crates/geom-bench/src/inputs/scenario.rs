@@ -10,27 +10,37 @@
 //! - Overlapping boxes in a grid, united in one call: [`FULL_BOXES`], 23.13's 1,000-operand union.
 //! - A storey: an envelope, walls on a square grid and one seed in each room, read as cells:
 //!   [`FULL_ROOMS`] rooms a side (G137's storey).
+//! - A wall raised by [`LIFTS`] lifts, each a block on the whole top face of the one below, in one
+//!   local operation's arrangement step (G144, 13.1): on the full path, arranged, and on the fast
+//!   path, on its plan's proof that the blocks meet only on whole shared faces. It has one size,
+//!   [`raised`]'s, which the count gates run.
 //!
 //! Class `typical` only, and each batch holds one scenario, not [`super::BATCH`] inputs: a scenario
 //! is a whole job, whose cost is what the gate guards, and 23.13 runs it once at about a tenth of
 //! its size. [`reduced`] gives the size the gates run, [`full`] the size of the job itself.
 //!
 //! Guarantees: every scenario is the same on every target, every body in it is a valid solid made
-//! by `geom-make`, and every result of a scenario is `Ok` (`tests/inputs.rs`).
+//! by `geom-make`, and every result of a scenario is `Ok` (`tests/inputs.rs`); the raised wall's
+//! two paths give one body and one history (`tests/inputs.rs`).
 //!
 //! Method: chapter 23.13's scenarios at reduced scale
 //! (`projects/engines/geometry/architecture/23-performance.md`), on the shapes of `geom-bool`'s own
-//! tests (`tests/batch.rs`'s wall of doors, `tests/cells.rs`'s rooms), grown to a size, with no
-//! randomness: a scenario is a fixed job, as Spare Construct's targets are (28.14).
+//! tests (`tests/batch.rs`'s wall of doors, `tests/cells.rs`'s rooms, `tests/attack_g144.rs`'s
+//! extrusion of a whole top face), grown to a size, with no randomness: a scenario is a fixed job,
+//! as Spare Construct's targets are (28.14).
 //!
 //! Cost: one box built per body, outside every measured run.
 
 use geom_bool::batch::{self, BatchRule, Cut, cut};
+use geom_bool::local::{LocalInput, Plan};
 use geom_bool::operand::{CellSeed, Operand, OperandKey, OperandKind, Selection};
 use geom_make::{BoxInput, make_box};
 use geom_num::Exactness;
 use geom_num::grid::{P3, Steps};
+use geom_op::history::ChangeClass;
+use geom_op::local::AllowSet;
 use geom_op::{OpContext, OpId, OpPath};
+use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec};
 use geom_topo::Body;
 
@@ -53,6 +63,13 @@ pub const BOXES_PER_ROW: usize = 10;
 
 /// Rooms a side of a storey at full size.
 pub const FULL_ROOMS: usize = 10;
+
+/// Lifts that raise a wall in one local step.
+pub const LIFTS: usize = 10;
+
+/// The changes raising a wall may make: the top lift's top face added, and the sides of the wall
+/// and its lifts merged, each side into one face (`geom-bool`'s `tests/attack_g144.rs`).
+pub const RAISED: AllowSet = AllowSet::of(&[ChangeClass::FaceAdded, ChangeClass::FacesMerged]);
 
 /// A host and the tools that cut it.
 #[derive(Clone, Debug)]
@@ -98,6 +115,18 @@ pub struct Storey {
     pub walls: Vec<Body>,
     /// One point in each room, by rows.
     pub seeds: Vec<P3>,
+}
+
+/// A wall and the lifts that raise it, each on the whole top face of the one below, and the path
+/// the step takes.
+#[derive(Clone, Debug)]
+pub struct Raise {
+    /// The wall.
+    pub wall: Body,
+    /// The lifts, lowest first, in key order.
+    pub lifts: Vec<Body>,
+    /// How the step runs: arranged, or on the plan's proof.
+    pub plan: Plan,
 }
 
 /// The sizes of the scenarios: openings, holes, boxes and rooms a side.
@@ -336,4 +365,55 @@ pub fn seeds(storey: &Storey) -> Vec<CellSeed> {
             key: solid(1_000_000 + k, &storey.envelope).key,
         })
         .collect()
+}
+
+/// The box from `low` of `size`, built by an operation of its own, numbered `n`, so the bodies of
+/// one local step bring different names, as a geometry step's new faces do.
+fn own_cuboid(n: usize, low: [i64; 3], size: [i64; 3]) -> Option<Body> {
+    let byte = u8::try_from(n).ok()?;
+    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([byte; 16])), Budget::UNLIMITED);
+    let [x, y, z] = low;
+    let input = BoxInput {
+        min: p3(x, y, z),
+        size: size.map(|s| Steps(s.unsigned_abs())),
+    };
+    Some(make_box(&ctx, &input).ok()?.result.body)
+}
+
+/// A wall 300 long, 10 thick and 30 high, and [`LIFTS`] lifts of the same block stacked on it, for
+/// `local_step` on `plan`.
+#[must_use]
+pub fn raised(class: Class, plan: Plan) -> Vec<Raise> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let make = || {
+        let wall = own_cuboid(16, [0, 0, 0], [300, 10, 30])?;
+        let lifts = (1..=LIFTS)
+            .map(|k| own_cuboid(16 + k, [0, 0, 30 * steps(k)], [300, 10, 30]))
+            .collect::<Option<Vec<Body>>>()?;
+        Some(Raise { wall, lifts, plan })
+    };
+    make().into_iter().collect()
+}
+
+/// The arrangement step that raises `raise` on its plan: the wall keyed 0 is the target and its
+/// lifts keyed 1 and on are the tools, as [`cut_of`] keys a host and its tools, united, merging
+/// what lies on one plane, under [`RAISED`].
+#[must_use]
+pub fn step_of(raise: &Raise) -> LocalInput<'_> {
+    LocalInput {
+        target: solid(0, &raise.wall),
+        tools: raise
+            .lifts
+            .iter()
+            .enumerate()
+            .map(|(i, lift)| solid(i + 1, lift))
+            .collect(),
+        select: Selection::Unite,
+        merge: Merge::RemoveRedundant,
+        accept: None,
+        may: RAISED,
+        plan: raise.plan,
+    }
 }

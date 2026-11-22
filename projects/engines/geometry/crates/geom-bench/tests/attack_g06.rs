@@ -2380,6 +2380,25 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
                 }),
         ),
+        ("scenario", "local_full" | "local_fast") => {
+            use geom_bool::local::{Plan, local_step};
+            let plan = if name == "local_fast" {
+                Plan::Glued
+            } else {
+                Plan::Arrange
+            };
+            fold(inputs::scenario::raised(class, plan).iter().map(|raise| {
+                let input = geom_bool::local::LocalInput {
+                    plan,
+                    ..inputs::scenario::step_of(raise)
+                };
+                local_step(&scenario_context(), &geom_run::Exec::serial(), &input).map(|out| {
+                    let [faces, edges, vertices, _] = scenario_counts([&out.result.body]);
+                    let changes = u32::try_from(out.result.history.changes().len()).unwrap();
+                    [faces, edges, vertices, changes]
+                })
+            }))
+        }
         ("mesh", "point_point") => fold(
             inputs::mesh::point_point(class)
                 .iter()

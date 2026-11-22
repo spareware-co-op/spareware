@@ -3438,9 +3438,23 @@ pub mod scenario {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/local_full/typical"))]
+    fn local_full(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("scenario/local_fast/typical"))]
+    fn local_fast(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = scenario;
-        benchmarks = openings, moved_door, slab_holes, union, one_selection, three_selections, storey
+        benchmarks = openings, moved_door, slab_holes, union, one_selection, three_selections, storey, local_full, local_fast
     );
 }
 

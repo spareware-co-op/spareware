@@ -1565,6 +1565,19 @@ impl Canonical for crate::inputs::scenario::Picks {
     }
 }
 
+impl Canonical for crate::inputs::scenario::Raise {
+    // The plan is part of the input: the two paths run one wall and its lifts.
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.wall, h);
+        bodies(&self.lifts, h);
+        let path: u64 = match self.plan {
+            geom_bool::local::Plan::Arrange => 0,
+            geom_bool::local::Plan::Glued => 1,
+        };
+        path.encode(h);
+    }
+}
+
 impl Canonical for crate::inputs::scenario::Many {
     fn encode(&self, h: &mut Sha256) {
         bodies(&self.bodies, h);

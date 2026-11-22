@@ -320,9 +320,15 @@
               "kind": "corpus",
               "piece": "G143",
               "why": "2 new count benchmarks in the group history: history/bounds_after and history/bounds_join (G143, geom_op::Bounds::after and geom_op::Bounds::join), typical only: a part's history of 200 operations, made with six faces and twelve edges and cut 199 times, each cut trimming a face, making a cut face and two edges, every tenth splitting a face or merging two edges, folded step by step from no bounds; and the bounds of two parts cut from one start joined. No existing digest moved"
+            },
+            {
+              "sha256": "f0f91833efa6ac64f59990797ac02df6daa98eb601af48510e73ebf1b9c1e1a4",
+              "kind": "corpus",
+              "piece": "G144",
+              "why": "2 new count benchmarks in the group scenario: scenario/local_full and scenario/local_fast (G144, geom_bool::local::local_step on its full path and its fast path), typical only, one job each: a wall 300 long, 10 thick and 30 high raised by ten lifts of the same block, each on the whole top face of the one below, united in one local step that may only add a face and merge faces, arranged on the full path and built from the plan's proof on the fast path; both give one block of six faces and one history, so the two rows have one results digest, and the plan in each input gives each row its own inputs digest. No existing digest moved"
             }
           ],
-          "sha256": "f0f91833efa6ac64f59990797ac02df6daa98eb601af48510e73ebf1b9c1e1a4"
+          "sha256": "5bad010ce240e08ae57af8b18fae00c3d85a9318a7c2f113eb973a90f284ed70"
         },
         {
           "id": "geom-nurbs/operations",
