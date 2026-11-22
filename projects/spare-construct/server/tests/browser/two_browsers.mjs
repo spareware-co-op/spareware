@@ -292,13 +292,24 @@ await shot(ben, 'ben-parameters');
 console.log('\n   Undo and redo, through the edit log');
 await ben.waitForSelector('#qat [data-act="stackundo"]');
 pass("Ben's Undo is ready: his last change is his to undo");
-await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+// The value field gave up focus when the value went in, so the page has the keys.
 await ben.keyboard.press('Control+z');
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+// What Ben's page saw of its undo: the state, the last toast and the newest lines of the edit log.
+console.log(
+  `      Ben's page after Ctrl+Z: ${JSON.stringify(
+    await ben.evaluate(() => ({
+      steps: window.spare.steps,
+      toast: document.getElementById('toast-m').textContent,
+      log: window.spare.log.slice(0, 3),
+    })),
+  )}`,
+);
 await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === undefined);
 pass("Ctrl+Z undoes his value, and Anna's browser follows");
 await ben.waitForSelector('#qat [data-act="stackredo"]');
 await ben.click('#qat [data-act="stackredo"]');
-await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:150');
+await anna.waitForFunction(() => window.spare.elements.get('D-103')?.el.props['P-sill'] === 'length:q0:960000');
 pass('his Redo button puts it back, for her too');
 await ben.waitForSelector('#qat [data-tl="Redo"][aria-disabled="true"]');
 pass('and then there is nothing to redo');
