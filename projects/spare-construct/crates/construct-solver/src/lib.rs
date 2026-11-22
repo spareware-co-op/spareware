@@ -9,8 +9,9 @@
 //! CON-A3-F2-P1-solver-home (where the solver lives for now, and why) and
 //! CON-A3-F2-P1-curves-and-drag (how curves are stored and solved, and how a drag works).
 //!
-//! - [`sketch`]: what a sketch is, in whole millimetres and authoring order.
-//! - [`outcome`]: what a solve gives back: whole-millimetre points and radii and a verdict (fully
+//! - [`sketch`]: what a sketch is, in whole grid steps of the geometry kernel (`Q0`, 1/6,400 mm)
+//!   and authoring order, with [`mm`] and [`Point::mm`] to give it whole millimetres.
+//! - [`outcome`]: what a solve gives back: points and radii in grid steps and a verdict (fully
 //!   or under-constrained, with the degrees of freedom left and the points and radii that carry
 //!   them, and any redundant constraints), or an error value (over-constrained with the
 //!   conflicting constraints, not converged, out of work, refused at rounding); and what a drag
@@ -21,7 +22,8 @@
 //! random starts, no hash-map order; IEEE `+ - * /` and `sqrt` only); work is counted in steps,
 //! never time; fixed points never move; nothing is dropped or relaxed silently; a solved sketch
 //! meets every constraint, and every arc has its ends on its circle, within the model tolerance
-//! (0.01 mm) after rounding points and radii to whole millimetres, or is refused.
+//! (0.01 mm) after rounding points and radii to the grid, or is refused. Rounding moves a point
+//! at most half a step (78 nm) along each axis, so sloped and curved sketches are accepted.
 //!
 //! Interim: the engine behind [`solve`] and [`drag`] is a private module of this crate, our own
 //! code following the kernel's chapter 15 method. The kernel's `geom-sketch` (pieces G216 to
@@ -39,17 +41,18 @@ pub mod outcome;
 pub mod sketch;
 
 pub use outcome::{
-    Budget, Dragged, FreePoint, MODEL_TOLERANCE_MM, Reach, SolveError, Solved, Unmet, Verdict,
+    Budget, Dragged, FreePoint, MODEL_TOLERANCE_MM, MODEL_TOLERANCE_STEPS, Reach, SolveError,
+    Solved, Unmet, Verdict,
 };
 pub use sketch::{
-    COORD_LIMIT_MM, Constraint, ConstraintId, Curve, CurveId, Line, LineId, Point, PointId, Side,
-    Sketch, SketchError, Touch,
+    COORD_LIMIT, Constraint, ConstraintId, Curve, CurveId, Line, LineId, Point, PointId,
+    STEPS_PER_MM, Side, Sketch, SketchError, Touch, mm,
 };
 
 /// Solves a sketch from its points and radii as drawn, within a work budget.
 ///
-/// Each solved coordinate and radius is rounded to the nearest whole millimetre, halves away from
-/// zero, and every arc and every constraint is then measured again on the rounded values: a
+/// Each solved coordinate and radius is rounded to the nearest grid step, halves to even as the
+/// kernel rounds onto its grid (chapter 6.1), and every arc and every constraint is then measured again on the rounded values: a
 /// sketch that no longer meets one within [`MODEL_TOLERANCE_MM`] is refused with
 /// [`SolveError::RoundingRefused`] or [`SolveError::ArcEndRefused`].
 ///
@@ -75,7 +78,7 @@ pub fn solve(sketch: &Sketch, budget: Budget) -> Result<Solved, SolveError> {
 /// # Errors
 ///
 /// [`SolveError::UnknownPoint`]; [`SolveError::OutOfRange`] for a target beyond
-/// [`COORD_LIMIT_MM`]; any error [`solve`] gives other than a conflict or no convergence with the
+/// [`COORD_LIMIT`]; any error [`solve`] gives other than a conflict or no convergence with the
 /// point held, which release instead.
 pub fn drag(
     sketch: &Sketch,

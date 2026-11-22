@@ -1,34 +1,37 @@
 //! From solution to stored geometry (chapter 15.10, in its simplest form). The solver works in
-//! floating point; the sketch stores whole millimetres.
+//! floating point; the sketch stores whole grid steps of the kernel (`Q0`, 1/6,400 mm).
 //!
 //! The rounding rule: each solved coordinate is unscaled once, as origin + value x scale (the
-//! origin is a whole millimetre and the scale a power of two, so only the sum rounds), and then
-//! rounded to the nearest whole millimetre, halves away from zero. A fixed point is never touched.
+//! origin is a whole grid step and the scale a power of two, so only the sum rounds), and then
+//! rounded to the nearest grid step, halves to even, as the kernel commits a point to its grid
+//! (chapter 6.1 and 6.3): at most half a step, 78 nm, per coordinate. A fixed point is never
+//! touched.
 //!
-//! After rounding every constraint is measured again on the whole-millimetre points, from exact
-//! integer differences, cross and dot products, and must hold within the model tolerance
-//! (0.01 mm). If one does not, the solve is refused with the first such constraint in authoring
+//! After rounding every constraint is measured again on the grid points, from exact integer
+//! differences, cross and dot products, and must hold within the model tolerance (0.01 mm, 64
+//! steps). If one does not, the solve is refused with the first such constraint in authoring
 //! order. Coincidences, horizontals and verticals therefore hold exactly; every other kind holds
 //! within the tolerance (chapter 15.10's "bounded" row; its exact carrier forms are the kernel's
-//! work).
+//! work). Half a step is far inside the tolerance, so sloped lines, arcs ended anywhere and
+//! sloped tangencies are accepted; a refusal is left only where no grid points near the answer
+//! meet a constraint, such as a line a fraction of a micrometre long held parallel to a long one.
 //!
-//! Curves. A radius is stored as a whole number of millimetres, like every length, rounded by the
-//! same rule from an origin of zero; an arc's centre and ends are ordinary whole-millimetre
-//! points. Before the constraints, every arc is measured: each end's distance from the centre,
-//! from the exact integer squared distance and one square root, must be within the model
-//! tolerance of the stored radius, or the solve is refused with [`SolveError::ArcEndRefused`]. An
-//! arc whose ends round to one place, or onto its centre, is degenerate. So a stored arc's ends
-//! are on its stored circle within 0.01 mm. Chapter 15.10's exact arc form (the centre a rational
-//! point on the ends' bisector) is the kernel's work; until it answers, an arc whose ends cannot
-//! fall on whole millimetres near its circle is refused rather than stored loose. A tangency is
-//! measured as a distance (the centre from the line's carrier, or the centres from each other,
-//! against the radii on the stored side or way), whichever residual form the solver used, so a
-//! tangency that solved to the other side shows as a miss of about twice the radius.
+//! Curves. A radius is stored as a whole number of grid steps, like every length, rounded by the
+//! same rule from an origin of zero; an arc's centre and ends are ordinary grid points. Before
+//! the constraints, every arc is measured: each end's distance from the centre, from the exact
+//! integer squared distance and one square root, must be within the model tolerance of the
+//! stored radius, or the solve is refused with [`SolveError::ArcEndRefused`]. An arc whose ends
+//! round to one place, or onto its centre, is degenerate. So a stored arc's ends are on its
+//! stored circle within 0.01 mm. Chapter 15.10's exact arc form (the centre a rational point on
+//! the ends' bisector) is the kernel's work. A tangency is measured as a distance (the centre
+//! from the line's carrier, or the centres from each other, against the radii on the stored side
+//! or way), whichever residual form the solver used, so a tangency that solved to the other side
+//! shows as a miss of about twice the radius.
 
-use crate::outcome::{MODEL_TOLERANCE_MM, SolveError};
+use crate::outcome::{MODEL_TOLERANCE_STEPS, SolveError};
 use crate::sketch::{
-    COORD_LIMIT_MM, Constraint, ConstraintId, Curve, CurveId, Point, PointId, Side, Sketch, Touch,
-    cross, diff, dot,
+    COORD_LIMIT, Constraint, ConstraintId, Curve, CurveId, Point, PointId, STEPS_PER_MM, Side,
+    Sketch, Touch, cross, diff, dot,
 };
 
 /// An exact integer as the nearest double. Every value here is below 2^127.
@@ -40,18 +43,24 @@ pub(super) fn real(value: i128) -> f64 {
     value as f64
 }
 
-/// A solved, unscaled coordinate as a whole millimetre, by the rounding rule above.
-pub(super) fn to_mm(origin: f64, value: f64, scale: f64) -> Option<i64> {
-    let mm = (origin + value * scale).round();
-    let limit = f64::from(i32::try_from(COORD_LIMIT_MM).ok()?);
-    if !mm.is_finite() || mm.abs() > limit {
+/// A solved, unscaled coordinate as a whole grid step, by the rounding rule above.
+pub(super) fn to_steps(origin: f64, value: f64, scale: f64) -> Option<i64> {
+    let steps = (origin + value * scale).round_ties_even();
+    // COORD_LIMIT is below 2^53, so it is exact as a double.
+    let limit = real(i128::from(COORD_LIMIT));
+    if !steps.is_finite() || steps.abs() > limit {
         return None;
     }
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "mm is whole and |mm| is at most COORD_LIMIT_MM, checked above"
+        reason = "steps is whole and |steps| is at most COORD_LIMIT, checked above"
     )]
-    Some(mm as i64)
+    Some(steps as i64)
+}
+
+/// A distance in grid steps as millimetres, for a report.
+pub(super) fn in_mm(steps: f64) -> f64 {
+    steps / real(i128::from(STEPS_PER_MM))
 }
 
 fn point(points: &[Point], id: PointId) -> Option<Point> {
@@ -86,7 +95,7 @@ fn signed_from_line(start: Point, end: Point, p: Point) -> Option<Result<f64, ()
     }
 }
 
-/// How far one constraint is from holding on whole-millimetre points, in millimetres.
+/// How far one constraint is from holding on grid points, in grid steps.
 #[expect(
     clippy::too_many_lines,
     reason = "one arm per constraint kind, side by side so each kind reads in one place"
@@ -134,14 +143,14 @@ fn miss(
             let (u, v) = two_lines(a, b)?;
             Ok((length(u)? - length(v)?).abs())
         }
-        Constraint::Distance { a, b, mm } => {
+        Constraint::Distance { a, b, steps } => {
             let gap = length(diff(point(points, a)?, point(points, b)?)?)?;
-            Ok((gap - real(i128::from(mm))).abs())
+            Ok((gap - real(i128::from(steps))).abs())
         }
         Constraint::PointLineDistance {
             point: held,
             line: l,
-            mm,
+            steps,
             side,
         } => {
             let (start, end) = line(sketch, points, l)?;
@@ -149,8 +158,8 @@ fn miss(
             let along = length(direction)?;
             if along > 0.0 {
                 let signed = match side {
-                    Side::Left => real(i128::from(mm)),
-                    Side::Right => -real(i128::from(mm)),
+                    Side::Left => real(i128::from(steps)),
+                    Side::Right => -real(i128::from(steps)),
                 };
                 let turn = real(cross(direction, diff(start, point(points, held)?)?)?);
                 Ok((turn / along - signed).abs())
@@ -178,13 +187,13 @@ fn miss(
             let (_, rb) = circle(sketch, points, radii, b)?;
             Ok((ra - rb).abs())
         }
-        Constraint::Radius { curve, mm } => {
+        Constraint::Radius { curve, steps } => {
             let (_, r) = circle(sketch, points, radii, curve)?;
-            Ok((r - real(i128::from(mm))).abs())
+            Ok((r - real(i128::from(steps))).abs())
         }
-        Constraint::Diameter { curve, mm } => {
+        Constraint::Diameter { curve, steps } => {
             let (_, r) = circle(sketch, points, radii, curve)?;
-            Ok((2.0 * r - real(i128::from(mm))).abs())
+            Ok((2.0 * r - real(i128::from(steps))).abs())
         }
         Constraint::TangentLine {
             line: l,
@@ -213,34 +222,35 @@ fn miss(
     })
 }
 
-/// How far an arc's ends are off its circle on whole-millimetre points, in millimetres; `Err`
+/// How far an arc's ends are off its circle on grid points, in grid steps; `Err`
 /// for an arc whose ends are one place or at its centre. `None` for a circle.
-fn arc_miss(points: &[Point], radius_mm: i64, curve: Curve) -> Option<Result<f64, ()>> {
+fn arc_miss(points: &[Point], radius: i64, curve: Curve) -> Option<Result<f64, ()>> {
     let (start, end) = curve.ends()?;
     let centre = point(points, curve.centre())?;
     let (s, e) = (point(points, start)?, point(points, end)?);
     if s == e || s == centre || e == centre {
         return Some(Err(()));
     }
-    let r = real(i128::from(radius_mm));
+    let r = real(i128::from(radius));
     let off_start = (length(diff(centre, s)?)? - r).abs();
     let off_end = (length(diff(centre, e)?)? - r).abs();
     Some(Ok(off_start.max(off_end)))
 }
 
-/// Checks whole-millimetre points and radii against every arc and then every constraint, or
+/// Checks grid points and radii against every arc and then every constraint, or
 /// refuses them. `points` holds every point and `radii` every curve's radius in authoring order,
 /// rounded by the rule above.
 pub(super) fn check(sketch: &Sketch, points: &[Point], radii: &[i64]) -> Result<(), SolveError> {
+    let tolerance = real(i128::from(MODEL_TOLERANCE_STEPS));
     for (index, (curve, r)) in sketch.curves().iter().zip(radii).enumerate() {
         let id = CurveId(u32::try_from(index).map_err(|_| SolveError::Decomposition)?);
         match arc_miss(points, *r, *curve) {
             None => {}
-            Some(Ok(residual_mm)) if residual_mm <= MODEL_TOLERANCE_MM => {}
-            Some(Ok(residual_mm)) => {
+            Some(Ok(residual)) if residual <= tolerance => {}
+            Some(Ok(residual)) => {
                 return Err(SolveError::ArcEndRefused {
                     curve: id,
-                    residual_mm,
+                    residual_mm: in_mm(residual),
                 });
             }
             Some(Err(())) => return Err(SolveError::DegenerateCurve { curve: id }),
@@ -249,11 +259,11 @@ pub(super) fn check(sketch: &Sketch, points: &[Point], radii: &[i64]) -> Result<
     for (index, constraint) in sketch.constraints().iter().enumerate() {
         let id = ConstraintId(u32::try_from(index).map_err(|_| SolveError::Decomposition)?);
         match miss(sketch, points, radii, *constraint) {
-            Some(Ok(residual_mm)) if residual_mm <= MODEL_TOLERANCE_MM => {}
-            Some(Ok(residual_mm)) => {
+            Some(Ok(residual)) if residual <= tolerance => {}
+            Some(Ok(residual)) => {
                 return Err(SolveError::RoundingRefused {
                     constraint: id,
-                    residual_mm,
+                    residual_mm: in_mm(residual),
                 });
             }
             Some(Err(())) | None => return Err(SolveError::Degenerate { constraint: id }),

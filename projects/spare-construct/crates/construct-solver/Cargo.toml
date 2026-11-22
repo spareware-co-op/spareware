@@ -20,6 +20,9 @@ serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1.0.154"
+# The kernel's interface, for one test only: STEPS_PER_MM and COORD_LIMIT are the kernel's
+# GridStep::Q0 and coordinate range. Ours. The crate itself does not link the kernel.
+engine-geometry = { path = "../../../engines/crates/engine-geometry" }
 
 [lints.rust]
 unsafe_code = "forbid"
