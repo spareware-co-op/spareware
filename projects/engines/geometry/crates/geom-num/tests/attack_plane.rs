@@ -1548,23 +1548,51 @@ fn to_grid_around_plus_minus_2_pow_127() {
     }
 }
 
+/// The near ties of [`to_grid_near_ties_with_w_near_2_pow_192`]: (a, x2), the tie at x2 / 2.
+const NEAR_TIES_192: [(i64, i64); 8] = [
+    (0, 1),
+    (0, -1),
+    (5, 11),
+    (-6, -13),
+    (7, 14),
+    (123_456_789_012, 246_913_578_025),
+    (-M, -2 * M + 1),
+    (-M, -2 * M - 1),
+];
+
 /// The near ties again with planes 1 and 2 scaled by about 2^38 each: |w| = `m_1` `m_2` D, about
-/// 2^192, still deciding points 2^-116 from a half step exactly.
-#[test]
-fn to_grid_near_ties_with_w_near_2_pow_192() {
+/// 2^192, still deciding points 2^-116 from a half step exactly. In quarters of its ties, two a
+/// quarter (decision 32.78: whole, it was too long for one Miri gate part).
+mod to_grid_near_ties_with_w_near_2_pow_192 {
+    use super::*;
+
+    #[test]
+    fn quarter_1() {
+        near_ties_192(&NEAR_TIES_192[0..2]);
+    }
+
+    #[test]
+    fn quarter_2() {
+        near_ties_192(&NEAR_TIES_192[2..4]);
+    }
+
+    #[test]
+    fn quarter_3() {
+        near_ties_192(&NEAR_TIES_192[4..6]);
+    }
+
+    #[test]
+    fn quarter_4() {
+        near_ties_192(&NEAR_TIES_192[6..8]);
+    }
+}
+
+/// The check of [`to_grid_near_ties_with_w_near_2_pow_192`] at the ties `ties`.
+fn near_ties_192(ties: &[(i64, i64)]) {
     let d = d_of(P_NEAR, [1, 1, EZ_NEAR]);
     let mw = BigInt::from(SCALE[0]) * BigInt::from(SCALE[1]) * &d;
     assert_eq!(mw.bits(), 192);
-    for (ax, x2) in [
-        (0, 1),
-        (0, -1),
-        (5, 11),
-        (-6, -13),
-        (7, 14),
-        (123_456_789_012, 246_913_578_025),
-        (-M, -2 * M + 1),
-        (-M, -2 * M - 1),
-    ] {
+    for &(ax, x2) in ties {
         for delta in [-1i64, 0, 1] {
             for swap in [false, true] {
                 let j = x2 - 2 * ax;

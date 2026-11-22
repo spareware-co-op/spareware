@@ -456,11 +456,91 @@ fn the_cube_and_square_diagonals_reach_the_budgets_without_failing() {
 /// Points built to lie exactly on the classifying plane or line, then one grid step off it: the
 /// exact sign is zero, then the sign of the step, which the filters cannot decide by margin. Each
 /// implicit point is built on a grid point: a crossing, a line-plane point and a three-plane point.
-#[test]
-fn one_step_from_degenerate_is_decided_exactly() {
+///
+/// In quarters of its cases (decision 32.78: whole, it was too long for one Miri gate part). Every
+/// quarter makes every draw of every case up to its last, from the one generator in the old order,
+/// and checks its own. The whole asked that some three-plane point be decided one step from
+/// degenerate: each quarter's count of them is pinned, for the default seed in each build, and the
+/// join test holds the pins to the whole. The pins hold for the default seed only, so a native
+/// test runs the whole case list once for whatever seed is set and asks it of the whole.
+mod one_step_from_degenerate_is_decided_exactly {
+    /// The three-plane points each quarter decides one step from degenerate, from the default
+    /// seed: in a debug build (100 cases, as Miri runs it) and in a release build (2,000).
+    pub const PINNED: [[u32; 4]; 2] = [[125, 125, 125, 125], [2500, 2500, 2500, 2500]];
+
+    fn quarter(part: usize) {
+        let all = super::cases(2000);
+        let decided = super::one_step_cases(all * part / 4..all * (part + 1) / 4);
+        let build = usize::from(!cfg!(debug_assertions));
+        if std::env::var_os("SPAREKIT_SEED").is_none() {
+            assert_eq!(decided, PINNED[build][part], "quarter {}", part + 1);
+        }
+    }
+
+    #[test]
+    fn quarter_1() {
+        quarter(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        quarter(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        quarter(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        quarter(3);
+    }
+
+    /// In each build some quarter decides a three-plane point one step from degenerate, as the
+    /// whole asked.
+    #[test]
+    fn the_quarters_join_to_the_whole() {
+        for pins in PINNED {
+            assert!(
+                pins.iter().any(|&n| n > 0),
+                "no three-plane point was decided one step from degenerate"
+            );
+        }
+    }
+
+    /// For whatever seed is set (`SPAREKIT_SEED`, or the default), the whole case list run once
+    /// decides some three-plane point one step from degenerate, as the whole asked; from the
+    /// default seed it decides exactly the quarters' pins together.
+    #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "the whole case list, too long for one Miri gate part; Miri runs it in its quarters"
+    )]
+    fn the_whole_decides_some_for_any_seed() {
+        let decided = super::one_step_cases(0..super::cases(2000));
+        assert!(
+            decided > 0,
+            "no three-plane point was decided one step from degenerate"
+        );
+        let build = usize::from(!cfg!(debug_assertions));
+        if std::env::var_os("SPAREKIT_SEED").is_none() {
+            let mut pinned = 0;
+            for n in PINNED[build] {
+                pinned += n;
+            }
+            assert_eq!(decided, pinned);
+        }
+    }
+}
+
+/// The cases `run` of `one_step_from_degenerate_is_decided_exactly`: every case up to the last
+/// drawn, those in `run` checked; how many three-plane points they decided.
+fn one_step_cases(run: std::ops::Range<usize>) -> u32 {
     let mut rng = Rng::for_test("one_step_from_degenerate_is_decided_exactly");
     let mut tpi_decided = 0u32;
-    for _ in 0..cases(2000) {
+    for case in 0..run.end {
+        let active = run.contains(&case);
         // A crossing at a grid point x: two lines through x, classified against a line through x
         // and a point one step off it.
         let x: Pt2 = array::from_fn(|_| rng.range(-M / 4, M / 4));
@@ -470,6 +550,19 @@ fn one_step_from_degenerate_is_decided_exactly() {
         let (c, d) = ([x[0] - v[0], x[1] - v[1]], [x[0] + v[0], x[1] + v[1]]);
         let w = step(&mut rng);
         let q = [x[0] + w[0], x[1] + w[1]];
+        if !active {
+            // The case's remaining draws, as the checks below would make them, unchecked.
+            let _y: Pt3 = array::from_fn(|_| rng.range(-M / 4, M / 4));
+            let s3 = |rng: &mut Rng| -> Pt3 { array::from_fn(|_| rng.range(-(1 << 13), 1 << 13)) };
+            let _drawn = (
+                s3(&mut rng),
+                s3(&mut rng),
+                s3(&mut rng),
+                s3(&mut rng),
+                s3(&mut rng),
+            );
+            continue;
+        }
         if let Ok(s) = Ssi::new(p2(a), p2(b), p2(c), p2(d)) {
             assert_eq!(
                 s.orient2d(p2(x), p2(q)).unwrap(),
@@ -524,10 +617,7 @@ fn one_step_from_degenerate_is_decided_exactly() {
             }
         }
     }
-    assert!(
-        tpi_decided > 0,
-        "no three-plane point was decided one step from degenerate"
-    );
+    tpi_decided
 }
 
 #[test]

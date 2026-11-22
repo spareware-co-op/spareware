@@ -15,8 +15,9 @@
 //! and every function excused as a constant refusal still refuses;
 //! the limits are principle 12's in the crate, the gate and the workflow alike; the toolchain,
 //! Gungraun and Wasmtime pins agree wherever they are written; every action the workflow runs is
-//! pinned to the full commit `kernel.yml` runs, and no checkout keeps credentials; and no retired
-//! name is reused.
+//! pinned to a full commit, one reviewed commit across the kernel's workflows (`kernel.yml` or
+//! `kernel-oracles.yml` runs it already, and every kernel workflow that runs it runs that commit),
+//! and no checkout keeps credentials; and no retired name is reused.
 //!
 //! Method: a traceability check (<https://en.wikipedia.org/wiki/Traceability_matrix>): each check
 //! reads the files it compares and requires the sets they list to be equal. `geom-num`'s source is
@@ -58,7 +59,10 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 28] = [
+const GEOM_NUM: [(&str, &str); 33] = [
+    ("distance", include_str!("../../geom-num/src/distance.rs")),
+    ("quadric", include_str!("../../geom-num/src/quadric.rs")),
+    ("sturm", include_str!("../../geom-num/src/sturm.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -94,8 +98,10 @@ const GEOM_NUM: [(&str, &str); 28] = [
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("scalar", include_str!("../../geom-num/src/scalar.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
+    ("step", include_str!("../../geom-num/src/step.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),
+    ("pencil", include_str!("../../geom-num/src/pencil.rs")),
 ];
 
 /// The files inside `geom-num`'s `math` module that hold public functions, by name: `unproven`, a
@@ -119,7 +125,31 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 13] = [
+const GENERATED_PARTS: [(&str, &str); 19] = [
+    (
+        "generated::line_sphere",
+        include_str!("../../geom-num/src/generated/line_sphere.rs"),
+    ),
+    (
+        "generated::line_cylinder",
+        include_str!("../../geom-num/src/generated/line_cylinder.rs"),
+    ),
+    (
+        "generated::line_cone",
+        include_str!("../../geom-num/src/generated/line_cone.rs"),
+    ),
+    (
+        "generated::line_cone_lead",
+        include_str!("../../geom-num/src/generated/line_cone_lead.rs"),
+    ),
+    (
+        "generated::cross_norm",
+        include_str!("../../geom-num/src/generated/cross_norm.rs"),
+    ),
+    (
+        "generated::axis_gap",
+        include_str!("../../geom-num/src/generated/axis_gap.rs"),
+    ),
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -345,6 +375,38 @@ fn main_runs_every_group() {
     assert!(MAIN.contains("config = gate::config();"));
 }
 
+/// `benches/ember` (EMBER's pair 827, outside the catalogue) measures under exactly `gate.rs`'s
+/// tools and limits, with only the models' folder passed through Gungraun's cleared environment,
+/// and its program runs that configuration.
+#[test]
+fn the_ember_benchmark_runs_under_the_gates_configuration() {
+    const EMBER: &str = include_str!("../benches/ember/main.rs");
+    let body = |source: &str, signature: &str| -> Vec<String> {
+        source
+            .split(signature)
+            .nth(1)
+            .and_then(|rest| rest.split("\n    config\n}").next())
+            .map(|body| {
+                body.lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with("use "))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut gate = body(GATE, "pub fn config() -> LibraryBenchmarkConfig {");
+    let ember = body(
+        EMBER,
+        "pub fn config() -> gungraun::LibraryBenchmarkConfig {",
+    );
+    assert!(gate.len() > 10, "gate.rs's config: {gate:?}");
+    gate.push("config.pass_through_env(pair::FOLDER);".to_owned());
+    assert_eq!(ember, gate);
+    assert!(EMBER.contains("config = config();"));
+    assert!(EMBER.contains("#[library_benchmark(teardown = verify)]"));
+}
+
 #[test]
 fn catalogue_names_are_unique_and_grouped() {
     let all = names();
@@ -515,6 +577,47 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 include_str!("../../geom-format/src/container.rs"),
             ),
             ("trust", include_str!("../../geom-format/src/trust.rs")),
+            ("pruned", include_str!("../../geom-format/src/pruned.rs")),
+        ],
+    ),
+    (
+        "geom_intersect",
+        &[
+            (
+                "selfcross",
+                include_str!("../../geom-intersect/src/selfcross.rs"),
+            ),
+            ("fit", include_str!("../../geom-intersect/src/fit.rs")),
+            ("known", include_str!("../../geom-intersect/src/known.rs")),
+            (
+                "contact",
+                include_str!("../../geom-intersect/src/contact.rs"),
+            ),
+            ("curve", include_str!("../../geom-intersect/src/curve.rs")),
+            (
+                "curve_surface",
+                include_str!("../../geom-intersect/src/curve_surface.rs"),
+            ),
+            (
+                "general",
+                include_str!("../../geom-intersect/src/general.rs"),
+            ),
+            ("level", include_str!("../../geom-intersect/src/level.rs")),
+            ("march", include_str!("../../geom-intersect/src/march.rs")),
+            ("order", include_str!("../../geom-intersect/src/order.rs")),
+            (
+                "quadrics",
+                include_str!("../../geom-intersect/src/quadrics.rs"),
+            ),
+            (
+                "quartic",
+                include_str!("../../geom-intersect/src/quartic.rs"),
+            ),
+            (
+                "project",
+                include_str!("../../geom-intersect/src/project.rs"),
+            ),
+            ("result", include_str!("../../geom-intersect/src/result.rs")),
         ],
     ),
     (
@@ -531,6 +634,14 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("qr", include_str!("../../geom-linalg/src/qr.rs")),
             ("svd", include_str!("../../geom-linalg/src/svd.rs")),
+        ],
+    ),
+    (
+        "geom_bool",
+        &[
+            ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("broad", include_str!("../../geom-bool/src/broad.rs")),
+            ("combine", include_str!("../../geom-bool/src/combine.rs")),
         ],
     ),
     (
@@ -558,15 +669,59 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("column", include_str!("../../geom-topo/src/column.rs")),
             ("builder", include_str!("../../geom-topo/src/builder.rs")),
+            (
+                "query_ops",
+                include_str!("../../geom-topo/src/query_ops.rs"),
+            ),
         ],
     ),
     (
         "geom_name",
-        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+        &[
+            ("classes", include_str!("../../geom-name/src/classes.rs")),
+            ("faces", include_str!("../../geom-name/src/faces.rs")),
+            ("graph", include_str!("../../geom-name/src/graph.rs")),
+            ("resolve", include_str!("../../geom-name/src/resolve.rs")),
+            ("prune", include_str!("../../geom-name/src/prune.rs")),
+        ],
+    ),
+    (
+        "geom_check",
+        &[("query", include_str!("../../geom-check/src/query.rs"))],
     ),
     (
         "geom_op",
-        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
+        &[
+            ("batch", include_str!("../../geom-op/src/batch.rs")),
+            ("cbor", include_str!("../../geom-op/src/cbor.rs")),
+            ("hash", include_str!("../../geom-op/src/hash.rs")),
+            ("name", include_str!("../../geom-op/src/name.rs")),
+            ("history", include_str!("../../geom-op/src/history.rs")),
+        ],
+    ),
+    (
+        "geom_mesh",
+        &[
+            ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("boolean", include_str!("../../geom-mesh/src/boolean.rs")),
+            ("classify", include_str!("../../geom-mesh/src/classify.rs")),
+            ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("hull", include_str!("../../geom-mesh/src/hull.rs")),
+            ("slice", include_str!("../../geom-mesh/src/slice.rs")),
+            ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
+            (
+                "model::decimate",
+                include_str!("../../geom-mesh/src/model/decimate.rs"),
+            ),
+            (
+                "model::remesh",
+                include_str!("../../geom-mesh/src/model/remesh.rs"),
+            ),
+            (
+                "exact::build",
+                include_str!("../../geom-mesh/src/exact/build.rs"),
+            ),
+        ],
     ),
     (
         "geom_nurbs",
@@ -597,13 +752,77 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_run",
         &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
+    (
+        // The facade (piece G100) holds no function of its own: its operation table and the
+        // operations it re-exports are what a program calls, so they are what it measures.
+        "engine_geometry",
+        &[(
+            "operations",
+            include_str!("../../../../crates/engine-geometry/src/operations.rs"),
+        )],
+    ),
 ];
+
+/// The names a file's public `use` items re-export, as `module::name` (`pub use a::{b, c}` gives
+/// `module::b` and `module::c`; a renamed item gives its new name; a glob gives nothing), and its
+/// public constants and statics: what the facade offers a program.
+fn reexports_and_constants(module: &str, file: &syn::File) -> Vec<String> {
+    let mut out = Vec::new();
+    for item in &file.items {
+        match item {
+            syn::Item::Use(u) if is_pub(&u.vis) && !is_test(&u.attrs) => {
+                let mut work = vec![&u.tree];
+                while let Some(tree) = work.pop() {
+                    match tree {
+                        syn::UseTree::Path(p) => work.push(&p.tree),
+                        syn::UseTree::Name(n) => out.push(format!("{module}::{}", n.ident)),
+                        syn::UseTree::Rename(r) => out.push(format!("{module}::{}", r.rename)),
+                        syn::UseTree::Group(g) => work.extend(g.items.iter()),
+                        syn::UseTree::Glob(_) => {}
+                    }
+                }
+            }
+            syn::Item::Const(c) if is_pub(&c.vis) && !is_test(&c.attrs) => {
+                out.push(format!("{module}::{}", c.ident));
+            }
+            syn::Item::Static(s) if is_pub(&s.vis) && !is_test(&s.attrs) => {
+                out.push(format!("{module}::{}", s.ident));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+#[test]
+fn the_facade_reader_finds_every_reexport_and_constant() {
+    let source = "\
+        pub use a::{b, c as d, e::{f, *}};\n\
+        use g::h;\n\
+        pub(crate) use i::j;\n\
+        pub const K: u8 = 1;\n\
+        const L: u8 = 2;\n\
+        pub static M: u8 = 3;\n\
+        #[cfg(test)]\npub use n::o;\n";
+    let found: BTreeSet<String> = reexports_and_constants("m", &parse("m", source))
+        .into_iter()
+        .collect();
+    let want: BTreeSet<String> = ["m::b", "m::d", "m::f", "m::K", "m::M"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(found, want);
+}
 
 /// [`public_functions`], with the methods of every trait implementation in the file too: a kind's
 /// evaluation is its trait's (`impl ParamCurve<D> for CurveKind<D>`), and a trait's methods are as
-/// public as the trait.
-fn crate_functions(module: &str, source: &str) -> Vec<String> {
+/// public as the trait. For the facade, which defines no function, its re-exports and public
+/// constants too ([`reexports_and_constants`]).
+fn crate_functions(krate: &str, module: &str, source: &str) -> Vec<String> {
     let mut out = public_functions(module, source);
+    if krate == "engine_geometry" {
+        out.extend(reexports_and_constants(module, &parse(module, source)));
+    }
     for item in &parse(module, source).items {
         // A public trait's methods with a default body, which every implementing kind runs.
         if let syn::Item::Trait(tr) = item
@@ -662,7 +881,7 @@ fn every_function_measured_in_another_crate_is_public_there() {
         let (_, files) = OTHER_CRATES.iter().find(|(k, _)| *k == krate).unwrap();
         let public: BTreeSet<String> = files
             .iter()
-            .flat_map(|(m, src)| crate_functions(m, src))
+            .flat_map(|(m, src)| crate_functions(krate, m, src))
             .collect();
         assert!(
             public.contains(name),
@@ -886,7 +1105,8 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "geom-bench-counts\" removed",
         "--save-summary=json",
         "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
-        "\"$GUNGRAUN_HOME/geom-bench/instructions\"",
+        // The judge reads the summaries of both bench targets, the catalogue's and EMBER's pair.
+        "\"$GUNGRAUN_HOME/geom-bench\" \"$RUNNER_TEMP/judged.names\"",
         // Each tree builds apart (cargo names a path crate's build by its place in the workspace),
         // and both trees' saved runs share one Gungraun home.
         "GUNGRAUN_HOME: ${{ github.workspace }}/gungraun",
@@ -1017,40 +1237,185 @@ fn locked_versions(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// Every kernel workflow (`.github/workflows/kernel*.yml`) by file name, read at compile time like
+/// every other file here, so the pin check needs no file access when it runs;
+/// `the_pin_check_reads_every_kernel_workflow` keeps the list whole.
+const KERNEL_WORKFLOWS: [(&str, &str); 12] = [
+    ("kernel.yml", KERNEL_WORKFLOW),
+    ("kernel-bench.yml", WORKFLOW),
+    (
+        "kernel-build.yml",
+        include_str!("../../../../../../.github/workflows/kernel-build.yml"),
+    ),
+    (
+        "kernel-certificates.yml",
+        include_str!("../../../../../../.github/workflows/kernel-certificates.yml"),
+    ),
+    (
+        "kernel-dev.yml",
+        include_str!("../../../../../../.github/workflows/kernel-dev.yml"),
+    ),
+    (
+        "kernel-fuzz.yml",
+        include_str!("../../../../../../.github/workflows/kernel-fuzz.yml"),
+    ),
+    (
+        "kernel-gate.yml",
+        include_str!("../../../../../../.github/workflows/kernel-gate.yml"),
+    ),
+    (
+        "kernel-golden.yml",
+        include_str!("../../../../../../.github/workflows/kernel-golden.yml"),
+    ),
+    (
+        "kernel-oracles.yml",
+        include_str!("../../../../../../.github/workflows/kernel-oracles.yml"),
+    ),
+    (
+        "kernel-quality.yml",
+        include_str!("../../../../../../.github/workflows/kernel-quality.yml"),
+    ),
+    (
+        "kernel-release.yml",
+        include_str!("../../../../../../.github/workflows/kernel-release.yml"),
+    ),
+    (
+        "kernel-variants.yml",
+        include_str!("../../../../../../.github/workflows/kernel-variants.yml"),
+    ),
+];
+
+/// The kernel workflows one of which must run an action already before the gates take it up.
+const REVIEWED_IN: [&str; 2] = ["kernel.yml", "kernel-oracles.yml"];
+
+/// The actions a workflow runs, each as its `uses:` value (`action@commit # tag`), in order. A
+/// workflow of this repository at the same commit (`uses: ./.github/workflows/...`, the job
+/// `cheap`) is no action to pin.
+fn actions_of(workflow: &str) -> Vec<&str> {
+    workflow
+        .lines()
+        .map(|line| line.trim().trim_start_matches("- "))
+        .filter_map(|line| line.strip_prefix("uses: "))
+        .filter(|uses| !uses.starts_with("./"))
+        .collect()
+}
+
+/// What is wrong with the pins of the actions kernel-bench.yml runs, given every kernel workflow by
+/// file name: each is pinned to a full commit (40 hexadecimal digits) with a comment naming the tag
+/// or branch it was checked against; kernel.yml or kernel-oracles.yml runs it already; and every
+/// kernel workflow that runs it runs that very commit.
+fn pin_problems(workflows: &[(&str, &str)]) -> Vec<String> {
+    let mut found = BTreeSet::new();
+    let bench = workflows
+        .iter()
+        .find(|(name, _)| *name == "kernel-bench.yml")
+        .map_or("", |(_, text)| *text);
+    let ours = actions_of(bench);
+    if ours.is_empty() {
+        found.insert("kernel-bench.yml runs no action".to_owned());
+    }
+    for uses in ours {
+        let (action, pin) = uses.split_once('@').unwrap_or((uses, ""));
+        let (commit, checked_against) = pin.split_once(" # ").unwrap_or((pin, ""));
+        let full = commit.len() == 40
+            && commit
+                .chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c));
+        if !full || checked_against.trim().is_empty() {
+            found.insert(format!(
+                "not pinned to a full commit with the tag it was checked against: {uses}"
+            ));
+        }
+        let mut reviewed = false;
+        for (name, text) in workflows {
+            for theirs in actions_of(text) {
+                let Some((other, pin)) = theirs.split_once('@') else {
+                    continue;
+                };
+                if other != action {
+                    continue;
+                }
+                let at = pin.split_whitespace().next().unwrap_or_default();
+                if at != commit {
+                    found.insert(format!(
+                        "{name} runs {action} at {at}, kernel-bench.yml at {commit}"
+                    ));
+                } else if REVIEWED_IN.contains(name) {
+                    reviewed = true;
+                }
+            }
+        }
+        if !reviewed {
+            found.insert(format!(
+                "neither kernel.yml nor kernel-oracles.yml runs {action} at {commit}"
+            ));
+        }
+    }
+    found.into_iter().collect()
+}
+
 #[test]
-fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
+fn every_action_runs_at_one_reviewed_commit_across_the_kernel_workflows() {
     // A tag or a branch can be moved to other code; a full commit cannot. Every action the gates
     // run is pinned to a full commit (40 hexadecimal digits) with a comment naming the tag or
-    // branch it was checked against, and to the very commit kernel.yml runs for that action, so
-    // the two workflows move together and only after review; and every checkout keeps no
-    // credentials.
-    let uses = |text: &'static str| -> Vec<&'static str> {
-        text.lines()
-            .map(|line| line.trim().trim_start_matches("- "))
-            // A workflow of this repository at the same commit (`uses: ./.github/workflows/...`,
-            // the job `cheap`) is no action to pin.
-            .filter(|line| line.starts_with("uses: ") && !line.starts_with("uses: ./"))
-            .collect()
-    };
-    let kernel = uses(KERNEL_WORKFLOW);
-    let ours = uses(WORKFLOW);
-    assert!(!ours.is_empty());
-    for line in &ours {
-        let pin = line
-            .split_once('@')
-            .and_then(|(_, pin)| pin.split_once(" # "));
-        assert!(
-            pin.is_some_and(|(commit, checked_against)| commit.len() == 40
-                && commit
-                    .chars()
-                    .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
-                && !checked_against.trim().is_empty()),
-            "not pinned to a full commit with the tag it was checked against: {line}"
-        );
-        assert!(
-            kernel.contains(line),
-            "kernel.yml runs another commit of this action, or does not run it: {line}"
-        );
+    // branch it was checked against, and runs at one reviewed commit across the kernel's
+    // workflows, which move together: kernel.yml or kernel-oracles.yml runs it already, so the
+    // gates take up no action the kernel's workflows had not run, and every kernel workflow that
+    // runs it runs that very commit, so a pin moved in one workflow alone fails here. And every
+    // checkout keeps no credentials.
+    assert_eq!(pin_problems(&KERNEL_WORKFLOWS), Vec::<String>::new());
+    // Each rule fails on a planted pin: another commit of actions/cache in kernel-bench.yml, an
+    // action no kernel workflow ran before, a tag in place of a commit, and a pin moved in
+    // another kernel workflow alone.
+    let restore = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+    let checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
+    for (file, from, to, said) in [
+        (
+            "kernel-bench.yml",
+            restore,
+            "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
+            "kernel-oracles.yml runs actions/cache/restore at \
+             55cc8345863c7cc4c66a329aec7e433d2d1c52a9, kernel-bench.yml at \
+             0057852bfaa89a56745cba8c7296529d2fc39830",
+        ),
+        (
+            "kernel-bench.yml",
+            restore,
+            "awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9",
+            "neither kernel.yml nor kernel-oracles.yml runs awalsh128/cache-apt-pkgs-action",
+        ),
+        (
+            "kernel-bench.yml",
+            restore,
+            "actions/cache/restore@v6.1.0",
+            "not pinned to a full commit",
+        ),
+        (
+            "kernel-quality.yml",
+            checkout,
+            "actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955",
+            "kernel-quality.yml runs actions/checkout at 08eba0b27e820071cde6df949e0beb9ba4906955",
+        ),
+    ] {
+        let planted: Vec<(&str, String)> = KERNEL_WORKFLOWS
+            .iter()
+            .map(|&(name, text)| {
+                let text = if name == file {
+                    let moved = text.replacen(from, to, 1);
+                    assert_ne!(moved, text, "the planted pin {to} applies to {file}");
+                    moved
+                } else {
+                    text.to_owned()
+                };
+                (name, text)
+            })
+            .collect();
+        let workflows: Vec<(&str, &str)> = planted
+            .iter()
+            .map(|(name, text)| (*name, text.as_str()))
+            .collect();
+        let found = pin_problems(&workflows);
+        assert!(found.iter().any(|p| p.contains(said)), "{said}: {found:#?}");
     }
     let lines: Vec<&str> = WORKFLOW.lines().map(str::trim).collect();
     let checkouts: Vec<usize> = lines
@@ -1075,6 +1440,35 @@ fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
             "a checkout keeps its credentials: {with:?}"
         );
     }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "lists the workflows' directory, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_pin_check_reads_every_kernel_workflow() {
+    // A kernel workflow the pin check does not read could move a pin unseen.
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../.github/workflows");
+    let on_disk: BTreeSet<String> = std::fs::read_dir(&dir)
+        .expect("the workflows' directory is readable")
+        .map(|entry| {
+            entry
+                .expect("each entry of the workflows' directory is readable")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|name| {
+            name.starts_with("kernel") && (name.ends_with(".yml") || name.ends_with(".yaml"))
+        })
+        .collect();
+    let read: BTreeSet<String> = KERNEL_WORKFLOWS
+        .iter()
+        .map(|(name, _)| (*name).to_owned())
+        .collect();
+    assert_eq!(on_disk, read);
 }
 
 #[test]

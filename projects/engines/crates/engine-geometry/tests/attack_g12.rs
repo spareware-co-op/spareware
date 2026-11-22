@@ -533,13 +533,12 @@ fn attack_panic_macros_other_than_panic_pass() {
 /// through the gate's own readers as geom-op's folder, each must be reported. (The fixer's gate
 /// reads, besides the folder, every file the compiler read for the library, from the dep-info its
 /// builds and clippy runs leave, `gate::compiled_sources`; this test reads both, as the gate's
-/// `gate_build` and `gate_clippy` runs do.) The gate reads crate folders relative to the
-/// workspace root, so the probe's folder, under `CARGO_TARGET_TMPDIR`, must sit under it too: with
-/// `CARGO_TARGET_DIR` pointed outside the workspace (a target directory shared between checkouts)
-/// this test fails, which says nothing about the gate; CI's target directory is in the workspace.
+/// `gate_build` and `gate_clippy` runs do.) The gate's readers name a crate's folder and files
+/// relative to the workspace root; here they are the same readers with the probe's own temporary
+/// folder in its place (`repo::crate_sources_under`, `repo::compiled_sources_under`), so the test
+/// runs wherever `CARGO_TARGET_DIR`, and with it `CARGO_TARGET_TMPDIR`, points.
 #[test]
 fn attack_statics_from_files_the_scan_never_reads() {
-    let root = repo::workspace_root();
     let dir = scratch("globals-probe");
     fs::create_dir_all(dir.join("src")).unwrap();
     fs::create_dir_all(dir.join("tests")).unwrap();
@@ -597,24 +596,14 @@ fn attack_statics_from_files_the_scan_never_reads() {
         "the probe must build: {}",
         shown(&built)
     );
-    // The gate's reader and check, with geom-op's folder being the probe's.
-    let canonical = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    let probe_dir = canonical(&dir);
-    let rest = probe_dir
-        .strip_prefix(canonical(&root))
-        .unwrap_or_else(|_| {
-            panic!(
-                "the test's temporary folder {} is not under the workspace root {}",
-                dir.display(),
-                root.display()
-            )
-        });
+    // The gate's readers and check, with geom-op's folder being the probe's, named relative to the
+    // test's temporary folder in place of the workspace root.
+    let probe_dir = fs::canonicalize(&dir).unwrap();
+    let base = probe_dir.parent().unwrap();
     let mut observed = repo::observe();
-    observed.packages.get_mut("geom-op").unwrap().dir = rest
-        .components()
-        .map(|c| c.as_os_str().to_str().unwrap().to_owned())
-        .collect();
-    let mut sources = repo::crate_sources(&observed, &BTreeSet::from(["geom-op"]));
+    observed.packages.get_mut("geom-op").unwrap().dir =
+        vec![probe_dir.file_name().unwrap().to_str().unwrap().to_owned()];
+    let mut sources = repo::crate_sources_under(base, &observed, &BTreeSet::from(["geom-op"]));
     let (compiled, problems) =
         gate::compiled_sources(&built, &dir, &BTreeSet::from(["attack-g12-globals"]));
     assert!(problems.is_empty(), "{problems:#?}");
@@ -624,7 +613,7 @@ fn attack_statics_from_files_the_scan_never_reads() {
         .unwrap_or_default();
     globals::merge(
         &mut sources,
-        repo::compiled_sources(&BTreeMap::from([("geom-op".to_owned(), files)])),
+        repo::compiled_sources_under(base, &BTreeMap::from([("geom-op".to_owned(), files)])),
     );
     let read: Vec<String> = sources["geom-op"]
         .iter()

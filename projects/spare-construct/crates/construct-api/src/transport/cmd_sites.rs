@@ -4,7 +4,8 @@ use super::Session;
 use super::helpers::val;
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{Params, free_object, params, string, strings};
+use crate::transport::helpers::{lost, put, scenario_at, scenario_at_mut, site_of};
 use construct_transport::edit::sites::{self, DetectOpts, SiteRules};
 use construct_transport::jsnum::{Maybe, Num, math_max};
 use construct_transport::project::SiteSource;
@@ -93,13 +94,13 @@ fn site_json(
     site: &construct_transport::project::Site,
 ) -> Value {
     let mut v = val(site);
-    v["displayName"] = json!(sites::name(sc, site));
+    put(&mut v, "displayName", json!(sites::name(sc, site)));
     v
 }
 
-fn sites_list(s: &mut Session, p: &Params) -> ApiResult {
+fn sites_list(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.pick_scenario(p, "scenario")?;
-    let sc = &s.project.scenarios[i];
+    let sc = scenario_at(&s.project.scenarios, i)?;
     let list: Vec<Value> = sc
         .sites
         .get()
@@ -108,7 +109,7 @@ fn sites_list(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "scenario": sc.id, "count": list.len(), "sites": list }))
 }
 
-fn rules_from(p: &Params) -> ApiResult<SiteRules> {
+fn rules_from(p: Params<'_>) -> ApiResult<SiteRules> {
     let mut r = SiteRules::default();
     if let Some(o) = p.opt_object("rules")? {
         for (k, v) in o {
@@ -133,13 +134,13 @@ fn rules_from(p: &Params) -> ApiResult<SiteRules> {
     Ok(r)
 }
 
-fn sites_detect(s: &mut Session, p: &Params) -> ApiResult {
+fn sites_detect(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let rules = rules_from(p)?;
     let points = sites::at_points(&s.project);
     s.snap("");
     let r = sites::detect(
-        &mut s.project.scenarios[i],
+        scenario_at_mut(&mut s.project.scenarios, i)?,
         &mut s.ids,
         &DetectOpts { rules, points },
     );
@@ -147,7 +148,7 @@ fn sites_detect(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "sites": r.sites, "nodes": r.nodes, "kept": r.kept }))
 }
 
-fn sites_merge(s: &mut Session, p: &Params) -> ApiResult {
+fn sites_merge(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let items = p.opt_strings("items")?.unwrap_or_default();
     if items.len() < 2 {
@@ -156,26 +157,27 @@ fn sites_merge(s: &mut Session, p: &Params) -> ApiResult {
         ));
     }
     s.snap("");
-    match sites::merge(&mut s.project.scenarios[i], &mut s.ids, &items) {
-        Some(id) => {
-            s.edited();
-            let sc = &s.project.scenarios[i];
-            let site = &sc.sites.get().expect("just made")[id.as_str()];
-            Ok(json!({ "site": id, "name": sites::name(sc, site), "nodes": site.nodes }))
-        }
-        None => {
-            s.discard_snap();
-            Err(ApiError::invalid_state(
-                "Fewer than two junction nodes result, so no site was made.",
-            ))
-        }
+    if let Some(id) = sites::merge(
+        scenario_at_mut(&mut s.project.scenarios, i)?,
+        &mut s.ids,
+        &items,
+    ) {
+        s.edited();
+        let sc = scenario_at(&s.project.scenarios, i)?;
+        let site = site_of(sc, &id)?;
+        Ok(json!({ "site": id, "name": sites::name(sc, site), "nodes": site.nodes }))
+    } else {
+        s.discard_snap();
+        Err(ApiError::invalid_state(
+            "Fewer than two junction nodes result, so no site was made.",
+        ))
     }
 }
 
-fn sites_split(s: &mut Session, p: &Params) -> ApiResult {
+fn sites_split(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let id = p.str("site")?;
-    if !s.project.scenarios[i]
+    if !scenario_at(&s.project.scenarios, i)?
         .sites
         .get()
         .is_some_and(|m| m.contains_key(id))
@@ -183,15 +185,19 @@ fn sites_split(s: &mut Session, p: &Params) -> ApiResult {
         return Err(ApiError::not_found(format!("There is no site {id}.")));
     }
     s.snap("");
-    sites::split(&mut s.project.scenarios[i], id);
+    sites::split(scenario_at_mut(&mut s.project.scenarios, i)?, id);
     s.edited();
     Ok(json!({ "split": id }))
 }
 
-fn sites_remove_node(s: &mut Session, p: &Params) -> ApiResult {
+fn sites_remove_node(s: &mut Session, p: Params<'_>) -> ApiResult {
     let i = s.target(p)?;
     let (id, node) = (p.str("site")?, p.str("node")?);
-    let Some(site) = s.project.scenarios[i].sites.get().and_then(|m| m.get(id)) else {
+    let Some(site) = scenario_at(&s.project.scenarios, i)?
+        .sites
+        .get()
+        .and_then(|m| m.get(id))
+    else {
         return Err(ApiError::not_found(format!("There is no site {id}.")));
     };
     if !site.nodes.iter().any(|n| n == node) {
@@ -200,13 +206,13 @@ fn sites_remove_node(s: &mut Session, p: &Params) -> ApiResult {
         )));
     }
     s.snap("");
-    let sc = &mut s.project.scenarios[i];
+    let sc = scenario_at_mut(&mut s.project.scenarios, i)?;
     let remaining = {
         let site = sc
             .sites
             .get_mut()
             .and_then(|m| m.get_mut(id))
-            .expect("checked");
+            .ok_or_else(|| lost("site", id))?;
         site.nodes.retain(|n| n != node);
         site.nodes.len()
     };
@@ -218,7 +224,7 @@ fn sites_remove_node(s: &mut Session, p: &Params) -> ApiResult {
             at: Maybe::Missing,
             rule: Maybe::Missing,
             at_site_no: Maybe::Missing,
-            extra: Default::default(),
+            extra: serde_json::Map::new(),
         });
         src.nodes = Maybe::Set("user".to_string());
         site.src = Maybe::Set(src);
@@ -227,14 +233,14 @@ fn sites_remove_node(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "site": id, "removed": node, "split": remaining < 2 }))
 }
 
-fn sites_set(s: &mut Session, p: &Params) -> ApiResult {
-    let i = s.target(p)?;
+fn sites_set(s: &mut Session, p: Params<'_>) -> ApiResult {
+    let idx = s.target(p)?;
     let id = p.str("site")?.to_string();
     let values = p.object("values")?;
     if values.is_empty() {
         return Err(ApiError::bad_params("`values` has no fields in it"));
     }
-    if !s.project.scenarios[i]
+    if !scenario_at(&s.project.scenarios, idx)?
         .sites
         .get()
         .is_some_and(|m| m.contains_key(&id))
@@ -250,11 +256,11 @@ fn sites_set(s: &mut Session, p: &Params) -> ApiResult {
     }
     s.snap("");
     let mut model = false;
-    let site = s.project.scenarios[i]
+    let site = scenario_at_mut(&mut s.project.scenarios, idx)?
         .sites
         .get_mut()
         .and_then(|m| m.get_mut(&id))
-        .expect("checked");
+        .ok_or_else(|| lost("site", &id))?;
     for (k, v) in values {
         let text = || match v {
             Value::String(t) => t.trim().to_string(),
@@ -304,7 +310,7 @@ fn sites_set(s: &mut Session, p: &Params) -> ApiResult {
                 } else if t.contains(',') {
                     Maybe::Set(Value::Array(
                         t.split(',')
-                            .map(|x| x.trim())
+                            .map(str::trim)
                             .filter(|x| !x.is_empty())
                             .map(|x| json!(x))
                             .collect(),
@@ -320,6 +326,6 @@ fn sites_set(s: &mut Session, p: &Params) -> ApiResult {
     } else {
         s.touch();
     }
-    let sc = &s.project.scenarios[i];
-    Ok(json!({ "site": site_json(sc, &sc.sites.get().expect("sites")[id.as_str()]) }))
+    let sc = scenario_at(&s.project.scenarios, idx)?;
+    Ok(json!({ "site": site_json(sc, site_of(sc, &id)?) }))
 }

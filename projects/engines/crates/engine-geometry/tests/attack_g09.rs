@@ -1209,13 +1209,7 @@ mod repository {
         ),
         ("geom-3dm", "G438"),
         ("geom-align", "G373 G374 G376"),
-        ("geom-analysis", "G346 G347 G348 G349"),
         ("geom-blend", "G262 G263 G264 G265 G266 G267 G268 G269"),
-        (
-            "geom-bool",
-            "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
-             G249 G250 G324",
-        ),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
         (
@@ -1234,22 +1228,10 @@ mod repository {
         ),
         ("geom-heal", "G417 G419 G420"),
         ("geom-ifc", "G421 G422 G423 G424 G426"),
-        (
-            "geom-intersect",
-            "G158 G159 G162 G163 G164 G165 G166 G167 G168 G169 G170 G171 G172 G173 G174 G175 \
-             G176 G292 G320 G321 G372 G390 G392 G393 G466 G467 G468",
-        ),
         ("geom-landxml", "G437"),
-        (
-            "geom-mesh",
-            "G146 G147 G148 G149 G150 G151 G152 G153 G288 G289 G290 G291 G298 G299 G300 G301 \
-             G302 G303 G304 G305 G306 G319 G341 G350 G411",
-        ),
         ("geom-meshio", "G354 G434 G435"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
-        ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
-        ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),
         ("geom-profile", "G229 G230"),
         ("geom-skeleton", "G271 G272 G274 G471"),
         (
@@ -1327,16 +1309,6 @@ mod repository {
         (
             "geom-ifc",
             &[(13, "G421 G422"), (17, "G421 G424"), (24, "G421-G426")],
-        ),
-        (
-            "geom-intersect",
-            &[
-                (12, "G158-G176 G320 G466 G467 G468"),
-                (16, "G321"),
-                (17, "G372"),
-                (18, "G392 G393"),
-                (19, "G292"),
-            ],
         ),
         ("geom-landxml", &[(17, "G437"), (24, "G437")]),
         ("geom-linalg", &[(15, "G49 G50 G215"), (16, "G49 G50 G215")]),
@@ -1580,6 +1552,10 @@ mod repository {
         assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
+    /// kernel.yml's WebAssembly doctests, one build's under one runtime.
+    const WASM_DOCTESTS: &str = "run: cargo test $KERNEL_CRATES --doc --target wasm32-wasip1 \
+                                 --release --locked --no-fail-fast -- --nocapture";
+
     #[test]
     fn kernel_build_yml_pins_kernel_yml_commits_and_reruns_none_of_its_tests_or_lints() {
         // kernel.yml tests, formats and lints every crate of the kernel's folder on seven targets;
@@ -1634,6 +1610,11 @@ mod repository {
                 "{tests} cargo test runs, {facade_tests} of the facade"
             ));
         }
+        // kernel.yml's suites run under nextest, its WebAssembly suite from archives built once;
+        // kernel-build.yml builds, archives and runs none of them.
+        if yml.contains("nextest") {
+            wrong.push("runs one of kernel.yml's nextest suites again".to_owned());
+        }
         for needle in [
             "if [ ! -d \"projects/engines/geometry/crates/$package\" ]; then",
             "PACKAGES: ${{ steps.outside.outputs.packages }}",
@@ -1652,7 +1633,10 @@ mod repository {
             wrong.push("formatting and clippy do not both take the outside list".to_owned());
         }
         // What moved to kernel.yml is there: every crate of the kernel's folder tested natively on
-        // six runners and on wasm32-wasip1, formatted and linted.
+        // six runners and on wasm32-wasip1, formatted and linted. On wasm32-wasip1 the suite (in
+        // release with overflow checks on) and geom-num as shipped are each built once into a
+        // nextest archive, the archive's tests run in parts, and the doctests, which nextest does
+        // not run, run beside the build under each runtime.
         for needle in [
             "for d in projects/engines/geometry/crates/*/",
             "os: ubuntu-latest",
@@ -1661,16 +1645,28 @@ mod repository {
             "os: windows-11-arm",
             "os: macos-latest",
             "os: macos-15-intel",
-            "run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
+            "run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast ${{ matrix.part.targets }}",
             "run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
             "run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast",
-            "run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast",
+            "run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-checked.tar.zst\"",
+            "run: cargo nextest archive $KERNEL_CRATES --target wasm32-wasip1 --release --locked --archive-file \"$RUNNER_TEMP/wasm-shipped.tar.zst\"",
+            "run: cargo nextest run --archive-file \"$RUNNER_TEMP/wasm-${{ matrix.part.build }}.tar.zst\" --workspace-remap . --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
+            WASM_DOCTESTS,
             "run: cargo fmt --check $KERNEL_CRATES",
             "run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings",
         ] {
             if !kernel.contains(needle) {
                 wrong.push(format!("kernel.yml lacks {needle:?}"));
             }
+        }
+        // The WebAssembly doctests run once for each build under each runtime: two builds, two
+        // runtimes.
+        let doctests = kernel.matches(WASM_DOCTESTS).count();
+        if doctests != 4 {
+            wrong.push(format!(
+                "kernel.yml runs the WebAssembly doctests {doctests} times, not once for each of \
+                 two builds under each of two runtimes"
+            ));
         }
         assert!(wrong.is_empty(), "{wrong:#?}");
     }

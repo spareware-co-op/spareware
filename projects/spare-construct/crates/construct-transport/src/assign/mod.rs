@@ -25,6 +25,9 @@ use crate::project::{Project, Scenario, Settings};
 use crate::results::{AssignOpts, Res};
 use run::Run;
 
+/// The progress callback of [`assign`]: called with the iteration, the gap and a message ("" for none).
+pub type Progress<'p> = &'p mut (dyn FnMut(u32, f64, &str) + 'p);
+
 /// `Engine.assign(sc, opts)`: the equilibrium assignment of a scenario in a period, with junction delay and capacity, and its results.
 ///
 /// `p` is the open project (`Store.P`: its matrix estimation, fitted factors, validation and data
@@ -40,12 +43,13 @@ use run::Run;
 /// own link flows (and development its own turn flows) on the same costs, averaged with the same
 /// steps. The period must be given by the options or the settings (a settings object without one
 /// reads as "AM", where the prototype would read undefined).
+#[must_use]
 pub fn assign(
     p: &Project,
     sc: &Scenario,
     s: &Settings,
     opts: &AssignOpts,
-    progress: Option<&mut dyn FnMut(u32, f64, &str)>,
+    progress: Option<Progress<'_>>,
 ) -> Res {
     let t0 = crate::util::now_ms();
     let period = match opts.period.as_deref() {
@@ -56,7 +60,7 @@ pub fn assign(
     let mut dem = demand(p, sc, &g, period, s);
     let df = if opts.demand_factor.num() > 0.0 { opts.demand_factor.num() } else { 1.0 };
     if df != 1.0 {
-        for v in dem.t.iter_mut() {
+        for v in &mut dem.t {
             *v *= df;
         }
     }

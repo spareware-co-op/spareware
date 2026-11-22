@@ -8,8 +8,10 @@
 //! What this file proves:
 //!
 //! - The corpus's digest is the golden `geom-test/replay-corpus`. `golden run` carries that one
-//!   digest through every target and build mode, and the release build as shipped runs the cheap
-//!   checker, so it proves the checker changes nothing.
+//!   digest through every target and build mode, each with the full checker. The shipped-checker
+//!   leg runs this file again in release without this crate's `full-checker` feature, so with
+//!   the cheap groups only (`tests/shipped.rs`; decision 32.48): the same digest there proves the
+//!   checker changes nothing.
 //! - Replays running side by side on 1, 2, 3 and 8 threads give that digest too, so nothing is
 //!   shared between runs. No operation takes a pool yet; when one does, `Kernel` hands it one.
 //! - Every family holds what it says: every primitive, moved and mirrored bodies, and a stop by

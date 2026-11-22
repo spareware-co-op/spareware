@@ -6,14 +6,56 @@ use construct_transport::edit::json::JsonValue;
 use construct_transport::edit::net::LinkProps;
 use construct_transport::edit::{STATUS, name_of};
 use construct_transport::jsnum::Maybe;
-use construct_transport::project::{CLASSES, Link, road_class_exact};
+use construct_transport::project::{CLASSES, Link, Scenario, road_class_exact};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 
+/// The scenario at an index from `Session::target`, `pick_scenario` or `active_index`. Those indexes come from the same
+/// project just before, so a missing one is a bug; it is an error the caller can show, never a crash.
+pub fn scenario_at(list: &[Scenario], i: usize) -> ApiResult<&Scenario> {
+    list.get(i).ok_or_else(gone)
+}
+
+/// [`scenario_at`] for a scenario to change.
+pub fn scenario_at_mut(list: &mut [Scenario], i: usize) -> ApiResult<&mut Scenario> {
+    list.get_mut(i).ok_or_else(gone)
+}
+
+/// The error for a record that a command made or checked a moment before and that is not there after all: a bug, shown
+/// rather than a crash.
+pub fn lost(what: &str, id: &str) -> ApiError {
+    ApiError::new(
+        "internal",
+        format!("The {what} {id} is not in the scenario."),
+    )
+}
+
+/// Sets a key of a JSON object, as `o[k] = x` does in the JavaScript. Anything that is not an object is left as it is.
+pub fn put(o: &mut Value, k: &str, x: Value) {
+    if let Some(m) = o.as_object_mut() {
+        m.insert(k.to_string(), x);
+    }
+}
+
+/// The site with this id in a scenario, or the error that says it is not there.
+pub fn site_of<'a>(
+    sc: &'a Scenario,
+    id: &str,
+) -> ApiResult<&'a construct_transport::project::Site> {
+    sc.sites
+        .get()
+        .and_then(|m| m.get(id))
+        .ok_or_else(|| lost("site", id))
+}
+
+fn gone() -> ApiError {
+    ApiError::new("internal", "The scenario is no longer in the project.")
+}
+
 /// `roadProps()` of ui.js: the class, lanes each way, speed and status a drawn or imported road takes
 /// (`View.template`: arterial, one lane each way, 50 km/h, proposed, unless given).
-pub fn road_template(p: &Params) -> ApiResult<LinkProps> {
+pub fn road_template(p: Params<'_>) -> ApiResult<LinkProps> {
     let cls = p.opt_str("cls")?.unwrap_or("arterial");
     if road_class_exact(cls).is_none() {
         return Err(ApiError::bad_params(format!(
@@ -158,41 +200,50 @@ pub fn kit_set_path(o: &mut JsonValue, k: &str, v: JsonValue) -> bool {
     {
         return false;
     }
-    let (last, steps) = parts.split_last().expect("a path has a last step");
-    let mut t = o;
+    // split always gives at least one part
+    let Some((last, steps)) = parts.split_last() else {
+        return false;
+    };
+    let mut cur = o;
     for p in steps {
-        let empty = child(t, p).is_none_or(|c| !c.truthy());
+        let empty = child(cur, p).is_none_or(|c| !c.truthy());
         if empty {
-            match t {
-                JsonValue::Object(_) => t.set(*p, JsonValue::object()),
-                JsonValue::Array(a) => match p.parse::<usize>() {
-                    Ok(i) if i < a.len() => a[i] = JsonValue::object(),
-                    Ok(i) if i == a.len() => a.push(JsonValue::object()),
-                    _ => return false,
+            match cur {
+                JsonValue::Object(_) => cur.set(*p, JsonValue::object()),
+                JsonValue::Array(items) => match p.parse::<usize>() {
+                    Ok(i) if i == items.len() => items.push(JsonValue::object()),
+                    Ok(i) => match items.get_mut(i) {
+                        Some(slot) => *slot = JsonValue::object(),
+                        None => return false,
+                    },
+                    Err(_) => return false,
                 },
                 _ => return false,
             }
         }
-        match child_mut(t, p) {
-            Some(next) if matches!(next, JsonValue::Object(_) | JsonValue::Array(_)) => t = next,
+        match child_mut(cur, p) {
+            Some(next) if matches!(next, JsonValue::Object(_) | JsonValue::Array(_)) => cur = next,
             _ => return false,
         }
     }
-    match t {
+    match cur {
         JsonValue::Object(_) => {
-            t.set(*last, v);
+            cur.set(*last, v);
             true
         }
-        JsonValue::Array(a) => match last.parse::<usize>() {
-            Ok(i) if i < a.len() => {
-                a[i] = v;
+        JsonValue::Array(items) => match last.parse::<usize>() {
+            Ok(i) if i == items.len() => {
+                items.push(v);
                 true
             }
-            Ok(i) if i == a.len() => {
-                a.push(v);
-                true
-            }
-            _ => false,
+            Ok(i) => match items.get_mut(i) {
+                Some(slot) => {
+                    *slot = v;
+                    true
+                }
+                None => false,
+            },
+            Err(_) => false,
         },
         _ => false,
     }

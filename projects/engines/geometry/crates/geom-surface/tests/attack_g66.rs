@@ -710,8 +710,38 @@ fn a_regions_pieces_stay_inside_it() {
     assert!(b.hi[0] < p[0], "{} >= {}", b.hi[0], p[0]);
 }
 
-#[test]
-fn nurbs_partials_along_a_line_hold_its_points() {
+/// The line positions of `nurbs_partials_along_a_line_hold_its_points`: at the start, inside a
+/// patch, at a knot and at the end. Its quarters run one each (decision 32.78: whole, it was too
+/// long for one Miri gate part).
+const PARTIAL_LINES_AT: [f64; 4] = [0.0, 0.25, 0.5, 1.0];
+
+mod nurbs_partials_along_a_line_hold_its_points {
+    use super::PARTIAL_LINES_AT;
+
+    #[test]
+    fn quarter_1() {
+        super::nurbs_partials_along_lines_at(&PARTIAL_LINES_AT[0..1]);
+    }
+
+    #[test]
+    fn quarter_2() {
+        super::nurbs_partials_along_lines_at(&PARTIAL_LINES_AT[1..2]);
+    }
+
+    #[test]
+    fn quarter_3() {
+        super::nurbs_partials_along_lines_at(&PARTIAL_LINES_AT[2..3]);
+    }
+
+    #[test]
+    fn quarter_4() {
+        super::nurbs_partials_along_lines_at(&PARTIAL_LINES_AT[3..4]);
+    }
+}
+
+/// The check of `nurbs_partials_along_a_line_hold_its_points` on the lines at `ts`, in each
+/// direction, on both surfaces.
+fn nurbs_partials_along_lines_at(ts: &[f64]) {
     let m = &mut meter();
     let mut rng = Lcg(0x11e5);
     let kinds = [
@@ -724,7 +754,7 @@ fn nurbs_partials_along_a_line_hold_its_points() {
     ];
     for s in &kinds {
         // Lines at the start, inside a patch, at a knot and at the end, in each direction.
-        for t in [0.0, 0.25, 0.5, 1.0] {
+        for &t in ts {
             for (line, at) in [
                 (((t, t), (0.1, 0.4)), [(t, 0.1), (t, 0.25), (t, 0.4)]),
                 (((0.1, 0.4), (t, t)), [(0.1, t), (0.25, t), (0.4, t)]),

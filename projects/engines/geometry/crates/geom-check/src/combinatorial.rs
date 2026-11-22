@@ -19,6 +19,12 @@
 //!   two; two partners run opposite ways along their edge and lie in one shell, so each shell is
 //!   closed (in a solid) and consistently oriented. A general body may be non-manifold: any number
 //!   of fins, in the radial order its operation recorded.
+//! - **Fans:** in a solid every vertex is one fan of one shell. A corner is where a fin ends and
+//!   the next fin of its loop starts, and two corners at a vertex are of one fan when a chain of
+//!   edges at the vertex, each used by both of two corners in the chain, joins them. A vertex
+//!   with corners in two shells, or in two fans of one shell, is where solids or parts of one
+//!   touch: the body is non-manifold there, of the kind General (chapter 8.1), as an edge of more
+//!   than two fins makes it.
 //! - **Shells:** every shell has faces, and they are one set connected through edges shared within
 //!   the shell.
 //! - **Regions:** a solid region has a shell; a solid body has a solid region, and each of its
@@ -86,6 +92,7 @@ pub(crate) fn words(a: &Arenas) -> usize {
         rows(Arena::Loop),
         rows(Arena::Fin),
         vertices.saturating_mul(3).saturating_add(rows(Arena::Edge)),
+        vertices.saturating_add(rows(Arena::Edge)).saturating_mul(2),
     ]
     .into_iter()
     .max()
@@ -112,6 +119,7 @@ pub(crate) fn check(
     contents(a, kind, scratch, sink)?;
     loops_close(a, sink)?;
     partners(a, kind, sink)?;
+    fans(a, kind, sink.found() == before, scratch, sink)?;
     shells(a, scratch, sink)?;
     regions(a, kind, sink)?;
     if matches!(kind, BodyKind::Solid | BodyKind::Sheet) {
@@ -479,13 +487,17 @@ fn contents(
 }
 
 /// Each loop closes: each fin ends where the next fin starts, and a closed edge without vertices
-/// is alone in its loop.
+/// is alone in its loop. Each fin's ends are read once: those of the next fin are kept for it.
 fn loops_close(a: &Arenas, sink: &mut Sink<'_, '_>) -> Result<(), Stopped> {
     for l in rows::<Loop>(a.rows(Arena::Loop)) {
         let alone = link(&a.loops.first_fin, l).is_some_and(|f| next(a, f) == f);
+        let mut kept = None;
         for f in loop_fins(a, l) {
             sink.charge()?;
-            match (fin_ends(a, f), fin_ends(a, next(a, f))) {
+            let here = kept.unwrap_or_else(|| fin_ends(a, f));
+            let after = fin_ends(a, next(a, f));
+            kept = Some(after);
+            match (here, after) {
                 (Some((_, head)), Some((tail, _))) if head != tail => {
                     sink.push(Fault::at(FaultKind::LoopOpen, Entity::Loop(l)).with(Entity::Fin(f)));
                 }
@@ -534,6 +546,153 @@ fn partners(a: &Arenas, kind: BodyKind, sink: &mut Sink<'_, '_>) -> Result<(), S
         }
     }
     Ok(())
+}
+
+/// Where a fin's corner is: the vertex where it ends and the next fin of its loop starts, and the
+/// ends of the two fins' edges there, each as a slot ([`slot`]); `None` for a fin on a closed
+/// edge without vertices, which has no corner. A fin ends at its edge's end when it runs
+/// `Forward`, and the next fin starts at its edge's end when it runs `Reversed`.
+fn corner(a: &Arenas, f: FinIx) -> Option<(VertexIx, u32, u32)> {
+    let (_, v) = fin_ends(a, f)?;
+    let n = next(a, f);
+    let sense = |fin: FinIx| a.fins.sense.get(fin).copied();
+    let here = slot(a, f, sense(f) == Some(Sense::Forward));
+    let after = slot(a, n, sense(n) == Some(Sense::Reversed));
+    Some((v, here, after))
+}
+
+/// The slot of a fin's edge at one of its ends: twice the edge's row, plus one at the edge's end
+/// (`at_end`). An edge that starts and ends at one vertex has one slot, as one edge at one vertex.
+fn slot(a: &Arenas, f: FinIx, at_end: bool) -> u32 {
+    let e = fin_edge(a, f);
+    let (start, end) = ends(a, e);
+    let row = e.map_or(0, Ix::row).saturating_mul(2);
+    row.saturating_add(u32::from(at_end && start != end))
+}
+
+/// Each vertex of a solid is one fan of one shell. A vertex's corners are the corners of the fins
+/// that end at it ([`corner`]); two are of one fan when a chain of edges at the vertex, each used
+/// by both of two corners in the chain, joins them: the edges' ends at the vertex are joined
+/// through each corner, and the corners of one fan are those whose ends are one set. A vertex
+/// whose corners lie in two shells, or in two fans of one shell, is where solids or parts of one
+/// touch: the body is non-manifold there, a general body (chapter 8.1), never a solid. It is the
+/// rule `geom-solidcore`'s conversion gives a body its kind by, so the two agree.
+///
+/// A solid whose checks so far found nothing (`sound`) is first walked fan by fan
+/// ([`one_fan_each`]); only one where that walk finds a vertex with a second fan is judged by the
+/// sets, so a body with no such vertex gets the faults (none) the sets would give it.
+///
+/// Cost: on a sound solid, [`one_fan_each`]'s; when it finds a second fan, or the body is not
+/// sound, linear in the corners, at most one for each fin, plus each set operation's time with
+/// path halving, logarithmic amortised at worst (Tarjan and van Leeuwen); memory: two words per
+/// edge and two per vertex.
+fn fans(
+    a: &Arenas,
+    kind: BodyKind,
+    sound: bool,
+    scratch: &mut [u32],
+    sink: &mut Sink<'_, '_>,
+) -> Result<(), Stopped> {
+    if kind != BodyKind::Solid || (sound && one_fan_each(a, scratch, sink)?) {
+        return Ok(());
+    }
+    // Each vertex's first corner and the first corner that differs from it, as the fin's row
+    // plus one, 0 for none.
+    let (first, rest) = take(scratch, a.rows(Arena::Vertex));
+    let (other, rest) = take(rest, a.rows(Arena::Vertex));
+    let (mut sets, _) = Sets::new(rest, a.rows(Arena::Edge).saturating_mul(2));
+    for f in rows::<Fin>(a.rows(Arena::Fin)) {
+        sink.charge()?;
+        if let Some((_, x, y)) = corner(a, f) {
+            sets.join(x, y);
+        }
+    }
+    for f in rows::<Fin>(a.rows(Arena::Fin)) {
+        sink.charge()?;
+        let Some((v, x, _)) = corner(a, f) else {
+            continue;
+        };
+        let mark = f.row().saturating_add(1);
+        let seen = first.get(v.to_usize()).copied().unwrap_or(0);
+        if seen == 0 {
+            swap_in(first, v.to_usize(), mark);
+            continue;
+        }
+        // The vertex's first corner, whose fin has a corner there.
+        let apart = Ix::<Fin>::new(seen.saturating_sub(1)).is_some_and(|one| {
+            let fan = corner(a, one).is_some_and(|(_, y, _)| sets.find(x) != sets.find(y));
+            fan || fin_shell(a, one) != fin_shell(a, f)
+        });
+        if apart && other.get(v.to_usize()) == Some(&0) {
+            swap_in(other, v.to_usize(), mark);
+        }
+    }
+    for v in rows::<Vertex>(a.rows(Arena::Vertex)) {
+        sink.charge()?;
+        let row = |words: &[u32]| {
+            let mark = words.get(v.to_usize()).copied().unwrap_or(0);
+            Ix::<Fin>::new(mark.checked_sub(1)?)
+        };
+        let (Some(one), Some(two)) = (row(first), row(other)) else {
+            continue;
+        };
+        let fault = if fin_shell(a, one) == fin_shell(a, two) {
+            FaultKind::VertexFans
+        } else {
+            FaultKind::VertexShells
+        };
+        sink.push(Fault::at(fault, Entity::Vertex(v)).with(Entity::Fin(two)));
+    }
+    Ok(())
+}
+
+/// Whether each vertex of a solid whose loops close and whose every edge has two partners in one
+/// shell, running opposite ways, is one fan of one shell, walked fan by fan.
+///
+/// From a fin's corner at a vertex the next fin of its loop starts there, and that fin's partner
+/// runs the other way along the same edge, so ends there too: its corner is the next one round
+/// the vertex, and shares an edge's end with the first, so the sets of [`fans`] join the two. The
+/// walk, fin to the partner of its next fin, keeps to one face and its partners, so to one shell,
+/// and it comes back to where it started, since the first stage found each fin in one loop ring
+/// and one radial ring. Each fin is walked once, and the corners of one walk are one fan of one
+/// shell at one vertex; when no vertex is where two walks start, every vertex's corners are one
+/// set and one shell, which is all [`fans`] asks. A fin on a closed edge without vertices has no
+/// corner, and neither has any fin its walk would reach, so it starts none.
+///
+/// It answers `false` at the first vertex where a second walk starts, though an edge that starts
+/// and ends there may join the two walks' corners in the sets, and then [`fans`] judges by the
+/// sets; and `false` if the scratch is too short for its marks, never `true` from a mark it could
+/// not read.
+///
+/// Cost: each fin is walked once and read once more, charged one work unit for each fin before
+/// the walk; memory: one word per fin and one per vertex, fewer than [`fans`]'s sets need, since
+/// each fin of such a solid is one of its edge's two.
+fn one_fan_each(a: &Arenas, scratch: &mut [u32], sink: &mut Sink<'_, '_>) -> Result<bool, Stopped> {
+    let fins = a.rows(Arena::Fin);
+    sink.meter().charge(u64::from(fins))?;
+    // 1 for each fin a walk has passed, and for each vertex where a walk started.
+    let (walked, rest) = take(scratch, fins);
+    let (started, _) = take(rest, a.rows(Arena::Vertex));
+    for first in rows::<Fin>(fins) {
+        if walked.get(first.to_usize()) == Some(&1) {
+            continue;
+        }
+        let Some((_, v)) = fin_ends(a, first) else {
+            continue;
+        };
+        if swap_in(started, v.to_usize(), 1) != Some(0) {
+            return Ok(false);
+        }
+        let mut f = first;
+        loop {
+            swap_in(walked, f.to_usize(), 1);
+            f = radial(a, next(a, f));
+            if f == first {
+                break;
+            }
+        }
+    }
+    Ok(true)
 }
 
 /// Disjoint sets of rows, with path halving (Tarjan and van Leeuwen), in one slice of scratch:

@@ -6,12 +6,13 @@
 //! hardest near-degenerate input the frame holds, that the proof's domain reaches the filter's
 //! rounding and both of its answers, and that every stored corpus and crash file is a case.
 //!
-//! The layout attacks read the repository: every target has its fuzz and seeded tests, the CI
-//! matrices list exactly the targets' fuzz and proof tests, the workflow's path filters cover every
-//! crate a target builds, the tool versions agree wherever they are written, the build check the
-//! workflow turns off is made by `.clusterfuzzlite/build.sh` instead, and the workspace has the
-//! profile cargo-bolero builds with. Each of those checks is a function of the files' text, and
-//! each is shown to fail on a seeded violation, so none can pass by reading nothing.
+//! The layout attacks read the repository: every target has its fuzz and seeded tests, the Kani
+//! matrix lists exactly the targets' proof tests, the parts of the predicate's proof are one for
+//! each class of its domain with the harness that proves the classes cover it, the workflow's path
+//! filters cover every crate a target builds, the Kani version agrees wherever it is written, and
+//! the workspace has the profile cargo-bolero builds with. Each of those checks is a function of
+//! the files' text, and each is shown to fail on a seeded violation, so none can pass by reading
+//! nothing.
 
 // The crate denies native arithmetic and lossy casts in kernel code (Cargo.toml); tests may use
 // them, and std's reductions, to build their oracles.
@@ -37,12 +38,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
-use geom_fuzz::{
-    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, curves, encoder, linalg,
-    make, maths, names, nurbs, open, operations, orient2d, predicates, records, roots, sequence,
-    surfaces, transforms, variants, wide,
+use geom_fuzz::orient2d::{
+    Case, PREDICATE_PARTS, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference,
 };
+use geom_fuzz::{
+    Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract,
+    crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg,
+    make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing,
+    planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence,
+    solids, surface_offsets, surfaces, transforms, variants, wide,
+};
+
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
 use geom_num::grid::{COORD_MAX, P2};
@@ -53,32 +59,55 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 25] = [
+const TARGETS: [(&str, Harness); 48] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
     ("bodies", bodies::harness),
+    ("booleans", booleans::harness),
     ("boxtree", boxtree::harness),
     ("cache", cache::harness),
     ("cbor", cbor::harness),
+    ("cdt", cdt::harness),
+    ("contract", contract::harness),
+    ("curve_offsets", curve_offsets::harness),
     ("curves", curves::harness),
     ("encoder", encoder::harness),
+    ("euler", euler::harness),
+    ("exact", exact::harness),
     ("linalg", linalg::harness),
     ("make", make::harness),
     ("maths", maths::harness),
     ("names", names::harness),
+    ("naming", naming::harness),
     ("nurbs", nurbs::harness),
     ("open", open::harness),
     ("operations", operations::harness),
+    ("intersect", intersect::harness),
+    ("natural", natural::harness),
+    ("project", project::harness),
+    ("level", level::harness),
+    ("general", general::harness),
     ("orient2d", orient2d::harness),
+    ("p21", p21::harness),
+    ("pencils", pencils::harness),
+    ("piercing", piercing::harness),
+    ("planes", planes::harness),
     ("predicates", predicates::harness),
+    ("prune", prune::harness),
     ("records", records::harness),
+    ("references", references::harness),
     ("roots", roots::harness),
     ("sequence", sequence::harness),
+    ("solids", solids::harness),
+    ("surface_offsets", surface_offsets::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
+    ("quadric", quadric::harness),
+    ("reductions", reductions::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
+    ("crossings", crossings::harness),
 ];
 
 const M: i64 = COORD_MAX;
@@ -374,8 +403,8 @@ fn proof_tests(text: &str) -> Vec<String> {
 /// The functions of a test file's `text` that call bolero's `check!` without being `#[test]`
 /// functions themselves. bolero names a target after the function `check!` is written in
 /// (`bolero-engine`'s `TargetLocation::item_path`), and cargo-bolero selects a target by running
-/// the test of that name, so a target written in a helper cannot be built for libFuzzer or for
-/// `ClusterFuzzLite` ("no targets matched"). Comment lines are skipped.
+/// the test of that name, so a target written in a helper cannot be found by its test's name, as
+/// Kani finds a proof ("no targets matched"). Comment lines are skipped.
 fn checks_outside_tests(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut marked_test = false;
@@ -408,10 +437,10 @@ fn checks_outside_tests(text: &str) -> Vec<String> {
 }
 
 /// The `#[should_panic]` test functions of a test file's `text` that call bolero's `check!`.
-/// cargo-bolero's `build-clusterfuzz` builds each test binary by running one of its bolero tests,
+/// A tool that finds a bolero test by its name runs one of the binary's bolero tests,
 /// the first it listed (in no fixed order), with `CARGO_BOLERO_SELECT` set, where `check!` returns
 /// without running its body (`bolero-engine`'s `TargetLocation::should_run`). A `#[should_panic]`
-/// test fails there, and `ClusterFuzzLite`'s build fails with it, on some runs and not others.
+/// test fails there, on some runs and not others.
 /// Comment lines are skipped.
 fn should_panic_checks(text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -505,8 +534,7 @@ fn layout_violations(
         for function in should_panic_checks(text) {
             found.push(format!(
                 "tests/{file}.rs calls bolero's check! in {function}, a #[should_panic] test, \
-                 which fails when cargo-bolero selects targets, and ClusterFuzzLite's build \
-                 with it"
+                 which fails when a tool selects the test by its name"
             ));
         }
     }
@@ -518,17 +546,10 @@ fn layout_violations(
             .filter_map(|rest| rest.split('(').next());
         for name in names.filter(|n| n.ends_with("_fuzz") && !fuzz_tests.contains(*n)) {
             found.push(format!(
-                "test {name} ends in _fuzz, so ClusterFuzzLite fuzzes it, but no target module \
+                "test {name} ends in _fuzz, so it reads as a target's, but no target module \
                  has it"
             ));
         }
-    }
-    let libfuzzer: BTreeSet<String> = workflow_list(workflow, "target").into_iter().collect();
-    if libfuzzer != fuzz_tests {
-        found.push(format!(
-            "kernel-fuzz.yml's libFuzzer matrix {libfuzzer:?} is not the targets' fuzz tests \
-             {fuzz_tests:?}"
-        ));
     }
     let proofs: BTreeSet<String> = tests.values().flat_map(|t| proof_tests(t)).collect();
     let kani: BTreeSet<String> = workflow_list(workflow, "harness").into_iter().collect();
@@ -555,7 +576,7 @@ fn attack_every_target_is_listed_here() {
     ignore = "reads the repository's files, which WASI cannot without a preopened folder"
 )]
 #[test]
-fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
+fn attack_every_target_has_its_tests_and_its_proofs_in_the_kani_matrix() {
     let workflow = read(".github/workflows/kernel-fuzz.yml");
     let targets = target_modules();
     let tests = test_files();
@@ -565,15 +586,7 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    // orient2d_fuzz dropped from the libFuzzer matrix, the one list that names it inline.
-    let drop_fuzz = workflow.replacen(" orient2d_fuzz,", "", 1);
-    assert_ne!(drop_fuzz, workflow);
-    assert!(
-        layout_violations(&targets, &tests, &drop_fuzz)
-            .iter()
-            .any(|v| v.contains("libFuzzer matrix"))
-    );
-    let drop_proof = workflow.replace("- orient2d_proof\n", "");
+    let drop_proof = workflow.replace("- orient2d_proof_filter_answer\n", "");
     assert_ne!(drop_proof, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_proof)
@@ -609,8 +622,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
             .iter()
             .any(|v| v.contains("extra_fuzz"))
     );
-    // A target written in a helper, as the first Kani trial harnesses were: ClusterFuzzLite's
-    // build failed on it with "no targets matched".
+    // A target written in a helper, as the first Kani trial harnesses were: a tool that selects
+    // a test by its name fails on it with "no targets matched".
     // The call is assembled, so this file's own text, which the layout check reads, has none.
     let call = ["check", "!()"].concat();
     let mut helper = tests.clone();
@@ -655,8 +668,8 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     let tests = test_files();
     // The call is assembled, so this file's own text, which the layout check reads, has none.
     let call = ["check", "!()"].concat();
-    // A #[should_panic] bolero test, as G11's bolero_fails_on_a_finding was: ClusterFuzzLite's
-    // build failed whenever cargo-bolero happened to list it first in its binary.
+    // A #[should_panic] bolero test, as G11's bolero_fails_on_a_finding was: a build that selects
+    // tests by name failed whenever it happened to list that one first in its binary.
     let mut panicking = tests.clone();
     panicking.insert(
         "panicking".to_owned(),
@@ -675,13 +688,13 @@ fn attack_a_should_panic_bolero_test_is_refused() {
     let mut returning = tests.clone();
     let text = returning.get_mut("orient2d").unwrap();
     *text = text.replace(
-        ".for_each(|draw| holds(prove(PROOF_BOUND, draw)));",
-        ".for_each(|draw| prove(PROOF_BOUND, draw));",
+        ".for_each(|draw| holds(prove_filter_step(PROOF_BOUND, draw, FilterStep::Answer)));",
+        ".for_each(|draw| prove_filter_step(PROOF_BOUND, draw, FilterStep::Answer));",
     );
     let v = layout_violations(&targets, &returning, &workflow);
     assert!(
         v.iter()
-            .any(|v| v.contains("orient2d_proof") && v.contains("holds")),
+            .any(|v| v.contains("orient2d_proof_filter_answer") && v.contains("holds")),
         "{v:?}"
     );
     // A #[should_panic] test without check!, and a bolero test that catches the panic itself,
@@ -693,6 +706,186 @@ fn attack_a_should_panic_bolero_test_is_refused() {
              {call}.for_each(|_: &[u8]| ());\n    }});\n}}\n"
         )),
         Vec::<String>::new()
+    );
+}
+
+/// The predicate's claim over the whole domain, as a test on every system.
+const WHOLE: &str = "orient2d_proof_predicate";
+/// The harness that proves every draw of the domain has a class.
+const COVER: &str = "orient2d_proof_predicate_cover";
+/// The parts of the predicate's proof: this prefix, then the class.
+const PART: &str = "orient2d_proof_predicate_part_";
+
+/// The body of `fn name(` in `text`, from its `fn` line to the first line that closes it, `}` at
+/// the start of a line; empty when `text` has no such function.
+fn body_of<'a>(text: &'a str, name: &str) -> &'a str {
+    let Some(start) = text.find(&format!("fn {name}(")) else {
+        return "";
+    };
+    let body = &text[start..];
+    &body[..body.find("\n}").unwrap_or(body.len())]
+}
+
+/// What the predicate's proof in parts gets wrong, read from `text`, the text of
+/// `tests/orient2d.rs`, for `parts` classes, and from the workflow. The proof is sound when the
+/// cover harness proves that every draw of the domain has a class below `parts`, and each class
+/// has a part that proves the claim for every draw of that class. So: the cover harness is a Kani
+/// proof of `covered`; each class 0 to `parts` − 1 has its part, a Kani proof whose body assumes
+/// that class and no other (`prove_part` with the class's number); no part is of a class past
+/// the last; Kani's matrix runs every one of them; and the claim still runs whole as a test.
+fn part_violations(text: &str, parts: u32, workflow: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let proofs = proof_tests(text);
+    let matrix = workflow_list(workflow, "harness");
+    let runs = |name: &str, found: &mut Vec<String>| {
+        if !matrix.iter().any(|m| m == name) {
+            found.push(format!("{name} is not in kernel-fuzz.yml's Kani matrix"));
+        }
+    };
+    if proofs.iter().any(|p| p == COVER) {
+        if !body_of(text, COVER).contains("holds(covered(draw))") {
+            found.push(format!(
+                "{COVER} does not prove that every draw has a class: its body has no \
+                 `holds(covered(draw))`"
+            ));
+        }
+        runs(COVER, &mut found);
+    } else {
+        found.push(format!(
+            "the predicate's proof has no cover harness {COVER}, so nothing proves that its \
+             classes are the whole domain"
+        ));
+    }
+    for class in 0..parts {
+        let name = format!("{PART}{class}");
+        if !proofs.contains(&name) {
+            found.push(format!("class {class} has no part {name}"));
+            continue;
+        }
+        let assumes = format!("holds(prove_part(PROOF_BOUND, draw, {class}))");
+        if !body_of(text, &name).contains(&assumes) {
+            found.push(format!(
+                "{name} does not assume class {class}: its body has no `{assumes}`"
+            ));
+        }
+        runs(&name, &mut found);
+    }
+    for name in proofs.iter().filter(|p| p.starts_with(PART)) {
+        let class = name[PART.len()..].parse::<u32>().ok();
+        if class.is_none_or(|c| c >= parts) {
+            found.push(format!(
+                "{name} is a part of no class: the classes are 0 to {}",
+                parts.saturating_sub(1)
+            ));
+        }
+    }
+    if !text.contains(&format!("#[test]\nfn {WHOLE}() {{"))
+        || !body_of(text, WHOLE).contains("holds(prove(PROOF_BOUND, draw, Claim::Predicate))")
+    {
+        found.push(format!(
+            "the predicate's claim no longer runs whole, over every class at once, as the test \
+             {WHOLE}"
+        ));
+    }
+    found
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
+#[test]
+fn attack_the_parts_of_the_predicates_proof_are_its_whole_domain() {
+    let workflow = read(".github/workflows/kernel-fuzz.yml");
+    let text = test_files().remove("orient2d").unwrap();
+    assert_eq!(
+        part_violations(&text, PREDICATE_PARTS, &workflow),
+        Vec::<String>::new()
+    );
+
+    // Seeded violations: each must be reported.
+    let last = PREDICATE_PARTS - 1;
+    let seeded = |label: &str, text: &str, parts: u32, workflow: &str, expect: &str| {
+        let v = part_violations(text, parts, workflow);
+        assert!(v.iter().any(|v| v.contains(expect)), "{label}: {v:?}");
+    };
+    let edited = |of: &str, from: &str, to: &str| {
+        let out = of.replacen(from, to, 1);
+        assert_ne!(out, of, "the planted edit {from:?} applies");
+        out
+    };
+    // A part missing from the matrix, and the cover harness missing from it.
+    seeded(
+        "part out of the matrix",
+        &text,
+        PREDICATE_PARTS,
+        &edited(&workflow, &format!("- {PART}{last}\n"), ""),
+        &format!("{PART}{last} is not in kernel-fuzz.yml's Kani matrix"),
+    );
+    seeded(
+        "cover out of the matrix",
+        &text,
+        PREDICATE_PARTS,
+        &edited(&workflow, &format!("- {COVER}\n"), ""),
+        &format!("{COVER} is not in kernel-fuzz.yml's Kani matrix"),
+    );
+    // The cover harness missing from the source, and one that proves nothing about the classes.
+    seeded(
+        "no cover harness",
+        &edited(&text, &format!("fn {COVER}()"), "fn covers_nothing()"),
+        PREDICATE_PARTS,
+        &workflow,
+        "has no cover harness",
+    );
+    seeded(
+        "a cover that proves nothing",
+        &edited(&text, "holds(covered(draw))", "holds(Ok(()))"),
+        PREDICATE_PARTS,
+        &workflow,
+        "does not prove that every draw has a class",
+    );
+    // A part whose assumption is no longer its class: the last part assuming class 0 leaves the
+    // last class unproved, and so does a part removed from the source.
+    seeded(
+        "a class nobody assumes",
+        &edited(
+            &text,
+            &format!("prove_part(PROOF_BOUND, draw, {last})"),
+            "prove_part(PROOF_BOUND, draw, 0)",
+        ),
+        PREDICATE_PARTS,
+        &workflow,
+        &format!("{PART}{last} does not assume class {last}"),
+    );
+    seeded(
+        "a part removed",
+        &edited(&text, &format!("fn {PART}{last}()"), "fn removed()"),
+        PREDICATE_PARTS,
+        &workflow,
+        &format!("class {last} has no part"),
+    );
+    // One class more than the parts, and one part more than the classes.
+    seeded(
+        "a class without a part",
+        &text,
+        PREDICATE_PARTS + 1,
+        &workflow,
+        &format!("class {PREDICATE_PARTS} has no part"),
+    );
+    seeded(
+        "a part without a class",
+        &text,
+        last,
+        &workflow,
+        &format!("{PART}{last} is a part of no class"),
+    );
+    // The whole claim no longer a test.
+    seeded(
+        "the whole removed",
+        &edited(&text, &format!("fn {WHOLE}()"), "fn whole_removed()"),
+        PREDICATE_PARTS,
+        &workflow,
+        "no longer runs whole",
     );
 }
 
@@ -764,8 +957,6 @@ fn path_filter_violations(workflow: &str, folders: &BTreeSet<String>) -> Vec<Str
             "Cargo.lock",
             ".cargo/config.toml",
             "rust-toolchain.toml",
-            ".clusterfuzzlite/build.sh",
-            ".clusterfuzzlite/Dockerfile",
             ".github/workflows/kernel-fuzz.yml",
         ]
         .map(str::to_owned),
@@ -877,11 +1068,11 @@ fn attack_the_workflow_runs_when_any_crate_a_target_builds_changes() {
             .any(|v| v.contains("geom-run"))
     );
     let mut more = folders.clone();
-    more.insert("projects/engines/geometry/crates/geom-bool".to_owned());
+    more.insert("projects/engines/geometry/crates/geom-blend".to_owned());
     assert!(
         path_filter_violations(&workflow, &more)
             .iter()
-            .any(|v| v.contains("geom-bool"))
+            .any(|v| v.contains("geom-blend"))
     );
 }
 
@@ -893,7 +1084,7 @@ fn env_value(yaml: &str, key: &str) -> Option<String> {
 }
 
 /// Every token in `text` that follows `marker` (up to the next space), e.g. the version after
-/// `cargo-bolero --version `.
+/// `kani-verifier --version `.
 fn after(text: &str, marker: &str) -> Vec<String> {
     text.match_indices(marker)
         .map(|(i, _)| {
@@ -906,40 +1097,13 @@ fn after(text: &str, marker: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every dated nightly toolchain named in `text`: `nightly-` and a date.
-fn nightlies(text: &str) -> Vec<String> {
-    after(text, "nightly-")
-        .into_iter()
-        .filter(|d| d.len() >= 10 && d[..10].chars().filter(char::is_ascii_digit).count() == 8)
-        .map(|d| format!("nightly-{}", &d[..10]))
-        .collect()
-}
-
-/// Where the pins disagree: the nightly compiler, cargo-bolero and Kani, between the workflow and
-/// every file that names them.
+/// Where the Kani pin disagrees between the workflow and every file that names it.
 fn pin_violations(workflow: &str, files: &[(&str, &str)]) -> Vec<String> {
     let mut found = Vec::new();
-    let Some(nightly) = env_value(workflow, "FUZZ_NIGHTLY") else {
-        return vec!["kernel-fuzz.yml pins no FUZZ_NIGHTLY".to_owned()];
-    };
-    let Some(bolero) = env_value(workflow, "CARGO_BOLERO_VERSION") else {
-        return vec!["kernel-fuzz.yml pins no CARGO_BOLERO_VERSION".to_owned()];
-    };
     let Some(kani) = env_value(workflow, "KANI_VERSION") else {
         return vec!["kernel-fuzz.yml pins no KANI_VERSION".to_owned()];
     };
     for (name, text) in files {
-        for n in nightlies(text).into_iter().filter(|n| *n != nightly) {
-            found.push(format!("{name} names {n}; kernel-fuzz.yml pins {nightly}"));
-        }
-        for v in after(text, "cargo-bolero --version ")
-            .into_iter()
-            .filter(|v| *v != bolero)
-        {
-            found.push(format!(
-                "{name} installs cargo-bolero {v}; kernel-fuzz.yml pins {bolero}"
-            ));
-        }
         for v in after(text, "kani-verifier --version ")
             .into_iter()
             .filter(|v| *v != kani)
@@ -959,44 +1123,16 @@ fn pin_violations(workflow: &str, files: &[(&str, &str)]) -> Vec<String> {
 #[test]
 fn attack_the_tool_pins_agree_everywhere_they_are_written() {
     let workflow = read(".github/workflows/kernel-fuzz.yml");
-    let dockerfile = read(".clusterfuzzlite/Dockerfile");
     let readme = read("projects/engines/geometry/crates/geom-fuzz/README.md");
-    let lib = read("projects/engines/geometry/crates/geom-fuzz/src/lib.rs");
-    let files = [
-        ("Dockerfile", dockerfile.as_str()),
-        ("README.md", readme.as_str()),
-        ("src/lib.rs", lib.as_str()),
-    ];
+    let files = [("README.md", readme.as_str())];
     assert_eq!(pin_violations(&workflow, &files), Vec::<String>::new());
-    // Each file names each pin it should, so the agreement is not vacuous.
-    assert_ne!(
-        after(&dockerfile, "cargo-bolero --version "),
-        Vec::<String>::new()
-    );
-    assert_ne!(
-        after(&readme, "cargo-bolero --version "),
-        Vec::<String>::new()
-    );
+    // The README names the pin, so the agreement is not vacuous.
     assert_ne!(
         after(&readme, "kani-verifier --version "),
         Vec::<String>::new()
     );
-    assert_ne!(nightlies(&readme), Vec::<String>::new());
-    assert_ne!(nightlies(&lib), Vec::<String>::new());
 
-    // Seeded violations.
-    let old = readme.replace("nightly-2026-10-01", "nightly-2026-09-01");
-    assert!(
-        pin_violations(&workflow, &[("README.md", &old)])
-            .iter()
-            .any(|v| v.contains("nightly-2026-09-01"))
-    );
-    let docker = dockerfile.replace("--version 0.13.5", "--version 0.13.4");
-    assert!(
-        pin_violations(&workflow, &[("Dockerfile", &docker)])
-            .iter()
-            .any(|v| v.contains("0.13.4"))
-    );
+    // Seeded violation.
     let kani = readme.replace(
         "kani-verifier --version 0.68.0",
         "kani-verifier --version 0.67.0",
@@ -1005,78 +1141,6 @@ fn attack_the_tool_pins_agree_everywhere_they_are_written() {
         pin_violations(&workflow, &[("README.md", &kani)])
             .iter()
             .any(|v| v.contains("0.67.0"))
-    );
-}
-
-/// What goes wrong if the workflow turns OSS-Fuzz's build check off: build.sh must then make the
-/// same checks, keep only the fuzz tests' scripts, and parallel fuzzing must stay off.
-fn build_check_violations(workflow: &str, build_sh: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    if workflow.contains("parallel-fuzzing: true") {
-        found.push(
-            "parallel fuzzing is on; libFuzzer's -jobs and -fork relaunch the binary without \
-             the start-up script's arguments"
-                .to_owned(),
-        );
-    }
-    if !workflow.contains("bad-build-check: false") {
-        return found;
-    }
-    for (needle, what) in [
-        ("readelf -h", "that each binary is an x86-64 ELF executable"),
-        (
-            "objdump -dC",
-            "the count of calls into the address sanitizer",
-        ),
-        ("-lt 1000", "the threshold of 1000 address-sanitizer calls"),
-        ("Done 64 runs", "a clean run of 64 inputs"),
-        ("-lt 100 ", "the threshold of 100 instrumented edges"),
-        (
-            "*_fuzz_fuzzer",
-            "keeping only the <target>_fuzz tests' scripts",
-        ),
-        ("exit 1", "failing the build"),
-    ] {
-        if !build_sh.contains(needle) {
-            found.push(format!(
-                "kernel-fuzz.yml turns OSS-Fuzz's build check off, but build.sh does not check \
-                 {what} (`{needle}`)"
-            ));
-        }
-    }
-    found
-}
-
-#[cfg_attr(
-    target_family = "wasm",
-    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
-)]
-#[test]
-fn attack_the_build_check_turned_off_is_made_by_build_sh() {
-    let workflow = read(".github/workflows/kernel-fuzz.yml");
-    let build_sh = read(".clusterfuzzlite/build.sh");
-    assert!(workflow.contains("bad-build-check: false"));
-    assert_eq!(
-        build_check_violations(&workflow, &build_sh),
-        Vec::<String>::new()
-    );
-    for needle in ["readelf -h", "objdump -dC", "Done 64 runs", "*_fuzz_fuzzer"] {
-        let weakened = build_sh.replace(needle, "true");
-        assert!(
-            build_check_violations(&workflow, &weakened)
-                .iter()
-                .any(|v| v.contains(needle)),
-            "{needle}"
-        );
-    }
-    let parallel = workflow.replace(
-        "mode: code-change",
-        "mode: code-change\n          parallel-fuzzing: true",
-    );
-    assert!(
-        build_check_violations(&parallel, &build_sh)
-            .iter()
-            .any(|v| v.contains("parallel"))
     );
 }
 

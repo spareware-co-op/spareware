@@ -1,4 +1,4 @@
-//! The sensitivity pack (engine.js SENS, SENS_DEFAULT, scaleRates, scaleTg, dropUnfunded and
+//! The sensitivity pack (engine.js SENS, `SENS_DEFAULT`, scaleRates, scaleTg, dropUnfunded and
 //! sensitivity; docs/spec/sensitivity-pack).
 //!
 //! Each test runs the with-proposal scenario again on a copy of the scenario and of the
@@ -8,7 +8,8 @@
 
 use super::{ExtentOpts, extent_test};
 use crate::econ::{Econ, Snr, econ, snr};
-use crate::jsnum::{Maybe, Num, math_max, math_round, number_to_js_string, to_fixed};
+use crate::jsnum::{Maybe, Num, math_max, math_round, number_to_js_string, to_fixed, usize_to_f64};
+use std::fmt::Write as _;
 use crate::project::{Project, Scenario, Settings, in_baseline, link_programmed, link_unfunded};
 use crate::results::{AssignOpts, Res, Results, js_sort_by, plain};
 use crate::util::{clamp, r1, r3};
@@ -189,10 +190,11 @@ pub const SENS: [SensTest; 11] = [
     },
 ];
 
-/// engine.js SENS_DEFAULT: the tests run when none are named (8 runs per period).
+/// engine.js `SENS_DEFAULT`: the tests run when none are named (8 runs per period).
 pub const SENS_DEFAULT: [&str; 8] = ["T1+", "T1-", "T2", "T3+", "T3-", "T4+", "T4-", "T5"];
 
 /// `SENS.find(t => t.id === id)`.
+#[must_use]
 pub fn sens_test(id: &str) -> Option<&'static SensTest> {
     SENS.iter().find(|t| t.id == id)
 }
@@ -256,13 +258,13 @@ impl SensTest {
         match self.settings {
             Some(SettingsChange::ScaleRates(f)) => scale_rates(s, f),
             Some(SettingsChange::ScaleGravityBeta(f)) => {
-                s.gravity_beta = Num::number(s.gravity_beta.num() * f)
+                s.gravity_beta = Num::number(s.gravity_beta.num() * f);
             }
             Some(SettingsChange::ScaleGrowth(f)) => s.growth = Num::number(s.growth.or(0.0) * f),
             None => {}
         }
     }
-    /// Applies the test's change to a scenario copy (`t.sc(sc, P, opts)`); mode_share is `opts.modeShare` (T6).
+    /// Applies the test's change to a scenario copy (`t.sc(sc, P, opts)`); `mode_share` is `opts.modeShare` (T6).
     pub fn apply_scenario(&self, sc: &mut Scenario, p: Option<&Project>, mode_share: &Num) {
         match self.scenario {
             Some(ScenarioChange::ScaleTg(f)) => scale_tg(sc, f),
@@ -304,7 +306,7 @@ pub type Progress<'a> = &'a mut dyn FnMut(usize, usize, &str);
 pub struct SensOpts<'a> {
     /// Periods (None: the scenario's, otherwise AM and PM).
     pub periods: Option<Vec<String>>,
-    /// Test ids (None: SENS_DEFAULT).
+    /// Test ids (None: `SENS_DEFAULT`).
     pub tests: Option<Vec<String>>,
     /// The do-minimum scenario: adds the links over 5% / 10% (each run is made without too).
     pub without: Option<&'a Scenario>,
@@ -324,7 +326,7 @@ pub struct SensOpts<'a> {
     pub now: Option<&'a dyn Fn() -> f64>,
 }
 
-/// The junction with the largest DoS over the periods.
+/// The junction with the largest `DoS` over the periods.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SensWorst {
     /// Site or node id.
@@ -348,9 +350,9 @@ pub struct SensCentral {
     /// VHT over the periods, 0.1.
     #[serde(with = "plain")]
     pub vht: f64,
-    /// The junction with the largest DoS; null without junctions.
+    /// The junction with the largest `DoS`; null without junctions.
     pub worst: Option<SensWorst>,
-    /// Junctions at LoS E or F.
+    /// Junctions at `LoS` E or F.
     #[serde(rename = "losEF", with = "plain")]
     pub los_ef: f64,
     /// Links over the 5% test (with a without scenario; null otherwise).
@@ -396,9 +398,9 @@ pub struct SensTestRow {
     /// Change in VHT from the central run (fraction), 0.001.
     #[serde(with = "plain")]
     pub d_vht: f64,
-    /// The junction with the largest DoS.
+    /// The junction with the largest `DoS`.
     pub worst: Option<SensWorst>,
-    /// Junctions at LoS E or F.
+    /// Junctions at `LoS` E or F.
     #[serde(rename = "losEF", with = "plain")]
     pub los_ef: f64,
     /// Links over the 5% test, or null.
@@ -409,7 +411,7 @@ pub struct SensTestRow {
     pub over10: Option<f64>,
     /// Elasticities, for tests with a relative change.
     pub elasticity: Option<Elasticity>,
-    /// A junction crosses its practical DoS or capacity, or changes LoS.
+    /// A junction crosses its practical `DoS` or capacity, or changes `LoS`.
     pub sensitive: bool,
     /// What changed.
     pub changes: Vec<String>,
@@ -523,23 +525,26 @@ struct Summary {
 /// assign(scenario copy, settings copy, options) must do what `Engine.assign(sc, { ...opts,
 /// settings })` does. The runs are made in the JavaScript's order: the central run, then each
 /// test; in each, every period with the scenario, then (with opts.without) without.
+///
+/// # Errors
+///
+/// T6 without an alternative mode share, as the JavaScript reports it.
 pub fn sensitivity(
     p: &Project,
     sc: &Scenario,
     mut opts: SensOpts,
-    mut assign: impl FnMut(&Scenario, &Settings, &AssignOpts) -> Res,
+    assign: impl FnMut(&Scenario, &Settings, &AssignOpts) -> Res,
 ) -> Result<SensTable, SensError> {
     let s0 = &p.settings;
     let t0 = opts.now.map_or(0.0, |f| f());
-    let periods: Vec<String> = match (&opts.periods, sc.periods.get()) {
-        (Some(ps), _) => ps.clone(),
-        (None, Some(ps)) => ps.clone(),
-        (None, None) => vec!["AM".to_string(), "PM".to_string()],
+    let periods: Vec<String> = match opts.periods.as_ref().or(sc.periods.get()) {
+        Some(ps) => ps.clone(),
+        None => vec!["AM".to_string(), "PM".to_string()],
     };
     let ids: Vec<String> = opts
         .tests
         .clone()
-        .unwrap_or_else(|| SENS_DEFAULT.iter().map(|s| s.to_string()).collect());
+        .unwrap_or_else(|| SENS_DEFAULT.iter().map(std::string::ToString::to_string).collect());
     let tests: Vec<&SensTest> = ids.iter().filter_map(|id| sens_test(id)).collect();
     // +opts.modeShare >= 0 && opts.modeShare !== '' && opts.modeShare != null
     let ms = &opts.mode_share;
@@ -550,17 +555,85 @@ pub fn sensitivity(
             error: "T6 needs the alternative mode share (% of vehicle trips replaced).".to_string(),
         });
     }
-    let n_runs = (tests.len() + 1) * periods.len() * if opts.without.is_some() { 2 } else { 1 };
-    let mut k = 0usize;
-    let mut run = |t: Option<&SensTest>, label: &str, opts: &mut SensOpts| -> Runs {
-        let mut s = s0.clone();
-        let mut s1 = clone_sc(sc);
+    let n_runs = tests
+        .len()
+        .saturating_add(1)
+        .saturating_mul(periods.len())
+        .saturating_mul(if opts.without.is_some() { 2 } else { 1 });
+    let mut runner = Runner {
+        p,
+        sc,
+        periods: &periods,
+        n_runs,
+        k: 0,
+        assign,
+    };
+    let has_without = opts.without.is_some();
+    let central_runs = runner.run(None, "Central", &mut opts);
+    let central = summarize(sc, &periods, has_without, central_runs, &opts);
+    let mut rows = Vec::new();
+    let mut sentences = Vec::new();
+    let mut flags = Vec::new();
+    for t in &tests {
+        let runs = runner.run(Some(t), t.label, &mut opts);
+        let s = summarize(sc, &periods, has_without, runs, &opts);
+        let row = test_row(t, &central, &s, &periods, s0, &opts);
+        if let Some(first) = row.changes.first() {
+            flags.push(format!(
+                "Conclusion sensitive: at {} {}.",
+                t.label.to_lowercase(),
+                first
+            ));
+        }
+        sentences.push(row.sentence.clone());
+        rows.push(SensRow::Test(row));
+    }
+    if let Some(row) = opts.econ_base.and_then(|eb| discount_row(s0, sc, &eb, &periods)) {
+        rows.push(row);
+    }
+    let ms = opts.now.map_or(0.0, |f| math_round(f() - t0));
+    let runs = usize_to_f64(runner.k);
+    Ok(SensTable {
+        label: "Table SENS-1: sensitivity tests".to_string(),
+        periods,
+        central: SensCentral {
+            trips: r1(central.trips),
+            vht: r1(central.vht),
+            worst: central.worst,
+            los_ef: usize_to_f64(central.los_ef),
+            over5: central.over5,
+            over10: central.over10,
+        },
+        rows,
+        sentences,
+        flags,
+        runs,
+        ms,
+        note: "Each test changes one input; elasticity = (\u{394}KPI / KPI) / (\u{394}input / input). Each run is checked for signal to noise against the central run (TAG M3.1).".to_string(),
+    })
+}
+
+// The runs of a sensitivity table: each test's copies of the settings and scenarios, assigned period by
+// period, counting the runs for the progress reports
+struct Runner<'a, A> {
+    p: &'a Project,
+    sc: &'a Scenario,
+    periods: &'a [String],
+    n_runs: usize,
+    k: usize,
+    assign: A,
+}
+
+impl<A: FnMut(&Scenario, &Settings, &AssignOpts) -> Res> Runner<'_, A> {
+    fn run(&mut self, t: Option<&SensTest>, label: &str, opts: &mut SensOpts) -> Runs {
+        let mut s = self.p.settings.clone();
+        let mut s1 = clone_sc(self.sc);
         let mut w1 = opts.without.map(clone_sc);
         if let Some(t) = t {
             t.apply_settings(&mut s);
-            t.apply_scenario(&mut s1, Some(p), &opts.mode_share);
+            t.apply_scenario(&mut s1, Some(self.p), &opts.mode_share);
             if let Some(w) = w1.as_mut() {
-                t.apply_scenario(w, Some(p), &opts.mode_share);
+                t.apply_scenario(w, Some(self.p), &opts.mode_share);
             }
         }
         // demandFactor: t && t.df (null for the central run)
@@ -569,10 +642,10 @@ pub fn sensitivity(
             Some(t) => t.df.map_or(Maybe::Missing, Num::number),
         };
         let mut out = Runs {
-            with: Default::default(),
-            without: Default::default(),
+            with: crate::project::OrderedMap::new(),
+            without: crate::project::OrderedMap::new(),
         };
-        for per in &periods {
+        for per in self.periods {
             let ao = AssignOpts {
                 gap_tol: opts.gap_tol.clone(),
                 max_iter: opts.max_iter.clone(),
@@ -581,289 +654,280 @@ pub fn sensitivity(
                 select: None,
                 arc_penalty: None,
             };
-            k += 1;
+            self.k = self.k.saturating_add(1);
             if let Some(f) = opts.on_progress.as_mut() {
-                f(k, n_runs, &format!("{}: {}", label, per));
+                f(self.k, self.n_runs, &format!("{label}: {per}"));
             }
-            out.with.insert(per.clone(), assign(&s1, &s, &ao));
+            out.with.insert(per.clone(), (self.assign)(&s1, &s, &ao));
             if let Some(w) = &w1 {
-                k += 1;
+                self.k = self.k.saturating_add(1);
                 if let Some(f) = opts.on_progress.as_mut() {
-                    f(k, n_runs, &format!("{}: {} (without)", label, per));
+                    f(self.k, self.n_runs, &format!("{label}: {per} (without)"));
                 }
-                out.without.insert(per.clone(), assign(w, &s, &ao));
+                out.without.insert(per.clone(), (self.assign)(w, &s, &ao));
             }
         }
         out
-    };
-    let has_without = opts.without.is_some();
-    let name_of = |key: &str, opts: &SensOpts| match opts.name {
+    }
+}
+
+// A junction or site's name for the table: opts.name's, otherwise its key
+fn sens_name(key: &str, opts: &SensOpts) -> String {
+    match opts.name {
         Some(f) => f(key),
         None => key.to_string(),
-    };
-    let summary = |o: Runs, opts: &SensOpts| -> Summary {
-        let (mut trips, mut vht) = (0.0, 0.0);
-        let mut worst: Option<SensWorst> = None;
-        let mut ef: Vec<String> = Vec::new();
-        let mut state = crate::project::OrderedMap::new();
-        let (mut n5, mut n10) = (0.0, 0.0);
-        for per in &periods {
-            let r = &o.with[per.as_str()];
-            trips += r.kpi.trips;
-            vht += r.kpi.vht;
-            for (id, nr) in r.nodes.iter() {
-                let key = nr
-                    .site
-                    .clone()
-                    .filter(|x| !x.is_empty())
-                    .unwrap_or_else(|| id.to_string());
-                if worst.as_ref().is_none_or(|w| nr.dos > w.dos) {
-                    worst = Some(SensWorst {
-                        id: key.clone(),
-                        name: name_of(&key, opts),
-                        dos: nr.dos,
-                        period: per.clone(),
-                    });
-                }
-                if (nr.los == "E" || nr.los == "F") && !ef.contains(&key) {
-                    ef.push(key.clone());
-                }
-                let band = nr.appr.iter().fold(0.0, |m, a| {
-                    let b = match a.dos_band.as_deref() {
-                        Some("over") => 2.0,
-                        Some("near") => 1.0,
-                        _ => 0.0,
-                    };
-                    math_max(m, b)
+    }
+}
+
+// One run set's totals, worst junction, junctions at LoS E or F, extent counts and each junction's state
+fn summarize(sc: &Scenario, periods: &[String], has_without: bool, o: Runs, opts: &SensOpts) -> Summary {
+    let (mut trips, mut vht) = (0.0, 0.0);
+    let mut worst: Option<SensWorst> = None;
+    let mut ef: Vec<String> = Vec::new();
+    let mut state = crate::project::OrderedMap::new();
+    let (mut n5, mut n10) = (0.0, 0.0);
+    for per in periods {
+        let Some(r) = o.with.get(per.as_str()) else {
+            continue;
+        };
+        trips += r.kpi.trips;
+        vht += r.kpi.vht;
+        for (id, nr) in r.nodes.iter() {
+            let key = nr
+                .site
+                .clone()
+                .filter(|x| !x.is_empty())
+                .unwrap_or_else(|| id.to_string());
+            if worst.as_ref().is_none_or(|w| nr.dos > w.dos) {
+                worst = Some(SensWorst {
+                    id: key.clone(),
+                    name: sens_name(&key, opts),
+                    dos: nr.dos,
+                    period: per.clone(),
                 });
-                state.insert(
-                    format!("{}|{}", per, key),
-                    State {
-                        band,
-                        los: nr.los.clone(),
-                        dos: nr.dos,
-                        name: name_of(&key, opts),
-                        p: per.clone(),
-                    },
-                );
             }
-            if let Some(wo) = o.without.get(per)
-                && let Some(x) = extent_test(sc, Some(wo), Some(r), ExtentOpts::default())
-            {
-                for row in x.rows.iter().filter(|r| r.included) {
-                    if row.cls.as_deref() == Some("5%") {
-                        n5 += 1.0;
-                    } else {
-                        n10 += 1.0;
-                    }
-                }
+            if (nr.los == "E" || nr.los == "F") && !ef.contains(&key) {
+                ef.push(key.clone());
             }
-        }
-        Summary {
-            trips,
-            vht,
-            worst,
-            los_ef: ef.len(),
-            over5: if has_without { Some(n5) } else { None },
-            over10: if has_without { Some(n10) } else { None },
-            state,
-            runs: o,
-        }
-    };
-    let central_runs = run(None, "Central", &mut opts);
-    let central = summary(central_runs, &opts);
-    let mut rows = Vec::new();
-    let mut sentences = Vec::new();
-    let mut flags = Vec::new();
-    for t in &tests {
-        let runs = run(Some(t), t.label, &mut opts);
-        let s = summary(runs, &opts);
-        let d_t = if central.trips > 0.0 {
-            (s.trips - central.trips) / central.trips
-        } else {
-            0.0
-        };
-        let d_v = if central.vht > 0.0 {
-            (s.vht - central.vht) / central.vht
-        } else {
-            0.0
-        };
-        let el = t
-            .rel
-            .filter(|r| *r != 0.0 && !r.is_nan())
-            .map(|rel| Elasticity {
-                trips: r3(d_t / rel),
-                vht: r3(d_v / rel),
+            let band = nr.appr.iter().fold(0.0, |m, a| {
+                let b = match a.dos_band.as_deref() {
+                    Some("over") => 2.0,
+                    Some("near") => 1.0,
+                    _ => 0.0,
+                };
+                math_max(m, b)
             });
-        // a conclusion changes when a junction crosses its practical DoS (or capacity) or changes LoS
-        let mut changed = Vec::new();
-        for (key, a) in central.state.iter() {
-            let Some(b) = s.state.get(key) else { continue };
-            if b.band > a.band {
-                changed.push(format!(
-                    "{} {} ({}, {})",
-                    b.name,
-                    if b.band == 2.0 {
-                        "exceeds capacity"
-                    } else {
-                        "exceeds practical DoS"
-                    },
-                    to_fixed(b.dos, 2),
-                    b.p
-                ));
-            } else if b.band < a.band {
-                changed.push(format!(
-                    "{} drops below {} ({}, {})",
-                    b.name,
-                    if a.band == 2.0 {
-                        "capacity"
-                    } else {
-                        "practical DoS"
-                    },
-                    to_fixed(b.dos, 2),
-                    b.p
-                ));
-            } else if a.los != b.los {
-                changed.push(format!(
-                    "{} moves from LoS {} to {} ({})",
-                    b.name, a.los, b.los, b.p
-                ));
-            }
+            state.insert(
+                format!("{per}|{key}"),
+                State {
+                    band,
+                    los: nr.los.clone(),
+                    dos: nr.dos,
+                    name: sens_name(&key, opts),
+                    p: per.clone(),
+                },
+            );
         }
-        let mut noises: Vec<Snr> = periods
-            .iter()
-            .filter_map(|per| snr(central.runs.with.get(per), s.runs.with.get(per), s0))
-            .collect();
-        js_sort_by(&mut noises, |a, b| a.r - b.r);
-        let noise = noises.into_iter().next();
-        let pc = |x: f64| {
-            format!(
-                "{}{}%",
-                if x >= 0.0 { "+" } else { "\u{2212}" },
-                to_fixed((x * 100.0).abs(), 1)
-            )
-        };
-        let lower = t.label.to_lowercase();
-        let mut sentence = format!(
-            "{}: total vehicle trips {}, VHT {}{}. ",
-            t.label,
-            pc(d_t),
-            pc(d_v),
-            match &el {
-                Some(e) => format!(" (VHT elasticity {})", to_fixed(e.vht, 2)),
-                None => String::new(),
-            }
-        );
-        if changed.is_empty() {
-            sentence.push_str("No junction crosses its practical DoS or changes LoS.");
-        } else {
-            sentence.push_str(&format!(
-                "Conclusion sensitive: at {} {}{}.",
-                lower,
-                changed[0],
-                if changed.len() > 1 {
-                    format!(", and {} more", changed.len() - 1)
-                } else {
-                    String::new()
-                }
-            ));
-        }
-        if let Some(n) = &noise
-            && !n.ok
+        if let Some(wo) = o.without.get(per)
+            && let Some(x) = extent_test(sc, Some(wo), Some(r), ExtentOpts::default())
         {
-            sentence.push(' ');
-            sentence.push_str(&n.text);
+            for row in x.rows.iter().filter(|r| r.included) {
+                if row.cls.as_deref() == Some("5%") {
+                    n5 += 1.0;
+                } else {
+                    n10 += 1.0;
+                }
+            }
         }
-        let input = if t.id == "T6" {
-            format!(
-                "zone reductions set to {}%",
-                number_to_js_string(opts.mode_share.num())
-            )
-        } else {
-            t.input.to_string()
-        };
-        if !changed.is_empty() {
-            flags.push(format!(
-                "Conclusion sensitive: at {} {}.",
-                lower, changed[0]
+    }
+    Summary {
+        trips,
+        vht,
+        worst,
+        los_ef: ef.len(),
+        over5: if has_without { Some(n5) } else { None },
+        over10: if has_without { Some(n10) } else { None },
+        state,
+        runs: o,
+    }
+}
+
+// A test's row: its totals against the central run's, elasticities, the conclusions it changes,
+// signal to noise and the sentence
+fn test_row(t: &SensTest, central: &Summary, s: &Summary, periods: &[String], s0: &Settings, opts: &SensOpts) -> SensTestRow {
+    let d_t = if central.trips > 0.0 {
+        (s.trips - central.trips) / central.trips
+    } else {
+        0.0
+    };
+    let d_v = if central.vht > 0.0 {
+        (s.vht - central.vht) / central.vht
+    } else {
+        0.0
+    };
+    let el = t
+        .rel
+        .filter(|r| *r != 0.0 && !r.is_nan())
+        .map(|rel| Elasticity {
+            trips: r3(d_t / rel),
+            vht: r3(d_v / rel),
+        });
+    let changed = changed_conclusions(central, s);
+    let mut noises: Vec<Snr> = periods
+        .iter()
+        .filter_map(|per| snr(central.runs.with.get(per), s.runs.with.get(per), s0))
+        .collect();
+    js_sort_by(&mut noises, |a, b| a.r - b.r);
+    let noise = noises.into_iter().next();
+    let sentence = test_sentence(t, d_t, d_v, el.as_ref(), &changed, noise.as_ref());
+    let input = if t.id == "T6" {
+        format!(
+            "zone reductions set to {}%",
+            number_to_js_string(opts.mode_share.num())
+        )
+    } else {
+        t.input.to_string()
+    };
+    SensTestRow {
+        id: t.id.to_string(),
+        test: t.test.to_string(),
+        label: t.label.to_string(),
+        input,
+        trips: r1(s.trips),
+        vht: r1(s.vht),
+        d_trips: r3(d_t),
+        d_vht: r3(d_v),
+        worst: s.worst.clone(),
+        los_ef: usize_to_f64(s.los_ef),
+        over5: s.over5,
+        over10: s.over10,
+        elasticity: el,
+        sensitive: !changed.is_empty(),
+        changes: changed,
+        noise,
+        sentence,
+    }
+}
+
+// A conclusion changes when a junction crosses its practical DoS (or capacity) or changes LoS
+fn changed_conclusions(central: &Summary, s: &Summary) -> Vec<String> {
+    let mut changed = Vec::new();
+    for (key, a) in central.state.iter() {
+        let Some(b) = s.state.get(key) else { continue };
+        if b.band > a.band {
+            changed.push(format!(
+                "{} {} ({}, {})",
+                b.name,
+                if b.band == 2.0 {
+                    "exceeds capacity"
+                } else {
+                    "exceeds practical DoS"
+                },
+                to_fixed(b.dos, 2),
+                b.p
+            ));
+        } else if b.band < a.band {
+            changed.push(format!(
+                "{} drops below {} ({}, {})",
+                b.name,
+                if a.band == 2.0 {
+                    "capacity"
+                } else {
+                    "practical DoS"
+                },
+                to_fixed(b.dos, 2),
+                b.p
+            ));
+        } else if a.los != b.los {
+            changed.push(format!(
+                "{} moves from LoS {} to {} ({})",
+                b.name, a.los, b.los, b.p
             ));
         }
-        sentences.push(sentence.clone());
-        rows.push(SensRow::Test(SensTestRow {
-            id: t.id.to_string(),
-            test: t.test.to_string(),
-            label: t.label.to_string(),
-            input,
-            trips: r1(s.trips),
-            vht: r1(s.vht),
-            d_trips: r3(d_t),
-            d_vht: r3(d_v),
-            worst: s.worst.clone(),
-            los_ef: s.los_ef as f64,
-            over5: s.over5,
-            over10: s.over10,
-            elasticity: el,
-            sensitive: !changed.is_empty(),
-            changes: changed,
-            noise,
-            sentence,
-        }));
     }
-    if let Some(eb) = opts.econ_base {
-        let ec =
-            periods
-                .iter()
-                .find_map(|per| match econ(s0, eb.sc, eb.res, sc, eb.opt_res, per) {
-                    Some(Econ::Mbcm(m)) => Some(m),
-                    _ => None,
-                });
-        if let Some(ec) = ec {
-            let sens = number_to_js_string(ec.sens_rate);
-            let sensitive = ec
-                .ipm
-                .iter()
-                .enumerate()
-                .any(|(i, b)| b.band != ec.ipm8.get(i).and_then(|x| x.band.clone()));
-            rows.push(SensRow::Discount(SensDiscountRow {
-                id: "R8".to_string(),
-                test: "R8".to_string(),
-                label: format!("Discount rate {}% (MBCM sensitivity)", sens),
-                input: format!("{}% for all {} years", sens, number_to_js_string(ec.years)),
-                bcr: ec.bcr,
-                bcr8: ec.bcr8,
-                bcr_text: ec.bcr_text.clone(),
-                bcr8_text: ec.bcr8_text.clone(),
-                sentence: format!(
-                    "At {}%, the BCR is {} (central {}).",
-                    sens, ec.bcr8_text, ec.bcr_text
-                ),
-                elasticity: None,
-                sensitive,
-            }));
+    changed
+}
+
+// A test's sentence: the changes in trips and VHT, the first conclusion it changes, and a noise warning
+fn test_sentence(
+    t: &SensTest,
+    d_t: f64,
+    d_v: f64,
+    el: Option<&Elasticity>,
+    changed: &[String],
+    noise: Option<&Snr>,
+) -> String {
+    let pc = |x: f64| {
+        format!(
+            "{}{}%",
+            if x >= 0.0 { "+" } else { "\u{2212}" },
+            to_fixed((x * 100.0).abs(), 1)
+        )
+    };
+    let mut sentence = format!(
+        "{}: total vehicle trips {}, VHT {}{}. ",
+        t.label,
+        pc(d_t),
+        pc(d_v),
+        match el {
+            Some(e) => format!(" (VHT elasticity {})", to_fixed(e.vht, 2)),
+            None => String::new(),
         }
+    );
+    if let Some(first) = changed.first() {
+        let more = if changed.len() > 1 {
+            format!(", and {} more", changed.len().saturating_sub(1))
+        } else {
+            String::new()
+        };
+        // Writing to a String cannot fail
+        let _ = write!(sentence, "Conclusion sensitive: at {} {first}{more}.", t.label.to_lowercase());
+    } else {
+        sentence.push_str("No junction crosses its practical DoS or changes LoS.");
     }
-    let ms = opts.now.map_or(0.0, |f| math_round(f() - t0));
-    Ok(SensTable {
-        label: "Table SENS-1: sensitivity tests".to_string(),
-        periods,
-        central: SensCentral {
-            trips: r1(central.trips),
-            vht: r1(central.vht),
-            worst: central.worst,
-            los_ef: central.los_ef as f64,
-            over5: central.over5,
-            over10: central.over10,
-        },
-        rows,
-        sentences,
-        flags,
-        runs: k as f64,
-        ms,
-        note: "Each test changes one input; elasticity = (\u{394}KPI / KPI) / (\u{394}input / input). Each run is checked for signal to noise against the central run (TAG M3.1).".to_string(),
-    })
+    if let Some(n) = noise
+        && !n.ok
+    {
+        sentence.push(' ');
+        sentence.push_str(&n.text);
+    }
+    sentence
+}
+
+// Row R8: the MBCM evaluation at the sensitivity discount rate, from the first period with an MBCM result
+fn discount_row(s0: &Settings, sc: &Scenario, eb: &EconBase, periods: &[String]) -> Option<SensRow> {
+    let ec = periods
+        .iter()
+        .find_map(|per| match econ(s0, eb.sc, eb.res, sc, eb.opt_res, per) {
+            Some(Econ::Mbcm(m)) => Some(m),
+            _ => None,
+        })?;
+    let sens = number_to_js_string(ec.sens_rate);
+    let sensitive = ec
+        .ipm
+        .iter()
+        .enumerate()
+        .any(|(i, b)| b.band != ec.ipm8.get(i).and_then(|x| x.band.clone()));
+    Some(SensRow::Discount(SensDiscountRow {
+        id: "R8".to_string(),
+        test: "R8".to_string(),
+        label: format!("Discount rate {sens}% (MBCM sensitivity)"),
+        input: format!("{}% for all {} years", sens, number_to_js_string(ec.years)),
+        bcr: ec.bcr,
+        bcr8: ec.bcr8,
+        bcr_text: ec.bcr_text.clone(),
+        bcr8_text: ec.bcr8_text.clone(),
+        sentence: format!(
+            "At {}%, the BCR is {} (central {}).",
+            sens, ec.bcr8_text, ec.bcr_text
+        ),
+        elasticity: None,
+        sensitive,
+    }))
 }
 
 /// engine.js cloneSc: a copy of the scenario with no results (`{ ...sc, res: {} }` through JSON).
+#[must_use]
 pub fn clone_sc(sc: &Scenario) -> Scenario {
     let mut c = sc.clone();
     c.res = Maybe::Set(json!({}));

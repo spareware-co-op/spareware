@@ -26,7 +26,7 @@ use geom_op::{
     History, NameId, NameSet, OpContext, OpId, OpPath, Origin, PieceKey, Record, Role, Side,
 };
 use geom_run::Budget;
-use geom_test::golden::{self, hex, sha256};
+use geom_test::golden::{self, sha256};
 use geom_test::{Seed, SplitMix64};
 
 /// `history` pruned by an operation at `by`, with no budget to run out.
@@ -189,11 +189,13 @@ fn prune_golden_hash_is_the_same_on_every_target() {
         let (bytes, kept) = corpus();
         (sha256(&bytes), (bytes, kept))
     });
+    // The digest the check kept is the first run's, of the first run's bytes, which are the value
+    // it kept: the bytes are not hashed a third time to print it.
     let (bytes, kept) = &checked.value;
     println!(
         "geom-name prune corpus: {kept} kept records, {} bytes, golden hash {}",
         bytes.len(),
-        hex(sha256(bytes))
+        checked.digest
     );
     assert!(*kept > 300, "only {kept} kept records");
     checked.verdict().unwrap_or_else(|e| panic!("{e}"));

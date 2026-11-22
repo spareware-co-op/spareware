@@ -823,27 +823,64 @@ fn main() {
 }
 "#;
 
+/// The probe's manifest.
+fn gen_probe_manifest() -> String {
+    format!(
+        "[package]\nname = \"attack-g11-gen-probe\"\nversion = \"0.0.0\"\nedition = \
+         \"2024\"\npublish = false\n\n[dependencies]\ngeom-gen = {{ path = '{}' }}\n\n\
+         [workspace]\n",
+        toml_path(&crates_dir().join("geom-gen"))
+    )
+}
+
+/// Locks the shared folder `dir` for this process: an exclusive lock (the standard library's
+/// `File::lock`) on the file `<dir>.lock` beside it, held until the returned file is dropped.
+///
+/// A folder that persists between runs is shared by every test process: nextest runs each test
+/// in its own process, and a `OnceLock` guards one process only. Without this lock several
+/// processes set such a folder up at once on a cold run; Windows then refuses the second writer
+/// of a file the first holds open (error 32, seen on a CI runner), and elsewhere one process can
+/// read a file another has just emptied to rewrite it.
+// The standard library's file locks are stable from Rust 1.89; this crate declares 1.86 for its
+// library, and only these test items, which hold the probe's shared folder, need the later one.
+#[clippy::msrv = "1.89"]
+fn lock_shared_folder(dir: &Path) -> std::fs::File {
+    let name = dir.file_name().unwrap().to_str().unwrap();
+    let path = dir.with_file_name(format!("{name}.lock"));
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .unwrap_or_else(|e| panic!("cannot open the lock file {}: {e}", path.display()));
+    file.lock()
+        .unwrap_or_else(|e| panic!("cannot lock {}: {e}", path.display()));
+    file
+}
+
+/// Writes the probe's sources into `dir` (and a copy of the workspace's `Cargo.lock` when it has
+/// none), holding the folder's lock; returns the lock, for the caller to hold over the build and
+/// the run too.
+fn set_up_gen_probe(dir: &Path) -> std::fs::File {
+    let lock = lock_shared_folder(dir);
+    write(&dir.join("Cargo.toml"), &gen_probe_manifest());
+    write(&dir.join("src").join("main.rs"), GEN_PROBE_MAIN);
+    if !dir.join("Cargo.lock").exists() {
+        std::fs::copy(workspace_root().join("Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    }
+    lock
+}
+
 /// Builds and runs the probe once per test process; its stdout.
 fn gen_probe() -> &'static str {
     static OUT: OnceLock<String> = OnceLock::new();
     OUT.get_or_init(|| {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        // The probe's sources and target folder persist, so later runs reuse the build.
+        // The probe's sources and target folder persist, so later runs reuse the build; the lock
+        // keeps other test processes out of both until this one has its output.
         let dir = tmp.join("attack-g11-gen-probe");
-        let gen_dir = crates_dir().join("geom-gen");
-        write(
-            &dir.join("Cargo.toml"),
-            &format!(
-                "[package]\nname = \"attack-g11-gen-probe\"\nversion = \"0.0.0\"\nedition = \
-                 \"2024\"\npublish = false\n\n[dependencies]\ngeom-gen = {{ path = '{}' }}\n\n\
-                 [workspace]\n",
-                toml_path(&gen_dir)
-            ),
-        );
-        write(&dir.join("src").join("main.rs"), GEN_PROBE_MAIN);
-        if !dir.join("Cargo.lock").exists() {
-            std::fs::copy(workspace_root().join("Cargo.lock"), dir.join("Cargo.lock")).unwrap();
-        }
+        let _lock = set_up_gen_probe(&dir);
         let s = Scratch::new("gen-probe-run");
         let out = Command::new(cargo())
             .args(["run", "--offline", "--quiet", "--manifest-path"])
@@ -862,6 +899,122 @@ fn gen_probe() -> &'static str {
         );
         text(&out.stdout)
     })
+}
+
+/// The folder and the start file `child_gen_probe_set_up` is given, and how many child processes
+/// and set-ups each the test below uses.
+const SET_UP_DIR: &str = "ATTACK_G11_SET_UP_DIR";
+const SET_UP_START: &str = "ATTACK_G11_SET_UP_START";
+const SET_UP_CHILDREN: usize = 6;
+const SET_UP_ROUNDS: usize = 40;
+
+/// The child of the test below: waits for the start file's lock, then sets the probe's folder up
+/// `SET_UP_ROUNDS` times, as that many test processes would, and after each set-up, still holding
+/// the folder's lock as `gen_probe` holds it over the build, checks that every file it wrote is
+/// whole. Run directly (neither variable set), it simply passes.
+// The standard library's file locks are stable from Rust 1.89; this crate declares 1.86 for its
+// library, and only these test items, which hold the probe's shared folder, need the later one.
+#[clippy::msrv = "1.89"]
+#[test]
+fn child_gen_probe_set_up() {
+    let (Some(dir), Some(start)) = (std::env::var_os(SET_UP_DIR), std::env::var_os(SET_UP_START))
+    else {
+        return;
+    };
+    let dir = PathBuf::from(dir);
+    let start = std::fs::File::open(start).unwrap();
+    println!("PROBE| ready");
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+    start.lock_shared().unwrap();
+    let want = [
+        ("Cargo.toml", gen_probe_manifest().into_bytes()),
+        ("src/main.rs", GEN_PROBE_MAIN.as_bytes().to_vec()),
+        (
+            "Cargo.lock",
+            std::fs::read(workspace_root().join("Cargo.lock")).unwrap(),
+        ),
+    ];
+    for round in 0..SET_UP_ROUNDS {
+        let _lock = set_up_gen_probe(&dir);
+        for (file, bytes) in &want {
+            let got = std::fs::read(dir.join(file)).unwrap();
+            assert!(
+                got == *bytes,
+                "set-up {round}: {file} holds {} bytes, expected the {} just written",
+                got.len(),
+                bytes.len()
+            );
+        }
+    }
+    println!("PROBE| whole after {SET_UP_ROUNDS} set-ups");
+}
+
+/// `gen_probe`'s folder persists and is shared by every test process. Started from several
+/// processes at once on a cold folder, each process's set-up must succeed and leave the files
+/// whole while it builds. Before the folder's lock, Windows refused the second writer of
+/// `Cargo.lock` (error 32, in the attack on outputs that are one file on a CI runner), and on
+/// Linux a process read `src/main.rs` empty while another rewrote it.
+// The standard library's file locks are stable from Rust 1.89; this crate declares 1.86 for its
+// library, and only these test items, which hold the probe's shared folder, need the later one.
+#[clippy::msrv = "1.89"]
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "starts child processes, which WebAssembly cannot"
+)]
+#[test]
+fn gen_probe_set_up_from_several_processes_at_once_leaves_its_files_whole() {
+    use std::io::{BufRead, BufReader, Read};
+    let s = Scratch::new("set-up-race");
+    let dir = s.0.join("gen-probe");
+    let start_path = s.0.join("start");
+    let start = std::fs::File::create(&start_path).unwrap();
+    start.lock().unwrap();
+    let mut children: Vec<_> = (0..SET_UP_CHILDREN)
+        .map(|_| {
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "child_gen_probe_set_up",
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(SET_UP_DIR, &dir)
+                .env(SET_UP_START, &start_path)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    // Every child is waiting on the start file's lock before any of them is let go.
+    let mut readers = Vec::new();
+    for child in &mut children {
+        let mut reader = BufReader::new(child.stdout.take().unwrap());
+        let mut seen = String::new();
+        while reader.read_line(&mut seen).unwrap() > 0 && !seen.contains("PROBE| ready") {}
+        readers.push((reader, seen));
+    }
+    start.unlock().unwrap();
+    let mut problems = Vec::new();
+    for (i, (child, (mut reader, mut seen))) in children.into_iter().zip(readers).enumerate() {
+        reader.read_to_string(&mut seen).unwrap();
+        let out = child.wait_with_output().unwrap();
+        if !out.status.success() || !seen.contains("PROBE| whole after") {
+            problems.push(format!(
+                "child {i} of {SET_UP_CHILDREN}: {}\n{seen}{}",
+                out.status,
+                text(&out.stderr)
+            ));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "\n{SET_UP_CHILDREN} processes set the probe's folder {} up {SET_UP_ROUNDS} times each, \
+         all at once from cold\n  expected: every set-up succeeds and every file is whole after \
+         it\n  actual:\n{}",
+        dir.display(),
+        problems.join("\n")
+    );
 }
 
 fn probe_line<'a>(out: &'a str, prefix: &str) -> &'a str {

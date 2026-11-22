@@ -3,8 +3,7 @@
 //!
 //! - `attributes_fuzz` wraps `geom_fuzz::attributes::harness` in `bolero::check!`: the crate's
 //!   corpus and crash files, then [`ITERATIONS`] random byte strings; a failing one's seed is
-//!   printed as `BOLERO_RANDOM_SEED=<seed>`. Under `cargo bolero test attributes_fuzz --package
-//!   geom-fuzz` it is a libFuzzer target.
+//!   printed as `BOLERO_RANDOM_SEED=<seed>`.
 //! - `attributes_seeded` runs the same harness on [`SEEDED_CASES`] byte strings from the printed
 //!   seed (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly; every origin, a transform and copies come up; and a step
@@ -39,7 +38,11 @@ use geom_test::{Seed, SplitMix64};
 const ITERATIONS: usize = 5_000;
 
 /// Byte strings in the seeded leg.
-const SEEDED_CASES: u32 = 10_000;
+///
+/// Sized for an optimised build by the release suite's time on GitHub's Linux runner (14 Nov 2026:
+/// 10,000 cases in 0.285 s), about 2 s; a build with debug assertions runs the first tenth
+/// ([`seeded::for_this_build`]).
+const SEEDED_CASES: u32 = 70_000;
 
 /// The longest byte string the seeded leg draws: the harness reads at most [`MAX_INPUT_BYTES`];
 /// the rest must change nothing.

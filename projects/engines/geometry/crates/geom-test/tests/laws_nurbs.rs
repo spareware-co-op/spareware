@@ -17,8 +17,8 @@
 //!   the tolerance asked for; and when nothing was removed the curve is unchanged, deviation 0.
 //!
 //! Each law lists every broken case it finds. Seeds: each law prints `seed: <hex>` and replays
-//! with `SPAREKIT_SEED`; pull requests run the fixed default seed, and the nightly workflow a fresh
-//! one (`kernel-nightly.yml`).
+//! with `SPAREKIT_SEED`; every run uses the fixed default seed, on every change the law
+//! reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

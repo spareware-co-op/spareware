@@ -1,7 +1,7 @@
 //! Piece G86's out-of-process cross-check with Python's cbor2 (MIT; chapter 28.10's oracles). The
-//! nightly workflow's `cbor2` job runs three steps:
+//! `cbor2` job of `kernel-oracles.yml` runs three steps:
 //!
-//! 1. `write_the_cases` (ignored) draws the night's values of SKG's subset from `SPAREKIT_SEED`
+//! 1. `write_the_cases` (ignored) draws the run's values of SKG's subset from `SPAREKIT_SEED`
 //!    and writes each to the file named by `CBOR2_CASES`, one line each: the kernel's encoding in
 //!    hexadecimal, a tab, and the value in the JSON form of `common` (`common::to_json`).
 //! 2. `oracles/cbor2.sh` installs cbor2 6.1.5, pinned by hash, in a container pinned by digest,
@@ -28,7 +28,7 @@ mod common;
 
 use std::fmt::Write as _;
 
-use common::{V, hex, ours, to_json};
+use common::{V, from_json, hex, ours, to_json};
 use geom_test::seed::{Seed, resolve};
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::TestRunner;
@@ -86,14 +86,14 @@ fn seed() -> Seed {
 }
 
 #[test]
-#[ignore = "the nightly cbor2 job's first step"]
+#[ignore = "kernel-oracles.yml's cbor2 job's first step"]
 fn write_the_cases() {
     let path = std::env::var("CBOR2_CASES").expect("CBOR2_CASES names the cases file");
     std::fs::write(path, cases(&values(seed()))).unwrap();
 }
 
 #[test]
-#[ignore = "the nightly cbor2 job's last step"]
+#[ignore = "kernel-oracles.yml's cbor2 job's last step"]
 fn compare_with_the_answers() {
     let path = std::env::var("CBOR2_ANSWERS").expect("CBOR2_ANSWERS names the answers file");
     let answers = std::fs::read_to_string(path).unwrap();
@@ -129,4 +129,26 @@ fn the_comparison_runs_on_our_own_bytes() {
     assert!(wrong[0].contains("answers for"));
     assert!(wrong[1].starts_with("case 7:"));
     assert!(wrong[2].starts_with("case 9:"));
+}
+
+/// The JSON form the oracle reads (`common::to_json`) reads back, as text, to a value with the same
+/// encoding, for one value of every kind. A small test that Miri finishes, so `serde_json`,
+/// whose unsafe code the kernel's tests use, is driven under Miri (32.58).
+#[test]
+fn the_json_form_reads_back_as_text_for_every_kind() {
+    let v = V::A(vec![
+        V::U(u64::MAX),
+        V::I(-(1_i128 << 100)),
+        V::F(-0.0),
+        V::B(vec![0, 255, 7]),
+        V::T("e\u{301}".to_owned()),
+        V::M(vec![(1, V::F(f64::MIN_POSITIVE)), (24, V::U(0))]),
+        V::Ci(vec![i64::MIN, 0]),
+        V::Cf(vec![1.5, -2.25]),
+        V::Set(vec![V::U(1), V::U(2)]),
+        V::Sorted(vec![V::U(1), V::U(1)]),
+    ]);
+    let text = serde_json::to_string(&to_json(&v)).unwrap();
+    let back = from_json(&serde_json::from_str(&text).unwrap());
+    assert_eq!(hex(&ours(&back)), hex(&ours(&v)), "{text}");
 }

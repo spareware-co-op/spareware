@@ -6,7 +6,7 @@
 //! ports' accurate paths, rounding filters, hard-case tables and scaling branches are reached only
 //! by hard-to-round or extreme inputs, which the other `math_*` tests sample but did not hit. Each
 //! input below was found by running every surviving mutant over CORE-MATH's worst-case lists (the
-//! five `.wc` files `kernel-nightly.yml` fetches, commit `0ce0cbc1`, SHA-256 checked), sinpi's
+//! five `.wc` files `math_full_worst_cases.rs` reads, commit `0ce0cbc1`, SHA-256 checked), sinpi's
 //! set-(b) images, atan2's worst cases scaled exactly by powers of two (atan2 is scale-invariant,
 //! so a scaled worst case reaches the subnormal and near-overflow branches), every table index of
 //! the reductions, and edge and random inputs, and taking the first input whose result changed.
@@ -561,9 +561,32 @@ fn atan2_tiny_quotients_whose_residual_underflows() {
 
 /// `atan2` where its second fast path's error bound is only just wide enough: a smaller bound
 /// accepts a wrongly rounded angle on these pairs.
-#[test]
-fn atan2_hard_cases_at_the_fast_path_bound() {
-    check_atan2(&ATAN2_FAST_BOUND, true);
+///
+/// One test for each of the three pairs (decision 32.78: together they were too long for one
+/// Miri gate part), each with all its swaps and signs.
+mod atan2_hard_cases_at_the_fast_path_bound {
+    use super::{ATAN2_FAST_BOUND, check_atan2};
+
+    #[test]
+    fn pair_1() {
+        check_atan2(&ATAN2_FAST_BOUND[0..1], true);
+    }
+
+    #[test]
+    fn pair_2() {
+        check_atan2(&ATAN2_FAST_BOUND[1..2], true);
+    }
+
+    #[test]
+    fn pair_3() {
+        check_atan2(&ATAN2_FAST_BOUND[2..3], true);
+    }
+
+    /// The three tests hold every pair once.
+    #[test]
+    fn the_pairs_join_to_the_whole_list() {
+        assert_eq!(ATAN2_FAST_BOUND.len(), 3);
+    }
 }
 
 /// `sinpi` and `cospi` near their troughs, where the general path's result is −1 or the double

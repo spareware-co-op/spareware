@@ -58,6 +58,9 @@ pub fn failed(ctx: &OpContext<'_>, meter: &WorkMeter<'_>, error: QueryError) -> 
         QueryError::Curved(edge) => QueryDetail::CurvedEdge { edge: edge.row() },
         QueryError::NotPlanar(face) => QueryDetail::CurvedFace { face: face.row() },
         QueryError::Loopless(face) => QueryDetail::NoLoops { face: face.row() },
+        QueryError::Implicit(vertex) => QueryDetail::ImplicitVertex {
+            vertex: vertex.row(),
+        },
         QueryError::NotSolid => QueryDetail::NotSolid,
         QueryError::Overflow => QueryDetail::Overflow,
     };

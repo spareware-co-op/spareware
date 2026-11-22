@@ -1,6 +1,17 @@
 //! `construct mcp`: spawns the server, speaks MCP over its standard input and output (initialize, the list of tools, a call that runs
 //! the model, an error) and checks the model's answer against the prototype's recorded run.
 
+// The crates deny these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test helpers; the rules are for the crate's own code"
+)]
+
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -37,11 +48,11 @@ impl Client {
             from,
             next: 1,
         };
-        c.call("initialize", json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "1" } }));
-        c.send(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }));
+        c.call("initialize", &json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "1" } }));
+        c.send(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }));
         c
     }
-    fn send(&mut self, v: Value) {
+    fn send(&mut self, v: &Value) {
         let to = self.to.as_mut().unwrap();
         writeln!(to, "{v}").unwrap();
         to.flush().unwrap();
@@ -52,10 +63,10 @@ impl Client {
         serde_json::from_str(l.trim()).unwrap_or_else(|e| panic!("not JSON ({e}): {l:?}"))
     }
     /// A request and its reply (the notifications that came first are returned too).
-    fn call(&mut self, method: &str, params: Value) -> (Value, Vec<Value>) {
+    fn call(&mut self, method: &str, params: &Value) -> (Value, Vec<Value>) {
         let id = self.next;
         self.next += 1;
-        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
+        self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         let mut notes = Vec::new();
         loop {
             let v = self.line();
@@ -65,8 +76,8 @@ impl Client {
             notes.push(v);
         }
     }
-    fn tool(&mut self, name: &str, args: Value) -> Value {
-        self.call("tools/call", json!({ "name": name, "arguments": args }))
+    fn tool(&mut self, name: &str, args: &Value) -> Value {
+        self.call("tools/call", &json!({ "name": name, "arguments": args }))
             .0
     }
     /// Closes the server's input, as a client going away does, and waits for it to stop.
@@ -88,8 +99,8 @@ fn text_of(reply: &Value) -> Value {
 #[test]
 fn an_agent_can_list_the_tools_and_run_the_model() {
     let project = truth("inputs/grid.json");
-    let mut c = Client::start(&["--project", project.to_str().unwrap()]);
-    let (init, _) = c.call("initialize", json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "1" } }));
+    let mut client = Client::start(&["--project", project.to_str().unwrap()]);
+    let (init, _) = client.call("initialize", &json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "1" } }));
     assert_eq!(
         init["result"]["serverInfo"]["name"],
         json!("spare-construct")
@@ -103,7 +114,7 @@ fn an_agent_can_list_the_tools_and_run_the_model() {
             .contains("transport_project_info")
     );
 
-    let (list, _) = c.call("tools/list", json!({}));
+    let (list, _) = client.call("tools/list", &json!({}));
     let tools = list["result"]["tools"].as_array().unwrap();
     assert!(tools.len() >= 135, "{} tools", tools.len());
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
@@ -111,7 +122,7 @@ fn an_agent_can_list_the_tools_and_run_the_model() {
     assert!(
         names
             .iter()
-            .all(|n| n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')),
+            .all(|n| n.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_')),
         "tool names use letters, digits and underscores"
     );
     let run = tools
@@ -127,33 +138,33 @@ fn an_agent_can_list_the_tools_and_run_the_model() {
     );
 
     // run the model for the second scenario's AM peak, then read the whole result back
-    let r = c.tool(
+    let ran = client.tool(
         "transport_run",
-        json!({ "scenario": "s-opt", "periods": ["AM"] }),
+        &json!({ "scenario": "s-opt", "periods": ["AM"] }),
     );
     assert!(
-        r["result"]
+        ran["result"]
             .get("isError")
-            .is_none_or(|e| e == &json!(false)),
-        "{r}"
+            .is_none_or(|flag| flag == &json!(false)),
+        "{ran}"
     );
-    assert_eq!(text_of(&r)["runs"].as_array().unwrap().len(), 1);
-    let got = text_of(&c.tool(
+    assert_eq!(text_of(&ran)["runs"].as_array().unwrap().len(), 1);
+    let got = text_of(&client.tool(
         "transport_results_get",
-        json!({ "scenario": "s-opt", "period": "AM" }),
+        &json!({ "scenario": "s-opt", "period": "AM" }),
     ));
     let recorded: Value =
         serde_json::from_str(&std::fs::read_to_string(truth("expected/grid.json")).unwrap())
             .unwrap();
     let want = &recorded["scenarios"]["s-opt"]["periods"]["AM"]["res"];
     for k in ["trips", "vkt", "vht", "dly", "spd", "co2", "over"] {
-        let (a, b) = (
+        let (ours, theirs) = (
             got["kpi"][k].as_f64().unwrap(),
             want["kpi"][k].as_f64().unwrap(),
         );
         assert!(
-            (a - b).abs() <= 1e-6 * a.abs().max(b.abs()).max(1.0),
-            "{k}: {a} against {b}"
+            (ours - theirs).abs() <= 1e-6 * ours.abs().max(theirs.abs()).max(1.0),
+            "{k}: {ours} against {theirs}"
         );
     }
     assert_eq!(got["it"].as_f64(), want["it"].as_f64());
@@ -163,21 +174,21 @@ fn an_agent_can_list_the_tools_and_run_the_model() {
     );
 
     // an error is a tool result with isError and the structured error as its text
-    let e = c.tool(
+    let failed = client.tool(
         "transport_network_get",
-        json!({ "kind": "node", "id": "nope" }),
+        &json!({ "kind": "node", "id": "nope" }),
     );
-    assert_eq!(e["result"]["isError"], json!(true));
-    assert_eq!(text_of(&e)["code"], json!("not_found"));
+    assert_eq!(failed["result"]["isError"], json!(true));
+    assert_eq!(text_of(&failed)["code"], json!("not_found"));
     // an unknown tool is an error too
-    let u = c.tool("transport_nothing", json!({}));
+    let unknown = client.tool("transport_nothing", &json!({}));
     assert!(
-        u.get("error").is_some() || u["result"]["isError"] == json!(true),
-        "{u}"
+        unknown.get("error").is_some() || unknown["result"]["isError"] == json!(true),
+        "{unknown}"
     );
-    let (p, _) = c.call("ping", json!({}));
-    assert_eq!(p["result"], json!({}));
-    assert!(c.finish(), "the server stops when its input closes");
+    let (pong, _) = client.call("ping", &json!({}));
+    assert_eq!(pong["result"], json!({}));
+    assert!(client.finish(), "the server stops when its input closes");
 }
 
 #[test]
@@ -186,7 +197,7 @@ fn the_server_reports_progress_when_asked() {
     let mut c = Client::start(&["--project", project.to_str().unwrap()]);
     let (r, notes) = c.call(
         "tools/call",
-        json!({ "name": "transport_run", "arguments": { "scenario": "s-dm", "periods": ["AM"] }, "_meta": { "progressToken": "run1" } }),
+        &json!({ "name": "transport_run", "arguments": { "scenario": "s-dm", "periods": ["AM"] }, "_meta": { "progressToken": "run1" } }),
     );
     assert!(r["result"].is_object());
     let progress: Vec<&Value> = notes
@@ -226,7 +237,7 @@ fn the_project_is_saved_on_exit_only_when_asked() {
     let mut c = Client::start(&["--project", p.to_str().unwrap()]);
     c.tool(
         "transport_network_add_node",
-        json!({ "point": [-36.9, 174.8] }),
+        &json!({ "point": [-36.9, 174.8] }),
     );
     c.finish();
     assert_eq!(
@@ -237,7 +248,7 @@ fn the_project_is_saved_on_exit_only_when_asked() {
     let mut c = Client::start(&["--project", p.to_str().unwrap(), "--save"]);
     c.tool(
         "transport_network_add_node",
-        json!({ "point": [-36.9, 174.8] }),
+        &json!({ "point": [-36.9, 174.8] }),
     );
     c.finish();
     assert_ne!(std::fs::read(&p).unwrap(), before, "written with --save");

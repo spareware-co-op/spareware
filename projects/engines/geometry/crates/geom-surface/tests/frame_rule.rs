@@ -212,10 +212,48 @@ fn stations(path: &CurveKind<3>, rng: &mut Rng) -> Stations {
     .unwrap()
 }
 
-#[test]
-fn every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path() {
+///
+/// In quarters of its 24 rounds (decision 32.78: whole, it was too long for one Miri gate part).
+/// Every quarter draws every round up to its last from the one generator in the old order, so
+/// each round's path and rules are the old ones, and checks the frames of its own six.
+mod every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path {
+    #[test]
+    fn quarter_1() {
+        super::frames_of_rounds(0..6);
+    }
+
+    #[test]
+    fn quarter_2() {
+        super::frames_of_rounds(6..12);
+    }
+
+    #[test]
+    fn quarter_3() {
+        super::frames_of_rounds(12..18);
+    }
+
+    #[test]
+    fn quarter_4() {
+        super::frames_of_rounds(18..24);
+    }
+
+    /// The quarters hold the rounds 0 to 23 once.
+    #[test]
+    fn the_quarters_join_to_every_round() {
+        let quarters = [0..6, 6..12, 12..18, 18..24];
+        assert_eq!(quarters[0].start, 0);
+        for w in quarters.windows(2) {
+            assert_eq!(w[0].end, w[1].start);
+        }
+        assert_eq!(quarters[3].end, 24);
+    }
+}
+
+/// The check of `every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path` on the
+/// rounds of `rounds`, every earlier round drawn but not checked.
+fn frames_of_rounds(rounds: std::ops::Range<usize>) {
     let mut rng = Rng::new("frames: orthonormal", 0x2540_0001);
-    for round in 0..24 {
+    for round in 0..rounds.end {
         let path = match round % 4 {
             0 => circle(&mut rng),
             1 => helix(&mut rng),
@@ -278,6 +316,10 @@ fn every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path() {
                     true,
                 ));
             }
+        }
+        // Every draw of the round is made above; an earlier quarter's round is not checked here.
+        if !rounds.contains(&round) {
+            continue;
         }
         for (rule, follows) in &rules {
             for t in samples(&path, 17) {

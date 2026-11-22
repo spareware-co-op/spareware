@@ -31,6 +31,13 @@ geom-surface = { path = "../geom-surface" }
 # An allocator that refuses allocations past a limit, so the tests reach every refused
 # reservation (23.10, never abort on memory). cap 0.1.2, MIT OR Apache-2.0.
 cap = "=0.1.2"
+# The capped test's harness, so it runs on the process's only thread (tests/memory.rs says why).
+# libtest-mimic 0.8.2, MIT OR Apache-2.0.
+libtest-mimic = "=0.8.2"
+
+[[test]]
+name = "memory"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"

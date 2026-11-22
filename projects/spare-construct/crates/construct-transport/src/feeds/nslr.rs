@@ -13,7 +13,7 @@ use super::sources::{src, NSLR_FUTURE_DAY, NSLR_SAMPLES, PERIOD_AM, PERIOD_PM};
 use super::vintage::{feeds_of, stamp};
 use super::arcgis::{FetchFailure, HttpRequest};
 use crate::edit::json::JsonValue;
-use crate::jsnum::{math_min_of, number_to_js_string, value_to_number, value_truthy, JsNum, Maybe};
+use crate::jsnum::{i64_to_f64, math_min_of, number_to_js_string, usize_to_f64, value_to_number, value_truthy, JsNum, Maybe};
 use crate::project::{Link, Project, Scenario};
 use crate::standards::year_of;
 use crate::util::{self, fmt};
@@ -41,18 +41,20 @@ fn year_text(year: f64) -> String {
 }
 
 /// `nslrWhere(year, now)`: the where clause for versions in force now, or on 1 July of a later scenario year.
+#[must_use]
 pub fn nslr_where(year: Option<f64>, now_ms: f64) -> String {
     let t = match year {
-        Some(y) if y != 0.0 && y > nz_year(now_ms) as f64 => format!("TIMESTAMP '{}-{} 00:00:00'", year_text(y), NSLR_FUTURE_DAY),
+        Some(y) if y != 0.0 && y > i64_to_f64(nz_year(now_ms)) => format!("TIMESTAMP '{}-{} 00:00:00'", year_text(y), NSLR_FUTURE_DAY),
         _ => "CURRENT_TIMESTAMP".to_string(),
     };
     format!("(speedLimitZoneEndDate IS NULL OR speedLimitZoneEndDate > {t}) AND speedLimitZoneStartDate <= {t}")
 }
 
 /// `asOfMs(year, now)`: the instant the register is read at: 1 July of a later scenario year, else now.
+#[must_use]
 pub fn as_of_ms(year: Option<f64>, now_ms: f64) -> f64 {
     match year {
-        Some(y) if y != 0.0 && y > nz_year(now_ms) as f64 => super::nztime::date_utc(y, 6.0, 1.0),
+        Some(y) if y != 0.0 && y > i64_to_f64(nz_year(now_ms)) => super::nztime::date_utc(y, 6.0, 1.0),
         _ => now_ms,
     }
 }
@@ -70,52 +72,56 @@ pub struct VarPeriods {
     pub windows: Vec<[f64; 2]>,
 }
 
+// A group's text; the regex gives ranges inside the units, so the range is always there
 fn unit_text(u: &[u16], g: Option<(usize, usize)>) -> Option<String> {
-    g.map(|(a, b)| String::from_utf16_lossy(&u[a..b]))
+    g.and_then(|(a, b)| u.get(a..b)).map(String::from_utf16_lossy)
 }
 
 /// `varPeriods(desc)`: the peak windows a variable (school) limit applies in: '08:30 \u{2013} 9:15am and 2:45 \u{2013} 3:30pm' gives AM true and PM false.
 ///
 /// Minutes are optional when am or pm is given ('8am \u{2013} 9.15am'); bare numbers ('40 - 50') are not times. None when no time range is named.
+#[must_use]
 pub fn var_periods(desc: &str) -> Option<VarPeriods> {
     let re = Regex::lit(r"(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:–|-|to)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?", "gi");
-    let u: Vec<u16> = desc.encode_utf16().collect();
+    let units: Vec<u16> = desc.encode_utf16().collect();
     let mut out: Vec<[f64; 2]> = Vec::new();
-    let mut at = 0;
-    while at <= u.len() {
-        let Some(m) = re.exec_units(&u, at) else { break };
-        let g = |i: usize| unit_text(&u, m.groups[i]);
-        let (m1, m2, m3, m4, m5, m6) = (g(0), g(1), g(2), g(3), g(4), g(5));
-        let truthy = |s: &Option<String>| s.as_deref().is_some_and(|x| !x.is_empty());
-        let num = |s: &Option<String>| s.as_deref().map_or(f64::NAN, crate::jsnum::string_to_number);
+    let mut at: usize = 0;
+    while at <= units.len() {
+        let Some(found) = re.exec_units(&units, at) else { break };
+        // The pattern has six groups, so every one is there (a missing one reads as undefined)
+        let group = |i: usize| unit_text(&units, found.groups.get(i).copied().flatten());
+        let (m1, m2, m3, m4, m5, m6) = (group(0), group(1), group(2), group(3), group(4), group(5));
+        let truthy = |text: &Option<String>| text.as_deref().is_some_and(|t| !t.is_empty());
+        let num = |text: &Option<String>| text.as_deref().map_or(f64::NAN, crate::jsnum::string_to_number);
         if !((truthy(&m2) || truthy(&m3) || truthy(&m6)) && (truthy(&m5) || truthy(&m6))) || num(&m1) > 24.0 || num(&m4) > 24.0 {
-            at = m.start + 1;
+            // Bound: a match starts within the text, so this stays at most units.len()
+            at = found.start.saturating_add(1);
             continue;
         }
-        at = m.end;
+        at = found.end;
         // h(hh, ap) = (+hh % 12) + (ap is pm ? 12 : 0) + (no ap and hh is 12 ? 12 : 0)
-        let h = |hh: &Option<String>, ap: Option<&str>| -> f64 {
-            let n = num(hh);
-            (n % 12.0) + if ap.is_some_and(|a| a.to_lowercase() == "pm") { 12.0 } else { 0.0 } + if ap.is_none() && n == 12.0 { 12.0 } else { 0.0 }
+        let hour = |hh: &Option<String>, ap: Option<&str>| -> f64 {
+            let value = num(hh);
+            (value % 12.0) + if ap.is_some_and(|ap_text| ap_text.to_lowercase() == "pm") { 12.0 } else { 0.0 } + if ap.is_none() && value == 12.0 { 12.0 } else { 0.0 }
         };
         let e_ap = if truthy(&m6) { m6.clone() } else { None };
         let s_ap = if truthy(&m3) { m3.clone() } else { e_ap.clone() };
-        let mi = |s: &Option<String>| {
-            let n = num(s);
-            (if n == 0.0 || n.is_nan() { 0.0 } else { n }) / 60.0
+        let mi = |text: &Option<String>| {
+            let value = num(text);
+            (if value == 0.0 || value.is_nan() { 0.0 } else { value }) / 60.0
         };
         let (min1, min2) = (mi(&m2), mi(&m5));
-        let mut s = h(&m1, s_ap.as_deref()) + min1;
-        let e = h(&m4, e_ap.as_deref()) + min2;
-        if s > e && !truthy(&m3) {
-            s = h(&m1, Some("am")) + min1;
+        let mut start = hour(&m1, s_ap.as_deref()) + min1;
+        let end = hour(&m4, e_ap.as_deref()) + min2;
+        if start > end && !truthy(&m3) {
+            start = hour(&m1, Some("am")) + min1;
         }
-        out.push([s, e]);
+        out.push([start, end]);
     }
     if out.is_empty() {
         return None;
     }
-    let ov = |w: [f64; 2]| out.iter().any(|[s, e]| *s < w[1] && *e > w[0]);
+    let ov = |window: [f64; 2]| out.iter().any(|[from, to]| *from < window[1] && *to > window[0]);
     Some(VarPeriods { am: ov(PERIOD_AM), pm: ov(PERIOD_PM), windows: out.clone() })
 }
 
@@ -236,20 +242,20 @@ pub fn parse_nslr(features: &[JsonValue], complete: bool, where_: &str, year: Op
         }
         let start = a.get("speedLimitZoneStartDate");
         let end = a.get("speedLimitZoneEndDate");
-        let nn = |v: Option<&JsonValue>| v.is_some_and(|v| !v.is_null());
-        if (nn(end) && end.unwrap().to_number() <= at) || (nn(start) && start.unwrap().to_number() > at) {
-            drop.ended += 1;
+        // Bound: the drop counts are at most features.len()
+        if end.is_some_and(|date| !date.is_null() && date.to_number() <= at) || start.is_some_and(|date| !date.is_null() && date.to_number() > at) {
+            drop.ended = drop.ended.saturating_add(1);
             continue;
         }
         if let Some(lane) = a.get("speedLimitZoneLanePurposeName").filter(|l| l.truthy())
             && !lane_ok.test(&lane.js_string())
         {
-            drop.lane += 1;
+            drop.lane = drop.lane.saturating_add(1);
             continue;
         }
         let v = parse_int10(a.get("speedLimitZoneValue"));
-        if !(v > 0.0) {
-            drop.value += 1;
+        if v <= 0.0 || v.is_nan() {
+            drop.value = drop.value.saturating_add(1);
             continue;
         }
         let cat = text_of(a.get("speedCategoryName"));
@@ -273,7 +279,7 @@ pub fn parse_nslr(features: &[JsonValue], complete: bool, where_: &str, year: Op
         polys,
         where_: where_.to_string(),
         year: match year {
-            Some(y) if y != 0.0 && y > nz_year(now_ms) as f64 => Some(y),
+            Some(y) if y != 0.0 && y > i64_to_f64(nz_year(now_ms)) => Some(y),
             _ => None,
         },
         as_of: utc_date(at),
@@ -281,6 +287,11 @@ pub fn parse_nslr(features: &[JsonValue], complete: bool, where_: &str, year: Op
         complete,
         n: features.len(),
     }
+}
+
+// The register's address from the source table, which always lists "nslr" (the fallback never applies)
+fn nslr_url() -> &'static str {
+    src("nslr").map_or("", |s| s.url)
 }
 
 /// The download of the register for an area and a year: the layer's description, then its polygons (up to 30 pages).
@@ -296,9 +307,10 @@ pub struct NslrLoad {
 
 impl NslrLoad {
     /// Loads the limits in force now (`year` None) or on 1 July of a later scenario year, for an area.
+    #[must_use]
     pub fn new(bounds: Bounds, year: Option<f64>, now_ms: f64, timeout_ms: f64, cache: &MetaCache) -> NslrLoad {
         NslrLoad {
-            meta: LayerMeta::new(src("nslr").expect("source").url, cache, timeout_ms),
+            meta: LayerMeta::new(nslr_url(), cache, timeout_ms),
             bounds,
             year,
             now_ms,
@@ -314,11 +326,14 @@ impl NslrLoad {
         p.push(("geometryPrecision".into(), "6".into()));
         p.push(("maxAllowableOffset".into(), "0.00002".into()));
         p.push(("orderByFields".into(), "OBJECTID".into()));
-        self.query = Some(ArcQuery::new(src("nslr").expect("source").url, p, 30, self.timeout_ms));
+        self.query = Some(ArcQuery::new(nslr_url(), p, 30, self.timeout_ms));
     }
-    /// The register's polygons once the download is done.
+    /// The register's polygons once the download is done (an empty, incomplete set if it never started).
+    #[must_use]
     pub fn finish(self) -> NslrSet {
-        let q = self.query.expect("the download finished");
+        let Some(q) = self.query else {
+            return parse_nslr(&[], false, &self.where_, self.year, self.now_ms);
+        };
         let complete = q.complete();
         parse_nslr(q.features(), complete, &self.where_, self.year, self.now_ms)
     }
@@ -335,13 +350,13 @@ impl Flow for NslrLoad {
         self.query.as_mut().and_then(Flow::next_request)
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
-        if self.query.is_none() {
+        let Some(q) = self.query.as_mut() else {
             // the description is optional: field names are taken as asked when it cannot be read
             let _ = self.meta.answer(a);
             self.start_query();
             return Ok(());
-        }
-        self.query.as_mut().expect("query").answer(a)
+        };
+        q.answer(a)
     }
     fn is_done(&self) -> bool {
         self.query.as_ref().is_some_and(Flow::is_done)
@@ -391,19 +406,24 @@ pub fn assign_nslr(sc: &mut Scenario, set: &NslrSet) -> NslrStats {
     let find = PolyIndex::new(&set.polys, 0.005);
     let mut st = NslrStats { links: 0, nslr: 0, variable: 0, missing: 0, share: 0.0 };
     let ids: Vec<String> = live_links(sc).iter().map(|l| l.id.clone()).collect();
+    // Bound: the counts are of links in memory, far below usize::MAX
     for id in ids {
-        st.links += 1;
-        let l = &sc.links[id.as_str()];
+        st.links = st.links.saturating_add(1);
+        let Some(l) = sc.links.get(id.as_str()) else {
+            continue;
+        };
         let g = sc.geom(l);
         let cum = util::cum_len(&g);
-        let len = cum[cum.len() - 1];
+        // cum_len always holds at least one value; NaN would be JavaScript's undefined
+        let len = cum.last().copied().unwrap_or(f64::NAN);
         let mut picks: Vec<Option<&NslrPoly>> = Vec::new();
         let mut vars: Vec<&NslrPoly> = Vec::new();
         for fr in NSLR_SAMPLES {
             let p = util::along(&g, &cum, len * fr).p;
-            let hit: Vec<&NslrPoly> = find.find(&set.polys, p[1], p[0]).into_iter().map(|n| &set.polys[n]).collect();
+            // The index finds positions in set.polys, so every one is there
+            let hit: Vec<&NslrPoly> = find.find(&set.polys, p[1], p[0]).into_iter().filter_map(|n| set.polys.get(n)).collect();
             let perm: Vec<&NslrPoly> = hit.iter().copied().filter(|h| !h.variable).collect();
-            picks.push(latest(if !perm.is_empty() { &perm } else { &hit }));
+            picks.push(latest(if perm.is_empty() { &hit } else { &perm }));
             let vz_list: Vec<&NslrPoly> = hit.iter().copied().filter(|h| h.variable && h.var_v.is_some()).collect();
             if let Some(vz) = latest(&vz_list) {
                 vars.push(vz);
@@ -413,31 +433,33 @@ pub fn assign_nslr(sc: &mut Scenario, set: &NslrSet) -> NslrStats {
         let mut votes: Vec<(f64, usize)> = Vec::new();
         for h in picks.iter().flatten() {
             match votes.iter_mut().find(|(v, _)| *v == h.v) {
-                Some(e) => e.1 += 1,
+                Some(e) => e.1 = e.1.saturating_add(1),
                 None => votes.push((h.v, 1)),
             }
         }
-        let l = sc.links.get_mut(id.as_str()).expect("link");
-        if votes.is_empty() {
+        // The link was found above, so this never skips
+        let Some(l) = sc.links.get_mut(id.as_str()) else { continue };
+        let Some(top) = votes.iter().map(|(_, n)| *n).max() else {
+            // No votes: nothing in the register under the link
             if l.extra.get("speedSource").and_then(Value::as_str) == Some("NSLR") {
                 l.extra.remove("speedLimit");
                 l.extra.remove("nslr");
                 l.var_speed = Maybe::Missing;
             }
             l.extra.insert("speedSource".to_string(), json!("OSM or class default"));
-            st.missing += 1;
+            st.missing = st.missing.saturating_add(1);
             continue;
-        }
-        let top = votes.iter().map(|(_, n)| *n).max().expect("votes");
+        };
         let cands: Vec<f64> = votes.iter().filter(|(_, n)| *n == top).map(|(v, _)| *v).collect();
-        let v = if cands.len() == 1 {
-            cands[0]
+        let v = if let [only] = cands.as_slice() {
+            *only
         } else if let Some(Some(p1)) = picks.get(1).copied().map(|p| p.filter(|p| cands.contains(&p.v))) {
             p1.v
         } else {
             math_min_of(&cands)
         };
-        let src_poly = picks.iter().flatten().find(|h| h.v == v).expect("a pick holds the limit");
+        // v is one of the votes' limits (limits are above 0, never NaN), so a pick holds it and this never skips
+        let Some(src_poly) = picks.iter().flatten().find(|h| h.v == v) else { continue };
         let vz = vars.first().copied();
         l.extra.insert("speedLimit".to_string(), crate::jsnum::json_number(v));
         l.extra.insert("speedSource".to_string(), json!("NSLR"));
@@ -465,14 +487,14 @@ pub fn assign_nslr(sc: &mut Scenario, set: &NslrSet) -> NslrStats {
                 "AM": vp.as_ref().is_some_and(|p| p.am),
                 "PM": vp.as_ref().is_some_and(|p| p.pm),
             }));
-            st.variable += 1;
+            st.variable = st.variable.saturating_add(1);
         } else {
             l.var_speed = Maybe::Missing;
         }
         l.extra.insert("nslr".to_string(), Value::Object(n));
-        st.nslr += 1;
+        st.nslr = st.nslr.saturating_add(1);
     }
-    st.share = if st.links > 0 { st.nslr as f64 / st.links as f64 } else { 0.0 };
+    st.share = if st.links > 0 { usize_to_f64(st.nslr) / usize_to_f64(st.links) } else { 0.0 };
     st
 }
 
@@ -498,6 +520,7 @@ pub struct SpeedProposal {
 }
 
 /// `userSpeed(L)`: a modelled speed the user changed after the legal limit was applied.
+#[must_use]
 pub fn user_speed(l: &Link) -> bool {
     match l.extra.get("speedApplied") {
         None | Some(Value::Null) => false,
@@ -514,6 +537,7 @@ fn strict_eq_num(speed: &crate::jsnum::Num, x: &Value) -> bool {
 }
 
 /// `speedProposals(sc)`: existing roads that have a legal limit different from their modelled speed.
+#[must_use]
 pub fn speed_proposals(sc: &Scenario) -> Vec<SpeedProposal> {
     live_links(sc)
         .into_iter()
@@ -536,10 +560,11 @@ pub fn speed_proposals(sc: &Scenario) -> Vec<SpeedProposal> {
 
 /// `applySpeeds(sc, ids)`: copies the legal limit into the modelled (free-flow) speed of the chosen roads (keeping the old speed as `speedOSM` the first time); gives how many changed.
 pub fn apply_speeds(sc: &mut Scenario, ids: &[String]) -> usize {
-    let mut n = 0;
+    let mut n: usize = 0;
     for id in ids {
         let Some(l) = sc.links.get_mut(id.as_str()) else { continue };
-        if !(extra_f64(l, "speedLimit") > 0.0) {
+        let limit_now = extra_f64(l, "speedLimit");
+        if limit_now <= 0.0 || limit_now.is_nan() {
             continue;
         }
         let none = matches!(l.extra.get("speedOSM"), None | Some(Value::Null));
@@ -555,15 +580,17 @@ pub fn apply_speeds(sc: &mut Scenario, ids: &[String]) -> usize {
         let limit = l.extra.get("speedLimit").cloned().unwrap_or(Value::Null);
         l.speed = Maybe::Set(JsNum::from(limit.clone()));
         l.extra.insert("speedApplied".to_string(), limit);
-        n += 1;
+        // Bound: at most ids.len()
+        n = n.saturating_add(1);
     }
     n
 }
 
 /// The scenario years a speed limit download covers (`nslrAll`): 0 for the limits in force now, or a later scenario's year (when the project
 /// settings ask for gazetted future limits), once each, in the order the scenarios list them.
+#[must_use]
 pub fn nslr_years(p: &Project, now_ms: f64, nslr_future: bool) -> Vec<f64> {
-    let y_now = nz_year(now_ms) as f64;
+    let y_now = i64_to_f64(nz_year(now_ms));
     let mut years: Vec<f64> = Vec::new();
     for sc in &p.scenarios {
         let y = year_of(Some(sc), &p.settings);
@@ -576,11 +603,12 @@ pub fn nslr_years(p: &Project, now_ms: f64, nslr_future: bool) -> Vec<f64> {
 }
 
 /// The progress line for one year of the download.
+#[must_use]
 pub fn nslr_status(year: f64) -> String {
-    if year != 0.0 {
-        format!("Downloading speed limits in force on 1 July {}\u{2026}", year_text(year))
-    } else {
+    if year == 0.0 {
         "Downloading current speed limits (NZTA register)\u{2026}".to_string()
+    } else {
+        format!("Downloading speed limits in force on 1 July {}\u{2026}", year_text(year))
     }
 }
 
@@ -614,19 +642,21 @@ pub struct NslrScenarioResult {
 ///
 /// `sets` holds one downloaded set per year of [`nslr_years`] (0 for the limits in force now). The active scenario's share is quoted in the vintage note.
 pub fn apply_nslr_all(p: &mut Project, sets: &[(f64, NslrSet)], now_ms: f64, nslr_future: bool) -> NslrAllResult {
-    let y_now = nz_year(now_ms) as f64;
+    let y_now = i64_to_f64(nz_year(now_ms));
     let mut out = NslrAllResult { scenarios: Vec::new(), drop: NslrDrop::default(), complete: true };
+    // Bound: counts of downloaded features, far below usize::MAX
     for (_, s) in sets {
-        out.drop.ended += s.drop.ended;
-        out.drop.lane += s.drop.lane;
-        out.drop.value += s.drop.value;
+        out.drop.ended = out.drop.ended.saturating_add(s.drop.ended);
+        out.drop.lane = out.drop.lane.saturating_add(s.drop.lane);
+        out.drop.value = out.drop.value.saturating_add(s.drop.value);
         out.complete = out.complete && s.complete;
     }
     let settings = p.settings.clone();
-    for sc in p.scenarios.iter_mut() {
+    for sc in &mut p.scenarios {
         let y = year_of(Some(sc), &settings);
         let k = if nslr_future && y > y_now { y } else { 0.0 };
-        let set = &sets.iter().find(|(yy, _)| *yy == k).expect("a set for the scenario's year").1;
+        // The caller passes a set for every year nslr_years gives, so no scenario is skipped here
+        let Some((_, set)) = sets.iter().find(|(yy, _)| *yy == k) else { continue };
         let stats = assign_nslr(sc, set);
         out.scenarios.push(NslrScenarioResult { id: sc.id.clone(), name: sc.name.as_str().map(str::to_string), year: set.year, stats });
     }
@@ -646,7 +676,8 @@ pub fn apply_nslr_all(p: &mut Project, sets: &[(f64, NslrSet)], now_ms: f64, nsl
     let record = json!({
         "at": crate::edit::ids::iso_string(now_ms),
         "scenarios": out.scenarios.iter().map(|s| json!({ "id": s.id, "year": s.year, "links": s.stats.links, "nslr": s.stats.nslr, "variable": s.stats.variable })).collect::<Vec<_>>(),
-        "drop": serde_json::to_value(&out.drop).expect("drop"),
+        // Three counts always serialize, so the fallback never applies
+        "drop": serde_json::to_value(&out.drop).unwrap_or(Value::Null),
     });
     feeds_of(p).insert("nslr".to_string(), record);
     let n: usize = sets.iter().map(|(_, s)| s.polys.len()).sum();

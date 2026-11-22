@@ -15,6 +15,7 @@ use serde_json::Value;
 /// The period's own frequency (`r.freqs[period]`, from GTFS) when it is set and a finite number
 /// (text such as "12" counts, empty text and null do not); otherwise the route's `freq`, read as
 /// `+freq || 0`. Never below 0. An unset period reads the key "undefined", as `r.freqs[undefined]` does.
+#[must_use]
 pub fn bus_freq(r: &Route, period: Option<&str>) -> f64 {
     if let Some(Value::Object(freqs)) = r.freqs.get()
         && let Some(f) = freqs.get(period.unwrap_or("undefined"))
@@ -33,6 +34,7 @@ pub fn bus_freq(r: &Route, period: Option<&str>) -> f64 {
 ///
 /// `settings.busPcu` when it is a positive finite number, otherwise the engine's earlier value
 /// (for a settings object saved before the setting existed).
+#[must_use]
 pub fn bus_pcu_of(s: &Settings) -> f64 {
     let p = s.bus_pcu.num();
     if p > 0.0 && p.is_finite() {
