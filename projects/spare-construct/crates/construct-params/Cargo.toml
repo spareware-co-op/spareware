@@ -1,0 +1,52 @@
+[package]
+name = "construct-params"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+kit-core = { path = "../../../kit/crates/kit-core" }
+kit-ops = { path = "../../../kit/crates/kit-ops" }
+# Definitions and unit settings are JSON rows, as construct-model's are. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# Exact decimal numbers: reading typed text and the number kind. MIT.
+rust_decimal = { version = "1.43.0", default-features = false, features = ["std"] }
+# A slope is a reduced ratio of two whole numbers. MIT OR Apache-2.0.
+num-rational = { version = "0.4.2", default-features = false, features = ["std"] }
+# Web links are checked and written in one spelling. MIT OR Apache-2.0.
+url = "2.5.8"
+
+[dev-dependencies]
+# Fuzz harnesses, as construct-model's tests/fuzz_keys.rs. MIT.
+bolero = "0.13.7"
+# Properties with fixed seeds, as the kernel's crates use it (geom-num). MIT OR Apache-2.0.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture, as construct-model's Cargo.toml: the geometry kernel's [lints]
+# tables, so that nothing here crashes. CI denies every warning. projects/spare-construct/clippy.toml
+# lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
+# may use native arithmetic and casts: each test file allows these four.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# No float is stored or compared here; a float comparison is an error.
+float_cmp = "deny"
