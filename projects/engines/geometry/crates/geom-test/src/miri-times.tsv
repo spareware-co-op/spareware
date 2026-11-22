@@ -66,6 +66,7 @@
 # GitHub measuring run 44855310217 (miri_measure=new on fix/near-touch-arcs at 52cc517e2, miri_measure_tests naming the 5 side_at_the_bottom tests #1003 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44867796857 (miri_measure=new on fix/ruling-domain at 7180d02e6, the train merged in, every test without a row: the branch's 3 line_along_a_ruling tests), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44860095410 (miri_measure=new on fix/nonisolated-common-blocks at 028670b0d, miri_measure_tests naming the common_blocks test #1152 added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
+# GitHub measuring run 44877123163 (miri_measure=new on fix/in-plane-domain at 8eb66b366, miri_measure_tests naming the line_plane_exact tests #1159 adds), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44867854907 (miri_measure=all on fix/coincidence-far-line at f20e72332, miri_measure_tests naming the 2 tests #1156 added and the route test it changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44870980124 (miri_measure=all on fix/coincidence-far-line at b187535bf, miri_measure_tests naming the route test #1156 changed), every report in yardstick seconds (decision 32.78), stopped at 600 s.
 # GitHub measuring run 44971833718 (miri_measure=new on kill/phase5-join at 49dc5fdf3, every test without a row: the 52 tests Phase 5's judge added), every report in yardstick seconds (decision 32.78), stopped at 600 s.
@@ -1785,6 +1786,9 @@ native-only over 741	geom-intersect::known_round	a_cylinder_lying_on_a_sheet_is_
 4	geom-intersect::line_plane_exact	a_pair_whose_enclosures_hold_zero_is_told_by_the_exact_signs
 2	geom-intersect::line_plane_exact	a_parallel_line_an_ulp_below_a_plane_whose_enclosures_hold_zero_meets_nothing
 3	geom-intersect::line_plane_exact	a_parallel_line_well_off_a_plane_off_the_grid_meets_nothing
+2	geom-intersect::line_plane_exact	a_segment_in_a_plane_a_hair_past_a_corner_of_its_domain_is_nothing
+3	geom-intersect::line_plane_exact	a_segment_in_a_plane_past_a_corner_of_its_domain_is_nothing
+3	geom-intersect::line_plane_exact	a_segment_in_a_plane_past_its_domain_is_the_part_on_it
 3	geom-intersect::line_plane_exact	every_product_of_a_general_plane_counts
 174	geom-intersect::loop_far_from_zero	a_cylinder_is_met_however_far_its_turn_starts
 108	geom-intersect::loop_far_from_zero	a_loop_too_far_out_to_hold_a_step_is_refused
