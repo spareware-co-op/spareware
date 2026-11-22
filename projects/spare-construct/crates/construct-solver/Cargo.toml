@@ -3,9 +3,23 @@ name = "construct-solver"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
-kit-core = { path = "../../../kit/crates/kit-core" }
+# The singular value decomposition the solver steps and diagnoses with. Apache-2.0. Default
+# features off: the `std` feature brings `matrixmultiply`, which picks processor-specific kernels
+# at run time, and the solver must give the same bits on every machine. `libm` gives the maths
+# functions without `std`. The code paths used (SVD, matrix-vector products) are nalgebra's own
+# scalar loops; see the engine module's header.
+nalgebra = { version = "0.35.0", default-features = false, features = ["alloc", "libm"] }
+# Forward-mode automatic differentiation (dual numbers), so every derivative is generated from the
+# residual written once. MIT OR Apache-2.0. Default features off: only `num-traits`.
+num-dual = { version = "0.16.0", default-features = false }
+# Solved sketches and reports serialise to canonical bytes. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0.154"
 
 [lints.rust]
 unsafe_code = "forbid"
