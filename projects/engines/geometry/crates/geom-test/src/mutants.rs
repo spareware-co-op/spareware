@@ -54,11 +54,15 @@
 //! `outcomes.json` must then exist (cargo-mutants writes none when it was given no mutants), hold
 //! a passing baseline, have an end time (written only when the run finished), give every listed
 //! mutant exactly one outcome and no other mutant any, and its counts must agree with its outcomes.
+//! A shard may skip its baseline (`--baseline=skip`, its crate's baseline then runs once in a job
+//! of its own): the judge then fails it unless every crate of its mutants has a passing baseline
+//! record whose tests, five times over (cargo-mutants' own timeout rule), fit the timeout the
+//! shard was given ([`vouch`], [`TEST_TIMEOUT_SECONDS`]).
 //!
 //! Guarantees:
 //!
-//! - **A gate that cannot see everything fails.** A run that did not finish, a failed or missing
-//!   baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard
+//! - **A gate that cannot see everything fails.** A run that did not finish, a failed baseline, a
+//!   skipped one no passing record of its crates vouches for, a mutant with no outcome or two, totals that disagree with the outcomes, a shard
 //!   missing from the full run or two shards that overlap are each a failure or a [`RunError`],
 //!   never a smaller set of mutants judged.
 //! - **Untested is never caught.** An unviable mutant counts only when its log shows a compiler
@@ -155,6 +159,22 @@ pub struct Run {
     pub outcomes: Vec<Outcome>,
     /// How long each took, build and test, in the same order.
     pub durations: Vec<Duration>,
+    /// Whether the run tested the unmutated code itself first.
+    pub baseline: Baseline,
+}
+
+/// Whether a run's baseline (its crates' tests on the unmutated code) is known to pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Baseline {
+    /// The run ran its baseline and it passed, or the run had no mutant to test.
+    #[default]
+    Passed,
+    /// The run skipped its baseline (`--baseline=skip`): the judge fails it unless [`vouch`]
+    /// finds a passing baseline record of each of its crates.
+    Skipped,
+    /// The run skipped its baseline, and every crate of its mutants has a passing baseline record
+    /// whose tests fit the timeout its shards were given ([`vouch`]).
+    Vouched,
 }
 
 /// Why an output directory or a list could not be used.
@@ -367,17 +387,22 @@ fn listed_outcomes(f: &Path, value: &Value) -> Result<Listed, RunError> {
     Ok(listed)
 }
 
-/// Checks the run's own totals against its outcomes.
-fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError> {
-    if listed.baseline != ["Success"] {
-        return Err(run_err(
-            f,
-            format!(
-                "the baseline (the tests on unmutated code) must run once and pass; found {:?}",
-                listed.baseline
-            ),
-        ));
-    }
+/// Checks the run's own totals against its outcomes, and tells whether it ran its baseline.
+fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<Baseline, RunError> {
+    let baseline = match listed.baseline.as_slice() {
+        [] => Baseline::Skipped,
+        [one] if one == "Success" => Baseline::Passed,
+        _ => {
+            return Err(run_err(
+                f,
+                format!(
+                    "the baseline (the tests on unmutated code) must pass when it runs, and run \
+                     at most once; found {:?}",
+                    listed.baseline
+                ),
+            ));
+        }
+    };
     let total = value.get("total_mutants").and_then(Value::as_u64);
     if total != u64::try_from(listed.by_name.len()).ok() {
         return Err(run_err(
@@ -407,7 +432,7 @@ fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError
             ));
         }
     }
-    Ok(())
+    Ok(baseline)
 }
 
 /// Checks that an unviable mutant's log shows a compiler error.
@@ -433,9 +458,10 @@ fn check_unviable(dir: &Path, name: &str, log: Option<&String>) -> Result<(), Ru
 ///
 /// # Errors
 ///
-/// [`RunError`] for a missing or malformed file, a failed or missing baseline, an unfinished run,
+/// [`RunError`] for a missing or malformed file, a failed baseline or two, an unfinished run,
 /// counts that disagree, a mutant without an outcome or an outcome without a listed mutant, or an
-/// unviable mutant whose log shows no compiler error.
+/// unviable mutant whose log shows no compiler error. A run with no baseline reads as
+/// [`Baseline::Skipped`], which [`judge`] fails unless [`vouch`] vouches for it.
 pub fn read_run(dir: &Path) -> Result<Run, RunError> {
     let mutants = read_mutant_list(&dir.join("mutants.json"))?;
     let f = dir.join("outcomes.json");
@@ -454,7 +480,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
         return Err(run_err(&f, "has no end time: the run did not finish"));
     }
     let mut listed = listed_outcomes(&f, &value)?;
-    check_totals(&f, &value, &listed)?;
+    let baseline = check_totals(&f, &value, &listed)?;
     let mut outcomes = Vec::new();
     let mut durations = Vec::new();
     for m in &mutants {
@@ -481,6 +507,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
         mutants,
         outcomes,
         durations,
+        baseline,
     })
 }
 
@@ -822,6 +849,14 @@ pub fn judge(
     files: Option<&Regex>,
 ) -> Verdict {
     let mut verdict = Verdict::default();
+    for run in runs {
+        if run.baseline == Baseline::Skipped && !run.mutants.is_empty() {
+            verdict.failures.push(format!(
+                "{}: the run skipped its baseline, and no passing baseline record of its crates                  vouches for it, so nothing shows the unmutated code passed",
+                run.dir.display()
+            ));
+        }
+    }
     check_entries(ledger, repo, &mut verdict.failures);
     let (judged, seen) = collect(runs, repo, &mut verdict.failures);
     for run in runs {
@@ -1042,9 +1077,157 @@ pub fn seconds_per_mutant(package: &str) -> u64 {
         .map_or(0, |(_, s)| *s)
 }
 
+/// The test timeout, in seconds, of a shard that skips its baseline (`--baseline=skip
+/// --timeout <s>`), by crate: cargo-mutants' own rule for the timeout it sets from a baseline
+/// (src/timeouts.rs at v27.1.0: five times the baseline's test time, rounded up, and at least its
+/// 20 s minimum), applied to the slowest baseline test measured for the crate. A crate's baseline
+/// then runs once, in a job of its own beside the shards, and [`vouch`] fails the gate when five
+/// times that baseline's test time is over the crate's row: raise the row to five times the new
+/// time. A crate with no row has its shards run their own baseline, as every shard did before.
+///
+/// Measured: the baseline line (`Unmutated baseline in <b>s build + <t>s test`) of every shard of
+/// the full run 40964349843 and of the diff run 44881938610, the largest test time of a shard of
+/// that crate alone, in seconds: geom-bool 27, geom-bvh 2, geom-curve 24, geom-intersect 192,
+/// geom-linalg 0, geom-math 31, geom-num 56, geom-nurbs 24, geom-surface 20. No shard held
+/// geom-check, geom-format, geom-pool or geom-run alone; their rows take the smallest shard that
+/// held them with others, whose time is at least theirs: geom-check 46 (with geom-bool and
+/// geom-curve), geom-format 16 (with geom-curve), geom-pool 32 (with geom-nurbs and geom-run),
+/// geom-run 19 (with geom-surface).
+pub const TEST_TIMEOUT_SECONDS: [(&str, u64); 13] = [
+    ("geom-bool", 135),
+    ("geom-bvh", 20),
+    ("geom-check", 230),
+    ("geom-curve", 120),
+    ("geom-format", 80),
+    ("geom-intersect", 960),
+    ("geom-linalg", 20),
+    ("geom-math", 155),
+    ("geom-num", 280),
+    ("geom-nurbs", 120),
+    ("geom-pool", 160),
+    ("geom-run", 95),
+    ("geom-surface", 100),
+];
+
+/// The test timeout, in seconds, of a shard of `package` that skips its baseline: its row of
+/// [`TEST_TIMEOUT_SECONDS`], or `None` for a crate with none, whose shards run their own baseline.
+#[must_use]
+pub fn test_timeout(package: &str) -> Option<u64> {
+    TEST_TIMEOUT_SECONDS
+        .iter()
+        .find(|(p, _)| *p == package)
+        .map(|(_, s)| *s)
+}
+
+/// One crate's baseline, as the workflow's `mutants-baseline` job writes it once its crate's
+/// tests passed on the unmutated code: `{"package": p, "passed": true, "test_seconds": t}`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BaselineRecord {
+    /// The crate.
+    pub package: String,
+    /// Whether its tests passed.
+    pub passed: bool,
+    /// How long its tests took, in seconds (the test phase, as cargo-mutants times a baseline).
+    pub test_seconds: f64,
+}
+
+/// Reads one baseline record.
+///
+/// # Errors
+///
+/// [`RunError`] for a missing or malformed file.
+pub fn read_baseline(path: &Path) -> Result<BaselineRecord, RunError> {
+    let value = read_json(path)?;
+    let package = value
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| run_err(path, "a baseline record without a package"))?;
+    let passed = value
+        .get("passed")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| run_err(path, "a baseline record without `passed`"))?;
+    let test_seconds = value
+        .get("test_seconds")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| run_err(path, "a baseline record without `test_seconds`"))?;
+    Ok(BaselineRecord {
+        package: package.to_owned(),
+        passed,
+        test_seconds,
+    })
+}
+
+/// What keeps a crate's baseline record from vouching for its shards, if anything.
+fn record_problem(package: &str, records: &[&BaselineRecord]) -> Option<String> {
+    let Some(timeout) = test_timeout(package) else {
+        return Some(format!(
+            "{package} has no row in TEST_TIMEOUT_SECONDS, so its shards must run their own \
+             baseline"
+        ));
+    };
+    let record = match records {
+        [] => {
+            return Some(format!(
+                "{package}: no baseline record, so nothing shows its tests pass on the unmutated \
+                 code"
+            ));
+        }
+        [one] => one,
+        _ => return Some(format!("{package}: {} baseline records", records.len())),
+    };
+    if !record.passed {
+        return Some(format!(
+            "{package}: its baseline failed, so the unmutated code does not pass its tests"
+        ));
+    }
+    let Ok(took) = Duration::try_from_secs_f64(record.test_seconds) else {
+        return Some(format!(
+            "{package}: its baseline's test time, {}, is not a time",
+            record.test_seconds
+        ));
+    };
+    (took.saturating_mul(5) > Duration::from_secs(timeout)).then(|| {
+        format!(
+            "{package}: its baseline's tests took {:.1} s, and five times that is over its {timeout} \
+             s timeout: raise its row of TEST_TIMEOUT_SECONDS to at least five times the time",
+            record.test_seconds
+        )
+    })
+}
+
+/// Vouches for the runs that skipped their baseline: a run becomes [`Baseline::Vouched`] when
+/// every crate of its mutants has exactly one baseline record, that record passed, and five times
+/// its test time is within the crate's row of [`TEST_TIMEOUT_SECONDS`], the timeout the shard was
+/// given (cargo-mutants would have set at least that from a baseline of its own). Returns each
+/// crate's problem, once, for the crates a skipped run needs; a run left [`Baseline::Skipped`]
+/// fails [`judge`].
+pub fn vouch(runs: &mut [Run], records: &[BaselineRecord]) -> Vec<String> {
+    let mut problems: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for run in runs.iter_mut() {
+        if run.baseline != Baseline::Skipped || run.mutants.is_empty() {
+            continue;
+        }
+        let packages: BTreeSet<&str> = run.mutants.iter().map(|m| m.package.as_str()).collect();
+        let mut whole = true;
+        for package in packages {
+            let problem = problems.entry(package.to_owned()).or_insert_with(|| {
+                let own: Vec<&BaselineRecord> =
+                    records.iter().filter(|r| r.package == package).collect();
+                record_problem(package, &own)
+            });
+            whole &= problem.is_none();
+        }
+        if whole {
+            run.baseline = Baseline::Vouched;
+        }
+    }
+    problems.into_values().flatten().collect()
+}
+
 /// The minutes of mutation a shard is planned at when the run fits [`MAX_SHARDS`] shards so: a
 /// push's checks end in about a quarter of an hour (the owner, 16 Nov 2026), and a shard's job adds
-/// its setup and its baseline build and test to the mutants' time. Planned times are twice the
+/// its setup and its first, whole build (and, for a crate with no row of
+/// [`TEST_TIMEOUT_SECONDS`], its baseline's tests) to the mutants' time. Planned times are twice the
 /// largest measured mean ([`SECONDS_PER_MUTANT`]), and dealt in turn no shard of the measured run
 /// 44881938610 took more than 0.80 of its plan but for a timeout, so ten planned minutes run in
 /// about eight.
@@ -1086,6 +1269,9 @@ pub struct Shard {
     pub k: u64,
     /// How many shards its package's mutants are dealt among.
     pub n: u64,
+    /// The test timeout, in seconds, when the shard skips its baseline (`--baseline=skip
+    /// --timeout`): its package's row of [`TEST_TIMEOUT_SECONDS`]. `None` runs its own baseline.
+    pub timeout: Option<u64>,
 }
 
 /// Each package's mutants, in the list's order, by package name.
@@ -1140,9 +1326,11 @@ fn shards_within<'a>(
 /// [`SHARD_LIMIT_MINUTES`]. In package order, each package's shards from `k = 0`. None for no
 /// mutant (a diff that touches none), whose judge then has nothing to wait for.
 ///
-/// A shard holds one package's mutants, so its baseline builds and tests that package alone and
-/// cargo-mutants sets its timeouts from that suite, as a slice of one crate did; a shard of several
-/// crates would build and test them all first (geom-num's tests alone take minutes to build). Dealt
+/// A shard holds one package's mutants, so it builds that package alone, and its test timeout is
+/// that suite's: its crate's row of [`TEST_TIMEOUT_SECONDS`], whose baseline then runs once beside
+/// the shards ([`Shard::timeout`], [`vouch`]), or, for a crate with no row, set by cargo-mutants
+/// from the shard's own baseline of that crate. A shard of several crates would build them all
+/// first (geom-num's tests alone take minutes to build). Dealt
 /// in turn ([`round_robin`]), a package's neighbouring survivors, which each run its whole suite,
 /// fall to different shards. Every mutant of a package is planned at its rate, so each shard is
 /// planned at its count of them ([`shard_seconds`]). What each shard tests is cargo-mutants' choice
@@ -1201,43 +1389,66 @@ pub fn shard_plan(mutants: &[Mutant]) -> Result<Vec<Shard>, String> {
                 package: package.to_owned(),
                 k,
                 n,
+                timeout: test_timeout(package),
             })
         })
         .collect())
 }
 
 /// The shard plan as JSON for the workflow: `{"count": c, "shards": [...], "count_2": m,
-/// "shards_2": [...]}`, each shard `{"index": i, "package": p, "k": k, "n": n}`. `count` is every
-/// shard of the run; `index` numbers them in the whole run, from 0, in the plan's order; `shards`
-/// lists the first job's, indices 0 to `min(c, 256) - 1`, and `shards_2` the second job's, 256 to
-/// `c - 1`, `count_2` of them. A GitHub Actions matrix may not be empty, so a job with no shard
-/// still lists one, index 0 or 256 of no package; the workflow runs a job only when its count is
-/// not 0. [`shard_plan`] gives at most [`MAX_SHARDS`] shards, so neither list holds more than
-/// [`MATRIX_JOBS`].
+/// "shards_2": [...], "count_baselines": b, "baselines": [...]}`, each shard `{"index": i,
+/// "package": p, "k": k, "n": n, "timeout": t}`. `count` is every shard of the run; `index` numbers
+/// them in the whole run, from 0, in the plan's order; `shards` lists the first job's, indices 0 to
+/// `min(c, 256) - 1`, and `shards_2` the second job's, 256 to `c - 1`, `count_2` of them. `timeout`
+/// is the shard's [`Shard::timeout`], or 0 when it runs its own baseline. `baselines` names, once
+/// each in the plan's order, the crates whose shards skip their baseline, `count_baselines` of
+/// them: the workflow runs each one's baseline in a job of its own. A GitHub Actions matrix may not
+/// be empty, so a job with nothing to run still lists one entry, index 0 or 256 of no package, or
+/// no crate; the workflow runs a job only when its count is not 0. [`shard_plan`] gives at most
+/// [`MAX_SHARDS`] shards, so neither shard list holds more than [`MATRIX_JOBS`].
 #[must_use]
 pub fn shard_matrix(plan: &[Shard]) -> String {
     let jobs = usize::try_from(MATRIX_JOBS).unwrap_or(usize::MAX);
-    let entry = |(index, s): (usize, &Shard)| matrix_entry(index, &s.package, s.k, s.n);
+    let entry = |(index, s): (usize, &Shard)| {
+        matrix_entry(index, &s.package, s.k, s.n, s.timeout.unwrap_or(0))
+    };
     let first: Vec<Value> = plan.iter().enumerate().take(jobs).map(entry).collect();
     let second: Vec<Value> = plan.iter().enumerate().skip(jobs).map(entry).collect();
     let (count, count_2) = (plan.len(), second.len());
     let first = if first.is_empty() {
-        vec![matrix_entry(0, "", 0, 1)]
+        vec![matrix_entry(0, "", 0, 1, 0)]
     } else {
         first
     };
     let second = if second.is_empty() {
-        vec![matrix_entry(jobs, "", 0, 1)]
+        vec![matrix_entry(jobs, "", 0, 1, 0)]
     } else {
         second
     };
-    serde_json::json!({"count": count, "shards": first, "count_2": count_2, "shards_2": second})
-        .to_string()
+    let mut baselines: Vec<&str> = Vec::new();
+    for s in plan {
+        if s.timeout.is_some() && !baselines.contains(&s.package.as_str()) {
+            baselines.push(&s.package);
+        }
+    }
+    let count_baselines = baselines.len();
+    if baselines.is_empty() {
+        baselines.push("");
+    }
+    serde_json::json!({
+        "count": count,
+        "shards": first,
+        "count_2": count_2,
+        "shards_2": second,
+        "count_baselines": count_baselines,
+        "baselines": baselines,
+    })
+    .to_string()
 }
 
 /// One shard of a matrix of [`shard_matrix`].
-fn matrix_entry(index: usize, package: &str, k: u64, n: u64) -> Value {
-    serde_json::json!({"index": index, "package": package, "k": k, "n": n})
+fn matrix_entry(index: usize, package: &str, k: u64, n: u64, timeout: u64) -> Value {
+    serde_json::json!({"index": index, "package": package, "k": k, "n": n, "timeout": timeout})
 }
 
 /// The function a ledger entry's mutant is in: the last path segment after the description's last

@@ -804,6 +804,11 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
             "{list:?}"
         );
         assert!(planned.iter().all(|&s| s > 0), "{list:?}: an empty shard");
+        assert!(
+            plan.iter()
+                .all(|s| s.timeout == geom_test::mutants::test_timeout(&s.package)),
+            "{list:?}"
+        );
         let need = |within: u64| -> Option<Vec<u64>> {
             list.iter()
                 .map(|(p, len)| fewest(*len as u64, seconds_per_mutant(p), within))
@@ -871,36 +876,43 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
                 package: format!("geom-{}", k % 3),
                 k,
                 n: count,
+                timeout: (k % 3 != 2).then_some(100 + k % 3),
             })
             .collect()
     };
     let matrix = |plan: &[Shard]| -> Value { serde_json::from_str(&shard_matrix(plan)).unwrap() };
+    let none = |index: u64| json!([{"index": index, "package": "", "k": 0, "n": 1, "timeout": 0}]);
     assert_eq!(
-        matrix(&shards(2)),
+        matrix(&shards(3)),
         json!({
-            "count": 2,
+            "count": 3,
             "shards": [
-                {"index": 0, "package": "geom-0", "k": 0, "n": 2},
-                {"index": 1, "package": "geom-1", "k": 1, "n": 2}
+                {"index": 0, "package": "geom-0", "k": 0, "n": 3, "timeout": 100},
+                {"index": 1, "package": "geom-1", "k": 1, "n": 3, "timeout": 101},
+                {"index": 2, "package": "geom-2", "k": 2, "n": 3, "timeout": 0}
             ],
             "count_2": 0,
-            "shards_2": [{"index": 256, "package": "", "k": 0, "n": 1}]
+            "shards_2": none(256),
+            "count_baselines": 2,
+            "baselines": ["geom-0", "geom-1"]
         })
     );
     assert_eq!(
         matrix(&[]),
         json!({
             "count": 0,
-            "shards": [{"index": 0, "package": "", "k": 0, "n": 1}],
+            "shards": none(0),
             "count_2": 0,
-            "shards_2": [{"index": 256, "package": "", "k": 0, "n": 1}]
+            "shards_2": none(256),
+            "count_baselines": 0,
+            "baselines": [""]
         })
     );
     assert_eq!(
         matrix(&shards(258))["shards_2"],
         json!([
-            {"index": 256, "package": "geom-1", "k": 256, "n": 258},
-            {"index": 257, "package": "geom-2", "k": 257, "n": 258}
+            {"index": 256, "package": "geom-1", "k": 256, "n": 258, "timeout": 101},
+            {"index": 257, "package": "geom-2", "k": 257, "n": 258, "timeout": 0}
         ])
     );
     for count in 0..=MAX_SHARDS {
@@ -923,9 +935,21 @@ fn shard_plans_fit_the_budget_and_a_matrix() {
         let want: Vec<Value> = plan
             .iter()
             .enumerate()
-            .map(|(i, s)| json!({"index": i, "package": s.package, "k": s.k, "n": s.n}))
+            .map(|(i, s)| {
+                json!({"index": i, "package": s.package, "k": s.k, "n": s.n,
+                       "timeout": s.timeout.unwrap_or(0)})
+            })
             .collect();
         assert_eq!(run, want, "{count}");
+        // Each crate whose shards skip their baseline, once, in the plan's order.
+        let baselines: Vec<&str> = ["geom-0", "geom-1"]
+            .into_iter()
+            .take(count.min(2) as usize)
+            .collect();
+        assert_eq!(m["count_baselines"], json!(baselines.len()), "{count}");
+        if !baselines.is_empty() {
+            assert_eq!(m["baselines"], json!(baselines), "{count}");
+        }
     }
 }
 
@@ -1262,9 +1286,10 @@ fn a_run_that_is_not_whole_cannot_be_read() {
             Box::new(|v| v["outcomes"][0]["summary"] = json!("Failure")),
         ),
         (
-            "no baseline",
+            "two baselines",
             Box::new(|v| {
-                v["outcomes"].as_array_mut().unwrap().remove(0);
+                let first = v["outcomes"][0].clone();
+                v["outcomes"].as_array_mut().unwrap().insert(0, first);
             }),
         ),
         ("count", Box::new(|v| v["missed"] = json!(0))),
@@ -1300,6 +1325,142 @@ fn a_run_that_is_not_whole_cannot_be_read() {
     // No mutants and no outcomes is a run of nothing, which passes.
     let empty = write_run(&repo, "empty", &[]);
     assert!(verdict(&repo, &[empty], vec![], Mode::Diff, Some(&[])).passes());
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
+fn a_skipped_baseline_needs_a_passing_record_that_fits_its_timeout() {
+    use geom_test::mutants::{
+        Baseline, BaselineRecord, SECONDS_PER_MUTANT, TEST_TIMEOUT_SECONDS, read_baseline,
+        test_timeout, vouch,
+    };
+    // The table: a row per crate SECONDS_PER_MUTANT plans, in name order, each at least
+    // cargo-mutants' 20 s minimum test timeout.
+    assert_eq!(
+        TEST_TIMEOUT_SECONDS.map(|(p, _)| p),
+        SECONDS_PER_MUTANT.map(|(p, _)| p)
+    );
+    for (package, s) in TEST_TIMEOUT_SECONDS {
+        assert!(s >= 20, "{package}: {s}");
+        assert_eq!(test_timeout(package), Some(s));
+    }
+    assert_eq!(test_timeout("geom-unmeasured"), None);
+    let timeout = test_timeout("geom-num").unwrap();
+    let repo = mutation_repo("skipped");
+    // A shard that ran its own baseline reads as passed; one that skipped it, as skipped.
+    let own = write_run(&repo, "own", &[caught(NUM, 3)]);
+    assert_eq!(read_run(&own).unwrap().baseline, Baseline::Passed);
+    let dir = write_run(&repo, "skipped", &[caught(NUM, 3), caught(NUM, 4)]);
+    edit_outcomes(&dir, |v| {
+        v["outcomes"].as_array_mut().unwrap().remove(0);
+    });
+    let skipped = read_run(&dir).unwrap();
+    assert_eq!(skipped.baseline, Baseline::Skipped);
+    let l = ledger(vec![]);
+    let judged =
+        |runs: &[mutants::Run]| judge(runs, &l, &repo.root, Mode::Diff, None, Some(&l), None);
+    let record = |passed: bool, test_seconds: f64| BaselineRecord {
+        package: "geom-num".to_owned(),
+        passed,
+        test_seconds,
+    };
+    // With nothing to vouch for it, the skipped shard fails the gate, though its mutants pass.
+    fails_with(
+        &judged(std::slice::from_ref(&skipped)),
+        "skipped its baseline",
+    );
+    // A passing record whose tests, five times over, fit the crate's timeout vouches for it.
+    let fits = timeout as f64 / 5.0;
+    for (records, why) in [
+        (vec![], Some("no baseline record")),
+        (vec![record(false, 1.0)], Some("its baseline failed")),
+        (vec![record(true, fits + 0.01)], Some("raise its row")),
+        (vec![record(true, -1.0)], Some("is not a time")),
+        (
+            vec![record(true, 1.0), record(true, 1.0)],
+            Some("2 baseline records"),
+        ),
+        (vec![record(true, fits)], None),
+        (vec![record(true, 0.5)], None),
+    ] {
+        let mut runs = vec![skipped.clone()];
+        let problems = vouch(&mut runs, &records);
+        let mut v = judged(&runs);
+        v.failures.extend(problems.clone());
+        if let Some(why) = why {
+            assert_eq!(runs[0].baseline, Baseline::Skipped, "{records:?}");
+            assert_eq!(problems.len(), 1, "{problems:?}");
+            fails_with(&v, why);
+            fails_with(&v, "skipped its baseline");
+        } else {
+            assert_eq!(runs[0].baseline, Baseline::Vouched, "{records:?}");
+            assert!(problems.is_empty(), "{problems:?}");
+            assert!(v.passes(), "{}", mutants::report(&v));
+        }
+    }
+    // Another crate's record vouches for nothing; a crate with no row cannot skip its baseline.
+    let mut runs = vec![skipped.clone()];
+    let other = BaselineRecord {
+        package: "geom-bool".to_owned(),
+        passed: true,
+        test_seconds: 1.0,
+    };
+    let problems = vouch(&mut runs, &[other]);
+    assert_eq!(runs[0].baseline, Baseline::Skipped);
+    assert!(problems[0].contains("no baseline record"), "{problems:?}");
+    let unmeasured = repo.path("unmeasured.json");
+    std::fs::write(
+        &unmeasured,
+        json!([{
+            "name": format!("{NUM}:3:5: x"),
+            "package": "geom-unmeasured",
+            "file": NUM,
+            "function": null,
+            "span": {"start": {"line": 3, "column": 5}, "end": {"line": 3, "column": 6}},
+            "replacement": "x",
+            "genre": "BinaryOperator",
+        }])
+        .to_string(),
+    )
+    .unwrap();
+    let mut odd = skipped.clone();
+    odd.mutants = mutants::read_mutant_list(&unmeasured).unwrap();
+    odd.outcomes.truncate(1);
+    odd.durations.truncate(1);
+    let mut runs = vec![odd];
+    let problems = vouch(
+        &mut runs,
+        &[BaselineRecord {
+            package: "geom-unmeasured".to_owned(),
+            passed: true,
+            test_seconds: 1.0,
+        }],
+    );
+    assert_eq!(runs[0].baseline, Baseline::Skipped);
+    assert!(
+        problems[0].contains("no row in TEST_TIMEOUT_SECONDS"),
+        "{problems:?}"
+    );
+    // A run that ran its own baseline needs no record, and a record is read from its file.
+    let mut runs = vec![read_run(&own).unwrap()];
+    assert!(vouch(&mut runs, &[]).is_empty());
+    assert_eq!(runs[0].baseline, Baseline::Passed);
+    let file = repo.path("geom-num.json");
+    std::fs::write(
+        &file,
+        json!({"package": "geom-num", "passed": true, "test_seconds": 48.5}).to_string(),
+    )
+    .unwrap();
+    assert_eq!(read_baseline(&file).unwrap(), record(true, 48.5));
+    std::fs::write(
+        &file,
+        json!({"package": "geom-num", "passed": true}).to_string(),
+    )
+    .unwrap();
+    assert!(read_baseline(&file).is_err());
 }
 
 #[cfg_attr(
@@ -2155,7 +2316,8 @@ fn a_narrowed_run_is_checked_by_the_plan_and_judged_on_its_files() {
         &all,
     ]);
     assert_eq!(code, 0, "{text}");
-    assert!(text.starts_with(r#"{"count":1,"#), "{text}");
+    let shards: Value = serde_json::from_str(text.trim()).unwrap();
+    assert_eq!(shards["count"], json!(1), "{text}");
     let (code, text) = plan(&["--list", &all, "--files", "geom-num/src/", "--all", &all]);
     assert_eq!(code, 2, "{text}");
     assert!(text.contains("whose file it does not match"), "{text}");
@@ -2294,10 +2456,11 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
     assert!(text.contains("(no mutants)"), "{text}");
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", empty.to_str().unwrap()]);
     assert_eq!(code, 0, "{text}");
-    let none = |index: u64| json!([{"index": index, "package": "", "k": 0, "n": 1}]);
+    let none = |index: u64| json!([{"index": index, "package": "", "k": 0, "n": 1, "timeout": 0}]);
     assert_eq!(
         serde_json::from_str::<Value>(text.trim()).unwrap(),
-        json!({"count": 0, "count_2": 0, "shards": none(0), "shards_2": none(256)}),
+        json!({"count": 0, "count_2": 0, "shards": none(0), "shards_2": none(256),
+               "count_baselines": 0, "baselines": [""]}),
         "{text}"
     );
     let (code, text) = kernel_quality(&repo, &["mutants-plan", "--list", longer.to_str().unwrap()]);
@@ -2307,8 +2470,10 @@ fn the_binary_exits_0_to_pass_1_to_fail_and_2_for_bad_input() {
         json!({
             "count": 1,
             "count_2": 0,
-            "shards": [{"index": 0, "package": "geom-num", "k": 0, "n": 1}],
-            "shards_2": none(256)
+            "shards": [{"index": 0, "package": "geom-num", "k": 0, "n": 1, "timeout": 280}],
+            "shards_2": none(256),
+            "count_baselines": 1,
+            "baselines": ["geom-num"]
         }),
         "{text}"
     );

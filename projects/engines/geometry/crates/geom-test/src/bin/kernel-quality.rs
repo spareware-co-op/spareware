@@ -14,7 +14,8 @@
 //! - `mutants` judges cargo-mutants output directories (`mutants.out`, one per shard) against the
 //!   ledger ([`geom_test::mutants`]); `--expected`, the same list, proves no shard is missing, and
 //!   in a pull request `--base-ledger` is the base branch's ledger, the only source of `known`
-//!   entries a pull request may use.
+//!   entries a pull request may use. Each `--baseline` is a crate's baseline record, the only
+//!   thing that vouches for shards that skipped their baseline ([`geom_test::mutants::vouch`]).
 //! - `coverage` judges `DIR/<crate>.lcov`, one LCOV file per kernel crate measured by its own
 //!   tests, with `DIR/<crate>.log`, the output of the cargo-llvm-cov run that wrote it, for every
 //!   crate `affected` names, and checks every `coverage(off)` mark in the kernel
@@ -192,6 +193,10 @@ enum Command {
         /// those files' ledger entries are counted.
         #[arg(long, value_name = "REGEX")]
         files: Option<String>,
+        /// A crate's baseline record (`mutants-baseline`'s `<crate>.json`), one per crate whose
+        /// shards skipped their baseline: only these vouch for those shards.
+        #[arg(long = "baseline", value_name = "FILE")]
+        baselines: Vec<PathBuf>,
         #[command(flatten)]
         repo: Repo,
         /// The output directories, one per shard (`mutants.out`).
@@ -734,6 +739,7 @@ fn judge_mutants(
     expected: &Path,
     base_ledger: Option<&Path>,
     files: Option<&str>,
+    baselines: &[PathBuf],
     repo: &Repo,
     outs: &[PathBuf],
 ) -> Result<bool, String> {
@@ -747,6 +753,11 @@ fn judge_mutants(
     for dir in outs {
         runs.push(mutants::read_run(dir).map_err(|e| e.to_string())?);
     }
+    let mut records = Vec::new();
+    for f in baselines {
+        records.push(mutants::read_baseline(f).map_err(|e| e.to_string())?);
+    }
+    let problems = mutants::vouch(&mut runs, &records);
     let mode = match mode {
         ModeArg::Diff => Mode::Diff,
         ModeArg::Full => Mode::Full,
@@ -769,7 +780,7 @@ fn judge_mutants(
             if outside == 1 { "y" } else { "ies" }
         );
     }
-    let verdict = mutants::judge(
+    let mut verdict = mutants::judge(
         &runs,
         &ledger,
         &root,
@@ -778,6 +789,7 @@ fn judge_mutants(
         base.as_ref(),
         files.as_ref(),
     );
+    verdict.failures.extend(problems);
     print!("{}", mutants::report(&verdict));
     Ok(verdict.passes())
 }
@@ -832,6 +844,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             expected,
             base_ledger,
             files,
+            baselines,
             repo,
             outs,
         } => judge_mutants(
@@ -839,6 +852,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             &expected,
             base_ledger.as_deref(),
             files.as_deref(),
+            &baselines,
             &repo,
             &outs,
         ),
