@@ -58,7 +58,8 @@ pub mod transform {
 /// Persistent names and the history that carries them (chapter 20).
 pub mod name {
     pub use geom_op::{
-        ChangeClass, History, NameId, Ordinal, Origin, PieceKey, Record, Role, Side, TopoName,
+        ChangeClass, History, NameId, NameList, Ordinal, Origin, PieceKey, Record, Role, RoleArg,
+        Side, TopoName,
     };
 }
 
@@ -81,6 +82,6 @@ pub mod op {
 /// own record of what it is, so the engine behind it can change and the program does not (25).
 pub mod engine {
     pub use geom_op::engine::{
-        Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Tolerance, Volume,
+        Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
     };
 }

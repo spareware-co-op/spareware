@@ -28,3 +28,13 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .stack-ghost { pointer-events: none; }
 .dw .element { cursor: move; }
 .dw .claim.mine { fill: none; stroke: var(--success); }
+
+/* The Types and Project parameters dialogs. */
+.stack-manage section { padding: 8px 0; border-bottom: 1px solid var(--hairline); }
+.stack-manage section:last-of-type { border-bottom: 0; }
+.stack-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stack-line > .inp { flex: 1; width: auto; min-width: 160px; }
+.stack-manage .props { margin-top: 6px; }
+.stack-manage details summary { cursor: pointer; padding: 2px 0; }
+.stack-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; padding: 4px 0; }
+.stack-manage .note.bad { margin-top: 6px; }
