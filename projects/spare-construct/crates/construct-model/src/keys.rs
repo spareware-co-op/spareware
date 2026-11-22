@@ -52,6 +52,18 @@ pub enum Place {
         /// The element that touches it.
         element: Id,
     },
+    /// Which elements of a document are of a kind, whether or not they have a shape, so a page
+    /// that works on one kind (Workshop's parts) finds them without a place in the plan. Derived.
+    Kind {
+        /// The project.
+        project: Id,
+        /// The document the element is in.
+        document: Id,
+        /// The element's kind.
+        kind: Id,
+        /// The element.
+        element: Id,
+    },
     /// A model's header in a team's WIP folder.
     Model {
         /// The project.
@@ -191,6 +203,15 @@ impl Place {
                 let parts = [document.as_str(), &level, &x, &y, element.as_str()];
                 in_project(project).table("area", &parts)
             }
+            Self::Kind {
+                project,
+                document,
+                kind,
+                element,
+            } => {
+                let parts = [document.as_str(), kind.as_str(), element.as_str()];
+                in_project(project).table("kind", &parts)
+            }
             Self::Model { project, model } => in_project(project).table("model", &[model.as_str()]),
             Self::Team { project, team } => in_project(project).table("team", &[team.as_str()]),
             Self::Item {
@@ -305,6 +326,12 @@ impl Place {
                 y: number(y)?,
                 element: id(element)?,
             },
+            ["kind", document, kind, element] => Self::Kind {
+                project,
+                document: id(document)?,
+                kind: id(kind)?,
+                element: id(element)?,
+            },
             ["model", model] => Self::Model {
                 project,
                 model: id(model)?,
@@ -352,10 +379,16 @@ pub mod list {
     pub fn built(project: &Id, document: &Id) -> Prefix {
         in_project(project).table_prefix("built", &[document.as_str()])
     }
+    /// The elements of a document of one kind.
+    #[must_use]
+    pub fn kind(project: &Id, document: &Id, kind: &Id) -> Prefix {
+        in_project(project).table_prefix("kind", &[document.as_str(), kind.as_str()])
+    }
     /// Every derived table of a project.
     #[must_use]
-    pub fn derived(project: &Id) -> [Prefix; 4] {
-        ["body", "display", "built", "area"].map(|name| in_project(project).table_prefix(name, &[]))
+    pub fn derived(project: &Id) -> [Prefix; 5] {
+        ["body", "display", "built", "area", "kind"]
+            .map(|name| in_project(project).table_prefix(name, &[]))
     }
     /// Every model of a project.
     #[must_use]
@@ -479,5 +512,16 @@ mod tests {
         };
         let (start, end) = list::hub_projects(&i("h")).bounds();
         assert!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]);
+        let place = Place::Kind {
+            project: i("p"),
+            document: i("m"),
+            kind: i("workshop.part"),
+            element: i("WP-1"),
+        };
+        let (start, end) = list::kind(&i("p"), &i("m"), &i("workshop.part")).bounds();
+        assert!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]);
+        // A kind whose name runs on from another's is a different list.
+        let (start, end) = list::kind(&i("p"), &i("m"), &i("workshop")).bounds();
+        assert!(!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]));
     }
 }
