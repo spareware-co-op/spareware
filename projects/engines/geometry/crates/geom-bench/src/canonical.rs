@@ -1325,6 +1325,46 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     }
 }
 
+// Placed instances (piece G145).
+
+impl Canonical for crate::inputs::placed::Instance {
+    // The definition as a transform's input, then its `Debug` text of the instance, which writes
+    // the definition's handle, the packed placement and the box.
+    fn encode(&self, h: &mut Sha256) {
+        self.shared.encode(h);
+        debug_text(&self.placed, h);
+    }
+}
+
+impl Canonical for crate::inputs::placed::Turn {
+    // The definition as a transform's input, then the turn's `Debug` text.
+    fn encode(&self, h: &mut Sha256) {
+        self.shared.encode(h);
+        debug_text(&self.turn, h);
+    }
+}
+
+impl Canonical for geom_topo::query::Side {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_topo::placed::PlacedError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // Root finding and quadrature (decision 32.46's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {

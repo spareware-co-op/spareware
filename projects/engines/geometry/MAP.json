@@ -1254,6 +1254,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] and one body built per input, once per batch, outside every measured run.",
+          "does": "each definition is a primitive within ±2^20 grid steps of the origin, its sizes from 4 to 2^16 steps, half of them boxes and half prisms on a right triangle, as the core queries' inputs are (`inputs/query.rs`). An exact placement is one of the 48 signed axis permutations, drawn by its packed number, with a shift within ±2^20 steps; an area input asks for one face of its instance, and a side input for one point, half of them inside the instance and half outside it, never on its boundary. A turn is the definition with one of eight rotations about z by a Pythagorean direction, a placed copy turned in plan as a building places one, so the sides of the turned body stay upright and its rounded corners keep every face flat.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/placed.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), every answer on an exact placement equals the same query on its materialisation, every point's side is decided, and every turned body is certified within [`ACCEPT`]'s bound. Only the typical class exists: the refusals are tested in `geom-topo` and `geom-make` themselves."
+          ],
+          "job": "Inputs for placed instances (piece G145; chapters 19.12 and 23.9): definitions placed exactly, for [`areas`] (`geom_topo::placed::face_area`) and [`sides`] (`geom_topo::placed::side_of_shell`), and definitions turned in plan, for [`turns`] (`geom_make::placed::materialise`).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-make`'s own tests (`tests/placed.rs`: a box and a prism under each of the 48 signed permutations with a shift, and a rotation about z by a Pythagorean direction accepted as certified within 64 steps), drawn from a stream; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::placed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],

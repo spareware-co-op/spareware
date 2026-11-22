@@ -3378,9 +3378,16 @@ pub mod make {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/materialise/typical"))]
+    fn materialise(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = make;
-        benchmarks = build_box, cylinder, move_box, turn_box
+        benchmarks = build_box, cylinder, move_box, turn_box, materialise
     );
 }
 
@@ -3704,9 +3711,23 @@ pub mod query {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/placed_area/typical"))]
+    fn placed_area(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/placed_side/typical"))]
+    fn placed_side(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = query;
-        benchmarks = area, bounding_box, exactness, faces, validity, volume
+        benchmarks = area, bounding_box, exactness, faces, validity, volume, placed_area, placed_side
     );
 }
 

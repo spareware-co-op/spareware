@@ -2954,6 +2954,69 @@ fn local_step_typical_batches_all_succeed() {
     }
 }
 
+/// Every typical batch of the placed instances' benchmarks (piece G145) succeeds, and each answer
+/// is its materialisation's: an exact placement's face area and point's side equal the same query
+/// on the body the placement makes, every side is decided, about half the points are inside, and
+/// every turned body keeps its faces and is certified.
+#[test]
+fn placed_typical_batches_all_succeed() {
+    use geom_bench::inputs::placed as m;
+    use geom_bench::kernels::placed as k;
+    use geom_topo::query::{self, Side};
+    let (areas, sides, turns) = (m::areas(Typical), m::sides(Typical), m::turns(Typical));
+    all_ok("placed_area", k::areas, &areas);
+    all_ok("placed_side", k::sides, &sides);
+    all_ok("materialise", k::turns, &turns);
+    let ctx = geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([4; 16])),
+        geom_run::Budget::UNLIMITED,
+    );
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    let shell = geom_topo::Ix::new(0).unwrap();
+    let body_of = |i: &m::Instance| {
+        let t = i.placed.placement().grid().unwrap();
+        let moved = geom_make::Moved {
+            body: &i.shared.result.body,
+            exactness: i.shared.exactness,
+            accept: None,
+        };
+        let exact = geom_math::TypedTransform::Exact(t);
+        geom_make::placed::materialise(&ctx, moved, &exact)
+            .unwrap()
+            .result
+            .body
+    };
+    let mut out = Vec::new();
+    k::areas(&areas, &mut out);
+    for ((i, face), area) in areas.iter().zip(&out) {
+        let face = geom_topo::Ix::new(*face).unwrap();
+        let want = query::face_area(&body_of(i), face, &mut meter).unwrap();
+        assert_eq!(*area.as_ref().unwrap(), want);
+    }
+    let mut out = Vec::new();
+    k::sides(&sides, &mut out);
+    let mut inside = 0_usize;
+    for ((i, point), side) in sides.iter().zip(&out) {
+        let side = *side.as_ref().unwrap();
+        let want = query::side_of_shell(&body_of(i), shell, *point, &mut meter).unwrap();
+        assert_eq!(side, want, "{point:?}");
+        assert!(side.is_some(), "{point:?}");
+        inside += usize::from(side == Some(Side::Inside));
+    }
+    assert!((16..=48).contains(&inside), "{inside} of {BATCH} inside");
+    for turn in &turns {
+        let moved = geom_make::Moved {
+            body: &turn.shared.result.body,
+            exactness: turn.shared.exactness,
+            accept: Some(m::ACCEPT),
+        };
+        let made = geom_make::placed::materialise(&ctx, moved, &turn.turn).unwrap();
+        assert!(matches!(made.exactness, Exactness::Certified { .. }));
+        let rows = |b: &geom_topo::Body| b.arenas().rows(geom_topo::Arena::Face);
+        assert_eq!(rows(&made.result.body), rows(&turn.shared.result.body));
+    }
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {

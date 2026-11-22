@@ -656,6 +656,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 "transform",
                 include_str!("../../geom-make/src/transform.rs"),
             ),
+            ("placed", include_str!("../../geom-make/src/placed.rs")),
         ],
     ),
     (
@@ -674,6 +675,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 "query_ops",
                 include_str!("../../geom-topo/src/query_ops.rs"),
             ),
+            ("placed", include_str!("../../geom-topo/src/placed.rs")),
         ],
     ),
     (

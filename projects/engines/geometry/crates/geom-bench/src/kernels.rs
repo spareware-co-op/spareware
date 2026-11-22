@@ -1915,6 +1915,77 @@ pub mod topo {
     }
 }
 
+/// Placed instances (piece G145; 19.12, 23.9): `geom-topo`'s queries on an exact placement, which
+/// answer in the definition's frame, and `geom-make`'s materialisation of a turned one, its body
+/// rounded to the grid and checked in full, each under an unlimited budget.
+pub mod placed {
+    use geom_make::Moved;
+    use geom_make::placed::materialise;
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpPath};
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::placed::{PlacedError, face_area, side_of_shell};
+    use geom_topo::query::{QueryError, Side};
+    use geom_topo::{Arena, Ix};
+
+    use super::run;
+    use crate::inputs::placed::{ACCEPT, Instance, Turn};
+
+    /// Twice the area vector of each instance's face, as the instance has it.
+    #[inline(never)]
+    pub fn areas(batch: &[(Instance, u32)], out: &mut Vec<Result<[i128; 3], PlacedError>>) {
+        run(batch, out, |(instance, face)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let face = Ix::new(*face).ok_or(QueryError::NoSuchRow)?;
+            face_area(
+                &instance.shared.result.body,
+                &instance.placed,
+                face,
+                &mut meter,
+            )
+        });
+    }
+
+    /// The side of each instance's shell its point lies on.
+    #[inline(never)]
+    pub fn sides(batch: &[(Instance, P3)], out: &mut Vec<Result<Option<Side>, PlacedError>>) {
+        run(batch, out, |(instance, point)| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let shell = Ix::new(0).ok_or(QueryError::NoSuchRow)?;
+            side_of_shell(
+                &instance.shared.result.body,
+                &instance.placed,
+                shell,
+                *point,
+                &mut meter,
+            )
+        });
+    }
+
+    /// `materialise` of each definition under its turn, accepted as certified within
+    /// [`ACCEPT`]'s bound: the body's faces, edges and vertices, and its class's rank.
+    #[inline(never)]
+    pub fn turns(batch: &[Turn], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED);
+        run(batch, out, |turn| {
+            let shared = Moved {
+                body: &turn.shared.result.body,
+                exactness: turn.shared.exactness,
+                accept: Some(ACCEPT),
+            };
+            materialise(&ctx, shared, &turn.turn).map(|made| {
+                let a = made.result.body.arenas();
+                [
+                    a.rows(Arena::Face),
+                    a.rows(Arena::Edge),
+                    a.rows(Arena::Vertex),
+                    u32::from(made.exactness.rank()),
+                ]
+            })
+        });
+    }
+}
+
 /// Error bounds per entity (piece G143, decision 32.21): `geom-op`'s `Bounds::after` over a part's
 /// whole history, and `Bounds::join` of two parts' bounds.
 pub mod bounds {

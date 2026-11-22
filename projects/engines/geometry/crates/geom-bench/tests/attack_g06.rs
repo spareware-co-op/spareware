@@ -1059,6 +1059,15 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
                 )
             })
         })),
+        "placed_area" => fold(inputs::placed::areas(class).iter().map(|(i, face)| {
+            let face = geom_topo::Ix::new(*face).unwrap();
+            geom_topo::placed::face_area(&i.shared.result.body, &i.placed, face, &mut unlimited())
+        })),
+        "placed_side" => fold(inputs::placed::sides(class).iter().map(|(i, point)| {
+            let shell = geom_topo::Ix::new(0).unwrap();
+            let body = &i.shared.result.body;
+            geom_topo::placed::side_of_shell(body, &i.placed, shell, *point, &mut unlimited())
+        })),
         _ => return None,
     })
 }
@@ -2078,6 +2087,17 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                             .map(|out| make_counts(&out))
                     }),
             )
+        }
+        ("make", "materialise") => {
+            let ctx = make_context();
+            fold(inputs::placed::turns(class).iter().map(|turn| {
+                let moved = geom_make::Moved {
+                    body: &turn.shared.result.body,
+                    exactness: turn.shared.exactness,
+                    accept: Some(inputs::placed::ACCEPT),
+                };
+                geom_make::placed::materialise(&ctx, moved, &turn.turn).map(|out| make_counts(&out))
+            }))
         }
         ("cbor", "check") => fold(inputs::cbor::check(class).iter().map(|bytes| {
             geom_format::cbor::check(bytes, inputs::cbor::DEPTH, &mut unlimited()).is_ok()

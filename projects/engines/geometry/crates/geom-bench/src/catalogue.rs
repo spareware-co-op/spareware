@@ -477,6 +477,9 @@ pub static OPS: &[Op] = &[
     Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
     Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
     Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // A placed instance's materialisation (piece G145, 23.9): a box or prism turned in plan, rounded
+    // to the grid and checked in full.
+    Op { group: "make", name: "materialise", measures: "geom_make::placed::materialise", classes: T, prepare: |c| bind(inputs::placed::turns(c), kernels::placed::turns) },
     // geom-format's CBOR decoder and text form (piece G91; decision 32.46).
     Op { group: "cbor", name: "check", measures: "geom_format::decode::check", classes: T, prepare: |c| bind(inputs::cbor::check(c), kernels::cbor::check) },
     Op { group: "cbor", name: "int_column", measures: "geom_format::column::int_column", classes: T, prepare: |c| bind(inputs::cbor::int_column(c), kernels::cbor::int_column) },
@@ -510,6 +513,10 @@ pub static OPS: &[Op] = &[
     Op { group: "query", name: "faces", measures: "geom_name::faces::faces", classes: T, prepare: |c| bind(inputs::query::listed(c), kernels::query::faces) },
     Op { group: "query", name: "validity", measures: "geom_check::query::validity", classes: T, prepare: |c| bind(inputs::query::validities(c), kernels::query::validities) },
     Op { group: "query", name: "volume", measures: "geom_topo::query_ops::six_volume", classes: T, prepare: |c| bind(inputs::query::volumes(c), kernels::query::volumes) },
+    // Placed instances (piece G145, 19.12): a face's area and a point's side on a box or prism placed
+    // by one of the 48 signed permutations, answered in the definition's frame.
+    Op { group: "query", name: "placed_area", measures: "geom_topo::placed::face_area", classes: T, prepare: |c| bind(inputs::placed::areas(c), kernels::placed::areas) },
+    Op { group: "query", name: "placed_side", measures: "geom_topo::placed::side_of_shell", classes: T, prepare: |c| bind(inputs::placed::sides(c), kernels::placed::sides) },
     // geom-op's canonical encoder and SHA-256 (piece G86; decision 32.46).
     Op { group: "encoder", name: "map", measures: "geom_op::Encoder::map", classes: T, prepare: |c| bind(inputs::encoder::maps(c), kernels::encoder::maps) },
     Op { group: "encoder", name: "float", measures: "geom_op::Encoder::float", classes: T, prepare: |c| bind(inputs::encoder::floats(c), kernels::encoder::floats) },

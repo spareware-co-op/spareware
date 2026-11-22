@@ -326,9 +326,15 @@
               "kind": "corpus",
               "piece": "G144",
               "why": "2 new count benchmarks in the group scenario: scenario/local_full and scenario/local_fast (G144, geom_bool::local::local_step on its full path and its fast path), typical only, one job each: a wall 300 long, 10 thick and 30 high raised by ten lifts of the same block, each on the whole top face of the one below, united in one local step that may only add a face and merge faces, arranged on the full path and built from the plan's proof on the fast path; both give one block of six faces and one history, so the two rows have one results digest, and the plan in each input gives each row its own inputs digest. No existing digest moved"
+            },
+            {
+              "sha256": "5bad010ce240e08ae57af8b18fae00c3d85a9318a7c2f113eb973a90f284ed70",
+              "kind": "corpus",
+              "piece": "G145",
+              "why": "3 new count benchmarks: query/placed_area and query/placed_side in the group query (G145, geom_topo::placed::face_area and geom_topo::placed::side_of_shell), and make/materialise in the group make (G145, geom_make::placed::materialise), typical only: boxes and prisms on a right triangle placed by one of the 48 signed permutations with a shift, one face's area and one point's side each, the point inside on about half and past the box on the rest, never on the boundary; and the same definitions turned about z by one of eight Pythagorean directions, rounded to the grid and checked in full, accepted as certified within 64 steps. No existing digest moved"
             }
           ],
-          "sha256": "5bad010ce240e08ae57af8b18fae00c3d85a9318a7c2f113eb973a90f284ed70"
+          "sha256": "dbbde709c447212ee5e9465e5fad14e3dd5f2e2a8c2ce8e17e21458999c65e01"
         },
         {
           "id": "geom-nurbs/operations",

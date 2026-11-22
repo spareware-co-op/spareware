@@ -63,6 +63,7 @@ pub mod naming;
 pub mod newton;
 pub mod nurbs;
 pub mod perturb;
+pub mod placed;
 pub mod plane;
 pub mod predicate;
 pub mod quadric;
