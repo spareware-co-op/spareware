@@ -71,7 +71,7 @@ fn strings() -> Vec<Value> {
         "a-b",
         "a.b",
         "_a",
-        "length:820",
+        "length:q0:5248000",
         "left",
         "Left",
         "outside",

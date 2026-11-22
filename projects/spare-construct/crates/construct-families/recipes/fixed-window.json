@@ -13,7 +13,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:1200"
+      "default": "length:q0:7680000"
     },
     {
       "key": "height",
@@ -24,7 +24,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:1200"
+      "default": "length:q0:7680000"
     },
     {
       "key": "frame",
@@ -35,7 +35,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:50"
+      "default": "length:q0:320000"
     },
     {
       "key": "frame_depth",
@@ -46,7 +46,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:100"
+      "default": "length:q0:640000"
     },
     {
       "key": "glazing",
@@ -57,7 +57,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:24"
+      "default": "length:q0:153600"
     },
     {
       "key": "frame_material",
@@ -79,7 +79,7 @@
         "holder": "instance",
         "choices": []
       },
-      "default": "length:900"
+      "default": "length:q0:5760000"
     }
   ],
   "planes": [
@@ -101,53 +101,53 @@
       "points": [
         {
           "key": "o",
-          "x": "length:0",
-          "y": "length:0"
+          "x": "length:q0:0",
+          "y": "length:q0:0"
         },
         {
           "key": "s",
-          "x": "length:0",
-          "y": "length:900"
+          "x": "length:q0:0",
+          "y": "length:q0:5760000"
         },
         {
           "key": "f1",
-          "x": "length:-600",
-          "y": "length:900"
+          "x": "length:q0:-3840000",
+          "y": "length:q0:5760000"
         },
         {
           "key": "f2",
-          "x": "length:600",
-          "y": "length:900"
+          "x": "length:q0:3840000",
+          "y": "length:q0:5760000"
         },
         {
           "key": "f3",
-          "x": "length:600",
-          "y": "length:2100"
+          "x": "length:q0:3840000",
+          "y": "length:q0:13440000"
         },
         {
           "key": "f4",
-          "x": "length:-600",
-          "y": "length:2100"
+          "x": "length:q0:-3840000",
+          "y": "length:q0:13440000"
         },
         {
           "key": "g1",
-          "x": "length:-550",
-          "y": "length:950"
+          "x": "length:q0:-3520000",
+          "y": "length:q0:6080000"
         },
         {
           "key": "g2",
-          "x": "length:550",
-          "y": "length:950"
+          "x": "length:q0:3520000",
+          "y": "length:q0:6080000"
         },
         {
           "key": "g3",
-          "x": "length:550",
-          "y": "length:2050"
+          "x": "length:q0:3520000",
+          "y": "length:q0:13120000"
         },
         {
           "key": "g4",
-          "x": "length:-550",
-          "y": "length:2050"
+          "x": "length:q0:-3520000",
+          "y": "length:q0:13120000"
         }
       ],
       "lines": [
@@ -305,38 +305,38 @@
       "points": [
         {
           "key": "o",
-          "x": "length:0",
-          "y": "length:0"
+          "x": "length:q0:0",
+          "y": "length:q0:0"
         },
         {
           "key": "c1",
-          "x": "length:-600",
-          "y": "length:0"
+          "x": "length:q0:-3840000",
+          "y": "length:q0:0"
         },
         {
           "key": "c2",
-          "x": "length:600",
-          "y": "length:0"
+          "x": "length:q0:3840000",
+          "y": "length:q0:0"
         },
         {
           "key": "a1",
-          "x": "length:-600",
-          "y": "length:-50"
+          "x": "length:q0:-3840000",
+          "y": "length:q0:-320000"
         },
         {
           "key": "a2",
-          "x": "length:600",
-          "y": "length:-50"
+          "x": "length:q0:3840000",
+          "y": "length:q0:-320000"
         },
         {
           "key": "b1",
-          "x": "length:-600",
-          "y": "length:50"
+          "x": "length:q0:-3840000",
+          "y": "length:q0:320000"
         },
         {
           "key": "b2",
-          "x": "length:600",
-          "y": "length:50"
+          "x": "length:q0:3840000",
+          "y": "length:q0:320000"
         }
       ],
       "lines": [
@@ -564,11 +564,11 @@
       "values": [
         {
           "parameter": "width",
-          "value": "length:600"
+          "value": "length:q0:3840000"
         },
         {
           "parameter": "height",
-          "value": "length:900"
+          "value": "length:q0:5760000"
         }
       ]
     },
@@ -578,11 +578,11 @@
       "values": [
         {
           "parameter": "width",
-          "value": "length:1200"
+          "value": "length:q0:7680000"
         },
         {
           "parameter": "height",
-          "value": "length:1200"
+          "value": "length:q0:7680000"
         }
       ]
     },
@@ -592,11 +592,11 @@
       "values": [
         {
           "parameter": "width",
-          "value": "length:1800"
+          "value": "length:q0:11520000"
         },
         {
           "parameter": "height",
-          "value": "length:1200"
+          "value": "length:q0:7680000"
         }
       ]
     }

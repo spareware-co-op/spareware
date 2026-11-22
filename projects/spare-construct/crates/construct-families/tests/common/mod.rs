@@ -103,7 +103,7 @@ pub fn every_shape() -> Value {
                     "id": "F-1.size", "name": "Size", "kind": "length", "holder": "type",
                     "choices": []
                 },
-                "default": "length:100"
+                "default": "length:q0:640000"
             },
             {
                 "key": "hand",
@@ -127,14 +127,14 @@ pub fn every_shape() -> Value {
             "key": "s",
             "plane": "base",
             "points": [
-                {"key": "p", "x": "length:0", "y": "length:0"},
-                {"key": "q", "x": "length:100", "y": "length:0"}
+                {"key": "p", "x": "length:q0:0", "y": "length:q0:0"},
+                {"key": "q", "x": "length:q0:640000", "y": "length:q0:0"}
             ],
             "lines": [{"key": "l", "start": "p", "end": "q"}],
             "arcs": [
-                {"key": "a", "centre": "p", "start": "q", "end": "q", "radius": "length:100"}
+                {"key": "a", "centre": "p", "start": "q", "end": "q", "radius": "length:q0:640000"}
             ],
-            "circles": [{"key": "c", "centre": "p", "radius": "length:50"}],
+            "circles": [{"key": "c", "centre": "p", "radius": "length:q0:320000"}],
             "constraints": [
                 key2("coincident"),
                 {"kind": "horizontal", "line": "l"},
@@ -191,7 +191,7 @@ pub fn every_shape() -> Value {
         ],
         "hosting": {"host": "wall", "opening": {"sketch": "s", "profile": ["l"]}},
         "types": [
-            {"key": "small", "name": "Small", "values": [{"parameter": "size", "value": "length:50"}]}
+            {"key": "small", "name": "Small", "values": [{"parameter": "size", "value": "length:q0:320000"}]}
         ]
     })
 }

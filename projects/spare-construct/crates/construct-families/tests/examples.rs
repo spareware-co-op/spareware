@@ -49,9 +49,9 @@ fn content_ids_are_pinned() {
     assert_eq!(
         ids,
         [
-            "sha256:a8fecef0ca61e717a38a6e9080f56f259226567e828458fb032579f35a90d930",
-            "sha256:ba13aaf838658b1bbfa9dd4762bb7384ecb5913f6e262645e3ee679e49268791",
-            "sha256:669c419557dc124e5379ea06f75c09359d4da527059ee8df0dfb88cdf0715a54",
+            "sha256:49a6410018b54a2b23fb27833d989d45bd31ef32406827cebabc23f1bd4e631a",
+            "sha256:ba1da76367be9fbcf2a64b19be57a4825d641643f728e4d44544c10b57482aac",
+            "sha256:9e16722a9ae1829c36fc8804d260f27dcf91a3a5b64999d030c9c0c555341dd3",
         ]
     );
 }
@@ -170,7 +170,7 @@ fn a_built_in_type_becomes_a_family_type() {
     assert_eq!(ty.name(), "920 x 2040");
     assert_eq!(ty.category(), DOORS);
     let width = Id::parse("01KAXF3M1Y0D00R5W1NG000001.width").unwrap();
-    assert_eq!(ty.value(&width).unwrap().stored(), "length:920");
+    assert_eq!(ty.value(&width).unwrap().stored(), "length:q0:5888000");
     let swing = Id::parse("01KAXF3M1Y0D00R5W1NG000001.swing").unwrap();
     assert!(ty.has(&swing) && ty.value(&swing).is_none());
     let opening = Id::parse("01KAXF3M1Y0D00R5W1NG000001.opening_width").unwrap();
@@ -196,7 +196,10 @@ fn a_built_in_type_becomes_a_family_type() {
     assert_eq!(record.props["@system.family"], expected);
     // A default the type does not set reads through the definition's default.
     let frame = Id::parse("01KAXF3M1Y0D00R5W1NG000001.frame").unwrap();
-    assert_eq!(params.default_of(&frame).unwrap().stored(), "length:40");
+    assert_eq!(
+        params.default_of(&frame).unwrap().stored(),
+        "length:q0:256000"
+    );
     assert_eq!(
         params.default_of(&Id::parse("01KAXF3M1Y0D00R5W1NG000001.panel_material").unwrap()),
         Some(&Value::from_stored("material:timber-white-oak").unwrap())

@@ -205,7 +205,7 @@ fn a_point_not_at_a_length_is_refused() {
         |kind| matches!(kind, ProblemKind::NotALength { text } if text == "angle:0"),
     );
     let text = edit(DOOR, |v| {
-        v["sketches"][0]["points"][0]["y"] = json!("length:00");
+        v["sketches"][0]["points"][0]["y"] = json!("length:q0:00");
     });
     assert_has(&problems(&text), "/sketches/0/points/0/y", |kind| {
         matches!(kind, ProblemKind::NotALength { .. })
@@ -346,7 +346,8 @@ fn a_type_setting_an_instance_parameter_is_refused() {
 #[test]
 fn a_type_setting_a_worked_out_parameter_or_a_bad_value_is_refused() {
     let text = edit(DOOR, |v| {
-        v["types"][1]["values"][0] = json!({"parameter": "opening_width", "value": "length:900"});
+        v["types"][1]["values"][0] =
+            json!({"parameter": "opening_width", "value": "length:q0:5760000"});
     });
     assert_has(
         &problems(&text),

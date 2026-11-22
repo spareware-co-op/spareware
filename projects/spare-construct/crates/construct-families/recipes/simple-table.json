@@ -13,7 +13,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:1600"
+      "default": "length:q0:10240000"
     },
     {
       "key": "width",
@@ -24,7 +24,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:800"
+      "default": "length:q0:5120000"
     },
     {
       "key": "height",
@@ -35,7 +35,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:740"
+      "default": "length:q0:4736000"
     },
     {
       "key": "top_thickness",
@@ -46,7 +46,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:30"
+      "default": "length:q0:192000"
     },
     {
       "key": "leg",
@@ -57,7 +57,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:60"
+      "default": "length:q0:384000"
     },
     {
       "key": "inset",
@@ -68,7 +68,7 @@
         "holder": "type",
         "choices": []
       },
-      "default": "length:50"
+      "default": "length:q0:320000"
     },
     {
       "key": "wood",
@@ -112,28 +112,28 @@
       "points": [
         {
           "key": "o",
-          "x": "length:0",
-          "y": "length:0"
+          "x": "length:q0:0",
+          "y": "length:q0:0"
         },
         {
           "key": "t1",
-          "x": "length:-800",
-          "y": "length:-400"
+          "x": "length:q0:-5120000",
+          "y": "length:q0:-2560000"
         },
         {
           "key": "t2",
-          "x": "length:800",
-          "y": "length:-400"
+          "x": "length:q0:5120000",
+          "y": "length:q0:-2560000"
         },
         {
           "key": "t3",
-          "x": "length:800",
-          "y": "length:400"
+          "x": "length:q0:5120000",
+          "y": "length:q0:2560000"
         },
         {
           "key": "t4",
-          "x": "length:-800",
-          "y": "length:400"
+          "x": "length:q0:-5120000",
+          "y": "length:q0:2560000"
         }
       ],
       "lines": [
@@ -217,88 +217,88 @@
       "points": [
         {
           "key": "o",
-          "x": "length:0",
-          "y": "length:0"
+          "x": "length:q0:0",
+          "y": "length:q0:0"
         },
         {
           "key": "r1",
-          "x": "length:-750",
-          "y": "length:-350"
+          "x": "length:q0:-4800000",
+          "y": "length:q0:-2240000"
         },
         {
           "key": "r2",
-          "x": "length:750",
-          "y": "length:-350"
+          "x": "length:q0:4800000",
+          "y": "length:q0:-2240000"
         },
         {
           "key": "r3",
-          "x": "length:750",
-          "y": "length:350"
+          "x": "length:q0:4800000",
+          "y": "length:q0:2240000"
         },
         {
           "key": "r4",
-          "x": "length:-750",
-          "y": "length:350"
+          "x": "length:q0:-4800000",
+          "y": "length:q0:2240000"
         },
         {
           "key": "a1",
-          "x": "length:-690",
-          "y": "length:-350"
+          "x": "length:q0:-4416000",
+          "y": "length:q0:-2240000"
         },
         {
           "key": "b1",
-          "x": "length:-690",
-          "y": "length:-290"
+          "x": "length:q0:-4416000",
+          "y": "length:q0:-1856000"
         },
         {
           "key": "c1",
-          "x": "length:-750",
-          "y": "length:-290"
+          "x": "length:q0:-4800000",
+          "y": "length:q0:-1856000"
         },
         {
           "key": "a2",
-          "x": "length:690",
-          "y": "length:-350"
+          "x": "length:q0:4416000",
+          "y": "length:q0:-2240000"
         },
         {
           "key": "b2",
-          "x": "length:690",
-          "y": "length:-290"
+          "x": "length:q0:4416000",
+          "y": "length:q0:-1856000"
         },
         {
           "key": "c2",
-          "x": "length:750",
-          "y": "length:-290"
+          "x": "length:q0:4800000",
+          "y": "length:q0:-1856000"
         },
         {
           "key": "a3",
-          "x": "length:690",
-          "y": "length:350"
+          "x": "length:q0:4416000",
+          "y": "length:q0:2240000"
         },
         {
           "key": "b3",
-          "x": "length:690",
-          "y": "length:290"
+          "x": "length:q0:4416000",
+          "y": "length:q0:1856000"
         },
         {
           "key": "c3",
-          "x": "length:750",
-          "y": "length:290"
+          "x": "length:q0:4800000",
+          "y": "length:q0:1856000"
         },
         {
           "key": "a4",
-          "x": "length:-690",
-          "y": "length:350"
+          "x": "length:q0:-4416000",
+          "y": "length:q0:2240000"
         },
         {
           "key": "b4",
-          "x": "length:-690",
-          "y": "length:290"
+          "x": "length:q0:-4416000",
+          "y": "length:q0:1856000"
         },
         {
           "key": "c4",
-          "x": "length:-750",
-          "y": "length:290"
+          "x": "length:q0:-4800000",
+          "y": "length:q0:1856000"
         }
       ],
       "lines": [
@@ -697,11 +697,11 @@
       "values": [
         {
           "parameter": "length",
-          "value": "length:1200"
+          "value": "length:q0:7680000"
         },
         {
           "parameter": "width",
-          "value": "length:800"
+          "value": "length:q0:5120000"
         }
       ]
     },
@@ -711,11 +711,11 @@
       "values": [
         {
           "parameter": "length",
-          "value": "length:1600"
+          "value": "length:q0:10240000"
         },
         {
           "parameter": "width",
-          "value": "length:800"
+          "value": "length:q0:5120000"
         }
       ]
     },
@@ -725,11 +725,11 @@
       "values": [
         {
           "parameter": "length",
-          "value": "length:2000"
+          "value": "length:q0:12800000"
         },
         {
           "parameter": "width",
-          "value": "length:1000"
+          "value": "length:q0:6400000"
         }
       ]
     }

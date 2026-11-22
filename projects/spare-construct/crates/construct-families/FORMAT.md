@@ -29,7 +29,7 @@ An object with exactly these members, written in this order:
 
 Everything a recipe names is named by a **key**: a lowercase letter, then up to 63 lowercase letters, digits and `_`. Keys are unique within each list (parameters, planes, sketches, steps, symbols, types), and within one sketch its points, lines, arcs and circles share one set. A parameter's key is its name in formulas.
 
-Lengths are never JSON numbers. A **stored** value is construct-params' stored text (`length:820`, `material:glass-plate`, `choice:left`), in its one spelling. A **formula** is construct-formulas' language: `width / 2 - frame`, `45 mm`, `frame_depth / 2`; a bare number is in millimetres.
+Lengths are never JSON numbers. A **stored** value is construct-params' stored text (`length:q0:5248000`, `material:glass-plate`, `choice:left`), in its one spelling. A **formula** is construct-formulas' language: `width / 2 - frame`, `45 mm`, `frame_depth / 2`; a bare number is in millimetres.
 
 ### Coordinates
 

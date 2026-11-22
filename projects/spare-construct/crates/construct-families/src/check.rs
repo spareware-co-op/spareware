@@ -13,7 +13,7 @@ use crate::model::{
 use construct_categories::{CategoryId, CategoryTable};
 use construct_formulas::{Entry, Expr, FormulaError, Quantity, evaluate, parse, value_of};
 use construct_materials::{MaterialId, Materials};
-use construct_params::{Definition, Format, Holder, Kind, ParamError, Unit, Units, Value};
+use construct_params::{Definition, Holder, Kind, ParamError, Value};
 use kit_core::Id;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -295,22 +295,13 @@ fn formula_kind(kind: Kind) -> Option<construct_formulas::Kind> {
     }
 }
 
-/// A value as formula text that reads back to it exactly: a length in millimetres to nine places
-/// (more than the stored unit needs), an angle as a ratio of degrees, numbers as they are.
+/// A value as formula text that reads back to it exactly: a length in exact millimetres (its own
+/// text, whatever its step count), an angle as a ratio of degrees, numbers as they are.
 fn formula_text(def: &Definition, value: &Value) -> Option<String> {
     match value {
-        Value::Length(_) => {
-            let mut units = Units::metric();
-            units
-                .set(
-                    Kind::Length,
-                    Format {
-                        unit: Unit::Millimetre,
-                        places: 9,
-                    },
-                )
-                .ok()?;
-            def.format(value, &units).ok()
+        Value::Length(length) => {
+            def.check(value).ok()?;
+            Some(length.to_string())
         }
         Value::Angle(angle) => {
             let degrees = angle.degrees();
@@ -1226,7 +1217,7 @@ mod tests {
             Holder::Type,
         )
         .unwrap();
-        let value = Value::from_stored("length:820").unwrap();
+        let value = Value::from_stored("length:q0:5248000").unwrap();
         let text = formula_text(&def, &value).unwrap();
         let back = value_of(&text, construct_formulas::Kind::Length, &mut |_| {
             Err(FormulaError {

@@ -110,7 +110,7 @@
       "minLength": 1
     },
     "stored": {
-      "description": "A value in construct-params' stored text, such as `length:820` or `choice:left`.",
+      "description": "A value in construct-params' stored text, such as `length:q0:5248000` or `choice:left`.",
       "type": "string",
       "minLength": 1
     },

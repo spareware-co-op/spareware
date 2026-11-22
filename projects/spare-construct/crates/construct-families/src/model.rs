@@ -108,7 +108,7 @@ pub struct DefinitionRow {
 /// Where a parameter's value comes from when nothing sets it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParameterValue {
-    /// A default, in construct-params' stored text (`length:820`). Types and instances may set
+    /// A default, in construct-params' stored text (`length:q0:5248000`). Types and instances may set
     /// their own value, as its holder allows.
     Default(String),
     /// A formula of other parameters (construct-formulas). Nothing sets it: it is worked out.
