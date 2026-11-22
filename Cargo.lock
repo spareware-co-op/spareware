@@ -769,11 +769,15 @@ dependencies = [
 name = "construct-views"
 version = "0.0.0"
 dependencies = [
- "construct-elements",
+ "construct-categories",
+ "construct-levels",
  "construct-model",
- "engine-draw2d",
- "engine-pdf",
- "engine-text",
+ "construct-params",
+ "construct-phases",
+ "construct-spatial",
+ "construct-styles",
+ "kit-core",
+ "serde_json",
 ]
 
 [[package]]
