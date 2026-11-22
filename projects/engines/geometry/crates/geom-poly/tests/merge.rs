@@ -1355,9 +1355,9 @@ fn the_end_of_a_section_s_curve_is_named_by_its_two_faces_and_then_a_plane_of_it
     // Each face of two tilted solids against the whole of the other: the curve where they meet stops
     // where the face does, off the grid on the face's edge. One edge of the curve ends there, on
     // two faces, and each fin's bound is the other's face, so neither the faces nor the bounds
-    // name the point: the third plane is the lowest other plane through its corners, the face's
-    // own bound along the edge. Where the curve turns, at an edge of the other solid, three faces
-    // meet and name the point.
+    // name the point: the third plane is the face's own bound along the edge, the outline the
+    // curve leaves the face across. Where the curve turns, at an edge of the other solid, three
+    // faces meet and name the point.
     let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
     let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
     let mut polygons = Vec::new();
