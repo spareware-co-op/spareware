@@ -652,6 +652,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-types"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-versions"
 version = "0.0.0"
 dependencies = [
