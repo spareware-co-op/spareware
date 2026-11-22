@@ -86,13 +86,13 @@ pub struct Bounds {
     rows: Vec<Row>,
 }
 
-/// The sum of `terms`, saturating: a sum that saturates is past any limit.
-fn total_of(terms: &[Spent]) -> Steps {
-    Steps(
-        terms
-            .iter()
-            .fold(0_u64, |sum, term| sum.saturating_add(term.bound.0)),
-    )
+/// The sum of `terms`, or none past the largest word: such a sum is past any limit, the largest
+/// word's too (#1170).
+fn total_of(terms: &[Spent]) -> Option<Steps> {
+    terms
+        .iter()
+        .try_fold(0_u64, |sum, term| sum.checked_add(term.bound.0))
+        .map(Steps)
 }
 
 /// What `record`'s output carries on from: its own operands.
@@ -224,64 +224,91 @@ impl Bounds {
         let astray = |entity: NameId| {
             OpError::new(op.clone(), BoundDetail::OwnTermAstray).with_entities([entity])
         };
+        // Each of the three checks meets its entities in name order, so the first fault it finds
+        // is its first; the refusal is the first of those in name order, and of two on one entity
+        // the earlier check's (#1171).
         let repeat = own.iter().zip(own.iter().skip(1)).find(|(a, b)| a.0 == b.0);
-        if let Some(((entity, _), _)) = repeat {
-            return Err(astray(*entity));
-        }
+        let mut refusal = repeat.map(|((entity, _), _)| (*entity, astray(*entity)));
         let mut rows = Vec::with_capacity(self.rows.len().saturating_add(own.len()));
         for record in history.records() {
-            let at = own.binary_search_by_key(&record.output, |t| t.0);
-            let added = at.ok().and_then(|at| own.get(at)).map(|t| t.1);
-            let mut terms: Vec<Spent> = Vec::new();
-            for operand in operands(record) {
-                terms.extend_from_slice(self.terms(*operand));
+            if refusal.as_ref().is_some_and(|(at, _)| *at <= record.output) {
+                break;
             }
-            if let Some(bound) = added {
-                if record.origin == Origin::Unchanged {
-                    return Err(astray(record.output));
+            match self.row_after(op, record, &own, limits) {
+                Ok(Some(row)) => rows.push(row),
+                Ok(None) => {}
+                Err(error) => {
+                    refusal = Some((record.output, error));
+                    break;
                 }
-                if bound > limits.own {
-                    let detail = BoundDetail::OverStep {
-                        own: bound,
-                        limit: limits.own,
-                        step: self.step,
-                    };
-                    return Err(OpError::new(op.clone(), detail).with_entities([record.output]));
-                }
-                terms.push(Spent {
-                    step: op.clone(),
-                    bound,
-                });
             }
-            let total = total_of(&terms);
-            if total > limits.total {
-                let detail = BoundDetail::OverCeiling {
-                    needed: total,
-                    ceiling: limits.total,
+        }
+        let stray = own
+            .iter()
+            .find(|(entity, _)| history.origin(*entity).is_none());
+        if let Some((entity, _)) = stray
+            && refusal.as_ref().is_none_or(|(at, _)| entity < at)
+        {
+            refusal = Some((*entity, astray(*entity)));
+        }
+        match refusal {
+            Some((_, error)) => Err(error),
+            None => Ok(Bounds {
+                step: self.step,
+                rows,
+            }),
+        }
+    }
+
+    /// The row of `record`'s output after `op`, with its term in the sorted `own`, which names it
+    /// at most once; none if it has no term.
+    fn row_after(
+        &self,
+        op: &OpPath,
+        record: &Record,
+        own: &[(NameId, Steps)],
+        limits: Limits,
+    ) -> Result<Option<Row>, OpError> {
+        let at = own.binary_search_by_key(&record.output, |t| t.0);
+        let added = at.ok().and_then(|at| own.get(at)).map(|t| t.1);
+        let mut terms: Vec<Spent> = Vec::new();
+        for operand in operands(record) {
+            terms.extend_from_slice(self.terms(*operand));
+        }
+        if let Some(bound) = added {
+            if record.origin == Origin::Unchanged {
+                return Err(OpError::new(op.clone(), BoundDetail::OwnTermAstray)
+                    .with_entities([record.output]));
+            }
+            if bound > limits.own {
+                let detail = BoundDetail::OverStep {
+                    own: bound,
+                    limit: limits.own,
                     step: self.step,
                 };
-                let words = format!("{detail}: {}", named(&terms));
-                return Err(OpError::new(op.clone(), detail)
-                    .with_entities([record.output])
-                    .with_message(words));
+                return Err(OpError::new(op.clone(), detail).with_entities([record.output]));
             }
-            if !terms.is_empty() {
-                rows.push(Row {
-                    entity: record.output,
-                    total,
-                    terms,
-                });
-            }
+            terms.push(Spent {
+                step: op.clone(),
+                bound,
+            });
         }
-        if let Some((entity, _)) = own
-            .iter()
-            .find(|(entity, _)| history.origin(*entity).is_none())
-        {
-            return Err(astray(*entity));
-        }
-        Ok(Bounds {
-            step: self.step,
-            rows,
-        })
+        let sum = total_of(&terms);
+        let Some(total) = sum.filter(|total| *total <= limits.total) else {
+            let detail = BoundDetail::OverCeiling {
+                needed: sum.unwrap_or(Steps(u64::MAX)),
+                ceiling: limits.total,
+                step: self.step,
+            };
+            let words = format!("{detail}: {}", named(&terms));
+            return Err(OpError::new(op.clone(), detail)
+                .with_entities([record.output])
+                .with_message(words));
+        };
+        Ok((!terms.is_empty()).then_some(Row {
+            entity: record.output,
+            total,
+            terms,
+        }))
     }
 }
