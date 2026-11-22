@@ -59,7 +59,6 @@
     reason = "the names are the formulas': p, q, r, a, b, c and d the coefficients, g the function, t a parameter, m a member of a family"
 )]
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use geom_num::interval::Interval;
@@ -181,8 +180,9 @@ pub enum Scalar {
 
 /// Where g′ is zero: families of critical points, or undecided.
 enum Critical {
-    /// Every critical point lies in one of these: (enclosure of c, whether it repeats every 2).
-    Families(Vec<(Interval, bool)>),
+    /// Every critical point lies in one of these: (enclosure of c, whether it repeats every 2). No
+    /// kind has more than three, and a fixed list of them takes no allocation.
+    Families([Option<(Interval, bool)>; 3]),
     /// The enclosures leave the closed form undecided.
     Undecided,
 }
@@ -428,10 +428,10 @@ impl Scalar {
             Scalar::Wave { q, a, b, .. } => wave_critical(q, a, b, meter),
             Scalar::Quadratic { q, r, .. } => {
                 if is_zero(r) {
-                    Ok(Critical::Families(Vec::new()))
+                    Ok(Critical::Families([None; 3]))
                 } else if excludes_zero(r) {
                     let t = tight::div(q.neg(), tight::mul(point(2.0)?, r)?)?;
-                    Ok(Critical::Families(vec![(t, false)]))
+                    Ok(Critical::Families([Some((t, false)), None, None]))
                 } else {
                     Ok(Critical::Undecided)
                 }
@@ -440,7 +440,7 @@ impl Scalar {
                 let s = tight::add(a, b)?;
                 if is_zero(s) || (is_zero(a) && is_zero(b)) {
                     // a·e^{−t} (or zero): monotone.
-                    return Ok(Critical::Families(Vec::new()));
+                    return Ok(Critical::Families([None; 3]));
                 }
                 if !excludes_zero(s) {
                     return Ok(Critical::Undecided);
@@ -448,24 +448,24 @@ impl Scalar {
                 // tanh t = −b/a, so e^{2t} = (a − b)/(a + b).
                 let z = tight::div(tight::sub(a, b)?, s)?;
                 if z.hi() <= 0.0 {
-                    Ok(Critical::Families(Vec::new()))
+                    Ok(Critical::Families([None; 3]))
                 } else if z.lo() > 0.0 {
                     let t = tight::mul(z.ln()?, point(0.5)?)?;
-                    Ok(Critical::Families(vec![(t, false)]))
+                    Ok(Critical::Families([Some((t, false)), None, None]))
                 } else {
                     Ok(Critical::Undecided)
                 }
             }
             Scalar::Involute { a, b, .. } => {
                 if is_zero(a) && is_zero(b) {
-                    return Ok(Critical::Families(Vec::new()));
+                    return Ok(Critical::Families([None; 3]));
                 }
                 // g′ = π²·t·R·cos(π(t − φ)).
                 let phi = tight::add(phase(a, b, meter)?, point(0.5)?)?;
-                Ok(Critical::Families(vec![
-                    (point(0.0)?, false),
-                    (phi, true),
-                    (tight::add(phi, one)?, true),
+                Ok(Critical::Families([
+                    Some((point(0.0)?, false)),
+                    Some((phi, true)),
+                    Some((tight::add(phi, one)?, true)),
                 ]))
             }
             // With no t in its coefficients it is a wave: p + a·cos πt + b·sin πt.
@@ -487,14 +487,15 @@ fn wave_critical(
     let one = point(1.0)?;
     if is_zero(a) && is_zero(b) {
         // p + q·t: monotone.
-        return Ok(Critical::Families(Vec::new()));
+        return Ok(Critical::Families([None; 3]));
     }
     let phi = phase(a, b, meter)?;
     if is_zero(q) {
         // Maxima at φ + 2m, minima at φ + 1 + 2m.
-        return Ok(Critical::Families(vec![
-            (phi, true),
-            (tight::add(phi, one)?, true),
+        return Ok(Critical::Families([
+            Some((phi, true)),
+            Some((tight::add(phi, one)?, true)),
+            None,
         ]));
     }
     let r = tight::norm(&[a, b])?;
@@ -505,7 +506,7 @@ fn wave_critical(
     let rho = tight::div(q, tight::mul(form::pi()?, r)?)?;
     if rho.lo() >= 1.0 || rho.hi() <= -1.0 {
         // g′ keeps the sign of q, zero at most at isolated points: monotone.
-        return Ok(Critical::Families(Vec::new()));
+        return Ok(Critical::Families([None; 3]));
     }
     // Where ρ's enclosure reaches ±1, ρ² reaches 1 and 1 − ρ² reaches 0: undecided.
     let cos2 = tight::sub(one, tight::square(rho)?)?;
@@ -514,9 +515,10 @@ fn wave_critical(
     }
     // ψ = asin ρ / π, in [−½, ½]: the angle whose sine is ρ and cosine √(1 − ρ²).
     let psi = tight::div(angle(rho, tight::sqrt(cos2)?, meter)?, form::pi()?)?;
-    Ok(Critical::Families(vec![
-        (tight::add(phi, psi)?, true),
-        (tight::sub(tight::add(phi, one)?, psi)?, true),
+    Ok(Critical::Families([
+        Some((tight::add(phi, psi)?, true)),
+        Some((tight::sub(tight::add(phi, one)?, psi)?, true)),
+        None,
     ]))
 }
 
@@ -560,19 +562,22 @@ fn last_within(base: Interval, t1: f64) -> Result<Option<f64>, CurveError> {
     Ok(None)
 }
 
-/// The members of a family to evaluate, clipped to the span (module documentation), or `None` if
-/// they cannot be placed: a family as wide as half a period (coefficients enclosing the origin).
-/// The bases are phases within [−2, 3] and the span is inside ±2⁵⁰ ([`extent`]), so 2m is exact.
+/// `out` hulled with g over the members of a family, each clipped to the span (module
+/// documentation), or `None` if they cannot be placed: a family as wide as half a period
+/// (coefficients enclosing the origin). Each member is evaluated as it is placed, so no list of
+/// them is made. The bases are phases within [−2, 3] and the span is inside ±2⁵⁰ ([`extent`]), so
+/// 2m is exact.
 fn members(
+    g: &Scalar,
     (base, periodic): (Interval, bool),
     (t0, t1): (f64, f64),
-) -> Result<Option<Vec<Interval>>, CurveError> {
+    mut out: Interval,
+) -> Result<Option<Interval>, CurveError> {
     if !periodic {
-        return Ok(Some(if base.hi() >= t0 && base.lo() <= t1 {
-            vec![clip(base, (t0, t1))?]
-        } else {
-            Vec::new()
-        }));
+        if base.hi() >= t0 && base.lo() <= t1 {
+            out = hull(out, g.over(clip(base, (t0, t1))?)?)?;
+        }
+        return Ok(Some(out));
     }
     if base.hi() - base.lo() >= 1.0 {
         return Ok(None);
@@ -580,11 +585,10 @@ fn members(
     let (Some(first), Some(last)) = (first_reaching(base, t0)?, last_within(base, t1)?) else {
         return Ok(None);
     };
-    let mut out = Vec::with_capacity(4);
     let mut previous = f64::NEG_INFINITY;
     for m in [first, first + 1.0, last - 1.0, last] {
         if first <= m && m <= last && m > previous {
-            out.push(clip(member(base, m)?, (t0, t1))?);
+            out = hull(out, g.over(clip(member(base, m)?, (t0, t1))?)?)?;
             previous = m;
         }
     }
@@ -690,13 +694,14 @@ pub fn extent(
         return pieces(g, (t0, t1), meter);
     };
     let mut out = hull(g.over(point(t0)?)?, g.over(point(t1)?)?)?;
-    for family in families {
-        let Some(list) = members(family, (t0, t1))? else {
+    for &family in &families {
+        let Some(family) = family else {
+            continue;
+        };
+        let Some(hulled) = members(g, family, (t0, t1), out)? else {
             return pieces(g, (t0, t1), meter);
         };
-        for e in list {
-            out = hull(out, g.over(e)?)?;
-        }
+        out = hulled;
     }
     Ok(out)
 }

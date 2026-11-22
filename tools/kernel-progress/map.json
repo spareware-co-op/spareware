@@ -100,6 +100,12 @@
       "G149": {"class": "Exact", "from": "architecture/30-build-order.json, G149: plane slices and an exact hull"},
       "G150": {"class": "Exact", "from": "architecture/30-build-order.json, G150: exact hulls of pairwise sums, exact against a rational oracle"},
       "G153": {"class": "Exact", "from": "architecture/30-build-order.json, G153: exact constrained Delaunay triangulation"},
+      "G163": {"classes": ["Exact", "Certified"], "from": "architecture/12-intersections.md, 12.5: overlap by identity \"is Exact\", and \"Arc crossing points involve a square root, so they are Certified\""},
+      "G164": {"classes": ["Exact", "Certified"], "from": "architecture/12-intersections.md, 12.6: \"A line with a plane gives an exact implicit point\", and outside the budget \"the result is Certified\""},
+      "G165": {"classes": ["Exact", "Certified"], "from": "architecture/12-intersections.md, 12.7: \"A result is Exact when it is rational, as described in 12.2, and Certified otherwise\""},
+      "G166": {"class": "Certified", "from": "architecture/12-intersections.md, 12.7, as built (G166): \"Each point is an enclosure of a point exactly on both surfaces\", and 12.2: Certified for \"every algebraic point\""},
+      "G167": {"classes": ["Exact", "Certified"], "from": "architecture/12-intersections.md, 12.7's table: \"Exact where the profile is lines\", \"Exact where the crossing is rational\", and Certified otherwise"},
+      "G170": {"class": "Certified", "from": "architecture/12-intersections.md, 12.7's table: the general paths of 12.8 are \"Certified\"; architecture/30-build-order.json, G170: certified marching"},
       "G300": {"class": "Certified", "from": "architecture/30-build-order.json, G300: results Certified(eps)"}
     }
   },

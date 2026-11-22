@@ -20,6 +20,11 @@
 # the others, and fails unless the certificate has t terms and it proved exactly those. Shards 1
 # to n, each green, prove every term of the one certificate; their theorems are its bound under
 # the terms the others proved.
+# A term too costly for one job is cut into pieces: `// hol-light-cut t: d` has term t checked as
+# 2^d pieces, its box halved d times as HOL Light's own search would first halve it, named t.1 to
+# t.2^d on the shard lines (fptaylor_cut.hl, which this script puts into FPTaylor's checker). A
+# shard with pieces of t proves its pieces, assumes the others, and proves t from them, so every
+# piece in some green shard proves t; the check below holds it to exactly its pieces.
 # A shard can start from a saved state of HOL Light instead of loading it (about an hour on a
 # runner): FPTAYLOR_STATE_OUT=<dir> with one problem loads HOL Light, its multivariate analysis and
 # the inequality verifier with that problem's Taylor tables, as a shard's session does, saves the
@@ -30,6 +35,18 @@
 # with the shard's terms, and the certificate's check. The saved state holds no theorem the check
 # relies on: every term the shard names is still proved after the restore. Both runs work in one
 # fixed folder, so that the paths the saved process holds are the shard's.
+# A cut term's pieces are one function on different boxes, and the verifier builds the function's
+# Taylor theorems before it checks any box (for line_cone's term 38, longer than a piece takes).
+# FPTAYLOR_CUT_STATE_OUT=<dir>, with FPTAYLOR_STATE, its sha256 and FPTAYLOR_CERTIFICATES, restores
+# the loaded state, loads the checker, has the verifier build the Taylor theorems of each term the
+# problem cuts (fptaylor_cache.hl keeps them; fptaylor_cut.hl's cut_setup), proving no term and no
+# piece, and saves the process again, to <dir>/hol-light-state.tar, printing its sha256. A shard
+# with pieces restores that state as it would the first, and proves its pieces as before: what the
+# state adds is the function's theorems, which HOL Light's kernel proved in the saving run.
+# A restored HOL Light is known by its output alone, never by `dmtcp_restart`'s process: DMTCP
+# restores a process whose parent was process 1 when it was saved (HOL Light's is, when this
+# script is its container's first process) in a process of its own, and `dmtcp_restart` ends at
+# once. A saving run that gives up shows the end of HOL Light's output and of DMTCP's log.
 # Usage: fptaylor.sh <problem.fpt>...  (geom-gen writes the problems: generated/fptaylor-*.fpt)
 #
 # OCaml 4.11: FPTaylor saves certificates as marshalled `Num` values, and HOL Light uses the Num
@@ -50,15 +67,20 @@ out=${FPTAYLOR_OUT:-}
 certificates=${FPTAYLOR_CERTIFICATES:-}
 shard=${FPTAYLOR_SHARD:-}
 state_out=${FPTAYLOR_STATE_OUT:-}
+cut_state_out=${FPTAYLOR_CUT_STATE_OUT:-}
 state=${FPTAYLOR_STATE:-}
 state_sha256=${FPTAYLOR_STATE_SHA256:-}
 shards=1
 if [ -n "$state_out" ]; then
-  [ $# -eq 1 ] && [ -z "$out$certificates$shard$state" ] ||
+  [ $# -eq 1 ] && [ -z "$out$certificates$shard$state$cut_state_out" ] ||
     { echo "FPTAYLOR_STATE_OUT saves the state for one problem, and does nothing else"; exit 1; }
 fi
+if [ -n "$cut_state_out" ]; then
+  [ $# -eq 1 ] && [ -n "$certificates" ] && [ -n "$state" ] && [ -z "$out$shard" ] ||
+    { echo "FPTAYLOR_CUT_STATE_OUT builds one problem's cut terms from FPTAYLOR_STATE and FPTAYLOR_CERTIFICATES"; exit 1; }
+fi
 if [ -n "$state" ]; then
-  [ -n "$shard" ] && [[ $state_sha256 =~ ^[0-9a-f]{64}$ ]] ||
+  [ -n "$shard$cut_state_out" ] && [[ $state_sha256 =~ ^[0-9a-f]{64}$ ]] ||
     { echo "FPTAYLOR_STATE is for a shard, with the FPTAYLOR_STATE_SHA256 its making job printed"; exit 1; }
 fi
 # A saved state holds its folder's paths, so the run that saves it and the shards that restore it
@@ -70,8 +92,13 @@ if [ -n "$state_out$state" ]; then
 else
   work=$(mktemp -d)
 fi
-# The terms this run proves, as an OCaml list; empty for every term.
+# What this run proves, for the session: every term (no shard), or the terms the shard proves
+# whole, as an OCaml list, and each term it proves pieces of, as `(term, depth, [pieces]); `. The
+# run that saves a cut state proves nothing: it names each cut term with no pieces (shard_setup).
+shard_whole=true
+shard_setup=false
 shard_terms=
+shard_cuts=
 if [ -n "$shard" ]; then
   [ $# -eq 1 ] && [ -n "$certificates" ] && [ -z "$out" ] ||
     { echo "a shard checks one problem's certificate from FPTAYLOR_CERTIFICATES"; exit 1; }
@@ -80,10 +107,41 @@ if [ -n "$shard" ]; then
     { echo "$1: no shard $shard of '$shards'"; exit 1; }
   shard_count=$(sed -n 's|^// hol-light-terms: ||p' "$1")
   shard_list=$(sed -n "s|^// hol-light-shard $shard: ||p" "$1")
-  numbers='^[1-9][0-9]*( [1-9][0-9]*)*$'
+  numbers='^[1-9][0-9]*(\.[1-9][0-9]*)?( [1-9][0-9]*(\.[1-9][0-9]*)?)*$'
   [[ $shard_count =~ ^[1-9][0-9]*$ && $shard_list =~ $numbers ]] ||
     { echo "$1: no terms for shard $shard"; exit 1; }
-  shard_terms=${shard_list// /; }
+  shard_whole=false
+  # The terms proved whole, and the pieces (t.p), each followed by a space.
+  whole=$(tr ' ' '\n' <<<"$shard_list" | grep -v '\.' | tr '\n' ' ' || true)
+  pieces=$(tr ' ' '\n' <<<"$shard_list" | grep '\.' | tr '\n' ' ' || true)
+  shard_terms=$(echo $whole | sed 's/ /; /g')
+  # The shard assumes every term it does not prove whole, less each it proves from its pieces,
+  # and the pieces of those it does not prove.
+  assume=$((shard_count - $(wc -w <<<"$whole")))
+  joins=
+  while read -r t d; do
+    own=$(tr ' ' '\n' <<<"$pieces" | sed -n "s/^$t\.//p" | tr '\n' ' ')
+    for p in $own; do
+      [ "$p" -le $((1 << d)) ] || { echo "$1: no piece $t.$p of $((1 << d))"; exit 1; }
+    done
+    if [ -n "$own" ]; then
+      shard_cuts+="($t, $d, [$(echo $own | sed 's/ /; /g')]); "
+      assume=$((assume - 1 + (1 << d) - $(wc -w <<<"$own")))
+      joins+="$t "
+    fi
+  done < <(sed -n 's|^// hol-light-cut \([1-9][0-9]*\): \([1-9][0-9]*\)$|\1 \2|p' "$1")
+  for p in $pieces; do
+    grep -q "^// hol-light-cut ${p%%.*}: " "$1" || { echo "$1: piece $p of a term not cut"; exit 1; }
+  done
+elif [ -n "$cut_state_out" ]; then
+  shard_whole=false
+  shard_setup=true
+  cut_terms=
+  while read -r t d; do
+    shard_cuts+="($t, $d, []); "
+    cut_terms+="$t "
+  done < <(sed -n 's|^// hol-light-cut \([1-9][0-9]*\): \([1-9][0-9]*\)$|\1 \2|p' "$1")
+  [ -n "$cut_terms" ] || { echo "$1: no term cut into pieces"; exit 1; }
 elif [ -n "$certificates" ]; then
   echo "FPTAYLOR_CERTIFICATES is for a shard"; exit 1
 fi
@@ -117,13 +175,29 @@ done
 sed -i "s/^let max_dim = 8;;$/let max_dim = $most;;/" "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 grep -n '^let max_dim' "$work/hol-light/Formal_ineqs/taylor/m_taylor.hl"
 
+# The verifier builds a function's Taylor theorems on each call, which for a large term takes
+# longer than checking a piece of its box; fptaylor_cache.hl has it build them once a function,
+# so a cut term's pieces share them.
+verifier="$work/hol-light/Formal_ineqs/verifier/m_verifier_main.hl"
+sed -i 's/^let mk_verification_functions =$/let mk_verification_functions_uncached =/' "$verifier"
+awk -v f="$here/fptaylor_cache.hl" \
+  '/^\(\* Normalizes a verification result \*\)$/ { while ((getline l < f) > 0) print l } { print }' \
+  "$verifier" >"$verifier.new"
+mv "$verifier.new" "$verifier"
+[ "$(grep -c '^let mk_verification_functions_uncached =$' "$verifier")" = 1 ] &&
+  [ "$(grep -c '^let mk_verification_functions =$' "$verifier")" = 1 ] ||
+  { echo "$verifier: no mk_verification_functions to remember"; exit 1; }
+
 # FPTaylor's checker proves each term's inequality in turn (formal/build_tform2.hl,
-# prove_opt_approx). Here it proves those of this shard, the terms its line names, naming each,
-# and assumes the others, so the theorem it ends with holds under them; with no shard (an empty
-# list) it proves every term, as written.
+# prove_opt_approx). Here each goes through shard_prove (fptaylor_cut.hl, put in after
+# prove_bound_cond): proved whole, naming each, when this shard names it or there is no shard;
+# proved from its pieces when this shard names some of them; assumed otherwise, so the theorem
+# the loop ends with holds under the terms and pieces assumed.
 checker="$work/FPTaylor/formal/build_tform2.hl"
-sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1(if shard_terms = [] \|\| List.mem !counter shard_terms then (let th = prove_bound_cond pp tm in report (sprintf "Proved: %d/%d" !counter total_bounds); th) else ASSUME tm)) bound_conds in|' "$checker"
-[ "$(grep -c 'List.mem !counter shard_terms then' "$checker")" = 1 ] ||
+sed -i 's|^\(\s*\)prove_bound_cond pp tm) bound_conds in$|\1shard_prove pp !counter total_bounds tm) bound_conds in|' "$checker"
+sed -i "/^  with _ -> error \"prove_bound_cond\" \[tm\] \[\];;\$/r $here/fptaylor_cut.hl" "$checker"
+[ "$(grep -c 'shard_prove pp !counter total_bounds tm) bound_conds in' "$checker")" = 1 ] &&
+  [ "$(grep -c '^let shard_prove ' "$checker")" = 1 ] ||
   { echo "$checker: no term loop to shard"; exit 1; }
 
 # The first part of the HOL Light session, the same for every problem with as many variables: load
@@ -164,6 +238,50 @@ cpu_flags() {
   done
 }
 
+# A saving run that gives up says why and shows the end of what HOL Light printed, where DMTCP's
+# programs write their errors too, and of the DMTCP coordinator's log where there is one, so that
+# the job's log names the cause.
+stopped() {
+  local log
+  echo "$1"
+  for log in "$work/hol.log" "$work/coordinator.log"; do
+    [ ! -f "$log" ] || { echo "the end of $(basename "$log"):"; tail -n 40 "$log" | cut -c 1-1000; }
+  done
+  exit 1
+}
+
+# Saves the HOL Light process, which runs under the DMTCP coordinator whose port is in $work/port
+# and reads the pipe open as descriptor 3, with $work/manifest, to <dir>/hol-light-state.tar, and
+# prints the file's sha256. `hol_ends` is a process that ends when HOL Light does.
+save_state() {
+  local port images
+  port=$(cat "$work/port")
+  # v4.2.0's coordinator starts the checkpoint `-bc` asks for but does not wait for it (its log:
+  # "unhandled user command; (cmd = b)"), so, as HOL Light's make-checkpoint.sh does, the state is
+  # taken as written once the coordinator has written its restart script, which it does after
+  # every image; only then is HOL Light stopped.
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
+  for _ in $(seq 360); do
+    [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
+    kill -0 "$hol_ends" 2>/dev/null || break
+    sleep 5
+  done
+  [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
+    stopped "DMTCP wrote no restart script: the state was not saved"
+  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
+  exec 3>&-
+  wait "$hol_ends" || true
+  wait
+  images=("$work"/checkpoint/ckpt_*.dmtcp)
+  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || stopped "DMTCP saved no single image"
+  mv "${images[0]}" "$work/hol.dmtcp"
+  cat "$work/manifest"
+  echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
+  tar -C "$work" -cf "$1/hol-light-state.tar" hol.dmtcp dmtcp manifest
+  ls -l "$1/hol-light-state.tar"
+  echo "HOL Light state sha256 $(sha256sum <"$1/hol-light-state.tar" | cut -d' ' -f1)"
+}
+
 if [ -n "$state_out" ]; then
   echo "::group::Build HOL Light and DMTCP"
   make -C "$work/hol-light" >/dev/null
@@ -172,6 +290,11 @@ if [ -n "$state_out" ]; then
     make install >/dev/null)
   echo "::endgroup::"
   load_session >"$work/load.ml"
+  # The load leaves most of OCaml's heap free: on a development machine line_cone's process held
+  # 10.4 GB when it was saved, and 3.95 GB once OCaml had compacted its heap after a restore. So
+  # the heap is compacted before the save, which changes no value: a smaller state to save, hand
+  # on and restore.
+  echo 'Gc.compact ();;' >>"$work/load.ml"
   echo 'print_endline "HOL Light state: loaded";;' >>"$work/load.ml"
   cat "$work/load.ml"
   # HOL Light reads the session from a pipe held open until the state is saved: at the end of its
@@ -183,45 +306,22 @@ if [ -n "$state_out" ]; then
     --port-file "$work/port" --ckptdir "$work/checkpoint" --no-gzip \
     "$work/hol-light/ocaml-hol" -I "$(camlp5 -where)" -safe-string -I "$work/hol-light" \
     <"$work/input" >"$work/hol.log" 2>&1 &
-  hol=$!
+  # `dmtcp_launch` runs HOL Light in its own process, so this one is HOL Light's.
+  hol_ends=$!
   exec 3>"$work/input"
   cat "$work/load.ml" >&3
-  tail -n +1 -f --pid="$hol" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  tail -n +1 -f --pid="$hol_ends" "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
   until grep -q '^\(# \)*HOL Light state: loaded$' "$work/hol.log"; do
-    kill -0 "$hol" 2>/dev/null || { echo "HOL Light stopped before it was loaded"; exit 1; }
+    kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before it was loaded"
     sleep 5
   done
-  port=$(cat "$work/port")
-  # v4.2.0's coordinator starts the checkpoint `-bc` asks for but does not wait for it (its log:
-  # "unhandled user command; (cmd = b)"), so, as HOL Light's make-checkpoint.sh does, the state is
-  # taken as written once the coordinator has written its restart script, which it does after
-  # every image; only then is HOL Light stopped.
-  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" -bc
-  for _ in $(seq 360); do
-    [ ! -e "$work/checkpoint/dmtcp_restart_script.sh" ] || break
-    kill -0 "$hol" 2>/dev/null || break
-    sleep 5
-  done
-  [ -e "$work/checkpoint/dmtcp_restart_script.sh" ] ||
-    { echo "DMTCP wrote no restart script: the state was not saved"; exit 1; }
-  "$work/dmtcp/bin/dmtcp_command" --coord-port "$port" --quit
-  exec 3>&-
-  wait "$hol" || true
-  wait
-  images=("$work"/checkpoint/ckpt_*.dmtcp)
-  [ ${#images[@]} -eq 1 ] && [ -f "${images[0]}" ] || { echo "DMTCP saved no single image"; exit 1; }
-  mv "${images[0]}" "$work/hol.dmtcp"
   {
     echo "hol-light $HOL_LIGHT_COMMIT"
     echo "dmtcp $DMTCP_COMMIT"
     echo "max_dim $most"
     echo "cpu-flags $(cpu_flags)"
   } >"$work/manifest"
-  cat "$work/manifest"
-  echo "saved on: $(sed -n 's/^model name\s*: //p' /proc/cpuinfo | head -n 1)"
-  tar -C "$work" -cf "$state_out/hol-light-state.tar" hol.dmtcp dmtcp manifest
-  ls -l "$state_out/hol-light-state.tar"
-  echo "HOL Light state sha256 $(sha256sum <"$state_out/hol-light-state.tar" | cut -d' ' -f1)"
+  save_state "$state_out"
   exit 0
 fi
 
@@ -301,9 +401,14 @@ fi
 # The rest of the HOL Light session: FPTaylor's checker (FPTaylor's formal/load.hl, with this
 # machine's paths), then each certificate checked against its bound.
 {
-  echo "let shard_terms : int list = [$shard_terms];;"
   echo 'needs "build_tform2.hl";;'
   echo 'needs "tests/utils.hl";;'
+  # What this run proves (fptaylor_cut.hl), set once the checker is loaded: a cut state holds the
+  # checker loaded, and the two lines above then load nothing.
+  echo "Build_tform2.shard_whole := $shard_whole;;"
+  echo "Build_tform2.shard_setup := $shard_setup;;"
+  echo "Build_tform2.shard_terms := [$shard_terms];;"
+  echo "Build_tform2.shard_cuts := [$shard_cuts];;"
   # A shard's theorems hold under the terms it assumed: their conclusions are printed, with how
   # many terms they assume.
   echo 'let print_bound th = if hyp th = [] then print_thm th else (print_term (concl th); Printf.printf "\n(assuming %d terms)" (length (hyp th)));;'
@@ -322,6 +427,45 @@ fi
     echo "(try let th = trans_bound bound_th \`$bound\` in print_bound th; print_newline (); print_endline \"$name: within K\" with Failure _ -> print_endline \"$name: above K\");;"
   done
 } >>"$session"
+
+if [ -n "$cut_state_out" ]; then
+  # The restored HOL Light reads the session from a pipe held open until the state is saved again,
+  # as the run that saved the loaded state does. The coordinator of a restored process writes its
+  # restart script where it runs, so it runs in the folder the image goes to.
+  # `dmtcp_restart`'s process is not HOL Light's and says nothing of it. HOL Light's parent was
+  # process 1 when the loaded state was saved wherever this script is its container's first
+  # process, and DMTCP restores such a process in a grandchild of `dmtcp_restart`, which itself
+  # ends at once with success. (Run 44076902825 failed so: this path watched `dmtcp_restart`,
+  # found it gone within seconds and gave up, with HOL Light restored and running.) So HOL Light
+  # is held as a shard's restore holds it, by its output: it writes into a pipe, and the pipe's
+  # last reader, `hol_ends`, ends when HOL Light does, whichever process DMTCP made it.
+  echo 'print_endline "HOL Light state: cut terms built";;' >>"$session"
+  cat "$session"
+  mkfifo "$work/input"
+  mkdir "$work/checkpoint"
+  : >"$work/hol.log"
+  (cd "$work/checkpoint" && exec "$work/dmtcp/bin/dmtcp_restart" --new-coordinator --coord-port 0 \
+    --port-file "$work/port" --ckptdir "$work/checkpoint" --coord-logfile "$work/coordinator.log" \
+    "$work/hol.dmtcp") <"$work/input" 2>&1 |
+    tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' &
+  hol_ends=$!
+  exec 3>"$work/input"
+  cat "$session" >&3
+  until grep -q '^\(# \)*HOL Light state: cut terms built$' "$work/hol.log"; do
+    kill -0 "$hol_ends" 2>/dev/null || stopped "HOL Light stopped before the cut terms were built"
+    sleep 5
+  done
+  # Each cut term's theorems were built here, and nothing was proved: every term is assumed.
+  built=$(sed -n 's|^\(# \)*Built: \([0-9][0-9]*\)/[0-9]* Taylor theorems in [0-9]* s$|\2|p' "$work/hol.log" | tr '\n' ' ')
+  [ "$built" = "$cut_terms" ] || { echo "built the Taylor theorems of terms '$built', not '$cut_terms'"; exit 1; }
+  ! grep -q '^\(# \)*Proved: ' "$work/hol.log" || { echo "the run that saves a cut state proved a term"; exit 1; }
+  {
+    echo "cpu-flags $(cpu_flags)"
+    echo "cut-terms $cut_terms"
+  } >>"$work/manifest"
+  save_state "$cut_state_out"
+  exit 0
+fi
 cat "$session"
 
 "${hol[@]}" <"$session" | tee "$work/hol.log" | grep --line-buffered -v '^val \|^- : ' || true
@@ -331,23 +475,28 @@ for check in "${checks[@]}"; do
   IFS='|' read -r _ _ _ name _ <<<"$check"
   grep -q "^\(# \)*checked $name " "$work/hol.log" || { echo "HOL Light did not check $name"; exit 1; }
   grep -h "^\(# \)*$name: \(within\|above\) K$" "$work/hol.log" || echo "$name: K not compared"
-  # Every term is proven, or for a shard exactly its own, the rest assumed. The exact problem
-  # is one inequality, and names no terms.
+  # Every term is proven, or for a shard exactly its own whole terms and pieces, each cut term it
+  # has pieces of joined from them, the rest assumed. The exact problem is one inequality, and
+  # names no terms.
   awk -v n="$name" '/^(# )*PROBLEM: / { on = ($NF == n) } on' "$work/hol.log" >"$work/$name.log"
   terms=$(sed -n 's/^\(# \)*Bounds: \([0-9][0-9]*\)$/\2/p' "$work/$name.log")
   [ -n "$terms" ] || terms=0
   proved=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]*$|\2|p' "$work/$name.log" | tr '\n' ' ')
+  proved_pieces=$(sed -n 's|^\(# \)*Proved: \([0-9][0-9]*\)/[0-9]* piece \([0-9][0-9]*\)/[0-9]* in [0-9]* s$|\2.\3|p' "$work/$name.log" | tr '\n' ' ')
+  joined=$(sed -n 's|^\(# \)*Joined: \([0-9][0-9]*\)/[0-9]* from [0-9]* pieces, [0-9]* of them proved here$|\2|p' "$work/$name.log" | tr '\n' ' ')
   if [ -n "$shard" ]; then
     [ "$terms" = "$shard_count" ] ||
       { echo "$name: the certificate has $terms terms, the shards share out $shard_count"; exit 1; }
-    want="$shard_list "
+    want=$whole
   else
     want=$(if [ "$terms" -gt 0 ]; then seq 1 "$terms" | tr '\n' ' '; fi)
+    pieces= joins= assume=0
   fi
   assumed=$(sed -n "s/^\\(# \\)*$name assumed \\([0-9][0-9]*\\) terms$/\\2/p" "$work/$name.log")
-  if [ "$proved" != "$want" ] || [ "$assumed" != "$((terms - $(wc -w <<<"$want")))" ]; then
-    echo "$name: proved terms '$proved' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"
+  if [ "$proved" != "$want" ] || [ "$proved_pieces" != "$pieces" ] || [ "$joined" != "$joins" ] ||
+    [ "$assumed" != "$assume" ]; then
+    echo "$name: proved terms '$proved', pieces '$proved_pieces', joined '$joined' and assumed '$assumed' of $terms, not shard ${shard:-1} of $shards"
     exit 1
   fi
-  [ -z "$shard" ] || echo "$name: shard $shard of $shards proved terms ${want% } of $terms and assumed the other $assumed"
+  [ -z "$shard" ] || echo "$name: shard $shard of $shards proved terms '${want% }' and pieces '${pieces% }' of $terms and assumed the other $assumed"
 done

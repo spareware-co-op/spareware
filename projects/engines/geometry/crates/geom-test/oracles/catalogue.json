@@ -72,13 +72,13 @@
     },
     {
       "id": "smlib-nlib",
-      "what": "SMLib's NLib layer, through solidcore's harness, the routines 32.6 bars stubbed out, never compiled",
+      "what": "SMLib's NLib layer, its own NL_ files alone, the routines 32.6 bars stubbed out, never compiled",
       "licence": "Apache-2.0",
       "run": "out-of-process",
-      "state": "planned",
+      "state": "live",
       "checks": "NURBS evaluation, knot insertion and removal, degree elevation; never fitting, booleans or validity",
-      "source": "chapter 28.10 and decision 32.23: solidcore's harness",
-      "pin": null,
+      "source": "https://github.com/NVIDIA-Omniverse/usd-brep",
+      "pin": "c9c5979f04cea8c38213004d4f04df0dcfb40d05",
       "never_linked": [
         "smlib",
         "smlib-sys"

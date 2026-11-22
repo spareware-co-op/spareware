@@ -43,10 +43,12 @@ use geom_fuzz::orient2d::{
 };
 use geom_fuzz::{
     Harness, arenas, attributes, batch, bodies, booleans, boxtree, cache, cbor, cdt, contract,
-    curve_offsets, curves, encoder, euler, exact, linalg, make, maths, names, naming, nurbs, open,
-    operations, orient2d, p21, planes, predicates, prune, records, references, roots, sequence,
+    crossings, curve_offsets, curves, encoder, euler, exact, general, intersect, level, linalg,
+    make, maths, names, naming, natural, nurbs, open, operations, orient2d, p21, pencils, piercing,
+    planes, predicates, project, prune, quadric, records, reductions, references, roots, sequence,
     solids, surface_offsets, surfaces, transforms, variants, wide,
 };
+
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
 use geom_num::grid::{COORD_MAX, P2};
@@ -57,7 +59,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 38] = [
+const TARGETS: [(&str, Harness); 48] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
@@ -81,8 +83,15 @@ const TARGETS: [(&str, Harness); 38] = [
     ("nurbs", nurbs::harness),
     ("open", open::harness),
     ("operations", operations::harness),
+    ("intersect", intersect::harness),
+    ("natural", natural::harness),
+    ("project", project::harness),
+    ("level", level::harness),
+    ("general", general::harness),
     ("orient2d", orient2d::harness),
     ("p21", p21::harness),
+    ("pencils", pencils::harness),
+    ("piercing", piercing::harness),
     ("planes", planes::harness),
     ("predicates", predicates::harness),
     ("prune", prune::harness),
@@ -94,8 +103,11 @@ const TARGETS: [(&str, Harness); 38] = [
     ("surface_offsets", surface_offsets::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
+    ("quadric", quadric::harness),
+    ("reductions", reductions::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
+    ("crossings", crossings::harness),
 ];
 
 const M: i64 = COORD_MAX;

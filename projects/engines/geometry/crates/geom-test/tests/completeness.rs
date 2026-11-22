@@ -115,8 +115,9 @@ fn the_real_tree_passes_and_lists_everything() {
         .collect();
     names.sort_unstable();
     assert_eq!(names, expected);
-    // Fifteen curve kinds and eleven surface kinds (chapter 7).
-    assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
+    // Sixteen curve kinds (G175's intersection curve the sixteenth) and eleven surface kinds
+    // (chapter 7).
+    assert_eq!(map["kinds"].as_array().unwrap().len(), 27);
 }
 
 #[cfg_attr(

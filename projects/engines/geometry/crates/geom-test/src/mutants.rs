@@ -993,7 +993,12 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// geom-linalg 0.8 (40866622419 and 40964349843), geom-math 22.1 (40866622419; 10.6 over the whole
 /// crate in 40964349843), geom-num 33.2 (40866610641; 25.9 over the whole crate in 40964349843),
 /// geom-nurbs 6.2 (40964349843), geom-pool 6.0 (40859780064), geom-run 11.7 (40964349843),
-/// geom-surface 2.4 (40964349843).
+/// geom-surface 2.4 (40964349843). The diff run of the Phase 5 train (43568172161, 6,738 mutants
+/// run, every outcome counted) found geom-curve 2.5, geom-format 5.7, geom-intersect 55.5,
+/// geom-num 34.5, geom-nurbs 6.7 and geom-surface 12.3, and each row rose to twice that where it
+/// was less. geom-intersect's slices differ eightfold, from 14 s a mutant to 117.8 s over one
+/// shard's, whose job reached the 345 minutes unfinished, as did another's; its row is 160, so that
+/// slice takes 0.74 of its planned time, the margin below.
 ///
 /// A run narrowed to some files is not a measure of its crates while cargo-mutants 27.1.0 is
 /// pinned. Its struct-field strays (see [`UNFILTERED_GENRE`]) put other crates' tests into a
@@ -1006,16 +1011,18 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// stretch of one crate. In those runs, the slowest stretch of each crate as long as a shard of it
 /// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run
 /// 40859780064. In 40964349843 it was 0.57, and the longest shard job took 135 minutes.
-pub const SECONDS_PER_MUTANT: [(&str, u64); 9] = [
+pub const SECONDS_PER_MUTANT: [(&str, u64); 11] = [
     ("geom-bvh", 4),
-    ("geom-curve", 3),
+    ("geom-curve", 5),
+    ("geom-format", 12),
+    ("geom-intersect", 160),
     ("geom-linalg", 2),
     ("geom-math", 45),
-    ("geom-num", 67),
-    ("geom-nurbs", 13),
+    ("geom-num", 69),
+    ("geom-nurbs", 14),
     ("geom-pool", 13),
     ("geom-run", 24),
-    ("geom-surface", 5),
+    ("geom-surface", 25),
 ];
 
 /// The seconds a mutant of `package` is planned at: its row of [`SECONDS_PER_MUTANT`], or, for a

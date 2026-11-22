@@ -1087,6 +1087,7 @@ pub fn curve_name<const D: usize>(k: &CurveKind<D>) -> &'static str {
         CurveKind::Offset(_) => "Offset",
         CurveKind::OnSurface(_) => "OnSurface",
         CurveKind::Transition(_) => "Transition",
+        CurveKind::Intersection(_) => "Intersection",
     }
 }
 
