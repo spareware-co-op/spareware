@@ -81,13 +81,17 @@ cells; `booleans` (`src/booleans.rs`, G130 to G133, G137 to G139 and G144, with 
 `rebuild.rs`), `geom-bool`'s boolean pipeline on small solids agrees with counted cells: every
 selection of one arrangement, a half-space and a wire kept inside the boxes, rooms and their
 leaks, batch cuts and a re-cut from the last cut's cache, and a local step on its full and fast
-paths, every result passing the full checker and the second checker, which agree; and `commits`
+paths, every result passing the full checker and the second checker, which agree; `commits`
 (`src/commits.rs`, G142), `geom-poly`'s plane commit holds its edge exactly, stays in budget,
 proves a deviation that the exact distance at no corner of its extent beats (decided in big
 integers), maps a class exactly under the grid's 48 signed permutations, refuses a flip exactly
 when the ideal sign is certain and differs, and refuses NaN, infinite and degenerate input by
-type. `make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and
-the pieces no target reaches yet (G143 and G145, which the boolean pipeline does not call), are in
+type; and `bounds` (`src/bounds.rs`, G143), `geom-op`'s error bounds per entity give each output
+the sum of its own operands' terms and its own (held to a sum in big integers), keep an unchanged
+entity's terms, agree on the largest bound and its class, keep the larger on a join, refuse a sum
+past the ceiling without wrapping and refuse each fault as its kind, in any order of reporting.
+`make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and the
+piece no target reaches yet (G145, which the boolean pipeline does not call), are in
 `projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.

@@ -66,8 +66,11 @@
 //! `geom-bool`'s boolean pipeline on small solids agrees with counted cells, every result passing
 //! both checkers, and [`commits`] (G142), `geom-poly`'s plane commit holds its edge exactly, stays
 //! in budget, proves a deviation no corner beats in exact integers, maps a class exactly under the
-//! grid's symmetries and refuses a flip exactly when the ideal sign is certain and differs. For the
-//! Gate 3 code no other target reaches (30.1's standard bar), [`euler`]
+//! grid's symmetries and refuses a flip exactly when the ideal sign is certain and differs, and
+//! [`bounds`] (G143), `geom-op`'s error bounds per entity sum each output's own operands' terms and
+//! its own, in big integers, keep the larger on a join and refuse a sum past the ceiling without
+//! wrapping, in any order of reporting. For the Gate 3 code no other target reaches (30.1's
+//! standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
 //! order to their laws (G87); [`references`], reference resolution gives 20.4's outcome on any
@@ -241,6 +244,7 @@ pub mod attributes;
 pub mod batch;
 pub mod bodies;
 pub mod booleans;
+pub mod bounds;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;

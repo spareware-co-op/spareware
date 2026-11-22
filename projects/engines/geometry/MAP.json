@@ -5993,6 +5993,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_OPS`] operations twice over, on [`NAMES`] entities, plus two joins each way; an entity holds at most [`NAMES`] to the power [`MAX_OPS`] terms, when every output merges every entity in every operation. At most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a grid step, up to [`MAX_OPS`] operations on up to [`NAMES`] entities, another grid step and the state to join. Each operation has a path (one of four, so steps repeat), a record for each entity it keeps (passed through unchanged, modified, generated, split or merged, from any of the entities, or none), up to [`MAX_TERMS`] own terms (zero, small, exactly the step's limit, one past it, any word, or within four of the largest word, on any entity, an output or not, once or twice) and its limits (the ladder's, small ones, the largest own term with a ceiling near the largest word, or any). Its records and terms come in an order of the bytes' choosing. [`check`] runs the operations from [`Bounds::new`] through [`Bounds::after`], each again with its records and terms reported in the other order, then joins the last state with an earlier one ([`Bounds::join`]) and with no bounds on the other grid step, and holds each to the laws below. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/bounds.rs",
+          "guarantees": [
+            "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: - an output whose bound is not the sum of its own operands' terms and its own term, summed here from scratch in big integers, or whose terms are not those terms, oldest first; an entity with a bound that is not an output, or a stored entity with no term; - an unchanged entity whose terms are not the ones it had; - a largest bound that is not the largest entity's, or a class that is not Exact for none and Certified with the largest otherwise, or bounds on another grid step; - a refusal of an operation with no fault, or no refusal of one with a fault: an own term past the step's limit, a sum past the ceiling (in big integers, so a sum that would wrap is past it), an own term on an unchanged output, on no output, or twice on one entity; - a refusal that names an entity with no fault, or a fault it does not have, or not the first at fault in name order when every fault is of one kind (named twice, an output at fault, a term on no output); a needed bound that is not the true sum, or the largest word for a sum past it; a message that does not name each step that spent; a kind or remedy not its fault's (`ExactnessNotAccepted` offering the larger bound, `Internal` asking for a report); - an answer that changes with the order the records and terms are reported in; - a join whose entity has not the larger of its two bounds and that operand's terms (the first operand's on a tie), whose two orders differ in a bound, or that is not refused `MixedSteps` (`InvalidInput`) on two grid steps; a join with nothing that changes anything."
+          ],
+          "job": "Fuzz target: `geom-op`'s error bounds per entity (G143), on any bytes, give each output the sum of its own operands' terms and its own, keep an unchanged entity's terms, agree on the largest bound and its class, keep the larger on a join, refuse a sum past the ceiling without wrapping, and answer the same in any order of reporting.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 13.2's one rule and decision 32.21 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`, `projects/engines/geometry/architecture/32-decisions.md`), held to a model written from scratch: each entity's terms in a sorted map, an output's terms its operands' (20.3's origins read again here) followed by its own, and every sum in `num-bigint`'s integers, sharing no code with the module."
+          },
+          "path": "geom_fuzz::bounds",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
