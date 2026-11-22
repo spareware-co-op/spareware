@@ -69,7 +69,9 @@
 //! grid's symmetries and refuses a flip exactly when the ideal sign is certain and differs, and
 //! [`bounds`] (G143), `geom-op`'s error bounds per entity sum each output's own operands' terms and
 //! its own, in big integers, keep the larger on a join and refuse a sum past the ceiling without
-//! wrapping, in any order of reporting. For the Gate 3 code no other target reaches (30.1's
+//! wrapping, in any order of reporting, and [`placed`] (G145), `geom-topo`'s placed instances
+//! answer every query on an exact placement as on its materialisation, under all 48 signed
+//! permutations, and a general one through its re-validated body. For the Gate 3 code no other target reaches (30.1's
 //! standard bar), [`euler`]
 //! holds `geom-topo`'s Euler operators to their table of counts, Euler's formula and their
 //! refusals (G81); [`naming`] holds names, the name graph, the duplicate detector and the ordinal
@@ -269,6 +271,7 @@ pub mod orient2d;
 pub mod p21;
 pub mod pencils;
 pub mod piercing;
+pub mod placed;
 pub mod planes;
 pub mod predicates;
 pub mod project;

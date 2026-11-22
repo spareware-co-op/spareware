@@ -89,9 +89,13 @@ when the ideal sign is certain and differs, and refuses NaN, infinite and degene
 type; and `bounds` (`src/bounds.rs`, G143), `geom-op`'s error bounds per entity give each output
 the sum of its own operands' terms and its own (held to a sum in big integers), keep an unchanged
 entity's terms, agree on the largest bound and its class, keep the larger on a join, refuse a sum
-past the ceiling without wrapping and refuse each fault as its kind, in any order of reporting.
-`make` and `sequence` reach G134's checker groups. Which lines of each piece they reach, and the
-piece no target reaches yet (G145, which the boolean pipeline does not call), are in
+past the ceiling without wrapping and refuse each fault as its kind, in any order of reporting;
+and `placed` (`src/placed.rs`, G145), `geom-topo`'s placed instances answer every query on an
+exact placement, under each of the grid's 48 signed permutations with a shift, as the same query on
+its materialisation (on-face points included), carry a point across and back, answer `General` for
+a general placement and give its re-validated body's answers through `geom_make::placed::Library`,
+keep the record within 88 bytes and refuse an index past the table. `make` and `sequence` reach
+G134's checker groups. Which lines of each piece they reach are in
 `projects/kit/notes/G156-piece-map.md`. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.

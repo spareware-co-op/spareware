@@ -6668,6 +6668,28 @@
           "target": "lib"
         },
         {
+          "cost": "one body of at most six corners built, two materialisations and one more in the [`Library`], each checked in full; the four queries on each placement, the side of a shell at [`MAX_POINTS`] points twice over on each; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a flat body (a box, or a prism on a triangle, a slanted quadrilateral or a pentagon), at a corner on chapter 28.5's hard cases (small, on a coarse sub-grid, at either edge of the grid) with sides of one step, a few or many; one of the 48 signed axis permutations with a shift (small, any, or at the grid's edge) and a packed permutation byte of any value; up to [`MAX_POINTS`] probe points, each coordinate drawn about a box (one step outside it, on its faces, one step in, its middle, or anywhere across it) with a shell that is the body's or past it; and a general transform (a rotation about an axis by quarter turns, a Pythagorean direction or any other direction, the exact permutation itself, or a scale), the class the caller accepts, and an index into a side table of one row or past it. [`check`] places the body exactly and generally, materialises each placement with `geom_make::placed::materialise`, asks every query of `geom_topo::placed` and of a [`Library`], each probe point resolved about the box of the frame it is asked in, and holds each answer to the laws below. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/placed.rs",
+          "guarantees": [
+            "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: - a record of more than 88 bytes, by its size or by its logical size; - a permutation that does not pack to one of the 48 and unpack to itself, a packed byte below 48 that is refused, or one past 47 that is not refused as `Permutation`; - an exact placement refused while its materialisation is made, or made while its materialisation is refused, or refused other than for range; an exact box that is not the materialised body's box; - on an exact placement, faces, a face's area, six times the volume or the side of a shell at a probe point that is not the same query's answer on the materialised body, through `geom_topo::placed` or through a [`Library`], a refusal where the materialised body answers other than for a point the placement sends out of range, or a [`Library`] that makes a body for an exact placement; - a point the placement does not send where its transform does, or that does not come back where it started, either way across; - a general placement that answers anything but `General` in `geom_topo::placed`; a [`Library`] answer that is not the same query on the body `materialise` makes, or a refusal that is not `materialise`'s; a body made more than once, or kept when it is refused; a general box that does not hold its materialised body's box; - a scale that is not refused as `NotRigid`; an index past the table that is not refused as `NoSuchPlacement` with its index, or whose refusal keeps a body."
+          ],
+          "job": "Fuzz target: `geom-topo`'s placed instances (G145), on any bytes, answer every query on an exact placement as the same query on its materialisation, carry a point across a placement and back, answer `General` for a general placement and give its re-validated body's answers through `geom_make::placed::Library`, keep the record within 88 bytes and refuse an index past the table.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "chapter 23.9's rule that an instance is defined as its materialisation and 19.12's placements (`projects/engines/geometry/architecture/23-performance.md`, `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), held by asking each query on the body `geom_make::placed::materialise` makes and comparing; the transform's own moves of a point are the oracle for crossing. On-face probe points are the hard case of 28.5 for the side of a shell, so they are drawn often."
+          },
+          "path": "geom_fuzz::placed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`PLANES`]³ predicates on each case; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into [`PLANES`] planes through grid points on the hard cases of chapter 28.5: small, on coarse sub-grids, one step off them, at the grid's edge. [`check`] holds the planes to the laws below, which hold whatever the planes are. [`harness`] is `decode` then `check`.",
           "family": [],
