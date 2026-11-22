@@ -654,6 +654,7 @@ dependencies = [
  "construct-clash",
  "construct-elements",
  "construct-families",
+ "construct-formulas",
  "construct-interop",
  "construct-model",
  "construct-params",
@@ -779,6 +780,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-formulas",
  "construct-model",
  "construct-params",
  "construct-types",

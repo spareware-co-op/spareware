@@ -273,6 +273,70 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
     ));
 }
 
+/// A parameter given by a formula is defined through the log, worked out on the server wherever
+/// it is read, and shown with its formula; a value for it is refused with the server's reason.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_formula_parameter_is_worked_out_on_the_server_and_shown_with_its_formula() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    for (definition, default) in [
+        (
+            json!({ "id": "P-sill", "name": "Sill", "kind": "length", "holder": "instance",
+                    "choices": [] }),
+            json!("150"),
+        ),
+        (
+            json!({ "id": "P-head", "name": "Head", "kind": "length", "holder": "instance",
+                    "choices": [], "formula": "Sill+2100mm" }),
+            Value::Null,
+        ),
+    ] {
+        let id = definition["id"].clone();
+        let define = json!({ "definition": definition });
+        s.edit(&anna, &project, &model, "parameter.define", define)
+            .await
+            .unwrap();
+        let bind = json!({ "parameter": id, "categories": [300], "default": default });
+        s.edit(&anna, &project, &model, "parameter.bind", bind)
+            .await
+            .unwrap();
+    }
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let head = view.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.from, "formula");
+    assert_eq!(head.formula.as_deref(), Some("Sill + 2100 mm"));
+    assert_eq!(head.shown.as_deref(), Some("2250 mm"));
+
+    let set = json!({ "element": "D-101", "parameter": "P-head", "value": "2000" });
+    let Err(Refusal::Refused(reason)) = s.edit(&anna, &project, &model, "element.param", set).await
+    else {
+        panic!("the formula gives the head height");
+    };
+    assert!(
+        reason.starts_with("Head is given by its formula"),
+        "{reason}"
+    );
+
+    // The sill follows into the head; the project's parameters list the formula.
+    let set = json!({ "element": "D-101", "parameter": "P-sill", "value": "0.9 m" });
+    s.edit(&anna, &project, &model, "element.param", set)
+        .await
+        .unwrap();
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let head = view.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.shown.as_deref(), Some("3000 mm"));
+    let table = s.project_parameters(&anna, &project, &model).await.unwrap();
+    let head = table.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.formula.as_deref(), Some("Sill + 2100 mm"));
+}
+
 /// What the page needs to manage parameters and types is read from the server, so the page holds
 /// no list of its own: the kinds, the categories, the project's parameters with where each is
 /// bound, and the types with their values in units. Only someone who can read the model reads it.

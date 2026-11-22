@@ -905,6 +905,7 @@
     'element.param': 'set a value of',
     'element.type': 'changed the type of',
     'parameter.define': 'defined a parameter',
+    'parameter.change': 'changed a parameter',
     'parameter.bind': 'bound a parameter to categories',
     'type.create': 'made a type',
     'type.rename': 'renamed a type',
@@ -962,6 +963,7 @@
     'element.param': 'a value',
     'element.type': 'a change of type',
     'parameter.define': 'defining a parameter',
+    'parameter.change': 'changing a parameter',
     'parameter.bind': 'binding a parameter',
     'type.create': 'making a type',
     'type.rename': 'renaming a type',
@@ -1018,7 +1020,13 @@
   // and parameter values"). A change is the `element.param` edit, through the same log as a move:
   // the server parses the typed text with its units, and a refusal comes back as its reason.
 
-  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set', formula: 'From its formula' };
+
+  /** A value its formula gives: shown, never typed, with the formula and, when it gives none, the server's reason. */
+  function worked(p) {
+    const reason = p.reason ? `<div class="note bad small" data-reason="${esc(p.id)}">${esc(p.reason)}</div>` : '';
+    return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
+  }
   function hasShape(record) {
     return record.kind !== 'type' && record.kind !== 'parameters';
   }
@@ -1046,8 +1054,9 @@
     let html = '<span class="lbl">Parameters</span><table class="props">';
     for (const p of view.parameters) {
       const value = p.shown ?? '';
-      const field =
-        p.holder === 'instance' && editable
+      const field = p.formula
+        ? worked(p)
+        : p.holder === 'instance' && editable
           ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" data-key="param:${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
           : esc(value);
       html += prow(esc(p.name), field + problem(`param:${p.id}`), FROM[p.from] || '');
@@ -1081,7 +1090,7 @@
 
   // --- Types and parameters ---
   // A person manages the project's parameters and the types of a category in two dialogs, and changes
-  // an element's type in the properties palette. Everything is one of the nine commands through the
+  // an element's type in the properties palette. Everything is one of the ten commands through the
   // same log (construct-model's FORMAT.md, "Categories, types and parameter values"): the page sends
   // what was typed and shows what the server answers. The lists (kinds, categories, parameters, types)
   // are read from the server, values are shown as the server formats them, and a refusal is shown in
@@ -1111,7 +1120,7 @@
     }
   }
 
-  /** Sends one of the nine commands, and remembers where to show the reason if it is turned back. */
+  /** Sends one of the ten commands, and remembers where to show the reason if it is turned back. */
   function manage(cmd, args, where, after) {
     if (!C.model || C.readOnly) {
       say('Open a model in your team’s WIP to change it.');
@@ -1278,7 +1287,9 @@
           const settable = p.holder === 'type' && editable;
           const control = p.holder !== 'type'
             ? 'Each element has its own'
-            : settable
+            : p.formula
+              ? worked(p)
+              : settable
               ? `<input class="inp" data-chg="stacktypeset" data-type="${esc(type.id)}" data-a="${esc(p.id)}" data-key="type-value:${esc(type.id)}:${esc(p.id)}" value="${esc(p.shown ?? '')}" aria-label="${label}: ${esc(p.name)}">`
               : esc(p.shown ?? '');
           html += prow(esc(p.name), control, FROM[p.from] || '');
@@ -1329,6 +1340,11 @@
       const standard = p.default === null ? '' : ` Default: ${esc(p.default)}.`;
       const choices = p.choices.length ? ` Choices: ${esc(p.choices.map((c) => c.label).join(', '))}.` : '';
       html += `<p class="small">${where}${standard}${choices}</p>`;
+      if (p.formula) html += `<p class="small" data-formula="${esc(p.id)}">Formula: ${esc(p.formula)}</p>`;
+      if (C.catalog.kinds.find((k) => k.tag === p.kind)?.takes_formula) {
+        html += `<label class="fld"><span>Formula of other parameters, such as Width - 2 * Frame (empty: a person sets the value)</span><input class="inp" data-enter="stackformula" data-a="${esc(p.id)}" data-key="formula:${esc(p.id)}" value="${esc(p.formula ?? '')}" aria-label="Formula for ${esc(p.name)}"${off}></label>`;
+        html += problem(`formula:${p.id}`);
+      }
       html += `<details data-open="${esc(p.id)}"${m.open.has(p.id) ? ' open' : ''}><summary>Bind to categories</summary><div class="stack-checks">`;
       for (const c of categories) {
         const on = bound.has(c.id);
@@ -1347,6 +1363,7 @@
     html += `<label class="fld"><span>Who holds the value</span><select class="inp" data-draft data-key="def-holder"${off}>${holders.join('')}</select></label>`;
     html += `<label class="fld"><span>Choices, for a choice only, separated by commas</span><input class="inp" data-draft data-key="def-choices"${off}></label>`;
     html += `<label class="fld"><span>Default (optional)</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-default"${off}></label>`;
+    html += `<label class="fld"><span>Formula of other parameters (optional), such as Width - 2 * Frame</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-formula"${off}></label>`;
     html += '</div>';
     html += '<div class="lbl">Bind it to (optional)</div><div class="stack-checks">';
     for (const c of categories) {
@@ -1387,6 +1404,12 @@
     manage('parameter.bind', { parameter: id, categories: chosen(section), default: text === '' ? null : text }, `bind:${id}`);
   };
 
+  // A formula goes to the server as typed: the server checks it and stores it in its one spelling.
+  ACT.stackformula = (input) => {
+    const text = input.value.trim();
+    manage('parameter.change', { parameter: input.dataset.a, formula: text === '' ? null : text }, `formula:${input.dataset.a}`);
+  };
+
   ACT.stackdefine = () => {
     const id = newId('P');
     const labels = manageField('def-choices').value.split(',').map((text) => text.trim()).filter(Boolean);
@@ -1397,6 +1420,8 @@
       holder: manageField('def-holder').value,
       choices: labels.map((label) => ({ key: label, label })),
     };
+    const formula = manageField('def-formula').value.trim();
+    if (formula !== '') definition.formula = formula;
     const categories = $$('#stack-manage [data-key^="def-cat:"]:checked').map((box) => Number(box.value));
     const text = manageField('def-default').value;
     const clear = () => {

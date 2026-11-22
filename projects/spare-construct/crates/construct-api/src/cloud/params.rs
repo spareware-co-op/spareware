@@ -12,7 +12,8 @@
 //!
 //! | Command | Arguments | What it writes |
 //! | --- | --- | --- |
-//! | `parameter.define` | `definition`: a construct-params definition row | The parameter table |
+//! | `parameter.define` | `definition`: a construct-params definition row, which may carry a `formula` | The parameter table |
+//! | `parameter.change` | `parameter`, and `name` (a new name), `formula` (text, or `null` to take it away) or both | The table: the parameter, and every formula that names it when it is renamed; when a formula is taken away, every holder of the parameter |
 //! | `parameter.bind` | `parameter`, `categories` (top-level category IDs), `default` (typed text or null) | The table, and each type of those categories, which then lists the parameter |
 //! | `type.create` | `type`, `name`, `category` | A type record listing every parameter bound to its category |
 //! | `type.rename` | `type`, `name` | The type |
@@ -26,28 +27,49 @@
 //! A command acts on one document's parameters: its table is one record (see
 //! [`construct_regen::parameters`]).
 //!
+//! Formulas (construct-formulas, CON-A2-F2-P2). A definition may carry a formula over other
+//! parameters by name; it is stored in its one spelling, and its value is worked out whenever it
+//! is read ([`construct_regen::parameters::Context::worked`]), never stored, as every derived
+//! value is (construct-model's FORMAT.md). The commands keep these rules:
+//! - Every formula passes construct-formulas' `check` over every parameter of the table, and over
+//!   the parameters of each category it is bound to, which are what it can see on an element: a
+//!   name it uses that is not there, kinds that do not fit, a loop (named) and a type
+//!   parameter's formula that uses an instance's are refused, in construct-formulas' words.
+//! - A parameter with a formula takes no value from a person (`element.param`, `type.set`) and no
+//!   default (`parameter.bind`). Taking its formula away (`parameter.change`) leaves each holder
+//!   with the value the formula last gave it, as its own value, or none where it gave none.
+//! - Renaming a parameter rewrites every formula that names it in the same command, in the one
+//!   spelling (construct-formulas' `rename`); a new name a formula can't use is refused, naming
+//!   the formulas that use the parameter.
+//! - A command that would make a formula fail where it worked (or waited on a value) before, such
+//!   as a value that divides by zero, is refused with the reason (`element.param`,
+//!   `element.type`, `type.set`, `parameter.bind`, `parameter.change`). A failure other commands
+//!   leave (a new element or type, an undo) is shown where the value is read, not refused.
+//!
 //! Later, with their places: unbinding and removing a parameter (construct-params' `unbind`
 //! counts the values that go); clearing a value back to its default (construct-types' `clear`);
 //! schedules (job 7.9) read the values through
-//! [`construct_regen::parameters::Context::value_of`]; formulas (job 2.5). Undo and redo of
-//! these commands are [`crate::cloud::undo`].
+//! [`construct_regen::parameters::Context::value_of`]. Undo and redo of these commands are
+//! [`crate::cloud::undo`].
 
 use crate::cloud::elements::write_record;
-use construct_categories::CategoryId;
+use construct_categories::{CategoryId, CategoryTable};
+use construct_formulas::FormulaError;
 use construct_model::element::Element;
-use construct_params::{Definition, Holder, ProjectParams, Value};
+use construct_params::{Definition, Holder, Kind, ProjectError, ProjectParams, Value};
 use construct_regen::parameters::{self as records, CATEGORY_KEY, Context, TYPE_KEY, TYPE_KIND};
 use construct_types::{ElementType, TypeError, Types};
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
 use kit_store::{Place, StoreError, Txn, read_row, to_row};
 use kit_sync::{Applied, Context as Ordered, Outcome, claims};
-use serde::Deserialize;
-use std::collections::BTreeMap;
+use serde::{Deserialize, Deserializer};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Every command here.
-pub const COMMANDS: [&str; 9] = [
+pub const COMMANDS: [&str; 10] = [
     "parameter.define",
+    "parameter.change",
     "parameter.bind",
     "type.create",
     "type.rename",
@@ -81,6 +103,22 @@ struct Args {
     value: Option<String>,
     #[serde(default, with = "kit_ops::id::option")]
     element: Option<Id>,
+    /// `parameter.change`'s formula: absent keeps it, `null` takes it away.
+    #[serde(default, deserialize_with = "present")]
+    formula: Option<NewFormula>,
+}
+
+/// The formula `parameter.change` is given.
+enum NewFormula {
+    /// `null`: the formula is taken away.
+    Away,
+    /// A formula, as typed.
+    Text(String),
+}
+
+/// A formula field that is there, even as `null`.
+fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<NewFormula>, D::Error> {
+    Option::<String>::deserialize(d).map(|f| Some(f.map_or(NewFormula::Away, NewFormula::Text)))
 }
 
 /// The part of a person's row a claim needs.
@@ -173,6 +211,57 @@ impl<T: Txn> Run<'_, T> {
         records::read_element(self.txn, self.project, self.document, id).await
     }
 
+    /// Every element of the document with a shape, with its hash and its type, and every type,
+    /// read against `context`: what holds parameter values.
+    async fn holders(&mut self, context: &Context) -> Result<Result<Holders, String>, StoreError> {
+        let all = records::read_document(self.txn, self.project, self.document).await?;
+        let type_records: Vec<Element> = all
+            .values()
+            .filter(|(_, record)| record.kind == TYPE_KIND)
+            .map(|(_, record)| record.clone())
+            .collect();
+        let types = match Types::from_records(&type_records, &context.params, &context.categories) {
+            Ok(types) => types,
+            Err(e) => return Ok(Err(why(e))),
+        };
+        let elements = all
+            .into_values()
+            .filter(|(_, record)| records::has_shape(record))
+            .map(|(hash, record)| {
+                let ty = records::type_of(&record).and_then(|id| types.get(&id).cloned());
+                (hash, record, ty)
+            })
+            .collect();
+        Ok(Ok(Holders { elements, types }))
+    }
+
+    /// Writes records whose pieces this person claims, as one command's whole result: another
+    /// person's claim on any of them refuses it all.
+    async fn put_all(&mut self, writes: Vec<(Element, Option<Id>)>) -> Answer {
+        let mut held = Vec::with_capacity(writes.len());
+        for (record, _) in &writes {
+            match self.claim(&record.id).await? {
+                Ok(claim) => held.push(claim),
+                Err(refusal) => return Ok(Err(refusal)),
+            }
+        }
+        let mut changes = Vec::with_capacity(writes.len());
+        for (record, before) in &writes {
+            changes.push(self.put(record, before.clone()).await?);
+        }
+        let mut taken = Vec::with_capacity(held.len());
+        for ((record, _), claim) in writes.iter().zip(held) {
+            taken.push(
+                claims::take(self.txn, self.project, self.document, &record.id, claim).await?,
+            );
+        }
+        Ok(Ok(Applied {
+            changes,
+            claims: taken,
+            ..Applied::default()
+        }))
+    }
+
     /// Every type of the document, read against `context`, as construct-types keeps them.
     async fn types(&mut self, context: &Context) -> Result<Result<Types, String>, StoreError> {
         let all = records::read_document(self.txn, self.project, self.document).await?;
@@ -198,6 +287,186 @@ fn typed(context: &Context, id: &Id, text: &str) -> Result<(Definition, Value), 
     let def = definition(context, id)?;
     let value = def.parse(text, &context.units).map_err(why)?;
     Ok((def.clone(), value))
+}
+
+/// What holds parameter values in a document: each element with a shape (its hash, its record
+/// and its type) in ID order, and each type.
+struct Holders {
+    elements: Vec<(Id, Element, Option<ElementType>)>,
+    types: Types,
+}
+
+/// One holder's formula results, by parameter ID, and its name for a refusal.
+type Worked = (String, BTreeMap<Id, Result<Value, FormulaError>>);
+
+/// An element's formula results. One whose values can't be read has none here: reading it
+/// refuses elsewhere.
+fn element_worked(context: &Context, element: &Element, ty: Option<&ElementType>) -> Worked {
+    (
+        element.name.clone(),
+        context.worked(element, ty).unwrap_or_default(),
+    )
+}
+
+/// A type's formula results.
+fn type_worked(context: &Context, ty: &ElementType) -> Worked {
+    (
+        ty.name().to_owned(),
+        context.type_worked(ty).unwrap_or_default(),
+    )
+}
+
+/// Whether a formula's result is one it can't work out, rather than one waiting on a value (or on
+/// another formula that can't, which is named where it fails).
+fn fails(result: Option<&Result<Value, FormulaError>>) -> bool {
+    matches!(result, Some(Err(e)) if e.code != "Depends")
+}
+
+/// Refuses a command that leaves a formula failing that did not fail before it: `before` and
+/// `after` are the same holders, in the same order, either side of it. The reason is
+/// construct-formulas', with the parameter and the holder named.
+fn no_new_failure(context: &Context, before: &[Worked], after: &[Worked]) -> Result<(), String> {
+    for ((_, was), (holder, now)) in before.iter().zip(after) {
+        for (id, result) in now {
+            if let Err(e) = result
+                && fails(Some(result))
+                && !fails(was.get(id))
+            {
+                let name = context
+                    .table
+                    .definition(id)
+                    .map_or_else(|| id.to_string(), |def| def.name().to_owned());
+                return Err(format!(
+                    "{name} can't be worked out for {holder}: {}",
+                    e.message
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a value for a parameter that has a formula: the formula gives it.
+fn settable(context: &Context, id: &Id) -> Result<(), String> {
+    match context.table.definition(id) {
+        Some(def) => match def.formula() {
+            Some(formula) => Err(format!(
+                "{} is given by its formula, {formula}; take the formula away to set it.",
+                def.name()
+            )),
+            None => Ok(()),
+        },
+        None => Ok(()),
+    }
+}
+
+/// construct-formulas' type check of every formula in `table`: over every parameter, and over
+/// the parameters of each category, which are what a formula on an element of it can see. The
+/// first refusal, `named`'s own first, in construct-formulas' words with the parameter (when it
+/// is another) and the category (when only there) named.
+fn formulas_checked(
+    table: &ProjectParams,
+    categories: &CategoryTable,
+    named: &Id,
+) -> Result<(), String> {
+    let name = |id: &Id| {
+        table
+            .definition(id)
+            .map_or_else(|| id.to_string(), |def| def.name().to_owned())
+    };
+    let first = |refusals: BTreeMap<Id, FormulaError>| {
+        let mut ordered: Vec<(Id, FormulaError)> = refusals.into_iter().collect();
+        ordered.sort_by_key(|(id, _)| id != named);
+        ordered.into_iter().next()
+    };
+    let all: Vec<Definition> = table.definitions().into_iter().cloned().collect();
+    if let Some((id, e)) = first(construct_formulas::check(&all)) {
+        return Err(if &id == named {
+            e.message
+        } else {
+            format!("{}: {}", name(&id), e.message)
+        });
+    }
+    for category in categories.all() {
+        if category.parent.is_some() {
+            continue;
+        }
+        let defs: Vec<Definition> = table
+            .parameters_of(categories, category.id)
+            .into_iter()
+            .map(|a| a.definition.clone())
+            .collect();
+        if defs.iter().all(|def| def.formula().is_none()) {
+            continue;
+        }
+        if let Some((id, e)) = first(construct_formulas::check(&defs)) {
+            return Err(if &id == named {
+                format!("On {}: {}", category.name, e.message)
+            } else {
+                format!("On {}, {}: {}", category.name, name(&id), e.message)
+            });
+        }
+    }
+    Ok(())
+}
+
+/// `def` as written when it carries a formula: in its one spelling.
+fn spelled(def: Definition) -> Result<Definition, String> {
+    match def.formula().map(str::to_owned) {
+        None => Ok(def),
+        Some(text) => construct_formulas::define(def, &text).map_err(why),
+    }
+}
+
+/// The parameter `old` under `name`, with no formula: everything else as it was.
+fn plain(old: &Definition, name: &str) -> Result<Definition, String> {
+    let made = if old.kind() == Kind::Choice {
+        Definition::choice(old.id().clone(), name, old.holder(), old.choices().to_vec())
+    } else {
+        Definition::new(old.id().clone(), name, old.kind(), old.holder())
+    };
+    made.map_err(why)
+}
+
+/// `table` with every formula that names parameter `from` naming `to` instead. Refused, naming
+/// the formulas, when `to` can't stand in one of them.
+fn renamed_in_formulas(
+    table: &ProjectParams,
+    changed: &Id,
+    from: &str,
+    to: &str,
+) -> Result<ProjectParams, String> {
+    let mut next = table.clone();
+    let mut refused: Vec<String> = Vec::new();
+    let mut reason = None;
+    for def in table.definitions() {
+        let Some(formula) = def.formula() else {
+            continue;
+        };
+        if def.id() == changed {
+            continue;
+        }
+        match construct_formulas::rename(formula, from, to) {
+            Ok(None) => {}
+            Ok(Some(rewritten)) => {
+                let def = plain(def, def.name())?
+                    .with_formula(&rewritten)
+                    .map_err(why)?;
+                next = next.redefine(def).map_err(why)?;
+            }
+            Err(e) => {
+                refused.push(def.name().to_owned());
+                reason.get_or_insert(e.message);
+            }
+        }
+    }
+    match reason {
+        None => Ok(next),
+        Some(reason) => Err(format!(
+            "{reason} The formulas of {} use {from}.",
+            refused.join(", ")
+        )),
+    }
 }
 
 /// The element's `props` with its parameter entries replaced by `own` (an instance's or an
@@ -261,6 +530,7 @@ pub async fn apply<T: Txn>(
     };
     match edit.cmd.as_str() {
         "parameter.define" => define(&mut run, &document, args).await,
+        "parameter.change" => change(&mut run, &document, args).await,
         "parameter.bind" => bind(&mut run, &document, args).await,
         "type.create" => create_type(&mut run, &document, args).await,
         "type.rename" | "type.duplicate" | "type.set" => {
@@ -292,7 +562,25 @@ async fn define<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> 
     };
     let table = Definition::from_json(&row)
         .map_err(why)
-        .and_then(|def| context.table.add_project_parameter(def).map_err(why));
+        .and_then(spelled)
+        .and_then(|def| {
+            let table = context
+                .table
+                .add_project_parameter(def.clone())
+                .map_err(why)?;
+            // The same parameter again changes nothing; another formula is parameter.change's.
+            if let Some(existing) = context.table.definition(def.id())
+                && existing.formula() != def.formula()
+            {
+                return Err(why(ProjectError::Conflict {
+                    id: def.id().clone(),
+                    name: existing.name().to_owned(),
+                    field: "formula",
+                }));
+            }
+            formulas_checked(&table, &context.categories, def.id())?;
+            Ok(table)
+        });
     let table = match table {
         Ok(table) => table,
         Err(refusal) => return Ok(Err(refusal)),
@@ -313,13 +601,22 @@ async fn bind<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> An
             .definition(&id)
             .ok_or_else(|| why(construct_params::ProjectError::UnknownParameter(id.clone())))?;
         let default = match &args.default {
-            Some(text) => Some(def.parse(text, &context.units).map_err(why)?),
+            Some(text) => {
+                settable(context, &id).map_err(|_| {
+                    format!(
+                        "{} is given by its formula; it takes no default.",
+                        def.name()
+                    )
+                })?;
+                Some(def.parse(text, &context.units).map_err(why)?)
+            }
             None => None,
         };
         let table = context
             .table
             .bind(&context.categories, &id, &targets, def.holder(), default)
             .map_err(why)?;
+        formulas_checked(&table, &context.categories, &id)?;
         Ok::<_, String>((id, targets, table))
     })();
     let (id, targets, table) = match checked {
@@ -330,21 +627,17 @@ async fn bind<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> An
         Ok(write) => write,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    let types = match run.types(context).await? {
-        Ok(types) => types,
+    let holders = match run.holders(context).await? {
+        Ok(holders) => holders,
         Err(refusal) => return Ok(Err(refusal)),
     };
     let after = match Context::new(table) {
         Ok(after) => after,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    let claim = match run.claim(&record.id).await? {
-        Ok(claim) => claim,
-        Err(refusal) => return Ok(Err(refusal)),
-    };
-    let mut changes = vec![run.put(&record, before).await?];
     // Every type of a bound category lists the parameter from now on.
-    for ty in types.iter() {
+    let mut grown_types: BTreeMap<Id, ElementType> = BTreeMap::new();
+    for ty in holders.types.iter() {
         if !targets.contains(&ty.category()) || ty.has(&id) {
             continue;
         }
@@ -352,7 +645,36 @@ async fn bind<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> An
         if let Err(e) = grown.add_parameter(&after.params, &id) {
             return Ok(Err(why(e)));
         }
-        let old = run.element(ty.id()).await?.map(|(hash, _)| hash);
+        grown_types.insert(ty.id().clone(), grown);
+    }
+    // No formula of the categories may fail for the binding, or for its default.
+    let (mut was, mut now) = (Vec::new(), Vec::new());
+    for ty in holders
+        .types
+        .iter()
+        .filter(|ty| targets.contains(&ty.category()))
+    {
+        was.push(type_worked(context, ty));
+        now.push(type_worked(&after, grown_types.get(ty.id()).unwrap_or(ty)));
+    }
+    for (_, record, ty) in &holders.elements {
+        if !Context::category_of_element(record).is_some_and(|c| targets.contains(&c)) {
+            continue;
+        }
+        let grown = ty.as_ref().map(|ty| grown_types.get(ty.id()).unwrap_or(ty));
+        was.push(element_worked(context, record, ty.as_ref()));
+        now.push(element_worked(&after, record, grown));
+    }
+    if let Err(refusal) = no_new_failure(&after, &was, &now) {
+        return Ok(Err(refusal));
+    }
+    let claim = match run.claim(&record.id).await? {
+        Ok(claim) => claim,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let mut changes = vec![run.put(&record, before).await?];
+    for grown in grown_types.values() {
+        let old = run.element(grown.id()).await?.map(|(hash, _)| hash);
         changes.push(run.put(&grown.to_record(run.document), old).await?);
     }
     let claim = claims::take(run.txn, run.project, run.document, &record.id, claim).await?;
@@ -404,9 +726,9 @@ async fn change_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
         Ok(types) => types,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    if types.get(&id).is_none() {
+    let Some(original) = types.get(&id).cloned() else {
         return Ok(Err(why(TypeError::UnknownType(id))));
-    }
+    };
     let changed = match run.edit.cmd.as_str() {
         "type.rename" => need(args.name, "a name")
             .and_then(|name| types.rename(&id, &name).map_err(why))
@@ -428,6 +750,7 @@ async fn change_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
                 let parameter = need(args.parameter, "a parameter")?;
                 let text = need(args.value, "a value")?;
                 let (_, value) = typed(context, &parameter, &text)?;
+                settable(context, &parameter)?;
                 let ty = types
                     .get_mut(&id)
                     .ok_or_else(|| why(TypeError::UnknownType(id.clone())))?;
@@ -443,6 +766,26 @@ async fn change_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
     let Some(ty) = types.get(&changed) else {
         return Ok(Err(why(TypeError::UnknownType(changed))));
     };
+    if run.edit.cmd == "type.set" {
+        // The type's formulas, and those of every element of it, may not fail for the value.
+        let holders = match run.holders(context).await? {
+            Ok(holders) => holders,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        let (mut was, mut now) = (
+            vec![type_worked(context, &original)],
+            vec![type_worked(context, ty)],
+        );
+        for (_, record, _) in &holders.elements {
+            if records::type_of(record).as_ref() == Some(&id) {
+                was.push(element_worked(context, record, Some(&original)));
+                now.push(element_worked(context, record, Some(ty)));
+            }
+        }
+        if let Err(refusal) = no_new_failure(context, &was, &now) {
+            return Ok(Err(refusal));
+        }
+    }
     let record = ty.to_record(run.document);
     let before = run.element(&changed).await?.map(|(hash, _)| hash);
     run.put_claimed(&record, before).await
@@ -542,6 +885,7 @@ async fn set_param<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) 
         let parameter = need(args.parameter, "a parameter")?;
         let text = need(args.value, "a value")?;
         let (def, value) = typed(context, &parameter, &text)?;
+        settable(context, &parameter)?;
         let category = category_of_element(&record)?;
         let own = if let Some(ty) = &ty {
             let mut instance = context.instance(&record, ty)?;
@@ -580,7 +924,15 @@ async fn set_param<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) 
         Ok(props) => props,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    let after = Element { props, ..record };
+    let after = Element {
+        props,
+        ..record.clone()
+    };
+    let was = [element_worked(context, &record, ty.as_ref())];
+    let now = [element_worked(context, &after, ty.as_ref())];
+    if let Err(refusal) = no_new_failure(context, &was, &now) {
+        return Ok(Err(refusal));
+    }
     run.put_claimed(&after, Some(hash)).await
 }
 
@@ -593,8 +945,11 @@ async fn retype<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> 
         Ok(id) => records::read_type(run.txn, run.project, run.document, &id, context).await?,
         Err(refusal) => Err(refusal),
     };
+    let to = match to {
+        Ok(to) => to,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
     let props = (|| {
-        let to = to?;
         let category = records::category_of(&record.recipe).map_err(why)?;
         let own = if let Some(from) = &from {
             let mut instance = context.instance(&record, from)?;
@@ -622,6 +977,118 @@ async fn retype<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> 
         Ok(props) => props,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    let after = Element { props, ..record };
+    let after = Element {
+        props,
+        ..record.clone()
+    };
+    let was = [element_worked(context, &record, from.as_ref())];
+    let now = [element_worked(context, &after, Some(&to))];
+    if let Err(refusal) = no_new_failure(context, &was, &now) {
+        return Ok(Err(refusal));
+    }
     run.put_claimed(&after, Some(hash)).await
+}
+
+/// `parameter.change`: a parameter's new name, its formula given, changed or taken away. Its
+/// kind, holder and choices stay (construct-params' `redefine`), and so does every value stored
+/// under its ID.
+async fn change<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> Answer {
+    let made = (|| {
+        let id = need(args.parameter, "a parameter")?;
+        let old = context
+            .table
+            .definition(&id)
+            .cloned()
+            .ok_or_else(|| why(ProjectError::UnknownParameter(id.clone())))?;
+        if args.name.is_none() && args.formula.is_none() {
+            return Err("This command needs a name or a formula.".to_owned());
+        }
+        let name = args.name.unwrap_or_else(|| old.name().to_owned());
+        let formula = match args.formula {
+            None => old.formula().map(str::to_owned),
+            Some(NewFormula::Away) => None,
+            Some(NewFormula::Text(text)) => Some(text),
+        };
+        let base = plain(&old, &name)?;
+        let def = match &formula {
+            Some(text) => construct_formulas::define(base, text).map_err(why)?,
+            None => base,
+        };
+        let mut table = context.table.redefine(def.clone()).map_err(why)?;
+        if name != old.name() {
+            table = renamed_in_formulas(&table, &id, old.name(), &name)?;
+        }
+        formulas_checked(&table, &context.categories, &id)?;
+        let after = Context::new(table.clone())?;
+        Ok::<_, String>((old, def, table, after))
+    })();
+    let (old, def, table, after) = match made {
+        Ok(made) => made,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let (record, before) = match write_table(run, &table).await? {
+        Ok(write) => write,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let holders = match run.holders(context).await? {
+        Ok(holders) => holders,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let id = def.id().clone();
+    let (holder, bound) = table.binding(&id).unwrap_or((def.holder(), Vec::new()));
+    let bound: BTreeSet<CategoryId> = bound.into_iter().collect();
+    // Taking a formula away leaves each holder the value it last gave, as its own.
+    let taken_away = old.formula().is_some() && def.formula().is_none();
+    let mut writes = vec![(record, before)];
+    let (mut was, mut now) = (Vec::new(), Vec::new());
+    let mut types_after: BTreeMap<Id, ElementType> = BTreeMap::new();
+    for ty in holders
+        .types
+        .iter()
+        .filter(|ty| bound.contains(&ty.category()))
+    {
+        let last = type_worked(context, ty);
+        let mut next = ty.clone();
+        if taken_away && holder == Holder::Type {
+            let kept = if let Some(Ok(value)) = last.1.get(&id) {
+                next.set(&after.params, &id, value.clone())
+            } else {
+                next.clear(&id);
+                Ok(())
+            };
+            if let Err(e) = kept {
+                return Ok(Err(why(e)));
+            }
+            if &next != ty {
+                let old = run.element(ty.id()).await?.map(|(hash, _)| hash);
+                writes.push((next.to_record(run.document), old));
+            }
+        }
+        was.push(last);
+        now.push(type_worked(&after, &next));
+        types_after.insert(ty.id().clone(), next);
+    }
+    for (hash, record, ty) in &holders.elements {
+        if !Context::category_of_element(record).is_some_and(|c| bound.contains(&c)) {
+            continue;
+        }
+        let last = element_worked(context, record, ty.as_ref());
+        let mut next = record.clone();
+        if taken_away && holder == Holder::Instance {
+            match last.1.get(&id) {
+                Some(Ok(value)) => next.props.insert(id.to_string(), value.stored()),
+                _ => next.props.remove(id.as_str()),
+            };
+            if &next != record {
+                writes.push((next.clone(), Some(hash.clone())));
+            }
+        }
+        let ty_after = ty.as_ref().map(|ty| types_after.get(ty.id()).unwrap_or(ty));
+        was.push(last);
+        now.push(element_worked(&after, &next, ty_after));
+    }
+    if let Err(refusal) = no_new_failure(&after, &was, &now) {
+        return Ok(Err(refusal));
+    }
+    run.put_all(writes).await
 }
