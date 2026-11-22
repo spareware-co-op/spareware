@@ -24,10 +24,18 @@ fn id(text: &str) -> Id {
 
 fn every_kind() -> Vec<(Value, &'static str)> {
     vec![
-        (Value::Length(Length::from_mm(2400)), "length:2400"),
-        (Value::Length(Length::from_mm(-150)), "length:-150"),
-        (Value::Area(Area::from_mm2(5_760_000)), "area:5760000"),
-        (Value::Volume(Volume::from_mm3(1)), "volume:1"),
+        (Value::Length(Length::from_mm(2400)), "length:q0:15360000"),
+        (Value::Length(Length::from_mm(-150)), "length:q0:-960000"),
+        (Value::Length(Length::from_steps(80_000)), "length:q0:80000"),
+        (Value::Length(Length::from_steps(1)), "length:q0:1"),
+        (Value::Length(Length::from_steps(0)), "length:q0:0"),
+        (
+            Value::Area(Area::from_mm2(5_760_000)),
+            "area:q0:235929600000000",
+        ),
+        (Value::Area(Area::from_square_steps(1)), "area:q0:1"),
+        (Value::Volume(Volume::from_mm3(1)), "volume:q0:262144000000"),
+        (Value::Volume(Volume::from_cubic_steps(-7)), "volume:q0:-7"),
         (
             Value::Angle(Angle::from_units(405_000_000)),
             "angle:405000000",
@@ -76,6 +84,20 @@ fn other_spellings_are_not_stored_values() {
         "length:1.0",
         "length: 1",
         "Length:1",
+        "length:q0:",
+        "length:q0:+1",
+        "length:q0:01",
+        "length:q0:-0",
+        "length:q0:1.0",
+        "length:q0: 1",
+        "length:q0:9223372036854775808",
+        "length:q1:1",
+        "length:Q0:1",
+        "length:q0:q0:1",
+        "area:q0:-0",
+        "volume:q0:01",
+        // Version 1 millimetres too large to be grid steps.
+        "length:9223372036854775807",
         "metres:1",
         "slope:2/80",
         "slope:1/-40",
@@ -100,6 +122,91 @@ fn other_spellings_are_not_stored_values() {
     ] {
         assert_eq!(Value::from_stored(text), None, "{text}");
     }
+}
+
+#[test]
+fn version_1_whole_millimetres_still_read_exactly_and_write_as_version_2() {
+    // FORMAT.md, version 1: a length, area or volume with no `q0:` is whole millimetres.
+    for (old, value, new) in [
+        (
+            "length:2400",
+            Value::Length(Length::from_mm(2400)),
+            "length:q0:15360000",
+        ),
+        (
+            "length:-150",
+            Value::Length(Length::from_mm(-150)),
+            "length:q0:-960000",
+        ),
+        ("length:0", Value::Length(Length::from_mm(0)), "length:q0:0"),
+        (
+            "area:5760000",
+            Value::Area(Area::from_mm2(5_760_000)),
+            "area:q0:235929600000000",
+        ),
+        (
+            "volume:1",
+            Value::Volume(Volume::from_mm3(1)),
+            "volume:q0:262144000000",
+        ),
+    ] {
+        assert_eq!(Value::from_stored(old), Some(value.clone()), "{old}");
+        assert_eq!(value.stored(), new, "{old}");
+    }
+    // A version 1 number is never read as grid steps, nor a version 2 one as millimetres.
+    assert_ne!(
+        Value::from_stored("length:2400"),
+        Value::from_stored("length:q0:2400")
+    );
+    let height = Definition::new(id("H"), "Height", Kind::Length, Holder::Instance).unwrap();
+    assert_eq!(
+        height.read("length:2100").unwrap(),
+        Value::Length(Length::from_mm(2100))
+    );
+}
+
+#[test]
+fn the_grid_step_is_the_kernels() {
+    // One millimetre in quarter-nanometres is 4,000,000; the kernel's Q0 step is 625 of them.
+    let quarter_nm_per_mm: u64 = 4_000_000;
+    assert_eq!(
+        engine_geometry::value::grid::GridStep::Q0.steps_per(quarter_nm_per_mm),
+        Some(Length::STEPS_PER_MM as u64)
+    );
+    assert_eq!(
+        Area::SQUARE_STEPS_PER_MM2,
+        i128::from(Length::STEPS_PER_MM).pow(2)
+    );
+    assert_eq!(
+        Volume::CUBIC_STEPS_PER_MM3,
+        i128::from(Length::STEPS_PER_MM).pow(3)
+    );
+}
+
+#[test]
+fn a_length_prints_its_exact_millimetres() {
+    const WALL: Length = Length::from_mm(90);
+    assert_eq!(WALL.steps(), 576_000);
+    assert_eq!(Length::from_mm(2400).to_string(), "2400 mm");
+    assert_eq!(Length::from_steps(80_000).to_string(), "12.5 mm");
+    assert_eq!(Length::from_steps(40_832).to_string(), "6.38 mm");
+    assert_eq!(Length::from_steps(-3_520).to_string(), "-0.55 mm");
+    assert_eq!(Length::from_steps(1).to_string(), "0.00015625 mm");
+    assert_eq!(
+        Length::from_steps(i64::MIN).to_string(),
+        "-1441151880758558.72 mm"
+    );
+    assert_eq!(Length::from_mm(2400).whole_mm(), Some(2400));
+    assert_eq!(Length::from_steps(80_000).whole_mm(), None);
+    assert_eq!(Length::checked_from_mm(i64::MAX), None);
+    assert_eq!(
+        Length::checked_from_mm(-1_000_000),
+        Some(Length::from_mm(-1_000_000))
+    );
+    assert_eq!(
+        Length::from_mm(i32::MAX).steps(),
+        i64::from(i32::MAX) * 6_400
+    );
 }
 
 #[test]
@@ -185,7 +292,7 @@ fn values_go_into_props_by_permanent_id_and_back() {
     assert_eq!(props, second.to_props());
     assert_eq!(
         serde_json::to_string(&props).unwrap(),
-        r#"{"A":"yesno:yes","H":"length:2100","M":"text:D01"}"#
+        r#"{"A":"yesno:yes","H":"length:q0:13440000","M":"text:D01"}"#
     );
     assert_eq!(Values::from_props(&defs, &props).unwrap(), first);
     assert_eq!(
@@ -199,7 +306,7 @@ fn values_go_into_props_by_permanent_id_and_back() {
 fn props_that_are_not_defined_parameters_are_left_alone() {
     let defs = definitions();
     let mut props = BTreeMap::new();
-    props.insert("H".to_owned(), "length:900".to_owned());
+    props.insert("H".to_owned(), "length:q0:5760000".to_owned());
     props.insert(
         "comment".to_owned(),
         "free text from before parameters".to_owned(),

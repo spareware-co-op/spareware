@@ -2,17 +2,33 @@
 //! libFuzzer with `cargo bolero test <name> --package construct-params`, as construct-model's do.
 
 use bolero::check;
-use construct_params::{Choice, Definition, Holder, Kind, Units, Value};
+use construct_params::{Area, Choice, Definition, Holder, Kind, Length, Units, Value, Volume};
 use kit_core::Id;
 
 /// Any text at all reads to nothing or to the value whose stored text is exactly that text, so a
-/// stored value has one spelling and reading never panics.
+/// stored value has one spelling and reading never panics. The one other text read is a length,
+/// area or volume in version 1's spelling (whole millimetres, FORMAT.md): exactly that many
+/// millimetres, whose version 2 text then reads back to the same value.
 #[test]
 fn stored_values_have_one_spelling() {
     check!().for_each(|bytes: &[u8]| {
         let text = String::from_utf8_lossy(bytes).into_owned();
         if let Some(value) = Value::from_stored(&text) {
-            assert_eq!(value.stored(), text);
+            if value.stored() != text {
+                let (tag, mm) = text.split_once(':').unwrap_or_default();
+                let mm: i64 = mm.parse().unwrap_or_default();
+                let old = match value {
+                    Value::Length(_) => {
+                        Value::Length(Length::checked_from_mm(mm).unwrap_or(Length::from_steps(0)))
+                    }
+                    Value::Area(_) => Value::Area(Area::from_mm2(mm)),
+                    Value::Volume(_) => Value::Volume(Volume::from_mm3(mm)),
+                    _ => Value::Whole(0),
+                };
+                assert_eq!(value, old, "{text}");
+                assert_eq!(format!("{tag}:{mm}"), text);
+            }
+            assert_eq!(Value::from_stored(&value.stored()), Some(value));
         }
     });
 }

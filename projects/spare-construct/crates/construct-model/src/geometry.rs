@@ -1,8 +1,9 @@
 //! The one join between Spare Construct and whatever builds its shapes. Nothing above [`Geometry`]
 //! knows what a shape is made of: an element holds a [`Recipe`], and everything drawn, stored or
-//! compared comes back as a [`Built`]. Today a stand-in makes boxes (in `construct-regen`);
-//! the geometry kernel is the next implementation, and swapping it changes one module, not the
-//! data layout, the edit log or the app. `construct-regen`'s `tests/swap.rs` proves that.
+//! compared comes back as a [`Built`]. Two implementations are in `construct-regen`: a stand-in
+//! that makes boxes, and a builder over the geometry kernel's engine seam, whose [`Edition`] carries
+//! the engine's own [`EngineReport`]. Swapping them changes one line where a program picks its
+//! builder, not the data layout, the edit log or the app; the server's `tests/swap.rs` proves that.
 //!
 //! This follows the kernel's own contract (architecture chapters 10, 20 and 24):
 //!
@@ -31,6 +32,49 @@ pub struct Edition {
     pub version: u32,
     /// The kernel's `NameScheme`: how faces and edges are named.
     pub name_scheme: u32,
+    /// The geometry engine's own report of itself, when a kernel engine builds the shapes; none
+    /// for a builder with no engine behind it. Left out of the bytes when there is none, so an
+    /// edition written before this field reads, and writes, exactly as it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report: Option<EngineReport>,
+}
+
+/// What a geometry engine says it is (the kernel's engine seam, `Engine::edition`), as a document
+/// records it: every value as the engine gave it, numbers as text so the record compares exactly.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EngineReport {
+    /// The engine's own name.
+    pub engine: String,
+    /// Its version: for an engine taken from elsewhere, the source and the commit it is pinned to.
+    pub version: String,
+    /// How many of the engine's grid steps make one millimetre.
+    pub steps_per_mm: u64,
+    /// The tolerances it works to.
+    pub tolerances: Vec<EngineTolerance>,
+    /// Which part of it answers each operation, for each case.
+    pub answers: Vec<EngineAnswer>,
+}
+
+/// One tolerance an engine works to.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EngineTolerance {
+    /// The engine's own name for it.
+    pub name: String,
+    /// Its value in `unit`, written as the shortest decimal that reads back to the engine's number.
+    pub value: String,
+    /// The unit of `value`.
+    pub unit: String,
+}
+
+/// Which part of an engine answers one operation, for one case of its inputs.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EngineAnswer {
+    /// The operation.
+    pub operation: String,
+    /// The inputs this answer is for, in the engine's words.
+    pub case: String,
+    /// What answers it, in the engine's words.
+    pub by: String,
 }
 
 /// How to build a shape: the kernel's recipe envelope (24.4). An element's input, never its result.
@@ -169,4 +213,64 @@ pub trait Geometry: Send + Sync + 'static {
     ///
     /// A [`GeometryError`] when the recipe can't be built, the same on every machine.
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plain() -> Edition {
+        Edition {
+            engine: "construct.stand-in".to_owned(),
+            version: 1,
+            name_scheme: 0,
+            report: None,
+        }
+    }
+
+    /// An edition with no engine report is written exactly as before the report existed, and an
+    /// edition written then reads back the same: "we never stop reading it" (FORMAT.md).
+    #[test]
+    fn an_edition_without_a_report_keeps_its_old_bytes() {
+        let old = br#"{"engine":"construct.stand-in","version":1,"name_scheme":0}"#;
+        assert_eq!(serde_json::to_vec(&plain()).unwrap(), old);
+        assert_eq!(serde_json::from_slice::<Edition>(old).unwrap(), plain());
+    }
+
+    /// An engine's report is part of the edition: two editions that differ only in the engine's
+    /// pin or a tolerance are different editions, and a report reads back as it was written.
+    #[test]
+    fn an_engines_report_is_part_of_its_edition() {
+        let report = EngineReport {
+            engine: "an engine".to_owned(),
+            version: "pinned at one commit".to_owned(),
+            steps_per_mm: 6400,
+            tolerances: vec![EngineTolerance {
+                name: "zone".to_owned(),
+                value: "0.00001".to_owned(),
+                unit: "m".to_owned(),
+            }],
+            answers: vec![EngineAnswer {
+                operation: "extrude".to_owned(),
+                case: "every case".to_owned(),
+                by: "its sweep".to_owned(),
+            }],
+        };
+        let with = Edition {
+            report: Some(report.clone()),
+            ..plain()
+        };
+        let bytes = serde_json::to_vec(&with).unwrap();
+        assert_eq!(serde_json::from_slice::<Edition>(&bytes).unwrap(), with);
+        assert_ne!(with, plain());
+        let mut moved = report;
+        moved.version = "pinned at another commit".to_owned();
+        assert_ne!(
+            with,
+            Edition {
+                report: Some(moved),
+                ..plain()
+            }
+        );
+    }
 }

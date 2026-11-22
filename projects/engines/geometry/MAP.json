@@ -61,7 +61,7 @@
         },
         {
           "cost": "none at run time.",
-          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
+          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]), an operation's context and output ([`op`]), and the engine seam a program codes against ([`engine`]). Anything not re-exported here is internal.",
           "family": [],
           "file": "projects/engines/crates/engine-geometry/src/value.rs",
           "guarantees": [
@@ -13558,6 +13558,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an engine gave no answer.",
+          "file": "projects/engines/geometry/crates/geom-op/src/engine.rs",
+          "kinds": [
+            {
+              "doc": "The input is not one the operation takes.",
+              "name": "Invalid",
+              "shape": "struct"
+            },
+            {
+              "doc": "The engine refused the operation, or its result failed a check the engine runs on every result.",
+              "name": "Refused",
+              "shape": "struct"
+            },
+            {
+              "doc": "The engine does not answer this case yet.",
+              "name": "Unsupported",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::engine",
+          "name": "EngineError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "One topology change a local operation made (13.14), recorded with its history.",
           "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
           "kinds": [
@@ -13960,6 +13984,31 @@
           "target": "lib"
         },
         {
+          "cost": "none; declarations only. Each engine states the cost of its own answers.",
+          "does": "[`Engine`] is the interface a program codes against for the first building operations: the extrusion of a flat profile with holes along a straight vector ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]), a solid's volume ([`Engine::volume`]), a display mesh of it ([`Engine::mesh`]) and the engine's own record of what answers each of them ([`Engine::edition`]). Every argument and result is a kernel value or a plain number: grid points and steps of the engine's [`GridStep`] (chapter 6), exactness classes, and this module's [`Profile`], [`Volume`], [`DisplayMesh`], [`Edition`] and [`EngineError`]. Each engine keeps its own solid type behind [`Engine::Solid`]. The first engine is geom-solidcore's (decision 32.70), outside the kernel's workspace; an exact engine of the kernel's own takes its place by implementing the same trait.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/engine.rs",
+          "guarantees": [
+            "**Declarations only.** The module defines types and one trait whose methods have no bodies; nothing here computes, so every engine answers for its own results.",
+            "**Only checked results.** [`Engine`]'s contract: every solid an implementation returns has a body the kernel's checker passes, and anything else is an [`EngineError`].",
+            "**No engine's own type.** No type of an engine behind the trait appears in it: a program that names only these items and the kernel's values keeps working when the engine changes.",
+            "**The engine names itself.** [`Edition`] carries the engine's name, its version, the grid step it works on, its tolerances and which part of it answers each operation, so a program can record what built a shape.",
+            "**Lengths in grid steps.** A program converts its own units once, at its seam, with [`GridStep::steps_per`]: on `Q0` one millimetre is 6,400 steps exactly."
+          ],
+          "job": "The engine seam: what a program asks of the engine that answers its geometry, and how that engine names itself, declared once so the engine behind it can change and the program does not.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/25-public-interface.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 25's stable facade, every program reaching geometry through `engine-geometry` and never through an engine's own crate, and decision 32.70's rule that solidcore sits behind an interface of the kernel's own (`projects/engines/geometry/architecture/25-public-interface.md`, `projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_op::engine",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "an error is one box holding its path, its message and three short vectors; making one allocates them, once. Errors are made only on failure, and the box keeps every operation's `Result` one pointer wide on the error side.",
           "does": "an [`OpError`] is chapter 22's structured error, the same for people and for AI agents: `kind`, `detail`, `op`, `entities`, `at` (evidence), `message` and `remedies`. It is built from its detail ([`OpError::new`]), which fixes its kind, its first message and the remedies the detail knows; the operation then adds the entities it names, the values that explain it, a fuller message and the remedies only it knows.",
           "family": [],
@@ -14244,7 +14293,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their composition ([`history`]) built (G88); the batch driver built (G104); per-entity bounds to come in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their composition ([`history`]) built (G88); the batch driver built (G104); the engine seam a program codes against, declarations only ([`engine`]); per-entity bounds to come in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {

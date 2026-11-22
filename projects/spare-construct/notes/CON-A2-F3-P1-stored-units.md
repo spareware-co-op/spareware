@@ -1,20 +1,29 @@
-# CON-A2-F3-P1: Stored values are exact whole units
+# CON-A2-F3-P1: Stored values are exact whole units, lengths in the kernel's grid steps
 
-**Status, 2026-11-22:** Decided for the build (decision 3 of the build plan). Stored values are exact whole units; floating-point numbers are only for display and sums. The crate `construct-params` follows it, and its [FORMAT.md](../crates/construct-params/FORMAT.md) is the stored form.
+**Status, 2026-11-23:** Decided for the build (piece A39). Stored values are exact whole units; floating-point numbers are only for display and sums. A length is a whole number of the geometry kernel's grid steps, `Q0`, 1/6,400 of a millimetre. This replaces the first form of this note (22 Nov 2026), which stored whole millimetres; that ruling is withdrawn, for the reasons below. `construct-params` and `construct-solver` follow it; [construct-params' FORMAT.md](../crates/construct-params/FORMAT.md) (version 2) is the stored form of a value.
 
 ## The question
 
-The map said "SI internally, metres in f64" ([ARCHITECTURE.md](../ARCHITECTURE.md), Data model) and part CON-A2-F3-P1 said "SI units inside in f64". The cloud format already rules that numbers in a recipe are whole millimetres ([construct-model's FORMAT.md](../crates/construct-model/FORMAT.md), "An element"), and the geometry kernel stores lengths and angles as whole numbers. A parameter value is an input to the edit log, hashed with its record, so the two rules could not both hold.
+The map said "SI internally, metres in f64" ([ARCHITECTURE.md](../ARCHITECTURE.md), Data model) and part CON-A2-F3-P1 said "SI units inside in f64". A parameter value is an input to the edit log, hashed with its record, so it must be exact and print one way. The first answer was whole millimetres, matching construct-model's stand-in recipes. Whole millimetres turned out too coarse for a building program:
+
+- A wall at an angle with an exact length cannot have whole-millimetre ends. The sketch solver rounded every solved point to a whole millimetre and refused anything that then missed by more than 0.01 mm, so an arc ended at 45 degrees on a 1 m radius, an equilateral triangle of 1 m sides and a circle tangent to a sloped line were all refused.
+- Everyday sizes could not be stored: 12.5 mm plasterboard, 6.38 mm laminated glass, 0.55 mm steel sheet, a 0.25 mm membrane.
 
 ## The decision
 
-- A stored length is a whole number of millimetres, an area of square millimetres and a volume of cubic millimetres, each a signed 64-bit integer.
-- A stored angle is a whole number of the kernel's angle units, 1/2,500 of an arc-second ([geometry architecture chapter 17](../../engines/geometry/architecture/17-survey-terrain-civil.md), "Angles are whole numbers"), so a parameter's angle and a recipe's angle agree.
-- A slope is a ratio of two whole numbers in lowest terms; a number without a unit is an exact decimal.
-- No stored value holds a floating-point number. Display units, rounding (half to even, to a stated number of places) and sums worked for display are a view of the stored value and never change it.
+- A stored length is a whole number of the kernel's grid steps `Q0`: 156.25 nanometres, 1/6,400 mm ([geometry architecture chapter 6.1](../../engines/geometry/architecture/06-numbers.md); `GridStep::Q0` in `engine-geometry`, where `Q0.steps_per` gives 6,400 to the millimetre). A signed 64-bit integer.
+- An area is a whole number of square steps (40,960,000 to the square millimetre) and a volume of cubic steps (262,144,000,000 to the cubic millimetre), each a signed 128-bit integer: 64 bits of cubic steps would not hold one cubic metre. A length times a length is then an area exactly, and an area times a length a volume.
+- A stored angle is a whole number of the kernel's angle units, 1/2,500 of an arc-second ([chapter 17](../../engines/geometry/architecture/17-survey-terrain-civil.md), "Angles are whole numbers"), as before.
+- A slope is a ratio of two whole numbers in lowest terms; a number without a unit is an exact decimal, as before.
+- Typed text is never rounded onto the grid: a length that is not a whole number of steps (0.001 mm is 6.4 steps) is refused, naming the nearest values below and above. A display format shows at most 0.01 mm, so every value shown is on the grid and reads back.
+- The sketch solver takes and gives points and radii in grid steps, rounds each solved value to the nearest step (ties to even, the kernel's rule), and checks every constraint against the model tolerance, 0.01 mm (64 steps), after rounding, as before.
+- The stored spelling names the step (`length:q0:15360000`), so a version 1 value in whole millimetres (`length:2400`) can never be misread as steps: it is still read, exactly, as millimetres, and written back in the new spelling.
+- A box in the spatial index stays in whole millimetres, construct-model's `Bounds`: it is a cache, never the truth, and a box made from grid geometry is rounded outward (the low corner down, the high corner up to the next whole millimetre), so it still holds its shape and a query never misses an element. construct-model's stand-in recipes and placements stay whole millimetres, every one an exact number of steps. Printed pen widths stay whole micrometres: they are sizes on paper, not model lengths.
 
 ## Why
 
-- Determinism: a record is named by the hash of its bytes, and every machine must replay the log to the same bytes. Whole numbers print one way everywhere; a float's text depends on how it is printed, and sums of floats depend on their order.
-- One rule, not two: FORMAT.md already stores recipe numbers as whole millimetres, and the kernel rounds onto whole steps. A parameter that drives a recipe holds the same number the recipe does.
-- Nothing is lost that a parameter needs: a millimetre is the smallest size a drawing or schedule shows, and 64 bits hold a length of over 9 million million kilometres. Finer geometry lives on the kernel's own grid, not in parameters.
+- The kernel's own rule. The kernel stores every coordinate as whole grid steps, and its interface asks a program to convert its own units once, at its seam (`geom-op`'s engine module: "Lengths in grid steps ... on `Q0` one millimetre is 6,400 steps exactly"). A length in the same steps is handed over with nothing rounded.
+- Exact everyday sizes. 0.01 mm is 64 steps, so every size to two decimals of a millimetre, and 1/256 inch (635 steps), is exact.
+- Sloped and curved work is accepted. A solved point lands at most half a step, 78 nm, from the true point on each axis, far inside the 0.01 mm model tolerance, so only a sketch no grid point can meet, such as a line under a micrometre long held parallel to a long sloped one, is still refused.
+- Determinism, as before: a record is named by the hash of its bytes, and every machine must replay the log to the same bytes. Whole numbers print one way everywhere; a float's text depends on how it is printed, and sums of floats depend on their order.
+- Room enough. 64 bits of steps hold about 1.4 x 10^9 km; the kernel's own frame is 2^40 steps, 171.8 km, which the sketch solver keeps to. A micrometre is not a whole number of `Q0` steps (6.4); work that needs one is a mechanical part on the kernel's finer `Q1` step, not a building length.

@@ -54,13 +54,15 @@ class Refusal extends Error {
 const fail = (m) => { throw new Refusal('failed', m); };
 const waits = (m) => { throw new Refusal('waits', m); };
 
-/* A field's value: a number, or the name of one of the part's parameters. */
+/* A field's value: a number, or the name of one of the part's parameters. Formulas are worked out by the kernel's
+   builder (crate construct-formulas, exact and with units); this prototype doesn't read them. */
 function value(env, v, what) {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string' && v.trim() !== '') {
     const t = v.trim();
     if (/^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(t)) return Number(t);
     if (Object.prototype.hasOwnProperty.call(env, t)) return env[t];
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) fail(`${what}: formulas are worked out by the geometry kernel's builder, which hasn't loaded here.`);
     fail(`${what}: there is no parameter called ${t}.`);
   }
   fail(`${what} is not set.`);

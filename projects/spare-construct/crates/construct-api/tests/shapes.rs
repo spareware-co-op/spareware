@@ -56,6 +56,7 @@ impl Geometry for Wedges {
             engine: "test.wedges".to_owned(),
             version: 7,
             name_scheme: 2,
+            report: None,
         }
     }
 

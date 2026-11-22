@@ -1,8 +1,11 @@
 //! One parameter value, its stored text, and the arithmetic a schedule needs.
 //!
-//! A stored value is `<kind>:<payload>` (FORMAT.md beside this crate): `length:2400`,
-//! `slope:1/40`, `link:https://example.org/`. Each value has exactly one spelling, so the same
-//! values always give the same bytes, and reading checks that writing again gives the same text.
+//! A stored value is `<kind>:<payload>` (FORMAT.md beside this crate, version 2):
+//! `length:q0:15360000` (2,400 mm in grid steps), `slope:1/40`, `link:https://example.org/`. Each
+//! value has exactly one spelling, so the same values always give the same bytes, and reading
+//! checks that writing again gives the same text. A length, area or volume written by version 1,
+//! in whole millimetres with no `q0:` (`length:2400`), is still read, exactly, as those
+//! millimetres; writing it again gives version 2's spelling.
 
 use crate::definition::Kind;
 use crate::error::{Op, ParamError};
@@ -15,11 +18,11 @@ use std::str::FromStr;
 /// or a decimal. There is no float.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
-    /// A length, in whole millimetres.
+    /// A length, in whole grid steps of the geometry kernel (1/6,400 mm).
     Length(Length),
-    /// An area, in whole square millimetres.
+    /// An area, in whole square grid steps.
     Area(Area),
-    /// A volume, in whole cubic millimetres.
+    /// A volume, in whole cubic grid steps.
     Volume(Volume),
     /// An angle, in whole angle units.
     Angle(Angle),
@@ -94,9 +97,9 @@ impl Value {
     #[must_use]
     pub fn stored(&self) -> String {
         let payload = match self {
-            Self::Length(v) => v.mm().to_string(),
-            Self::Area(v) => v.mm2().to_string(),
-            Self::Volume(v) => v.mm3().to_string(),
+            Self::Length(v) => format!("{GRID}{}", v.steps()),
+            Self::Area(v) => format!("{GRID}{}", v.square_steps()),
+            Self::Volume(v) => format!("{GRID}{}", v.cubic_steps()),
             Self::Angle(v) => v.units().to_string(),
             Self::Slope(v) => format!("{}/{}", v.rise(), v.run()),
             Self::Number(v) => v.to_string(),
@@ -109,14 +112,21 @@ impl Value {
     }
 
     /// Reads stored text. `None` unless it is a value in its one spelling: writing the value read
-    /// gives exactly `text` back.
+    /// gives exactly `text` back. The one exception is a length, area or volume in version 1's
+    /// spelling, whole millimetres with no `q0:` (`length:2400`, `area:5760000`, `volume:1`),
+    /// itself in its one spelling: it reads as exactly those millimetres, and writing it gives
+    /// version 2's text. A version 1 value too large for grid steps is `None`.
     #[must_use]
     pub fn from_stored(text: &str) -> Option<Self> {
         let (tag, payload) = text.split_once(':')?;
-        let value = match Kind::from_tag(tag)? {
-            Kind::Length => Self::Length(Length::from_mm(payload.parse().ok()?)),
-            Kind::Area => Self::Area(Area::from_mm2(payload.parse().ok()?)),
-            Kind::Volume => Self::Volume(Volume::from_mm3(payload.parse().ok()?)),
+        let kind = Kind::from_tag(tag)?;
+        if matches!(kind, Kind::Length | Kind::Area | Kind::Volume) && !payload.starts_with(GRID) {
+            return from_version_1(kind, payload);
+        }
+        let value = match kind {
+            Kind::Length => Self::Length(Length::from_steps(on_grid(payload)?.parse().ok()?)),
+            Kind::Area => Self::Area(Area::from_square_steps(on_grid(payload)?.parse().ok()?)),
+            Kind::Volume => Self::Volume(Volume::from_cubic_steps(on_grid(payload)?.parse().ok()?)),
             Kind::Angle => Self::Angle(Angle::from_units(payload.parse().ok()?)),
             Kind::Slope => {
                 let (rise, run) = payload.split_once('/')?;
@@ -210,6 +220,30 @@ impl Value {
             left: self.kind(),
             right: other.kind(),
         }
+    }
+}
+
+/// How a version 2 length, area or volume payload starts: the kernel's grid step its whole number
+/// counts in (`Q0`, 1/6,400 mm). Version 1 payloads, in whole millimetres, never start with it.
+const GRID: &str = "q0:";
+
+/// The whole number after [`GRID`].
+fn on_grid(payload: &str) -> Option<&str> {
+    payload.strip_prefix(GRID)
+}
+
+/// A version 1 length, area or volume: whole millimetres, square millimetres or cubic
+/// millimetres in their one spelling, read exactly into grid steps.
+fn from_version_1(kind: Kind, payload: &str) -> Option<Value> {
+    let mm: i64 = payload.parse().ok()?;
+    if mm.to_string() != payload {
+        return None;
+    }
+    match kind {
+        Kind::Length => Length::checked_from_mm(mm).map(Value::Length),
+        Kind::Area => Some(Value::Area(Area::from_mm2(mm))),
+        Kind::Volume => Some(Value::Volume(Volume::from_mm3(mm))),
+        _ => None,
     }
 }
 
