@@ -6,6 +6,10 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+# Quantities, kinds, units and values: the one units system. Ours.
+construct-params = { path = "../construct-params" }
+# Parameter IDs, as construct-params keys values by them. Ours.
+kit-core = { path = "../../../kit/crates/kit-core" }
 # The parser, on a well-known parser crate rather than by hand, as note A07 asks (and as Zoo's KCL
 # parses). MIT.
 winnow = "=0.7.15"
