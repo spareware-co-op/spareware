@@ -21,7 +21,8 @@
 mod kernel_suite;
 
 use engine_geometry::value::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Tolerance, Volume,
+    Answer, Cut, DisplayMesh, Edition, Engine, EngineError, GridPlane, Profile, Section, Tolerance,
+    Volume,
 };
 use engine_geometry::value::grid::GridStep;
 
@@ -102,6 +103,14 @@ impl Engine for Cuboids {
         Err(unsupported("subtract"))
     }
 
+    fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
+        Err(unsupported("unite"))
+    }
+
     fn volume(&mut self, _: &Cuboid) -> Result<Volume, EngineError> {
         Err(unsupported("volume"))
     }
@@ -146,6 +155,10 @@ impl Engine for Cuboids {
             mesh.triangles.push([base, base + 2, base + 3]);
         }
         Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Cuboid, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
     }
 }
 
@@ -198,11 +211,20 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
         fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
             Err(unsupported("subtract"))
         }
+        fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
+            Err(unsupported("loft"))
+        }
+        fn unite(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
+            Err(unsupported("unite"))
+        }
         fn volume(&mut self, _: &Cuboid) -> Result<Volume, EngineError> {
             Err(unsupported("volume"))
         }
         fn mesh(&mut self, _: &Cuboid) -> Result<DisplayMesh, EngineError> {
             Err(unsupported("mesh"))
+        }
+        fn section(&mut self, _: &Cuboid, _: &GridPlane) -> Result<Cut, EngineError> {
+            Err(unsupported("section"))
         }
     }
     let k = construct_regen::kernel::Kernel::new(Refusing).unwrap();
