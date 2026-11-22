@@ -427,3 +427,44 @@ fn a_loft_whose_walls_bend_less_than_half_a_degree_is_refused() {
         }
     );
 }
+
+/// A section two of whose sides turn by less than solidcore's angle tolerance (0.5 degrees) is
+/// refused today, as the replay of a real site found for every strip of a void whose profile's
+/// last side is carried on along its own slope and its corners then put on the grid: a section
+/// rising 3 m, then at 45 degrees to 6 m in, then on to 12 m in turning by 0.05 degrees, lofted
+/// 500 mm, comes back with the two sloped walls joined into one face whose edge solidcore writes
+/// as a bent B-spline, which the kernel has no kind for. With the sides exactly in line the loft is
+/// a closed solid of the section's area times its length. Recorded as it is: no retry, heal or
+/// nudge.
+#[test]
+fn a_section_whose_sides_turn_less_than_half_a_degree_is_refused() {
+    let mut e = engine();
+    let strip = |e: &mut SolidcoreEngine, top: i64| {
+        let section = |x: i64| Section {
+            corners: [(0, 0), (0, 3000), (6000, 9000), (12_000, top), (12_000, 0)]
+                .iter()
+                .map(|&(r, h)| at(x, r, h))
+                .collect(),
+        };
+        e.loft(&[section(0), section(500)])
+    };
+    let found = strip(&mut e, 15_010);
+    assert!(
+        matches!(
+            &found,
+            Err(EngineError::Refused { operation: "loft", reason })
+                if reason == "loft: the result holds a spline curve, which the kernel has no kind for"
+        ),
+        "{:?}",
+        found.err()
+    );
+    let closed = strip(&mut e, 15_000).expect("sides exactly in line");
+    let six = |mm3: i128| I256::from_i128(6 * mm3 * i128::from(mm(1)).pow(3));
+    assert_eq!(
+        e.volume(&closed).expect("its volume"),
+        Volume::SixTimes {
+            cubic_steps: six(12_000 * (3000 + 15_000) / 2 * 500),
+            exactness: closed.exactness(),
+        }
+    );
+}
