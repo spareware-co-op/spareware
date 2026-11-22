@@ -3,7 +3,8 @@
 //!
 //! What it does: [`Engine`] is the interface a program codes against for the first building
 //! operations: the extrusion of a flat profile with holes along a straight vector
-//! ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]), a loft through flat
+//! ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]) and every piece that leaves
+//! ([`Engine::subtract_pieces`]), a loft through flat
 //! polygon sections ([`Engine::loft`]), two solids united ([`Engine::unite`]), a solid's volume
 //! ([`Engine::volume`]), a display mesh of it ([`Engine::mesh`]) and the engine's own record of
 //! what answers each of them ([`Engine::edition`]). Every argument and result is a kernel value or
@@ -180,6 +181,21 @@ pub trait Engine {
         target: &Self::Solid,
         tool: &Self::Solid,
     ) -> Result<Self::Solid, EngineError>;
+
+    /// `target` less `tool`, as every piece it leaves, each one solid; neither is changed. The
+    /// pieces come in the order of their corners: each piece's vertices sorted by x, then y, then
+    /// z, and the pieces by those lists, the least first. None when `tool` takes the whole of
+    /// `target`.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Unsupported`] for operands the engine does not take yet, and the engine's
+    /// refusals.
+    fn subtract_pieces(
+        &mut self,
+        target: &Self::Solid,
+        tool: &Self::Solid,
+    ) -> Result<Vec<Self::Solid>, EngineError>;
 
     /// The solid lofted through `sections` in their order: corner `i` of each section is joined to
     /// corner `i` of the next by a straight wall, and the first and last sections cap its ends.

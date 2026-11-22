@@ -596,3 +596,203 @@ pub fn sections_of_different_counts_are_an_invalid_input<E: Checked>(mut e: E) {
         one.as_ref().err()
     );
 }
+
+/// The face count of a loft of `stations` sections of `corners` corners each, one face for each
+/// wall between two sections and one for each end.
+fn loft_faces(stations: u32, corners: u32) -> u32 {
+    2 + (stations - 1) * corners
+}
+
+/// The envelope's section over ground that rises by `raised` millimetres at the middle of three
+/// stations 500 mm apart, lofted through all three at once: the walls bend between the stations
+/// by under half a degree at 2 mm (0.46 degrees), not at all at 0 mm, and by 1.15 degrees at
+/// 5 mm. Each loft is one closed solid with one flat face for each wall between two stations and
+/// one for each end however little the walls turn, its volume the profile's area times its
+/// length, as a shear keeps volume.
+pub fn a_loft_whose_walls_bend_less_than_half_a_degree_is_one_face_per_wall<E: Checked>(mut e: E) {
+    let expected = I256::from_i128(six_times(ENVELOPE_MM2 * 1000));
+    for raised in [2, 0, 5] {
+        let s = checked::<E>(
+            e.loft(&[
+                section(0, 0, 0, (0, 1)),
+                section(500, 0, raised, (0, 1)),
+                section(1000, 0, 0, (0, 1)),
+            ])
+            .unwrap_or_else(|err| panic!("raised {raised} mm: {err:?}")),
+        );
+        assert_eq!(six_volume(&mut e, &s), expected, "raised {raised} mm");
+        assert_eq!(E::body(&s).0.arenas().faces.len(), loft_faces(3, 4));
+    }
+}
+
+/// A section two of whose sides turn by under half a degree: a rise of 3 m, then 45 degrees to
+/// 6 m in, then on to 12 m in, turning by 0.05 degrees (the last corner 10 mm above the slope's
+/// line), lofted 500 mm. The loft is one closed solid with each of the two sloped walls its own
+/// flat face, its volume the section's area times its length; with the sides exactly in line it
+/// is the same, the trapezoid's area times the length.
+pub fn a_section_whose_sides_turn_less_than_half_a_degree_lofts_to_one_face_per_side<E: Checked>(
+    mut e: E,
+) {
+    // The section's area in square millimetres: the trapezoid under the line to 15 m, and the
+    // triangle of the last corner's 10 mm above it over 6 m.
+    for (top, mm2) in [(15_010, 108_030_000), (15_000, 108_000_000)] {
+        let section = |x: i64| Section {
+            corners: [(0, 0), (0, 3000), (6000, 9000), (12_000, top), (12_000, 0)]
+                .iter()
+                .map(|&(r, h)| at(x, r, h))
+                .collect(),
+        };
+        let s = checked::<E>(
+            e.loft(&[section(0), section(500)])
+                .unwrap_or_else(|err| panic!("top {top}: {err:?}")),
+        );
+        assert_eq!(
+            six_volume(&mut e, &s),
+            I256::from_i128(six_times(mm2 * 500)),
+            "top {top}"
+        );
+        assert_eq!(E::body(&s).0.arenas().faces.len(), loft_faces(2, 5));
+    }
+}
+
+/// The envelope's strip of 20 m along x, lofted through eleven sections 2 m apart over ground that
+/// rises and falls by a few millimetres between them (every wall turning by under half a degree
+/// from the next), is one closed solid of one face per wall between two sections and per end,
+/// the profile's area times its length.
+pub fn a_loft_over_uneven_ground_is_its_profile_times_its_length<E: Checked>(mut e: E) {
+    let ground = [0, 3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
+    let sections: Vec<Section> = ground
+        .iter()
+        .zip(0_i64..)
+        .map(|(&z, k)| section(2000 * k, 0, z, (0, 1)))
+        .collect();
+    let s = checked::<E>(e.loft(&sections).expect("the strip over uneven ground"));
+    assert_eq!(
+        six_volume(&mut e, &s),
+        I256::from_i128(six_times(ENVELOPE_MM2 * 20_000))
+    );
+    assert_eq!(E::body(&s).0.arenas().faces.len(), loft_faces(11, 4));
+}
+
+/// The same loft gives the same bytes: two fresh engines, each lofting the strip over uneven
+/// ground, give the same volume and the same mesh, bit for bit.
+pub fn the_same_loft_gives_the_same_bytes<E: Checked>(make: impl Fn() -> E) {
+    let bytes = || {
+        let mut e = make();
+        let sections: Vec<Section> = [0, 2, 0, 5, 0]
+            .iter()
+            .zip(0_i64..)
+            .map(|(&z, k)| section(500 * k, 0, z, (0, 1)))
+            .collect();
+        let s = e.loft(&sections).expect("the loft");
+        let v = e.volume(&s).expect("the volume");
+        let m = e.mesh(&s).expect("the mesh");
+        let mut out = format!("{v:?}").into_bytes();
+        for p in m.positions.iter().chain(&m.normals) {
+            for c in p {
+                out.extend(c.to_bits().to_le_bytes());
+            }
+        }
+        for t in &m.triangles {
+            for i in t {
+                out.extend(i.to_le_bytes());
+            }
+        }
+        out
+    };
+    let first = bytes();
+    assert!(!first.is_empty());
+    assert_eq!(first, bytes());
+}
+
+/// The box that cuts the strip of 20 m along x across its whole width and height from x = 8 m to
+/// x = 12 m: from 1 m outside the boundary to 1 m past the profile's depth, from 1 m under the
+/// ground to 1 m over the envelope.
+fn across<E: Checked>(e: &mut E, x0: i64, x1: i64) -> E::Solid {
+    let profile = Profile {
+        outer: rectangle(x0, -1000, x1, DEPTH + 1000, -1000),
+        holes: vec![],
+    };
+    checked::<E>(
+        e.extrude(&profile, [0, 0, mm(RISE + DEPTH + 2000)])
+            .expect("the box across"),
+    )
+}
+
+/// A strip cut in two: the box across it from 8 m to 12 m leaves two pieces, the strip's first
+/// 8 m and its last 8 m, each one closed solid of the profile's area times 8 m, the first piece
+/// first (its least corner, the boundary's start, is the least); a box across the whole strip
+/// leaves none. The one-solid subtraction gives the cut in two as one solid of two shells, of
+/// both pieces' volume.
+pub fn a_strip_cut_in_two_leaves_two_pieces_in_order<E: Checked>(mut e: E) {
+    let s = checked::<E>(strip(&mut e, (0, 0), (20_000, 0), 0, (0, 1), 2).expect("the strip"));
+    let cutter = across(&mut e, 8000, 12_000);
+    let pieces = e.subtract_pieces(&s, &cutter).expect("the pieces");
+    assert_eq!(pieces.len(), 2);
+    let piece = I256::from_i128(six_times(ENVELOPE_MM2 * 8000));
+    let least = |p: &E::Solid| {
+        let b = E::body(p).0;
+        (0..b.arenas().vertices.len())
+            .filter_map(geom_topo::VertexIx::new)
+            .filter_map(|v| geom_topo::query::point(b, v).ok())
+            .map(|q| (q.x.get(), q.y.get(), q.z.get()))
+            .min()
+    };
+    let mut leasts = Vec::new();
+    for p in pieces {
+        let p = checked::<E>(p);
+        assert_eq!(six_volume(&mut e, &p), piece);
+        leasts.push(least(&p));
+    }
+    assert_eq!(
+        leasts,
+        [Some((0, 0, 0)), Some((mm(12_000), 0, 0))],
+        "the pieces in order of their corners"
+    );
+    let one = checked::<E>(e.subtract(&s, &cutter).expect("the strip less the box"));
+    assert_eq!(E::body(&one).0.arenas().shells.len(), 2);
+    assert_eq!(
+        six_volume(&mut e, &one),
+        I256::from_i128(six_times(ENVELOPE_MM2 * 16_000))
+    );
+    let all = across(&mut e, -1000, 21_000);
+    assert_eq!(e.subtract_pieces(&s, &all).map(|p| p.len()), Ok(0));
+}
+
+/// How two boxes of 1 m are set against each other: sharing only an edge, or only a corner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Touch {
+    /// The second box beside the first along x and y at once: they share one vertical edge.
+    AlongAnEdge,
+    /// The second box beside the first along x, y and z at once: they share one corner.
+    AtAPoint,
+}
+
+/// Two boxes of 1 m that touch only as `touch` says, united: as two envelopes cut at a corner
+/// meet along the corner's vertical line, the union is non-manifold there, so it has no solid
+/// answer and the engine's error is returned, never a solid. Two boxes sharing a face, the same
+/// boxes moved, unite into one solid of both volumes.
+pub fn united_touching<E: Checked>(e: &mut E, touch: Touch) -> EngineError {
+    let cube = |e: &mut E, x: i64, y: i64, z: i64| {
+        let profile = Profile {
+            outer: rectangle(x, y, x + 1000, y + 1000, z),
+            holes: vec![],
+        };
+        checked::<E>(e.extrude(&profile, [0, 0, mm(1000)]).expect("a box"))
+    };
+    let first = cube(e, 0, 0, 0);
+    let beside = cube(e, 1000, 0, 0);
+    let both = checked::<E>(e.unite(&first, &beside).expect("boxes sharing a face"));
+    assert_eq!(
+        six_volume(e, &both),
+        I256::from_i128(six_times(2 * 1000 * 1000 * 1000))
+    );
+    let second = match touch {
+        Touch::AlongAnEdge => cube(e, 1000, 1000, 0),
+        Touch::AtAPoint => cube(e, 1000, 1000, 1000),
+    };
+    match e.unite(&first, &second) {
+        Ok(u) => panic!("{touch:?}: a solid of {:?}", E::body(&u).0.kind()),
+        Err(err) => err,
+    }
+}

@@ -11,14 +11,20 @@
 //!   32.91), its body converted and checked as the kernel's and each flat face's plane written
 //!   through its own grid corners ([`on_its_corners`]);
 //! - `subtract`: the kernel's exact `geom-bool` (`combine` with one subtract selection), since
-//!   flat-faced booleans stay the kernel's (32.70, rule 5);
-//! - `loft`: solidcore's skin through the sections ([`Modeller::loft`]), for sections whose walls
-//!   are flat (each wall's four corners exactly on one plane, decided here on the grid before
-//!   solidcore is reached), its body converted and checked as the kernel's and each flat face's
-//!   plane written through its own grid corners as the extrusion's is; a wall that is not flat is
-//!   unsupported, as the kernel has no kind for a ruled surface yet. solidcore has no check that a
-//!   skin does not fold back or cross itself, and the kernel's checker, which every result
-//!   passes, refuses such a body: a folded or crossed loft is an error, never a solid;
+//!   flat-faced booleans stay the kernel's (32.70, rule 5); `subtract_pieces` the same, its
+//!   selection every cell inside the target and outside the tool, one solid each, ordered by
+//!   their corners ([`corners_of`]);
+//! - `loft`: for sections whose walls are flat (each wall's four corners exactly on one plane,
+//!   decided here on the grid), the solid the walls bound written as the kernel's rows here
+//!   ([`lofted`]): each wall and each end one flat face through its own grid corners, however
+//!   little a wall turns from its neighbours, Exact. solidcore's skin is not used for it: the
+//!   skin joins neighbouring walls that turn by less than half a degree, across sections or
+//!   between two sides of one section, into one bent B-spline face (the curve and surface
+//!   continuity tests of solidcore at the pin, `CONTINUITY_ANGLE`, a constant no caller sets),
+//!   which the kernel has no kind for. A wall that is not flat is unsupported, as the kernel has
+//!   no kind for a ruled surface yet. The sections are checked first as [`crate::loft_reversed`]
+//!   checks them, and the kernel's checker, which every result passes, refuses a body whose
+//!   walls cross: a folded or crossed loft is an error, never a solid;
 //! - `unite`: the kernel's exact `geom-bool` (`combine` with the unite selection) when both
 //!   solids are flat-faced (32.70, rule 5), and solidcore's boolean union ([`Modeller::union`])
 //!   otherwise, on the solidcore bodies the engine keeps of the solids solidcore made; a curved
@@ -34,17 +40,21 @@
 //! ([`EngineSolid::made_by`]), and, privately, solidcore's own body of it when solidcore made it;
 //! no solidcore type is in its interface.
 //!
+//! Interim: this whole module answers the seam until the kernel's own engine does; the loft's
+//! rows until geom-sweep's ruled loft (chapter 13.6) writes them (`tests/interim.json`).
+//!
 //! Not yet: a loft wall that is not flat is not made, a curved face is not meshed (solidcore-tess's planner works on solidcore's record of a
-//! body, and a body `geom-bool` made has none), and a subtraction whose result is more than one
-//! solid is refused as unsupported.
+//! body, and a body `geom-bool` made has none), and `subtract` returns a cut that leaves several
+//! pieces as one solid of as many shells (`subtract_pieces` returns each piece).
 //!
 //! SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
 use geom_bool::combine::combine;
-use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
+use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
 use geom_check::{Level, check};
 use geom_make::{PrismInput, prism};
 use geom_num::{Exactness, GridStep, P3, Steps};
@@ -57,7 +67,9 @@ use geom_run::{Budget, Exec, WorkMeter};
 use geom_topo::query::{face_area, loop_area, point};
 use geom_topo::query_ops::six_volume;
 use geom_topo::{
-    Body, BodyKind, Builder, CurveKind, FaceIx, FinIx, FlatSurface, LoopIx, Sense, SurfaceKind,
+    Body, BodyKind, Box3, Builder, CurveKind, Edge, EdgeIx, Face, FaceIx, Fin, FinIx, FlatSurface,
+    Ix, Line, Loop, LoopIx, PointKind, Region, RegionKind, Sense, Shell, SurfaceKind, Vertex,
+    VertexIx,
 };
 use solidcore::KernelOptions;
 
@@ -112,9 +124,8 @@ pub const BY_BOOL: &str = "the kernel's geom-bool (decision 32.70, rule 5)";
 /// The lofts the engine makes.
 pub const LOFT_CASE: &str = "sections whose walls are flat: each wall's four corners on one plane";
 
-/// What made a solid: solidcore's skin.
-pub const BY_LOFT: &str =
-    "solidcore's skin of degree 1 through the sections (create_skin_primitive)";
+/// What made a solid: the engine's own rows of a loft.
+pub const BY_LOFT: &str = "the engine's own rows: each wall and each end one flat face through the sections' grid corners, Exact";
 
 /// The unions the kernel's boolean takes.
 pub const FLAT_CASE: &str = "both solids flat-faced";
@@ -197,16 +208,64 @@ fn unsupported(operation: &'static str, what: &str) -> EngineError {
     }
 }
 
+/// How many edges of `body` more than two faces meet at: the radial ring of fins round each edge
+/// counted, a ring that does not come back to its first fin within the body's fins counted as far
+/// as it went.
+fn crowded_edges(body: &Body) -> u32 {
+    let a = body.arenas();
+    let mut crowded = 0;
+    for row in 0..a.edges.len() {
+        let Some(edge) = EdgeIx::new(row).and_then(|e| a.edges.get(e)) else {
+            continue;
+        };
+        let first = edge.first_fin;
+        let (mut at, mut fins) = (first, 0_u32);
+        while let Some(fin) = at {
+            fins += 1;
+            if fins > a.fins.len() {
+                break;
+            }
+            at = a
+                .fins
+                .get(fin)
+                .map(|f| f.radial)
+                .filter(|&r| Some(r) != first);
+        }
+        if fins > 2 {
+            crowded += 1;
+        }
+    }
+    crowded
+}
+
+/// Why `body`, which is not of the kind Solid, is no solid, in plain words: nothing kept, solids
+/// that touch along an edge (an edge more than two faces meet at), or at a point (a vertex the
+/// faces round which make more than one fan). A union of solids that touch only so has no solid
+/// answer: what a body of the kind Solid bounds is manifold everywhere (chapter 8.1).
+fn not_a_solid(body: &Body) -> String {
+    let edges = crowded_edges(body);
+    if body.arenas().faces.is_empty() {
+        "the result is not a solid: it keeps nothing".to_owned()
+    } else if edges > 0 {
+        format!(
+            "the result is not a solid: solids in it touch along an edge without sharing a face there ({edges} edges where more than two faces meet), so it is non-manifold, which no solid is"
+        )
+    } else {
+        "the result is not a solid: solids in it touch at a point (a vertex where the faces meet in more than one fan), so it is non-manifold, which no solid is".to_owned()
+    }
+}
+
 /// `body` as the engine's solid, only if it is a solid the kernel's checker passes at its full
 /// level with `exactness`: every result the engine returns comes through here, so a body that is
-/// not closed, or fails any other check, is refused and never handed to the program.
+/// not closed, or fails any other check, is refused and never handed to the program; a body of
+/// another kind is refused saying why it is none ([`not_a_solid`]).
 fn accepted(
     operation: &'static str,
     (body, exactness): (Body, Exactness),
     made_by: &'static str,
 ) -> Result<EngineSolid, EngineError> {
     if body.kind() != BodyKind::Solid {
-        return Err(refused(operation, "the result is not a solid"));
+        return Err(refused(operation, not_a_solid(&body)));
     }
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let report = check(&body, exactness, Level::Full, &mut meter)
@@ -505,6 +564,278 @@ fn on_its_corners(operation: &'static str, body: &Body) -> Result<Body, EngineEr
         .map_err(|e| refused(operation, format!("{e:?}")))
 }
 
+/// The index of row `row`.
+fn ix<K>(operation: &'static str, row: usize) -> Result<Ix<K>, EngineError> {
+    u32::try_from(row)
+        .ok()
+        .and_then(Ix::new)
+        .ok_or_else(|| refused(operation, "more rows than an index holds"))
+}
+
+/// Twice the vector area of the polygon `ps` (its Newell normal), in squared steps, exactly, taken
+/// about its first corner: each difference is under 2^41 and each term of the sum under 2^83, so a
+/// sum of fewer than 2^43 terms stays inside i128.
+fn newell(ps: &[P3]) -> [i128; 3] {
+    let Some(&first) = ps.first() else {
+        return [0; 3];
+    };
+    let o = whole(first);
+    let less = |p: P3| {
+        let q = whole(p);
+        [q[0] - o[0], q[1] - o[1], q[2] - o[2]]
+    };
+    let mut n = [0_i128; 3];
+    for w in ps.windows(2).skip(1) {
+        let c = cross(less(w[0]), less(w[1]));
+        for (s, t) in n.iter_mut().zip(c) {
+            *s += t;
+        }
+    }
+    n
+}
+
+/// The plane of the flat polygon `ps`, which runs counter-clockwise seen from the side its normal
+/// points to: through its first corner, along two of its sides' grid vectors from there whose
+/// cross product points the way its Newell normal does, decided exactly on the axis where that
+/// normal is largest (every such cross product is a multiple of the normal, as the corners are on
+/// one plane); its domain the corners' own coordinates in the plane and a step round them.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "whole steps under 2^41, which an f64 holds exactly"
+)]
+fn plane_of(operation: &'static str, ps: &[P3]) -> Result<FlatSurface, EngineError> {
+    let n = newell(ps);
+    let axis = (0..3).max_by_key(|&a| n[a].unsigned_abs()).unwrap_or(2);
+    let Some(&first) = ps.first() else {
+        return Err(refused(operation, "a face with no corner"));
+    };
+    if n[axis] == 0 {
+        return Err(refused(operation, "a face with no area"));
+    }
+    let o = whole(first);
+    let less = |p: P3| {
+        let q = whole(p);
+        [q[0] - o[0], q[1] - o[1], q[2] - o[2]]
+    };
+    let along = ps.iter().map(|&p| less(p)).find(|d| *d != [0; 3]);
+    let across = along.and_then(|u| {
+        ps.iter()
+            .map(|&p| less(p))
+            .find(|&d| {
+                let c = cross(u, d)[axis];
+                c != 0 && (c > 0) == (n[axis] > 0)
+            })
+            .map(|v| (u, v))
+    });
+    let Some((u, v)) = across else {
+        return Err(refused(operation, "a face whose corners lie on one line"));
+    };
+    let (uf, vf) = (u.map(|c| c as f64), v.map(|c| c as f64));
+    let dot = |x: [f64; 3], y: [f64; 3]| x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+    let (uu, uv, vv) = (dot(uf, uf), dot(uf, vf), dot(vf, vf));
+    let det = uu * vv - uv * uv;
+    let (mut su, mut sv) = (
+        (f64::INFINITY, f64::NEG_INFINITY),
+        (f64::INFINITY, f64::NEG_INFINITY),
+    );
+    for &p in ps {
+        let d = less(p).map(|c| c as f64);
+        let (x, y) = (
+            (vv * dot(d, uf) - uv * dot(d, vf)) / det,
+            (uu * dot(d, vf) - uv * dot(d, uf)) / det,
+        );
+        su = (su.0.min(x - 1.0), su.1.max(x + 1.0));
+        sv = (sv.0.min(y - 1.0), sv.1.max(y + 1.0));
+    }
+    FlatSurface::new(o.map(|c| c as f64), uf, vf, (su, sv))
+        .map_err(|e| refused(operation, format!("{e:?}")))
+}
+
+/// The box of the grid points `ps`.
+fn box_of(operation: &'static str, ps: &[P3]) -> Result<Box3, EngineError> {
+    let first = ps
+        .first()
+        .copied()
+        .ok_or_else(|| refused(operation, "a face with no corner"))?;
+    let pick = |f: fn(i64, i64) -> i64| {
+        let [x, y, z] = ps.iter().fold(
+            [first.x.get(), first.y.get(), first.z.get()],
+            |[x, y, z], p| [f(x, p.x.get()), f(y, p.y.get()), f(z, p.z.get())],
+        );
+        P3::new(x, y, z).map_err(|e| refused(operation, e))
+    };
+    Box3::new(pick(i64::min)?, pick(i64::max)?).map_err(|e| refused(operation, e))
+}
+
+/// The solid lofted through `sections`, which [`crate::loft_reversed`] passed (`reversed` its
+/// answer) and whose walls are flat, as the kernel's rows, written here and published unchecked:
+/// one vertex at each corner of each section; the first section a face facing back and the last a
+/// face facing ahead; between each section and the next, one flat face for each pair of its
+/// corners that a side joins, the wall to the same pair of the next section, however little it
+/// turns from its neighbours (a wall in one plane with the next is its own face all the same);
+/// one edge for each side of a section and each corner's line to the next section's; every face
+/// on the plane through its own grid corners ([`plane_of`]), every edge a line between two grid
+/// points. Each section is taken turning positively about the way ahead, every one listed the
+/// other way round when the first turns negatively, which keeps corner `i` of each paired with
+/// corner `i` of the next. Nothing is rounded: the body is Exact. A face with no area (a crossed
+/// wall whose halves cancel) is refused here, and the checker refuses any other body whose faces
+/// cross ([`accepted`]).
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "whole steps under 2^41, which an f64 holds exactly; one pass writes every arena's rows"
+)]
+fn lofted(sections: &[Section], reversed: bool) -> Result<Body, EngineError> {
+    const OP: &str = "loft";
+    let broke = |e| refused(OP, format!("{e:?}"));
+    let n = sections.first().map_or(0, |s| s.corners.len());
+    let m = sections.len();
+    let mut points = Vec::with_capacity(m * n);
+    for s in sections {
+        for i in 0..n {
+            let at = if reversed { (n - i) % n } else { i };
+            points.push(
+                *s.corners
+                    .get(at)
+                    .ok_or_else(|| refused(OP, "a section short of corners"))?,
+            );
+        }
+    }
+    // Each face's ring of vertex rows, counter-clockwise seen from outside.
+    let mut rings: Vec<Vec<usize>> = Vec::with_capacity(2 + (m - 1) * n);
+    rings.push((0..n).map(|i| (n - i) % n).collect());
+    for k in 0..m - 1 {
+        for i in 0..n {
+            let j = (i + 1) % n;
+            rings.push(vec![k * n + i, k * n + j, (k + 1) * n + j, (k + 1) * n + i]);
+        }
+    }
+    rings.push((0..n).map(|i| (m - 1) * n + i).collect());
+
+    let mut edge_of: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    let mut ends: Vec<(usize, usize)> = Vec::new();
+    let mut ring_of: Vec<Vec<usize>> = Vec::new();
+    let (mut faces, mut surfaces, mut loops, mut fins) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let count = rings.len();
+    for (f, ring) in rings.iter().enumerate() {
+        let corners: Vec<P3> = ring.iter().map(|&v| points[v]).collect();
+        surfaces.push(SurfaceKind::Plane(plane_of(OP, &corners)?));
+        let first = fins.len();
+        let len = ring.len();
+        loops.push(Loop {
+            face: ix(OP, f)?,
+            next: None,
+            first_fin: Some(ix(OP, first)?),
+        });
+        for (s, &a) in ring.iter().enumerate() {
+            let b = ring[(s + 1) % len];
+            let key = (a.min(b), a.max(b));
+            let e = *edge_of.entry(key).or_insert_with(|| {
+                ends.push(key);
+                ring_of.push(Vec::new());
+                ends.len() - 1
+            });
+            ring_of[e].push(first + s);
+            fins.push(Fin {
+                loop_: ix(OP, f)?,
+                next: ix(OP, first + (s + 1) % len)?,
+                prev: ix(OP, first + (s + len - 1) % len)?,
+                edge: ix(OP, e)?,
+                sense: if a == key.0 {
+                    Sense::Forward
+                } else {
+                    Sense::Reversed
+                },
+                radial: ix(OP, first + s)?,
+                pcurve: None,
+            });
+        }
+        faces.push(Face {
+            shell: ix(OP, 0)?,
+            next: if f + 1 < count {
+                Some(ix(OP, f + 1)?)
+            } else {
+                None
+            },
+            surface: ix(OP, f)?,
+            sense: Sense::Forward,
+            first_loop: Some(ix(OP, f)?),
+            bound: box_of(OP, &corners)?,
+        });
+    }
+    let mut edges = Vec::with_capacity(ends.len());
+    let mut curves = Vec::with_capacity(ends.len());
+    for (e, &(a, b)) in ends.iter().enumerate() {
+        let [x, y] = ring_of[e][..] else {
+            return Err(refused(OP, "an edge not shared by exactly two faces"));
+        };
+        fins[x].radial = ix(OP, y)?;
+        fins[y].radial = ix(OP, x)?;
+        let (from, to) = (coords(points[a]), coords(points[b]));
+        let line = Line::new(
+            from,
+            [to[0] - from[0], to[1] - from[1], to[2] - from[2]],
+            (0.0, 1.0),
+        )
+        .map_err(|e| refused(OP, format!("{e:?}")))?;
+        curves.push(CurveKind::Line(line));
+        edges.push(Edge {
+            first_fin: Some(ix(OP, x)?),
+            start: Some(ix(OP, a)?),
+            end: Some(ix(OP, b)?),
+            curve: ix(OP, e)?,
+        });
+    }
+    let vertices: Vec<Vertex> = (0..points.len())
+        .map(|v| Ok(Vertex { point: ix(OP, v)? }))
+        .collect::<Result<_, EngineError>>()?;
+    let regions = [
+        Region {
+            kind: RegionKind::Void,
+            first_shell: None,
+        },
+        Region {
+            kind: RegionKind::Solid,
+            first_shell: Some(ix(OP, 0)?),
+        },
+    ];
+    let shells = [Shell {
+        region: ix(OP, 1)?,
+        next: None,
+        first_face: Some(ix(OP, 0)?),
+    }];
+    let mut b = Builder::new();
+    let a = &mut b.arenas;
+    a.regions.extend(&regions).map_err(broke)?;
+    a.shells.extend(&shells).map_err(broke)?;
+    a.faces.extend(&faces).map_err(broke)?;
+    a.loops.extend(&loops).map_err(broke)?;
+    a.fins.extend(&fins).map_err(broke)?;
+    a.edges.extend(&edges).map_err(broke)?;
+    a.vertices.extend(&vertices).map_err(broke)?;
+    a.surfaces.extend(surfaces).map_err(broke)?;
+    a.curves.extend(curves).map_err(broke)?;
+    a.points
+        .extend(points.into_iter().map(PointKind::Grid).collect::<Vec<_>>())
+        .map_err(broke)?;
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    b.publish(BodyKind::Solid, ix(OP, 0)?, &mut meter)
+        .map_err(broke)
+}
+
+/// The grid points of every vertex of `body`, sorted by x, then y, then z: the key the pieces of a
+/// cut are ordered by.
+fn corners_of(body: &Body) -> Vec<(i64, i64, i64)> {
+    let mut out: Vec<(i64, i64, i64)> = (0..body.arenas().vertices.len())
+        .filter_map(VertexIx::new)
+        .filter_map(|v| point(body, v).ok())
+        .map(|p| (p.x.get(), p.y.get(), p.z.get()))
+        .collect();
+    out.sort_unstable();
+    out
+}
+
 impl Engine for SolidcoreEngine {
     type Solid = EngineSolid;
 
@@ -534,6 +865,7 @@ impl Engine for SolidcoreEngine {
                 answer("extrude", PRISM_CASE, BY_PRISM),
                 answer("extrude", SWEEP_CASE, BY_SWEEP),
                 answer("subtract", EVERY_CASE, BY_BOOL),
+                answer("subtract_pieces", EVERY_CASE, BY_BOOL),
                 answer("loft", LOFT_CASE, BY_LOFT),
                 answer("unite", FLAT_CASE, BY_BOOL),
                 answer("unite", CURVED_CASE, BY_UNION),
@@ -611,15 +943,14 @@ impl Engine for SolidcoreEngine {
             .iter()
             .map(|s| s.corners.iter().map(|&p| Corner::from(p)).collect())
             .collect();
-        let s = self.modeller.loft(&given).map_err(|e| match e {
+        let reversed = crate::loft_reversed(&given).map_err(|e| match e {
             crate::Error::Invalid { what, .. } => EngineError::Invalid {
                 operation: OP,
                 what,
             },
             other => refused(OP, other),
         })?;
-        accepted(OP, (on_its_corners(OP, s.body())?, s.exactness()), BY_LOFT)
-            .map(|made| made.keeping(s))
+        accepted(OP, (lofted(sections, reversed)?, Exactness::Exact), BY_LOFT)
     }
 
     fn unite(&mut self, a: &EngineSolid, b: &EngineSolid) -> Result<EngineSolid, EngineError> {
@@ -704,6 +1035,50 @@ impl Engine for SolidcoreEngine {
             .map(|c| c.body)
             .ok_or_else(|| refused(OP, "no body"))?;
         accepted(OP, (body, exactness), BY_BOOL)
+    }
+
+    fn subtract_pieces(
+        &mut self,
+        target: &EngineSolid,
+        tool: &EngineSolid,
+    ) -> Result<Vec<EngineSolid>, EngineError> {
+        const OP: &str = "subtract_pieces";
+        let (t, k) = (OperandKey([1; 16]), OperandKey([2; 16]));
+        fn operand(key: OperandKey, s: &EngineSolid) -> Operand<'_> {
+            Operand {
+                key,
+                body: &s.body,
+                kind: OperandKind::Solid,
+                exactness: s.exactness,
+            }
+        }
+        let would = target
+            .exactness
+            .combine(tool.exactness)
+            .ok_or_else(|| unsupported(OP, "operands whose exactness has no common class"))?;
+        // Every cell inside the target and outside the tool, each its own body: the pieces.
+        let input = BooleanInput {
+            operands: vec![operand(t, target), operand(k, tool)],
+            select: vec![Selection::Cells {
+                test: vec![Term::Inside(t), Term::Inside(k), Term::Not, Term::And],
+                seeds: vec![],
+            }],
+            merge: Merge::RemoveRedundant,
+            accept: Some(would),
+        };
+        let out = combine(&context(), &Exec::serial(), &input).map_err(|e| refused(OP, e))?;
+        let exactness = out.exactness;
+        let mut lists = out.result;
+        let cells = lists.pop().unwrap_or_default();
+        if !lists.is_empty() {
+            return Err(refused(OP, "more than one list for one selection"));
+        }
+        let mut pieces = cells
+            .into_iter()
+            .map(|c| accepted(OP, (c.body, exactness), BY_BOOL))
+            .collect::<Result<Vec<_>, _>>()?;
+        pieces.sort_by_cached_key(|p| corners_of(&p.body));
+        Ok(pieces)
     }
 
     fn volume(&mut self, solid: &EngineSolid) -> Result<Volume, EngineError> {
