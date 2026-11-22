@@ -25,8 +25,10 @@
 //!   exact coordinates in lowest terms would be its own as well, but they pass a plane's budget,
 //!   and a vertex is a meeting of three planes its body holds (24.3). Where the faces at a point
 //!   lie on fewer than three such planes, as at a seam's vertex, a sheet's rim or the end of a
-//!   section's curve, the bounds of its edges' fins come next and then the other planes through
-//!   its corners, and that part of the name is as the pieces were cut (tested).
+//!   section's curve, the bounds of its edges' fins come next, and at a curve's end the bounds of
+//!   the polygons' outlines that end there, which the boxes do not change either (#1177; tested).
+//!   A fin's bound along a line a cut ran along is the cutting polygon's plane, so where two
+//!   polygons' planes meet a face in one line, a rim's name can still be as the pieces were cut.
 //! - **Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by
 //!   their Plücker coordinates, in at most 576 bits, and nothing is rounded.
 //! - **Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has
@@ -372,18 +374,14 @@ struct Corner {
     cells: Option<[Cell; 3]>,
 }
 
-/// One point of the merge: the first of its corners in the sorted order, and where the run of its
-/// corners lies in that order, whose planes [`named`] reads last, where it is off the grid and its
-/// faces and its fins' bounds do not name it.
+/// One point of the merge: the first of its corners in the sorted order.
 struct Place<'c> {
     corner: &'c Corner,
-    run: (usize, usize),
 }
 
-/// The merge's points: every corner by reference, in piece order, each staying in the list its
-/// piece's task made; their sorted order; and the distinct points, each a run of that order.
+/// The merge's points: the sorted order of every corner, in piece order, and the distinct
+/// points, each a run of that order.
 struct Points<'c> {
-    corners: Vec<&'c Corner>,
     order: Vec<usize>,
     places: Vec<Place<'c>>,
 }
@@ -1388,8 +1386,8 @@ fn numbered<'c>(
             sorted_from(start, &order_of)?
         }
     };
-    // Each run of equal points in that order is one place: its first corner, and where the run
-    // lies, so no corner's planes are copied. Whether a corner starts a run is told on the pool,
+    // Each run of equal points in that order is one place: its first corner, so no corner's
+    // planes are copied. Whether a corner starts a run is told on the pool,
     // against the corner before it in the order, by the keys the sort read where there are any:
     // a corner equal to the one before it is equal to its run's first. The runs are then walked
     // once, in order.
@@ -1410,7 +1408,7 @@ fn numbered<'c>(
     let mut places: Vec<Place<'c>> = Vec::with_capacity(starts.iter().filter(|s| **s).count());
     let mut start = 0usize;
     while let Some(first) = order.get(start) {
-        let leader = corners.get(*first).ok_or(MergeError::Open)?;
+        let leader = corners.get(*first).copied().ok_or(MergeError::Open)?;
         let after = start.saturating_add(1);
         let end = starts
             .iter()
@@ -1420,17 +1418,10 @@ fn numbered<'c>(
         for at in order.get(start..end).ok_or(MergeError::Open)? {
             *number.get_mut(*at).ok_or(MergeError::Open)? = places.len();
         }
-        places.push(Place {
-            corner: leader,
-            run: (start, end),
-        });
+        places.push(Place { corner: leader });
         start = end;
     }
-    let points = Points {
-        corners,
-        order,
-        places,
-    };
+    let points = Points { order, places };
     Ok((number, points))
 }
 
@@ -1592,11 +1583,56 @@ fn splits_boxes(plane: &Plane) -> bool {
 
 /// What the edges that end at one point bring it, which name it where it is off the grid: the
 /// planes of the faces they bound, in canonical form, and the bounds their fins stand on, as the
-/// pieces write them.
+/// pieces write them; and for a section's curve, the bounds of the outlines that end there, as
+/// [`outlines`] finds them.
 #[derive(Debug, Default)]
 struct Brought {
     faces: Vec<Plane>,
     bounds: Vec<Plane>,
+    outline: Vec<Plane>,
+}
+
+/// For each place of `used`, the bounds of the sides on an outline that end there: in each
+/// stretch of each line of `lines`, stretches of `sides` in line order, a side of a piece that no
+/// piece of its owner, on its plane and facing its way, meets from across the line. A section is
+/// given every piece of its polygons, so such a side lies on a polygon's outline, and it keeps the
+/// polygon's own bound there whatever the boxes did: a cut or a split along that line leaves the
+/// piece whole.
+fn outlines(
+    lines: &[(usize, usize)],
+    sides: &[&Side],
+    held: &[Held<'_>],
+    used: &[usize],
+) -> Result<Vec<Vec<Plane>>, MergeError> {
+    let mut at: Vec<Vec<Plane>> = alloc::vec![Vec::new(); used.len()];
+    let key = |side: &Side| -> Result<(usize, Plane, bool), MergeError> {
+        let piece = held.get(side.held).ok_or(MergeError::Open)?;
+        Ok((side.sheet, piece.face.plane, side.flipped))
+    };
+    for (start, end) in lines {
+        let group = sides.get(*start..*end).ok_or(MergeError::Open)?;
+        for (low, high, active) in stretches(group) {
+            for one in &active {
+                let mine = key(one)?;
+                let mut across = false;
+                for other in &active {
+                    across |= other.rising != one.rising && key(other)? == mine;
+                }
+                if across {
+                    continue;
+                }
+                for id in [low, high] {
+                    if let Ok(place) = used.binary_search(&id) {
+                        at.iter_mut()
+                            .skip(place)
+                            .take(1)
+                            .for_each(|list| list.push(one.bound));
+                    }
+                }
+            }
+        }
+    }
+    Ok(at)
 }
 
 /// For each place of `used`, the runs that end there, as places in `runs`; none for a place whose
@@ -1700,10 +1736,22 @@ fn first_meeting(list: &[Plane], meter: &mut WorkMeter<'_>) -> Result<Option<Tpi
 /// on two lines at least, or the sweep would have run them into one, and each edge's faces lie
 /// on two planes through its line. A seam's vertex, a sheet's rim and the end of a section's
 /// curve can have fewer. There the bounds the edges' fins stand on come after the faces' planes,
-/// and after them the other planes through the point's corners, each in canonical form and in
-/// plane order, leaving out the boxes' splits; a point with no three even then keeps its first
-/// corner's. Those planes are the pieces', so that part of such a name is as the pieces were
-/// cut.
+/// each in canonical form and in plane order, leaving out the boxes' splits: at a rim or a seam
+/// that turns, edges on two lines end, and the face's plane and their two fins' bounds meet only
+/// there. A fin's bound on a polygon's outline is the polygon's own; one on a line a cut ran along
+/// is the plane of whichever polygon cut the piece there first, so where two polygons' planes
+/// meet the face in one line, that bound can still be as the pieces were cut.
+///
+/// At the end of a section's curve one edge ends, on two faces, and each fin's bound is the
+/// other's face, so neither names the point. The name once took its third plane from the planes
+/// through the point's corners, and a polygon whose triangle stops short of the point cut a piece
+/// through it in one box and not in smaller ones (#1177). A curve runs where the polygons of both
+/// faces cover the line the faces meet in, since a cut runs along that line wherever the other
+/// polygon reaches a piece, so it ends where the outline of one of them crosses the line; and a
+/// side on a polygon's outline keeps the polygon's own bound, as a cut or a split along that line
+/// leaves the piece whole ([`outlines`]). So the bounds of the outlines that end at the point come
+/// next, and with them the name is the shape's. A point that none of these name keeps its first
+/// corner's; no input is known to reach it.
 ///
 /// A plane is read in canonical form because one plane reaches a point written either way, as a
 /// face and as a bound of the face beside it, and at more than one scale: `geom-bool` makes a
@@ -1730,15 +1778,15 @@ fn named(
     if let Some(at) = first_meeting(&list, meter)? {
         return Ok(at);
     }
-    let (start, end) = place.run;
-    let run = points.order.get(start..end).ok_or(MergeError::Open)?;
-    let mut through: Vec<Plane> = Vec::with_capacity(run.len().saturating_mul(3));
-    for at in run {
-        let corner = points.corners.get(*at).ok_or(MergeError::Open)?;
-        through.extend(corner.point.planes());
-    }
-    then_in_plane_order(&mut list, &through)?;
-    Ok(first_meeting(&list, meter)?.unwrap_or(place.corner.point))
+    // A merge brings no outline, and the list it has already failed is not read again.
+    let before = list.len();
+    then_in_plane_order(&mut list, &ends.outline)?;
+    let found = if list.len() > before {
+        first_meeting(&list, meter)?
+    } else {
+        None
+    };
+    Ok(found.unwrap_or(place.corner.point))
 }
 
 /// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
@@ -2545,7 +2593,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     let (order, lines) = by_line(&each_side, None, &Exec::serial(), meter)?;
     let sides = in_order(&each_side, &order)?;
     let mut runs: Vec<Run> = Vec::new();
-    for (start, end) in lines {
+    for (start, end) in lines.iter().copied() {
         let group = sides.get(start..end).ok_or(MergeError::Open)?;
         meetings(start, group, &held, &mut runs)?;
     }
@@ -2561,9 +2609,11 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
         meets.push(run.fins.iter().map(|fin| fin.held).collect());
     }
     let ending = runs_at(&runs, &used, &points);
+    let outline = outlines(&lines, &sides, &held, &used)?;
     let mut vertices = Vec::with_capacity(used.len());
-    for (id, here) in used.iter().zip(&ending) {
-        let ends = brought(here, &runs, &held)?;
+    for ((id, here), through) in used.iter().zip(&ending).zip(outline) {
+        let mut ends = brought(here, &runs, &held)?;
+        ends.outline = through;
         vertices.push(named(&points, *id, &ends, meter)?);
     }
     Ok(Curves {
