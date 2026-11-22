@@ -442,7 +442,7 @@ Every kind of view, the drawing engine that turns 3D into correct 2D, and the gr
 | CON-A8-F2-P2 | **Hidden line removal**. Removes or dashes hidden edges per view, worked out in tiles and cached per element. | library | large | CON-A8-F2-P1, engine-draw2d | [A12](STATUS.md) |
 | CON-A8-F2-P3 | **Line clean-up**. Joined elements draw without seams between layers of the same material. | library | medium | CON-A8-F2-P1 |  |
 | CON-A8-F2-P4 | **2D output**. Lines at true weights at any zoom and patterns as GPU fills, from the drawing engine. | library | medium | engine-draw2d, CON-A8-F4-P1 |  |
-| CON-A8-F3-P1 | **Object and line styles**. Line weights by scale, line patterns, object styles and colours as project data. | data | small | CON-A2-F1-P1 |  |
+| CON-A8-F3-P1 | **Object and line styles**. Line weights by scale, line patterns, object styles and colours as project data. A pen is a named number with a width per view scale. | data | small | CON-A2-F1-P1 |  |
 | CON-A8-F3-P2 | **Graphics rules**. Category and subcategory styles, cut and projection, halftone and transparency, per view. | library | medium | CON-A8-F3-P1 |  |
 | CON-A8-F3-P3 | **View filters**. Rule-based and selection filters that change graphics or hide elements. | library | medium | CON-A8-F3-P2, CON-A2-F2-P1 |  |
 | CON-A8-F3-P4 | **View templates**. Saved sets of view settings applied to many views at once. | library | small | CON-A8-F3-P2 |  |
