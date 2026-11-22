@@ -1,6 +1,6 @@
 {
-  "format": 1,
-  "about": "Every triaged oracle difference (chapter 28.10), by signature: an oracle run fails only on a signature not here, and each ends as a fixture.",
+  "format": 2,
+  "about": "Every triaged oracle difference (chapter 28.10), by signature and the job it was triaged on (the SHA-256 of the job's line, the one its fixture logs): an oracle run fails on any difference whose signature and job no record here holds, and each ends as a fixture.",
   "records": [
     {
       "signature": {
@@ -9,6 +9,7 @@
         "kind": "hausdorff",
         "family": "tetrahedra"
       },
+      "job": "a211c9d7ddc86f4b14bc8356016ac7a2b07304963b1724014fd728eed1b4ea48",
       "outcome": "ours",
       "fixture": "meshes/0001-union-fold-in-the-export",
       "reference": "spareware PR #878 (fix/G154-export-fold c3b02f41: the export's triangles cover what a face's rounded outline encloses) and join/oracles-live 56e2e078 (the comparison measures the kernel's exact result)",
@@ -21,6 +22,7 @@
         "kind": "unmeasured",
         "family": "tetrahedra"
       },
+      "job": "68de6107a357ea33326058c4a18ae77e6d92d8f74c6aebe0aa9b686f9eefce38",
       "outcome": "ours",
       "fixture": "meshes/0002-union-measured-through-rounding",
       "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
@@ -33,6 +35,7 @@
         "kind": "unmeasured",
         "family": "tetrahedra"
       },
+      "job": "b0ab22675e2bfe98369a8e45becf7135c1c1d8061b708f6dfc80fc1e219b4061",
       "outcome": "ours",
       "fixture": "meshes/0003-difference-measured-through-rounding",
       "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",
@@ -45,6 +48,7 @@
         "kind": "unmeasured",
         "family": "tetrahedra"
       },
+      "job": "a0bb6f1372b565352f93b06b64046a58ef8237ad597df292ad54abbf6bbfc5a1",
       "outcome": "ours",
       "fixture": "meshes/0004-intersection-measured-through-rounding",
       "reference": "join/oracles-live 56e2e078 (the comparison measures the kernel's exact result, not the export's triangles)",

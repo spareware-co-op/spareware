@@ -897,7 +897,7 @@ How to read an entry:
 
 **Sign** (also: `Sign`): A predicate's answer: `Negative`, `Zero` or `Positive`, never a number (6.2).
 
-**Signature**: In a reference, the stored description of what it pointed at, used only to suggest a repair in the interface, never to resolve the reference (20.4). In differential testing, the key a difference from an oracle is grouped by: operation, oracle, kind of difference and input family; an oracle run fails only on a new signature (28.10).
+**Signature**: In a reference, the stored description of what it pointed at, used only to suggest a repair in the interface, never to resolve the reference (20.4). In differential testing, the key a difference from an oracle is grouped by: operation, oracle, kind of difference and input family; a triage covers its signature on the job it was triaged on alone, and an oracle run fails on any difference not triaged (28.10).
 
 **Simulation of Simplicity**: Edelsbrunner and Mücke's symbolic perturbation, which breaks ties as if inputs were moved by infinitesimals in a fixed order; the kernel orders by persistent keys, never addresses (6.2; piece G30).
 

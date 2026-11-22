@@ -1,10 +1,13 @@
-//! Triage: every difference ends in one of four outcomes, each a fixture, and each signature is
-//! recorded once (chapter 28.10; piece G113).
+//! Triage: every difference ends in one of four outcomes, each a fixture, and each is recorded once,
+//! by its signature and the job it was triaged on (chapter 28.10; piece G113).
 //!
 //! What it does: a [`Signature`] groups differences: operation, oracle, kind of difference, input
-//! family. [`Register`] is the record of triaged signatures (`oracles/triaged.json`,
-//! [`REGISTER_PATH`]): [`Register::new_signatures`] says which of a night's are new, and only those
-//! fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.
+//! family. A [`Difference`] is one of them as the register reads it: its signature and its job,
+//! pinned by [`job_digest`], the SHA-256 of the job's line as the oracle received it. [`Register`]
+//! is the record of triaged differences (`oracles/triaged.json`, [`REGISTER_PATH`]): each record
+//! holds a signature and the job it was triaged on, the one its fixture logs ([`logged_job`]).
+//! [`Register::new_differences`] says which of a run's are not triaged, and those fail it.
+//! [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.
 //!
 //! The outcomes are [`Triage`]'s four, and each ends differently:
 //!
@@ -18,10 +21,12 @@
 //!
 //! Guarantees:
 //!
-//! - **One record per signature**, and every record names its fixture.
+//! - **One record per signature and job**, and every record names its fixture.
 //! - **"Theirs" names its report**, and "ours" its fix: neither can be recorded empty.
-//! - **An oracle run fails only on a new signature**, so a known difference never hides a new one
-//!   and is never argued twice.
+//! - **A record covers only the job it was triaged on**: a difference is known only when one record
+//!   holds both its signature and its job, so a second cause under a triaged signature, on any
+//!   other job, is not triaged and fails the run. A known difference never hides a new one and is
+//!   never argued twice.
 //!
 //! Method: chapter 28.10's triage (`projects/engines/geometry/architecture/28-testing.md`).
 //!
@@ -30,10 +35,13 @@
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
 
+use geom_format::payload::Reader;
+use geom_run::{Budget, WorkMeter};
 use serde::{Deserialize, Serialize};
 
 use crate::fixture::run::Replayed;
 use crate::fixture::{Fixture, Key, OpLog, Source, Speed, Status, Triage};
+use crate::golden::{Digest, hex, sha256};
 
 /// The register's path, relative to the workspace root, one component per entry.
 pub const REGISTER_PATH: [&str; 7] = [
@@ -49,8 +57,8 @@ pub const REGISTER_PATH: [&str; 7] = [
 /// The register's text as this crate was built with it.
 pub const EMBEDDED: &str = include_str!("../../oracles/triaged.json");
 
-/// The register format this reader reads.
-pub const FORMAT: u32 = 1;
+/// The register format this reader reads: 2, whose records pin their job.
+pub const FORMAT: u32 = 2;
 
 /// What groups one difference with another.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -76,12 +84,53 @@ impl fmt::Display for Signature {
     }
 }
 
-/// One triaged signature.
+/// The pin of a job: the SHA-256 of `line`, the job's JSON line as `oracle jobs` writes it and a
+/// triaged case's fixture logs it, as 64 lowercase hexadecimal digits.
+#[must_use]
+pub fn job_digest(line: &str) -> String {
+    hex(sha256(line.as_bytes()))
+}
+
+/// The job `log` was written from: the JSON line its one operation carries, as
+/// `meshes::operation` and `geomdl::operation` write it.
+///
+/// # Errors
+///
+/// A log of other than one operation, or one whose parameters are not one text.
+pub fn logged_job(log: &OpLog) -> Result<String, String> {
+    let [operation] = log.operations.as_slice() else {
+        return Err(format!(
+            "{} operations, not a triaged job's one",
+            log.operations.len()
+        ));
+    };
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let mut reader = Reader::new(&operation.params);
+    let text = reader
+        .text(&mut meter, "a job")
+        .map_err(|e| e.to_string())?;
+    reader.end().map_err(|e| e.to_string())?;
+    Ok(text.to_owned())
+}
+
+/// One difference as the register reads it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Difference {
+    /// Its signature.
+    pub signature: Signature,
+    /// Its job's pin, [`job_digest`].
+    pub job: String,
+}
+
+/// One triaged difference: a signature on the job it was triaged on.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
     /// The signature.
     pub signature: Signature,
+    /// The job it was triaged on, [`job_digest`] of the line its fixture logs: the record covers
+    /// that job alone.
+    pub job: String,
     /// The outcome.
     pub outcome: Triage,
     /// The fixture it ended as.
@@ -92,7 +141,7 @@ pub struct Record {
     pub why: String,
 }
 
-/// The record of triaged signatures.
+/// The record of triaged differences.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Register {
@@ -127,6 +176,9 @@ impl core::error::Error for TriageError {}
 impl Record {
     fn rules(&self) -> Result<(), String> {
         let s = &self.signature;
+        if !Digest::is_canonical_hex(&self.job) {
+            return Err(format!("{s}: its job is not a job's SHA-256"));
+        }
         if !crate::fixture::is_id(&self.fixture) {
             return Err(format!("{s}: its fixture is not a fixture's id"));
         }
@@ -146,6 +198,12 @@ impl Record {
             ));
         }
         Ok(())
+    }
+
+    /// Whether this record covers `difference`: its signature, on its job.
+    #[must_use]
+    pub fn covers(&self, difference: &Difference) -> bool {
+        self.signature == difference.signature && self.job == difference.job
     }
 }
 
@@ -167,10 +225,10 @@ impl Register {
         let mut seen = BTreeSet::new();
         for record in &register.records {
             record.rules().map_err(TriageError::Rule)?;
-            if !seen.insert(&record.signature) {
+            if !seen.insert((&record.signature, &record.job)) {
                 return Err(TriageError::Rule(format!(
-                    "{}: recorded twice",
-                    record.signature
+                    "{} on job {}: recorded twice",
+                    record.signature, record.job
                 )));
             }
         }
@@ -186,22 +244,22 @@ impl Register {
         Register::parse(EMBEDDED)
     }
 
-    /// Whether `signature` has been triaged.
+    /// Whether `difference` has been triaged: whether a record holds its signature on its job.
     #[must_use]
-    pub fn knows(&self, signature: &Signature) -> bool {
-        self.records.iter().any(|r| r.signature == *signature)
+    pub fn knows(&self, difference: &Difference) -> bool {
+        self.records.iter().any(|r| r.covers(difference))
     }
 
-    /// Of `differences`, the signatures not yet triaged, each once, in order.
+    /// Of `differences`, those not yet triaged, each once, in order.
     #[must_use]
-    pub fn new_signatures<'a>(
+    pub fn new_differences<'a>(
         &self,
-        differences: impl IntoIterator<Item = &'a Signature>,
-    ) -> Vec<Signature> {
-        let unique: BTreeSet<&Signature> = differences.into_iter().collect();
+        differences: impl IntoIterator<Item = &'a Difference>,
+    ) -> Vec<Difference> {
+        let unique: BTreeSet<&Difference> = differences.into_iter().collect();
         unique
             .into_iter()
-            .filter(|s| !self.knows(s))
+            .filter(|d| !self.knows(d))
             .cloned()
             .collect()
     }
