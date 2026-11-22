@@ -175,8 +175,73 @@ fn a_whole_number_refuses_a_fraction() {
 }
 
 #[test]
+fn a_typed_length_off_the_grid_is_refused_naming_the_nearest_values() {
+    let units = Units::metric();
+    let height = def("Height", Kind::Length);
+    // 0.001 mm is 6.4 grid steps: never rounded to 6.
+    let error = height.parse("0.001", &units).unwrap_err();
+    assert_eq!(
+        error,
+        ParamError::OffGrid {
+            parameter: "Height".to_owned(),
+            text: "0.001".to_owned(),
+            below: "0.0009375 mm".to_owned(),
+            above: "0.00109375 mm".to_owned(),
+        }
+    );
+    let text = error.to_string();
+    assert!(
+        text.contains("Height") && text.contains("0.0009375 mm") && text.contains("0.00109375 mm"),
+        "{text}"
+    );
+    // Named in the unit typed, and below and above for a negative value too.
+    assert_eq!(
+        height.parse("2.4000001 m", &units),
+        Err(ParamError::OffGrid {
+            parameter: "Height".to_owned(),
+            text: "2.4000001 m".to_owned(),
+            below: "2.4 m".to_owned(),
+            above: "2.40000015625 m".to_owned(),
+        })
+    );
+    assert_eq!(
+        height.parse("-0.001 mm", &units),
+        Err(ParamError::OffGrid {
+            parameter: "Height".to_owned(),
+            text: "-0.001 mm".to_owned(),
+            below: "-0.00109375 mm".to_owned(),
+            above: "-0.0009375 mm".to_owned(),
+        })
+    );
+    // Areas and volumes in their own steps.
+    assert_eq!(
+        def("Floor area", Kind::Area).parse("0.00000001 mm2", &units),
+        Err(ParamError::OffGrid {
+            parameter: "Floor area".to_owned(),
+            text: "0.00000001 mm2".to_owned(),
+            below: "0 mm²".to_owned(),
+            above: "0.0000000244140625 mm²".to_owned(),
+        })
+    );
+    assert!(matches!(
+        def("Volume", Kind::Volume).parse("0.0000000000000000001 m3", &units),
+        Err(ParamError::OffGrid { .. })
+    ));
+}
+
+#[test]
 fn a_value_too_large_to_store_is_refused() {
     let units = Units::metric();
+    // 10^20 mm is beyond 64 bits of grid steps, and so is 10^16.
+    for too_big in ["99999999999999999999", "10000000000000000"] {
+        assert_eq!(
+            def("Height", Kind::Length).parse(too_big, &units),
+            Err(ParamError::OutOfRange {
+                parameter: "Height".to_owned(),
+                text: too_big.to_owned(),
+            })
+        );
+    }
     let too_big = "99999999999999999999";
     assert_eq!(
         def("Height", Kind::Length).parse(too_big, &units),
@@ -274,6 +339,9 @@ fn stored_text_of_another_kind_or_spelling_is_refused() {
         "length:-0",
         "length: 1",
         "length",
+        "length:q0:02400",
+        "length:q0:+1",
+        "length:q1:1",
         "2400",
         "",
     ] {
@@ -338,8 +406,8 @@ fn arithmetic_on_unlike_kinds_is_refused_naming_both_kinds() {
 
 #[test]
 fn arithmetic_that_overflows_is_refused() {
-    let big = Value::Length(Length::from_mm(i64::MAX));
-    let one = Value::Length(Length::from_mm(1));
+    let big = Value::Length(Length::from_steps(i64::MAX));
+    let one = Value::Length(Length::from_steps(1));
     assert_eq!(
         big.add(&one),
         Err(ParamError::Overflow {
@@ -347,10 +415,20 @@ fn arithmetic_that_overflows_is_refused() {
             kind: Kind::Length,
         })
     );
+    // Two lengths always make an area (128 bits), but a vast area times a length may not fit.
+    assert!(big.multiply(&big).is_ok());
+    let vast = Value::Area(Area::from_square_steps(i128::MAX));
     assert_eq!(
-        big.multiply(&big),
+        vast.multiply(&big),
         Err(ParamError::Overflow {
             op: Op::Multiply,
+            kind: Kind::Volume,
+        })
+    );
+    assert_eq!(
+        vast.add(&Value::Area(Area::from_square_steps(1))),
+        Err(ParamError::Overflow {
+            op: Op::Add,
             kind: Kind::Area,
         })
     );
@@ -450,6 +528,33 @@ fn a_display_format_of_the_wrong_kind_is_refused() {
             places: 10,
         })
     );
+    // Finer than 0.01 mm would show values off the grid, which could not be read back.
+    for (kind, unit, places) in [
+        (Kind::Length, Unit::Millimetre, 3),
+        (Kind::Length, Unit::Metre, 6),
+        (Kind::Area, Unit::SquareMillimetre, 5),
+        (Kind::Volume, Unit::CubicMillimetre, 7),
+        (Kind::Area, Unit::SquareMetre, 10),
+    ] {
+        assert_eq!(
+            units.set(kind, Format { unit, places }),
+            Err(ParamError::BadFormat { kind, unit, places }),
+            "{unit:?} {places}"
+        );
+        assert_eq!(unit.max_places(), places - 1, "{unit:?}");
+        assert!(
+            units
+                .set(
+                    kind,
+                    Format {
+                        unit,
+                        places: places - 1
+                    }
+                )
+                .is_ok()
+        );
+    }
+    units = Units::metric();
     assert_eq!(
         units.set(
             Kind::Text,

@@ -12,7 +12,8 @@
 )]
 
 use construct_params::{
-    Angle, Area, Definition, Format, Holder, Kind, Length, Slope, Unit, Units, Value, Volume,
+    Angle, Area, Definition, Format, Holder, Kind, Length, ParamError, Slope, Unit, Units, Value,
+    Volume,
 };
 use kit_core::Id;
 use proptest::prelude::*;
@@ -47,11 +48,16 @@ fn shown_and_read(kind: Kind, units: &Units, value: &Value) -> Value {
     def.parse(&text, units).unwrap()
 }
 
+/// `mm` whole millimetres; every `mm` these tests make fits.
+fn mm_length(mm: i64) -> Length {
+    Length::checked_from_mm(mm).unwrap()
+}
+
 fn any_value() -> impl Strategy<Value = Value> {
     prop_oneof![
-        any::<i64>().prop_map(|mm| Value::Length(Length::from_mm(mm))),
-        any::<i64>().prop_map(|v| Value::Area(Area::from_mm2(v))),
-        any::<i64>().prop_map(|v| Value::Volume(Volume::from_mm3(v))),
+        any::<i64>().prop_map(|steps| Value::Length(Length::from_steps(steps))),
+        any::<i128>().prop_map(|v| Value::Area(Area::from_square_steps(v))),
+        any::<i128>().prop_map(|v| Value::Volume(Volume::from_cubic_steps(v))),
         any::<i64>().prop_map(|v| Value::Angle(Angle::from_units(v))),
         (-FAR..FAR, 1..FAR).prop_map(|(rise, run)| Value::Slope(Slope::new(rise, run).unwrap())),
         (any::<i64>(), 0u32..20)
@@ -72,10 +78,49 @@ proptest! {
 
     #[test]
     fn lengths_round_trip_through_mm_and_m(mm in -FAR..FAR) {
-        let value = Value::Length(Length::from_mm(mm));
+        let value = Value::Length(mm_length(mm));
         prop_assert_eq!(shown_and_read(Kind::Length, &Units::metric(), &value), value.clone());
         let metres = units(Kind::Length, Unit::Metre, 3);
         prop_assert_eq!(shown_and_read(Kind::Length, &metres, &value), value);
+    }
+
+    #[test]
+    fn every_size_to_two_decimals_of_a_millimetre_is_exact(hundredths in -FAR..FAR) {
+        // 0.01 mm is 64 grid steps, so any size typed to two places reads exactly and shows
+        // back the same at two places.
+        let sign = if hundredths < 0 { "-" } else { "" };
+        let typed = format!("{sign}{}.{:02} mm", hundredths.abs() / 100, hundredths.abs() % 100);
+        let length = def(Kind::Length);
+        let mm2 = units(Kind::Length, Unit::Millimetre, 2);
+        let value = length.parse(&typed, &mm2).unwrap();
+        prop_assert_eq!(&value, &Value::Length(Length::from_steps(hundredths * 64)));
+        let shown = length.format(&value, &mm2).unwrap();
+        prop_assert_eq!(length.parse(&shown, &mm2).unwrap(), value);
+    }
+
+    #[test]
+    fn typed_lengths_off_the_grid_are_refused_between_their_neighbours(
+        steps in -FAR..FAR,
+        tenth in 1i64..10,
+    ) {
+        // A tenth of a step is 1/64,000 mm, which is 15,625 billionths: written exactly to nine
+        // places, it is never rounded but refused, naming the steps either side.
+        let tenths = steps * 10 + tenth;
+        let billionths = tenths * 15_625;
+        let sign = if billionths < 0 { "-" } else { "" };
+        let typed = format!(
+            "{sign}{}.{:09} mm",
+            billionths.abs() / 1_000_000_000,
+            billionths.abs() % 1_000_000_000
+        );
+        let length = def(Kind::Length);
+        let Err(ParamError::OffGrid { below, above, .. }) = length.parse(&typed, &Units::metric())
+        else {
+            panic!("{typed} was not refused");
+        };
+        let low = tenths.div_euclid(10);
+        prop_assert_eq!(below, Length::from_steps(low).to_string());
+        prop_assert_eq!(above, Length::from_steps(low + 1).to_string());
     }
 
     #[test]
@@ -102,11 +147,12 @@ proptest! {
     }
 
     #[test]
-    fn shown_values_read_back_to_what_was_shown(mm in -FAR..FAR, places in 0u8..=9) {
-        // Fewer places lose part of a value, but what is shown reads back to itself.
+    fn shown_values_read_back_to_what_was_shown(steps in -FAR..FAR, places in 0u8..=5) {
+        // Fewer places lose part of a value, but what is shown reads back to itself: at most
+        // five places of a metre (0.01 mm), so it is always on the grid.
         let length = def(Kind::Length);
         let metres = units(Kind::Length, Unit::Metre, places);
-        let shown = length.format(&Value::Length(Length::from_mm(mm)), &metres).unwrap();
+        let shown = length.format(&Value::Length(Length::from_steps(steps)), &metres).unwrap();
         let again = length.parse(&shown, &metres).unwrap();
         prop_assert_eq!(length.format(&again, &metres).unwrap(), shown);
     }
@@ -137,7 +183,7 @@ proptest! {
 
     #[test]
     fn sums_of_like_values_are_exact(a in -FAR..FAR, b in -FAR..FAR, c in -FAR..FAR) {
-        let len = |mm| Value::Length(Length::from_mm(mm));
+        let len = |mm| Value::Length(mm_length(mm));
         prop_assert_eq!(len(a).add(&len(b)), Ok(len(a + b)));
         prop_assert_eq!(len(a).add(&len(b)), len(b).add(&len(a)));
         prop_assert_eq!(
@@ -160,7 +206,7 @@ proptest! {
         b in -1_000_000i64..1_000_000,
         c in -1_000_000i64..1_000_000,
     ) {
-        let len = |mm| Value::Length(Length::from_mm(mm));
+        let len = |mm| Value::Length(mm_length(mm));
         let area = len(a).multiply(&len(b)).unwrap();
         prop_assert_eq!(&area, &Value::Area(Area::from_mm2(a * b)));
         prop_assert_eq!(area.multiply(&len(c)), Ok(Value::Volume(Volume::from_mm3(a * b * c))));

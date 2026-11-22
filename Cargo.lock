@@ -577,6 +577,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "engine-geometry",
  "kit-core",
  "kit-ops",
  "num-rational",
@@ -605,6 +606,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-model",
+ "construct-params",
  "construct-regen",
  "engine-geometry",
  "hex",
@@ -632,6 +634,7 @@ dependencies = [
 name = "construct-solver"
 version = "0.0.0"
 dependencies = [
+ "engine-geometry",
  "nalgebra",
  "num-dual",
  "serde",
