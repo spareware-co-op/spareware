@@ -2,8 +2,8 @@
 //! command that isn't listed in `permit` is refused, so a new command can't arrive unguarded.
 
 use crate::cloud::access::{Access, Target};
-use crate::cloud::elements;
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
+use crate::cloud::{elements, params};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -129,6 +129,10 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
+            cmd if params::is_command(cmd) => {
+                self.allowed(person, "model.edit", Target::Model(project, &edit.target))
+                    .await?
+            }
             "document.checkpoint" => {
                 let model = Target::Model(project, &edit.target);
                 self.allowed(person, "document.checkpoint", model).await?
@@ -173,9 +177,10 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element edit of a model has the same answer, so a batch asks Cedar once.
+    /// Every element, parameter and type edit of a model has the same answer, so a batch asks
+    /// Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
-        if edit.cmd.starts_with("element.") {
+        if edit.cmd.starts_with("element.") || params::is_command(&edit.cmd) {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
             format!("{}/{}/{}/{}", edit.person, edit.cmd, edit.target, edit.args)
@@ -191,7 +196,9 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         let Scope::Project(project) = context.scope else {
             return Ok(Err("These commands act on a project.".to_owned()));
         };
-        if edit.cmd.starts_with("element.") {
+        if params::is_command(&edit.cmd) {
+            params::apply(txn, project, context, edit, self.claim_ms).await
+        } else if edit.cmd.starts_with("element.") {
             elements::apply(txn, project, context, edit, self.claim_ms).await
         } else if edit.cmd == "document.checkpoint" {
             Ok(elements::checkpoint(edit))
