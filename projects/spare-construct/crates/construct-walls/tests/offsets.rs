@@ -12,13 +12,13 @@
 
 mod common;
 
-use common::{finish, id, mm, mms, structure};
+use common::{finish, hmm, hmms, id, mm, structure};
+use construct_materials::MaterialId;
 use construct_params::{Definition, Holder, Kind, Length, Units, Value};
-use construct_walls::{Assembly, LocationLine, WallError, default_walls};
+use construct_walls::{Assembly, Function, Layer, LocationLine, WallError, default_walls};
 
 use LocationLine::{
-    CoreCentre, ExteriorCoreFace, ExteriorFinishFace, InteriorCoreFace, InteriorFinishFace,
-    WallCentre,
+    ExteriorCoreFace, ExteriorFinishFace, InteriorCoreFace, InteriorFinishFace, WallCentre,
 };
 
 /// The default type with this ID.
@@ -33,6 +33,7 @@ fn default(wall: &str) -> Assembly {
 
 /// Each default type: its face depths, its six location line depths in the order of
 /// `LocationLine::ALL`, and the face offsets with each location line on the reference line.
+/// Every number is in half millimetres, because the partition's linings are 12.5 mm.
 struct Expected {
     wall: &'static str,
     total: i64,
@@ -44,44 +45,44 @@ struct Expected {
 const EXPECTED: [Expected; 3] = [
     Expected {
         wall: "wall-partition-stud-90",
-        total: 116,
-        depths: &[0, 13, 103, 116],
-        lines: [58, 58, 0, 116, 13, 103],
+        total: 230,
+        depths: &[0, 25, 205, 230],
+        lines: [115, 115, 0, 230, 25, 205],
         faces: [
-            &[58, 45, -45, -58],
-            &[58, 45, -45, -58],
-            &[0, -13, -103, -116],
-            &[116, 103, 13, 0],
-            &[13, 0, -90, -103],
-            &[103, 90, 0, -13],
+            &[115, 90, -90, -115],
+            &[115, 90, -90, -115],
+            &[0, -25, -205, -230],
+            &[230, 205, 25, 0],
+            &[25, 0, -180, -205],
+            &[205, 180, 0, -25],
         ],
     },
     Expected {
         wall: "wall-concrete-200",
-        total: 200,
-        depths: &[0, 200],
-        lines: [100, 100, 0, 200, 0, 200],
+        total: 400,
+        depths: &[0, 400],
+        lines: [200, 200, 0, 400, 0, 400],
         faces: [
-            &[100, -100],
-            &[100, -100],
-            &[0, -200],
-            &[200, 0],
-            &[0, -200],
-            &[200, 0],
+            &[200, -200],
+            &[200, -200],
+            &[0, -400],
+            &[400, 0],
+            &[0, -400],
+            &[400, 0],
         ],
     },
     Expected {
         wall: "wall-brick-veneer-90",
-        total: 250,
-        depths: &[0, 110, 150, 150, 240, 250],
-        lines: [125, 195, 0, 250, 150, 240],
+        total: 500,
+        depths: &[0, 220, 300, 300, 480, 500],
+        lines: [250, 390, 0, 500, 300, 480],
         faces: [
-            &[125, 15, -25, -25, -115, -125],
-            &[195, 85, 45, 45, -45, -55],
-            &[0, -110, -150, -150, -240, -250],
-            &[250, 140, 100, 100, 10, 0],
-            &[150, 40, 0, 0, -90, -100],
-            &[240, 130, 90, 90, 0, -10],
+            &[250, 30, -50, -50, -230, -250],
+            &[390, 170, 90, 90, -90, -110],
+            &[0, -220, -300, -300, -480, -500],
+            &[500, 280, 200, 200, 20, 0],
+            &[300, 80, 0, 0, -180, -200],
+            &[480, 260, 180, 180, 0, -20],
         ],
     },
 ];
@@ -91,12 +92,12 @@ const EXPECTED: [Expected; 3] = [
 fn default_depths() {
     for expected in &EXPECTED {
         let wall = default(expected.wall);
-        assert_eq!(wall.total(), mm(expected.total), "{}", expected.wall);
-        assert_eq!(wall.face_depths(), mms(expected.depths).as_slice());
+        assert_eq!(wall.total(), hmm(expected.total), "{}", expected.wall);
+        assert_eq!(wall.face_depths(), hmms(expected.depths).as_slice());
         for (line, depth) in LocationLine::ALL.iter().zip(expected.lines) {
             assert_eq!(
                 wall.depth(*line),
-                Some(mm(depth)),
+                Some(hmm(depth)),
                 "{} {line:?}",
                 expected.wall
             );
@@ -114,7 +115,7 @@ fn default_offsets_every_line() {
             let offsets = wall.offsets(*on, false).unwrap();
             assert_eq!(
                 offsets.faces(),
-                mms(faces).as_slice(),
+                hmms(faces).as_slice(),
                 "{} on {on:?}",
                 expected.wall
             );
@@ -166,21 +167,37 @@ fn sign_convention() {
     assert_eq!(interior.line(ExteriorCoreFace), Some(mm(100)));
 }
 
-/// 13 + 90 + 10 = 113 mm. Today's length unit is a whole millimetre, so half of 113 mm is not a
-/// length: the wall centreline is refused, naming it, and never rounded; every other line is
-/// exact. Delete this test when piece A39 lands: its twin below then switches on.
+/// One step over 90 mm is an odd number of steps: its wall centreline is refused, naming it, and
+/// never rounded; every other line is exact. (An odd whole millimetre halves exactly: see
+/// `a39_odd_millimetre_centre_is_exact`.)
 #[test]
-fn odd_millimetre_centre_refused_today() {
-    let wall = Assembly::new(vec![finish(13), structure(90), finish(10)], 1, 2).unwrap();
+fn odd_step_centre_refused() {
+    let step = Length::from_steps(1);
+    let wall = Assembly::new(
+        vec![
+            Layer::new(
+                Function::Finish,
+                step,
+                MaterialId::parse("board").unwrap(),
+                false,
+            ),
+            structure(90),
+        ],
+        1,
+        2,
+    )
+    .unwrap();
     assert_eq!(wall.depth(WallCentre), None);
     assert_eq!(
         wall.offsets(WallCentre, false),
         Err(WallError::HalfNotExact { line: WallCentre })
     );
     let offsets = wall.offsets(ExteriorFinishFace, false).unwrap();
-    assert_eq!(offsets.faces(), mms(&[0, -13, -103, -113]).as_slice());
     assert_eq!(offsets.line(WallCentre), None);
-    assert_eq!(offsets.line(CoreCentre), Some(mm(-58)));
+    assert_eq!(
+        offsets.line(ExteriorCoreFace),
+        Some(mm(0).checked_sub(step).unwrap())
+    );
     assert_eq!(
         WallError::HalfNotExact { line: WallCentre }.to_string(),
         "the wall centreline falls between two steps of the length unit"
@@ -199,7 +216,6 @@ fn typed(text: &str) -> Option<Length> {
 /// With piece A39's length unit (the kernel's grid), half of an odd millimetre is exact: the
 /// centreline of 113 mm is 56.5 mm, with no rule of this crate's own.
 #[test]
-#[ignore = "switch on when piece A39 lands: Length in the kernel's grid unit"]
 fn a39_odd_millimetre_centre_is_exact() {
     let wall = Assembly::new(vec![finish(13), structure(90), finish(10)], 1, 2).unwrap();
     assert!(typed("56.5 mm").is_some());
@@ -213,7 +229,6 @@ fn a39_odd_millimetre_centre_is_exact() {
 /// 115 mm in all, its centreline 57.5 mm from either face. Switch on with that change made to
 /// the defaults.
 #[test]
-#[ignore = "switch on when piece A39 lands: Length in the kernel's grid unit"]
 fn a39_partition_lining_is_12_5_mm() {
     let wall = default("wall-partition-stud-90");
     assert!(typed("12.5 mm").is_some() && typed("57.5 mm").is_some());

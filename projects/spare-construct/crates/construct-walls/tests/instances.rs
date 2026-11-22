@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{id, mm, mms, wall_parameters};
+use common::{hmms, id, mm, mms, wall_parameters};
 use construct_categories::{CategoryTable, WALLS};
 use construct_params::Value;
 use construct_types::{ElementType, Instance, Parameters, TypeError, Types};
@@ -106,7 +106,7 @@ fn instance_values_choose_the_offsets() {
         (LocationLine::ExteriorCoreFace, true)
     );
     let offsets = offsets_of(&params, partition, &wall).unwrap();
-    assert_eq!(offsets.faces(), mms(&[-13, 0, 90, 103]).as_slice());
+    assert_eq!(offsets.faces(), hmms(&[-25, 0, 180, 205]).as_slice());
     let props = wall.to_props();
     assert_eq!(
         props.get(LOCATION_LINE).map(String::as_str),
@@ -150,17 +150,17 @@ fn change_type_keeps_the_location_line_on_the_reference_line() {
     let cases = [
         (
             LocationLine::InteriorFinishFace,
-            &[116, 103, 13, 0][..],
+            &[230, 205, 25, 0][..],
             &[250, 140, 100, 100, 10, 0][..],
         ),
         (
             LocationLine::ExteriorCoreFace,
-            &[13, 0, -90, -103][..],
+            &[25, 0, -180, -205][..],
             &[150, 40, 0, 0, -90, -100][..],
         ),
         (
             LocationLine::WallCentre,
-            &[58, 45, -45, -58][..],
+            &[115, 90, -90, -115][..],
             &[125, 15, -25, -25, -115, -125][..],
         ),
     ];
@@ -174,7 +174,7 @@ fn change_type_keeps_the_location_line_on_the_reference_line() {
         )
         .unwrap();
         let old = offsets_of(&params, partition, &wall).unwrap();
-        assert_eq!(old.faces(), mms(before).as_slice());
+        assert_eq!(old.faces(), hmms(before).as_slice());
         assert_eq!(old.line(line), Some(mm(0)));
         let dropped = wall.change_type(partition, veneer).unwrap();
         assert!(dropped.is_empty());

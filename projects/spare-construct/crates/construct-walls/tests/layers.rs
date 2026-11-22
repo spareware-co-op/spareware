@@ -15,7 +15,9 @@ mod common;
 use std::cmp::Ordering;
 
 use common::{finish, layer, membrane, mm, structure, three};
-use construct_walls::{Assembly, Function, Join, MOST_TOTAL, Side, WallError, Zone, join};
+use construct_materials::MaterialId;
+use construct_params::Length;
+use construct_walls::{Assembly, Function, Join, Layer, MOST_TOTAL, Side, WallError, Zone, join};
 
 /// The three zones, the core test and the total of a valid type.
 #[test]
@@ -86,8 +88,20 @@ fn refuses_more_than_ten_metres() {
         Assembly::new(vec![structure(6_000), finish(4_001)], 0, 1),
         Err(WallError::TooThick { layer: 1 })
     );
+    let huge = |function| {
+        Layer::new(
+            function,
+            Length::from_steps(i64::MAX),
+            MaterialId::parse("huge").unwrap(),
+            false,
+        )
+    };
     assert_eq!(
-        Assembly::new(vec![structure(i64::MAX), finish(i64::MAX)], 0, 1),
+        Assembly::new(
+            vec![huge(Function::Structure), huge(Function::Finish)],
+            0,
+            1
+        ),
         Err(WallError::TooThick { layer: 0 })
     );
 }

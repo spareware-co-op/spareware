@@ -19,12 +19,12 @@ Compact JSON, no spaces, the fields in exactly this order:
 | Layer field | Value |
 | --- | --- |
 | `function` | `structure`, `substrate`, `thermal` (insulation or an air space), `finish` or `membrane` |
-| `thickness` | A length in construct-params' stored spelling, `length:<payload>`: never below 0, and 0 only for a membrane |
+| `thickness` | A length in construct-params' stored spelling, `length:q0:<steps>` (steps of the length grid, 6,400 to the millimetre; `length:q0:80000` is 12.5 mm): never below 0, and 0 only for a membrane |
 | `material` | The material's permanent ID ([construct-materials](../construct-materials/src/material.rs)) |
 | `wraps` | `true` or `false`: whether it wraps at free ends and at the sides of openings |
 
 ```json
-{"version":1,"core":{"exterior":1,"interior":2},"layers":[{"function":"finish","thickness":"length:13","material":"plasterboard-gypsum","wraps":true},{"function":"structure","thickness":"length:90","material":"timber-douglas-fir","wraps":false},{"function":"finish","thickness":"length:13","material":"plasterboard-gypsum","wraps":true}]}
+{"version":1,"core":{"exterior":1,"interior":2},"layers":[{"function":"finish","thickness":"length:q0:80000","material":"plasterboard-gypsum","wraps":true},{"function":"structure","thickness":"length:q0:576000","material":"timber-douglas-fir","wraps":false},{"function":"finish","thickness":"length:q0:80000","material":"plasterboard-gypsum","wraps":true}]}
 ```
 
 ## Rules a reader checks

@@ -3,10 +3,9 @@
 //! value, so a change to its unit changes this file and no caller.
 //!
 //! Halving (for the two centrelines) is the one step that can fail: half of a length is exact
-//! only if the length unit holds it. Today's `Length` counts whole millimetres, so half of an odd
-//! number of millimetres is refused, naming the line. Piece A39 moves `Length` to the geometry
-//! kernel's length grid (1/6400 mm), which holds the half of every length with up to two decimals
-//! of a millimetre; only a length off that step can then be refused. Nothing is ever rounded.
+//! only if the length unit holds it. `Length` counts steps of the geometry kernel's grid (1/6400
+//! mm), which holds the half of every length with up to two decimals of a millimetre; only an odd
+//! number of steps is refused, naming the line. Nothing is ever rounded.
 
 use construct_params::{Length, Value};
 
@@ -30,9 +29,9 @@ pub(crate) fn negated(a: Length) -> Option<Length> {
 
 /// Half of `a`, if the length unit holds it exactly.
 pub(crate) fn half(a: Length) -> Option<Length> {
-    let units = a.mm();
-    if units.checked_rem(2) == Some(0) {
-        units.checked_div(2).map(Length::from_mm)
+    let steps = a.steps();
+    if steps.checked_rem(2) == Some(0) {
+        steps.checked_div(2).map(Length::from_steps)
     } else {
         None
     }

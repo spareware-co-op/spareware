@@ -19,12 +19,22 @@ pub fn id(text: &str) -> Id {
 
 /// Whole millimetres as a length.
 pub fn mm(mm: i64) -> Length {
-    Length::from_mm(mm)
+    Length::checked_from_mm(mm).unwrap()
 }
 
 /// Whole millimetres as lengths.
 pub fn mms(list: &[i64]) -> Vec<Length> {
     list.iter().map(|value| mm(*value)).collect()
+}
+
+/// Half millimetres as a length (3,200 steps each).
+pub fn hmm(half_mm: i64) -> Length {
+    Length::from_steps(half_mm.checked_mul(3_200).unwrap())
+}
+
+/// Half millimetres as lengths.
+pub fn hmms(list: &[i64]) -> Vec<Length> {
+    list.iter().map(|value| hmm(*value)).collect()
 }
 
 /// A layer.

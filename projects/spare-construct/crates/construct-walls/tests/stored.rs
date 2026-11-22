@@ -19,23 +19,23 @@ use construct_walls::{
 
 const PARTITION: &str = concat!(
     r#"{"version":1,"core":{"exterior":1,"interior":2},"layers":["#,
-    r#"{"function":"finish","thickness":"length:13","material":"plasterboard-gypsum","wraps":true},"#,
-    r#"{"function":"structure","thickness":"length:90","material":"timber-douglas-fir","wraps":false},"#,
-    r#"{"function":"finish","thickness":"length:13","material":"plasterboard-gypsum","wraps":true}]}"#
+    r#"{"function":"finish","thickness":"length:q0:80000","material":"plasterboard-gypsum","wraps":true},"#,
+    r#"{"function":"structure","thickness":"length:q0:576000","material":"timber-douglas-fir","wraps":false},"#,
+    r#"{"function":"finish","thickness":"length:q0:80000","material":"plasterboard-gypsum","wraps":true}]}"#
 );
 
 const CONCRETE: &str = concat!(
     r#"{"version":1,"core":{"exterior":0,"interior":1},"layers":["#,
-    r#"{"function":"structure","thickness":"length:200","material":"concrete-regular","wraps":false}]}"#
+    r#"{"function":"structure","thickness":"length:q0:1280000","material":"concrete-regular","wraps":false}]}"#
 );
 
 const BRICK_VENEER: &str = concat!(
     r#"{"version":1,"core":{"exterior":3,"interior":4},"layers":["#,
-    r#"{"function":"finish","thickness":"length:110","material":"brick-clay","wraps":false},"#,
-    r#"{"function":"thermal","thickness":"length:40","material":"air-dry","wraps":false},"#,
-    r#"{"function":"membrane","thickness":"length:0","material":"membrane-polyethylene","wraps":true},"#,
-    r#"{"function":"structure","thickness":"length:90","material":"timber-douglas-fir","wraps":false},"#,
-    r#"{"function":"finish","thickness":"length:10","material":"plasterboard-gypsum","wraps":true}]}"#
+    r#"{"function":"finish","thickness":"length:q0:704000","material":"brick-clay","wraps":false},"#,
+    r#"{"function":"thermal","thickness":"length:q0:256000","material":"air-dry","wraps":false},"#,
+    r#"{"function":"membrane","thickness":"length:q0:0","material":"membrane-polyethylene","wraps":true},"#,
+    r#"{"function":"structure","thickness":"length:q0:576000","material":"timber-douglas-fir","wraps":false},"#,
+    r#"{"function":"finish","thickness":"length:q0:64000","material":"plasterboard-gypsum","wraps":true}]}"#
 );
 
 /// The concrete wall type's whole element record, as construct-model writes it.
@@ -45,7 +45,7 @@ const CONCRETE_ROW: &str = concat!(
     r#""recipe":{"owner":"construct","schema":1,"op":"type","op_version":2,"args":{}},"#,
     r#""props":{"@category":"100","@params":"wall.flipped,wall.location-line","#,
     r#""@system.wall":"{\"version\":1,\"core\":{\"exterior\":0,\"interior\":1},\"layers\":["#,
-    r#"{\"function\":\"structure\",\"thickness\":\"length:200\",\"material\":\"concrete-regular\","#,
+    r#"{\"function\":\"structure\",\"thickness\":\"length:q0:1280000\",\"material\":\"concrete-regular\","#,
     r#"\"wraps\":false}]}"},"references":[]}"#
 );
 
@@ -111,11 +111,11 @@ fn other_spellings_refused() {
     malformed(&CONCRETE.replace(r#""version":1"#, r#""version":2"#));
     malformed(&CONCRETE.replace(r#""wraps":false"#, r#""wraps":false,"colour":"red""#));
     malformed(&CONCRETE.replace(r#","wraps":false"#, ""));
-    malformed(&CONCRETE.replace(r#""length:200""#, "200"));
-    malformed(&CONCRETE.replace("length:200", "length:0200"));
-    malformed(&CONCRETE.replace("length:200", "length:200.0"));
-    malformed(&CONCRETE.replace("length:200", "whole:200"));
-    malformed(&CONCRETE.replace("length:200", "200 mm"));
+    malformed(&CONCRETE.replace(r#""length:q0:1280000""#, "200"));
+    malformed(&CONCRETE.replace("length:q0:1280000", "length:q0:01280000"));
+    malformed(&CONCRETE.replace("length:q0:1280000", "length:q0:1280000.0"));
+    malformed(&CONCRETE.replace("length:q0:1280000", "whole:200"));
+    malformed(&CONCRETE.replace("length:q0:1280000", "200 mm"));
     malformed(&CONCRETE.replace("concrete-regular", "@concrete"));
     malformed(&CONCRETE.replace(r#""structure""#, r#""glazing""#));
     malformed(&CONCRETE.replace(r#""exterior":0"#, r#""exterior":-1"#));
@@ -133,7 +133,7 @@ fn invalid_layers_refused_as_themselves() {
         })
     );
     assert_eq!(
-        Assembly::from_text(&CONCRETE.replace("length:200", "length:0")),
+        Assembly::from_text(&CONCRETE.replace("length:q0:1280000", "length:q0:0")),
         Err(WallError::ZeroThickness { layer: 0 })
     );
     assert_eq!(
