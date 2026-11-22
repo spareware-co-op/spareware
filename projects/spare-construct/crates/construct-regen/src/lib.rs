@@ -12,6 +12,8 @@
 //! - [`parameters`]: how categories, parameters and types sit in a document's records, and how a
 //!   recipe that names a parameter is filled before it is built; the server's commands read
 //!   through it too, so the two cannot differ.
+//! - [`levels`]: how an element's place and shape read its levels (its base, and a wall's top
+//!   tied to the level above), and a document's levels as a page shows them.
 //! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
 //!   project's parameters with where they are bound, and the types with their values in units.
 //!
@@ -22,6 +24,8 @@
 #[cfg(feature = "server")]
 pub mod catalog;
 pub mod kernel;
+#[cfg(feature = "server")]
+pub mod levels;
 #[cfg(feature = "server")]
 pub mod parameters;
 #[cfg(feature = "server")]

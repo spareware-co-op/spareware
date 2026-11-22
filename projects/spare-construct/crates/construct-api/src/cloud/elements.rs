@@ -5,12 +5,16 @@
 //! The log's `changes` hold each element's record before and after, by content ID. Those records
 //! hold the recipe, so the log is enough to rebuild every shape.
 //!
+//! A new element is tied to the level its `level` argument names ([`levels::tie_of_new`]); its
+//! integer `level` is written 0, on no level by number.
+//!
 //! Every record written here carries its category under `@category`, from its kind
 //! (construct-categories): a new kind with no category is refused. A new element may name its
 //! type (`type`); a parameter's value and the reserved `@` keys are never set through `props`
 //! here, only by the parameter commands ([`crate::cloud::params`]), which check them. Types and
 //! the parameter table are records with no shape and their own commands, so these refuse them.
 
+use crate::cloud::levels;
 use construct_model::element::{Element, Placement, Reference};
 use construct_model::geometry::Recipe;
 use construct_model::rows::Checkpoint;
@@ -30,7 +34,8 @@ struct Args {
     element: Option<Id>,
     kind: Option<String>,
     name: Option<String>,
-    level: Option<i32>,
+    /// The level a new element is tied to: its ID, or an old page's integer ([`levels::tie_of_new`]).
+    level: Option<serde_json::Value>,
     placement: Option<Placement>,
     recipe: Option<Recipe>,
     props: Option<BTreeMap<String, String>>,
@@ -94,6 +99,13 @@ async fn create<T: Txn>(
         Ok(category) => category,
         Err(e) => return Ok(Err(e.to_string())),
     };
+    if kind == construct_levels::LEVEL_KIND || category == construct_categories::LEVELS {
+        return Ok(Err(levels::BY_LEVEL_COMMANDS.to_owned()));
+    }
+    let tie = match levels::tie_of_new(txn, project, &edit.target, args.level.as_ref()).await? {
+        Ok(tie) => tie,
+        Err(why) => return Ok(Err(why)),
+    };
     let mut props = args.props.unwrap_or_default();
     if let Err(why) = props_allowed(txn, project, &edit.target, &props).await? {
         return Ok(Err(why));
@@ -117,12 +129,14 @@ async fn create<T: Txn>(
         props.insert(TYPE_KEY.to_owned(), type_id.to_string());
     }
     props.insert(CATEGORY_KEY.to_owned(), records::write_category(category));
+    construct_levels::write_base(&mut props, tie.as_ref());
     let element = Element {
         id: id.clone(),
         document: edit.target.clone(),
         kind,
         name: args.name.unwrap_or_else(|| id.to_string()),
-        level: args.level.unwrap_or(0),
+        // On no level by number: the tie in `props` is its level.
+        level: 0,
         placement,
         recipe,
         props,
@@ -143,7 +157,7 @@ async fn create<T: Txn>(
 
 /// Why a command refuses a record of no shape.
 const NOT_AN_ELEMENT: &str =
-    "Types and the parameter table are changed by their own commands, not as elements.";
+    "Types, levels and the parameter table are changed by their own commands, not as elements.";
 
 /// Refuses `props` that set a reserved `@` key or a defined parameter's value: those are set by
 /// the parameter commands, which check them. Any other key is plain text, kept as it is.

@@ -655,6 +655,7 @@ dependencies = [
  "construct-elements",
  "construct-families",
  "construct-interop",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",
@@ -720,6 +721,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-levels"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+]
+
+[[package]]
 name = "construct-model"
 version = "0.0.0"
 dependencies = [
@@ -751,6 +762,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-types",

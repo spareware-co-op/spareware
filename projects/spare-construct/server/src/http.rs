@@ -138,6 +138,7 @@ pub fn routes(app: Shared) -> Router {
             get(project_parameters),
         )
         .route("/api/projects/{project}/models/{model}/types", get(types))
+        .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
@@ -393,7 +394,7 @@ async fn bridge_targets(
 
 #[derive(Deserialize)]
 struct ViewQuery {
-    level: i32,
+    level: String,
     x0: i64,
     y0: i64,
     x1: i64,
@@ -407,7 +408,7 @@ async fn area(
     Query(q): Query<ViewQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let view = View {
-        level: q.level,
+        level: id(&q.level)?,
         x0: q.x0,
         y0: q.y0,
         x1: q.x1,
@@ -482,6 +483,18 @@ async fn types(
     Ok(Json(
         app.service
             .types(&person, &id(&project)?, &id(&model)?, q.category)
+            .await?,
+    ))
+}
+
+async fn levels(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .levels(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

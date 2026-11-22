@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, params, undo};
+use crate::cloud::{elements, levels, params, undo};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -132,7 +132,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
-            cmd if params::is_command(cmd) || undo::is_command(cmd) => {
+            cmd if params::is_command(cmd) || undo::is_command(cmd) || levels::is_command(cmd) => {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
@@ -180,12 +180,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter and type edit of a model, and every undo and redo, has the same
+    /// Every element, parameter, type and level edit of a model, and every undo and redo, has the same
     /// answer, so a batch asks Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
         if edit.cmd.starts_with("element.")
             || params::is_command(&edit.cmd)
             || undo::is_command(&edit.cmd)
+            || levels::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -207,6 +208,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             params::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if undo::is_command(&edit.cmd) {
             undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if levels::is_command(&edit.cmd) {
+            levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
             elements::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd == "document.checkpoint" {
