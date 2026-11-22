@@ -570,8 +570,13 @@ fn a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side(
     let middle = tube.point(lo * 0.5 + hi * 0.5, Limit::FromRight).unwrap();
     assert!(middle[0] < 0.0, "{middle:?}");
     let horn = revolution(tube);
-    let r = natural(&level(0.0), &horn, &mut meter()).unwrap().unwrap();
+    // The span is short of a whole turn by 1.1e−16 half-turns, and the ring ρ = 2 stands 6.9e−18
+    // half-turns inside the arc's end: its turn, read on the profile's stored frame, not on its
+    // rounded image in the half-plane, is told inside the arc (issue 1142).
+    let mut m = meter();
+    let r = natural(&level(0.0), &horn, &mut m).unwrap().unwrap();
     assert_rings(&r, &[(0.0, 0.0), (2.0, 0.0)]);
+    assert_eq!(m.used().work, 4284);
     let z = 0.75_f64.sqrt();
     let r = natural(&cylinder(1.5, WIDE), &horn, &mut meter())
         .unwrap()
@@ -584,6 +589,41 @@ fn a_horn_circle_whose_middle_rounds_across_the_axis_is_read_on_its_centre_side(
         .unwrap()
         .unwrap();
     assert_rings(&r, &[(1.125, -z), (1.125, z)]);
+}
+
+#[test]
+fn a_profile_from_a_spheres_pole_meets_it_at_the_pole_by_its_proof() {
+    // The segment from the pole (0, 0, 5) of the sphere of radius 5 to (8, 0, 11) sweeps a funnel
+    // that stands above the sphere's cap, so they meet at the pole alone. The profile's rounded
+    // image in the half-plane misses the pole by 1.7e−15, so the meeting's turn reaches the half
+    // circle's end 1/2: the pole is proven on the profile by exact signs on its stored doubles
+    // (issue 1142).
+    let ball = Sphere::new([0.0; 3], 5.0, up(), (ROUND, (-0.5, 0.5))).unwrap();
+    let funnel = revolution(segment([0.0, 0.0, 5.0], [8.0, 0.0, 11.0]));
+    let mut m = meter();
+    let r = natural(&SurfaceKind::Sphere(ball), &funnel, &mut m)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(r.items(), [Item::Point { .. }]), "{r:?}");
+    assert_rings(&r, &[(0.0, 5.0)]);
+    assert_eq!(m.used().work, 104);
+}
+
+#[test]
+fn a_profile_whose_line_crosses_the_axis_past_its_span_is_read_on_its_own_side() {
+    // The profile is the piece t in (2, 3) of the line (21 − 6t, 0, 13 − 2t), from (9, 0, 9) to
+    // (3, 0, 7); its line crosses the axis at t = 3.5, past its end. The sphere of radius 10 meets
+    // the line at t = 2.5, on the span, in the ring ρ = 6 at z = 8, and at t = 5.1, off it. The
+    // true line is read in the half-plane toward the span's middle, t = 2.5: read toward a point
+    // past the crossing (t = 4 or more) it is the mirror image, whose meeting (−6, 8) is off the
+    // sphere's half circle, and the ring is lost (issue 1142).
+    let ball = Sphere::new([0.0; 3], 10.0, up(), (ROUND, (-0.5, 0.5))).unwrap();
+    let line = Line::new([21.0, 0.0, 13.0], [-6.0, 0.0, -2.0], (2.0, 3.0)).unwrap();
+    let funnel = revolution(CurveKind::Line(line));
+    let r = natural(&SurfaceKind::Sphere(ball), &funnel, &mut meter())
+        .unwrap()
+        .unwrap();
+    assert_rings(&r, &[(6.0, 8.0)]);
 }
 
 #[test]

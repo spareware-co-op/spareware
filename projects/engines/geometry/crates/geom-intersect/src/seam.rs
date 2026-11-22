@@ -138,7 +138,7 @@ fn apex(r0: f64, k: f64, v: f64) -> bool {
 }
 
 /// The cosine of π·v where it is exact, at a multiple of a half-turn: 1, 0, −1 or 0.
-fn exact_cospi(v: f64) -> Option<f64> {
+pub(crate) fn exact_cospi(v: f64) -> Option<f64> {
     // v·2 is exact; it is a whole number exactly when its floor is itself.
     let twice = v * 2.0;
     if floor(twice).ok()?.get() != twice {
