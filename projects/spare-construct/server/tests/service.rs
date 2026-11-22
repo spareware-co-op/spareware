@@ -200,6 +200,79 @@ async fn workshop_parts_are_elements_listed_by_kind() {
     assert_ne!(parts.pieces["WP-1"], hash.to_string());
 }
 
+/// A parameter is defined, bound and set through the log like any edit, checked on the server
+/// with construct-params, and everyone on the team reads it with its category and units.
+#[tokio::test(flavor = "multi_thread")]
+async fn parameters_go_through_the_log_and_are_read_with_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let sill = json!({ "definition": { "id": "P-sill", "name": "Sill height", "kind": "length",
+                                       "holder": "instance", "choices": [] } });
+    s.edit(&anna, &project, &model, "parameter.define", sill)
+        .await
+        .unwrap();
+    let bind = json!({ "parameter": "P-sill", "categories": [300], "default": "0" });
+    s.edit(&anna, &project, &model, "parameter.bind", bind)
+        .await
+        .unwrap();
+    let set = |value: &str| json!({ "element": "D-101", "parameter": "P-sill", "value": value });
+    s.edit(&ben, &project, &model, "element.param", set("0.15 m"))
+        .await
+        .unwrap();
+
+    // A wrong unit is refused with construct-params' reason, and changes nothing.
+    let Err(Refusal::Refused(reason)) = s
+        .edit(&ben, &project, &model, "element.param", set("3 kg"))
+        .await
+    else {
+        panic!("a mass is no length");
+    };
+    assert!(reason.contains("Sill height"), "{reason}");
+
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let view = serde_json::to_value(view).unwrap();
+    assert_eq!(view["category"], json!({ "id": 300, "name": "Doors" }));
+    assert_eq!(view["type"], Value::Null);
+    let sill = &view["parameters"][0];
+    assert_eq!(sill["name"], "Sill height");
+    assert_eq!(sill["value"], "length:q0:960000");
+    assert_eq!(sill["shown"], "150 mm");
+    assert_eq!(sill["from"], "instance");
+    let other = s
+        .parameters(&anna, &project, &model, &i("D-102"))
+        .await
+        .unwrap();
+    assert_eq!(other.parameters[0].from, "default");
+
+    // The seed's own text is kept beside the value, and the record says its category.
+    s.regenerate(&project).await.unwrap();
+    let doors = s.kind(&anna, &project, &model, &i("door")).await.unwrap();
+    let hash = i(&doors.pieces["D-101"]);
+    let record = s.record(&anna, &project, &model, &hash).await.unwrap();
+    assert_eq!(record.props["fire rating"], "FD30");
+    assert_eq!(record.props["@category"], "300");
+    assert_eq!(record.props["P-sill"], "length:q0:960000");
+
+    // Someone who can't read the model can't read its parameters either.
+    assert!(refused(
+        s.parameters(&dan, &project, &model, &i("D-101")).await
+    ));
+    assert!(refused(
+        s.edit(&dan, &project, &model, "element.param", set("1"))
+            .await
+    ));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_record_cant_be_reached_through_another_model() {
     let stack = seeded().await;

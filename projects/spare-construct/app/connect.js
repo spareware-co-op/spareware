@@ -688,6 +688,8 @@
 
   async function loadPiece(model, id, hash, seq, into, mine = false) {
     const record = await api(`${modelUrl(model)}/record/${hash}`);
+    // A type or the parameter table has no place in the plan: the properties palette reads them.
+    if (!hasShape(record)) return;
     if (isWorkshop(record)) {
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
@@ -834,8 +836,16 @@
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, mine).then(queueDraw);
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, mine).then(() => {
+          queueDraw();
+          if (change.piece === S.sel) refreshSide();
+        });
       }
+    }
+    // A type or a parameter changed: what the selected element reads may have too.
+    if (/^(type|parameter)\./.test(entry.cmd) && entry.target === C.model?.id) {
+      C.paramsEpoch += 1;
+      refreshSide();
     }
     if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
@@ -853,6 +863,8 @@
     'element.delete': 'deleted',
     'element.claim': 'took',
     'element.release': 'let go of',
+    'element.param': 'set a value of',
+    'element.type': 'changed the type of',
   };
 
   function logEntry(entry) {
@@ -884,6 +896,64 @@
       edit('element.release', { element: id });
     }
   }
+
+  // --- Parameters ---
+  // The selected element's category, type and parameters come from the server, which reads them
+  // the way it checks a change and builds a shape (construct-model's FORMAT.md, "Categories, types
+  // and parameter values"). A change is the `element.param` edit, through the same log as a move:
+  // the server parses the typed text with its units, and a refusal comes back as its reason.
+
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  function hasShape(record) {
+    return record.kind !== 'type' && record.kind !== 'parameters';
+  }
+  C.params = null; // { key, view } of the selected element
+  C.paramsEpoch = 0; // goes up when a type or a parameter changes
+  C.edit = edit; // the browser test defines parameters through the page's own edit path
+
+  function paramsFor(piece) {
+    if (!C.model) return null;
+    const key = `${piece.el.id}/${piece.hash}/${C.paramsEpoch}`;
+    if (C.params?.key !== key && C.paramsLoading !== key) {
+      C.paramsLoading = key;
+      api(`${modelUrl(C.model.id)}/parameters/${piece.el.id}`)
+        .then((view) => {
+          C.params = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.params?.view.element === piece.el.id ? C.params.view : null;
+  }
+
+  function parametersTable(view) {
+    const editable = !C.readOnly && !C.viewing;
+    let html = '<span class="lbl">Parameters</span><table class="props">';
+    for (const p of view.parameters) {
+      const value = p.shown ?? '';
+      const field =
+        p.holder === 'instance' && editable
+          ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
+          : esc(value);
+      html += prow(esc(p.name), field, FROM[p.from] || '');
+    }
+    return `${html}</table>`;
+  }
+
+  /** Draws the properties palette again, unless someone is typing in it. */
+  function refreshSide() {
+    for (const side of ['#pv-side', '#iso-side']) {
+      const el = $(side);
+      if (el && !el.contains(document.activeElement)) el.innerHTML = propertiesPalette();
+    }
+  }
+
+  CHG.stackparam = (input) => {
+    if (S.sel && C.model && !C.readOnly) {
+      edit('element.param', { element: S.sel, parameter: input.dataset.a, value: input.value });
+      input.blur();
+    }
+  };
 
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
@@ -1027,7 +1097,9 @@
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
+      const view = paramsFor(piece);
       html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', esc(view.type?.name || 'None'));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
         html += prow('Size', `${max[0] - min[0]} × ${max[1] - min[1]} × ${max[2] - min[2]} mm`);
@@ -1036,9 +1108,13 @@
         html += prow('Shape', esc(failed?.message || 'Not built yet'));
       }
       for (const host of e.references) html += prow('Hosted on', esc(host.element));
-      for (const [key, value] of Object.entries(e.props)) html += prow(esc(key), esc(value));
+      const shown = new Set((view?.parameters || []).map((p) => p.id));
+      for (const [key, value] of Object.entries(e.props)) {
+        if (!key.startsWith('@') && !shown.has(key)) html += prow(esc(key), esc(value));
+      }
       html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
       html += '</table>';
+      if (view?.parameters.length) html += parametersTable(view);
     } else {
       const view = VIEWS[S.view];
       html += typeSel('plan', esc(view?.kind || ''), `<b>${esc(C.model?.name || view?.name || '')}</b>`);
