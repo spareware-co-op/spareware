@@ -760,3 +760,56 @@ async fn the_undo_order_comes_from_the_log_alone() {
     Stack::run_on(&restarted, edit).await.unwrap();
     assert_eq!(stack.record("W-1").await.name, "B");
 }
+
+/// A click on an element, as the page sends it: a claim, then a move to where it already is.
+async fn click(stack: &Stack, element: &str) -> u64 {
+    stack
+        .edit("element.claim", json!({ "element": element }))
+        .await
+        .unwrap();
+    stack.edit("element.move", at(element, 0)).await.unwrap()
+}
+
+/// Clicking an element to select it claims it and, on letting go, sends a move to where it
+/// already is: an entry that changes no record. It is no step: the undo after it reverses the
+/// change before it, and it leaves the redo order alone.
+#[tokio::test]
+async fn an_edit_that_changed_nothing_is_no_step() {
+    let stack = Stack::new().await;
+    stack.edit("element.create", wall("W-1")).await.unwrap();
+    let set = stack
+        .edit("element.set", json!({ "element": "W-1", "name": "A" }))
+        .await
+        .unwrap();
+    let still = click(&stack, "W-1").await;
+    let entry = stack.entry(still).await;
+    assert_eq!(entry.changes[0].before, entry.changes[0].after);
+    assert_eq!(
+        stack.state("anna").await.undo,
+        Some(Step {
+            seq: set,
+            cmd: "element.set".to_owned()
+        })
+    );
+
+    let undone = stack.undo("anna").await.unwrap();
+    assert_eq!(stack.record("W-1").await.name, "W-1");
+    let state = stack.state("anna").await;
+    assert_eq!(
+        state.undo.map(|step| step.cmd),
+        Some("element.create".to_owned())
+    );
+    assert_eq!(
+        state.redo,
+        Some(Step {
+            seq: undone,
+            cmd: "edit.undo".to_owned()
+        })
+    );
+
+    // Another click after the undo keeps the redo.
+    click(&stack, "W-1").await;
+    assert!(stack.state("anna").await.redo.is_some());
+    stack.redo("anna").await.unwrap();
+    assert_eq!(stack.record("W-1").await.name, "A");
+}
