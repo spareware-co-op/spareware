@@ -530,6 +530,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-phases"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
+ "kit-ops",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-regen"
 version = "0.0.0"
 dependencies = [
