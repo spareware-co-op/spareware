@@ -21,6 +21,9 @@ url = "2.5.8"
 [dev-dependencies]
 # Fuzz harnesses, as construct-model's tests/fuzz_keys.rs. MIT.
 bolero = "0.13.7"
+# The kernel's interface, for one test only: Length::STEPS_PER_MM is the kernel's GridStep::Q0.
+# Ours. The crate itself does not link the kernel.
+engine-geometry = { path = "../../../engines/crates/engine-geometry" }
 # Properties with fixed seeds, as the kernel's crates use it (geom-num). MIT OR Apache-2.0.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 

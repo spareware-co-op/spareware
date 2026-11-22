@@ -1,5 +1,6 @@
 //! Text a person types reads to the stored value, and the stored value formats back to text that
-//! reads to it again. One rounding rule throughout: half to even, in whole numbers.
+//! reads to it again. Typed lengths, areas and volumes are exact in grid steps; typed angles and
+//! shown values round by one rule: half to even, in whole numbers.
 
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
@@ -74,25 +75,55 @@ fn lengths_read_from_what_people_type() {
 }
 
 #[test]
-fn typed_lengths_round_half_to_even_to_the_whole_millimetre() {
+fn typed_lengths_are_exact_in_grid_steps() {
+    // Everyday sizes that are not whole millimetres are stored exactly: plasterboard, laminated
+    // glass, steel sheet, a membrane. Nothing typed is rounded.
     let units = Units::metric();
-    for (text, mm) in [
-        ("2.4005 m", 2400),
-        ("2.4015 m", 2402),
-        ("2.40051 m", 2401),
-        ("-2.4005 m", -2400),
-        ("-2.4015 m", -2402),
-        ("0.5", 0),
-        ("1.5", 2),
-        ("-0.5", 0),
-        ("-0.4", 0),
+    for (text, steps) in [
+        ("12.5", 80_000),
+        ("12.5 mm", 80_000),
+        ("6.38mm", 40_832),
+        ("0.55 mm", 3_520),
+        ("0.25", 1_600),
+        ("2.4005 m", 15_363_200),
+        ("-2.4015 m", -15_369_600),
+        ("0.5", 3_200),
+        ("-0.4", -2_560),
+        ("0.005 mm", 32),
+        ("0.00015625", 1),
+        ("0", 0),
     ] {
         assert_eq!(
             def(Kind::Length).parse(text, &units).unwrap(),
-            Value::Length(Length::from_mm(mm)),
+            Value::Length(Length::from_steps(steps)),
             "{text}"
         );
     }
+}
+
+#[test]
+fn products_of_lengths_are_exact() {
+    let board = Value::Length(Length::from_steps(80_000));
+    let square = board.multiply(&board).unwrap();
+    assert_eq!(square, Value::Area(Area::from_square_steps(6_400_000_000)));
+    let mm2 = with(Kind::Area, Unit::SquareMillimetre, 2);
+    assert_eq!(def(Kind::Area).format(&square, &mm2).unwrap(), "156.25 mm²");
+    let cube = square.multiply(&board).unwrap();
+    let mm3 = with(Kind::Volume, Unit::CubicMillimetre, 3);
+    assert_eq!(
+        def(Kind::Volume).format(&cube, &mm3).unwrap(),
+        "1953.125 mm³"
+    );
+    // A cubic metre is beyond 64 bits of cubic steps, and is held.
+    let metre = Value::Length(Length::from_mm(1_000));
+    let cubic_metre = metre.multiply(&metre).unwrap().multiply(&metre).unwrap();
+    assert_eq!(cubic_metre, Value::Volume(Volume::from_mm3(1_000_000_000)));
+    assert_eq!(
+        def(Kind::Volume)
+            .format(&cubic_metre, &Units::metric())
+            .unwrap(),
+        "1.00 m³"
+    );
 }
 
 #[test]
@@ -120,6 +151,24 @@ fn lengths_display_in_mm_and_m() {
     assert_eq!(length.format(&len(3500), &m0).unwrap(), "4 m");
     let mm1 = with(Kind::Length, Unit::Millimetre, 1);
     assert_eq!(length.format(&len(2400), &mm1).unwrap(), "2400.0 mm");
+    // A size between whole millimetres shows at its places, rounded half to even.
+    let steps = |s| Value::Length(Length::from_steps(s));
+    assert_eq!(length.format(&steps(80_000), &mm1).unwrap(), "12.5 mm");
+    assert_eq!(
+        length.format(&steps(80_000), &Units::metric()).unwrap(),
+        "12 mm"
+    );
+    assert_eq!(
+        length.format(&steps(86_400), &Units::metric()).unwrap(),
+        "14 mm"
+    );
+    let mm2 = with(Kind::Length, Unit::Millimetre, 2);
+    assert_eq!(length.format(&steps(40_832), &mm2).unwrap(), "6.38 mm");
+    assert_eq!(length.format(&steps(1), &mm2).unwrap(), "0.00 mm");
+    let m5 = with(Kind::Length, Unit::Metre, 5);
+    assert_eq!(length.format(&steps(80_000), &m5).unwrap(), "0.01250 m");
+    reads(Kind::Length, &mm2, "6.38", &steps(40_832));
+    reads(Kind::Length, &m5, "0.0125", &steps(80_000));
 }
 
 #[test]

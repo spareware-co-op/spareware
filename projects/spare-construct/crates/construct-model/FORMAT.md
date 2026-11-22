@@ -16,7 +16,7 @@ The kit's `p:<project>/record/<hash>` holds an element, named by the SHA-256 of 
 | --- | --- |
 | `id`, `document` | Its permanent ID, and the document it belongs to |
 | `kind`, `name`, `level`, `props` | What it is |
-| `placement` | `{x,y,z}` in whole millimetres. Outside the recipe, so a move rebuilds nothing and every door of one type shares one body |
+| `placement` | `{x,y,z}` in whole millimetres, each exactly 6,400 of the geometry kernel's grid steps, the unit every other Construct length is stored in ([note CON-A2-F3-P1](../../notes/CON-A2-F3-P1-stored-units.md)). Outside the recipe, so a move rebuilds nothing and every door of one type shares one body |
 | `recipe` | How to build it |
 | `references` | What it is hosted on or built against |
 
@@ -26,7 +26,7 @@ A recipe is the kernel's envelope (architecture chapter 24):
 | --- | --- |
 | `owner`, `schema` | Who owns the operation, and their schema version |
 | `op`, `op_version` | The operation, named for what it makes: `wall.straight`, `door.single`, `block` |
-| `args` | Its arguments, sorted by name. Numbers are whole |
+| `args` | Its arguments, sorted by name. Numbers are whole; the stand-in recipes (`op_version` 1) give lengths in whole millimetres, exact multiples of the grid step, and a recipe that needs a finer length gives grid steps under a new `op_version` |
 
 A reference (chapter 20) points at part of a shape by persistent name, never by position in a list. A hosted door points at a face of a wall, not at the wall:
 

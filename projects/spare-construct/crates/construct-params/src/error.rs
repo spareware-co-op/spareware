@@ -77,6 +77,19 @@ pub enum ParamError {
         /// The text.
         text: String,
     },
+    /// A typed length, area or volume that is not a whole number of the geometry kernel's grid
+    /// steps (1/6,400 mm), such as 0.001 mm. It is never rounded: the two nearest values that
+    /// are, below and above, are named, exactly, in the unit typed.
+    OffGrid {
+        /// The parameter's name.
+        parameter: String,
+        /// The text.
+        text: String,
+        /// The nearest value below, such as `0.0009375 mm`.
+        below: String,
+        /// The nearest value above, such as `0.00109375 mm`.
+        above: String,
+    },
     /// The text is neither yes nor no.
     NotYesOrNo {
         /// The parameter's name.
@@ -119,7 +132,8 @@ pub enum ParamError {
         /// Which rule.
         reason: &'static str,
     },
-    /// A display format whose unit is not for its kind, or with more than nine places.
+    /// A display format whose unit is not for its kind, or with more places than its unit allows
+    /// ([`Unit::max_places`]).
     BadFormat {
         /// The kind it was set for.
         kind: Kind,
@@ -175,6 +189,16 @@ impl fmt::Display for ParamError {
             Self::OutOfRange { parameter, text } => {
                 write!(f, "{parameter}: {text:?} is out of range")
             }
+            Self::OffGrid {
+                parameter,
+                text,
+                below,
+                above,
+            } => write!(
+                f,
+                "{parameter}: {text:?} is not a whole number of grid steps (1/6400 mm); the \
+                 nearest are {below} and {above}"
+            ),
             Self::NotYesOrNo { parameter, text } => {
                 write!(f, "{parameter} takes yes or no, not {text:?}")
             }
