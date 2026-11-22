@@ -9,7 +9,7 @@
 //! unchanged, modified, generated, split or merged, from any of the entities, or none), up to
 //! [`MAX_TERMS`] own terms (zero, small, exactly the step's limit, one past it, any word, or within
 //! four of the largest word, on any entity, an output or not, once or twice) and its limits (the
-//! ladder's, small ones, the largest own term with a ceiling near the largest word, or any). Its
+//! ladder's, small ones, the largest own term with a ceiling at or near the largest word, or any). Its
 //! records and terms come in an order of the bytes' choosing. [`check`] runs the operations from
 //! [`Bounds::new`] through [`Bounds::after`], each again with its records and terms reported in
 //! the other order, then joins the last state with an earlier one ([`Bounds::join`]) and with no
@@ -30,18 +30,14 @@
 //!     past the step's limit, a sum past the ceiling (in big integers, so a sum that would wrap is
 //!     past it), an own term on an unchanged output, on no output, or twice on one entity;
 //!   - a refusal that names an entity with no fault, or a fault it does not have, or not the first
-//!     at fault in name order when every fault is of one kind (named twice, an output at fault, a
-//!     term on no output); a needed bound that is not the true sum, or the largest word for a sum
-//!     past it; a message that does not name each step that spent; a kind or remedy not its
-//!     fault's (`ExactnessNotAccepted` offering the larger bound, `Internal` asking for a report);
+//!     at fault in name order, whatever the kinds of fault (named twice, an output at fault, a term
+//!     on no output); a needed bound that is not the true sum, or the largest word for a sum past
+//!     it; a message that does not name each step that spent; a kind or remedy not its fault's
+//!     (`ExactnessNotAccepted` offering the larger bound, `Internal` asking for a report);
 //!   - an answer that changes with the order the records and terms are reported in;
 //!   - a join whose entity has not the larger of its two bounds and that operand's terms (the
 //!     first operand's on a tie), whose two orders differ in a bound, or that is not refused
 //!     `MixedSteps` (`InvalidInput`) on two grid steps; a join with nothing that changes anything.
-//!
-//! Not drawn: a ceiling of the largest word (`u64::MAX`). There a sum past the largest word
-//! saturates to it and is not past the ceiling, so it is accepted with a bound below its true sum
-//! (found by this target; the module's own words say a sum that saturates is past any limit).
 //!
 //! Method: chapter 13.2's one rule and decision 32.21
 //! (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`,
@@ -195,12 +191,10 @@ fn origin(i: usize, rule: u8, bits: u8) -> Option<Origin> {
 }
 
 /// An operation's limits through their rule byte: the ladder's, small, the largest own term with
-/// a ceiling near the largest word, or any; never a ceiling of the largest word (the module
-/// header says why).
+/// a ceiling at or near the largest word, or any.
 fn limits(src: &mut ByteSource<'_>) -> Limits {
     let rule = src.byte();
     let (a, b) = (src.word(), src.word());
-    let below_max = |x: u64| Steps(x.min(u64::MAX.saturating_sub(1)));
     match rule % 6 {
         0..=2 => Limits::DEFAULT,
         3 => Limits {
@@ -209,11 +203,11 @@ fn limits(src: &mut ByteSource<'_>) -> Limits {
         },
         4 => Limits {
             own: Steps(u64::MAX),
-            total: below_max(u64::MAX.saturating_sub(b % 4)),
+            total: Steps(u64::MAX.saturating_sub(b % 4)),
         },
         _ => Limits {
             own: Steps(a),
-            total: below_max(b),
+            total: Steps(b),
         },
     }
 }
@@ -570,9 +564,7 @@ fn refused(
             || format!("operation {at}: {error:?}, faults {faults:?}; {case:?}"),
         ));
     }
-    let kinds: Vec<Kind> = faults.values().map(|f| f.0).collect();
-    let first = faults.keys().next().copied();
-    if kinds.windows(2).all(|w| w.first() == w.last()) && first != Some(entity) {
+    if faults.keys().next() != Some(&entity) {
         return Err(Finding::new(
             "the first entity at fault in name order is the one a refusal names",
             || format!("operation {at}: {error:?}, faults {faults:?}; {case:?}"),

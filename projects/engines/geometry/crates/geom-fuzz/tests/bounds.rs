@@ -200,7 +200,8 @@ fn every_fault_is_refused_as_the_laws_ask() {
         &[(3, 1)],
         // Twice on one output.
         &[(2, 1), (2, 2)],
-        // A term on no output beside one twice, and one past the limit.
+        // A term on no output beside one twice, and one past the limit: the last, on the first
+        // entity in name order, is the one named (#1171).
         &[(3, 1), (4, 1), (4, 1), (1, 9)],
     ];
     for own in faults {
@@ -222,29 +223,31 @@ fn every_fault_is_refused_as_the_laws_ask() {
             ..part()
         }));
     }
-    // A sum within four of the largest word, twice over, on a ceiling just below it: refused, and
-    // never wrapped.
-    let huge = Limits {
-        own: Steps(u64::MAX),
-        total: Steps(u64::MAX - 1),
-    };
-    holds(check(&Case {
-        ops: vec![
-            op(
-                1,
-                vec![generated(0, &[]), generated(1, &[])],
-                &[(0, u64::MAX - 2), (1, u64::MAX - 3)],
-                huge,
-            ),
-            op(
-                2,
-                vec![record(2, Origin::Merged { of: names(&[0, 1]) })],
-                &[],
-                huge,
-            ),
-        ],
-        ..part()
-    }));
+    // A sum within four of the largest word, twice over, on a ceiling just below it and on the
+    // largest word itself (#1170): refused, and never wrapped or saturated.
+    for total in [u64::MAX - 1, u64::MAX] {
+        let huge = Limits {
+            own: Steps(u64::MAX),
+            total: Steps(total),
+        };
+        holds(check(&Case {
+            ops: vec![
+                op(
+                    1,
+                    vec![generated(0, &[]), generated(1, &[])],
+                    &[(0, u64::MAX - 2), (1, u64::MAX - 3)],
+                    huge,
+                ),
+                op(
+                    2,
+                    vec![record(2, Origin::Merged { of: names(&[0, 1]) })],
+                    &[],
+                    huge,
+                ),
+            ],
+            ..part()
+        }));
+    }
 }
 
 /// The names of a case are in name order, as the refusal law reads them.
