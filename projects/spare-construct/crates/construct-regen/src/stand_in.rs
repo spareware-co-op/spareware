@@ -111,6 +111,9 @@ impl Geometry for Boxes {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if let Some(datum) = crate::datum::build(recipe) {
+            return datum;
+        }
         let size = size_of(recipe)?;
         let [w, d, _] = size;
         let body = serde_json::to_vec(&BoxBody { kind: "box", size }).unwrap_or_default();

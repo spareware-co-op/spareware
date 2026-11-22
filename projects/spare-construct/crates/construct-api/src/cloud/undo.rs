@@ -47,7 +47,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::params;
+use crate::cloud::{grids, params};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -92,7 +92,10 @@ pub fn is_command(cmd: &str) -> bool {
 /// Whether an applied entry of this command is a step.
 #[must_use]
 pub fn is_step(cmd: &str) -> bool {
-    ELEMENT_STEPS.contains(&cmd) || params::is_command(cmd) || is_command(cmd)
+    ELEMENT_STEPS.contains(&cmd)
+        || params::is_command(cmd)
+        || grids::is_command(cmd)
+        || is_command(cmd)
 }
 
 /// A step a person could undo or redo now: the newest entry of it, and its command.
@@ -552,6 +555,9 @@ async fn check<T: Txn>(
     written: &[Element],
     whole: bool,
 ) -> Result<Result<(), String>, StoreError> {
+    if let Err(why) = grids::check(txn, project, document, written).await? {
+        return Ok(Err(why));
+    }
     let context = match records::read_context(txn, project, document).await? {
         Ok(context) => context,
         Err(why) => return Ok(Err(why)),

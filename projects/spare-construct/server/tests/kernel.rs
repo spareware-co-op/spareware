@@ -84,6 +84,11 @@ fn a_recipe_that_cant_build_says_why() {
 }
 
 #[test]
+fn a_datum_is_built_as_the_stand_in_builds_it() {
+    kernel_suite::a_datum_is_built_as_the_stand_in_builds_it(engine);
+}
+
+#[test]
 fn a_door_cuts_a_real_opening() {
     kernel_suite::a_door_cuts_a_real_opening(engine);
 }

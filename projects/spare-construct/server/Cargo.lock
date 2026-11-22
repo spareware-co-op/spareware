@@ -654,6 +654,7 @@ dependencies = [
  "construct-clash",
  "construct-elements",
  "construct-families",
+ "construct-grids",
  "construct-interop",
  "construct-model",
  "construct-params",
@@ -729,6 +730,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-grids"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "libm",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-interop"
 version = "0.0.0"
 dependencies = [
@@ -779,6 +792,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-grids",
  "construct-model",
  "construct-params",
  "construct-types",

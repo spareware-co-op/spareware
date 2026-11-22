@@ -666,6 +666,9 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if let Some(datum) = crate::datum::build(recipe) {
+            return datum;
+        }
         self.build_hosting(recipe, &[])
     }
 }

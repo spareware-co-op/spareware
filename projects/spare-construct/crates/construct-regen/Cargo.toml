@@ -13,7 +13,6 @@ server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
-    "dep:construct-params",
     "dep:construct-types",
 ]
 
@@ -23,8 +22,11 @@ kit-ops = { path = "../../../kit/crates/kit-ops" }
 kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
+# The display shape of grids and reference planes: src/datum.rs reads their recipes.
+construct-grids = { path = "../construct-grids" }
 construct-categories = { path = "../construct-categories", optional = true }
-construct-params = { path = "../construct-params", optional = true }
+# Lengths and angles, which datum.rs reads from recipes; the server feature reads values with it too.
+construct-params = { path = "../construct-params" }
 construct-types = { path = "../construct-types", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.

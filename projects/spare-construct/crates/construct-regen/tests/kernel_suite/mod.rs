@@ -328,6 +328,40 @@ pub fn a_recipe_that_cant_build_says_why<E: Engine + Send + 'static>(make: impl 
     assert_eq!(k.build(&huge).unwrap_err().code, "TooBig");
 }
 
+/// A grid line and a reference plane are datums, with no solid: the kernel's builder hands them to
+/// the one datum builder, so each is built the same as by the stand-in, bytes included, and an
+/// engine is never asked for one.
+pub fn a_datum_is_built_as_the_stand_in_builds_it<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let stand_in = construct_regen::geometry();
+    let text = |x: &str| json!(format!("length:q0:{x}"));
+    for datum in [
+        recipe(
+            "grid.line",
+            json!({ "x0": text("0"), "y0": text("0"), "x1": text("38400000"), "y1": text("0") }),
+        ),
+        recipe(
+            "grid.arc",
+            json!({ "cx": text("0"), "cy": text("0"), "radius": text("6400000"),
+                    "from": "angle:0", "to": "angle:810000000" }),
+        ),
+        recipe("refplane.horizontal", json!({ "z": text("-1920000") })),
+    ] {
+        let here = k
+            .build(&datum)
+            .unwrap_or_else(|e| panic!("{}: {e}", datum.op));
+        let there = stand_in.build(&datum).unwrap();
+        assert_eq!(here, there, "{}", datum.op);
+        assert_eq!(here.body_id(), there.body_id());
+    }
+    // One that is not as written is a failure, with the same code from both.
+    let bad = recipe("grid.line", json!({ "x0": text("0") }));
+    assert_eq!(k.build(&bad).unwrap_err().code, "BadDatum");
+    assert_eq!(stand_in.build(&bad).unwrap_err().code, "BadDatum");
+}
+
 /// The persistent names of the faces door `D-1`'s opening makes in a straight wall, by role, under
 /// `NameScheme v1`: `Created { op: the wall's, role: tool(D-1), from: [the opening's own face] }`.
 /// Recorded: a reference to a reveal lands only while these stay, so a change here is a new name
