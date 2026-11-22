@@ -13,7 +13,7 @@ Floors, roofs, rooms, stairs and families need a 2D sketch solver now. Two docum
 
 1. Wait for `geom-sketch`. Nothing in the first version that needs an outline can start.
 2. Build the solver inside the kernel now. That is the kernel's own work, under its exactness rules and its pieces, and is not this program's to do.
-3. Build Construct's sketch interface in `construct-solver` now (whole millimetres in, a report out), with an interim engine of our own behind it, private to the crate, following chapter 15's method. When `geom-sketch` lands, it answers behind the same types through `engine-geometry` and the interim engine goes.
+3. Build Construct's sketch interface in `construct-solver` now (grid steps in, a report out; whole millimetres until piece A39, note CON-A2-F3-P1), with an interim engine of our own behind it, private to the crate, following chapter 15's method. When `geom-sketch` lands, it answers behind the same types through `engine-geometry` and the interim engine goes.
 
 ## Evidence
 
@@ -23,10 +23,10 @@ Floors, roofs, rooms, stairs and families need a 2D sketch solver now. Two docum
 
 ## Decision
 
-Option 3. `construct-solver` holds the public sketch and outcome types and one call, `solve`. The engine is the private module `engine`, written as our own code from chapter 15: least-change damped Gauss-Newton steps, derivatives by dual numbers (num-dual), rank, free motions and dependency groups from a singular value decomposition (nalgebra, default features off, its source read for determinism), a work limit in steps, and whole-millimetre commit with a check against the model tolerance. The crate's header and the module's header say it is interim and name G216 to G228 and CON-A27-F1-P2. Its tests use only the public types, so they judge the kernel's solver on the day it answers.
+Option 3. `construct-solver` holds the public sketch and outcome types and one call, `solve`. The engine is the private module `engine`, written as our own code from chapter 15: least-change damped Gauss-Newton steps, derivatives by dual numbers (num-dual), rank, free motions and dependency groups from a singular value decomposition (nalgebra, default features off, its source read for determinism), a work limit in steps, and a commit to the kernel's grid (whole millimetres until piece A39) with a check against the model tolerance. The crate's header and the module's header say it is interim and name G216 to G228 and CON-A27-F1-P2. Its tests use only the public types, so they judge the kernel's solver on the day it answers.
 
 ## Open risks
 
 - The interim engine solves one block with a dense decomposition. It is fine for room and family sketches of a few hundred constraints; a 5,000-segment outline needs chapter 15.5's decomposition and sparse factors, which are the kernel's design.
-- Its commit rounds each point to whole millimetres and refuses anything that then misses by more than 0.01 mm. Chapter 15.10's exact forms (integer carriers, depth-one points) would accept more sketches exactly; until the kernel answers, some sloped shapes are refused rather than stored loose.
+- Its commit rounds each point to the nearest grid step (1/6,400 mm; whole millimetres until piece A39, note CON-A2-F3-P1) and refuses anything that then misses by more than 0.01 mm. Half a step is far inside that, so sloped shapes are accepted; chapter 15.10's exact forms (integer carriers, depth-one points) are the kernel's and hold every constraint exactly, not within the tolerance.
 - Root choices other than a point's side of a line are not stored: a sketch solves to the shape nearest the one drawn. Continuation (15.7) and dragging (15.9) come with arcs in the next job or with the kernel.

@@ -4,7 +4,7 @@ Part of CON-A3-F2-P1 (sketch solver, [FEATURES.md](../FEATURES.md)), second half
 
 ## The questions
 
-1. How are circles and arcs stored, so that whole millimetres still hold and an arc's ends are on its circle?
+1. How are circles and arcs stored, so that whole stored units still hold and an arc's ends are on its circle?
 2. How is tangency written, so that the degrees of freedom stay exact?
 3. What does a drag do?
 4. Which of chapter 15.3's constraint kinds come now, and which later?
@@ -13,7 +13,7 @@ Part of CON-A3-F2-P1 (sketch solver, [FEATURES.md](../FEATURES.md)), second half
 
 **Entities.** Circles and arcs are one list, the curves (`CurveId`). Each has a centre point and a radius; an arc also has a start and an end point and runs anticlockwise about its centre from start to end (chapter 15.2's table). The radius is a solver variable, after every point's variables, so a sketch of points and lines keeps its variable order and its bytes. An arc's ends stay on its circle by two equations the arc owns; they are not constraints, and a conflict or redundancy report never names them (the constraints around them are named).
 
-**Stored form.** A radius is a whole number of millimetres, like every stored length (construct-model's FORMAT.md), rounded once by the same rule as a coordinate. An arc's centre and ends are ordinary whole-millimetre points. After rounding, each arc end's distance from its centre is measured exactly (integer squared distance, one square root) and must be within the model tolerance (0.01 mm) of the stored radius, or the solve fails with `ArcEndRefused`. So a stored arc's ends lie on its stored circle within 0.01 mm. An arc whose ends would need to fall between whole millimetres (an end at 45 degrees on a 1 m arc, say) is refused rather than stored loose. Chapter 15.10's exact arc form (ends on the grid, the centre a rational point on their bisector) is the kernel's.
+**Stored form.** A radius is a whole number of grid steps (1/6,400 mm), like every stored length (note CON-A2-F3-P1; whole millimetres until piece A39), rounded once by the same rule as a coordinate. An arc's centre and ends are ordinary grid points. After rounding, each arc end's distance from its centre is measured exactly (integer squared distance, one square root) and must be within the model tolerance (0.01 mm) of the stored radius, or the solve fails with `ArcEndRefused`. So a stored arc's ends lie on its stored circle within 0.01 mm. On whole millimetres an end at 45 degrees on a 1 m arc fell 0.15 mm off and was refused; on the grid it is at most half a step off and is accepted. Chapter 15.10's exact arc form (ends on the grid, the centre a rational point on their bisector) is the kernel's.
 
 **Tangency.** Written two ways, chosen from the sketch's structure before solving:
 
@@ -28,11 +28,11 @@ The reason: at a shared point, the distance form and the point's own place on bo
 
 **Kinds later, and why:**
 
-- Angle between lines: Spare Construct has no stored angle unit yet (FORMAT.md fixes only whole millimetres), and an angle needs sine and cosine, which chapter 15.12 allows only from the kernel's own maths functions, out of a program's reach; this crate's rule is IEEE `+ - * /` and `sqrt` only. After whole-millimetre rounding most sloped angles would be refused anyway, as sloped parallels are now. It comes with the kernel solver, or with a decision on the stored unit.
+- Angle between lines: construct-params now stores angles in the kernel's angle units, but an angle needs sine and cosine, which chapter 15.12 allows only from the kernel's own maths functions, out of a program's reach; this crate's rule is IEEE `+ - * /` and `sqrt` only. It comes with the kernel solver.
 - Midpoint, collinear, symmetry, horizontal and vertical distances, arc sweep and arc length, point-to-curve distance, ellipses and splines: not needed by the outlines the first version draws (floors, roofs, rooms, family profiles of lines and arcs), and each is one residual and one commit measure when it is.
 
 ## Open risks
 
-- Rounding refuses arcs whose ends cannot sit on whole millimetres within 0.01 mm of their circle, and tangencies at slopes. Drawn shapes on axis-aligned lines with whole radii solve; others may be refused until the kernel's exact forms answer.
+- Rounding to whole millimetres refused arcs whose ends could not sit on whole millimetres within 0.01 mm of their circle, and tangencies at slopes. Since piece A39 rounding is to the grid (half a step, 78 nm), and these solve; a refusal is left only where no grid point near the answer meets a constraint.
 - A drag is one frame from the stored state. A large drag can land on another solution branch (a flipped corner), which chapter 15.9's frames and root-choice checks would stop; callers should drag in small steps.
 - A conflict among an arc's own equations and fixings alone (an arc between three fixed points at different distances) names no constraint, because fixings have no equations; the first half has the same limit for fixed points under distances.
