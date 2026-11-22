@@ -5,14 +5,19 @@
 //! double as a point interval instead of widening it. So a circle of integer radius on a grid
 //! center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of
 //! one exact value compare equal: a conversion or transform that is exact reports a deviation of
-//! 0, which widened intervals never could. [`meet`] intersects two enclosures of one value.
+//! 0, which widened intervals never could. A product with an exact zero, and an exact zero over a
+//! divisor clear of zero, are the point zero whatever the other operand holds, where the interval
+//! operation would widen 0 to a subnormal each side (decision 32.109): so a unit vector's exact
+//! zero stays one on a frame whose norms are not doubles. [`meet`] intersects two enclosures of
+//! one value.
 //!
 //! Guarantees:
 //!
 //! - **Certified.** A point result is the exact value, decided by an error-free transformation
 //!   (`geom-num`'s `two_sum` and `two_prod`, whose error is finite and zero exactly when the
-//!   operation was exact); every other result is the widened interval of `geom-num`, which encloses
-//!   the exact range.
+//!   operation was exact), or the zero of a product with an exact zero or of an exact zero over a
+//!   divisor clear of zero, which is 0 for every value the other operand holds; every other result
+//!   is the widened interval of `geom-num`, which encloses the exact range.
 //! - **Deterministic.** The same operands give the same bits on every target.
 //!
 //! Method: error-free transformations (T. J. Dekker, "A floating-point technique for extending
@@ -90,7 +95,7 @@ pub fn sub(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     add(a, b.neg())
 }
 
-/// `a · b`.
+/// `a · b`: the point zero where either is the point zero.
 ///
 /// # Errors
 ///
@@ -101,10 +106,13 @@ pub fn mul(a: Interval, b: Interval) -> Result<Interval, CurveError> {
     {
         return point(p);
     }
+    if single(a) == Some(0.0) || single(b) == Some(0.0) {
+        return point(0.0);
+    }
     Ok(a.mul(b)?)
 }
 
-/// `a / b`.
+/// `a / b`: the point zero where `a` is the point zero and `b` is clear of zero.
 ///
 /// # Errors
 ///
@@ -117,6 +125,9 @@ pub fn div(a: Interval, b: Interval) -> Result<Interval, CurveError> {
         if q.is_finite() && exact_product(q, y) == Some(x) {
             return point(q);
         }
+    }
+    if single(a) == Some(0.0) && (b.lo() > 0.0 || b.hi() < 0.0) {
+        return point(0.0);
     }
     Ok(a.div(b)?)
 }

@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "Phase 5 train 1 (G158 to G180, with G242; issues 974, 1102, 1103, 1116, 1068 and 1156)",
               "why": "Phase 5's first train, one record for its pieces' 40 new count benchmarks: 39 in the groups intersect and quadric (geom-intersect's canonical order, projection, curve-curve, curve-surface, closed-form and general surface intersections, marching, contact, seams, known intersections and surface self-intersection, and geom-num's exact quadric decisions and pencils) and G242's curved/broad_pairs (geom-bool's broad phase, decision 32.46). Their rows are the sizes CI runs: thirteen were resized on the train after their first digests so that every batch runs inside its CI job, and three of them (intersect/march_poles, intersect/natural_apex and intersect/selfcross_sweep) keep a few inputs of their batch of 64 (geom-bench's inputs::SHORT_BATCHES) so that both 5% count gates finish inside their jobs, chosen so that the measured pass runs every function and line the pass over all 64 runs; no gate or limit changed. No existing digest of main's moved: every other row is main's, unchanged. Then issue 974's fix of the trim, on the train: no answer moved. Four benchmarks of geom-intersect's natural (intersect/natural_tee, intersect/natural_apex, intersect/reduced_torus and intersect/reduced_tube, each typical) have new result digests because an answer carries the count of the work it cost, and that count fell: the trim now runs each edge of a pair against the other surface once a call, where every curve of the answer ran every edge again (issue 974). An input costs 98 units where it cost 174 (the tee, two curves), 23,450 where 93,452 (the apex, four), 29 where 33 on 58 of the torus cut's 64 inputs (two; the other 6 cost 25 before and now) and 111 where 197 (the torus tube, two). With the work count's line taken out, every input's answer is the same text before and after; the four input digests and every other row are unchanged. Then issues 1102, 1103 and 1116, on the train: a circle's foot is now its closed form wherever its enclosures decide it (geom-intersect's project_curve_over, issue 1102), so intersect/project_arc/typical's result digest moved; its input digest and every other row are unchanged. 41 of its 64 inputs answer differently and 23 the same (feet at or off an end of the span, still searched). Each changed answer is still one point, a foot on both sides, its enclosures overlapping the old ones: the parameter's width falls from about 1e-8 to 2e-8 to under 1e-15, the distance's from about 1e-4 to about 1e-9. Then a whole circle across a plane is now its crossings by a closed form (geom-intersect's circle_across_plane, issue 1103), so intersect/natural_plane/typical's result digest moved; its input digest and every other row are unchanged. Its 64 answers are the same to the character but for their recorded work, 243 units a case before and 17 after: each case's tilted plane crosses both end circles of its cylinder, and natural's marks now takes those crossings by the closed form. Then a turn box across a whole turn's join is now held in the whole turn (geom-intersect's quadrics::parameters, issue 1116), so intersect/natural_spheres/typical's result digest moved; its input digest and every other row are unchanged. Each of its 64 answers has one span that moves, a sphere's turn span across its join, from (0, about 1/3) to the whole turn (0, 2); nothing else in any answer changes. Then issue 1068 (decision 32.104), on the train: intersect/surface_torus/typical's results only (inputs unchanged): line_tori's lines run along x through each torus's centre, so each meets its torus in four points, the two on one side of the axis at u = 0, the torus's join, and the two outer ones at v = 0, the tube's join (of the 256 items, 128 have u on a join, 128 v, 64 both). The box of such a coordinate starts a hair before the join and ends a hair after it. Under decision 32.104 it is moved by the turn to start in the window and kept whole, ending past the window's end by at most 4.4e-16 (the move by the turn rounds out to the doubles beside the end), read modulo the turn; before, it was cut to the window at the join, from 0 to its tiny far end. So 192 items' u or v spans moved, each new span holding the old one modulo the turn. Every other part of every result is the same text before and after: each item's t span, box in space, contact and class, and each result's coverage, diagnostics and work count; no point added or lost. Then issue 1156, on the train: a line meets a circle in its plane by its discriminant held to what both its forms enclose, B² − AC and A less the square of the line's distance from the centre times A (geom-intersect's line_conic, issue 1156), so intersect/curve_line_circle/typical's result digest moved; its input digest and every other row are unchanged. All 64 answers are the same items in the same grid boxes, with the same work, 384 units; every enclosure lies inside the one before, the widest 8.17e-11 wide before and 5.32e-13 now. Every row these later changes moved is one of the train's own new benchmarks, so against main this is one change of the corpus: no digest of main's moved"
+            },
+            {
+              "sha256": "303855851d1dd4a5e21ddde04cf428cad58dab2db306f7079b33ed9f3c1b23f0",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so nine benchmarks' result digests moved; their input digests and every other row are unchanged. curve/helix_enclose and surface/torus_enclose: 192 and 256 of their 576 enclosures are inside the old ones, the rest the same. surface/torus_second_bound: the third coordinate of each of 64 mixed second partials of a torus about z, exactly 0, was enclosed by a subnormal each side, up to 2e-323, and is the point zero. surface/offset_point: 25 of its 192 coordinates, points in doubles, moved a double. intersect/natural_apex: the same 16 lines, each through the same apex along the same direction to the bit, the four at one apex listed in another order; their domain ends moved by up to 99 doubles about 1024 times the square root of 5 (14 nearer it, 11 farther, 7 the same; the farthest now 4.2e-11 from it, where it was 4.9e-11), and four height spans' ends short of the cones' end 1024 moved with them, by up to 9.1e-12. intersect/subdivide_patch, march_plate, march_poles and analyse_rest: 1,261 of 1,776, 340 of 608, 170 of 512 and 90 of 320 enclosures are inside the old ones and 458, 214, 328 and 179 the same; the searches read the tighter enclosures and so cut, step, refine and fit a few roundings apart, so 57, 54, 14 and 51 move across their old ones (by up to 1.2e-10, 1.8e-15, 5.0e-12 and 3.5e-16), and of march_plate's 64 fitted deviations 7 fell and 15 rose, by at most 1.1e-10 of themselves."
             }
           ],
-          "sha256": "303855851d1dd4a5e21ddde04cf428cad58dab2db306f7079b33ed9f3c1b23f0"
+          "sha256": "86eb11b66aeddc7d4876e2e253994dc91f3019370baaa1ac081ecced6f6b6adb"
         },
         {
           "id": "geom-nurbs/operations",
@@ -344,7 +350,7 @@
             "test": "analytic_determinism",
             "function": "analytic_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "b9e16212d966052945e4131e1705a3bc9a5e5c01df31a5ccd1a16216bc459dfb",
+          "sha256": "fe7df0fbf9e4a999ae13c91969c435958baf9ae784c343bd5a1bd31dd2078694",
           "history": [
             {
               "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342",
@@ -357,6 +363,12 @@
               "kind": "improvement",
               "piece": "G69",
               "why": "A grid transform that moves a circle's centre exactly now states deviation 0 (chapter 7: grid transforms stay exact; piece G69's law catalogue found circles on frames with irrational unit vectors stating about 1e-14, from comparing interval enclosures that are never points). The corpus's quarter turns of circles moved; the kinds, their data and every other record are unchanged, and so are the result count (30606) and the refusals (6)."
+            },
+            {
+              "sha256": "b9e16212d966052945e4131e1705a3bc9a5e5c01df31a5ccd1a16216bc459dfb",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so the corpus's records on such frames moved, each inward or by a rounding: 5,540 of its 95,760 enclosures are inside the old ones and the rest the same; 475 ends of its bounds moved inward and none outward; 253 deviations fell and none rose (193 of changed curves, 60 of NURBS forms); and 392 control points of NURBS forms moved by roundings, at most 32 doubles (4.5e-15 of themselves). The result count (30606) and the refusals (6) are unchanged."
             }
           ]
         },
@@ -368,7 +380,7 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "73638c0b193a68eb859693f3563e6795b0bb36c8b73988c931b9d8ce5ec6cf1b",
+          "sha256": "1432356f158dd517f433c4ca38a868343d70e115ff59d6fda459bd53bf65b3f6",
           "history": [
             {
               "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
@@ -387,6 +399,12 @@
               "kind": "bug",
               "piece": "G70",
               "why": "An offset that a transform does not keep, and a bulge polyline under a transform that is not a similarity, give their NURBS form moved, and stated that form's deviation unscaled, though the transform stretches it (Gate 2's fuzz campaign found the transform law broken under scales of 2^36 to 2^60). The deviation is now the form's times a certified bound on the transform's stretch, plus the move's, so the corpus's offsets under its rational and certified transforms, and its polylines under its non-uniform scales, moved. The result count (10506) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "73638c0b193a68eb859693f3563e6795b0bb36c8b73988c931b9d8ce5ec6cf1b",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so the corpus's records on such frames moved: 6,849 of its 35,910 enclosures are inside the old ones and 28,668 the same; 406 ends of its bounds moved inward and none outward; 145 deviations fell and none rose (65 of changed curves, 80 of NURBS forms). The other 393 enclosures that moved (220 apart from the old one, 164 overlapping it, 9 holding it) are of changed curves, evaluated after their deviation: 362 of first and second derivatives, which a deviation does not bound, and 31 of points, each no farther from the old one than the old and new deviations together. With them 749 derivatives in doubles moved, and 4,105 control points of NURBS forms by roundings, at most 128 doubles (1.4e-14 of themselves). The result count (10506) and the refusals (6) are unchanged."
             }
           ]
         },
@@ -426,7 +444,7 @@
             "test": "surface_determinism",
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "b649188c5a496949dbfdc81714544cc36aeee9c50bb90cd6402ec5a8117cbf94",
+          "sha256": "92bb8164b5af8ce644f3b3a4a540a1f27e6fcdba735d3faa081e17033ab9387e",
           "history": [
             {
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
@@ -439,6 +457,12 @@
               "kind": "improvement",
               "piece": "G69",
               "why": "A grid transform that moves a cylinder's, cone's, sphere's or torus's centre exactly now states deviation 0 (chapter 7; piece G69's law catalogue found about 1e-15 stated, from comparing interval enclosures of irrational unit vectors). The corpus's quarter turns of those kinds moved; its revolutions turn about the origin, so piece G69's fix of a revolution's placement moved none of them; the result count (2693) and the refusals (5) are unchanged."
+            },
+            {
+              "sha256": "b649188c5a496949dbfdc81714544cc36aeee9c50bb90cd6402ec5a8117cbf94",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so the corpus's records on such frames moved, each inward or by a rounding: 3,830 of its 15,552 enclosures are inside the old ones and the rest the same; 96 ends of its bounds moved inward and none outward; 2 deviations of NURBS forms fell and none rose; and 100 control points of NURBS forms moved by roundings, at most 16 doubles (3.4e-15 of themselves). The result count (2693) and the refusals (5) are unchanged."
             }
           ]
         },
@@ -450,7 +474,7 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "1b57e016cdcb9289e72b1acc128f572722e2c8d9cca9c57d33e516df3e22921e",
+          "sha256": "b388125b0cc3cdbd0d031f651c69c08730b045a7c49398df172736dcec5eae4a",
           "history": [
             {
               "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
@@ -475,6 +499,12 @@
               "kind": "bug",
               "piece": "G70",
               "why": "An offset that a transform does not keep gives its NURBS cache moved, and stated the cache's deviation unscaled, though the transform stretches it (Gate 2's fuzz campaign found the transform law broken under scales of 2^36 to 2^60). The deviation is now the cache's times a certified bound on the transform's stretch, plus the move's, so the corpus's transformed offsets moved. The result count (314) and the refusals (4) are unchanged."
+            },
+            {
+              "sha256": "1b57e016cdcb9289e72b1acc128f572722e2c8d9cca9c57d33e516df3e22921e",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so an offset of a base on such a frame bounds itself and builds its certified cache from enclosures that moved inward: 719 of the corpus's 2,520 enclosures are inside the old ones and 1,722 the same; 28 ends of its bounds moved inward and none outward; and of 9 deviations that moved, 7 fell and 2 rose by a few doubles (a changed surface's 10.583403063574618 to 10.583403063574625, a NURBS form's 6.110330607697097 to 6.110330607697102). The other 79 enclosures that moved (69 overlapping the old one, 3 apart from it, 7 holding it) are of changed surfaces, evaluated after their deviation: 64 of partials, which a deviation does not bound, and 15 of points, each overlapping the old one; and 56 control points of NURBS caches moved by roundings, at most 192 doubles (2.3e-14 of themselves). The result count (314) and the refusals (4) are unchanged."
             }
           ]
         },
@@ -616,8 +646,15 @@
             "test": "derivative_determinism",
             "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
-          "history": []
+          "sha256": "2646059bea30466d0be55ece7329d147d25bc0c7dba078c399945118773376a4",
+          "history": [
+            {
+              "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
+              "kind": "improvement",
+              "piece": "issue 1155",
+              "why": "A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero now (geom-curve's tight::mul and tight::div, issue 1155, decision 32.109), where before they fell back to the interval operation, which widened 0 to a subnormal each side. A frame whose norms are not doubles encloses its unit vectors' exact zeros through such quotients, and the kinds built on it scale them on, so the corpus's bounds over boxes of surfaces on such frames moved inward: 56 of its 1,728 partials over boxes are inside the old ones and the rest the same, and 50 ends of its bounds moved inward and none outward. The result count (386) and the refusals (2) are unchanged."
+            }
+          ]
         },
         {
           "id": "geom-surface/frames",

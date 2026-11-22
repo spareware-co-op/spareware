@@ -294,9 +294,10 @@ fn a_cone_a_sphere_and_a_torus_carry_a_tangent_tube_by_their_own_equations() {
         Torus::new([0.0; 3], 0.5, 0.25, frame(), ((0.0, 2.0), (-1.0, 1.0))).unwrap(),
     );
     let in_wide = run(&wide, &ring, equator, KnownContact::Tangent);
-    // Both tubes are proven whole: nothing is left to search.
+    // Both tubes are proven whole: nothing is left to search. The torus's reading took 356,672
+    // units until a product with an exact zero came back the point zero (issue #1155).
     assert_eq!(
         [on_cone, in_cylinder, in_wide],
-        [(0, 0, 24_144), (0, 0, 135_759), (0, 0, 356_672)]
+        [(0, 0, 24_144), (0, 0, 135_759), (0, 0, 322_922)]
     );
 }

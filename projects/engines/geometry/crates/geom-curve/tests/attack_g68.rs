@@ -14,6 +14,9 @@
 //!   stays under 1,000 times its sampled size, where the boxes alone give over 3,000 times.
 //! - **Intersecting enclosures.** `tight::meet` keeps the common part of two enclosures, and the
 //!   first when they miss.
+//! - **Exact zeros.** `tight::mul` with an exact zero, and `tight::div` of an exact zero by a
+//!   divisor clear of zero, give the point zero whatever the other enclosure holds (decision
+//!   32.109); a divisor holding zero is refused as before, and other operands keep their enclosures.
 //!
 //! Every curve is drawn from a printed seed (`SPAREKIT_SEED` replays one).
 #![allow(
@@ -229,4 +232,28 @@ fn meet_keeps_the_common_part() {
     assert_eq!(tight::meet(iv(0.0, 1.0), iv(1.0, 2.0)), Ok(iv(1.0, 1.0)));
     assert_eq!(tight::meet(iv(-1.0, 4.0), iv(0.0, 1.0)), Ok(iv(0.0, 1.0)));
     assert_eq!(tight::meet(iv(0.0, 1.0), iv(2.0, 3.0)), Ok(iv(0.0, 1.0)));
+}
+
+#[test]
+fn an_exact_zero_times_or_over_an_enclosure_is_the_point_zero() {
+    let iv = |a: f64, b: f64| Interval::new(a, b).unwrap();
+    let zero = iv(0.0, 0.0);
+    for other in [iv(1.0, 2.0), iv(-3.0, 5.0), iv(-2.0, -1.0), iv(0.6, 0.8)] {
+        assert_eq!(tight::mul(zero, other), Ok(zero), "0 times {other:?}");
+        assert_eq!(tight::mul(other, zero), Ok(zero), "{other:?} times 0");
+    }
+    assert_eq!(tight::mul(iv(-0.0, -0.0), iv(1.0, 2.0)), Ok(zero));
+    for divisor in [iv(1.0, 2.0), iv(-2.0, -1.0), iv(0.6, 0.8)] {
+        assert_eq!(tight::div(zero, divisor), Ok(zero), "0 over {divisor:?}");
+    }
+    for divisor in [iv(0.0, 1.0), iv(-1.0, 0.0), iv(-1.0, 1.0), zero] {
+        assert!(tight::div(zero, divisor).is_err(), "0 over {divisor:?}");
+    }
+    // Operands that are not an exact zero keep their enclosures.
+    let product = tight::mul(iv(3.0, 3.0), iv(1.0, 2.0)).unwrap();
+    assert!(product.lo() <= 3.0 && product.hi() >= 6.0, "{product:?}");
+    let quotient = tight::div(iv(1.0, 2.0), iv(1.0, 2.0)).unwrap();
+    assert!(quotient.lo() <= 0.5 && quotient.hi() >= 2.0, "{quotient:?}");
+    let around = tight::div(iv(0.0, 1.0), iv(1.0, 2.0)).unwrap();
+    assert!(around.lo() <= 0.0 && around.hi() >= 1.0, "{around:?}");
 }

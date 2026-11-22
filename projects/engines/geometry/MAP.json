@@ -4024,11 +4024,11 @@
         },
         {
           "cost": "a few floating-point operations per call more than the interval operation.",
-          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could. [`meet`] intersects two enclosures of one value.",
+          "does": "each function is the `geom-num` interval operation of the same name, except that when both operands are single doubles and the exact result is a double too, it returns that double as a point interval instead of widening it. So a circle of integer radius on a grid center, evaluated at a quarter turn, is enclosed by its exact point, and two constructions of one exact value compare equal: a conversion or transform that is exact reports a deviation of 0, which widened intervals never could. A product with an exact zero, and an exact zero over a divisor clear of zero, are the point zero whatever the other operand holds, where the interval operation would widen 0 to a subnormal each side (decision 32.109): so a unit vector's exact zero stays one on a frame whose norms are not doubles. [`meet`] intersects two enclosures of one value.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/tight.rs",
           "guarantees": [
-            "**Certified.** A point result is the exact value, decided by an error-free transformation (`geom-num`'s `two_sum` and `two_prod`, whose error is finite and zero exactly when the operation was exact); every other result is the widened interval of `geom-num`, which encloses the exact range.",
+            "**Certified.** A point result is the exact value, decided by an error-free transformation (`geom-num`'s `two_sum` and `two_prod`, whose error is finite and zero exactly when the operation was exact), or the zero of a product with an exact zero or of an exact zero over a divisor clear of zero, which is 0 for every value the other operand holds; every other result is the widened interval of `geom-num`, which encloses the exact range.",
             "**Deterministic.** The same operands give the same bits on every target."
           ],
           "job": "Interval operations that stay exact when they can: the analytic kinds' arithmetic.",

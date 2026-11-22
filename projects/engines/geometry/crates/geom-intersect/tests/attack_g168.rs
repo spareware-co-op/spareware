@@ -1037,8 +1037,9 @@ fn each_trace_takes_the_work_it_always_took() {
             &outline,
             1e-2,
             // 244,468 before a torus's partials paid for the arctangent's 192-bit corners (issue
-            // #765): the same trace, charged more.
-            1_236_148,
+            // #765), and 1,236,148 after, until a product with an exact zero came back the point
+            // zero (issue #1155). The same vertices and reach each time.
+            183_412,
             292,
             4_576_913_829_044_423_827,
         ),
