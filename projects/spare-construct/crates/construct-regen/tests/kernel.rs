@@ -21,7 +21,7 @@
 mod kernel_suite;
 
 use engine_geometry::value::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Tolerance, Volume,
+    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
 };
 use engine_geometry::value::grid::GridStep;
 use std::sync::{Arc, Mutex};
@@ -101,6 +101,14 @@ impl Engine for Cuboids {
 
     fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
         Err(unsupported("subtract"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
+        Err(unsupported("unite"))
     }
 
     fn volume(&mut self, _: &Cuboid) -> Result<Volume, EngineError> {
@@ -204,6 +212,14 @@ impl Engine for Recording {
         Ok(target.clone())
     }
 
+    fn loft(&mut self, sections: &[Section]) -> Result<Cuboid, EngineError> {
+        Cuboids.loft(sections)
+    }
+
+    fn unite(&mut self, a: &Cuboid, b: &Cuboid) -> Result<Cuboid, EngineError> {
+        Cuboids.unite(a, b)
+    }
+
     fn volume(&mut self, s: &Cuboid) -> Result<Volume, EngineError> {
         Cuboids.volume(s)
     }
@@ -295,6 +311,12 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
         }
         fn subtract(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
             Err(unsupported("subtract"))
+        }
+        fn loft(&mut self, _: &[Section]) -> Result<Cuboid, EngineError> {
+            Err(unsupported("loft"))
+        }
+        fn unite(&mut self, _: &Cuboid, _: &Cuboid) -> Result<Cuboid, EngineError> {
+            Err(unsupported("unite"))
         }
         fn volume(&mut self, _: &Cuboid) -> Result<Volume, EngineError> {
             Err(unsupported("volume"))
