@@ -28,7 +28,8 @@
 //! primitives the stored cases need ([`Modeller::cuboid`], [`Modeller::sphere`],
 //! [`Modeller::cylinder`], [`Modeller::cone`]), the extrusion of a plane profile with holes by a
 //! vector of whole steps ([`Modeller::extrude`], chapter 13.4's Extrude with distance ends and no
-//! taper), the three booleans ([`Modeller::union`],
+//! taper), the loft through flat polygon sections whose corners the caller pairs
+//! ([`Modeller::loft`], solidcore's skin of degree 1), the three booleans ([`Modeller::union`],
 //! [`Modeller::difference`], [`Modeller::intersection`]), a solid cut by a plane
 //! ([`Modeller::plane_section`]) and two solids met ([`Modeller::meet`]), and reads a solid's
 //! volume and face count. Lengths reach solidcore in metres, the unit of its tolerances: a length
@@ -39,6 +40,10 @@
 //! Not yet the kernel's: the meeting curves and plane sections are solidcore's curves, read by
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
 //! role (chapter 20) yet.
+//!
+//! For programs: [`engine::SolidcoreEngine`] answers the kernel's engine seam (`geom_op::engine`,
+//! which programs reach through `engine-geometry`), extruding and lofting by solidcore, and
+//! subtracting and uniting flat-faced solids by the kernel's own `geom-bool`.
 //!
 //! Method: solidcore at commit 1d8e14b46dedccbb03572956e7c708782fef1b8f of the project's fork of
 //! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's. Its record of a body is written
@@ -51,10 +56,11 @@
 //! SPDX-License-Identifier: Apache-2.0
 
 pub mod convert;
+pub mod engine;
 
 use std::fmt;
 
-use geom_num::{GridStep, P3, Steps};
+use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_topo::Body;
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -72,6 +78,7 @@ use solidcore::primitive::api_primitives::{
     create_box, create_cone, create_cylinder, create_sphere,
 };
 use solidcore::sweep::api_brep::create_linear_sweep;
+use solidcore::sweep::api_surfaces::create_skin_primitive;
 use solidcore::topology::brep::p3::brep_copy;
 use solidcore::topology::brep::validation::{CheckLevel, check_brep};
 use solidcore::{Brep, Kernel, KernelOptions, Point3, SolidError, Vec3};
@@ -146,6 +153,8 @@ impl std::error::Error for Error {}
 pub struct Solid {
     brep: Brep,
     body: Body,
+    /// The exactness the body was checked at.
+    exactness: Exactness,
     /// The centre and radius the modeller made the solid with, when it is a ball.
     ball: Option<(P3, Steps)>,
 }
@@ -155,6 +164,12 @@ impl Solid {
     #[must_use]
     pub fn body(&self) -> &Body {
         &self.body
+    }
+
+    /// The exactness class the body was checked at.
+    #[must_use]
+    pub fn exactness(&self) -> Exactness {
+        self.exactness
     }
 }
 
@@ -399,8 +414,8 @@ impl Modeller {
             operation,
             what: u.0,
         };
-        let body = if solidcore::topology::brep::p1::num_faces(&brep) == 0 {
-            convert::empty().map_err(unconverted)?
+        let (body, exactness) = if solidcore::topology::brep::p1::num_faces(&brep) == 0 {
+            (convert::empty().map_err(unconverted)?, Exactness::Exact)
         } else {
             // The record is written from a copy: solidcore adds the pcurves it lacks to the body
             // it writes, and the body returned stays as solidcore made it.
@@ -412,17 +427,19 @@ impl Modeller {
                 })?;
             let (body, exactness) =
                 convert::body_of(&record, &order, self.step).map_err(unconverted)?;
-            convert::checked(body, exactness).map_err(|r| match r {
+            let body = convert::checked(body, exactness).map_err(|r| match r {
                 Refusal::Unconverted(u) => unconverted(u),
                 Refusal::Failed { first, faults } => Error::CheckFailed {
                     operation,
                     report: format!("geom-check found {faults} faults, the first: {first}"),
                 },
-            })?
+            })?;
+            (body, exactness)
         };
         Ok(Solid {
             brep,
             body,
+            exactness,
             ball: None,
         })
     }
@@ -624,6 +641,121 @@ impl Modeller {
         let b = create_linear_sweep(&mut self.kernel, &refs, dir, dist, true)
             .map_err(|e| refused(OP, &e))?;
         self.checked(OP, b)
+    }
+
+    /// The solid lofted through `sections` in their order, capped at both ends: solidcore's skin
+    /// (`create_skin_primitive`, SMLib's `SmApiCreateSkinPrimitive`) of degree 1 across the
+    /// sections, so that corner `i` of each section is joined to corner `i` of the next by a
+    /// ruled wall, which solidcore writes as the plane it lies in where it is flat (the fork's
+    /// `skin_flat_walls`). Each section is handed to solidcore as its polygon's lines, every one
+    /// turning positively about the way from the first section to the second (as the extrusion
+    /// hands its outer loop about its vector), decided exactly from the corners' exact fractions
+    /// of steps: when the first section turns the other way, every section is handed reversed,
+    /// which keeps each corner paired with the same corner of the next. The pairing is the
+    /// caller's: solidcore's own matching of sections of different corner counts
+    /// (`sweep::loft_sections::match_loft_sections`, which splits segments where a lone corner
+    /// lands and so adds corners on no grid) is not used, and sections of different counts are
+    /// refused. solidcore has no check of its own that the skin does not fold back or cross
+    /// itself: a section behind the one before it is refused here, before solidcore is reached,
+    /// and a skin whose walls cross is left to the kernel's checker, which every result passes
+    /// (as [`Modeller::extrude`]'s does).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Invalid`] for fewer than two sections, a section of fewer than three corners, with
+    /// no area or with a corner off its plane, sections of different corner counts, a second
+    /// section whose centre lies on the first one's plane, or a section not wholly ahead of the
+    /// plane of the one before it (a fold); [`Error::Refused`] if solidcore
+    /// refuses; [`Error::CheckFailed`] and [`Error::Unconverted`] as every result.
+    pub fn loft(&mut self, sections: &[Vec<Corner>]) -> Result<Solid, Error> {
+        const OP: &str = "loft";
+        let invalid = |what: &str| Error::Invalid {
+            operation: OP,
+            what: what.to_owned(),
+        };
+        let [first, second, ..] = sections else {
+            return Err(invalid("fewer than two sections"));
+        };
+        let count = first.len();
+        if count < 3 {
+            return Err(invalid("a section of fewer than three corners"));
+        }
+        if sections.iter().any(|s| s.len() != count) {
+            return Err(invalid(
+                "sections of different corner counts: corner i of each is joined to corner i of the next",
+            ));
+        }
+        for s in sections {
+            let n = newell(s);
+            if n.iter().all(Zero::is_zero) {
+                return Err(invalid("a section with no area"));
+            }
+            let o = s[0].exact();
+            if s.iter().any(|&p| !dot(&n, &diff(&p.exact(), &o)).is_zero()) {
+                return Err(invalid("a section's corner off its plane"));
+            }
+        }
+        // Each section's centre times its count, exactly: the sign of the way ahead is the same.
+        let sum = |s: &[Corner]| {
+            s.iter().fold(
+                [
+                    BigRational::zero(),
+                    BigRational::zero(),
+                    BigRational::zero(),
+                ],
+                |a, p| {
+                    let e = p.exact();
+                    [&a[0] + &e[0], &a[1] + &e[1], &a[2] + &e[2]]
+                },
+            )
+        };
+        let ahead = dot(&newell(first), &diff(&sum(second), &sum(first)));
+        if ahead.is_zero() {
+            return Err(invalid(
+                "a second section whose centre lies on the first one's plane",
+            ));
+        }
+        let reversed = ahead.is_negative();
+        // The loft runs one way: every corner of each section lies strictly ahead of the plane of
+        // the one before it, ahead being the way the first section's normal turns towards the
+        // second. A section behind, or listed the other way round, folds the loft back.
+        for (k, pair) in sections.windows(2).enumerate() {
+            let n = newell(&pair[0]);
+            let o = pair[0][0].exact();
+            let behind = pair[1].iter().any(|p| {
+                let d = dot(&n, &diff(&p.exact(), &o));
+                if reversed {
+                    !d.is_negative()
+                } else {
+                    !d.is_positive()
+                }
+            });
+            if behind {
+                return Err(invalid(&format!(
+                    "the loft folds back: section {} is not wholly ahead of section {}'s plane, or not listed the same way round",
+                    k + 2,
+                    k + 1
+                )));
+            }
+        }
+        let mut curves: Vec<Curve> = Vec::new();
+        for s in sections {
+            let mut q = s.clone();
+            if reversed {
+                q.reverse();
+            }
+            for (i, &a) in q.iter().enumerate() {
+                let b = q[(i + 1) % q.len()];
+                let line = create_line_segment(self.corner(a), self.corner(b))
+                    .map_err(|e| refused(OP, &e))?;
+                curves.push(Curve::from(line));
+            }
+        }
+        let counts = vec![count; sections.len()];
+        let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
+        let skin = create_skin_primitive(&mut self.kernel, &counts, &refs, 1, true)
+            .map_err(|e| refused(OP, &e))?;
+        self.checked(OP, skin.brep)
     }
 
     /// `a` united with `b`; neither is changed.
@@ -895,5 +1027,39 @@ mod tests {
                 assert_eq!(cross(xyz(xa), xyz(ya)), normal.map(|c| -c), "{corners:?}");
             }
         }
+    }
+
+    /// solidcore has no check of its own that a skin does not fold back: the envelope's section
+    /// lofted to 10 m and back to 5 m is skinned without complaint, and its own validity check at
+    /// its first level passes the folded skin; the modeller's loft refuses the same order as a
+    /// fold before solidcore is reached.
+    #[test]
+    fn solidcore_skins_a_folded_order_without_complaint() {
+        let mut m = Modeller::new(GridStep::Q0);
+        let mm = 6_400_i64;
+        let section = |x: i64| {
+            [(0, 0), (0, 3000), (6000, 9000), (6000, 0)]
+                .map(|(r, h)| Corner::from(P3::new(x * mm, r * mm, h * mm).expect("a grid point")))
+        };
+        let order = [section(0), section(10_000), section(5000)];
+        let mut curves = Vec::new();
+        for s in &order {
+            for i in 0..4 {
+                let line =
+                    create_line_segment(m.corner(s[i]), m.corner(s[(i + 1) % 4])).expect("a line");
+                curves.push(Curve::from(line));
+            }
+        }
+        let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
+        let skin = create_skin_primitive(&mut m.kernel, &[4, 4, 4], &refs, 1, true);
+        let checked = skin.map(|mut s| {
+            check_brep(&mut m.kernel, &mut s.brep, CheckLevel::Level1).map(|r| r.assert_valid)
+        });
+        assert!(matches!(checked, Ok(Ok(Some(true)))), "{checked:?}");
+        let refused = m.loft(&order.map(|s| s.to_vec()));
+        assert!(
+            matches!(&refused, Err(Error::Invalid { operation: "loft", what }) if what.contains("folds back")),
+            "{refused:?}"
+        );
     }
 }
