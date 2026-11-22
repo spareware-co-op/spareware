@@ -2,7 +2,7 @@
 
 *Stage: Mapping. A readable copy of [features.json](features.json), which is the source; keep the two in step. Every priority and size is a proposal for an owner to accept.*
 
-Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 27 areas, 221 things a person can do, and 719 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
+Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 27 areas, 221 things a person can do, and 720 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
 
 **Replaces:** Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control; Autodesk Design Collaboration for sharing between firms.
 
@@ -22,7 +22,7 @@ Where the kit part could wait, the Spare Construct part moved instead: office si
 | ID | Area | Features | Parts | Core features |
 | --- | --- | --- | --- | --- |
 | CON-A1 | [Getting started, accounts and settings](#con-a1-getting-started-accounts-and-settings) | 9 | 29 | 5 |
-| CON-A2 | [Model core, storage and speed](#con-a2-model-core-storage-and-speed) | 10 | 42 | 10 |
+| CON-A2 | [Model core, storage and speed](#con-a2-model-core-storage-and-speed) | 10 | 43 | 10 |
 | CON-A3 | [Geometry kernel and modelling tools](#con-a3-geometry-kernel-and-modelling-tools) | 7 | 31 | 5 |
 | CON-A4 | [Architectural elements](#con-a4-architectural-elements) | 10 | 33 | 8 |
 | CON-A5 | [Structure](#con-a5-structure) | 7 | 20 | 1 |
@@ -106,7 +106,7 @@ The database every element lives in, the project file, the operation log behind 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
 | CON-A2-F1 Keep the whole building in one model | Model architecture, structure and services in one model rather than a stack of linked files. | core | P1 Element store; P2 Permanent IDs; P3 Relationship tables; P4 Discipline ownership |
-| CON-A2-F2 Give elements data | Give any element typed parameters, formulas, shared parameters and project-wide values. | core | P1 Typed parameters; P2 Formula language; P3 Shared parameters; P4 Project-wide values; P5 Project information |
+| CON-A2-F2 Give elements data | Give any element typed parameters, formulas, shared parameters and project-wide values. | core | P1 Typed parameters; P2 Formula language; P3 Shared parameters; P4 Project-wide values; P5 Project information; P6 Categories and subcategories |
 | CON-A2-F3 Work in real units and real places | Model in metres or feet with survey-accurate coordinates and true north. | core | P1 Units and display; P2 Coordinates and survey points; P3 Coordinate systems; P4 Vertical datums |
 | CON-A2-F4 Save and reopen without waiting | Save instantly and reopen a large project to its first view in seconds. | core | P1 Project file; P2 Chunked storage; P3 Paging from disk; P4 Spatial index; P5 Never-blocking save; P6 Published file format; P7 No forced upgrades; P8 Storage layout decision |
 | CON-A2-F5 Undo anything | Undo and redo any change, including big batch changes, in one step. | core | P1 Operation log; P2 Transactions; P3 Undo and redo |
@@ -129,7 +129,8 @@ The database every element lives in, the project file, the operation log behind 
 | CON-A2-F2-P3 | **Shared parameters**. Parameters keyed by GUID so they match across projects, families and schedules. | data | small | CON-A2-F2-P1 |  |
 | CON-A2-F2-P4 | **Project-wide values**. Named values that drive dimensions and parameters across the whole project. | library | small | CON-A2-F2-P1, CON-A2-F6-P1 |  |
 | CON-A2-F2-P5 | **Project information**. Client, address, project number, stage and other project data that title blocks and exports read. | data | small | CON-A2-F2-P1 |  |
-| CON-A2-F3-P1 | **Units and display**. SI units inside in f64, with display units, rounding and formats as view and project settings. | library | small | KIT-A15-F1-P1 |  |
+| CON-A2-F2-P6 | **Categories and subcategories**. A fixed built-in tree of what an element is, such as wall, door and floor, with subcategories such as door panel and door frame, kept as data; a project adds its own subcategories and cannot change the built-in ones. Visibility, line styles, schedules, tags and exports read it. | data | small | CON-A2-F1-P1 |  |
+| CON-A2-F3-P1 | **Units and display**. Stored values in exact whole units (whole millimetres; floats only for display and sums: [note CON-A2-F3-P1](notes/CON-A2-F3-P1-stored-units.md)), with display units, rounding and formats as view and project settings. | library | small | KIT-A15-F1-P1 |  |
 | CON-A2-F3-P2 | **Coordinates and survey points**. Local building origin, project base point, survey point, true north and NZTM or any other projected system. | library | medium | CON-A2-F3-P1 |  |
 | CON-A2-F3-P3 | **Coordinate systems**. Coordinate system definitions and transforms for any country, from a database whose terms are checked first (A24-F1-P7). A candidate for the kit's maps, since other apps place things on maps too. | data | medium | CON-A2-F3-P2, CON-A24-F1-P7 |  |
 | CON-A2-F3-P4 | **Vertical datums**. NZVD2016 and the older local vertical datums, with the published transforms between them. Every level, spot height and drainage invert states its datum, so survey, flood and drainage levels line up. | library | medium | CON-A2-F3-P3, CON-A24-F1-P7 |  |

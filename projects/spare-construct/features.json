@@ -544,6 +544,17 @@
         "CON-A2-F2-P1"
        ],
        "piece": null
+      },
+      {
+       "id": "CON-A2-F2-P6",
+       "name": "Categories and subcategories",
+       "what": "A fixed built-in tree of what an element is, such as wall, door and floor, with subcategories such as door panel and door frame, kept as data; a project adds its own subcategories and cannot change the built-in ones. Visibility, line styles, schedules, tags and exports read it.",
+       "kind": "data",
+       "size": "small",
+       "depends_on": [
+        "CON-A2-F1-P1"
+       ],
+       "piece": null
       }
      ]
     },
@@ -556,7 +567,7 @@
       {
        "id": "CON-A2-F3-P1",
        "name": "Units and display",
-       "what": "SI units inside in f64, with display units, rounding and formats as view and project settings.",
+       "what": "Stored values in exact whole units (whole millimetres; floats only for display and sums: note CON-A2-F3-P1), with display units, rounding and formats as view and project settings.",
        "kind": "library",
        "size": "small",
        "depends_on": [
