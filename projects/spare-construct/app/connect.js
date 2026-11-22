@@ -653,15 +653,51 @@
     return row && canBuild(row) ? buildShape(record.recipe) : storedShape(model, record.id);
   }
 
+  /** A stored length, `length:q0:<steps>`, in millimetres. */
+  const storedMm = (text) => Number(String(text).split(':').pop()) / 6400;
+
+  /** The face reference a hosted door names its wall by, and that wall, if it is on this page. */
+  function hostOf(el) {
+    const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+    const host = face && C.elements.get(face.element);
+    return host ? { face, host } : null;
+  }
+
+  /**
+   * Where an element sits. A door hosted on a face of its wall sits where its offsets put it on
+   * the wall, as the server reads it (construct-regen's `hosting`): along the wall from its start,
+   * up from its base, and flush with its side; so it moves with its wall, whose record alone
+   * changes. Anything else, or a door whose wall is not here, sits at its own placement.
+   */
+  function placementOf(el) {
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    const hosted = along !== undefined && up !== undefined && hostOf(el);
+    if (!hosted) return el.placement;
+    const { face, host } = hosted;
+    const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    const thickness = host.el.recipe.args.thickness;
+    const own = el.recipe.args.thickness;
+    if (!Number.isFinite(thickness) || !Number.isFinite(own)) return el.placement;
+    const alongY = host.el.recipe.args.axis === 'y';
+    // Along x the exterior is the wall's side at y = 0; along y, its side at x = its thickness.
+    const across = (role === 'exterior') !== alongY ? 0 : thickness - own;
+    const [a, u] = [storedMm(along), storedMm(up)];
+    const at = host.el.placement;
+    return alongY
+      ? { x: at.x + across, y: at.y + a, z: at.z + u }
+      : { x: at.x + a, y: at.y + across, z: at.z + u };
+  }
+
   /** The box around a piece in the model. */
   function around(piece) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const { min, max } = piece.shape.bounds;
     return { x: x + min[0], y: y + min[1], w: max[0] - min[0], d: max[1] - min[1] };
   }
 
   function outlineOf(piece, paint) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const points = piece.shape.displays[0].outline.map(([px, py]) => `${x + px},${y + py}`);
     return `<polygon class="${paint}" points="${points.join(' ')}"/>`;
   }
@@ -911,6 +947,8 @@
     'type.duplicate': 'copied a type',
     'type.delete': 'deleted a type',
     'type.set': 'set a value of a type',
+    'hosted.place': 'placed on a wall',
+    'hosted.move': 'moved along its wall',
     'edit.undo': 'undid a change to',
     'edit.redo': 'redid a change to',
   };
@@ -1549,7 +1587,7 @@
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1619,7 +1657,7 @@
     );
     for (const piece of inOrder) {
       const { el: e } = piece;
-      const { x, y } = e.placement;
+      const { x, y } = placementOf(e);
       const data = `class="element" data-id="${esc(e.id)}" data-x="${x}" data-y="${y}"`;
       if (!piece.shape) {
         // Nothing to draw yet, or a recipe that can't build: a mark, so it can still be found.
@@ -1703,21 +1741,29 @@
     }
     const box = around(wall);
     const along = box.w >= box.d;
-    const placement = along
-      ? { x: snap(at.x) - 450, y: box.y + box.d / 2 - 150, z: 0 }
-      : { x: box.x + box.w / 2 - 150, y: snap(at.y) - 450, z: 0 };
-    const args = { width: 900, thickness: 300, height: 2100, axis: along ? 'x' : 'y' };
-    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall.
-    const face = wall.shape.names.find((name) => name.role === 'exterior');
-    const host = {
-      doc: null,
-      element: wall.el.id,
-      name: face.name,
-      kind: 'face',
-      want: 'carrier',
-      signature: null,
-    };
-    add('door', 'D', placement, recipe('door.single', args), 'Doors', [host]);
+    const width = 900;
+    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall:
+    // the side clicked (along x the exterior is the wall's low y side, along y its high x side),
+    // as far along the wall from its start as the click, less half the door, as thick as the wall.
+    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+    const exterior = along ? at.y < middle : at.x > middle;
+    const face = wall.shape.names.find((name) => name.role === (exterior ? 'exterior' : 'interior'));
+    if (!face) {
+      say('That wall has no side to place a door on.');
+      return;
+    }
+    const offset = (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2;
+    const thickness = along ? box.d : box.w;
+    const args = { width, thickness, height: 2100, axis: along ? 'x' : 'y' };
+    edit('hosted.place', {
+      element: `D-${crypto.randomUUID().slice(0, 8)}`,
+      kind: 'door',
+      host: wall.el.id,
+      face: face.name,
+      along: `${offset} mm`,
+      up: '0 mm',
+      recipe: recipe('door.single', args),
+    });
   }
 
   /** Spare Construct's own operations, by what they make. */
@@ -1757,9 +1803,12 @@
         say(`${claim.name} is working on this.`);
         return;
       }
-      const { placement } = C.elements.get(id).el;
+      const { el } = C.elements.get(id);
+      const placement = placementOf(el);
       edit('element.claim', { element: id });
-      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y };
+      // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
+      const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
+      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
     });
 
     window.addEventListener('pointermove', (event) => {
@@ -1769,6 +1818,18 @@
       const at = toModel(event);
       const x = snap(at.x - drag.dx);
       const y = snap(at.y - drag.dy);
+      if (drag.hosted) {
+        const hosted = hostOf(piece.el);
+        if (!hosted) return;
+        const wall = hosted.host.el;
+        const offset = wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
+        if (storedMm(piece.el.props['@host.along']) === offset) return;
+        const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        piece.el = { ...piece.el, props };
+        drag.along = offset;
+        queueDraw();
+        return;
+      }
       const { placement } = piece.el;
       if (x === placement.x && y === placement.y) return;
       piece.el = { ...piece.el, placement: { ...placement, x, y } };
@@ -1783,7 +1844,11 @@
     const finish = () => {
       if (!drag) return;
       const piece = C.elements.get(drag.id);
-      if (piece) edit('element.move', { element: drag.id, placement: piece.el.placement });
+      if (piece && drag.hosted) {
+        if (drag.along !== undefined) edit('hosted.move', { element: drag.id, along: `${drag.along} mm` });
+      } else if (piece) {
+        edit('element.move', { element: drag.id, placement: piece.el.placement });
+      }
       drag = null;
     };
     window.addEventListener('pointerup', finish);
@@ -1832,7 +1897,12 @@
     scene.add(meshes.group);
     C.three = {
       update() {
-        meshes.update(C.elements.values());
+        // Each where it sits: a hosted door on its wall (placementOf).
+        const placed = [...C.elements.values()].map((piece) => ({
+          ...piece,
+          el: { ...piece.el, placement: placementOf(piece.el) },
+        }));
+        meshes.update(placed);
       },
     };
     C.three.update();
