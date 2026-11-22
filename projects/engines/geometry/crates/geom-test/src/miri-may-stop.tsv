@@ -37,11 +37,13 @@
 476	geom-curve::attack_g64	a_reversed_curve_is_the_transition_built_from_the_end
 475	geom-num::steps	every_step_of_a_plane_gives_the_exact_sign
 470	geom-make::attack_g101	transforms_keep_names_and_pass_the_checker
+469	geom-intersect::march_seam_kills_2	a_start_whose_box_reaches_a_pole_it_is_not_held_on_is_not_the_pole
 465	geom-num::attack_g52	interval_jacobians_enclose_point_jacobians
 464	geom-format::cbor2	every_verdict_and_text_matches_cbor2
 458	geom-num::rng_properties	philox4x32_10_is_a_bijection_on_counters
 457	geom-num::rng_properties	range_inclusive_is_low_plus_below
 453	geom-num::rng_properties	next_u64_and_next_f64_follow_their_definitions
+452	geom-intersect::march_kills	a_cylinders_end_circle_lying_in_a_strip_of_a_plane_is_two_arcs_along_the_edge
 450	geom-format::record_determinism	golden_hash_is_the_same_on_every_target
 449	geom-bool::names	a_new_vertex_a_wedge_makes_half_a_step_from_old_ones_takes_a_name_of_its_own
 448	geom-bool::combine	one_arrangement_gives_every_selection
@@ -64,11 +66,13 @@
 410	geom-mesh::boolean	two_faces_of_one_sheet_meet_at_a_point_on_an_edge
 410	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_1
 405	geom-poly::subdivide	a_test_that_is_settled_drops_its_box_and_nothing_it_keeps
+403	geom-intersect::fit_kills_3	an_arc_on_a_cone_whose_domain_ends_just_above_the_apex_is_still_fitted
 403	geom-mesh::boolean	the_threads_and_the_order_do_not_show::the_threads
 402	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::three_doors
 402	geom-bool::names	two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners
 402	geom-num::attack_g05	sinpi_and_cospi_hard_cases_of_the_port_and_their_neighbours
 401	geom-bool::combine	the_order_of_the_operands_does_not_count
+401	geom-intersect::selfcross_kills_a	a_ramp_on_knots_one_double_apart_takes_its_recorded_work
 400	geom-op::attack_g82	paths_order_by_operation_then_labels
 394	geom-bool::names	a_boolean_reports_every_name_it_made_after_those_it_refers_to::two_doors
 394	geom-num::attack_plane	to_grid_near_ties_with_w_near_2_pow_192::quarter_3
@@ -81,3 +85,4 @@
 381	geom-bool::combine	three_boxes_whose_union_pinches_at_a_corner_give_a_general_body::united_at_once
 378	geom-surface::frame_rule	the_frame_meets_its_stations_bit_for_bit_and_is_c1_between_them
 377	geom-mesh::slice	the_threads_do_not_show
+376	geom-intersect::march_kills	a_cap_holds_one_branch_through_its_pole
