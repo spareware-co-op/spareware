@@ -33,7 +33,13 @@
 //!   condition in its box, by the interval engine (12.3). At an end of the curve whose pcurve point
 //!   lies on one edge of a domain, it proves the curve's end there, the only zero of S₁ − S₂ on
 //!   that edge in the box's face: a box that stands in the domain has that point on its face, where
-//!   no Krawczyk step can prove it.
+//!   no Krawczyk step can prove it. At an end on a corner, two or more parameters on edges, all of
+//!   them are held there, and S₁ − S₂ has more equations than unknowns: as the start search does at
+//!   an end of a domain (`general`'s `at_the_ends`), the rows that best determine the rest are
+//!   proven to have one zero in the face, and the others must hold zero over it with each
+//!   surface's point there within `SETTLED` steps, so the end is the corner to within the rounding
+//!   of the kinds' reads. A corner that is not on the curve so, or that no choice of rows decides,
+//!   has no true point: `None`, never a run to the budget.
 //! - **The definition kept.** The curve's chain is the branch's vertices, each with its parameter
 //!   on the caches; points added in refinement are fit data only.
 //!
@@ -697,12 +703,271 @@ impl Field<3> for OnEdge<'_> {
     }
 }
 
+/// S₁ − S₂ with two or more of (u₁, v₁, u₂, v₂) held at ends of their domains, in the other N, and
+/// N of its three rows kept: the system of [`true_point`] at an end of the curve on a corner. The
+/// rows left out are checked over a zero of the kept ones ([`OnCorner::settled`]).
+struct OnCorner<'a, const N: usize> {
+    first: &'a SurfaceKind,
+    second: &'a SurfaceKind,
+    held: [Option<f64>; 4],
+    rows: [usize; N],
+    floor: f64,
+}
+
+/// How many steps of the double each surface's point may reach at a curve's end on a corner, for
+/// the rows left out to say anything: past the rounding of a kind's read at a point, which for a
+/// NURBS patch is several steps (7 to 13 for the quadratic sheet of `tests/true_point_corner.rs`),
+/// and far inside any bound a fit certifies. A power of two.
+const SETTLED: f64 = 64.0;
+
+/// The choices of rows an end's system on a corner could keep, of each size.
+const ROW_SETS: [&[usize]; 6] = [&[0, 1], &[0, 2], &[1, 2], &[0], &[1], &[2]];
+
+impl<const N: usize> OnCorner<'_, N> {
+    /// The four parameters: the held ones at their edges, `x` in the others, in order.
+    fn whole(&self, x: &[Interval; N]) -> Result<[Interval; 4], IntersectError> {
+        let mut out = [Interval::point(0.0)?; 4];
+        let mut rest = x.iter();
+        for (slot, held) in out.iter_mut().zip(self.held) {
+            *slot = match held {
+                Some(edge) => Interval::point(edge)?,
+                None => *rest.next().ok_or(IntersectError::Internal)?,
+            };
+        }
+        Ok(out)
+    }
+
+    /// Both surfaces' partials to `order` over the box `x` of the free parameters, or `None` where
+    /// they cannot be bounded.
+    fn read(
+        &self,
+        x: &[Interval; N],
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Both>, IntersectError> {
+        let [u1, v1, u2, v2] = self.whole(x)?;
+        let (Some(p), Some(q)) = (
+            partials(self.first, region(&[u1, v1]), order, meter)?,
+            partials(self.second, region(&[u2, v2]), order, meter)?,
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((p, q)))
+    }
+
+    /// The kept rows of three.
+    fn kept(&self, all: &[Interval; 3]) -> Result<[Interval; N], IntersectError> {
+        let mut out = [Interval::point(0.0)?; N];
+        for (slot, row) in out.iter_mut().zip(self.rows) {
+            *slot = *all.get(row).ok_or(IntersectError::Internal)?;
+        }
+        Ok(out)
+    }
+
+    /// Whether the four parameters `whole`, a zero of the kept rows, are the curve's end to within
+    /// the rounding of the kinds' reads: every row left out holds zero over them, and each
+    /// surface's point there reaches no more than [`SETTLED`] steps.
+    fn settled(
+        &self,
+        whole: &[Interval; 4],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<bool, IntersectError> {
+        let [u1, v1, u2, v2] = *whole;
+        let (Some(p), Some(q)) = (
+            partials(self.first, region(&[u1, v1]), 0, meter)?,
+            partials(self.second, region(&[u2, v2]), 0, meter)?,
+        ) else {
+            return Ok(false);
+        };
+        let ([s1, ..], [s2, ..]) = (p.as_slice(), q.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        let holds = minus_box(s1, s2)?
+            .iter()
+            .enumerate()
+            .filter(|(k, _)| !self.rows.contains(k))
+            .all(|(_, r)| r.lo() <= 0.0 && 0.0 <= r.hi());
+        let most = SETTLED * self.floor;
+        Ok(holds && image(s1) <= most && image(s2) <= most)
+    }
+
+    /// How well the kept rows determine the free parameters over `x`: the least their N by N
+    /// partials' determinant can be there, or `None` if it may be zero.
+    fn determined(
+        &self,
+        x: &[Interval; N],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<f64>, IntersectError> {
+        let Some(m) = self.slope(x, meter)? else {
+            return Ok(None);
+        };
+        let at = |i: usize, j: usize| -> Result<Interval, IntersectError> {
+            m.get(i)
+                .and_then(|r| r.get(j))
+                .copied()
+                .ok_or(IntersectError::Internal)
+        };
+        let det = match N {
+            1 => at(0, 0)?,
+            2 => at(0, 0)?.mul(at(1, 1)?)?.sub(at(0, 1)?.mul(at(1, 0)?)?)?,
+            _ => return Err(IntersectError::Internal),
+        };
+        Ok((det.lo() > 0.0 || det.hi() < 0.0).then(|| smaller(det.lo().abs(), det.hi().abs())))
+    }
+}
+
+impl<const N: usize> Field<N> for OnCorner<'_, N> {
+    fn at(&self, x: [f64; N], meter: &mut WorkMeter<'_>) -> Result<[Interval; N], IntersectError> {
+        let Some(both) = self.read(&exact(&x)?, 0, meter)? else {
+            return Err(IntersectError::Internal);
+        };
+        self.kept(&OnEdge::residuals(&both)?)
+    }
+
+    fn over(
+        &self,
+        x: &[Interval; N],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; N]>, IntersectError> {
+        match self.read(x, 0, meter)? {
+            Some(both) => Ok(Some(self.kept(&OnEdge::residuals(&both)?)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn slope(
+        &self,
+        x: &[Interval; N],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; N]; N]>, IntersectError> {
+        let Some((p, q)) = self.read(x, 1, meter)? else {
+            return Ok(None);
+        };
+        let ([_, au, av, ..], [_, bu, bv, ..]) = (p.as_slice(), q.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        let mut rows = [[Interval::point(0.0)?; N]; N];
+        for (row, k) in rows.iter_mut().zip(self.rows) {
+            let pick = |v: &[Interval; 3]| v.get(k).copied().ok_or(IntersectError::Internal);
+            let all = [pick(au)?, pick(av)?, pick(bu)?.neg(), pick(bv)?.neg()];
+            let mut rest = all
+                .into_iter()
+                .zip(self.held)
+                .filter(|(_, held)| held.is_none());
+            for slot in row.iter_mut() {
+                *slot = rest.next().ok_or(IntersectError::Internal)?.0;
+            }
+        }
+        Ok(Some(rows))
+    }
+
+    fn reach(&self, x: &[Interval; N], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let [u1, v1, ..] = self.whole(x)?;
+        let b = around(self.first, region(&[u1, v1]), meter)?;
+        Ok(image(&b) / self.floor)
+    }
+}
+
+/// The curve's end on a corner, held at `held`, in `face`, the box of the free parameters: each
+/// choice of N of S₁ − S₂'s three rows whose partials are sure to determine those parameters there,
+/// best first, is solved until one decides the box, and its one zero that [`OnCorner::settled`]
+/// keeps is the end; `None` where the kept rows have no zero there, the end is not settled, or no
+/// choice decides.
+fn cornered<const N: usize>(
+    (first, second): (&SurfaceKind, &SurfaceKind),
+    held: [Option<f64>; 4],
+    face: [Interval; N],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<[Interval; 4]>, IntersectError> {
+    let mut choices = Vec::new();
+    for rows in ROW_SETS
+        .iter()
+        .filter_map(|s| <[usize; N]>::try_from(*s).ok())
+    {
+        let system = OnCorner {
+            first,
+            second,
+            held,
+            rows,
+            floor,
+        };
+        if let Some(least) = system.determined(&face, meter)? {
+            choices.push((least, system));
+        }
+    }
+    choices.sort_by(|a, b| b.0.total_cmp(&a.0));
+    for (_, system) in choices {
+        let found = solve(&system, face, face, |_, _| Ok(true), meter)?;
+        if !found.flagged.is_empty() {
+            continue;
+        }
+        let mut ends = Vec::new();
+        for zero in &found.zeros {
+            let whole = system.whole(&zero.enclosure)?;
+            if system.settled(&whole, meter)? {
+                ends.push(whole);
+            }
+        }
+        return Ok(match ends.as_slice() {
+            [end] => Some(*end),
+            _ => None,
+        });
+    }
+    Ok(None)
+}
+
+/// The curve's end on a corner: every parameter of `domain4` whose read reached an edge
+/// (`edges`) held there, and the end found in the others by [`cornered`], or settled at once
+/// where all four are held. `None` for a parameter that reached both its edges.
+fn on_corner(
+    (first, second): (&SurfaceKind, &SurfaceKind),
+    domain4: &[Interval; 4],
+    edges: &[(usize, f64)],
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<[Interval; 4]>, IntersectError> {
+    let mut held = [None; 4];
+    for &(index, edge) in edges {
+        let slot = held.get_mut(index).ok_or(IntersectError::Internal)?;
+        if slot.is_some() {
+            return Ok(None);
+        }
+        *slot = Some(edge);
+    }
+    let face: Vec<Interval> = domain4
+        .iter()
+        .zip(held)
+        .filter(|(_, h)| h.is_none())
+        .map(|(x, _)| *x)
+        .collect();
+    let pair = (first, second);
+    match face.as_slice() {
+        [a, b] => cornered(pair, held, [*a, *b], floor, meter),
+        [a] => cornered(pair, held, [*a], floor, meter),
+        [] => {
+            let system = OnCorner {
+                first,
+                second,
+                held,
+                rows: [],
+                floor,
+            };
+            let whole = system.whole(&[])?;
+            Ok(system.settled(&whole, meter)?.then_some(whole))
+        }
+        _ => Err(IntersectError::Internal),
+    }
+}
+
 /// The point of the true curve in the plane across `curve`'s 3D cache at `t`, (u₁, v₁, u₂, v₂)
 /// proven the only one in a box about the pcurves' points there, or `None` where none is proven
 /// (module documentation). At an end of the curve where one pcurve's point lies on an edge of its
 /// surface's domain, the point is the true curve's end on that edge: there it lies on the face of
 /// any box about it that stands in the domain, where the interior system cannot prove it, so that
-/// parameter is held at the edge and S₁ − S₂ is solved in the other three.
+/// parameter is held at the edge and S₁ − S₂ is solved in the other three. Where two or more lie on
+/// edges, a corner, all of them are held and the end is proven to within the rounding of the
+/// kinds' reads, or is `None` (module documentation).
 ///
 /// # Errors
 ///
@@ -814,6 +1079,9 @@ pub fn true_point(
         } else {
             Ok(None)
         };
+    }
+    if edges.len() > 1 {
+        return on_corner((first, second), &domain4, &edges, field.floor, meter);
     }
     let found = solve(&field, domain4, domain4, |_, _| Ok(true), meter)?;
     let [zero] = found.zeros.as_slice() else {
