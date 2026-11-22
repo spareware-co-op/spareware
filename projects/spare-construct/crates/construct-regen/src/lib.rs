@@ -19,9 +19,9 @@
 //! today. A program that links an engine builds a [`kernel::Kernel`] over it in its own one place
 //! instead: the server picks between the two by a setting.
 
-pub mod kernel;
 #[cfg(feature = "server")]
 pub mod catalog;
+pub mod kernel;
 #[cfg(feature = "server")]
 pub mod parameters;
 #[cfg(feature = "server")]
