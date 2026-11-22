@@ -11,7 +11,7 @@ use construct_materials::{
     Class, Drawing, Graphics, MaterialError, MaterialId, Materials, Measure, NewMaterial, Physical,
     RefName, mass_grams,
 };
-use construct_params::Volume;
+use construct_params::{Length, Value, Volume};
 use construct_styles::{Colour, patterns::SOLID};
 
 fn physical(density: u64) -> Physical {
@@ -72,6 +72,69 @@ fn the_largest_inputs_do_not_overflow() {
     let dense = physical(100_000_000);
     let most = mass_grams(Volume::from_mm3(i64::MAX), &dense).unwrap();
     assert_eq!(most, 922_337_203_685_477_581);
+}
+
+/// The rule as it was written for whole cubic millimetres: `mm3 * density / 10^9`, to the nearest
+/// gram, a half to the even gram.
+fn grams_from_mm3(mm3: u128, density: u128) -> u64 {
+    let product = mm3 * density;
+    let (whole, rest) = (product / 1_000_000_000, product % 1_000_000_000);
+    let up = rest * 2 > 1_000_000_000 || (rest * 2 == 1_000_000_000 && whole % 2 == 1);
+    (whole + u128::from(up)) as u64
+}
+
+#[test]
+fn a_volume_gives_the_same_mass_as_in_whole_cubic_millimetres() {
+    for density in [1, 999, 2_300_000, 7_861_000, 99_999_999, 100_000_000] {
+        for mm3 in [
+            0_i64,
+            1,
+            4,
+            5,
+            6,
+            15,
+            25,
+            35,
+            1_953,
+            10_000_000,
+            1_000_000_000,
+            123_456_789_012,
+            i64::MAX / 3,
+            i64::MAX,
+        ] {
+            assert_eq!(
+                mass_grams(Volume::from_mm3(mm3), &physical(density)).unwrap(),
+                grams_from_mm3(mm3 as u128, u128::from(density)),
+                "{mm3} mm3 at {density} g/m3"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_volume_between_whole_cubic_millimetres_has_its_exact_mass() {
+    // A 12.5 mm cube of steel: 1,953.125 mm3 x 7,861,000 g/m3 = 15.35 g, so 15 g.
+    let side = Value::Length(Length::from_steps(80_000));
+    let cube = Volume::from_cubic_steps(80_000_i128.pow(3));
+    assert_eq!(
+        side.multiply(&side).and_then(|area| area.multiply(&side)),
+        Ok(Value::Volume(cube))
+    );
+    assert_eq!(mass_grams(cube, &physical(7_861_000)).unwrap(), 15);
+    // Half a gram exactly, between whole cubic millimetres: 5 mm3 and one cubic step more is
+    // just over a half, so 1 g; 5 mm3 is exactly a half, so 0 g.
+    let half = Volume::from_mm3(5);
+    assert_eq!(mass_grams(half, &physical(100_000_000)).unwrap(), 0);
+    let over = Volume::from_cubic_steps(half.cubic_steps() + 1);
+    assert_eq!(mass_grams(over, &physical(100_000_000)).unwrap(), 1);
+}
+
+#[test]
+fn a_mass_beyond_a_u64_of_grams_is_refused() {
+    assert_eq!(
+        mass_grams(Volume::from_cubic_steps(i128::MAX), &physical(100_000_000)).unwrap_err(),
+        MaterialError::MassTooLarge
+    );
 }
 
 #[test]

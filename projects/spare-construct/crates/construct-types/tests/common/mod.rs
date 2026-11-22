@@ -18,7 +18,7 @@ pub fn id(text: &str) -> Id {
 }
 
 /// A length value.
-pub fn mm(mm: i64) -> Value {
+pub fn mm(mm: i32) -> Value {
     Value::Length(Length::from_mm(mm))
 }
 

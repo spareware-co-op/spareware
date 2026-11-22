@@ -14,16 +14,17 @@
 )]
 
 use construct_solver::{
-    Budget, COORD_LIMIT_MM, Constraint, ConstraintId, FreePoint, LineId, Point, PointId, Side,
-    Sketch, SketchError, SolveError, Solved, Verdict, solve,
+    Budget, COORD_LIMIT, Constraint, ConstraintId, FreePoint, LineId, MODEL_TOLERANCE_STEPS, Point,
+    PointId, STEPS_PER_MM, Side, Sketch, SketchError, SolveError, Solved, Verdict, mm, solve,
 };
+use engine_geometry::value::grid::{Coord, GridStep};
 
 fn solved_points(sketch: &Sketch) -> Vec<Point> {
     solve(sketch, Budget::DEFAULT).unwrap().points
 }
 
-fn p(x_mm: i64, y_mm: i64) -> Point {
-    Point { x_mm, y_mm }
+fn p(x_mm: i32, y_mm: i32) -> Point {
+    Point::mm(x_mm, y_mm)
 }
 
 /// A rectangle drawn roughly as four lines, each with its own two ends, tied corner to corner.
@@ -49,7 +50,7 @@ fn rough_rectangle() -> Rectangle {
     ];
     let ends: Vec<PointId> = drawn
         .iter()
-        .map(|(x, y)| sketch.add_point(*x, *y).unwrap())
+        .map(|(x, y)| sketch.add_point(mm(*x), mm(*y)).unwrap())
         .collect();
     let mut line = |i: usize| sketch.add_line(ends[i], ends[i + 1]).unwrap();
     let bottom = line(0);
@@ -78,9 +79,13 @@ fn rough_rectangle() -> Rectangle {
     }
 }
 
-fn distance(sketch: &mut Sketch, a: PointId, b: PointId, mm: i64) -> ConstraintId {
+fn distance(sketch: &mut Sketch, a: PointId, b: PointId, length_mm: i32) -> ConstraintId {
     sketch
-        .add_constraint(Constraint::Distance { a, b, mm })
+        .add_constraint(Constraint::Distance {
+            a,
+            b,
+            steps: mm(length_mm),
+        })
         .unwrap()
 }
 
@@ -115,9 +120,9 @@ fn a_rectangle_solves_to_the_exact_rectangle() {
 #[test]
 fn a_triangle_from_three_lengths() {
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(0, 0).unwrap();
-    let b = sketch.add_point(5_800, 150).unwrap();
-    let c = sketch.add_point(3_200, 3_700).unwrap();
+    let a = sketch.add_point(mm(0), mm(0)).unwrap();
+    let b = sketch.add_point(mm(5_800), mm(150)).unwrap();
+    let c = sketch.add_point(mm(3_200), mm(3_700)).unwrap();
     let base = sketch.add_line(a, b).unwrap();
     sketch.add_line(b, c).unwrap();
     sketch.add_line(c, a).unwrap();
@@ -146,15 +151,15 @@ fn an_undimensioned_height_is_one_freedom_on_the_top_corners() {
     assert_eq!(solved.verdict, Verdict::UnderConstrained { dof: 1, free });
     // Least change: the width is met and some height near the drawn one is kept.
     assert_eq!(solved.points[1], p(4_000, 0));
-    assert_eq!(solved.points[3].x_mm, 4_000);
-    assert_eq!(solved.points[3].y_mm, solved.points[6].y_mm);
+    assert_eq!(solved.points[3].x, mm(4_000));
+    assert_eq!(solved.points[3].y, solved.points[6].y);
 }
 
 #[test]
 fn a_sketch_with_nothing_fixed_keeps_its_placement_freedoms() {
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(10, 20).unwrap();
-    let b = sketch.add_point(990, 20).unwrap();
+    let a = sketch.add_point(mm(10), mm(20)).unwrap();
+    let b = sketch.add_point(mm(990), mm(20)).unwrap();
     distance(&mut sketch, a, b, 1_000);
     let solved = solve(&sketch, Budget::DEFAULT);
     // Two free points joined by one length: four coordinates, one equation. Least change
@@ -213,11 +218,11 @@ fn parallel_equal_and_point_to_line_distance() {
     // A fixed base line, a point held 1,200 mm to its left on a vertical guide, and a second line
     // from that point, parallel to the base and as long as it.
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(0, 0).unwrap();
-    let b = sketch.add_point(5_000, 0).unwrap();
-    let foot = sketch.add_point(2_000, -500).unwrap();
-    let top = sketch.add_point(2_100, 900).unwrap();
-    let far = sketch.add_point(6_500, 1_300).unwrap();
+    let a = sketch.add_point(mm(0), mm(0)).unwrap();
+    let b = sketch.add_point(mm(5_000), mm(0)).unwrap();
+    let foot = sketch.add_point(mm(2_000), mm(-500)).unwrap();
+    let top = sketch.add_point(mm(2_100), mm(900)).unwrap();
+    let far = sketch.add_point(mm(6_500), mm(1_300)).unwrap();
     let base = sketch.add_line(a, b).unwrap();
     let guide = sketch.add_line(foot, top).unwrap();
     let copy = sketch.add_line(top, far).unwrap();
@@ -230,7 +235,7 @@ fn parallel_equal_and_point_to_line_distance() {
         .add_constraint(Constraint::PointLineDistance {
             point: top,
             line: base,
-            mm: 1_200,
+            steps: mm(1_200),
             side: Side::Left,
         })
         .unwrap();
@@ -252,14 +257,16 @@ fn the_same_sketch_gives_the_same_bytes() {
     let once = serde_json::to_vec(&solve(&r.sketch, Budget::DEFAULT).unwrap()).unwrap();
     let twice = serde_json::to_vec(&solve(&r.sketch.clone(), Budget::DEFAULT).unwrap()).unwrap();
     assert_eq!(once, twice);
-    // Pinned, so a machine that solves it differently, even by one step, fails here.
+    // Pinned, so a machine that solves it differently, even by one step, fails here. Pinned
+    // again when lengths moved to grid steps (piece A39): the same shape, its numbers 6,400
+    // times larger, in the same 8 steps.
     assert_eq!(String::from_utf8(once).unwrap(), GOLDEN_RECTANGLE);
 }
 
 const GOLDEN_RECTANGLE: &str = concat!(
-    r#"{"points":[{"x_mm":0,"y_mm":0},{"x_mm":4000,"y_mm":0},{"x_mm":4000,"y_mm":0},"#,
-    r#"{"x_mm":4000,"y_mm":3000},{"x_mm":4000,"y_mm":3000},{"x_mm":0,"y_mm":3000},"#,
-    r#"{"x_mm":0,"y_mm":3000},{"x_mm":0,"y_mm":0}],"verdict":"FullyConstrained","#,
+    r#"{"points":[{"x":0,"y":0},{"x":25600000,"y":0},{"x":25600000,"y":0},"#,
+    r#"{"x":25600000,"y":19200000},{"x":25600000,"y":19200000},{"x":0,"y":19200000},"#,
+    r#"{"x":0,"y":19200000},{"x":0,"y":0}],"verdict":"FullyConstrained","#,
     r#""redundant":[],"steps":8}"#,
 );
 
@@ -273,31 +280,78 @@ fn running_out_of_steps_is_an_error() {
 }
 
 #[test]
-fn a_shape_that_does_not_fall_on_whole_millimetres_is_refused() {
-    // An equilateral triangle with 1 m sides: its apex is 866.025... mm high, and at 866 mm its
-    // two slopes miss 1,000 mm by about 0.02 mm, more than the model tolerance.
+fn a_shape_between_whole_millimetres_is_solved_on_the_grid() {
+    // An equilateral triangle with 1 m sides: its apex is 866.0254... mm high, 5,542,562.58 grid
+    // steps. On whole millimetres its slopes missed 1,000 mm by 0.02 mm and it was refused; on
+    // the grid the apex is at most half a step off and every side is within the tolerance.
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(0, 0).unwrap();
-    let b = sketch.add_point(1_010, 0).unwrap();
-    let c = sketch.add_point(480, 850).unwrap();
+    let a = sketch.add_point(mm(0), mm(0)).unwrap();
+    let b = sketch.add_point(mm(1_010), mm(0)).unwrap();
+    let c = sketch.add_point(mm(480), mm(850)).unwrap();
     let base = sketch.add_line(a, b).unwrap();
     sketch.add_constraint(Constraint::Fixed(a)).unwrap();
     sketch.add_constraint(Constraint::Horizontal(base)).unwrap();
     distance(&mut sketch, a, b, 1_000);
     distance(&mut sketch, b, c, 1_000);
     distance(&mut sketch, c, a, 1_000);
+    let solved = solve(&sketch, Budget::DEFAULT).unwrap();
+    assert_eq!(
+        solved.points,
+        vec![
+            Point { x: 0, y: 0 },
+            Point { x: 6_400_000, y: 0 },
+            Point {
+                x: 3_200_000,
+                y: 5_542_563
+            }
+        ]
+    );
+    assert_eq!(solved.verdict, Verdict::FullyConstrained);
+}
+
+#[test]
+fn a_constraint_no_grid_point_can_meet_is_still_refused() {
+    // A line six grid steps long (under a micrometre), held parallel to a fixed line about 105 m
+    // long at a slope no small grid vector has: the nearest grid direction turns the long line's
+    // far end by more than a metre, so rounding cannot meet the tolerance and the sketch is
+    // refused rather than stored loose.
+    let mut sketch = Sketch::new();
+    let a = sketch.add_point(0, 0).unwrap();
+    let b = sketch.add_point(mm(100_000), mm(31_416)).unwrap();
+    let s = sketch.add_point(mm(10), mm(10)).unwrap();
+    let e = sketch.add_point(mm(10) + 6, mm(10) + 2).unwrap();
+    let long = sketch.add_line(a, b).unwrap();
+    let short = sketch.add_line(s, e).unwrap();
+    for point in [a, b, s] {
+        sketch.add_constraint(Constraint::Fixed(point)).unwrap();
+    }
+    sketch
+        .add_constraint(Constraint::Distance {
+            a: s,
+            b: e,
+            steps: 6,
+        })
+        .unwrap();
+    let parallel = sketch
+        .add_constraint(Constraint::Parallel(short, long))
+        .unwrap();
     let error = solve(&sketch, Budget::DEFAULT).unwrap_err();
-    let SolveError::RoundingRefused { residual_mm, .. } = error else {
+    let SolveError::RoundingRefused {
+        constraint,
+        residual_mm,
+    } = error
+    else {
         panic!("expected a refusal, got {error:?}");
     };
-    assert!(residual_mm > 0.01 && residual_mm < 0.05, "{residual_mm}");
+    assert_eq!(constraint, parallel);
+    assert!(residual_mm > 1_000.0, "{residual_mm}");
 }
 
 #[test]
 fn a_distance_between_points_drawn_at_one_place_is_degenerate() {
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(100, 100).unwrap();
-    let b = sketch.add_point(100, 100).unwrap();
+    let a = sketch.add_point(mm(100), mm(100)).unwrap();
+    let b = sketch.add_point(mm(100), mm(100)).unwrap();
     let d = distance(&mut sketch, a, b, 500);
     assert_eq!(
         solve(&sketch, Budget::DEFAULT),
@@ -308,19 +362,36 @@ fn a_distance_between_points_drawn_at_one_place_is_degenerate() {
 #[test]
 fn bad_input_is_refused_when_added() {
     let mut sketch = Sketch::new();
-    let a = sketch.add_point(0, 0).unwrap();
-    let b = sketch.add_point(1, 0).unwrap();
+    let a = sketch.add_point(mm(0), mm(0)).unwrap();
+    let b = sketch.add_point(mm(1), mm(0)).unwrap();
     assert_eq!(sketch.add_line(a, a), Err(SketchError::SameTwice));
     assert_eq!(sketch.add_line(a, PointId(9)), Err(SketchError::Unknown));
     assert_eq!(
-        sketch.add_constraint(Constraint::Distance { a, b, mm: 0 }),
+        sketch.add_constraint(Constraint::Distance { a, b, steps: mm(0) }),
         Err(SketchError::BadDistance)
     );
     assert_eq!(
-        sketch.add_point(COORD_LIMIT_MM + 1, 0),
+        sketch.add_point(COORD_LIMIT + 1, 0),
         Err(SketchError::OutOfRange)
     );
     let solved = solve(&Sketch::new(), Budget::DEFAULT).unwrap();
     assert_eq!(solved.points, Vec::new());
     assert_eq!(solved.verdict, Verdict::FullyConstrained);
+}
+
+#[test]
+fn lengths_are_the_kernels_grid_steps() {
+    // One millimetre in quarter-nanometres is 4,000,000; the kernel's Q0 step is 625 of them.
+    assert_eq!(GridStep::Q0.steps_per(4_000_000), Some(STEPS_PER_MM as u64));
+    assert_eq!(COORD_LIMIT, Coord::MAX.get());
+    assert_eq!(MODEL_TOLERANCE_STEPS * 100, STEPS_PER_MM);
+    assert_eq!(mm(2_400), 15_360_000);
+    assert_eq!(mm(-1), -6_400);
+    assert_eq!(
+        Point::mm(3, -4),
+        Point {
+            x: 19_200,
+            y: -25_600
+        }
+    );
 }

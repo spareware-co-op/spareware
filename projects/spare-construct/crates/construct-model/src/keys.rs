@@ -64,6 +64,16 @@ pub enum Place {
         /// The element.
         element: Id,
     },
+    /// Which elements of a document build their shape from parameter values, so a change to a
+    /// type or to the document's parameters rebuilds them. Derived.
+    Reads {
+        /// The project.
+        project: Id,
+        /// The document the element is in.
+        document: Id,
+        /// The element.
+        element: Id,
+    },
     /// A model's header in a team's WIP folder.
     Model {
         /// The project.
@@ -212,6 +222,11 @@ impl Place {
                 let parts = [document.as_str(), kind.as_str(), element.as_str()];
                 in_project(project).table("kind", &parts)
             }
+            Self::Reads {
+                project,
+                document,
+                element,
+            } => in_project(project).table("reads", &[document.as_str(), element.as_str()]),
             Self::Model { project, model } => in_project(project).table("model", &[model.as_str()]),
             Self::Team { project, team } => in_project(project).table("team", &[team.as_str()]),
             Self::Item {
@@ -332,6 +347,11 @@ impl Place {
                 kind: id(kind)?,
                 element: id(element)?,
             },
+            ["reads", document, element] => Self::Reads {
+                project,
+                document: id(document)?,
+                element: id(element)?,
+            },
             ["model", model] => Self::Model {
                 project,
                 model: id(model)?,
@@ -384,10 +404,15 @@ pub mod list {
     pub fn kind(project: &Id, document: &Id, kind: &Id) -> Prefix {
         in_project(project).table_prefix("kind", &[document.as_str(), kind.as_str()])
     }
+    /// The elements of a document whose shape reads parameter values.
+    #[must_use]
+    pub fn reads(project: &Id, document: &Id) -> Prefix {
+        in_project(project).table_prefix("reads", &[document.as_str()])
+    }
     /// Every derived table of a project.
     #[must_use]
-    pub fn derived(project: &Id) -> [Prefix; 5] {
-        ["body", "display", "built", "area", "kind"]
+    pub fn derived(project: &Id) -> [Prefix; 6] {
+        ["body", "display", "built", "area", "kind", "reads"]
             .map(|name| in_project(project).table_prefix(name, &[]))
     }
     /// Every model of a project.
@@ -522,6 +547,16 @@ mod tests {
         assert!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]);
         // A kind whose name runs on from another's is a different list.
         let (start, end) = list::kind(&i("p"), &i("m"), &i("workshop")).bounds();
+        assert!(!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]));
+        let place = Place::Reads {
+            project: i("p"),
+            document: i("m"),
+            element: i("D-1"),
+        };
+        assert_eq!(Place::parse(&place.key()), Some(place.clone()));
+        let (start, end) = list::reads(&i("p"), &i("m")).bounds();
+        assert!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]);
+        let (start, end) = list::reads(&i("p"), &i("mm")).bounds();
         assert!(!(place.key().as_bytes() >= &start[..] && place.key().as_bytes() < &end[..]));
     }
 }
