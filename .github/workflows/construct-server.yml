@@ -46,17 +46,54 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # The crates are found by a rule, not named one by one, so a crate added under
+      # projects/spare-construct/crates is linted and tested the day it lands. The step fails if a
+      # crate folder is not a workspace member (nothing would check it) or if an exclusion below
+      # names a crate that is gone.
+      - name: List the crates under projects/spare-construct/crates
+        id: crates
+        env:
+          # Tested in the job `transport`, whose truth tests take far longer than this job allows.
+          # It is still linted here.
+          NOT_TESTED_HERE: construct-transport
+        run: |
+          set -euo pipefail
+          meta=$(cargo metadata --locked --no-deps --format-version 1)
+          listed=$(printf '%s' "$meta" | jq -r '.packages[]
+            | select(.manifest_path | contains("/projects/spare-construct/crates/"))
+            | .manifest_path | sub("/Cargo.toml$"; "")
+            | sub("^.*/projects/spare-construct/"; "projects/spare-construct/")' | sort)
+          present=$(for d in projects/spare-construct/crates/*/; do
+            if [ -f "${d}Cargo.toml" ]; then echo "${d%/}"; fi
+          done | sort)
+          missing=$(comm -13 <(echo "$listed") <(echo "$present"))
+          if [ -n "$missing" ]; then
+            echo "::error::Not workspace members, so no check reaches them: $missing"
+            exit 1
+          fi
+          names=$(printf '%s' "$meta" | jq -r '.packages[]
+            | select(.manifest_path | contains("/projects/spare-construct/crates/")) | .name' | sort)
+          tests=$names
+          for n in $NOT_TESTED_HERE; do
+            if ! echo "$names" | grep -qx "$n"; then
+              echo "::error::NOT_TESTED_HERE names $n, which is not a crate under projects/spare-construct/crates"
+              exit 1
+            fi
+            tests=$(echo "$tests" | grep -vx "$n")
+          done
+          echo "all=$(echo "$names" | sed 's/^/-p /' | paste -sd' ')" >>"$GITHUB_OUTPUT"
+          echo "tests=$(echo "$tests" | sed 's/^/-p /' | paste -sd' ')" >>"$GITHUB_OUTPUT"
+          echo "Linted: $(echo $names)"
+          echo "Tested here: $(echo $tests)"
       # Every crate linted here carries the geometry kernel's lint tables (piece A19).
       - name: Clippy
-        run: >-
-          cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api -p construct-transport -p construct-wasm -p construct-cli -p construct-clash
-          -p construct-elements -p construct-families -p construct-interop -p construct-solver
-          -p construct-versions -p construct-views --all-features --all-targets -- -D warnings
+        env:
+          CRATES: ${{ steps.crates.outputs.all }}
+        run: cargo clippy --locked --no-deps $CRATES --all-features --all-targets -- -D warnings
       - name: Tests, with the shapes run on two generators
-        run: >-
-          cargo test --locked -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api --all-features
+        env:
+          CRATES: ${{ steps.crates.outputs.tests }}
+        run: cargo test --locked $CRATES --all-features
       - name: The browser's builds stay free of the store
         run: >-
           cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm
