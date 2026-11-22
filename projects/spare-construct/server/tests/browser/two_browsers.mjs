@@ -177,6 +177,15 @@ if (process.env.STACK_KILL) {
   await anna.reload();
   await anna.waitForSelector('g.element[data-id="D-102"]');
   check((await position(anna, 'D-102')).join() === a.join(), 'and a fresh load agrees');
+  // Anna's claim on the door outlives her reload: a claim lasts 30 s after her last edit, and the
+  // server turns back anyone else's change to the door until then. Ben changes this door's type
+  // further down, so Anna lets go of it the way a person does: she picks it, then clicks off it.
+  const held = await box(anna, 'D-102');
+  await anna.mouse.click(held.x + held.width / 2, held.y + held.height / 2);
+  await anna.waitForFunction(() => window.spare.claims.get('D-102')?.person === 'anna');
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await ben.waitForFunction(() => !window.spare.claims.has('D-102'));
+  pass('Anna lets go of the door, and Ben sees it free');
 }
 
 console.log('\n4. Arch v12 is shared, bridged and consumed, on the page');
