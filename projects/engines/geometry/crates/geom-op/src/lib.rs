@@ -70,8 +70,9 @@
 //! built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the
 //! canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their
 //! `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their
-//! composition ([`history`]) built (G88); the batch driver built (G104); per-entity bounds to come
-//! in G143, the local-operation driver in G144 and preview precision in G459.
+//! composition ([`history`]) built (G88); the batch driver built (G104); the engine seam a program
+//! codes against, declarations only ([`engine`]); per-entity bounds to come in G143, the
+//! local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -83,6 +84,7 @@ pub mod canonical;
 pub mod cbor;
 pub mod context;
 pub mod detail;
+pub mod engine;
 pub mod error;
 pub mod evidence;
 pub mod hash;

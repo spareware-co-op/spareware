@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -46,6 +52,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
+
+[[package]]
 name = "crypto-common"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -62,6 +93,39 @@ checksum = "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
 dependencies = [
  "block-buffer",
  "crypto-common",
+]
+
+[[package]]
+name = "either"
+version = "1.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+
+[[package]]
+name = "equivalent"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
+
+[[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+
+[[package]]
+name = "geom-bool"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-check",
+ "geom-intersect",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-poly",
+ "geom-run",
+ "geom-topo",
 ]
 
 [[package]]
@@ -140,6 +204,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-name"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-num"
 version = "0.0.0"
 dependencies = [
@@ -169,6 +243,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "geom-poly"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
 name = "geom-run"
 version = "0.0.0"
 
@@ -177,12 +262,14 @@ name = "geom-solidcore"
 version = "0.0.0"
 dependencies = [
  "bigdecimal",
+ "geom-bool",
  "geom-check",
  "geom-curve",
  "geom-make",
  "geom-math",
  "geom-num",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-topo",
@@ -193,6 +280,7 @@ dependencies = [
  "solidcore",
  "solidcore-convert",
  "solidcore-record",
+ "solidcore-tess",
 ]
 
 [[package]]
@@ -217,6 +305,17 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash",
 ]
 
 [[package]]
@@ -310,6 +409,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "robust"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -364,6 +489,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "smallvec"
+version = "1.16.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59"
+
+[[package]]
 name = "solidcore"
 version = "1.0.1"
 source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
@@ -389,6 +520,32 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "solidcore-tess"
+version = "0.1.0"
+source = "git+https://github.com/spareware-co-op/solidcore?rev=1d8e14b46dedccbb03572956e7c708782fef1b8f#1d8e14b46dedccbb03572956e7c708782fef1b8f"
+dependencies = [
+ "rayon",
+ "serde",
+ "solidcore",
+ "solidcore-convert",
+ "solidcore-record",
+ "spade",
+ "thiserror",
+]
+
+[[package]]
+name = "spade"
+version = "2.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9699399fd9349b00b184f5635b074f9ec93afffef30c853f8c875b32c0f8c7fa"
+dependencies = [
+ "hashbrown",
+ "num-traits",
+ "robust",
+ "smallvec",
 ]
 
 [[package]]
