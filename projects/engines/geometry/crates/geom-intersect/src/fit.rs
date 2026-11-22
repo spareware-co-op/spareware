@@ -30,7 +30,10 @@
 //!   and σ ≥ |n|/√(E + G), from the first fundamental form's least eigenvalue, at least EG−F²
 //!   over E + G.
 //! - **One true point.** [`true_point`] proves its point the only zero of S₁ − S₂ and the plane
-//!   condition in its box, by the interval engine (12.3).
+//!   condition in its box, by the interval engine (12.3). At an end of the curve whose pcurve point
+//!   lies on one edge of a domain, it proves the curve's end there, the only zero of S₁ − S₂ on
+//!   that edge in the box's face: a box that stands in the domain has that point on its face, where
+//!   no Krawczyk step can prove it.
 //! - **The definition kept.** The curve's chain is the branch's vertices, each with its parameter
 //!   on the caches; points added in refinement are fit data only.
 //!
@@ -592,9 +595,114 @@ impl Field<4> for Across<'_> {
     }
 }
 
+/// S₁ − S₂ with one of (u₁, v₁, u₂, v₂) held at an end of its domain, in the other three: the
+/// system of [`true_point`] at an end of the curve on an edge of a domain.
+struct OnEdge<'a> {
+    first: &'a SurfaceKind,
+    second: &'a SurfaceKind,
+    held: usize,
+    edge: f64,
+    floor: f64,
+}
+
+/// Both surfaces' partials to some order.
+type Both = (Vec<[Interval; 3]>, Vec<[Interval; 3]>);
+
+impl OnEdge<'_> {
+    /// The four parameters: `x`, with the held one put back at the edge.
+    fn whole(&self, x: &[Interval; 3]) -> Result<[Interval; 4], IntersectError> {
+        let mut out = [Interval::point(self.edge)?; 4];
+        let mut rest = x.iter();
+        for (k, slot) in out.iter_mut().enumerate() {
+            if k != self.held {
+                *slot = *rest.next().ok_or(IntersectError::Internal)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Both surfaces' partials to `order` over the box `x` of the other three, or `None` where
+    /// they cannot be bounded.
+    fn read(
+        &self,
+        x: &[Interval; 3],
+        order: usize,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Both>, IntersectError> {
+        let [u1, v1, u2, v2] = self.whole(x)?;
+        let (Some(p), Some(q)) = (
+            partials(self.first, region(&[u1, v1]), order, meter)?,
+            partials(self.second, region(&[u2, v2]), order, meter)?,
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((p, q)))
+    }
+
+    /// S₁ − S₂ from both surfaces' partials.
+    fn residuals((p, q): &Both) -> Result<[Interval; 3], IntersectError> {
+        let ([s1, ..], [s2, ..]) = (p.as_slice(), q.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        Ok(minus_box(s1, s2)?)
+    }
+}
+
+impl Field<3> for OnEdge<'_> {
+    fn at(&self, x: [f64; 3], meter: &mut WorkMeter<'_>) -> Result<[Interval; 3], IntersectError> {
+        let Some(both) = self.read(&exact(&x)?, 0, meter)? else {
+            return Err(IntersectError::Internal);
+        };
+        Self::residuals(&both)
+    }
+
+    fn over(
+        &self,
+        x: &[Interval; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 3]>, IntersectError> {
+        match self.read(x, 0, meter)? {
+            Some(both) => Ok(Some(Self::residuals(&both)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn slope(
+        &self,
+        x: &[Interval; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 3]; 3]>, IntersectError> {
+        let Some((p, q)) = self.read(x, 1, meter)? else {
+            return Ok(None);
+        };
+        let ([_, au, av, ..], [_, bu, bv, ..]) = (p.as_slice(), q.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        let mut rows = [[Interval::point(0.0)?; 3]; 3];
+        for (k, row) in rows.iter_mut().enumerate() {
+            let pick = |v: &[Interval; 3]| v.get(k).copied().ok_or(IntersectError::Internal);
+            let all = [pick(au)?, pick(av)?, pick(bu)?.neg(), pick(bv)?.neg()];
+            let mut rest = all.into_iter().enumerate().filter(|&(j, _)| j != self.held);
+            for slot in row.iter_mut() {
+                *slot = rest.next().ok_or(IntersectError::Internal)?.1;
+            }
+        }
+        Ok(Some(rows))
+    }
+
+    fn reach(&self, x: &[Interval; 3], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let [u1, v1, ..] = self.whole(x)?;
+        let b = around(self.first, region(&[u1, v1]), meter)?;
+        Ok(image(&b) / self.floor)
+    }
+}
+
 /// The point of the true curve in the plane across `curve`'s 3D cache at `t`, (u₁, v₁, u₂, v₂)
 /// proven the only one in a box about the pcurves' points there, or `None` where none is proven
-/// (module documentation).
+/// (module documentation). At an end of the curve where one pcurve's point lies on an edge of its
+/// surface's domain, the point is the true curve's end on that edge: there it lies on the face of
+/// any box about it that stands in the domain, where the interior system cannot prove it, so that
+/// parameter is held at the edge and S₁ − S₂ is solved in the other three.
 ///
 /// # Errors
 ///
@@ -629,15 +737,31 @@ pub fn true_point(
         .find(|s| s.at.0 <= t && t <= s.at.1)
         .ok_or(IntersectError::Internal)?;
     let mut b = Vec::with_capacity(4);
-    for ((surface, pcurve), gap) in [first, second]
+    // At an end of the curve, each parameter whose read reaches an edge of its domain, and that
+    // edge.
+    let at_end = !(domain.0 < t && t < domain.1);
+    let mut edges = Vec::new();
+    for (((surface, pcurve), gap), slots) in [first, second]
         .into_iter()
         .zip(curve.pcurves())
         .zip(span.pcurves)
+        .zip([[0, 1], [2, 3]])
     {
         let read = pcurve.enclose(t, along, 0, meter)?;
         let [x, ..] = read.as_slice() else {
             return Err(IntersectError::Internal);
         };
+        if at_end {
+            let (us, vs) = surface.domain();
+            for ((p, (lo, hi)), index) in x.iter().zip([us, vs]).zip(slots) {
+                if p.lo() <= lo {
+                    edges.push((index, lo));
+                }
+                if p.hi() >= hi {
+                    edges.push((index, hi));
+                }
+            }
+        }
         // Kept inside the domain: an enclosure at an end may reach a rounding past it. σ is read
         // over the span's whole pcurve box, a lower bound for any part of it: a kind's bound over
         // a box a few doubles wide is too loose to give one.
@@ -665,6 +789,32 @@ pub fn true_point(
         b.push(Interval::new(e, f)?);
     }
     let domain4: [Interval; 4] = b.try_into().map_err(|_| IntersectError::Internal)?;
+    if let [(held, edge)] = edges.as_slice() {
+        // The curve's end on one edge: the box's face there, and the zero of S₁ − S₂ in it.
+        let on = OnEdge {
+            first,
+            second,
+            held: *held,
+            edge: *edge,
+            floor: field.floor,
+        };
+        let face: Vec<Interval> = domain4
+            .iter()
+            .enumerate()
+            .filter(|&(k, _)| k != *held)
+            .map(|(_, x)| *x)
+            .collect();
+        let face: [Interval; 3] = face.try_into().map_err(|_| IntersectError::Internal)?;
+        let found = solve(&on, face, face, |_, _| Ok(true), meter)?;
+        let [zero] = found.zeros.as_slice() else {
+            return Ok(None);
+        };
+        return if found.flagged.is_empty() {
+            Ok(Some(on.whole(&zero.enclosure)?))
+        } else {
+            Ok(None)
+        };
+    }
     let found = solve(&field, domain4, domain4, |_, _| Ok(true), meter)?;
     let [zero] = found.zeros.as_slice() else {
         return Ok(None);
