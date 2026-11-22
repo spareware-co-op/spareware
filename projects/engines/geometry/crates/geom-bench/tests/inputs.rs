@@ -2877,6 +2877,27 @@ fn commit_typical_batches_all_succeed() {
     all_ok("moved_along", k::moved_along, &m::moved_along(Typical));
 }
 
+/// Every typical batch of the error bounds' benchmarks (piece G143) succeeds: every part's 200
+/// operations stay inside the ladder's limits, and every join keeps, for each entity, the larger
+/// of its two bounds.
+#[test]
+fn bounds_typical_batches_all_succeed() {
+    use geom_bench::inputs::bounds as m;
+    use geom_bench::kernels::bounds as k;
+    let parts = m::after(Typical);
+    assert!(parts.iter().all(|p| p.steps.len() == m::OPERATIONS));
+    all_ok("bounds_after", k::after, &parts);
+    let pairs = m::join(Typical);
+    all_ok("bounds_join", k::join, &pairs);
+    let mut out = Vec::new();
+    k::join(&pairs, &mut out);
+    for ((a, b), joined) in pairs.iter().zip(out.iter().flatten()) {
+        for e in a.entities().chain(b.entities()) {
+            assert_eq!(joined.of(e), a.of(e).max(b.of(e)));
+        }
+    }
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {

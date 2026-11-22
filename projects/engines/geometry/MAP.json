@@ -648,6 +648,26 @@
           "target": "lib"
         },
         {
+          "cost": "200 histories of about forty records built per input, and for a join both bounds worked out, once per batch, outside every measured run.",
+          "does": "a part is made by one operation, six faces and twelve edges each with its own term or none, then cut 199 times. Each cut keeps everything else unchanged, trims one face of the part (now and then spending a step), makes a cut face from it and two edges where the cut meets two faces of the part, each with its own term or none; every tenth cut splits a face of the part by a tool in two, and every tenth merges the two edges the cut before made. The oldest cut face beyond four, and the oldest edges beyond twelve, are deleted, so the part keeps at most about forty entities. [`after`] gives one part's 200 steps per input; [`join`] the bounds of two parts cut from one made start, which share faces at different bounds.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/bounds.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`): every history is built, every bound stays inside the ladder's limits, and the two bounds of a join share an entity at different bounds. Only the typical class exists: the refusals are tested in `geom-op` itself."
+          ],
+          "job": "Inputs for error bounds per entity (piece G143, decision 32.21): a part's history of 200 operations for [`after`] (`Bounds::after`), and the bounds two such histories leave on one start for [`join`] (`Bounds::join`).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-op`'s own tests (`tests/bounds.rs`: a part cut 200 times, every origin summing its own operands, operands joined), made one part's whole history; each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::bounds",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],

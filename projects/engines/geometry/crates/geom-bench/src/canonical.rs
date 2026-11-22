@@ -1132,6 +1132,20 @@ impl Canonical for geom_op::OpPath {
     }
 }
 
+impl Canonical for crate::inputs::bounds::Part {
+    // Its `Debug` text writes every step's path, history and own terms.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_op::Bounds {
+    // Its `Debug` text writes the grid step and every entity's total and terms.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_op::History {
     // Its `Debug` text writes every record, deleted name and topology change.
     fn encode(&self, h: &mut Sha256) {

@@ -933,6 +933,23 @@ fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map(|(h, inputs)| h.check(inputs).is_ok()),
         ),
         ("history", "compose") => fold(inm::compositions(class).iter().map(|(a, b)| a.then(b))),
+        ("history", "bounds_after") => {
+            fold(geom_bench::inputs::bounds::after(class).iter().map(|part| {
+                part.steps
+                    .iter()
+                    .try_fold(geom_op::Bounds::new(GridStep::Q0), |bounds, step| {
+                        bounds.after(&step.op, &step.history, &step.own, geom_op::Limits::DEFAULT)
+                    })
+            }))
+        }
+        ("history", "bounds_join") => {
+            let op = geom_op::OpPath::new(geom_op::OpId::from_bytes([8; 16]));
+            fold(
+                geom_bench::inputs::bounds::join(class)
+                    .iter()
+                    .map(|(a, b)| a.join(&op, b)),
+            )
+        }
         ("resolve", "reference") => fold(inm::scenes(class).iter().map(|s| {
             let body = geom_name::Body {
                 names: &s.chain.body,

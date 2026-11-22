@@ -697,6 +697,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("hash", include_str!("../../geom-op/src/hash.rs")),
             ("name", include_str!("../../geom-op/src/name.rs")),
             ("history", include_str!("../../geom-op/src/history.rs")),
+            ("bounds", include_str!("../../geom-op/src/bounds.rs")),
         ],
     ),
     (

@@ -314,9 +314,15 @@
               "kind": "corpus",
               "piece": "G142",
               "why": "2 new count benchmarks in the group plane: plane/through_edge and plane/moved_along (G142, geom_poly::commit::through_edge and geom_poly::commit::moved_along), typical only: a sloping face through an exact edge whose tilt is an integer vector over its length in doubles, and a face moved whole steps along a sloping normal drawn the same way, each committed over its four corners. No existing digest moved"
+            },
+            {
+              "sha256": "a1f0762b67f0dc9c4f221eac22b76f8f496d728b141e035d659ed359ffacc2a9",
+              "kind": "corpus",
+              "piece": "G143",
+              "why": "2 new count benchmarks in the group history: history/bounds_after and history/bounds_join (G143, geom_op::Bounds::after and geom_op::Bounds::join), typical only: a part's history of 200 operations, made with six faces and twelve edges and cut 199 times, each cut trimming a face, making a cut face and two edges, every tenth splitting a face or merging two edges, folded step by step from no bounds; and the bounds of two parts cut from one start joined. No existing digest moved"
             }
           ],
-          "sha256": "a1f0762b67f0dc9c4f221eac22b76f8f496d728b141e035d659ed359ffacc2a9"
+          "sha256": "f0f91833efa6ac64f59990797ac02df6daa98eb601af48510e73ebf1b9c1e1a4"
         },
         {
           "id": "geom-nurbs/operations",

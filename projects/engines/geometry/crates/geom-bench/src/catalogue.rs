@@ -520,6 +520,10 @@ pub static OPS: &[Op] = &[
     // History records (piece G88; decision 32.46): a step's laws checked, and two steps composed.
     Op { group: "history", name: "check", measures: "geom_op::History::check", classes: T, prepare: |c| bind(inputs::naming::checks(c), kernels::naming::checks) },
     Op { group: "history", name: "compose", measures: "geom_op::Relations::then", classes: T, prepare: |c| bind(inputs::naming::compositions(c), kernels::naming::composed) },
+    // Error bounds per entity (piece G143, decision 32.21): a part's 200 operations in turn, and the
+    // bounds of two such parts joined.
+    Op { group: "history", name: "bounds_after", measures: "geom_op::Bounds::after", classes: T, prepare: |c| bind(inputs::bounds::after(c), kernels::bounds::after) },
+    Op { group: "history", name: "bounds_join", measures: "geom_op::Bounds::join", classes: T, prepare: |c| bind(inputs::bounds::join(c), kernels::bounds::join) },
     // Reference resolution (piece G89; decision 32.46): each of its paths in turn.
     Op { group: "resolve", name: "reference", measures: "geom_name::resolve::resolve", classes: T, prepare: |c| bind(inputs::naming::scenes(c), kernels::naming::resolved) },
     // PruneHistory and its record (piece G109; decision 32.46).

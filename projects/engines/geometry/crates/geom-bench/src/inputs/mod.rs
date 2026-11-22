@@ -34,6 +34,7 @@ use crate::rng::{SplitMix64, seed_for};
 
 pub mod attributes;
 pub mod batch;
+pub mod bounds;
 pub mod bvh;
 pub mod cbor;
 pub mod crossing;

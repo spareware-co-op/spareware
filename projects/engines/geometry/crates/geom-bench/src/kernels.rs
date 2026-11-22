@@ -1915,6 +1915,29 @@ pub mod topo {
     }
 }
 
+/// Error bounds per entity (piece G143, decision 32.21): `geom-op`'s `Bounds::after` over a part's
+/// whole history, and `Bounds::join` of two parts' bounds.
+pub mod bounds {
+    use geom_op::{Bounds, OpError, OpId, OpPath};
+
+    use super::run;
+    use crate::inputs::bounds::Part;
+
+    /// `Bounds::after` of each step of each part in turn, from no bounds: the bounds the part
+    /// ends with.
+    #[inline(never)]
+    pub fn after(batch: &[Part], out: &mut Vec<Result<Bounds, OpError>>) {
+        run(batch, out, Part::bounds);
+    }
+
+    /// `Bounds::join` of each pair, as one operation's two operands.
+    #[inline(never)]
+    pub fn join(batch: &[(Bounds, Bounds)], out: &mut Vec<Result<Bounds, OpError>>) {
+        let op = OpPath::new(OpId::from_bytes([8; 16]));
+        run(batch, out, |(a, b)| a.join(&op, b));
+    }
+}
+
 /// The batch runner's hot paths (piece G104, decision 32.46): `geom-op`'s driver over a list of
 /// items, on the serial executor, and the flat arrays of a curve's and a surface's points.
 pub mod batch {

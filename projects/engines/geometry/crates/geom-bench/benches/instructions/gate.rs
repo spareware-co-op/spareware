@@ -3769,9 +3769,23 @@ pub mod history {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/bounds_after/typical"))]
+    fn bounds_after(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("history/bounds_join/typical"))]
+    fn bounds_join(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = history;
-        benchmarks = check, compose
+        benchmarks = check, compose, bounds_after, bounds_join
     );
 }
 
