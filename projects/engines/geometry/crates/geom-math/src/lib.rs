@@ -115,6 +115,7 @@ pub use convert::{DecimalPoint, MapPoint};
 pub use decimal::{Decimal, DecimalError};
 pub use epoch::{DecimalYear, ModelRef};
 pub use error::{FrameMismatch, MathError};
+pub use exact::gcd_u128;
 pub use float::{F2, F3};
 pub use frame::{CrsId, FrameKind, FrameRecord, FrameShift, LatticeCell, Rotation, Scale};
 pub use grid_transform::{Axis, GridTransform};

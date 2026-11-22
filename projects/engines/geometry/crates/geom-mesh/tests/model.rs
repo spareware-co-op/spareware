@@ -1,0 +1,1401 @@
+//! Decimation and remeshing through the public interface (piece G300), and the envelope's
+//! whole-triangle test they rest on, against an exact oracle written apart from the code: squared
+//! distances from rational points to triangles as exact fractions.
+
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names,
+    reason = "test oracles and generators; the rules are for kernel code"
+)]
+#![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
+
+use std::collections::BTreeMap;
+
+use geom_mesh::envelope::{EnvelopeError, TriangleEnvelope, covers, half_side};
+use geom_mesh::model::{Decimate, ModelError, Modelled, Remesh, decimate, remesh};
+use geom_num::grid::{GridStep, P3, Steps};
+use geom_num::{Exactness, NumError};
+use std::num::NonZeroU64;
+
+use geom_run::{Budget, BudgetKind, Exec, Stop, WorkMeter};
+use geom_test::seed::resolve;
+use geom_test::{Seed, SplitMix64};
+
+fn meter() -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(1 << 40))
+}
+
+/// A meter of `work` units, a few times what the run it is given takes, so a change that makes a
+/// run loop, or split without end, stops it at once with an error rather than by a timeout.
+fn budget(work: u64) -> WorkMeter<'static> {
+    WorkMeter::new(Budget::of_work(work))
+}
+
+fn p(x: i64, y: i64, z: i64) -> P3 {
+    P3::new(x, y, z).unwrap()
+}
+
+fn xyz(c: P3) -> [i128; 3] {
+    [c.x.get(), c.y.get(), c.z.get()].map(i128::from)
+}
+
+fn sub(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn dot(a: [i128; 3], b: [i128; 3]) -> i128 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// Squared distance from `q` to segment `ab`, as a fraction.
+fn to_segment(q: [i128; 3], a: [i128; 3], b: [i128; 3]) -> (i128, i128) {
+    let (ab, aq) = (sub(b, a), sub(q, a));
+    let (t, l) = (dot(aq, ab), dot(ab, ab));
+    if l == 0 || t <= 0 {
+        (dot(aq, aq), 1)
+    } else if t >= l {
+        let bq = sub(q, b);
+        (dot(bq, bq), 1)
+    } else {
+        (dot(aq, aq) * l - t * t, l)
+    }
+}
+
+/// Whether squared distance `d` (a fraction) is at most `bound`.
+fn within((num, den): (i128, i128), bound: i128) -> bool {
+    num <= bound * den
+}
+
+/// Whether `q` is within squared distance `bound` of triangle `t`: through the face if its foot
+/// is inside, else through the nearest edge.
+fn near_triangle(q: [i128; 3], t: [[i128; 3]; 3], bound: i128) -> bool {
+    let [a, b, c] = t;
+    let n = cross(sub(b, a), sub(c, a));
+    let length = dot(n, n);
+    if length != 0 {
+        let height = dot(n, sub(q, a));
+        // The foot is inside when q − height·n/length is on the inner side of each edge.
+        let inside = [(a, b), (b, c), (c, a)].iter().all(|&(u, v)| {
+            let edge = cross(n, sub(v, u));
+            // Side of the foot: dot(edge, q − u) − height·dot(edge, n)/length; dot(edge, n) = 0.
+            dot(edge, sub(q, u)) >= 0
+        });
+        if inside {
+            return within((height * height, length), bound);
+        }
+    }
+    [(a, b), (b, c), (c, a)]
+        .iter()
+        .any(|&(u, v)| within(to_segment(q, u, v), bound))
+}
+
+/// Every sample of each of `from`'s triangles (corners, edge points and inner points on a lattice
+/// of step 1/`d`) is within `epsilon` of some triangle of `to`: exact, with everything scaled by d.
+fn samples_within(from: &[[P3; 3]], to: &[[P3; 3]], epsilon: u64, d: i128) -> bool {
+    let to: Vec<[[i128; 3]; 3]> = to
+        .iter()
+        .map(|t| t.map(|c| xyz(c).map(|v| v * d)))
+        .collect();
+    let bound = i128::from(epsilon) * i128::from(epsilon) * d * d;
+    for t in from {
+        let [a, b, c] = t.map(xyz);
+        for i in 0..=d {
+            for j in 0..=d - i {
+                let k = d - i - j;
+                let q = [0, 1, 2].map(|m| a[m] * i + b[m] * j + c[m] * k);
+                if !to.iter().any(|u| near_triangle(q, *u, bound)) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// A triangle list's corner positions.
+fn soup(points: &[P3], triangles: &[[u32; 3]]) -> Vec<[P3; 3]> {
+    triangles
+        .iter()
+        .map(|t| t.map(|i| points[i as usize]))
+        .collect()
+}
+
+/// An n × n grid of cells of side s, heights from `z`, counter-clockwise seen from above.
+fn sheet(n: i64, s: i64, z: impl Fn(i64, i64) -> i64) -> (Vec<P3>, Vec<[u32; 3]>) {
+    let mut points = Vec::new();
+    for j in 0..=n {
+        for i in 0..=n {
+            points.push(p(i * s, j * s, z(i, j)));
+        }
+    }
+    let at = |i: i64, j: i64| (j * (n + 1) + i) as u32;
+    let mut triangles = Vec::new();
+    for j in 0..n {
+        for i in 0..n {
+            triangles.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)]);
+            triangles.push([at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+        }
+    }
+    (points, triangles)
+}
+
+/// The surface of the cube [0, n·s]³ in n × n cells a face, outward, its points moved by `warp`.
+fn cube(n: i64, s: i64, warp: impl Fn([i64; 3]) -> [i64; 3]) -> (Vec<P3>, Vec<[u32; 3]>) {
+    let mut index: BTreeMap<[i64; 3], u32> = BTreeMap::new();
+    let mut points = Vec::new();
+    let mut id = |c: [i64; 3], points: &mut Vec<P3>| -> u32 {
+        *index.entry(c).or_insert_with(|| {
+            let [x, y, z] = warp(c.map(|v| v * s));
+            points.push(p(x, y, z));
+            (points.len() - 1) as u32
+        })
+    };
+    let mut triangles = Vec::new();
+    for axis in 0..3 {
+        for side in [0, n] {
+            let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+            for j in 0..n {
+                for i in 0..n {
+                    let corner = |di: i64, dj: i64| {
+                        let mut c = [0; 3];
+                        c[axis] = side;
+                        c[a] = i + di;
+                        c[b] = j + dj;
+                        c
+                    };
+                    let q = [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1)];
+                    let v = q.map(|c| id(c, &mut points));
+                    // (a, b, axis) is right-handed, so a, b turn counter-clockwise seen from +axis.
+                    let (t1, t2) = if side == n {
+                        ([v[0], v[1], v[2]], [v[0], v[2], v[3]])
+                    } else {
+                        ([v[0], v[2], v[1]], [v[0], v[3], v[2]])
+                    };
+                    triangles.push(t1);
+                    triangles.push(t2);
+                }
+            }
+        }
+    }
+    (points, triangles)
+}
+
+/// The cube's lattice pushed out onto a sphere of radius r about its centre, on the grid.
+fn ball(n: i64, r: f64) -> (Vec<P3>, Vec<[u32; 3]>) {
+    let half = n as f64 / 2.0;
+    cube(n, 1, |c| {
+        let d = c.map(|v| v as f64 - half);
+        let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        d.map(|v| (v / l * r).round() as i64)
+    })
+}
+
+/// Each directed edge's count, for closedness: an edge run both ways once each.
+fn closed(triangles: &[[u32; 3]]) -> bool {
+    let mut edges: BTreeMap<(u32, u32), i32> = BTreeMap::new();
+    for &[a, b, c] in triangles {
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            *edges.entry((u, v)).or_default() += 1;
+        }
+    }
+    edges
+        .iter()
+        .all(|(&(u, v), &k)| k == 1 && edges.get(&(v, u)) == Some(&1))
+}
+
+/// V − E + F.
+fn euler(points: usize, triangles: &[[u32; 3]]) -> i64 {
+    let mut edges = std::collections::BTreeSet::new();
+    for &[a, b, c] in triangles {
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            edges.insert((u.min(v), u.max(v)));
+        }
+    }
+    points as i64 - edges.len() as i64 + triangles.len() as i64
+}
+
+/// Whether `triangles` are an oriented surface: no directed edge twice, and the triangles at each
+/// vertex one fan, the link (x → y for each triangle (v, x, y)) one path or one cycle.
+fn surface(points: usize, triangles: &[[u32; 3]]) -> bool {
+    let mut directed = std::collections::BTreeSet::new();
+    let mut link: Vec<BTreeMap<u32, u32>> = vec![BTreeMap::new(); points];
+    for &[a, b, c] in triangles {
+        for (u, v, w) in [(a, b, c), (b, c, a), (c, a, b)] {
+            if !directed.insert((u, v)) || link[u as usize].insert(v, w).is_some() {
+                return false;
+            }
+        }
+    }
+    link.iter().all(|next| {
+        let Some(&first) = next.keys().next() else {
+            return true;
+        };
+        // A path starts where no link edge comes in; a cycle anywhere.
+        let start = next
+            .keys()
+            .copied()
+            .find(|x| !next.values().any(|y| y == x))
+            .unwrap_or(first);
+        let (mut at, mut walked) = (start, 0);
+        while let Some(&y) = next.get(&at) {
+            walked += 1;
+            if y == start || walked > next.len() {
+                break;
+            }
+            at = y;
+        }
+        walked == next.len()
+    })
+}
+
+/// The result is a surface within ε of the input both ways, by the sampling oracle.
+fn two_way(input: &(Vec<P3>, Vec<[u32; 3]>), out: &Modelled, epsilon: u64) {
+    assert!(
+        surface(out.points().len(), out.triangles()),
+        "not a surface: {:?}",
+        out.triangles()
+    );
+    let a = soup(&input.0, &input.1);
+    let b = soup(out.points(), out.triangles());
+    assert!(
+        samples_within(&b, &a, epsilon, 4),
+        "result strays from the input"
+    );
+    assert!(
+        samples_within(&a, &b, epsilon, 4),
+        "input strays from the result"
+    );
+}
+
+#[test]
+fn a_flat_sheet_decimates_to_few_triangles_on_the_same_plane() {
+    let input = sheet(4, 100, |_, _| 0);
+    let epsilon = 8;
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate { epsilon, target: 2 },
+        &Exec::serial(),
+        &mut budget(1 << 21),
+    )
+    .unwrap();
+    assert!(
+        out.triangles().len() < input.1.len() / 4,
+        "{}",
+        out.triangles().len()
+    );
+    assert!(out.points().iter().all(|q| q.z.get() == 0));
+    assert_eq!(euler(out.points().len(), out.triangles()), 1);
+    two_way(&input, &out, epsilon);
+    assert_eq!(
+        out.exactness(GridStep::Q0),
+        Exactness::Certified {
+            bound: Steps(epsilon),
+            step: GridStep::Q0
+        }
+    );
+}
+
+/// Decimation stops as soon as the mesh has no more triangles than asked: a collapse inside the
+/// sheet removes two, one on its edge removes one, so it stops at the target or one below.
+#[test]
+fn decimation_stops_at_its_target() {
+    let input = sheet(4, 100, |_, _| 0);
+    for target in [10, 20, 31] {
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate { epsilon: 8, target },
+            &Exec::serial(),
+            &mut budget(1 << 21),
+        )
+        .unwrap();
+        let n = out.triangles().len();
+        assert!(n == target || n + 1 == target, "{target}: {n}");
+        two_way(&input, &out, 8);
+    }
+    // A target the mesh already meets changes nothing.
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 8,
+            target: 32,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 21),
+    )
+    .unwrap();
+    assert_eq!(out.triangles(), input.1.as_slice());
+    assert_eq!(out.operations(), (0, 0));
+}
+
+#[test]
+fn a_closed_cube_stays_closed_and_within_epsilon() {
+    let input = cube(2, 64, |c| c);
+    let epsilon = 6;
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon,
+            target: 12,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 21),
+    )
+    .unwrap();
+    assert!(closed(out.triangles()));
+    assert_eq!(euler(out.points().len(), out.triangles()), 2);
+    assert!(
+        out.triangles().len() < input.1.len() / 2,
+        "{}",
+        out.triangles().len()
+    );
+    // On a closed surface every kept collapse removes two triangles.
+    let (kept, _) = out.operations();
+    assert_eq!(kept, (input.1.len() - out.triangles().len()) as u64 / 2);
+    assert_eq!(out.epsilon(), epsilon);
+    two_way(&input, &out, epsilon);
+}
+
+#[test]
+fn a_ball_decimates_within_epsilon_and_a_tighter_bound_keeps_more() {
+    let input = ball(2, 300.0);
+    let loose = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 60,
+            target: 0,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 22),
+    )
+    .unwrap();
+    let tight = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 40,
+            target: 0,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 22),
+    )
+    .unwrap();
+    assert!(closed(loose.triangles()) && closed(tight.triangles()));
+    assert!(loose.triangles().len() < tight.triangles().len());
+    assert!(tight.triangles().len() < input.1.len());
+    two_way(&input, &loose, 60);
+    two_way(&input, &tight, 40);
+}
+
+/// A spike the forward test alone would flatten: its walls are steep, so the base under it is
+/// within h of them and a flat patch there lies inside the input's envelope, but its tip is far from
+/// any flat patch. Only the backward test (the input inside the result's envelope) keeps it.
+#[test]
+fn a_thin_spike_is_kept_by_the_backward_test() {
+    let input = sheet(4, 10, |i, j| if (i, j) == (2, 2) { 100 } else { 0 });
+    let epsilon = 24;
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate { epsilon, target: 0 },
+        &Exec::serial(),
+        &mut budget(1 << 21),
+    )
+    .unwrap();
+    assert!(
+        out.points()
+            .iter()
+            .any(|q| q.z.get() > 100 - epsilon as i64),
+        "{:?}",
+        out.points()
+    );
+    assert!(out.triangles().len() < input.1.len());
+    two_way(&input, &out, epsilon);
+}
+
+#[test]
+fn decimation_is_deterministic() {
+    let input = ball(2, 300.0);
+    let run = || {
+        decimate(
+            &input.0,
+            &input.1,
+            Decimate {
+                epsilon: 20,
+                target: 0,
+            },
+            &Exec::serial(),
+            &mut budget(1 << 19),
+        )
+        .unwrap()
+    };
+    assert_eq!(run(), run());
+}
+
+/// A bent, tilted sheet in 4 × 4 cells of 60 steps, no plane of it parallel to another or to an
+/// axis.
+fn bent() -> (Vec<P3>, Vec<[u32; 3]>) {
+    sheet(4, 60, |i, j| {
+        3 * i * i + 11 * j - 2 * i * j + 5 * (i * j * j % 3)
+    })
+}
+
+/// The points as (x, y, z).
+fn coordinates(out: &Modelled) -> Vec<(i64, i64, i64)> {
+    out.points()
+        .iter()
+        .map(|q| (q.x.get(), q.y.get(), q.z.get()))
+        .collect()
+}
+
+/// Which collapse goes first and where its point lands are the quadrics' choice: the planes of
+/// the faces and of the open sides, their sums, their best points and the queue's order. Each is
+/// pinned here by the whole result on a sheet where no plane is special. Stopped at 16 triangles,
+/// every collapse tried is kept, and most of the points are best points rather than ends or
+/// middles (the corner (0, 0, 0) moves below the sheet there, to where its planes meet best).
+/// With ε = 6 and no target, most collapses are refused, so the order the candidates are tried in
+/// after a refusal is pinned too.
+#[test]
+fn decimation_takes_the_cheapest_collapse_at_its_best_point() {
+    let input = bent();
+    let run = |epsilon: u64, target: usize| {
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate { epsilon, target },
+            &Exec::serial(),
+            &mut budget(1 << 22),
+        )
+        .unwrap();
+        two_way(&input, &out, epsilon);
+        out
+    };
+    let out = run(10, 16);
+    assert_eq!(out.operations(), (12, 0));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (154, 0, 18),
+            (240, 0, 48),
+            (63, 104, 25),
+            (112, 89, 33),
+            (240, 90, 58),
+            (0, 132, 24),
+            (186, 160, 41),
+            (88, 170, 29),
+            (240, 180, 57),
+            (0, 240, 43),
+            (176, 240, 49),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 9, 12],
+            [7, 5, 9],
+            [6, 3, 8],
+            [6, 8, 10],
+            [4, 7, 8],
+            [3, 4, 8],
+            [7, 12, 11],
+            [8, 7, 11],
+            [8, 11, 10],
+            [0, 3, 6],
+            [0, 4, 3],
+            [1, 5, 7],
+            [1, 2, 5],
+            [4, 1, 7],
+            [0, 1, 4]
+        ]
+    );
+    let out = run(6, 0);
+    assert_eq!(out.operations(), (12, 104));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (145, 0, 16),
+            (240, 0, 48),
+            (0, 105, 18),
+            (112, 89, 33),
+            (180, 60, 32),
+            (240, 90, 58),
+            (186, 160, 41),
+            (88, 170, 29),
+            (240, 180, 57),
+            (0, 240, 43),
+            (176, 240, 49),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 9, 12],
+            [5, 6, 7],
+            [7, 6, 9],
+            [1, 2, 6],
+            [1, 6, 5],
+            [4, 5, 7],
+            [1, 5, 4],
+            [4, 7, 8],
+            [7, 12, 11],
+            [8, 7, 11],
+            [8, 11, 10],
+            [0, 1, 4],
+            [3, 8, 10],
+            [3, 4, 8],
+            [0, 4, 3]
+        ]
+    );
+}
+
+/// A sheet of 6 × 6 cells of side `s`, tilted across both axes, whose bend grows fourfold from
+/// each row of vertices to the next, from nearly none.
+fn growing(s: i64) -> (Vec<P3>, Vec<[u32; 3]>) {
+    sheet(6, s, |i, j| {
+        (i + j) * s + ((i * i + 2 * j * j + i * j) << (2 * j)) / 64
+    })
+}
+
+/// A quadric's best point is offered only up to twice the edge's length from the edge's middle.
+/// On the growing sheet at a scale of 1800, decimated to 24 triangles within 40, a best point
+/// more than the edge's length from its middle is offered and taken, and the result pins it.
+#[test]
+fn a_best_point_is_offered_up_to_twice_the_edge_from_its_middle() {
+    let input = growing(1800);
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 40,
+            target: 24,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 23),
+    )
+    .unwrap();
+    assert_eq!(out.triangles().len(), 25);
+    assert_eq!(out.operations(), (28, 161));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (10799, 0, 10799),
+            (1, 5609, 5620),
+            (10803, 5099, 15936),
+            (6, 7307, 7443),
+            (6419, 7202, 13857),
+            (10797, 7149, 18306),
+            (0, 9000, 9800),
+            (1800, 9000, 11696),
+            (3600, 9000, 13624),
+            (5400, 9000, 15584),
+            (7200, 9000, 17576),
+            (9000, 9000, 19600),
+            (10800, 9000, 21656),
+            (0, 10800, 15408),
+            (1800, 10800, 17656),
+            (3600, 10800, 20032),
+            (5400, 10800, 22536),
+            (7200, 10800, 25168),
+            (9000, 10800, 27928),
+            (10800, 10800, 30816)
+        ]
+    );
+}
+
+/// A quadric's best point is trusted only when the quadric is far enough from singular: its
+/// determinant above 10⁻¹² of the cube of its trace. The growing sheet has quadrics on both sides
+/// of that line, and where it falls is pinned by the result at two scales.
+#[test]
+fn a_best_point_is_trusted_only_away_from_a_flat_quadric() {
+    let run = |s: i64| {
+        let input = growing(s);
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate {
+                epsilon: 20,
+                target: 36,
+            },
+            &Exec::serial(),
+            &mut budget(1 << 22),
+        )
+        .unwrap();
+        assert_eq!(out.triangles().len(), 36);
+        assert_eq!(out.operations(), (22, 0));
+        coordinates(&out)
+    };
+    assert_eq!(
+        run(600),
+        [
+            (0, 0, 0),
+            (3599, 0, 3599),
+            (1, 1725, 1731),
+            (3600, 1128, 4739),
+            (972, 1800, 2797),
+            (2141, 1801, 3984),
+            (3599, 1782, 5452),
+            (0, 2400, 2528),
+            (957, 2399, 3519),
+            (1800, 2400, 4412),
+            (2400, 2400, 5056),
+            (3000, 2400, 5708),
+            (3600, 2400, 6368),
+            (0, 3000, 3800),
+            (600, 3000, 4496),
+            (1200, 3000, 5224),
+            (1800, 3000, 5984),
+            (2400, 3000, 6776),
+            (3000, 3000, 7600),
+            (3600, 3000, 8456),
+            (0, 3600, 8208),
+            (600, 3600, 9256),
+            (1200, 3600, 10432),
+            (1800, 3600, 11736),
+            (2400, 3600, 13168),
+            (3000, 3600, 14728),
+            (3600, 3600, 16416)
+        ]
+    );
+    assert_eq!(
+        run(6000),
+        [
+            (0, 0, 0),
+            (35999, 0, 35999),
+            (0, 17203, 17211),
+            (36000, 11559, 47571),
+            (17909, 18034, 35979),
+            (35999, 17858, 53928),
+            (0, 24000, 24128),
+            (6000, 24000, 30148),
+            (12000, 24000, 36176),
+            (18000, 24000, 42212),
+            (24000, 24000, 48256),
+            (30000, 24000, 54308),
+            (36000, 24000, 60368),
+            (0, 30000, 30800),
+            (6000, 30000, 36896),
+            (12000, 30000, 43024),
+            (18000, 30000, 49184),
+            (24000, 30000, 55376),
+            (30000, 30000, 61600),
+            (36000, 30000, 67856),
+            (0, 36000, 40608),
+            (6000, 36000, 47056),
+            (12000, 36000, 53632),
+            (18000, 36000, 60336),
+            (24000, 36000, 67168),
+            (30000, 36000, 74128),
+            (36000, 36000, 81216)
+        ]
+    );
+}
+
+/// The bent sheet sheared in plan, so no open side runs along an axis: each side's plane, across
+/// the side and square to its triangle, is then tilted in every part, and the result pins them.
+#[test]
+fn decimation_weighs_the_open_sides_of_a_skewed_sheet() {
+    let (mut points, triangles) = bent();
+    for (k, q) in points.iter_mut().enumerate() {
+        let (i, j) = ((k % 5) as i64, (k / 5) as i64);
+        *q = p(q.x.get() + 17 * j, q.y.get() - 11 * i, q.z.get());
+    }
+    let input = (points, triangles);
+    let out = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 10,
+            target: 16,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 21),
+    )
+    .unwrap();
+    two_way(&input, &out, 10);
+    assert_eq!(out.operations(), (11, 0));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, -2),
+            (155, -28, 18),
+            (240, -44, 48),
+            (92, 93, 25),
+            (137, 68, 33),
+            (266, 46, 58),
+            (34, 120, 22),
+            (231, 126, 41),
+            (68, 240, 45),
+            (136, 154, 29),
+            (291, 136, 57),
+            (162, 223, 47),
+            (248, 207, 47),
+            (308, 196, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [7, 10, 13],
+            [7, 13, 12],
+            [7, 5, 10],
+            [6, 9, 8],
+            [9, 7, 12],
+            [6, 3, 9],
+            [9, 12, 11],
+            [8, 9, 11],
+            [4, 7, 9],
+            [3, 4, 9],
+            [0, 3, 6],
+            [0, 4, 3],
+            [1, 5, 7],
+            [1, 2, 5],
+            [4, 1, 7],
+            [0, 1, 4]
+        ]
+    );
+}
+
+#[test]
+fn a_coarse_sheet_remeshes_toward_the_target_length() {
+    // A gently bent sheet of 2 × 2 cells of 400 steps, remeshed toward edges of 150.
+    let input = sheet(1, 300, |_, _| 0);
+    let epsilon = 6;
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length: 150,
+            iterations: 2,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 20),
+    )
+    .unwrap();
+    assert!(
+        out.triangles().len() > 4 * input.1.len(),
+        "{}",
+        out.triangles().len()
+    );
+    let longest = out
+        .triangles()
+        .iter()
+        .flat_map(|&[a, b, c]| [(a, b), (b, c), (c, a)])
+        .map(|(u, v)| {
+            let d = sub(xyz(out.points()[u as usize]), xyz(out.points()[v as usize]));
+            dot(d, d)
+        })
+        .max()
+        .unwrap();
+    // Every edge at most 4/3 of the target, rounding aside.
+    assert!(9 * longest <= 16 * 150 * 150 + 9 * 3 * 4, "{longest}");
+    assert_eq!(euler(out.points().len(), out.triangles()), 1);
+    two_way(&input, &out, epsilon);
+}
+
+/// A strip one cell wide, with a width the envelope would let a collapse pinch: every vertex is on
+/// the boundary, and joining two across the strip makes a vertex two fans meet at. The boundary
+/// rule refuses that, so the result stays a surface.
+/// A narrow strip is not pinched: decimated, and remeshed, one test each (decision 32.78: the
+/// two together were too long for one Miri gate part).
+mod a_narrow_strip_is_not_pinched {
+    use super::*;
+
+    /// The strip: two rows of seven points ten steps apart, twelve triangles.
+    fn strip() -> (Vec<P3>, Vec<[u32; 3]>) {
+        let mut points = Vec::new();
+        for i in 0..7 {
+            points.push(p(i * 10, 0, 0));
+            points.push(p(i * 10, 10, 0));
+        }
+        let mut triangles = Vec::new();
+        for i in 0..6_u32 {
+            let (a, b, c, d) = (2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1);
+            triangles.push([a, b, c]);
+            triangles.push([a, c, d]);
+        }
+        (points, triangles)
+    }
+
+    const EPSILON: u64 = 14;
+
+    #[test]
+    fn decimated() {
+        let input = strip();
+        let out = decimate(
+            &input.0,
+            &input.1,
+            Decimate {
+                epsilon: EPSILON,
+                target: 0,
+            },
+            &Exec::serial(),
+            &mut budget(1 << 17),
+        )
+        .unwrap();
+        assert!(out.triangles().len() < input.1.len());
+        two_way(&input, &out, EPSILON);
+    }
+
+    #[test]
+    fn remeshed() {
+        let input = strip();
+        let out = remesh(
+            &input.0,
+            &input.1,
+            Remesh {
+                epsilon: EPSILON,
+                length: 40,
+                iterations: 2,
+            },
+            &Exec::serial(),
+            &mut budget(1 << 17),
+        )
+        .unwrap();
+        assert!(out.triangles().len() < input.1.len());
+        two_way(&input, &out, EPSILON);
+    }
+}
+
+/// A square of two triangles whose diagonal alone is too long: it is split once at its middle, and
+/// nothing else changes. The diagonal is the first edge of one triangle and the second of the
+/// other, so both ways a triangle is turned to put the edge first are used.
+#[test]
+fn a_long_diagonal_is_split_at_its_middle() {
+    let points = vec![p(0, 0, 0), p(300, 0, 0), p(0, 300, 0), p(300, 300, 0)];
+    let input = (points, vec![[1, 3, 0], [0, 3, 2]]);
+    let epsilon = 4;
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length: 250,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 12),
+    )
+    .unwrap();
+    assert_eq!(out.triangles().len(), 4, "{:?}", out.triangles());
+    assert!(out.points().contains(&p(150, 150, 0)), "{:?}", out.points());
+    two_way(&input, &out, epsilon);
+}
+
+/// A flat 2 × 2 sheet with every cell's diagonal through the middle vertex, which so has eight
+/// neighbours, and every edge near the target length, so nothing is split or collapsed: flips
+/// move edges off the middle toward the corners, which have three. And smoothing moves a middle
+/// vertex set off its place back toward it.
+#[test]
+fn flips_and_smoothing_work_on_a_flat_sheet() {
+    let (points, _) = sheet(2, 100, |_, _| 0);
+    let triangles = vec![
+        [0, 1, 4],
+        [0, 4, 3],
+        [1, 2, 4],
+        [2, 5, 4],
+        [3, 4, 6],
+        [4, 7, 6],
+        [4, 5, 8],
+        [4, 8, 7],
+    ];
+    let valence = |triangles: &[[u32; 3]]| {
+        let mut around: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        for t in triangles.iter().filter(|t| t.contains(&4)) {
+            around.extend(t.iter().filter(|v| **v != 4));
+        }
+        around.len()
+    };
+    assert_eq!(valence(&triangles), 8);
+    let settings = Remesh {
+        epsilon: 4,
+        length: 110,
+        iterations: 1,
+    };
+    // The first flip is of the edge from the middle to corner 0, between the first two
+    // triangles; the first is given turned each of three ways, so the flip finds its edge from
+    // each place of the third corner. After it no flip evens the valences out further.
+    for first in [[0, 1, 4], [1, 4, 0], [4, 0, 1]] {
+        let mut turned = triangles.clone();
+        turned[0] = first;
+        let input = (points.clone(), turned);
+        let out = remesh(
+            &input.0,
+            &input.1,
+            settings,
+            &Exec::serial(),
+            &mut budget(1 << 17),
+        )
+        .unwrap();
+        assert_eq!(out.triangles().len(), input.1.len());
+        // Every vertex is still there, in its number, so the middle is still number 4.
+        assert_eq!(out.points().len(), input.0.len());
+        assert_eq!(valence(out.triangles()), 7, "{:?}", out.triangles());
+        // It was that edge: the diagonal 0–4 became 1–3.
+        let joins = |u: u32, v: u32| {
+            out.triangles()
+                .iter()
+                .any(|t| t.contains(&u) && t.contains(&v))
+        };
+        assert!(joins(1, 3) && !joins(0, 4), "{:?}", out.triangles());
+        two_way(&input, &out, 4);
+    }
+    let mut moved = points;
+    moved[4] = p(130, 120, 0);
+    let input = (moved, triangles);
+    let out = remesh(
+        &input.0,
+        &input.1,
+        settings,
+        &Exec::serial(),
+        &mut budget(1 << 17),
+    )
+    .unwrap();
+    let off = |q: P3| (q.x.get() - 100).pow(2) + (q.y.get() - 100).pow(2);
+    assert!(
+        off(out.points()[4]) < off(p(130, 120, 0)),
+        "{:?}",
+        out.points()
+    );
+    two_way(&input, &out, 4);
+}
+
+/// The bent sheet remeshed once toward edges of `length` within `epsilon`, checked both ways.
+fn remesh_bent(epsilon: u64, length: u64) -> Modelled {
+    let input = bent();
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 22),
+    )
+    .unwrap();
+    two_way(&input, &out, epsilon);
+    out
+}
+
+/// Which edges remeshing flips and where smoothing moves a vertex are PMP's rules on valences and
+/// area-weighted centroids, pinned here by the whole result on the bent sheet. Toward edges of 90
+/// within 6, the sheet's edges of 60 are too short but no collapse is kept, so the result is the
+/// flips and the smoothing's moves alone.
+#[test]
+fn remeshing_flips_and_smooths_as_pmp_does() {
+    let out = remesh_bent(6, 90);
+    assert_eq!(out.operations(), (11, 8));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (60, 0, 3),
+            (120, 0, 12),
+            (180, 0, 27),
+            (240, 0, 48),
+            (0, 60, 11),
+            (60, 60, 17),
+            (120, 59, 29),
+            (182, 60, 32),
+            (240, 60, 56),
+            (0, 120, 22),
+            (60, 120, 26),
+            (120, 120, 36),
+            (181, 120, 37),
+            (240, 120, 59),
+            (0, 180, 33),
+            (60, 181, 30),
+            (121, 181, 33),
+            (181, 180, 42),
+            (240, 180, 57),
+            (0, 240, 44),
+            (60, 240, 44),
+            (120, 240, 50),
+            (180, 240, 47),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [0, 1, 6],
+            [0, 6, 5],
+            [3, 4, 9],
+            [5, 6, 11],
+            [5, 11, 10],
+            [15, 21, 20],
+            [13, 14, 19],
+            [10, 11, 16],
+            [10, 16, 15],
+            [15, 16, 21],
+            [16, 22, 21],
+            [18, 19, 24],
+            [18, 24, 23],
+            [13, 19, 18],
+            [1, 2, 7],
+            [1, 7, 6],
+            [2, 3, 8],
+            [3, 9, 8],
+            [8, 9, 14],
+            [8, 14, 13],
+            [2, 8, 7],
+            [7, 8, 13],
+            [6, 12, 11],
+            [12, 13, 18],
+            [6, 7, 12],
+            [7, 13, 12],
+            [17, 23, 22],
+            [11, 17, 16],
+            [16, 17, 22],
+            [17, 18, 23],
+            [11, 12, 17],
+            [12, 18, 17]
+        ]
+    );
+}
+
+/// Which short edge remeshing collapses into which end, as PMP's rules on boundaries and valences
+/// choose, pinned by the whole result: toward edges of 120 within 10, the bent sheet loses more
+/// than half its triangles.
+#[test]
+fn remeshing_collapses_as_pmp_does() {
+    let out = remesh_bent(10, 120);
+    assert_eq!(out.operations(), (27, 22));
+    assert_eq!(
+        coordinates(&out),
+        [
+            (0, 0, 0),
+            (60, 0, 3),
+            (180, 0, 27),
+            (240, 0, 48),
+            (0, 60, 11),
+            (96, 62, 25),
+            (178, 118, 36),
+            (240, 120, 59),
+            (0, 180, 33),
+            (89, 153, 29),
+            (0, 240, 44),
+            (60, 240, 44),
+            (180, 240, 47),
+            (240, 240, 65)
+        ]
+    );
+    assert_eq!(
+        out.triangles(),
+        [
+            [8, 11, 10],
+            [4, 9, 8],
+            [8, 9, 11],
+            [9, 12, 11],
+            [1, 2, 5],
+            [1, 5, 0],
+            [0, 5, 4],
+            [5, 9, 4],
+            [7, 6, 3],
+            [6, 2, 3],
+            [7, 13, 6],
+            [13, 12, 6],
+            [12, 9, 6],
+            [5, 2, 6],
+            [9, 5, 6]
+        ]
+    );
+}
+
+/// An edge is too long only above 4/3 of the target and too short only below 4/5 of it. A flat
+/// sheet of 60 × 80 cells has sides of 60 and diagonals of 100, exactly 4/5 and 4/3 of 75, and
+/// every vertex's triangles are symmetric about it, so nothing is split, collapsed, flipped or
+/// moved: remeshing toward 75 gives the input back, and cheaply, since no edit is tried (a small
+/// budget is enough, where splitting every edge pass after pass would run it out).
+#[test]
+fn edges_at_the_bounds_of_the_target_are_left_alone() {
+    let mut points = Vec::new();
+    for j in 0..4 {
+        for i in 0..4 {
+            points.push(p(60 * i, 80 * j, 0));
+        }
+    }
+    let at = |i: u32, j: u32| j * 4 + i;
+    let mut triangles = Vec::new();
+    for j in 0..3 {
+        for i in 0..3 {
+            triangles.push([at(i, j), at(i + 1, j), at(i + 1, j + 1)]);
+            triangles.push([at(i, j), at(i + 1, j + 1), at(i, j + 1)]);
+        }
+    }
+    let out = remesh(
+        &points,
+        &triangles,
+        Remesh {
+            epsilon: 4,
+            length: 75,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 10),
+    )
+    .unwrap();
+    assert_eq!(out.points(), points.as_slice());
+    assert_eq!(out.triangles(), triangles.as_slice());
+}
+
+/// A side of exactly 4/5 of the target is not too short either: a flat pentagon of three
+/// triangles toward edges of 100 has one side of exactly 80 and the rest a little longer, its
+/// diagonals below 4/3 of 100, and no vertex inside, so nothing is done to it. Merging the side's
+/// ends would be allowed: no new edge too long, and the pentagon's corner it cuts off within ε.
+#[test]
+fn a_side_at_four_fifths_of_the_target_is_not_collapsed() {
+    let points = vec![
+        p(0, 69, 0),
+        p(-66, 21, 0),
+        p(-40, -56, 0),
+        p(40, -56, 0),
+        p(66, 21, 0),
+    ];
+    let triangles = vec![[0, 1, 2], [0, 2, 3], [0, 3, 4]];
+    let out = remesh(
+        &points,
+        &triangles,
+        Remesh {
+            epsilon: 100,
+            length: 100,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 8),
+    )
+    .unwrap();
+    assert_eq!(out.operations(), (0, 0));
+    assert_eq!(out.points(), points.as_slice());
+    assert_eq!(out.triangles(), triangles.as_slice());
+}
+
+#[test]
+fn a_fine_ball_remeshes_coarser_within_epsilon() {
+    let input = ball(3, 300.0);
+    let epsilon = 30;
+    let out = remesh(
+        &input.0,
+        &input.1,
+        Remesh {
+            epsilon,
+            length: 280,
+            iterations: 1,
+        },
+        &Exec::serial(),
+        &mut budget(1 << 26),
+    )
+    .unwrap();
+    assert!(closed(out.triangles()));
+    assert_eq!(euler(out.points().len(), out.triangles()), 2);
+    assert!(out.triangles().len() < input.1.len());
+    let (kept, refused) = out.operations();
+    assert!(kept > 0, "{kept} {refused}");
+    two_way(&input, &out, epsilon);
+}
+
+#[test]
+fn inputs_that_are_not_surfaces_are_refused() {
+    let (points, mut triangles) = sheet(1, 10, |_, _| 0);
+    let run = |points: &[P3], triangles: &[[u32; 3]]| {
+        decimate(
+            points,
+            triangles,
+            Decimate {
+                epsilon: 2,
+                target: 0,
+            },
+            &Exec::serial(),
+            &mut budget(1 << 12),
+        )
+    };
+    assert_eq!(
+        run(&points, &[[0, 1, 9]]),
+        Err(ModelError::Index { face: 0 })
+    );
+    assert_eq!(
+        run(&points, &[[0, 1, 1]]),
+        Err(ModelError::Flat { face: 0 })
+    );
+    let line = [p(0, 0, 0), p(1, 1, 1), p(2, 2, 2)];
+    assert_eq!(run(&line, &[[0, 1, 2]]), Err(ModelError::Flat { face: 0 }));
+    assert!(run(&points, &triangles).is_ok());
+    // A triangle running the first's diagonal the same way.
+    triangles.push([0, 3, 2]);
+    assert_eq!(
+        run(&points, &triangles),
+        Err(ModelError::NotSurface { face: 2 })
+    );
+    // Two triangles meeting only at a vertex: a bow tie.
+    let bow = [
+        p(0, 0, 0),
+        p(10, 0, 0),
+        p(10, 10, 0),
+        p(-10, 0, 0),
+        p(-10, -10, 0),
+    ];
+    assert!(matches!(
+        run(&bow, &[[0, 1, 2], [0, 3, 4]]),
+        Err(ModelError::NotSurface { .. })
+    ));
+}
+
+#[test]
+fn errors_say_what_went_wrong() {
+    assert_eq!(
+        ModelError::Index { face: 3 }.to_string(),
+        "triangle 3 names a missing vertex"
+    );
+    assert_eq!(
+        ModelError::Flat { face: 1 }.to_string(),
+        "triangle 1 has no area"
+    );
+    assert_eq!(
+        ModelError::NotSurface { face: 2 }.to_string(),
+        "triangle 2 does not join the others as a surface"
+    );
+    assert_eq!(
+        ModelError::Full.to_string(),
+        "more vertices or triangles than a u32 numbers"
+    );
+    let inner = EnvelopeError::Num(NumError::Degenerate);
+    assert_eq!(ModelError::Envelope(inner).to_string(), inner.to_string());
+}
+
+#[test]
+fn a_budget_ends_the_run_with_an_error() {
+    let input = ball(4, 300.0);
+    let mut small = WorkMeter::new(Budget::of_work(20_000));
+    let r = decimate(
+        &input.0,
+        &input.1,
+        Decimate {
+            epsilon: 20,
+            target: 0,
+        },
+        &Exec::serial(),
+        &mut small,
+    );
+    match r {
+        Err(ModelError::Envelope(EnvelopeError::Stopped(s))) => {
+            assert_eq!(s.reason(), Stop::OverBudget(BudgetKind::Work));
+        }
+        Err(ModelError::Envelope(EnvelopeError::Bvh(_))) => {}
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Bodies of width `epsilon` round each of `triangles`.
+fn bodies(triangles: &[[P3; 3]], epsilon: u64) -> Vec<TriangleEnvelope> {
+    triangles
+        .iter()
+        .map(|t| TriangleEnvelope::new(*t, half_side(epsilon)).unwrap())
+        .collect()
+}
+
+#[test]
+fn a_triangle_across_two_coplanar_bodies_is_covered_and_one_past_them_is_not() {
+    let square = [
+        [p(0, 0, 0), p(100, 0, 0), p(100, 100, 0)],
+        [p(0, 0, 0), p(100, 100, 0), p(0, 100, 0)],
+    ];
+    let b = bodies(&square, 4);
+    let refs: Vec<&TriangleEnvelope> = b.iter().collect();
+    let mut m = meter();
+    // Inside the square, crossing its diagonal, lifted a step.
+    let across = [p(10, 5, 1), p(90, 20, 1), p(30, 95, 1)];
+    assert_eq!(covers(&refs, across, &mut m), Ok(true));
+    // One corner 10 steps past the square's edge.
+    let past = [p(10, 5, 0), p(110, 20, 0), p(30, 95, 0)];
+    assert_eq!(covers(&refs, past, &mut m), Ok(false));
+    // Lifted past ε.
+    let high = [p(10, 5, 5), p(90, 20, 5), p(30, 95, 5)];
+    assert_eq!(covers(&refs, high, &mut m), Ok(false));
+    // A corner in, the rest out through a gap: two bodies apart.
+    let apart = bodies(
+        &[
+            [p(0, 0, 0), p(40, 0, 0), p(0, 40, 0)],
+            [p(60, 0, 0), p(100, 0, 0), p(60, 40, 0)],
+        ],
+        4,
+    );
+    let refs: Vec<&TriangleEnvelope> = apart.iter().collect();
+    let bridge = [p(5, 5, 0), p(95, 5, 0), p(50, 10, 0)];
+    assert_eq!(covers(&refs, bridge, &mut m), Ok(false));
+    assert_eq!(covers(&[], bridge, &mut m), Ok(false));
+    let flat = [p(5, 5, 0), p(95, 5, 0), p(185, 5, 0)];
+    assert_eq!(
+        covers(&refs, flat, &mut m),
+        Err(EnvelopeError::Num(NumError::Degenerate))
+    );
+}
+
+/// Random surfaces of triangles and random triangles near them: every triangle `covers` accepts
+/// is within ε of the surface at every sample (soundness), and each surface triangle's own
+/// sub-triangles are accepted (no needless refusal where one body holds the whole).
+#[test]
+fn covered_triangles_are_within_epsilon_at_every_sample() {
+    let seed = resolve("geom-mesh model covers oracle", Seed::DEFAULT).unwrap();
+    let mut g = SplitMix64::new(seed);
+    let below = |g: &mut SplitMix64, n: u64| g.below(NonZeroU64::new(n).unwrap());
+    let small = |g: &mut SplitMix64, r: u64| below(g, 2 * r + 1) as i64 - r as i64;
+    let mut accepted = 0;
+    for _ in 0..60 {
+        let epsilon = 3 + below(&mut g, 8);
+        let (points, triangles) = sheet(3, 40, |i, j| ((i * 7 + j * 3) % 5) * 2);
+        let surface = soup(&points, &triangles);
+        let b = bodies(&surface, epsilon);
+        let refs: Vec<&TriangleEnvelope> = b.iter().collect();
+        for _ in 0..20 {
+            let t = [0, 1, 2].map(|_| {
+                let (x, y) = (small(&mut g, 60) + 60, small(&mut g, 60) + 60);
+                p(x, y, small(&mut g, 6) + 4)
+            });
+            let mut m = meter();
+            match covers(&refs, t, &mut m) {
+                Ok(true) => {
+                    accepted += 1;
+                    assert!(
+                        samples_within(&[t], &surface, epsilon, 6),
+                        "{seed:?}: {t:?} accepted at ε = {epsilon}"
+                    );
+                }
+                Ok(false) | Err(EnvelopeError::Num(NumError::Degenerate)) => {}
+                Err(e) => panic!("{seed:?}: {e:?}"),
+            }
+        }
+        for s in &surface {
+            let [a, b2, c] = s.map(xyz);
+            let mid = |u: [i128; 3], v: [i128; 3]| {
+                let m = [0, 1, 2].map(|k| i128::midpoint(u[k], v[k]));
+                p(m[0] as i64, m[1] as i64, m[2] as i64)
+            };
+            let inner = [s[0], mid(a, b2), mid(a, c)];
+            assert_eq!(covers(&refs, inner, &mut meter()), Ok(true), "{seed:?}");
+        }
+    }
+    assert!(accepted > 0, "{seed:?}: nothing accepted");
+}

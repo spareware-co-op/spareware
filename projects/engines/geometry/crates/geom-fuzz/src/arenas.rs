@@ -35,7 +35,8 @@ use geom_run::{Budget, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
 use geom_test::{ByteSource, Entropy};
 use geom_topo::{
-    Arena, Arenas, Body, BodyKind, Builder, Column, Ix, Kind, Link, RegionKind, Sense, TopoError,
+    Arena, Arenas, Body, BodyKind, Builder, Column, Ix, Kind, Link, PointKind, RegionKind, Sense,
+    TopoError,
 };
 
 use crate::Finding;
@@ -103,7 +104,8 @@ pub struct Edit {
 /// edits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Case {
-    /// Each arena's rows, in `Arena::ALL`'s order.
+    /// Each arena's rows, in `Arena::ALL`'s order, which ends with the plane pool: it has no links
+    /// of its own here, so it stays empty and has no byte in the input.
     pub rows: [u8; 11],
     /// Each link column's values, in [`LINKS`]'s order, one per row of the arena that holds it.
     pub links: Vec<Vec<Target>>,
@@ -355,7 +357,7 @@ fn fill(case: &Case) -> Arenas {
     }
     for _ in 0..count(Arena::Point) {
         if let Ok(p) = P3::new(0, 0, 0) {
-            let _ = a.points.push(p);
+            let _ = a.points.push(PointKind::Grid(p));
         }
     }
     if let Some((i, longer)) = case.uneven

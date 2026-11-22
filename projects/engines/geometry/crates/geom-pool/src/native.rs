@@ -36,19 +36,15 @@
 //! 2026-10-27, in no release yet). `join` keeps its jobs on the caller's stack and has no such
 //! window. Once a rayon-core release carries #1330 a scope would do again, but `join` is no worse.
 //!
-//! The halving itself is [`run_halves`](crate::halves::run_halves), over a [`Join`]; the bound of
-//! its recursion is stated here, because the cycle runs through this module's `Join` for rayon's
-//! pool and through `Inline`, which has no threads and lets the same halving run on WebAssembly's
-//! small stack.
-//!
-//! Recursion:
-//!
-//! - Cycle: `run_halves`, `<crate::halves::Inline as Join>::join`, `<Rayon as Join>::join`.
-//!   Bound: 64.
-//!   Why: each call hands `Join::join` two halves, each at most half the slice (rounded up), and a
-//!   slice of one task or none ends the recursion, so `n` tasks need at most `ceil(log2 n) + 1`
-//!   frames, and a slice is at most `isize::MAX` long, under 2^63 tasks.
-//!   Test: `halving_reaches_every_task_of_a_large_wave`.
+//! The halving itself is [`run_halves`](crate::halves::run_halves), over a [`Join`]: it runs
+//! through this module's `Join` for rayon's pool and through `Inline`, which has no threads and lets
+//! the same halving run on WebAssembly's small stack. Each call hands `Join::join` two halves, each
+//! at most half the slice (rounded up), and a slice of one task or none ends the recursion, so `n`
+//! tasks need at most `ceil(log2 n) + 1` levels, and a slice is at most `isize::MAX` long, under
+//! 2^63 tasks: at most 64 levels, which `halving_reaches_every_task_of_a_large_wave` runs on every
+//! target. In the kernel the halving is one recursive cycle with the nested parallel phases of
+//! `geom-bool`'s batch cut, whose tasks run phases of their own, so the whole cycle's bound is
+//! stated once, in that module's header (`geom_bool::batch`), with these 64 levels in it.
 //!
 //! Cost: `n - 1` calls of `join` for `n` tasks, each pushing one job on the worker's own deque
 //! without a heap allocation, and the pool's threads, started once when it is built and stopped

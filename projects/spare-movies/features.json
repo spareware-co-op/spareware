@@ -3661,7 +3661,7 @@
       {
        "id": "MOV-A16-F1-P1",
        "name": "Protection decision",
-       "what": "Compare locked playback (Widevine, FairPlay and PlayReady are closed systems and each needs an agreement with its company), a hidden per-viewer watermark and no lock, on cost, reach, privacy, patents and what filmmakers and their investors require.",
+       "what": "Compare locked playback (Widevine, FairPlay and PlayReady are closed systems and each needs an agreement with its company), a hidden per-viewer watermark and no lock, on cost, reach, privacy and what filmmakers and their investors require.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -3713,7 +3713,7 @@
       {
        "id": "MOV-A16-F2-P1",
        "name": "Fingerprint method",
-       "what": "Compare open video and audio fingerprinting methods on accuracy, speed and licence, starting with Meta's TMK+PDQF and vPDQ (BSD-2-Clause), with a patent search before any code.",
+       "what": "Compare open video and audio fingerprinting methods on accuracy, speed and licence, starting with Meta's TMK+PDQF and vPDQ (BSD-2-Clause).",
        "kind": "research",
        "size": "medium",
        "depends_on": [],
@@ -3784,7 +3784,7 @@
       {
        "id": "MOV-A16-F4-P1",
        "name": "Watermark method",
-       "what": "Compare watermarking methods, such as two marked copies of each piece with every viewer getting a unique pattern of them, with a patent search before any code; the field is heavily patented (unverified).",
+       "what": "Compare watermarking methods, such as two marked copies of each piece with every viewer getting a unique pattern of them.",
        "kind": "research",
        "size": "medium",
        "depends_on": [],

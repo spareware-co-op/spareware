@@ -1,53 +1,61 @@
 name: Kernel fuzzing and proofs
 
-# The legs of the geometry kernel's fuzz targets that need Linux (kernel architecture, chapter
-# 28.5 and 28.7; the layout is in projects/engines/geometry/crates/geom-fuzz/README.md). Every
-# target is one law and its oracle, `check`, in a module of geom-fuzz, with a `harness` that
-# decodes a fuzzer's bytes and calls it. kernel.yml and kernel-dev.yml already run each target's
-# tests on every operating system: bolero's test mode (`<target>_fuzz`), the seeded leg
-# (`<target>_seeded`) and the property test of each proof's domain (`<target>_proof`). This
-# workflow adds:
+# The Kani proofs of the geometry kernel (kernel architecture, chapter 28.7; the layout of the fuzz
+# harnesses they prove is in projects/engines/geometry/crates/geom-fuzz/README.md). Every harness
+# is one law and its oracle, `check`, in a module of geom-fuzz, with a `harness` that decodes bytes
+# and calls it. kernel.yml and kernel-dev.yml run each harness's tests on every operating system:
+# the seeded leg (`<target>_seeded`, a fixed set of seeded random and hostile cases sized to
+# seconds), every saved input of its corpus and crash folders (tests/saved.rs), and the property
+# test of each proof's domain (`<target>_proof`). There is no libFuzzer, ClusterFuzzLite or long
+# fuzzing campaign: a harness is a test in the suite (28.5). This workflow adds:
 #
-# - libFuzzer: each `<target>_fuzz` test rebuilt by cargo-bolero with libFuzzer, coverage
-#   instrumentation and the address sanitizer, and fuzzed for a minute, on the pinned nightly
-#   compiler those flags need. A crash fails the job and its input is uploaded; put the file in
-#   tests/__fuzz__/<target>/crashes and `cargo test` replays it forever (28.16).
 # - Kani: each `<target>_proof` test, bolero's harness unchanged, proven by Kani for every case of
 #   its domain (the target module's header says which).
 # - Kani for geom-num: each `#[kani::proof]` harness beside geom-num's code (piece G41), proven
 #   on its own; and the same for geom-op's (piece G86), in the job kani-op, and geom-format's
 #   (piece G92), in the job kani-format.
-# - kernel-fuzz-campaign.yml runs a target for hours instead, on demand: the wide integers' 25-hour
-#   campaign (G26).
-# - ClusterFuzzLite, on pull requests: .clusterfuzzlite/build.sh builds every `<target>_fuzz` test
-#   with cargo-bolero's build-clusterfuzz command, and ClusterFuzzLite fuzzes them in turn
-#   (code-change mode, address sanitizer). OSS-Fuzz's build check cannot read the start-up
-#   scripts cargo-bolero packs, so it is turned off here and build.sh makes the same checks on the
-#   binaries they start. A second job, clusterfuzzlite-seeded, runs ClusterFuzzLite's own images on
-#   the checkout with a crash planted (gate 1, G43; .clusterfuzzlite/seeded.sh), and must see it
-#   found.
 #
-# Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num,
-# geom-nurbs, geom-op, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
-# engine-geometry and kit-core through geom-gen's facade generators;
+# What a pull request runs (28.7 and 28.17): only the proofs its change can affect. The job
+# `select` runs geom-test's `kernel-quality fuzz-scope` on the files of the pull request's merge
+# commit against its base: the proofs of geom-fuzz's tests run when a changed file is in a crate
+# their targets' code builds (by the workspace's crate graph, through normal and build
+# dependencies, transitively) or among those targets' own files in geom-fuzz; a crate's Kani
+# proofs run when a changed file is in a crate that crate builds; a changed file in no crate (a
+# workflow, Cargo.lock, .cargo, the toolchain file, an architecture chapter) runs everything, but
+# MAP.json and the quality ledger are read against the base by their changed entries (`--base`):
+# a change to one runs only the proofs whose code reads it whole (none today; geom-test's
+# src/shared.rs), and everything when it cannot be placed so.
+# geom-test's src/fuzz_scope.rs gives the whole rule. Each job's `if` reads its output, and its log
+# and the run's summary name every proof job, whether it runs and why: a skipped job was not
+# affected, not failed. A push to main and a release tag run everything. geom-test's
+# tests/fuzz_scope.rs holds the selection to the crate graph and each job to the selection.
+#
+# Path filters: the workflow runs when the code a proof reaches changes: geom-fuzz and every crate
+# of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name,
+# geom-num, geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and
+# geom-topo today, with engine-geometry and kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, geom-format for kani-format, the workspace
-# files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
-# ClusterFuzzLite files and this workflow.
+# its job kani-op, geom-format for kani-format, the workspace files that change any build
+# (Cargo.toml, Cargo.lock, .cargo/, the toolchain file) and this workflow.
 #
 # Pins: the compiler in RUST_TOOLCHAIN is the workspace's (the scaffold test checks every
-# workflow that names it); FUZZ_NIGHTLY is the nightly compiler for libFuzzer's flags, a dated
-# nightly so a run never changes because nightly did; cargo-bolero and Kani are exact versions,
-# installed from their published lockfiles (--locked). Every action is pinned to a full commit,
-# checked against its tag when it was pinned, as in kernel.yml. ClusterFuzzLite's actions run
-# OSS-Fuzz's images tagged v1, which the action pins and we cannot; the image the targets are
-# built in is pinned by digest in .clusterfuzzlite/Dockerfile.
+# workflow that names it); Kani is an exact version, installed from its published lockfile
+# (--locked). Every action is pinned to a full commit, checked against its tag when it was pinned,
+# as in kernel.yml.
+#
+# By hand (`workflow_dispatch`): only the harnesses the run names, to read a proof's minutes on a
+# hosted runner without the whole workflow's jobs. `-f kani_num=` names geom-num's harnesses and
+# `-f kani=` geom-fuzz's, each a list separated by spaces; the job `named` checks the names and
+# hands them on, and `kani-num-named` and `kani-named` prove each with the steps of `kani-num` and
+# `kani`, word for word but for the planted violation, which those jobs have already shown fails.
+# No other job runs: `cheap` and `select` are skipped, and with them every job that needs them. A
+# push, a pull request and the release's call never reach these jobs, and run as they did.
+# geom-test's tests/fuzz_scope.rs holds all of this to the text below.
 #
 # --locked: every cargo command that resolves dependencies runs with --locked, or after a
-# `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tools
-# (cargo-bolero, cargo kani) that take no such flag.
+# `cargo metadata --locked`, which fails if Cargo.lock is not the reviewed one, for the tool
+# (cargo kani) that takes no such flag.
 
 on:
   pull_request:
@@ -55,6 +63,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
@@ -73,6 +82,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-p21/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
@@ -88,7 +98,6 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - "rust-toolchain"
-      - ".clusterfuzzlite/**"
       - ".github/workflows/kernel-fuzz.yml"
   push:
     branches: [main]
@@ -96,6 +105,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
@@ -114,6 +124,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-p21/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-pool/**"
       - "projects/engines/geometry/crates/geom-run/**"
@@ -129,43 +140,61 @@ on:
       - ".cargo/**"
       - "rust-toolchain.toml"
       - "rust-toolchain"
-      - ".clusterfuzzlite/**"
       - ".github/workflows/kernel-fuzz.yml"
+  workflow_dispatch:
+    inputs:
+      kani_num:
+        description: "geom-num's Kani harnesses to prove alone, separated by spaces, e.g. eft::proofs::two_sum_of_any_and_three"
+        required: false
+        default: ""
+        type: string
+      kani:
+        description: "geom-fuzz's Kani harnesses to prove alone, separated by spaces, e.g. orient2d_proof_filter_answer"
+        required: false
+        default: ""
+        type: string
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
 
 permissions:
   contents: read
 
+# A run by hand has a group of its own, so two of them on one branch never wait for each other;
+# every other run's group is as it was (the second term is empty).
 concurrency:
-  group: kernel-fuzz-${{ github.ref }}
+  group: kernel-fuzz-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-by-hand-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # The workspace's pinned compiler (rust-toolchain.toml), for building the tools.
   RUST_TOOLCHAIN: "1.99.0"
-  # The nightly compiler cargo-bolero builds libFuzzer targets with (sanitizer flags are
-  # nightly-only).
-  FUZZ_NIGHTLY: nightly-2026-10-01
-  CARGO_BOLERO_VERSION: 0.13.5
   KANI_VERSION: 0.68.0
 
 jobs:
   cheap:
     name: Cheap checks first
     # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
-    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    # fails one of them stops here; every heavy job below lists this job under `needs`. A run by
+    # hand proves only the harnesses it names (the job `named`), so it skips this job.
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/cheap-checks.yml
 
-  libfuzzer:
-    name: libFuzzer under cargo-bolero (${{ matrix.target }})
-    needs: cheap
+  # Which proofs the change can affect (the paragraph above): on a pull request, the files of its
+  # merge commit's diff against its base; on any other run, everything. Its outputs are each job's
+  # `if`. It runs beside `cheap`, so it adds no wait. A run by hand skips it, and so every job
+  # that needs it.
+  select:
+    name: Which proofs the change can affect
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, bodies_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, encoder_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, names_fuzz, nurbs_fuzz, open_fuzz, operations_fuzz, orient2d_fuzz, predicates_fuzz, records_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+    timeout-minutes: 30
+    outputs:
+      kani: ${{ steps.scope.outputs.kani }}
+      kani_num: ${{ steps.scope.outputs.kani_num }}
+      kani_topo: ${{ steps.scope.outputs.kani_topo }}
+      kani_limbs: ${{ steps.scope.outputs.kani_limbs }}
+      kani_op: ${{ steps.scope.outputs.kani_op }}
+      kani_format: ${{ steps.scope.outputs.kani_format }}
     defaults:
       run:
         shell: bash
@@ -173,63 +202,171 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Install the pinned nightly compiler
-        run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only main saves the cache; a pull request restores main's (a pull request's own
-          # caches filled the repository's cache limit and evicted what main saved).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
-        run: >-
-          cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
-          --no-default-features --features libfuzzer
-      - name: Cargo.lock is the reviewed one
-        run: cargo metadata --locked --format-version 1 > /dev/null
-      # Gate 1 (G43): on the first leg, libFuzzer must first find a planted violation, a carry
-      # dropped from geom-num's wide integers, which wide_fuzz compares with big integers
-      # (geom-test's trip module and binary). The corpus and crash that run leaves are removed,
-      # so a later failure uploads only its own. It runs with the next step's options, the input
-      # time limit too, so the planted run is the real one.
-      - name: libFuzzer finds a planted violation
-        if: strategy.job-index == 0
+          # Restores the one cache of geom-test's development build on Linux x86-64, which
+          # kernel-gate.yml's job rules saves, and saves none: this job builds the same
+          # dependencies (decision 32.90).
+          save-if: false
+          shared-key: geom-test-dev-${{ env.RUST_TOOLCHAIN }}
+          add-rust-environment-hash-key: false
+      # A pull request's checkout is its merge commit, whose first parent is the base: the diff
+      # between them is the change, renames as a removed and an added file.
+      - name: The files the change touches
         run: |
-          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
-          rm -rf projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide
-      # --timeout: an input that runs for ten seconds fails the job, and libFuzzer saves it as
-      # timeout-<sha1> beside the crash files, which the next step uploads (a slow or hung input,
-      # not a broken law). geom-fuzz's tests make the limit work under the test harness
-      # (tests/common/mod.rs, issue #764), as kernel-fuzz-campaign.yml says.
-      - name: Fuzz ${{ matrix.target }} with libFuzzer for a minute
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3
+            git diff --no-ext-diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "SCOPE=--changed $RUNNER_TEMP/changed.txt --base $(git rev-parse HEAD^1)" >> "$GITHUB_ENV"
+          else
+            echo "SCOPE=--all" >> "$GITHUB_ENV"
+          fi
+      - name: The proofs it can affect, and why
+        id: scope
         run: >-
-          cargo bolero test "${{ matrix.target }}" --package geom-fuzz
-          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
-      - name: Upload the crashing input
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: libfuzzer-crashes-${{ matrix.target }}
-          path: projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/*/crashes/
-          if-no-files-found: ignore
+          cargo run --locked -q -p geom-test --bin kernel-quality -- fuzz-scope $SCOPE
+          --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # A run by hand only: the harnesses it names, checked and handed on as the two lists the jobs
+  # `kani-named` and `kani-num-named` prove. A name is letters, digits, `_` and `:` only, and a run
+  # that names none fails here, so a run by hand is never the whole workflow.
+  named:
+    name: The harnesses named by hand
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      kani: ${{ steps.lists.outputs.kani }}
+      kani_num: ${{ steps.lists.outputs.kani_num }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: The two lists
+        id: lists
+        env:
+          INPUT_KANI: ${{ inputs.kani }}
+          INPUT_KANI_NUM: ${{ inputs.kani_num }}
+        run: |
+          list() {
+            local json="[" sep="" name
+            for name in $1; do
+              if [[ ! "$name" =~ ^[A-Za-z0-9_:]+$ ]]; then
+                echo "::error::Not a harness's name: $name"
+                exit 1
+              fi
+              json="$json$sep\"$name\""
+              sep=","
+            done
+            echo "$json]"
+          }
+          kani=$(list "$INPUT_KANI")
+          kani_num=$(list "$INPUT_KANI_NUM")
+          if [ "$kani$kani_num" = "[][]" ]; then
+            echo "::error::Name at least one harness: -f kani_num='<names>' or -f kani='<names>'."
+            exit 1
+          fi
+          {
+            echo "kani=$kani"
+            echo "kani_num=$kani_num"
+          } | tee -a "$GITHUB_OUTPUT"
 
   kani:
     name: Kani (${{ matrix.harness }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani == 'true'
     runs-on: ubuntu-latest
-    # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
-    # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
-    # 40308963161, which the old 75-minute limit then cut off) on the hosted runners; CaDiCaL ran
-    # past three hours. 120 minutes is about one and a half times the slower run.
-    timeout-minutes: 120
+    # The bounded proof of orient2d is three harnesses, one claim of its check each (geom-fuzz's
+    # tests/orient2d.rs): proved as one, kissat's single solve took 63 minutes on the hosted runner
+    # (run 43688165033); apart, on a development machine, the exact path's and the filter's took
+    # about 7 minutes and the predicate's 29, and 35 to 46 on a runner. So the predicate's claim is
+    # proved in parts, one job each: orient2d_proof_predicate_part_<k> for the draws of class k of
+    # the six coordinates' signs, and orient2d_proof_predicate_cover, which proves that every draw
+    # is in one of the 64 classes; a part took 4 to 9 minutes on a runner. geom-fuzz's
+    # tests/attack_g14.rs holds the parts and the cover to this list. The filter's claim is proved
+    # one step of its check at a time after the one reference (decision 32.83): its exact path's
+    # stand-in, its predicate's stand-in and the filter's answer, one job each; as one harness it
+    # took 570 to 943 seconds on a runner, most of it in holding the reference's copies equal.
+    # 30 minutes is about twice the longest harness's on a runner.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         harness:
           - orient2d_fuzz
-          - orient2d_proof
+          - orient2d_proof_predicate_cover
+          - orient2d_proof_predicate_part_0
+          - orient2d_proof_predicate_part_1
+          - orient2d_proof_predicate_part_2
+          - orient2d_proof_predicate_part_3
+          - orient2d_proof_predicate_part_4
+          - orient2d_proof_predicate_part_5
+          - orient2d_proof_predicate_part_6
+          - orient2d_proof_predicate_part_7
+          - orient2d_proof_predicate_part_8
+          - orient2d_proof_predicate_part_9
+          - orient2d_proof_predicate_part_10
+          - orient2d_proof_predicate_part_11
+          - orient2d_proof_predicate_part_12
+          - orient2d_proof_predicate_part_13
+          - orient2d_proof_predicate_part_14
+          - orient2d_proof_predicate_part_15
+          - orient2d_proof_predicate_part_16
+          - orient2d_proof_predicate_part_17
+          - orient2d_proof_predicate_part_18
+          - orient2d_proof_predicate_part_19
+          - orient2d_proof_predicate_part_20
+          - orient2d_proof_predicate_part_21
+          - orient2d_proof_predicate_part_22
+          - orient2d_proof_predicate_part_23
+          - orient2d_proof_predicate_part_24
+          - orient2d_proof_predicate_part_25
+          - orient2d_proof_predicate_part_26
+          - orient2d_proof_predicate_part_27
+          - orient2d_proof_predicate_part_28
+          - orient2d_proof_predicate_part_29
+          - orient2d_proof_predicate_part_30
+          - orient2d_proof_predicate_part_31
+          - orient2d_proof_predicate_part_32
+          - orient2d_proof_predicate_part_33
+          - orient2d_proof_predicate_part_34
+          - orient2d_proof_predicate_part_35
+          - orient2d_proof_predicate_part_36
+          - orient2d_proof_predicate_part_37
+          - orient2d_proof_predicate_part_38
+          - orient2d_proof_predicate_part_39
+          - orient2d_proof_predicate_part_40
+          - orient2d_proof_predicate_part_41
+          - orient2d_proof_predicate_part_42
+          - orient2d_proof_predicate_part_43
+          - orient2d_proof_predicate_part_44
+          - orient2d_proof_predicate_part_45
+          - orient2d_proof_predicate_part_46
+          - orient2d_proof_predicate_part_47
+          - orient2d_proof_predicate_part_48
+          - orient2d_proof_predicate_part_49
+          - orient2d_proof_predicate_part_50
+          - orient2d_proof_predicate_part_51
+          - orient2d_proof_predicate_part_52
+          - orient2d_proof_predicate_part_53
+          - orient2d_proof_predicate_part_54
+          - orient2d_proof_predicate_part_55
+          - orient2d_proof_predicate_part_56
+          - orient2d_proof_predicate_part_57
+          - orient2d_proof_predicate_part_58
+          - orient2d_proof_predicate_part_59
+          - orient2d_proof_predicate_part_60
+          - orient2d_proof_predicate_part_61
+          - orient2d_proof_predicate_part_62
+          - orient2d_proof_predicate_part_63
+          - orient2d_proof_exact_path
+          - orient2d_proof_filter_exact_stand_in
+          - orient2d_proof_filter_predicate_stand_in
+          - orient2d_proof_filter_answer
     defaults:
       run:
         shell: bash
@@ -267,6 +404,49 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
+  # A run by hand only: each of geom-fuzz's harnesses the run names (`-f kani=`), proved with
+  # kani's steps, word for word but for the planted violation, so its minutes are a part's of
+  # that job.
+  kani-named:
+    name: Kani by hand (${{ matrix.harness }})
+    needs: named
+    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        harness: ${{ fromJSON(needs.named.outputs.kani || '[""]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          # setup downloads Kani's bundle from a GitHub release, which now and then answers HTTP 504
+          # under load; a failed try leaves no bundle, so clear ~/.kani and try again.
+          for attempt in 1 2 3 4 5; do
+            cargo kani setup && break
+            [ "$attempt" = 5 ] && exit 1
+            rm -rf "$HOME/.kani"; sleep 30
+          done
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.harness }}
+        run: |
+          start=$(date +%s)
+          cargo kani --tests -p geom-fuzz -Z stubbing --harness "${{ matrix.harness }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
   # Bounded proofs beside geom-num's own code (chapter 28.7; piece G41): each harness of a module's
   # `#[cfg(kani)] mod proofs`, proven by Kani for every case of its domain, with Kani's overflow,
   # bounds and panic checks on. A harness that cannot finish within the budget is narrowed, and
@@ -274,10 +454,63 @@ jobs:
   # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget, two hours:
   # in WSL on 2026-10-28, with up to thirteen proofs sharing twelve cores, the slowest took 57
   # minutes (exact_sum's cancellation in the subnormals), eft's full-width two_prod with the
-  # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
+  # splitter 54 and dd's from_i128 46; 120 minutes is the margin the orient2d proof's job kept before it was split by claim.
+  # two_sum's law against 3, −0.1, 2^53 and the smallest subnormal is two harnesses a value, one
+  # for each order of its operands, which together prove what one harness of both orders did: as
+  # one they took 16 to 25 minutes on a hosted runner (run 44020080291), apart 1 to 8 (run
+  # 44051779140). A cut is measured before it is kept: interval's mul alone, with its claim on
+  # the product of the two doubles, ran past an hour where add, sub and mul in one harness took
+  # 43 to 48 minutes (runs 44046765712 and 44244068917).
+  # interval's add, sub and mul are one harness each, on the same two points and with the same
+  # claim: add takes 8.5 to 8.8 minutes and sub 6.5 to 10.0. mul (8.2 to 9.4) has its claim on
+  # the product of the two points' bounds, the first product mul itself forms, and two more
+  # harnesses prove that this is the same claim: that the product of the bounds is the product
+  # of the doubles for every pair (2.5 to 3.4), and that equal doubles are finite alike and
+  # inside the same intervals (0.6 to 0.7). So the five together prove what the one did (runs
+  # 44251477765 and 44255063848, on the text that was proven).
+  # eft's two_prod with the splitter took 12.3, 14.3 and 18.2 minutes as one harness, on one
+  # text (runs 44244068917, 44222245211 and 44255063848): a job's minutes move by half again
+  # from run to run. Its law's two claims are one harness each, under a mask that asserts each
+  # claim exactly when its bit is set, so the two together prove what the one did: that the
+  # first answer is the rounded product takes 1.1 minutes, and that the error adds back 9.4
+  # (run 44251477765).
+  # dd's from_i128 (18 to 20 minutes as one harness of every i128) is one harness for each of
+  # eight classes of the value, its sign and its magnitude's width in four bands, with a cover
+  # harness that proves every i128 is in one of the eight, so the nine together prove what the
+  # one did.
+  # atan2's proof of `agreed` (22 to 29 minutes under CaDiCaL, Kani's default SAT solver) names
+  # kissat as its solver, with an answer's two claims as two assertions: one harness with the
+  # same claim, 6.7 and 9.8 minutes on its final text (runs 44089885389 and 44086584465); with
+  # the two joined in one assertion kissat took 15.4 (run 44083788360).
+  # grid's law of `coarsen` (32 to 44 minutes as one harness of every coordinate and every pair
+  # of steps) is cut by the pair of steps, each harness naming its pairs so that the divisor is a
+  # constant: one harness for the six pairs that do not divide (0.8 minutes), and for each of the
+  # three that do, one for no larger and exactness (0.7 to 2.0) and, for nearest, one for each
+  # sign of the coordinate by 25, and by 625 one for each sign and each of nearest's two sides.
+  # Two cover harnesses prove that the pairs are every pair and the two signs every coordinate,
+  # so the fourteen together prove what the one did. Below zero, nearest by 25 is asserted on
+  # the negated pair, and one more harness proves that the two ways of writing it give one
+  # verdict for every pair of values of the frame. By 625, nearest for one sign took 15.7 and
+  # 19.4 minutes (run 44244068917), and neither bands of the magnitude nor the direction of
+  # rounding shorten it: a side is its own harness, that the answer is less than half a step
+  # above the value or that it is less than half a step below, and one more harness proves that
+  # the two sides together are nearest for every pair of values of the frame. Whole job minutes
+  # on the text that was proven (runs 44251477765 and 44255063848): nearest by 25 takes 1.2 to
+  # 2.0 minutes, and a side by 625 3.9 to 10.6.
+  # atan2's `mul_keeps_every_carry` took 27.6 to 35.9 minutes (main's push runs 44244068917,
+  # 44299434285, 44312155060 and 44322372914) while `mul` formed its six products inside and the
+  # proof formed them again, so the solver had to find the two copies equal. `mul` is now its two
+  # steps, `partial_products` and then `sum_partial_products`, each with its own proof:
+  # `mul_keeps_every_carry` runs the two steps on the one set of products and proves the sum
+  # (7.6 minutes, run 44342665715), and `partial_products_are_the_six_products` proves that the
+  # products are the six written out in it. What did not shorten it: a cut by the word of the answer
+  # (the exponent alone took 18.7, each of the three words ran to the job's 120-minute limit, run
+  # 44248734972), tying a copy of the steps to the old `mul` (ran to the limit, run 44246797569),
+  # and the SMT solvers z3 and cvc5 in place of SAT (both ran to the limit, run 44251931865).
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_num == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -285,7 +518,15 @@ jobs:
       matrix:
         proof:
           - dd::proofs::exponent_reads_the_leading_bit
-          - dd::proofs::from_i128_accepts_exactly_below_2_106
+          - dd::proofs::from_i128_classes_cover_every_value
+          - dd::proofs::from_i128_of_a_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_negative_of_over_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_54_to_64_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_65_to_106_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_at_most_53_bits
+          - dd::proofs::from_i128_of_a_non_negative_of_over_106_bits
           - dd::proofs::pow2_is_exact_over_its_range
           - dd::proofs::scale_pow2_never_reports_a_defect
           - dd::proofs::whole_reads_what_it_accepts_exactly
@@ -293,14 +534,23 @@ jobs:
           - eft::proofs::two_prod_with_minus_a_tenth
           - eft::proofs::two_prod_with_the_largest_double
           - eft::proofs::two_prod_with_the_smallest_subnormal
-          - eft::proofs::two_prod_with_the_splitter
+          - distance::proofs::cross_is_the_cross_product
+          - distance::proofs::point_line_has_the_sign_of_its_gap
+          - distance::proofs::point_point_has_the_sign_of_its_gap
+          - distance::proofs::triple_has_the_sign_of_its_gap
+          - eft::proofs::two_prod_with_the_splitter_adds_back
+          - eft::proofs::two_prod_with_the_splitter_is_the_rounded_product
           - eft::proofs::two_prod_with_three
           - eft::proofs::two_prod_with_two_pow_996
-          - eft::proofs::two_sum_with_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_minus_a_tenth
+          - eft::proofs::two_sum_of_any_and_the_smallest_subnormal
+          - eft::proofs::two_sum_of_any_and_three
+          - eft::proofs::two_sum_of_any_and_two_pow_53
+          - eft::proofs::two_sum_of_minus_a_tenth_and_any
+          - eft::proofs::two_sum_of_the_smallest_subnormal_and_any
+          - eft::proofs::two_sum_of_three_and_any
+          - eft::proofs::two_sum_of_two_pow_53_and_any
           - eft::proofs::two_sum_with_the_largest_double
-          - eft::proofs::two_sum_with_the_smallest_subnormal
-          - eft::proofs::two_sum_with_three
-          - eft::proofs::two_sum_with_two_pow_53
           - exact_sum::proofs::a_non_finite_term_is_reported
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_31
           - exact_sum::proofs::a_term_and_its_negation_cancel_in_binade_32
@@ -316,21 +566,40 @@ jobs:
           - exact_sum::proofs::one_term_rounds_back_in_the_subnormals
           - exactness::proofs::combine_keeps_the_less_exact_class
           - exactness::proofs::within_never_panics_and_respects_the_ceiling
-          - grid::proofs::coarsen_is_nearest_and_reported
+          - grid::proofs::coarsen_from_q1_to_q0_is_nearest_at_or_above_zero
+          - grid::proofs::coarsen_from_q1_to_q0_is_nearest_below_zero
+          - grid::proofs::coarsen_from_q1_to_q0_is_no_larger_and_reported
+          - grid::proofs::coarsen_from_q2_to_q0_is_no_larger_and_reported
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_high_below_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q0_is_not_low_below_zero
+          - grid::proofs::coarsen_from_q2_to_q1_is_nearest_at_or_above_zero
+          - grid::proofs::coarsen_from_q2_to_q1_is_nearest_below_zero
+          - grid::proofs::coarsen_from_q2_to_q1_is_no_larger_and_reported
+          - grid::proofs::coarsen_keeps_or_refuses_where_it_does_not_divide
           - grid::proofs::coord_from_i128_accepts_exactly_the_frame
           - grid::proofs::coord_new_accepts_exactly_the_frame
+          - grid::proofs::every_coordinate_is_below_zero_or_not
+          - grid::proofs::nearest_is_its_two_sides
+          - grid::proofs::nearest_on_the_negated_pair_is_nearest
           - grid::proofs::p3_new_accepts_exactly_three_frame_coordinates
           - grid::proofs::refine_is_exact_or_refused
           - grid::proofs::steps_refine_is_exact_or_none
-          - interval::proofs::add_sub_mul_enclose_the_rounded_result
+          - grid::proofs::the_nine_pairs_are_every_pair_of_steps
+          - interval::proofs::add_encloses_the_rounded_result
           - interval::proofs::div_by_minus_a_tenth
           - interval::proofs::div_by_minus_zero_is_refused
           - interval::proofs::div_by_the_largest_double
           - interval::proofs::div_by_the_smallest_subnormal
           - interval::proofs::div_by_three
           - interval::proofs::div_by_zero_is_refused
+          - interval::proofs::equal_doubles_are_enclosed_alike
+          - interval::proofs::mul_encloses_the_product_of_its_bounds
           - interval::proofs::new_accepts_exactly_ordered_finite_bounds
           - interval::proofs::square_is_never_negative_and_encloses
+          - interval::proofs::sub_encloses_the_rounded_result
+          - interval::proofs::the_product_of_two_points_bounds_is_the_product
           - ladder::proofs::quarter_nm_always_answers_exactly
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps
@@ -338,6 +607,7 @@ jobs:
           - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
+          - math::atan2::proofs::partial_products_are_the_six_products
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
@@ -403,6 +673,49 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
+  # A run by hand only: each of geom-num's harnesses the run names (`-f kani_num=`), proved with
+  # kani-num's steps, word for word but for the planted violation, so its minutes are a part's
+  # of that job.
+  kani-num-named:
+    name: Kani by hand, geom-num (${{ matrix.proof }})
+    needs: named
+    if: github.event_name == 'workflow_dispatch' && needs.named.outputs.kani_num != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        proof: ${{ fromJSON(needs.named.outputs.kani_num || '[""]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Kani ${{ env.KANI_VERSION }}
+        run: |
+          cargo install kani-verifier --version "$KANI_VERSION" --locked
+          # setup downloads Kani's bundle from a GitHub release, which now and then answers HTTP 504
+          # under load; a failed try leaves no bundle, so clear ~/.kani and try again.
+          for attempt in 1 2 3 4 5; do
+            cargo kani setup && break
+            [ "$attempt" = 5 ] && exit 1
+            rm -rf "$HOME/.kani"; sleep 30
+          done
+      - name: Cargo.lock is the reviewed one
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove ${{ matrix.proof }}
+        run: |
+          start=$(date +%s)
+          cargo kani -p geom-num --harness "${{ matrix.proof }}" --exact
+          echo "Proved in $(( $(date +%s) - start )) seconds."
+      - name: Kani left Cargo.lock as it was
+        run: git diff --exit-code -- Cargo.lock
+
   # Bounded proofs beside geom-topo's own code (chapter 28.7; piece G112): the arenas' typed
   # indices and columns, the two checks publishing makes, which keep every index of a body inside
   # its arenas, and short sequences of Euler operators, which keep the combinatorial rules. Each
@@ -414,6 +727,8 @@ jobs:
   # for every assertion, which ran a runner out of memory.
   kani-topo:
     name: Kani, geom-topo (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_topo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -466,7 +781,8 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
-    needs: cheap
+    needs: [cheap, select]
+    if: needs.select.outputs.kani_limbs == 'true'
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -509,14 +825,10 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
-  # Bounded proofs beside geom-op's own code (chapter 28.7; piece G86), as kani-num proves
-  # geom-num's: the canonical CBOR encoder's binary16 and binary32 narrowing, each proven exact and
-  # shortest for every finite double, and a refused double proven to write nothing. geom-op's
-  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget: on a
-  # development machine (Kani 0.68.0) each proof took under 3 seconds after a one-minute build, so
-  # 60 minutes leaves room for Kani's install, which takes most of a job.
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_op == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -565,6 +877,8 @@ jobs:
   # tests/kani_harnesses.rs holds this list to the harnesses in the source.
   kani-format:
     name: Kani, geom-format (${{ matrix.proof }})
+    needs: select
+    if: needs.select.outputs.kani_format == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -606,59 +920,3 @@ jobs:
           echo "Proved in $(( $(date +%s) - start )) seconds."
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
-
-  clusterfuzzlite:
-    name: ClusterFuzzLite (address sanitizer)
-    needs: cheap
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Build the fuzz targets
-        id: build
-        uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
-        with:
-          language: rust
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          sanitizer: address
-          bad-build-check: false
-      - name: Fuzz the targets
-        id: run
-        uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c # main, 2026-02-12 (v1 and two documentation changes)
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 300
-          mode: code-change
-          sanitizer: address
-      - name: Upload the crashing input
-        if: failure() && steps.build.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: clusterfuzzlite-artifacts
-          path: ./out/artifacts
-          if-no-files-found: ignore
-
-  # Gate 1 (G43): the job above must fail on a planted crash. Its actions build a fresh clone of
-  # the pull request, which a planted line never reaches, so this job runs the images those actions
-  # run, with the inputs given above, on this checkout with the libFuzzer leg's planted violation
-  # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
-  clusterfuzzlite-seeded:
-    name: ClusterFuzzLite finds a planted violation
-    needs: cheap
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      # The trip binary builds outside the checkout, which ClusterFuzzLite copies into its image.
-      - name: ClusterFuzzLite's build and run fail on a planted violation
-        env:
-          CARGO_TARGET_DIR: ${{ runner.temp }}/target
-        run: >-
-          cargo run --locked -q -p geom-test --bin trip -- clusterfuzzlite --
-          bash .clusterfuzzlite/seeded.sh

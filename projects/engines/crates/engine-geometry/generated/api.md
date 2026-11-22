@@ -366,6 +366,7 @@ Twice the area vector of a flat face, exact on its grid vertices: Σ pᵢ × p�
 | --- | --- | --- | --- |
 | `Malformed` | `InvalidInput` | - | A link into a row its arena does not have, or a list that does not end. |
 | `CurvedEdge` | `Unsupported` | `edge: u32` | An edge is not a straight line between two vertices; certified mass properties of curved bodies come with piece G177. |
+| `ImplicitVertex` | `Unsupported` | `vertex: u32` | A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129. |
 | `CurvedFace` | `Unsupported` | `face: u32` | A face is not on a plane; certified mass properties of curved bodies come with piece G177. |
 | `NoLoops` | `Unsupported` | `face: u32` | A face has no loop, so no polygon to measure; such faces are curved today, and piece G177 measures them. |
 | `Overflow` | `Internal` | - | A sum went past its integer's width: never for a body within its arenas' limits. |
@@ -470,7 +471,7 @@ A body's exactness report: its recorded class and bound, how many faces lie on p
 **Example**
 
 ```text
-query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, and a report that passed.
+query.exactness { body: the cylinder of radius 5 and height 10, exactness: Certified within 1 step } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, a report that passed, and Certified within 1 step.
 ```
 
 ## `query.faces`
@@ -515,7 +516,7 @@ Every face of a body in arena order, with its shell, surface, sense and loops, i
 **Example**
 
 ```text
-query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.
+query.faces { body: a box, histories: [its make.box history], exactness: Exact } gives 6 rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.
 ```
 
 ## `query.validity`
@@ -557,7 +558,7 @@ A body's validity report: chapter 8.3's checks at the level asked, each fault wi
 **Example**
 
 ```text
-query.validity { body: a box, exactness: Exact, level: Full } gives a report with no faults, all four groups run and nothing deferred.
+query.validity { body: a box, exactness: Exact, level: Full } gives a report with 0 faults, 4 groups run and 0 deferred, and Exact.
 ```
 
 ## `query.volume`
@@ -587,6 +588,7 @@ Six times the volume of a flat solid, exact on its grid vertices: Σ over its fa
 | --- | --- | --- | --- |
 | `Malformed` | `InvalidInput` | - | A link into a row its arena does not have, or a list that does not end. |
 | `CurvedEdge` | `Unsupported` | `edge: u32` | An edge is not a straight line between two vertices; certified mass properties of curved bodies come with piece G177. |
+| `ImplicitVertex` | `Unsupported` | `vertex: u32` | A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129. |
 | `CurvedFace` | `Unsupported` | `face: u32` | A face is not on a plane; certified mass properties of curved bodies come with piece G177. |
 | `NoLoops` | `Unsupported` | `face: u32` | A face has no loop, so no polygon to measure; such faces are curved today, and piece G177 measures them. |
 | `NotSolid` | `InvalidInput` | - | The body is not a solid. |

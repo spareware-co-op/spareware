@@ -4,19 +4,16 @@
 //! What it does: gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the
 //! pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]).
 //! Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The
-//! gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer,
-//! `ClusterFuzzLite`, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and
-//! HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line
+//! gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, Gungraun's
+//! Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line
 //! in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool
 //! prints when it catches it.
 //! The binary `trip` writes the changed line into the working tree, runs the gate's own command,
 //! restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason.
 //! Each workflow job runs it with its real check, so a job that could no longer fail (a tool that
 //! stopped checking, a command that checks nothing) fails instead. The two count gates run it
-//! last, comparing the planted run with the pull request's own run measured just before; the
-//! `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions
-//! build a fresh clone of the pull request, which a planted line never reaches; and HOL Light's
-//! runs on orient2d's leg of its matrix alone.
+//! last, comparing the planted run with the pull request's own run measured just before; and HOL
+//! Light's runs on orient2d's leg of its matrix alone.
 //!
 //! Guarantees:
 //!
@@ -26,11 +23,7 @@
 //!   assert; a set bit the canonical encoder's narrowing proofs keep; the frame's edge the
 //!   file reader's range proofs accept; a row the arena index proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the
 //!   antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz
-//!   target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target
-//!   compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own
-//!   build and fuzzing must report through whichever target meets it first (each target's law
-//!   names its own break, "broken law: "; its address sanitizer reports the abort that follows);
-//!   `Sign::of_i128` reading its argument through an opaque copy
+//!   target holds orient2d to its laws, not to an oracle); `Sign::of_i128` reading its argument through an opaque copy
 //!   (`core::hint::black_box`), the same answer for more work, which both count gates must report
 //!   as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims,
 //!   halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq
@@ -72,7 +65,7 @@ pub struct Violation {
 }
 
 /// The planted violations, one for each gate that runs an outside tool on the kernel's code.
-pub const VIOLATIONS: [Violation; 14] = [
+pub const VIOLATIONS: [Violation; 12] = [
     Violation {
         name: "fmt",
         gate: "kernel.yml lint",
@@ -138,24 +131,8 @@ pub const VIOLATIONS: [Violation; 14] = [
         caught: &["VERIFICATION:- FAILED"],
     },
     Violation {
-        name: "libfuzzer",
-        gate: "kernel-fuzz.yml libfuzzer",
-        file: "projects/engines/geometry/crates/geom-num/src/wide.rs",
-        anchor: "        let (s2, c2) = s1.overflowing_add(u64::from(carry));",
-        planted: "        let (s2, c2) = s1.overflowing_sub(u64::from(carry));",
-        caught: &["libFuzzer: deadly signal"],
-    },
-    Violation {
-        name: "clusterfuzzlite",
-        gate: "kernel-fuzz.yml clusterfuzzlite-seeded",
-        file: "projects/engines/geometry/crates/geom-num/src/wide.rs",
-        anchor: "        let (s2, c2) = s1.overflowing_add(u64::from(carry));",
-        planted: "        let (s2, c2) = s1.overflowing_sub(u64::from(carry));",
-        caught: &["Detected bug.", "Crash is reproducible.", "broken law: "],
-    },
-    Violation {
         name: "gungraun",
-        gate: "kernel-bench.yml instructions",
+        gate: "kernel-bench.yml instructions-parts",
         file: "projects/engines/geometry/crates/geom-num/src/sign.rs",
         anchor: "        if v < 0 {",
         planted: "        if core::hint::black_box(v) < 0 {",

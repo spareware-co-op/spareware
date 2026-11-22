@@ -14,6 +14,7 @@ use crate::util::LatLng;
 use std::collections::HashSet;
 
 /// `parsePrecincts(text)`: the extra transport precincts the author added in Settings, one per line as "I123 | Name | rule".
+#[must_use]
 pub fn parse_precincts(text: &V) -> V {
     let t = if text.t() { text.s() } else { String::new() };
     let esc_re = rx(r"[.*+?^${}()|[\]\\]", "g");
@@ -34,6 +35,7 @@ pub fn parse_precincts(text: &V) -> V {
 
 /// `siteInfo(P)`: the site's zone, precinct, PC120 zoning and FDS area: the author's entries win over the lookup. `{ zone, precinct,
 /// transportPrecinct, cfoc, pc120, fds, board, designations, looked, at }`.
+#[must_use]
 pub fn site_info(p: &V) -> V {
     let c = state(p);
     let l = c.g("site").g("lookup");
@@ -46,7 +48,7 @@ pub fn site_info(p: &V) -> V {
     } else {
         V::Null
     };
-    let first_precinct = l.g("precincts").items().first().map(|p| p.g("name").clone()).unwrap_or(V::Null);
+    let first_precinct = l.g("precincts").items().first().map_or(V::Null, |p| p.g("name").clone());
     let precinct_name = if s.g("precinctOverride").t() {
         s.g("precinctOverride").s()
     } else if first_precinct.t() {
@@ -56,7 +58,7 @@ pub fn site_info(p: &V) -> V {
     };
     let mut list: Vec<V> = table("PRECINCTS").items().to_vec();
     list.extend(parse_precincts(settings(p).g("precincts")).items().iter().cloned());
-    let tp = if !precinct_name.is_empty() { list.iter().find(|q| rx(&q.g("match").s(), "i").test(&precinct_name)).cloned().unwrap_or(V::Null) } else { V::Null };
+    let tp = if precinct_name.is_empty() { V::Null } else { list.iter().find(|q| rx(&q.g("match").s(), "i").test(&precinct_name)).cloned().unwrap_or(V::Null) };
     let pc120: V = if s.g("pc120Override").t() {
         jobj! { "zone" => s.g("pc120Override"), "src" => "entered" }
     } else if l.g("pc120").t() {
@@ -80,8 +82,9 @@ pub fn site_info(p: &V) -> V {
 }
 
 /// `authorities(P, now)`: the reviewer and approver of each part of the network on the lodgement date (or today): the road controlling
-/// authority, the local board and the transport CCO after 7 May 2026, NZTA for state highways and KiwiRail for rail; the transitional
+/// authority, the local board and the transport CCO after 7 May 2026, NZTA for state highways and `KiwiRail` for rail; the transitional
 /// period, the requiring authority for a notice of requirement, and the wording for reports.
+#[must_use]
 pub fn authorities(p: &V, now: &V) -> V {
     let c = state(p);
     let ctx = c.g("ctx");
@@ -107,7 +110,8 @@ pub fn authorities(p: &V, now: &V) -> V {
         ends.push(ctx.g("cl82Date").s());
     }
     ends.sort();
-    let end_by = ends[0].clone();
+    // ends always holds the transitional end, so first() is always Some
+    let end_by = ends.first().cloned().unwrap_or_default();
     let transitional = in_auckland(p) && d.as_str() >= transfer.as_str() && d.as_str() < end_by.as_str();
     let mut requiring = V::Null;
     if in_auckland(p) && pathway_entry(ctx.g("pathway")).is_some_and(|e| e.g("proc").eq_s("nor")) {
@@ -131,12 +135,13 @@ pub fn authorities(p: &V, now: &V) -> V {
 
 /// `shOf(P, L)`: whether a link is a state highway and why: the author's tick, the NZTA layer (a matched link with a blank highway number
 /// still counts), or the motorway or ramp class. `{ sh, ref, basis }`.
+#[must_use]
 pub fn sh_of(p: &V, l: &V) -> V {
-    let c = state(p);
-    let n = c.g("net");
+    let cs = state(p);
+    let n = cs.g("net");
     let id = l.g("id").s();
     let has = n.g("sh").has(&id);
-    let tag = if has { let t = n.g("sh").g(&id); if t.t() { t.s() } else { String::new() } } else { String::new() };
+    let tag = if has { let tag_v = n.g("sh").g(&id); if tag_v.t() { tag_v.s() } else { String::new() } } else { String::new() };
     let user = n.g("shUser").g(&id);
     let sh_ref = if tag.is_empty() { "SH".to_string() } else { format!("SH{tag}") };
     if user.strict_eq(&V::Bool(true)) {
@@ -169,29 +174,31 @@ pub struct AuthCtx {
 }
 
 /// `authCtx(P, sc)`.
+#[must_use]
 pub fn auth_ctx(p: &V, sc: &V) -> AuthCtx {
     let a = authorities(p, &V::Null);
     let auck = in_auckland(p);
     let post = auck && a.g("date").s().as_str() >= table("AUTH.transfer").s().as_str();
-    let routes = sc.g("routes").vals().iter().map(|r| r.g("wp").items().iter().map(|w| w.s()).collect()).collect();
+    let routes = sc.g("routes").vals().iter().map(|r| r.g("wp").items().iter().map(super::jv::Jx::s).collect()).collect();
     AuthCtx { a, site: site_info(p), auck, post, routes }
 }
 
 /// `levelCrossingDist(P, sc, L)`: the shortest distance (m) from anywhere on the link to a level-crossing control area or VAR line, None when
 /// the AUP controls are not loaded or none is near.
 pub fn level_crossing_dist(p: &V, sc: &V, l: &V) -> Option<f64> {
-    let c = state(p);
-    let o = c.g("overlays");
-    let has_var_level = o.g("var").items().iter().any(|v| rx("Level", "").test(&v.g("type").s()));
-    if !o.t() || !(o.g("lx").jlen() > 0 || has_var_level) {
+    let cs = state(p);
+    let overlays = cs.g("overlays");
+    let has_var_level = overlays.g("var").items().iter().any(|v| rx("Level", "").test(&v.g("type").s()));
+    if !overlays.t() || !(overlays.g("lx").jlen() > 0 || has_var_level) {
         return None;
     }
-    let g = net::geom(sc, l)?;
-    let f = flat_at(g[0][0]);
-    let lines: Vec<Vec<LatLng>> = o.g("var").items().iter().filter(|v| rx("Level", "").test(&v.g("type").s())).map(|v| pts_of(v.g("pts"))).collect();
-    let lx: Vec<Vec<LatLng>> = o.g("lx").items().iter().map(pts_of).collect();
-    let d = crate::jsnum::math_min(line_to_polys(&g, &lx, &f, 200.0, false), line_to_polys(&g, &lines, &f, 200.0, true));
-    if d.is_finite() { Some(d) } else { None }
+    let geo = net::geom(sc, l)?;
+    // A link's geometry always holds its two end nodes
+    let flat = flat_at(geo.first()?[0]);
+    let lines: Vec<Vec<LatLng>> = overlays.g("var").items().iter().filter(|v| rx("Level", "").test(&v.g("type").s())).map(|v| pts_of(v.g("pts"))).collect();
+    let lx: Vec<Vec<LatLng>> = overlays.g("lx").items().iter().map(pts_of).collect();
+    let dist = crate::jsnum::math_min(line_to_polys(&geo, &lx, &flat, 200.0, false), line_to_polys(&geo, &lines, &flat, 200.0, true));
+    if dist.is_finite() { Some(dist) } else { None }
 }
 
 /// A stored polyline as points.
@@ -199,22 +206,23 @@ pub fn pts_of(v: &V) -> Vec<LatLng> {
     v.items().iter().map(net::pt).collect()
 }
 
-/// `linkAuthority(P, L, sc)`: the operator of a link (NZTA for a state highway, otherwise the road controlling authority), KiwiRail where it
+/// `linkAuthority(P, L, sc)`: the operator of a link (NZTA for a state highway, otherwise the road controlling authority), `KiwiRail` where it
 /// is within 30 m of a level crossing, the transport CCO for a bus route, and who decides on speed, signals, crossings and closures.
+#[must_use]
 pub fn link_authority(p: &V, l: &V, sc: &V) -> V {
     link_authority_with(p, l, sc, &auth_ctx(p, sc))
 }
 
 /// [`link_authority`] with the project facts already worked out (for many links).
+#[must_use]
 pub fn link_authority_with(p: &V, l: &V, sc: &V, x: &AuthCtx) -> V {
     let auth = table("AUTH");
     let sh = sh_of(p, l);
     let mut also: Vec<V> = Vec::new();
-    if let Some(d) = level_crossing_dist(p, sc, l) {
-        if d <= auth.g("levelCrossingM").n() {
+    if let Some(d) = level_crossing_dist(p, sc, l)
+        && d <= auth.g("levelCrossingM").n() {
             also.push(auth.g("kiwirail").clone());
         }
-    }
     let on_route = l.g("busLane").t() || x.routes.iter().any(|r| r.contains(&l.g("a").s()) && r.contains(&l.g("b").s()));
     if x.auck && x.post && on_route {
         also.push(auth.g("after").g("cco").clone());
@@ -238,12 +246,14 @@ pub fn link_authority_with(p: &V, l: &V, sc: &V, x: &AuthCtx) -> V {
 }
 
 /// `alsoKey(n)`.
+#[must_use]
 pub fn also_key(n: &V) -> &'static str {
     if n.strict_eq(table("AUTH.kiwirail")) { "kiwirail" } else { "cco" }
 }
 
 /// `sitePoint(P, sc)`: where the site is: the author's point, the centre of the development zones, or the centre of the network.
 /// `{ lat, lng, src }`, None for an empty project.
+#[must_use]
 pub fn site_point(p: &V, sc: &V) -> Option<V> {
     let c = state(p);
     let s = c.g("site");
@@ -252,15 +262,16 @@ pub fn site_point(p: &V, sc: &V) -> Option<V> {
     }
     let dev = net::dev_zones(sc);
     if !dev.is_empty() {
-        let n = dev.len() as f64;
+        let n = crate::jsnum::usize_to_f64(dev.len());
         let lat = dev.iter().fold(0.0, |a, z| a + z.g("lat").n()) / n;
         let lng = dev.iter().fold(0.0, |a, z| a + z.g("lng").n()) / n;
         return Some(jobj! { "lat" => lat, "lng" => lng, "src" => format!("centre of {} development zone{}", dev.len(), if dev.len() == 1 { "" } else { "s" }) });
     }
-    super::geom::bounds_of(sc).map(|(s, w, n, e)| jobj! { "lat" => (s + n) / 2.0, "lng" => (w + e) / 2.0, "src" => "centre of the network" })
+    super::geom::bounds_of(sc).map(|(s, w, n, e)| jobj! { "lat" => f64::midpoint(s, n), "lng" => f64::midpoint(w, e), "src" => "centre of the network" })
 }
 
 /// `toLine` for a site point and a link, for callers that need the distance.
+#[must_use]
 pub fn dist_to_link(sc: &V, l: &V, ll: &LatLng) -> f64 {
     let f = flat_at(ll[0]);
     net::geom(sc, l).map_or(f64::INFINITY, |g| to_line(ll, &g, &f).d)

@@ -58,7 +58,8 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 28] = [
+const GEOM_NUM: [(&str, &str); 30] = [
+    ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -94,6 +95,7 @@ const GEOM_NUM: [(&str, &str); 28] = [
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("scalar", include_str!("../../geom-num/src/scalar.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
+    ("step", include_str!("../../geom-num/src/step.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),
 ];
@@ -345,6 +347,38 @@ fn main_runs_every_group() {
     assert!(MAIN.contains("config = gate::config();"));
 }
 
+/// `benches/ember` (EMBER's pair 827, outside the catalogue) measures under exactly `gate.rs`'s
+/// tools and limits, with only the models' folder passed through Gungraun's cleared environment,
+/// and its program runs that configuration.
+#[test]
+fn the_ember_benchmark_runs_under_the_gates_configuration() {
+    const EMBER: &str = include_str!("../benches/ember/main.rs");
+    let body = |source: &str, signature: &str| -> Vec<String> {
+        source
+            .split(signature)
+            .nth(1)
+            .and_then(|rest| rest.split("\n    config\n}").next())
+            .map(|body| {
+                body.lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with("use "))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut gate = body(GATE, "pub fn config() -> LibraryBenchmarkConfig {");
+    let ember = body(
+        EMBER,
+        "pub fn config() -> gungraun::LibraryBenchmarkConfig {",
+    );
+    assert!(gate.len() > 10, "gate.rs's config: {gate:?}");
+    gate.push("config.pass_through_env(pair::FOLDER);".to_owned());
+    assert_eq!(ember, gate);
+    assert!(EMBER.contains("config = config();"));
+    assert!(EMBER.contains("#[library_benchmark(teardown = verify)]"));
+}
+
 #[test]
 fn catalogue_names_are_unique_and_grouped() {
     let all = names();
@@ -515,6 +549,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
                 include_str!("../../geom-format/src/container.rs"),
             ),
             ("trust", include_str!("../../geom-format/src/trust.rs")),
+            ("pruned", include_str!("../../geom-format/src/pruned.rs")),
         ],
     ),
     (
@@ -531,6 +566,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("qr", include_str!("../../geom-linalg/src/qr.rs")),
             ("svd", include_str!("../../geom-linalg/src/svd.rs")),
+        ],
+    ),
+    (
+        "geom_bool",
+        &[
+            ("batch", include_str!("../../geom-bool/src/batch.rs")),
+            ("combine", include_str!("../../geom-bool/src/combine.rs")),
         ],
     ),
     (
@@ -558,15 +600,59 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("column", include_str!("../../geom-topo/src/column.rs")),
             ("builder", include_str!("../../geom-topo/src/builder.rs")),
+            (
+                "query_ops",
+                include_str!("../../geom-topo/src/query_ops.rs"),
+            ),
         ],
     ),
     (
         "geom_name",
-        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+        &[
+            ("classes", include_str!("../../geom-name/src/classes.rs")),
+            ("faces", include_str!("../../geom-name/src/faces.rs")),
+            ("graph", include_str!("../../geom-name/src/graph.rs")),
+            ("resolve", include_str!("../../geom-name/src/resolve.rs")),
+            ("prune", include_str!("../../geom-name/src/prune.rs")),
+        ],
+    ),
+    (
+        "geom_check",
+        &[("query", include_str!("../../geom-check/src/query.rs"))],
     ),
     (
         "geom_op",
-        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
+        &[
+            ("batch", include_str!("../../geom-op/src/batch.rs")),
+            ("cbor", include_str!("../../geom-op/src/cbor.rs")),
+            ("hash", include_str!("../../geom-op/src/hash.rs")),
+            ("name", include_str!("../../geom-op/src/name.rs")),
+            ("history", include_str!("../../geom-op/src/history.rs")),
+        ],
+    ),
+    (
+        "geom_mesh",
+        &[
+            ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("boolean", include_str!("../../geom-mesh/src/boolean.rs")),
+            ("classify", include_str!("../../geom-mesh/src/classify.rs")),
+            ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("hull", include_str!("../../geom-mesh/src/hull.rs")),
+            ("slice", include_str!("../../geom-mesh/src/slice.rs")),
+            ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
+            (
+                "model::decimate",
+                include_str!("../../geom-mesh/src/model/decimate.rs"),
+            ),
+            (
+                "model::remesh",
+                include_str!("../../geom-mesh/src/model/remesh.rs"),
+            ),
+            (
+                "exact::build",
+                include_str!("../../geom-mesh/src/exact/build.rs"),
+            ),
+        ],
     ),
     (
         "geom_nurbs",
@@ -597,13 +683,77 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_run",
         &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
+    (
+        // The facade (piece G100) holds no function of its own: its operation table and the
+        // operations it re-exports are what a program calls, so they are what it measures.
+        "engine_geometry",
+        &[(
+            "operations",
+            include_str!("../../../../crates/engine-geometry/src/operations.rs"),
+        )],
+    ),
 ];
+
+/// The names a file's public `use` items re-export, as `module::name` (`pub use a::{b, c}` gives
+/// `module::b` and `module::c`; a renamed item gives its new name; a glob gives nothing), and its
+/// public constants and statics: what the facade offers a program.
+fn reexports_and_constants(module: &str, file: &syn::File) -> Vec<String> {
+    let mut out = Vec::new();
+    for item in &file.items {
+        match item {
+            syn::Item::Use(u) if is_pub(&u.vis) && !is_test(&u.attrs) => {
+                let mut work = vec![&u.tree];
+                while let Some(tree) = work.pop() {
+                    match tree {
+                        syn::UseTree::Path(p) => work.push(&p.tree),
+                        syn::UseTree::Name(n) => out.push(format!("{module}::{}", n.ident)),
+                        syn::UseTree::Rename(r) => out.push(format!("{module}::{}", r.rename)),
+                        syn::UseTree::Group(g) => work.extend(g.items.iter()),
+                        syn::UseTree::Glob(_) => {}
+                    }
+                }
+            }
+            syn::Item::Const(c) if is_pub(&c.vis) && !is_test(&c.attrs) => {
+                out.push(format!("{module}::{}", c.ident));
+            }
+            syn::Item::Static(s) if is_pub(&s.vis) && !is_test(&s.attrs) => {
+                out.push(format!("{module}::{}", s.ident));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+#[test]
+fn the_facade_reader_finds_every_reexport_and_constant() {
+    let source = "\
+        pub use a::{b, c as d, e::{f, *}};\n\
+        use g::h;\n\
+        pub(crate) use i::j;\n\
+        pub const K: u8 = 1;\n\
+        const L: u8 = 2;\n\
+        pub static M: u8 = 3;\n\
+        #[cfg(test)]\npub use n::o;\n";
+    let found: BTreeSet<String> = reexports_and_constants("m", &parse("m", source))
+        .into_iter()
+        .collect();
+    let want: BTreeSet<String> = ["m::b", "m::d", "m::f", "m::K", "m::M"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(found, want);
+}
 
 /// [`public_functions`], with the methods of every trait implementation in the file too: a kind's
 /// evaluation is its trait's (`impl ParamCurve<D> for CurveKind<D>`), and a trait's methods are as
-/// public as the trait.
-fn crate_functions(module: &str, source: &str) -> Vec<String> {
+/// public as the trait. For the facade, which defines no function, its re-exports and public
+/// constants too ([`reexports_and_constants`]).
+fn crate_functions(krate: &str, module: &str, source: &str) -> Vec<String> {
     let mut out = public_functions(module, source);
+    if krate == "engine_geometry" {
+        out.extend(reexports_and_constants(module, &parse(module, source)));
+    }
     for item in &parse(module, source).items {
         // A public trait's methods with a default body, which every implementing kind runs.
         if let syn::Item::Trait(tr) = item
@@ -662,7 +812,7 @@ fn every_function_measured_in_another_crate_is_public_there() {
         let (_, files) = OTHER_CRATES.iter().find(|(k, _)| *k == krate).unwrap();
         let public: BTreeSet<String> = files
             .iter()
-            .flat_map(|(m, src)| crate_functions(m, src))
+            .flat_map(|(m, src)| crate_functions(krate, m, src))
             .collect();
         assert!(
             public.contains(name),
@@ -886,7 +1036,8 @@ fn the_workflow_passes_the_documented_limits_and_build() {
         "geom-bench-counts\" removed",
         "--save-summary=json",
         "\"$CARGO_TARGET_DIR/release/geom-bench-counts\" callgrind",
-        "\"$GUNGRAUN_HOME/geom-bench/instructions\"",
+        // The judge reads the summaries of both bench targets, the catalogue's and EMBER's pair.
+        "\"$GUNGRAUN_HOME/geom-bench\" \"$RUNNER_TEMP/judged.names\"",
         // Each tree builds apart (cargo names a path crate's build by its place in the workspace),
         // and both trees' saved runs share one Gungraun home.
         "GUNGRAUN_HOME: ${{ github.workspace }}/gungraun",

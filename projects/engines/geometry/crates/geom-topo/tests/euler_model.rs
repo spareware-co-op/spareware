@@ -55,7 +55,13 @@ fn rot(l: &[Use], i: usize) -> Vec<Use> {
 
 /// `l` turned to start where it is least.
 fn norm(l: &[Use]) -> Vec<Use> {
-    (0..l.len()).map(|i| rot(l, i)).min().unwrap()
+    // The rotations are compared in place and only the least is copied, where turning out every
+    // rotation copied the loop once per fin.
+    let turned = |i: usize| l[i..].iter().chain(&l[..i]);
+    let least = (0..l.len())
+        .min_by(|&i, &j| turned(i).cmp(turned(j)))
+        .unwrap();
+    rot(l, least)
 }
 
 /// The model: plain lists keyed by name.
@@ -278,20 +284,26 @@ impl Model {
     }
 
     fn state(&self) -> State {
+        // Each shell's faces, then each region's shells: one pass over the faces and one over
+        // the shells, where filtering every face for every shell of every region made this, run
+        // after every step, most of the test's time.
+        let mut faces_of: BTreeMap<u64, BTreeSet<NameKey>> =
+            self.shells.keys().map(|t| (*t, BTreeSet::new())).collect();
+        for (f, (t, _)) in &self.faces {
+            if let Some(set) = faces_of.get_mut(t) {
+                set.insert(*f);
+            }
+        }
+        let mut shells_of: BTreeMap<NameKey, BTreeSet<BTreeSet<NameKey>>> = BTreeMap::new();
+        for (t, r) in &self.shells {
+            shells_of
+                .entry(*r)
+                .or_default()
+                .insert(faces_of.remove(t).unwrap_or_default());
+        }
         let mut regions = BTreeMap::new();
         for (name, kind) in &self.regions {
-            let shells = self
-                .shells
-                .iter()
-                .filter(|(_, r)| *r == name)
-                .map(|(t, _)| {
-                    self.faces
-                        .iter()
-                        .filter(|(_, x)| x.0 == *t)
-                        .map(|(f, _)| *f)
-                        .collect()
-                })
-                .collect();
+            let shells = shells_of.remove(name).unwrap_or_default();
             regions.insert(*name, (*kind, shells));
         }
         let faces = self

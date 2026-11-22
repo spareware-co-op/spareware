@@ -13,14 +13,14 @@ use super::jsregex::Regex;
 use super::nztime::{date_text, date_utc, nz_year, today, DAY_MS};
 use super::sources::{GTFS_BUFFER_M, GTFS_LINK_M, NZ_FEEDS, PERIOD_AM, PERIOD_PM, SRC_GTFS, SRC_GTFS_CAT, TERM_DATES};
 use super::vintage::{feeds_of, stamp};
-use super::zip::{member_bytes, read_zip};
+use super::zip::{member_bytes, read_zip, ZipEntry};
 use crate::edit::collate::locale_compare_f64;
 use crate::edit::ids::iso_string;
 use crate::edit::json::JsonValue;
 use crate::edit::net::nearest_link;
 use crate::graph::js_sort_by;
 use crate::importers::jsparse::parse_float;
-use crate::jsnum::string_to_number;
+use crate::jsnum::{string_to_number, usize_to_f64};
 use crate::project::{road_class, Project, Route, Scenario};
 use crate::util::{dist, fmt, r1, r7};
 use serde::Serialize;
@@ -29,6 +29,8 @@ use std::collections::{HashMap, HashSet};
 
 /// `ROUTE_COLOURS`: the colours bus routes cycle through.
 pub const ROUTE_COLOURS: [&str; 7] = ["#7048e8", "#0c8599", "#e8590c", "#c2255c", "#2f9e44", "#1971c2", "#9c36b5"];
+
+const N_COLOURS: usize = ROUTE_COLOURS.len();
 
 /// A GTFS feed the study area may use.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -60,7 +62,7 @@ fn area4(b: &[f64; 4]) -> f64 {
 
 // Catalogue boxes can be far too big (the AT feed's reaches the Chathams because of stray stops), so a feed whose Spare Construct coverage box holds the study-area centre comes first; then the smallest box.
 fn rank(f: &GtfsFeed, b: &Bounds) -> f64 {
-    let (cy, cx) = ((b.south + b.north) / 2.0, (b.west + b.east) / 2.0);
+    let (cy, cx) = (f64::midpoint(b.south, b.north), f64::midpoint(b.west, b.east));
     match NZ_FEEDS.iter().find(|x| Some(x.id) == f.id.as_deref()) {
         Some(k) if cy >= k.box_[0] && cy <= k.box_[2] && cx >= k.box_[1] && cx <= k.box_[3] => 0.0,
         _ => 1.0,
@@ -70,7 +72,7 @@ fn rank(f: &GtfsFeed, b: &Bounds) -> f64 {
 fn sort_feeds(mut hit: Vec<GtfsFeed>, b: &Bounds) -> Vec<GtfsFeed> {
     js_sort_by(&mut hit, |p, q| {
         let d = rank(p, b) - rank(q, b);
-        if d != 0.0 { d } else { area4(&p.box_) - area4(&q.box_) }
+        if d == 0.0 { area4(&p.box_) - area4(&q.box_) } else { d }
     });
     hit
 }
@@ -79,7 +81,11 @@ fn covers(f: &[f64; 4], b: &Bounds) -> bool {
     f[0] <= b.north && f[2] >= b.south && f[1] <= b.east && f[3] >= b.west
 }
 
-/// `parseCatalogue(text)`: the active GTFS feeds of the Mobility Database list (feeds_v2.csv) that have a coverage box.
+/// `parseCatalogue(text)`: the active GTFS feeds of the Mobility Database list (`feeds_v2.csv`) that have a coverage box.
+///
+/// # Errors
+///
+/// The message the prototype's reading gives for text without a header row.
 pub fn parse_catalogue(text: &str) -> Result<Vec<GtfsFeed>, String> {
     let rows = crate::calibrate::parse_csv(text);
     let Some(h0) = rows.first() else { return Err("Cannot read properties of undefined (reading 'map')".to_string()) };
@@ -87,7 +93,7 @@ pub fn parse_catalogue(text: &str) -> Result<Vec<GtfsFeed>, String> {
     let col = |n: &str| h.iter().position(|x| x == n);
     let (id, ty, status, cc, prov, name, latest, lic) =
         (col("id"), col("data_type"), col("status"), col("location.country_code"), col("provider"), col("name"), col("urls.latest"), col("urls.license"));
-    let (s, n, w, e) = (
+    let (south, north, west, east) = (
         col("location.bounding_box.minimum_latitude"),
         col("location.bounding_box.maximum_latitude"),
         col("location.bounding_box.minimum_longitude"),
@@ -96,8 +102,10 @@ pub fn parse_catalogue(text: &str) -> Result<Vec<GtfsFeed>, String> {
     let cell = |r: &Vec<String>, i: Option<usize>| -> Option<String> { i.and_then(|i| r.get(i).cloned()) };
     let num = |r: &Vec<String>, i: Option<usize>| -> f64 { cell(r, i).map_or(f64::NAN, |t| string_to_number(&t)) };
     let or_empty = |v: Option<String>| v.filter(|t| !t.is_empty()).unwrap_or_default();
-    Ok(rows[1..]
+    // The rows after the header
+    Ok(rows
         .iter()
+        .skip(1)
         .filter(|r| cell(r, ty).as_deref() == Some("gtfs") && cell(r, status).is_none_or(|t| t.is_empty() || t == "active"))
         .map(|r| GtfsFeed {
             id: cell(r, id),
@@ -106,7 +114,7 @@ pub fn parse_catalogue(text: &str) -> Result<Vec<GtfsFeed>, String> {
             cc: Some(or_empty(cell(r, cc))),
             latest: if latest.is_some() { cell(r, latest) } else { Some(String::new()) },
             licence: if lic.is_some() { cell(r, lic) } else { Some(String::new()) },
-            box_: [num(r, s), num(r, w), num(r, n), num(r, e)],
+            box_: [num(r, south), num(r, west), num(r, north), num(r, east)],
         })
         .filter(|f| f.box_.iter().all(|v| v.is_finite()))
         .collect())
@@ -125,6 +133,7 @@ pub struct CatalogueResult {
 }
 
 /// The feeds of a catalogue that cover the study area, best first, else (as the prototype does on any problem) the built-in list.
+#[must_use]
 pub fn find_feeds(catalogue: Result<&[GtfsFeed], String>, b: &Bounds) -> CatalogueResult {
     let attempt = match catalogue {
         Ok(list) => {
@@ -161,14 +170,17 @@ impl Catalogue {
         let t = if timeout_s > 45.0 { timeout_s } else { 45.0 };
         Catalogue { bounds, timeout_ms: t * 1000.0, fresh: false, sent: cached.is_some(), list: cached.map(Ok) }
     }
-    /// The feeds covering the area, once done.
+    /// The feeds covering the area, once done (before then, the built-in list's).
+    #[must_use]
     pub fn result(&self) -> CatalogueResult {
-        match self.list.as_ref().expect("the list was read") {
-            Ok(l) => find_feeds(Ok(l), &self.bounds),
-            Err(e) => find_feeds(Err(e.clone()), &self.bounds),
+        match self.list.as_ref() {
+            Some(Ok(l)) => find_feeds(Ok(l), &self.bounds),
+            Some(Err(e)) => find_feeds(Err(e.clone()), &self.bounds),
+            None => find_feeds(Err("the list was not read".to_string()), &self.bounds),
         }
     }
     /// The list as downloaded, to keep for the session (None when it was not downloaded or could not be read).
+    #[must_use]
     pub fn fresh_list(&self) -> Option<&[GtfsFeed]> {
         match (&self.list, self.fresh) {
             (Some(Ok(l)), true) => Some(l),
@@ -225,6 +237,7 @@ pub struct GtfsOpts {
 }
 
 /// `feedUrl(f)`: where a feed's zip is: its own latest address, else the Mobility Database mirror.
+#[must_use]
 pub fn feed_url(f: &GtfsFeed) -> String {
     match &f.latest {
         Some(l) if !l.is_empty() => l.clone(),
@@ -233,12 +246,13 @@ pub fn feed_url(f: &GtfsFeed) -> String {
 }
 
 /// The options `loadGTFS` gives the reader: the study area widened by 500 m, today, the holidays of last year, this year and next (with the feed's region), every school term, and the peak windows.
+#[must_use]
 pub fn gtfs_opts(feed: &GtfsFeed, b: &Bounds, now_ms: f64) -> GtfsOpts {
     let bb = pad_box(&box_of_bounds(b), GTFS_BUFFER_M);
     let d = today(now_ms);
     let yr = nz_year(now_ms);
     let mut hol: Vec<String> = Vec::new();
-    for y in [yr - 1, yr, yr + 1] {
+    for y in [yr.saturating_sub(1), yr, yr.saturating_add(1)] {
         for n in super::tms::holidays(y, &feed.provider) {
             hol.push(super::tms::diso(n).replace('-', ""));
         }
@@ -322,7 +336,7 @@ pub struct GtfsResult {
     pub services: usize,
     /// Bus trips that day.
     pub trips: usize,
-    /// Rows of stop_times.txt.
+    /// Rows of `stop_times.txt`.
     pub stop_times: usize,
     /// The feed's description.
     pub feed_info: Option<GtfsFeedInfo>,
@@ -341,18 +355,16 @@ fn split_line(s: &str) -> Vec<String> {
     if !s.contains('"') {
         return s.split(',').map(str::to_string).collect();
     }
-    let cs: Vec<char> = s.chars().collect();
+    let mut cs = s.chars().peekable();
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut q = false;
-    let mut i = 0;
-    while i < cs.len() {
-        let ch = cs[i];
+    while let Some(ch) = cs.next() {
         if q {
             if ch == '"' {
-                if cs.get(i + 1) == Some(&'"') {
+                if cs.peek() == Some(&'"') {
                     cur.push('"');
-                    i += 1;
+                    cs.next();
                 } else {
                     q = false;
                 }
@@ -366,7 +378,6 @@ fn split_line(s: &str) -> Vec<String> {
         } else {
             cur.push(ch);
         }
-        i += 1;
     }
     out.push(cur);
     out
@@ -383,7 +394,7 @@ fn decode_text(bytes: &[u8]) -> String {
 // rows(name, fn): every data row of a table with its header, and how many rows there were
 fn for_each_row(text: &str, mut f: impl FnMut(&[String], &Head)) -> usize {
     let mut head: Option<Head> = None;
-    let mut count = 0;
+    let mut count: usize = 0;
     for part in text.split('\n') {
         let line = part.strip_suffix('\r').unwrap_or(part);
         if line.is_empty() {
@@ -399,7 +410,8 @@ fn for_each_row(text: &str, mut f: impl FnMut(&[String], &Head)) -> usize {
                 head = Some(h);
             }
             Some(h) => {
-                count += 1;
+                // Bound: a count of lines of text held in memory
+                count = count.saturating_add(1);
                 f(&c, h);
             }
         }
@@ -425,7 +437,7 @@ fn ymd(n: f64) -> String {
 }
 
 fn num_of_ymd(s: &str) -> f64 {
-    let n = |a: usize, b: usize| string_to_number(&s.chars().skip(a).take(b - a).collect::<String>());
+    let n = |a: usize, b: usize| string_to_number(&s.chars().skip(a).take(b.saturating_sub(a)).collect::<String>());
     crate::jsnum::math_round(date_utc(n(0, 4), n(4, 6) - 1.0, n(6, 8)) / DAY_MS)
 }
 
@@ -433,12 +445,12 @@ fn num_of_ymd(s: &str) -> f64 {
 fn sec(s: Option<&str>) -> f64 {
     let re = Regex::lit(r"^\s*(\d+):(\d{2})(?::(\d{2}))?", "");
     let text = s.unwrap_or("");
-    let u: Vec<u16> = text.encode_utf16().collect();
-    match re.exec_units(&u, 0) {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    match re.exec_units(&units, 0) {
         Some(m) => {
-            let g = |i: usize| m.text(&u, i);
-            let n = |t: Option<String>| t.map_or(0.0, |t| string_to_number(&t));
-            n(g(1)) * 3600.0 + n(g(2)) * 60.0 + n(g(3))
+            let group = |i: usize| m.text(&units, i);
+            let num = |t: Option<String>| t.map_or(0.0, |t| string_to_number(&t));
+            num(group(1)) * 3600.0 + num(group(2)) * 60.0 + num(group(3))
         }
         None => f64::NAN,
     }
@@ -455,205 +467,253 @@ struct Trip {
     st: Vec<(f64, Option<String>, f64)>,
 }
 
-/// `gtfsWork(buf, o)`: reads a GTFS zip.
-///
-/// Finds a representative Tuesday in service that is not a public holiday (in a school term first, where the term dates
-/// are known; else the next one; else the latest before today, marked stale), the stops inside the box, the bus routes
-/// (route type 3 or 700 to 799) and that day's trips, and builds the patterns (route, direction and stops) with the
-/// trips per hour that start in the AM and PM windows. Errors say what is wrong with the feed.
-pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
-    let files = read_zip(buf)?;
-    let rows_of = |name: &str, need: bool| -> Result<Option<String>, String> {
-        match files.get(name) {
+// One row of calendar.txt: a service, whether it runs on Tuesdays, and its first and last day
+struct Cal {
+    id: Option<String>,
+    tue: bool,
+    s: Option<String>,
+    e: Option<String>,
+}
+
+// calendar_dates.txt by date (in the order first seen): each service's exception type that day
+type Exceptions = Vec<(Option<String>, Vec<(Option<String>, Option<String>)>)>;
+
+// A stop in the box as the reader gathers it
+struct StopB {
+    id: Option<String>,
+    code: String,
+    name: String,
+    lat: f64,
+    lng: f64,
+    routes: Vec<String>,
+    am: f64,
+    pm: f64,
+}
+
+// Where each id is in a list of stops or trips
+type IdIndex = HashMap<Option<String>, usize>;
+
+// Bus routes by id: the short and long name
+type RouteNames = HashMap<Option<String>, (String, String)>;
+
+// The members of a feed's zip
+struct Members<'a> {
+    buf: &'a [u8],
+    files: HashMap<String, ZipEntry>,
+}
+
+impl Members<'_> {
+    // A member as text; None for a missing member the feed may leave out, an error for one it needs
+    fn text(&self, name: &str, need: bool) -> Result<Option<String>, String> {
+        match self.files.get(name) {
             None => {
                 if need { Err(format!("The feed has no {name}, so it cannot be used.")) } else { Ok(None) }
             }
-            Some(f) => Ok(Some(decode_text(&member_bytes(buf, f, name)?))),
+            Some(f) => Ok(Some(decode_text(&member_bytes(self.buf, f, name)?))),
         }
-    };
-    // 1. calendar: a representative Tuesday in service that is not a public holiday
-    struct Cal {
-        id: Option<String>,
-        tue: bool,
-        s: Option<String>,
-        e: Option<String>,
     }
+}
+
+// School terms: the years that have term dates, and the terms
+struct Terms<'a> {
+    terms: &'a [[String; 2]],
+    years: HashSet<String>,
+}
+
+impl<'a> Terms<'a> {
+    fn new(terms: &'a [[String; 2]]) -> Terms<'a> {
+        Terms { terms, years: terms.iter().map(|x| x[0].chars().take(4).collect()).collect() }
+    }
+    // Whether a day (YYYYMMDD) is in a term; None when its year has no term dates
+    fn of(&self, d: &str) -> Option<bool> {
+        let year: String = d.chars().take(4).collect();
+        if self.years.contains(&year) { Some(self.terms.iter().any(|[s, e]| d >= s.as_str() && d <= e.as_str())) } else { None }
+    }
+}
+
+fn read_calendar(text: &str) -> Vec<Cal> {
     let mut cal: Vec<Cal> = Vec::new();
-    let mut ex: Vec<(Option<String>, Vec<(Option<String>, Option<String>)>)> = Vec::new();
-    let hol: HashSet<&str> = o.holidays.iter().map(String::as_str).collect();
-    if let Some(t) = rows_of("calendar.txt", false)? {
-        for_each_row(&t, |c, h| {
-            cal.push(Cal { id: cell(c, h, "service_id").map(str::to_string), tue: cell(c, h, "tuesday") == Some("1"), s: cell(c, h, "start_date").map(str::to_string), e: cell(c, h, "end_date").map(str::to_string) });
-        });
-    }
-    if let Some(t) = rows_of("calendar_dates.txt", false)? {
-        for_each_row(&t, |c, h| {
-            let d = cell(c, h, "date").map(str::to_string);
-            let sid = cell(c, h, "service_id").map(str::to_string);
-            let ty = cell(c, h, "exception_type").map(str::to_string);
-            let m = match ex.iter_mut().find(|(k, _)| *k == d) {
-                Some(m) => m,
-                None => {
-                    ex.push((d, Vec::new()));
-                    ex.last_mut().expect("just pushed")
-                }
-            };
-            match m.1.iter_mut().find(|(k, _)| *k == sid) {
-                Some(e) => e.1 = ty,
-                None => m.1.push((sid, ty)),
-            }
-        });
-    }
+    for_each_row(text, |c, h| {
+        cal.push(Cal { id: cell(c, h, "service_id").map(str::to_string), tue: cell(c, h, "tuesday") == Some("1"), s: cell(c, h, "start_date").map(str::to_string), e: cell(c, h, "end_date").map(str::to_string) });
+    });
+    cal
+}
+
+fn read_exceptions(text: &str) -> Exceptions {
+    let mut ex: Exceptions = Vec::new();
+    for_each_row(text, |c, h| {
+        let day = cell(c, h, "date").map(str::to_string);
+        let sid = cell(c, h, "service_id").map(str::to_string);
+        let ty = cell(c, h, "exception_type").map(str::to_string);
+        let entry = if let Some(i) = ex.iter().position(|(k, _)| *k == day) {
+            ex.get_mut(i)
+        } else {
+            ex.push((day, Vec::new()));
+            ex.last_mut()
+        };
+        // position found the entry, or it was just pushed
+        let Some(entry) = entry else { return };
+        match entry.1.iter_mut().find(|(k, _)| *k == sid) {
+            Some(e) => e.1 = ty,
+            None => entry.1.push((sid, ty)),
+        }
+    });
+    ex
+}
+
+// The services running on a day (YYYYMMDD): the Tuesday services of calendar.txt within their dates, with that day's exceptions
+fn active(cal: &[Cal], ex: &Exceptions, d: &str) -> Vec<Option<String>> {
     let js_le = |a: &Option<String>, b: &str| a.as_deref().is_some_and(|x| x.encode_utf16().cmp(b.encode_utf16()) != std::cmp::Ordering::Greater);
     let js_ge_opt = |a: &str, b: &Option<String>| b.as_deref().is_some_and(|x| a.encode_utf16().cmp(x.encode_utf16()) != std::cmp::Ordering::Greater);
-    let active = |d: &str| -> Vec<Option<String>> {
-        let mut s: Vec<Option<String>> = Vec::new();
-        for r in &cal {
-            if r.tue && js_le(&r.s, d) && js_ge_opt(d, &r.e) && !s.contains(&r.id) {
-                s.push(r.id.clone());
-            }
+    let mut s: Vec<Option<String>> = Vec::new();
+    for r in cal {
+        if r.tue && js_le(&r.s, d) && js_ge_opt(d, &r.e) && !s.contains(&r.id) {
+            s.push(r.id.clone());
         }
-        if let Some((_, m)) = ex.iter().find(|(k, _)| k.as_deref() == Some(d)) {
-            for (id, t) in m {
-                if t.as_deref() == Some("1") {
-                    if !s.contains(id) {
-                        s.push(id.clone());
-                    }
-                } else {
-                    s.retain(|x| x != id);
+    }
+    if let Some((_, m)) = ex.iter().find(|(k, _)| k.as_deref() == Some(d)) {
+        for (id, t) in m {
+            if t.as_deref() == Some("1") {
+                if !s.contains(id) {
+                    s.push(id.clone());
                 }
-            }
-        }
-        s
-    };
-    let mut date: Option<String> = None;
-    let mut services: Vec<Option<String>> = Vec::new();
-    let mut stale = false;
-    let t = num_of_ymd(&o.today);
-    // School terms: a term-time Tuesday first; a year without term dates counts as unknown
-    let t_years: HashSet<String> = o.terms.iter().map(|x| x[0].chars().take(4).collect()).collect();
-    let term_of = |d: &str| -> Option<bool> {
-        let y: String = d.chars().take(4).collect();
-        if t_years.contains(&y) { Some(o.terms.iter().any(|[s, e]| d >= s.as_str() && d <= e.as_str())) } else { None }
-    };
-    for need_term in [true, false] {
-        let mut k = 0;
-        while k < 200 && date.is_none() {
-            let n = t + k as f64;
-            k += 1;
-            let day = ymd(n);
-            if (n + 4.0) % 7.0 != 2.0 || hol.contains(day.as_str()) || (need_term && term_of(&day) == Some(false)) {
-                continue;
-            }
-            let s = active(&day);
-            if !s.is_empty() {
-                date = Some(day);
-                services = s;
+            } else {
+                s.retain(|x| x != id);
             }
         }
     }
-    let mut k = 1;
-    while k < 400 && date.is_none() {
-        let n = t - k as f64;
-        k += 1;
+    s
+}
+
+// A service day, its services and whether it is the latest before today
+type ServiceDay = (String, Vec<Option<String>>, bool);
+
+// The service day: a Tuesday in service that is not a public holiday, from today on (a term-time one first), else the latest
+// before today. Gives the day, its services and whether it is the latest before today (stale).
+fn service_day(cal: &[Cal], ex: &Exceptions, o: &GtfsOpts, terms: &Terms<'_>) -> Option<ServiceDay> {
+    let hol: HashSet<&str> = o.holidays.iter().map(String::as_str).collect();
+    let first = num_of_ymd(&o.today);
+    for need_term in [true, false] {
+        for k in 0..200_i32 {
+            let n = first + f64::from(k);
+            let day = ymd(n);
+            if (n + 4.0) % 7.0 != 2.0 || hol.contains(day.as_str()) || (need_term && terms.of(&day) == Some(false)) {
+                continue;
+            }
+            let services = active(cal, ex, &day);
+            if !services.is_empty() {
+                return Some((day, services, false));
+            }
+        }
+    }
+    for k in 1..400_i32 {
+        let n = first - f64::from(k);
         let day = ymd(n);
         if (n + 4.0) % 7.0 != 2.0 || hol.contains(day.as_str()) {
             continue;
         }
-        let s = active(&day);
-        if !s.is_empty() {
-            date = Some(day);
-            services = s;
-            stale = true;
+        let services = active(cal, ex, &day);
+        if !services.is_empty() {
+            return Some((day, services, true));
         }
     }
-    let Some(date) = date else { return Err("The feed has no Tuesday with buses in service. It may have expired.".to_string()) };
-    // 2. stops in the box, bus routes, trips that day
-    let [bs, bw, bn, be] = o.box_;
-    struct StopB {
-        id: Option<String>,
-        code: String,
-        name: String,
-        lat: f64,
-        lng: f64,
-        routes: Vec<String>,
-        am: f64,
-        pm: f64,
-    }
+    None
+}
+
+// stops.txt: the stops inside the box [south, west, north, east] (a later row with the same id replaces the earlier)
+fn read_stops(text: &str, box_: [f64; 4]) -> (Vec<StopB>, IdIndex) {
+    let [bs, bw, bn, be] = box_;
     let mut stops: Vec<StopB> = Vec::new();
-    let mut stop_ix: HashMap<Option<String>, usize> = HashMap::new();
-    if let Some(t) = rows_of("stops.txt", true)? {
-        for_each_row(&t, |c, h| {
-            let (lat, lng) = (num_cell(c, h, "stop_lat"), num_cell(c, h, "stop_lon"));
-            if lat >= bs && lat <= bn && lng >= bw && lng <= be {
-                let id = cell(c, h, "stop_id").map(str::to_string);
-                let s = StopB {
-                    id: id.clone(),
-                    code: if h.contains_key("stop_code") { cell_or_empty(c, h, "stop_code") } else { String::new() },
-                    name: cell_or_empty(c, h, "stop_name"),
-                    lat,
-                    lng,
-                    routes: Vec::new(),
-                    am: 0.0,
-                    pm: 0.0,
-                };
-                match stop_ix.get(&id) {
-                    Some(&i) => stops[i] = s,
-                    None => {
-                        stop_ix.insert(id, stops.len());
-                        stops.push(s);
-                    }
+    let mut stop_ix: IdIndex = HashMap::new();
+    for_each_row(text, |c, h| {
+        let (lat, lng) = (num_cell(c, h, "stop_lat"), num_cell(c, h, "stop_lon"));
+        if lat >= bs && lat <= bn && lng >= bw && lng <= be {
+            let id = cell(c, h, "stop_id").map(str::to_string);
+            let stop = StopB {
+                id: id.clone(),
+                code: if h.contains_key("stop_code") { cell_or_empty(c, h, "stop_code") } else { String::new() },
+                name: cell_or_empty(c, h, "stop_name"),
+                lat,
+                lng,
+                routes: Vec::new(),
+                am: 0.0,
+                pm: 0.0,
+            };
+            if let Some(&i) = stop_ix.get(&id) {
+                // stop_ix holds only positions in stops
+                if let Some(slot) = stops.get_mut(i) {
+                    *slot = stop;
                 }
+            } else {
+                stop_ix.insert(id, stops.len());
+                stops.push(stop);
             }
-        });
-    }
-    let mut routes: HashMap<Option<String>, (String, String)> = HashMap::new();
-    if let Some(t) = rows_of("routes.txt", true)? {
-        for_each_row(&t, |c, h| {
-            let ty = num_cell(c, h, "route_type");
-            if ty == 3.0 || (ty >= 700.0 && ty < 800.0) {
-                routes.insert(cell(c, h, "route_id").map(str::to_string), (cell_or_empty(c, h, "route_short_name"), cell_or_empty(c, h, "route_long_name")));
-            }
-        });
-    }
+        }
+    });
+    (stops, stop_ix)
+}
+
+// routes.txt: the bus routes (route type 3 or 700 to 799)
+fn read_routes(text: &str) -> RouteNames {
+    let mut routes: RouteNames = HashMap::new();
+    for_each_row(text, |c, h| {
+        let ty = num_cell(c, h, "route_type");
+        if ty == 3.0 || (700.0..800.0).contains(&ty) {
+            routes.insert(cell(c, h, "route_id").map(str::to_string), (cell_or_empty(c, h, "route_short_name"), cell_or_empty(c, h, "route_long_name")));
+        }
+    });
+    routes
+}
+
+// trips.txt: the trips of the bus routes on the day's services (a later row with the same id replaces the earlier)
+fn read_trips(text: &str, routes: &RouteNames, services: &[Option<String>]) -> (Vec<Trip>, IdIndex) {
     let mut trips: Vec<Trip> = Vec::new();
-    let mut trip_ix: HashMap<Option<String>, usize> = HashMap::new();
-    if let Some(t) = rows_of("trips.txt", true)? {
-        for_each_row(&t, |c, h| {
-            let r = cell(c, h, "route_id").map(str::to_string);
-            let sid = cell(c, h, "service_id").map(str::to_string);
-            if routes.contains_key(&r) && services.contains(&sid) {
-                let id = cell(c, h, "trip_id").map(str::to_string);
-                let trip = Trip {
-                    r,
-                    dir: if h.contains_key("direction_id") { let v = cell_or_empty(c, h, "direction_id"); if v.is_empty() { "0".to_string() } else { v } } else { "0".to_string() },
-                    head: if h.contains_key("trip_headsign") { cell_or_empty(c, h, "trip_headsign") } else { String::new() },
-                    st: Vec::new(),
-                };
-                match trip_ix.get(&id) {
-                    Some(&i) => trips[i] = trip,
-                    None => {
-                        trip_ix.insert(id, trips.len());
-                        trips.push(trip);
-                    }
+    let mut trip_ix: IdIndex = HashMap::new();
+    for_each_row(text, |c, h| {
+        let r = cell(c, h, "route_id").map(str::to_string);
+        let sid = cell(c, h, "service_id").map(str::to_string);
+        if routes.contains_key(&r) && services.contains(&sid) {
+            let id = cell(c, h, "trip_id").map(str::to_string);
+            let trip = Trip {
+                r,
+                dir: if h.contains_key("direction_id") { let v = cell_or_empty(c, h, "direction_id"); if v.is_empty() { "0".to_string() } else { v } } else { "0".to_string() },
+                head: if h.contains_key("trip_headsign") { cell_or_empty(c, h, "trip_headsign") } else { String::new() },
+                st: Vec::new(),
+            };
+            if let Some(&i) = trip_ix.get(&id) {
+                // trip_ix holds only positions in trips
+                if let Some(slot) = trips.get_mut(i) {
+                    *slot = trip;
                 }
+            } else {
+                trip_ix.insert(id, trips.len());
+                trips.push(trip);
             }
-        });
-    }
-    let mut nst = 0;
-    if let Some(t) = rows_of("stop_times.txt", true)? {
-        nst = for_each_row(&t, |c, h| {
-            let Some(&ti) = trip_ix.get(&cell(c, h, "trip_id").map(str::to_string)) else { return };
-            let sid = cell(c, h, "stop_id").map(str::to_string);
-            if !stop_ix.contains_key(&sid) {
-                return;
-            }
-            let dep = cell(c, h, "departure_time");
-            let when = if truthy(dep) { dep } else { cell(c, h, "arrival_time") };
-            trips[ti].st.push((num_cell(c, h, "stop_sequence"), sid, sec(when)));
-        });
-    }
-    // 3. patterns (route, direction and the stops in the box) and departures in the AM and PM windows
+        }
+    });
+    (trips, trip_ix)
+}
+
+// stop_times.txt: each kept trip's stops in the box with their sequence and time; gives the number of rows
+fn read_stop_times(text: &str, trips: &mut [Trip], trip_ix: &IdIndex, stop_ix: &IdIndex) -> usize {
+    for_each_row(text, |c, h| {
+        let Some(&ti) = trip_ix.get(&cell(c, h, "trip_id").map(str::to_string)) else { return };
+        let sid = cell(c, h, "stop_id").map(str::to_string);
+        if !stop_ix.contains_key(&sid) {
+            return;
+        }
+        let dep = cell(c, h, "departure_time");
+        let when = if truthy(dep) { dep } else { cell(c, h, "arrival_time") };
+        // trip_ix holds only positions in trips
+        if let Some(trip) = trips.get_mut(ti) {
+            trip.st.push((num_cell(c, h, "stop_sequence"), sid, sec(when)));
+        }
+    })
+}
+
+// The patterns (route, direction and the stops in the box) with the trips that start in the AM and PM windows; each stop
+// gathers the routes that serve it and its departures in the windows
+fn build_patterns(trips: &mut [Trip], routes: &RouteNames, stops: &mut [StopB], stop_ix: &IdIndex, o: &GtfsOpts) -> Vec<GtfsPattern> {
     let win = |x: f64, w: [f64; 2]| x >= w[0] * 3600.0 && x < w[1] * 3600.0;
     let mut pats: Vec<GtfsPattern> = Vec::new();
     let mut pat_ix: HashMap<String, usize> = HashMap::new();
@@ -662,20 +722,23 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
             continue;
         }
         js_sort_by(&mut tr.st, |x, y| x.0 - y.0);
-        let (short, long) = routes[&tr.r].clone();
-        let label = if !short.is_empty() { short.clone() } else { long.clone() };
+        // Only trips of the routes read were kept
+        let Some((short, long)) = routes.get(&tr.r).cloned() else { continue };
+        let label = if short.is_empty() { long.clone() } else { short.clone() };
         let t1 = tr.st.iter().find(|x| x.2.is_finite()).map_or(f64::NAN, |x| x.2);
         for x in &tr.st {
-            let s = &mut stops[stop_ix[&x.1]];
-            if !s.routes.contains(&label) {
-                s.routes.push(label.clone());
+            // Only stop times of the stops in the box were kept
+            let Some(&si) = stop_ix.get(&x.1) else { continue };
+            let Some(stop) = stops.get_mut(si) else { continue };
+            if !stop.routes.contains(&label) {
+                stop.routes.push(label.clone());
             }
             if x.2.is_finite() {
                 if win(x.2, o.am) {
-                    s.am += 1.0;
+                    stop.am += 1.0;
                 }
                 if win(x.2, o.pm) {
-                    s.pm += 1.0;
+                    stop.pm += 1.0;
                 }
             }
         }
@@ -685,39 +748,44 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
             continue;
         }
         let key = format!("{}|{}|{}", tr.r.clone().unwrap_or_else(|| "undefined".to_string()), tr.dir, seq.iter().map(|s| s.clone().unwrap_or_default()).collect::<Vec<_>>().join(">"));
-        let i = match pat_ix.get(&key) {
-            Some(&i) => i,
-            None => {
-                pat_ix.insert(key, pats.len());
-                pats.push(GtfsPattern { route: tr.r.clone(), short, long, dir: tr.dir.clone(), head: tr.head.clone(), stops: seq, am: 0.0, pm: 0.0 });
-                pats.len() - 1
-            }
+        let i = if let Some(&i) = pat_ix.get(&key) {
+            i
+        } else {
+            let i = pats.len();
+            pat_ix.insert(key, i);
+            pats.push(GtfsPattern { route: tr.r.clone(), short, long, dir: tr.dir.clone(), head: tr.head.clone(), stops: seq, am: 0.0, pm: 0.0 });
+            i
         };
-        if am {
-            pats[i].am += 1.0;
-        }
-        if pm {
-            pats[i].pm += 1.0;
+        // i is a position in pats: found in pat_ix, or the one just pushed
+        if let Some(pat) = pats.get_mut(i) {
+            if am {
+                pat.am += 1.0;
+            }
+            if pm {
+                pat.pm += 1.0;
+            }
         }
     }
+    pats
+}
+
+// feed_info.txt: the last row's description
+fn read_feed_info(text: &str) -> Option<GtfsFeedInfo> {
     let mut feed_info: Option<GtfsFeedInfo> = None;
-    let mut agencies: Vec<String> = Vec::new();
-    if let Some(t) = rows_of("feed_info.txt", false)? {
-        for_each_row(&t, |c, h| {
-            feed_info = Some(GtfsFeedInfo {
-                publisher: cell_or_empty(c, h, "feed_publisher_name"),
-                url: if h.contains_key("feed_publisher_url") { cell(c, h, "feed_publisher_url").map(str::to_string) } else { Some(String::new()) },
-                start: cell_or_empty(c, h, "feed_start_date"),
-                end: cell_or_empty(c, h, "feed_end_date"),
-                version: if h.contains_key("feed_version") { cell(c, h, "feed_version").map(str::to_string) } else { Some(String::new()) },
-            });
+    for_each_row(text, |c, h| {
+        feed_info = Some(GtfsFeedInfo {
+            publisher: cell_or_empty(c, h, "feed_publisher_name"),
+            url: if h.contains_key("feed_publisher_url") { cell(c, h, "feed_publisher_url").map(str::to_string) } else { Some(String::new()) },
+            start: cell_or_empty(c, h, "feed_start_date"),
+            end: cell_or_empty(c, h, "feed_end_date"),
+            version: if h.contains_key("feed_version") { cell(c, h, "feed_version").map(str::to_string) } else { Some(String::new()) },
         });
-    }
-    if let Some(t) = rows_of("agency.txt", false)? {
-        for_each_row(&t, |c, h| agencies.push(cell_or_empty(c, h, "agency_name")));
-    }
-    let h_a = o.am[1] - o.am[0];
-    let h_p = o.pm[1] - o.pm[0];
+    });
+    feed_info
+}
+
+// The stops a bus serves, with their routes in route number order and departures per hour (h_a and h_p are the window lengths)
+fn finish_stops(stops: Vec<StopB>, h_a: f64, h_p: f64) -> Vec<GtfsStop> {
     let by_num = |x: &String, y: &String| -> f64 {
         let key = |s: &String| {
             let v = parse_float(s);
@@ -726,7 +794,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
         let d = key(x) - key(y);
         if d != 0.0 && !d.is_nan() { d } else { locale_compare_f64(x, y) }
     };
-    let out_stops: Vec<GtfsStop> = stops
+    stops
         .into_iter()
         .filter(|s| !s.routes.is_empty())
         .map(|s| {
@@ -734,10 +802,46 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
             js_sort_by(&mut r, by_num);
             GtfsStop { id: s.id, code: s.code, name: s.name, lat: s.lat, lng: s.lng, routes: r, am: s.am / h_a, pm: s.pm / h_p }
         })
-        .collect();
+        .collect()
+}
+
+/// `gtfsWork(buf, o)`: reads a GTFS zip.
+///
+/// Finds a representative Tuesday in service that is not a public holiday (in a school term first, where the term dates
+/// are known; else the next one; else the latest before today, marked stale), the stops inside the box, the bus routes
+/// (route type 3 or 700 to 799) and that day's trips, and builds the patterns (route, direction and stops) with the
+/// trips per hour that start in the AM and PM windows. Errors say what is wrong with the feed.
+///
+/// # Errors
+///
+/// The prototype's message for a zip that cannot be read, a table the feed needs that is missing, or a feed with no
+/// Tuesday in service.
+pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
+    let members = Members { buf, files: read_zip(buf)? };
+    // 1. calendar: a representative Tuesday in service that is not a public holiday
+    let cal = members.text("calendar.txt", false)?.map(|text| read_calendar(&text)).unwrap_or_default();
+    let ex = members.text("calendar_dates.txt", false)?.map(|text| read_exceptions(&text)).unwrap_or_default();
+    // School terms: a term-time Tuesday first; a year without term dates counts as unknown
+    let terms = Terms::new(&o.terms);
+    let Some((date, services, stale)) = service_day(&cal, &ex, o, &terms) else { return Err("The feed has no Tuesday with buses in service. It may have expired.".to_string()) };
+    // 2. stops in the box, bus routes, trips that day
+    let (mut stops, stop_ix) = members.text("stops.txt", true)?.map(|text| read_stops(&text, o.box_)).unwrap_or_default();
+    let routes = members.text("routes.txt", true)?.map(|text| read_routes(&text)).unwrap_or_default();
+    let (mut trips, trip_ix) = members.text("trips.txt", true)?.map(|text| read_trips(&text, &routes, &services)).unwrap_or_default();
+    let nst = members.text("stop_times.txt", true)?.map_or(0, |text| read_stop_times(&text, &mut trips, &trip_ix, &stop_ix));
+    // 3. patterns (route, direction and the stops in the box) and departures in the AM and PM windows
+    let pats = build_patterns(&mut trips, &routes, &mut stops, &stop_ix, o);
+    let feed_info = members.text("feed_info.txt", false)?.and_then(|text| read_feed_info(&text));
+    let mut agencies: Vec<String> = Vec::new();
+    if let Some(text) = members.text("agency.txt", false)? {
+        for_each_row(&text, |c, h| agencies.push(cell_or_empty(c, h, "agency_name")));
+    }
+    let h_a = o.am[1] - o.am[0];
+    let h_p = o.pm[1] - o.pm[0];
+    let out_stops = finish_stops(stops, h_a, h_p);
     let patterns: Vec<GtfsPattern> = pats.into_iter().map(|q| GtfsPattern { am: q.am / h_a, pm: q.pm / h_p, ..q }).collect();
     Ok(GtfsResult {
-        term: term_of(&date),
+        term: terms.of(&date),
         date,
         stale,
         services: services.len(),
@@ -753,7 +857,7 @@ pub fn parse_gtfs(buf: &[u8], o: &GtfsOpts) -> Result<GtfsResult, String> {
 
 /// `loadGTFS(feed, b)`: the download of a feed's timetable (with the optional HEAD request that tells when it was last changed) and its reading.
 ///
-/// The feed's own cache (the prototype keeps parsed feeds in IndexedDB) is the host's affair: when the HEAD answer shows a
+/// The feed's own cache (the prototype keeps parsed feeds in `IndexedDB`) is the host's affair: when the HEAD answer shows a
 /// copy it holds is current, it can stop the flow after the first answer and use its own result.
 pub struct GtfsLoad {
     feed: GtfsFeed,
@@ -798,20 +902,24 @@ pub struct GtfsFeedRef {
 
 impl GtfsLoad {
     /// A download for a feed and an area. `timeout_s` is the settings time limit in seconds (the zip is allowed at least 120 s).
+    #[must_use]
     pub fn new(feed: GtfsFeed, b: &Bounds, now_ms: f64, timeout_s: f64) -> GtfsLoad {
         let url = feed_url(&feed);
         let opts = gtfs_opts(&feed, b, now_ms);
         GtfsLoad { feed, opts, url, timeout_ms: (if timeout_s > 120.0 { timeout_s } else { 120.0 }) * 1000.0, stage: 0, last_modified: None, result: None, statuses: Vec::new() }
     }
     /// The options the reader was given.
+    #[must_use]
     pub fn opts(&self) -> &GtfsOpts {
         &self.opts
     }
     /// The progress lines the prototype passes to its status callback, in order.
+    #[must_use]
     pub fn statuses(&self) -> &[String] {
         &self.statuses
     }
     /// The reading, with the feed and the time the file was last changed.
+    #[must_use]
     pub fn finish(self) -> Option<GtfsLoaded> {
         let result = self.result?;
         Some(GtfsLoaded {
@@ -853,7 +961,7 @@ impl Flow for GtfsLoad {
             Ok(_) => return Err(get_error(&self.url, self.timeout_ms, &FetchFailure::Unreadable("not a file".to_string()))),
             Err(f) => return Err(get_error(&self.url, self.timeout_ms, &f)),
         };
-        self.statuses.push(format!("Reading {} MB of timetable for {}\u{2026}", fmt::num(data.len() as f64 / 1_048_576.0, 1), self.opts.today.chars().take(4).collect::<String>()));
+        self.statuses.push(format!("Reading {} MB of timetable for {}\u{2026}", fmt::num(usize_to_f64(data.len()) / 1_048_576.0, 1), self.opts.today.chars().take(4).collect::<String>()));
         self.result = Some(parse_gtfs(&data, &self.opts)?);
         if lm.as_deref().is_some_and(|l| !l.is_empty()) {
             self.last_modified = lm;
@@ -868,18 +976,19 @@ impl Flow for GtfsLoad {
 
 impl GtfsFeed {
     fn provider_or_id(&self) -> String {
-        if !self.provider.is_empty() { self.provider.clone() } else { self.id.clone().unwrap_or_else(|| "undefined".to_string()) }
+        if self.provider.is_empty() { self.id.clone().unwrap_or_else(|| "undefined".to_string()) } else { self.provider.clone() }
     }
 }
 
 /// `hashStr(s)`: a short text from a text (32-bit FNV-1a, in base 36).
+#[must_use]
 pub fn hash_str(s: &str) -> String {
     let mut h: u32 = 2_166_136_261;
     for u in s.encode_utf16() {
-        h ^= u as u32;
+        h ^= u32::from(u);
         h = h.wrapping_mul(16_777_619);
     }
-    crate::edit::ids::integer_radix36(h as f64)
+    crate::edit::ids::integer_radix36(f64::from(h))
 }
 
 /// A bus route made from a pattern (`gtfsRoutes` entry).
@@ -908,35 +1017,38 @@ pub struct GtfsRoute {
 /// Each stop snaps to the nearest road (not a motorway or ramp) within 60 m, and the route passes the end of that road
 /// towards the next stop, so stops in the middle of long rural links still count. Stops outside the network are skipped.
 /// Patterns that give the same waypoints are merged (their frequencies add). Busiest first.
+#[must_use]
 pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
-    let by_stop: HashMap<Option<String>, &GtfsStop> = g.result.stops.iter().map(|s| (s.id.clone(), s)).collect();
-    let mut snap: HashMap<Option<String>, Option<String>> = HashMap::new();
-    let bus_road = |l: &crate::project::Link| !l.status.is("closed") && road_class(l.cls.as_str()).rank < 5.0;
-    let mut link_of = |id: &Option<String>| -> Option<String> {
-        if !snap.contains_key(id) {
-            let v = by_stop.get(id).and_then(|s| nearest_link(sc, [s.lat, s.lng], GTFS_LINK_M, Some(&bus_road))).map(|h| h.id);
-            snap.insert(id.clone(), v);
-        }
-        snap[id].clone()
-    };
-    let ll = |id: Option<&Option<String>>| -> Option<[f64; 2]> { id.and_then(|i| by_stop.get(i)).map(|s| [s.lat, s.lng]) };
-    let node = |id: &str| -> [f64; 2] {
-        let n = &sc.nodes[id];
-        [n.lat.num(), n.lng.num()]
-    };
     struct Merged {
         p: GtfsPattern,
         wp: Vec<String>,
     }
+    let by_stop: HashMap<Option<String>, &GtfsStop> = g.result.stops.iter().map(|s| (s.id.clone(), s)).collect();
+    let mut snap: HashMap<Option<String>, Option<String>> = HashMap::new();
+    let bus_road = |l: &crate::project::Link| !l.status.is("closed") && road_class(l.cls.as_str()).rank < 5.0;
+    let mut link_of = |id: &Option<String>| -> Option<String> {
+        if let Some(v) = snap.get(id) {
+            return v.clone();
+        }
+        let v = by_stop.get(id).and_then(|s| nearest_link(sc, [s.lat, s.lng], GTFS_LINK_M, Some(&bus_road))).map(|h| h.id);
+        snap.insert(id.clone(), v.clone());
+        v
+    };
+    let ll = |id: Option<&Option<String>>| -> Option<[f64; 2]> { id.and_then(|i| by_stop.get(i)).map(|s| [s.lat, s.lng]) };
+    let node = |id: &str| -> [f64; 2] {
+        sc.nodes.get(id).map_or([f64::NAN; 2], |n| [n.lat.num(), n.lng.num()])
+    };
     let mut merged: Vec<Merged> = Vec::new();
     let mut m_ix: HashMap<String, usize> = HashMap::new();
     for p in &g.result.patterns {
         let mut wp: Vec<String> = Vec::new();
         for (i, s) in p.stops.iter().enumerate() {
             let Some(hit) = link_of(s) else { continue };
-            let l = &sc.links[hit.as_str()];
-            let nx = ll(p.stops.get(i + 1));
-            let pv = if i > 0 { ll(p.stops.get(i - 1)) } else { None };
+            let Some(l) = sc.links.get(hit.as_str()) else {
+                continue;
+            };
+            let nx = ll(i.checked_add(1).and_then(|j| p.stops.get(j)));
+            let pv = ll(i.checked_sub(1).and_then(|j| p.stops.get(j)));
             // the exit end: nearer the next stop, or (for the last stop) further from the previous one
             let n = if let Some(nx) = nx {
                 if dist(&node(&l.a), &nx) <= dist(&node(&l.b), &nx) { l.a.clone() } else { l.b.clone() }
@@ -954,15 +1066,15 @@ pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
             continue;
         }
         let key = format!("{}|{}|{}", p.route.clone().unwrap_or_else(|| "undefined".to_string()), p.dir, wp.join(">"));
-        match m_ix.get(&key) {
-            Some(&i) => {
-                merged[i].p.am += p.am;
-                merged[i].p.pm += p.pm;
+        if let Some(&i) = m_ix.get(&key) {
+            // m_ix holds only positions in merged
+            if let Some(m) = merged.get_mut(i) {
+                m.p.am += p.am;
+                m.p.pm += p.pm;
             }
-            None => {
-                m_ix.insert(key, merged.len());
-                merged.push(Merged { p: p.clone(), wp });
-            }
+        } else {
+            m_ix.insert(key, merged.len());
+            merged.push(Merged { p: p.clone(), wp });
         }
     }
     js_sort_by(&mut merged, |x, y| (y.p.am + y.p.pm) - (x.p.am + x.p.pm));
@@ -977,7 +1089,8 @@ pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
             GtfsRoute {
                 id: format!("gtfs-{}", hash_str(&format!("{}|{}|{}", p.route.clone().unwrap_or_else(|| "undefined".to_string()), p.dir, m.wp.join(">")))),
                 name,
-                color: ROUTE_COLOURS[i % ROUTE_COLOURS.len()].to_string(),
+                // i % N_COLOURS is always a position in ROUTE_COLOURS
+                color: ROUTE_COLOURS.get(i % N_COLOURS).copied().unwrap_or_default().to_string(),
                 freq: crate::jsnum::math_max(am, pm),
                 freqs: json!({ "AM": am, "PM": pm }),
                 wp: m.wp.clone(),
@@ -995,14 +1108,15 @@ pub fn apply_gtfs(sc: &mut Scenario, routes: &[GtfsRoute]) -> usize {
         sc.routes.remove(&id);
     }
     for r in routes {
-        let v = serde_json::to_value(r).expect("route");
-        let route: Route = serde_json::from_value(v).expect("a route reads");
+        // A GtfsRoute always writes as JSON that reads as a Route
+        let Ok(route) = serde_json::to_value(r).and_then(serde_json::from_value::<Route>) else { continue };
         sc.routes.insert(r.id.clone(), route);
     }
     routes.len()
 }
 
 /// `feedDate(g)`: the feed's own date: the download's Last-Modified, then the feed's version and validity ("feed dated 21 Oct 2026; version 3, valid 20260101\u{2013}20261231").
+#[must_use]
 pub fn feed_date(g: &GtfsLoaded) -> String {
     let fi = g.result.feed_info.as_ref();
     let lm = match &g.last_modified {
@@ -1056,7 +1170,8 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
             Value::Object(o)
         })
         .collect();
-    let feed = serde_json::to_value(&g.feed).expect("feed");
+    // The feed's fields are text, which always writes as JSON
+    let feed = serde_json::to_value(&g.feed).unwrap_or_default();
     feeds_of(p).insert(
         "gtfs".to_string(),
         json!({
@@ -1065,7 +1180,7 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
         }),
     );
     let d = &g.result.date;
-    let pub_or_provider = if !publisher.is_empty() { publisher.clone() } else { g.feed.provider.clone() };
+    let pub_or_provider = if publisher.is_empty() { g.feed.provider.clone() } else { publisher.clone() };
     let tail = if g.result.stale {
         " (the feed has no later Tuesday: it may be out of date)"
     } else if g.result.term == Some(false) {
@@ -1073,7 +1188,7 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
     } else {
         ""
     };
-    let day = |a: usize, b: usize| -> String { d.chars().skip(a).take(b - a).collect() };
+    let day = |a: usize, b: usize| -> String { d.chars().skip(a).take(b.saturating_sub(a)).collect() };
     let note = format!(
         "{}{}; service day {}/{}/{}{}; {} route patterns in the study area.",
         pub_or_provider,
@@ -1087,7 +1202,7 @@ pub fn keep_gtfs(p: &mut Project, g: &GtfsLoaded, routes: &[GtfsRoute], now_ms: 
     let mut extra = Map::new();
     extra.insert("key".into(), json!("gtfs"));
     extra.insert("url".into(), json!(g.feed.url));
-    extra.insert("licence".into(), json!(if !g.feed.licence.is_empty() { g.feed.licence.clone() } else { SRC_GTFS.licence.to_string() }));
+    extra.insert("licence".into(), json!(if g.feed.licence.is_empty() { SRC_GTFS.licence.to_string() } else { g.feed.licence.clone() }));
     extra.insert("n".into(), json!(g.result.stops.len()));
     extra.insert("note".into(), json!(note));
     stamp(p, "gtfs", &extra, now_ms);

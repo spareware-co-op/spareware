@@ -39,6 +39,9 @@
     clippy::indexing_slicing
 )]
 
+#[macro_use]
+mod slices;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
@@ -757,34 +760,62 @@ proptest! {
     }
 
     #[test]
-    fn orient3d_matches_the_oracle(p in uniform::<_, 4>(uniform::<_, 3>(coord())), seeds in any::<[u64; 3]>()) {
-        checked_orient3d(p);
-        check_laws(orient3d_of, p, seeds);
-    }
-
-    #[test]
-    fn incircle_matches_the_oracle(p in uniform::<_, 4>(uniform::<_, 2>(coord())), seeds in any::<[u64; 2]>()) {
-        checked_incircle(p);
-        check_laws(incircle_of, p, seeds);
-    }
-
-    #[test]
     fn insphere_matches_the_oracle(p in uniform::<_, 5>(uniform::<_, 3>(coord())), seeds in any::<[u64; 3]>()) {
         checked_insphere(p);
         check_laws(insphere_of, p, seeds);
     }
 }
 
+// The longest of them under Miri, each cut into quarters of its one stream of cases (decision
+// 32.78, `slices`): the same cases, from the same strategies, drawn in the same order.
+sliced!(
+    orient3d_matches_the_oracle,
+    ProptestConfig::default(),
+    (uniform::<_, 4>(uniform::<_, 3>(coord())), any::<[u64; 3]>()),
+    |(p, seeds)| {
+        checked_orient3d(p);
+        check_laws(orient3d_of, p, seeds);
+        Ok(())
+    }
+);
+
+sliced!(
+    incircle_matches_the_oracle,
+    ProptestConfig::default(),
+    (uniform::<_, 4>(uniform::<_, 2>(coord())), any::<[u64; 2]>()),
+    |(p, seeds)| {
+        checked_incircle(p);
+        check_laws(incircle_of, p, seeds);
+        Ok(())
+    }
+);
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(ProptestConfig::default().cases, "a property's cases");
+}
+
 // ---------------------------------------------------------------------------------------------
 // Near-degenerate constructions: exactly degenerate, then every one-step move off it.
 
-proptest! {
-    /// Three points on one lattice line; moving one of them one step is zero exactly when the
-    /// step runs along the line (given the other two are distinct).
-    #[test]
-    fn orient2d_on_collinear_points_and_one_step_off(
-        a in uniform::<_, 2>(coord()), w in direction::<2>(), s in any::<[u64; 2]>(), seeds in any::<[u64; 2]>(),
-    ) {
+// Three points on one lattice line; moving one of them one step is zero exactly when the step runs
+// along the line (given the other two are distinct). In quarters of its one stream of cases, the
+// longest of these under Miri (decision 32.78, `slices`).
+sliced!(
+    orient2d_on_collinear_points_and_one_step_off,
+    ProptestConfig::default(),
+    (
+        uniform::<_, 2>(coord()),
+        direction::<2>(),
+        any::<[u64; 2]>(),
+        any::<[u64; 2]>(),
+    ),
+    |(a, w, s, seeds)| {
         let p = [a, on_line(a, w, s[0]), on_line(a, w, s[1])];
         prop_assert!(checked_orient2d(p).is_zero());
         check_laws(orient2d_of, p, seeds);
@@ -793,12 +824,22 @@ proptest! {
             let rest: [Pt2; 2] = others(p, i);
             if rest[0] != rest[1] {
                 // The step is parallel to the line exactly when w has no component across it.
-                prop_assert_eq!(v.is_zero(), w[1 - axis] == 0, "move point {} along axis {} in {:?}", i, axis, p);
+                prop_assert_eq!(
+                    v.is_zero(),
+                    w[1 - axis] == 0,
+                    "move point {} along axis {} in {:?}",
+                    i,
+                    axis,
+                    p
+                );
             }
             check_laws(orient2d_of, q, seeds);
         }
+        Ok(())
     }
+);
 
+proptest! {
     /// Four points on one lattice plane; moving one of them one step is zero exactly when the
     /// plane contains the step (given the other three are not collinear).
     #[test]

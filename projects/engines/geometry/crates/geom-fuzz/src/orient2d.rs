@@ -20,7 +20,7 @@
 //! [`decode`] turns a fuzzer's bytes into three points with `geom-test`'s [`GridSampler`], aimed at
 //! the hard cases: repeated points, collinear points, points one step off a line, and the edges of
 //! the frame. [`harness`] is `decode` then `check`: the one function every fuzzing engine drives
-//! (bolero's test mode, cargo-bolero's libFuzzer, `ClusterFuzzLite` and the seeded leg; the crate
+//! (bolero's test mode and the seeded leg; the crate
 //! README sets out the layout). [`proof_case`] maps a draw onto the bounded domain of the Kani
 //! proof, which drives `check` itself.
 //!
@@ -42,8 +42,13 @@
 //! - **What is proven and what is tested.** For every case [`proof_case`] can give with bound
 //!   [`PROOF_BOUND`] (every coordinate within `PROOF_BOUND` steps of 0 or of an edge ±(2^40 − 1)
 //!   of the frame, in any combination), Kani proves that all three claims hold and that nothing
-//!   on the way panics or overflows (`tests/orient2d.rs`, `orient2d_proof`; Kani checks every
-//!   arithmetic step, index and unwrap by default). Near the edges the filter's products round,
+//!   on the way panics or overflows (`tests/orient2d.rs`: `orient2d_proof_predicate`,
+//!   `orient2d_proof_exact_path` and `orient2d_proof_filter`, one claim each by [`check_claim`],
+//!   which together prove what [`check`] checks; Kani checks every arithmetic step, index and
+//!   unwrap by default; the predicate's claim is proved in [`PREDICATE_PARTS`] parts, one for
+//!   each class of [`predicate_part`], with a proof that the classes are the whole domain, and
+//!   the filter's claim one step of [`check_with`] at a time, by [`check_filter_step`] for each
+//!   of [`FILTER_STEPS`]). Near the edges the filter's products round,
 //!   so the proof covers the filter's error bound, not only exact arithmetic. Everywhere else in
 //!   the frame the claims are tested, by fuzzing and the property tests, not proven.
 //!
@@ -128,6 +133,55 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     check_with(case, orient2d, filter, value)
 }
 
+/// One of [`check`]'s three claims (the module header numbers them), for a bounded proof of that
+/// claim alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Claim {
+    /// 1. The predicate answers, with the reference's sign.
+    Predicate,
+    /// 2. The generated exact path returns the reference's value.
+    ExactPath,
+    /// 3. The generated filter declines or gives the reference's sign.
+    Filter,
+}
+
+/// Every claim of [`check`]: a case passes [`check`] exactly when it passes [`check_claim`] with
+/// each of these.
+pub const CLAIMS: [Claim; 3] = [Claim::Predicate, Claim::ExactPath, Claim::Filter];
+
+/// [`check`]'s claim `claim` alone, for `case`: [`check_with`] on `geom-num`'s function for that
+/// claim, with the reference itself standing in for the other two, which it always meets (its own
+/// sign, its own value, and a filter that declines). So `check_claim` fails exactly when the
+/// reference cannot be computed or that claim is broken, and a case passes [`check`] exactly when
+/// it passes `check_claim` for every one of [`CLAIMS`]: a proof split by claim proves what one
+/// proof of [`check`] proves.
+///
+/// # Errors
+///
+/// A [`Finding`] for the claim, or if the reference itself could not be computed.
+pub fn check_claim(case: &Case, claim: Claim) -> Result<(), Finding> {
+    match claim {
+        Claim::Predicate => check_with(case, orient2d, declines, reference),
+        Claim::ExactPath => check_with(case, reference_sign, declines, value),
+        // Proved one step at a time ([`check_filter_step`]), so this must stay `check_with` on
+        // exactly these three functions.
+        Claim::Filter => check_with(case, reference_sign, filter, reference),
+    }
+}
+
+/// The sign of [`reference`], standing in for the predicate in [`check_claim`]; an error only
+/// where the reference cannot be computed, which [`check_with`] reports first.
+fn reference_sign(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    reference(a, b, c)
+        .map(Sign::of_i128)
+        .ok_or(NumError::BudgetExceeded)
+}
+
+/// A filter that declines every case, standing in for the filter in [`check_claim`].
+fn declines(_: P2, _: P2, _: P2) -> Option<Sign> {
+    None
+}
+
 /// [`check`] on the given predicate, filter and exact path, so a test can hand it broken ones and
 /// see that it catches them (28.4, fault injection: a check that cannot fail proves nothing).
 ///
@@ -140,46 +194,125 @@ pub fn check_with(
     filter: impl Fn(P2, P2, P2) -> Option<Sign>,
     exact_value: impl Fn(P2, P2, P2) -> Option<i128>,
 ) -> Result<(), Finding> {
+    // check_with must stay the reference and then its three steps, in this order, each on what
+    // its function answers for the case and nothing else: the filter's claim is proved one step
+    // at a time ([`check_filter_step`]), and that proves what one proof of it did only because
+    // check_with is these four calls.
     let Case { a, b, c } = *case;
-    // The detail is written only when a finding is reported, and never under Kani
-    // (`Finding::new`).
-    let finding = |law: &str, detail: &dyn Fn() -> String| {
-        Finding::new(law, || format!("points: {a:?}, {b:?}, {c:?}\n{}", detail()))
-    };
-    let Some(det) = reference(a, b, c) else {
-        return Err(finding(
+    let det = checked_reference(case)?;
+    exact_step(case, det, exact_value(a, b, c))?;
+    predicate_step(case, det, predicate(a, b, c))?;
+    filter_step(case, det, filter(a, b, c))
+}
+
+/// A finding for `case`: the law broken, and the points with `detail`. The detail is written only
+/// when a finding is reported, and never under Kani (`Finding::new`).
+fn finding(case: &Case, law: &str, detail: &dyn Fn() -> String) -> Finding {
+    let Case { a, b, c } = *case;
+    Finding::new(law, || format!("points: {a:?}, {b:?}, {c:?}\n{}", detail()))
+}
+
+/// [`check_with`]'s first step: the case's [`reference`] determinant, or the finding that it
+/// could not be computed.
+fn checked_reference(case: &Case) -> Result<i128, Finding> {
+    let Case { a, b, c } = *case;
+    reference(a, b, c).ok_or_else(|| {
+        finding(
+            case,
             "the reference determinant fits i128 for grid points (|det| ≤ 6M² < 2^83), so a \
              failed step is a defect in this harness",
             &String::new,
-        ));
-    };
-    let sign = Sign::of_i128(det);
-    let got = exact_value(a, b, c);
+        )
+    })
+}
+
+/// [`check_with`]'s step for the exact path: `got`, its answer, is the reference `det`.
+fn exact_step(case: &Case, det: i128, got: Option<i128>) -> Result<(), Finding> {
     if got != Some(det) {
         return Err(finding(
+            case,
             "orient2d's exact path returns the determinant of its definition, every bit of it",
             &|| format!("reference: {det}\nexact path: {got:?}"),
         ));
     }
-    match predicate(a, b, c) {
-        Ok(s) if s == sign => {}
-        other => {
-            return Err(finding(
-                "orient2d answers every grid input with the sign of the determinant of its \
-                 definition (an error is a defect in geom-num, which proves every grid input \
-                 answers)",
-                &|| format!("reference: {det} ({sign:?})\norient2d: {other:?}"),
-            ));
-        }
+    Ok(())
+}
+
+/// [`check_with`]'s step for the predicate: `got`, its answer, is the sign of the reference
+/// `det`.
+fn predicate_step(case: &Case, det: i128, got: Result<Sign, NumError>) -> Result<(), Finding> {
+    let sign = Sign::of_i128(det);
+    match got {
+        Ok(s) if s == sign => Ok(()),
+        other => Err(finding(
+            case,
+            "orient2d answers every grid input with the sign of the determinant of its \
+             definition (an error is a defect in geom-num, which proves every grid input \
+             answers)",
+            &|| format!("reference: {det} ({sign:?})\norient2d: {other:?}"),
+        )),
     }
-    match filter(a, b, c) {
+}
+
+/// [`check_with`]'s step for the filter: `got`, its answer, declines or is the sign of the
+/// reference `det`.
+fn filter_step(case: &Case, det: i128, got: Option<Sign>) -> Result<(), Finding> {
+    let sign = Sign::of_i128(det);
+    match got {
         None => Ok(()),
         Some(s) if s == sign => Ok(()),
         Some(s) => Err(finding(
+            case,
             "orient2d's f64 filter declines or gives the sign of the exact determinant: its \
              error bound is never exceeded",
             &|| format!("reference: {det} ({sign:?})\nfilter: {s:?}"),
         )),
+    }
+}
+
+/// One step of the filter's claim (`check_claim` with [`Claim::Filter`]), for its proof one step
+/// at a time: [`check_filter_step`] takes the reference once and then this step alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilterStep {
+    /// The reference, standing in for the exact path, returns its own value.
+    ExactStandIn,
+    /// The reference's sign, standing in for the predicate, is its own sign.
+    PredicateStandIn,
+    /// The generated filter declines or gives the reference's sign.
+    Answer,
+}
+
+/// Every step of the filter's claim: a case passes `check_claim` with [`Claim::Filter`] exactly
+/// when it passes [`check_filter_step`] with each of these.
+pub const FILTER_STEPS: [FilterStep; 3] = [
+    FilterStep::ExactStandIn,
+    FilterStep::PredicateStandIn,
+    FilterStep::Answer,
+];
+
+/// The filter's claim, one step: the case's reference, as [`check_with`] takes it first, and then
+/// [`check_with`]'s step `step` on what that step's function answers in the filter's claim (the
+/// reference for the exact path, its sign for the predicate, `geom-num`'s filter for the filter).
+///
+/// `check_claim` with [`Claim::Filter`] is [`check_with`] on those three functions, and
+/// [`check_with`] is the reference and then its three steps, each on its own function's answer
+/// for the case; every function is a function of the case alone. So a case passes the filter's
+/// claim exactly when it passes this for every one of [`FILTER_STEPS`], and a proof split by
+/// step proves what one proof of the claim proves. The split is for the solver: proved as one,
+/// the claim computes the reference three times and the solver must find the copies equal while
+/// it also proves the filter's bound; one step at a time, it holds one copy against the other or
+/// the filter against one reference, never both.
+///
+/// # Errors
+///
+/// A [`Finding`] for the step, or if the reference itself could not be computed.
+pub fn check_filter_step(case: &Case, step: FilterStep) -> Result<(), Finding> {
+    let Case { a, b, c } = *case;
+    let det = checked_reference(case)?;
+    match step {
+        FilterStep::ExactStandIn => exact_step(case, det, reference(a, b, c)),
+        FilterStep::PredicateStandIn => predicate_step(case, det, reference_sign(a, b, c)),
+        FilterStep::Answer => filter_step(case, det, filter(a, b, c)),
     }
 }
 
@@ -259,6 +392,26 @@ pub fn proof_case(bound: u64, draw: &ProofDraw) -> Option<Case> {
         b: P2::new(bx, by).ok()?,
         c: P2::new(cx, cy).ok()?,
     })
+}
+
+/// How many classes [`predicate_part`] cuts the proof's domain into: 64, one for each pattern of
+/// the six coordinates' signs.
+pub const PREDICATE_PARTS: u32 = 64;
+
+/// The class of the proof's domain `draw` is in, for the predicate's proof in parts
+/// (`tests/orient2d.rs`): the six negative flags read as a number, a.x's worth 1, a.y's 2, b.x's
+/// 4, b.y's 8, c.x's 16 and c.y's 32, so always below [`PREDICATE_PARTS`]. The near-edge flags
+/// and the offsets do not enter it: a class is every draw with those six signs.
+///
+/// Kani proves the predicate's claim one class at a time, and proves of this function that every
+/// draw of the domain has a class below [`PREDICATE_PARTS`], so the parts together are the
+/// domain. The signs are what to split on because they are what the solver's time follows: one
+/// class of them took 4 to 9 minutes on the hosted runner where the whole domain took 35 to 46.
+#[must_use]
+pub fn predicate_part(draw: &ProofDraw) -> u32 {
+    let [ax, ay, bx, by, cx, cy] = draw.negative;
+    let worth = |negative: bool, weight: u32| if negative { weight } else { 0 };
+    worth(ax, 1) | worth(ay, 2) | worth(bx, 4) | worth(by, 8) | worth(cx, 16) | worth(cy, 32)
 }
 
 #[cfg(test)]
@@ -357,6 +510,96 @@ mod tests {
         assert!(zero.is_err());
     }
 
+    /// Each claim's stand-ins are met by every case: with all three the reference's own, the
+    /// check passes, even where the claimed functions would not run. So a proof of one claim by
+    /// [`check_claim`] fails only on that claim, and the three together are [`check`].
+    #[test]
+    fn the_stand_ins_always_pass_and_each_claim_is_its_own() {
+        let cases = [
+            Case {
+                a: p(0, 0),
+                b: p(1, 0),
+                c: p(0, 1),
+            },
+            Case {
+                a: p(-M, -M),
+                b: p(M, -M),
+                c: p(M, M),
+            },
+            Case {
+                a: p(M, M),
+                b: p(-M, -M),
+                c: p(M - 1, M),
+            },
+        ];
+        for case in &cases {
+            check_with(case, reference_sign, declines, reference).unwrap();
+            for claim in CLAIMS {
+                check_claim(case, claim).unwrap();
+            }
+        }
+        // Broken on its own, each claim still fails with the stand-ins for the other two.
+        let case = &cases[0];
+        let flipped = |a, b, c| orient2d(a, b, c).map(Sign::negate);
+        assert!(check_with(case, flipped, declines, reference).is_err());
+        assert!(
+            check_with(case, reference_sign, declines, |a, b, c| value(a, b, c)
+                .map(|v| v + 1))
+            .is_err()
+        );
+        assert!(
+            check_with(
+                case,
+                reference_sign,
+                |_, _, _| Some(Sign::Negative),
+                reference
+            )
+            .is_err()
+        );
+    }
+
+    /// The filter's claim is its steps: on every case each step passes as the claim does, and
+    /// each step function fails on a wrong answer of its own, as `check_with` does.
+    #[test]
+    fn the_filter_steps_are_its_claim() {
+        let mut rng = SplitMix64::new(fixed("orient2d filter steps", Seed(0x0f11)));
+        let mut cases = vec![
+            Case {
+                a: p(0, 0),
+                b: p(1, 0),
+                c: p(0, 1),
+            },
+            Case {
+                a: p(-M, -M),
+                b: p(M, -M),
+                c: p(M, M),
+            },
+        ];
+        for _ in 0..200 {
+            let mut v = || (rng.next_u64() >> 24) as i64 - (1 << 39);
+            cases.push(Case {
+                a: p(v(), v()),
+                b: p(v(), v()),
+                c: p(v(), v()),
+            });
+        }
+        for case in &cases {
+            let whole = check_claim(case, Claim::Filter).is_ok();
+            let steps = FILTER_STEPS
+                .iter()
+                .all(|&s| check_filter_step(case, s).is_ok());
+            assert!(whole && steps, "{case:?}");
+        }
+        let case = &cases[0];
+        let det = reference(case.a, case.b, case.c).unwrap();
+        assert!(exact_step(case, det, Some(det + 1)).is_err());
+        assert!(exact_step(case, det, None).is_err());
+        assert!(predicate_step(case, det, Ok(Sign::Negative)).is_err());
+        assert!(predicate_step(case, det, Err(NumError::BudgetExceeded)).is_err());
+        assert!(filter_step(case, det, Some(Sign::Negative)).is_err());
+        assert!(filter_step(case, det, None).is_ok());
+    }
+
     #[test]
     fn empty_and_tiny_inputs_are_cases() {
         harness(&[]).unwrap();
@@ -428,6 +671,25 @@ mod tests {
         assert_eq!(proof_coord(u64::MAX, true, true, u64::MAX), None);
     }
 
+    /// Every draw of the domain is in the part its six signs name, and every part has the same
+    /// number of draws: 2^12, the near-edge flags and the offsets.
+    #[test]
+    fn the_predicates_parts_are_the_sign_patterns() {
+        let mut draws = [0u32; PREDICATE_PARTS as usize];
+        for pattern in 0u32..(1 << 18) {
+            let bit = |i: u32| pattern >> i & 1 == 1;
+            let draw = ProofDraw {
+                near_edge: core::array::from_fn(|i| bit(i as u32)),
+                negative: core::array::from_fn(|i| bit(6 + i as u32)),
+                offset: core::array::from_fn(|i| u64::from(bit(12 + i as u32))),
+            };
+            let part = predicate_part(&draw);
+            assert_eq!(part, pattern >> 6 & 63);
+            draws[part as usize] += 1;
+        }
+        assert_eq!(draws, [1 << 12; PREDICATE_PARTS as usize]);
+    }
+
     #[test]
     fn every_proof_case_is_on_the_grid_and_passes() {
         // Every coordinate pattern of the proof's domain at offsets 0 and the bound: 4^6 sign and
@@ -442,6 +704,9 @@ mod tests {
             };
             let case = proof_case(b, &draw).unwrap();
             check(&case).unwrap();
+            for claim in CLAIMS {
+                check_claim(&case, claim).unwrap();
+            }
         }
         let mut too_far = ProofDraw {
             near_edge: [false; 6],

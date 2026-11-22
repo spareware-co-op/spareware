@@ -1,7 +1,9 @@
 //! The surface kind contract (piece G60) on the NURBS kind, a pole, a kind broken on purpose, and
 //! the `ImplicitBound` of an exact plane: every random NURBS surface keeps every law under exact,
 //! rational and certified transforms; a cone's apex keeps its normals' direction; a wrong normal
-//! bound is caught; and the plane's enclosure holds the exact value at every corner.
+//! bound is caught, by the entry without the conversions too, which keeps `check`'s verdicts on
+//! the laws it runs and never converts; and the plane's enclosure holds the exact value at every
+//! corner.
 //!
 //! Covers: `SurfaceKind::Nurbs`.
 
@@ -19,18 +21,51 @@
 )]
 
 use geom_curve::affine::int_interval;
-use geom_curve::{CurveError, DerivativeBound, Law};
+use geom_curve::{ContractError, CurveError, DerivativeBound, Law};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_num::grid::P3;
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_nurbs::{Basis, Bounds, Changed, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::contract::check;
+use geom_surface::contract::{check, check_without_conversions};
 use geom_surface::{ImplicitBound, ParamBox, ParamSurface, SurfaceForm, SurfaceKind};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
+}
+
+/// Checks that `run` ends with the meter's stop as its law's error on every budget below `whole`,
+/// running one budget of each stretch the meter cannot tell apart; returns how many stretches.
+///
+/// The meter adds a charge and then stops if its total passes the cap, so a run capped at b stops
+/// at the first charge that takes the total past b, and every cap from b to that total less one
+/// stops at the same charge after the same work: up to the stop they are one run. So the sweep
+/// runs b, reads the total its meter reached with the refused charge, and goes on from there:
+/// every place a stop can fall, each once, where running every budget ran each about 18 times
+/// over (6,872 budgets, 380 places, on the apex below). Each stretch's last budget runs too and
+/// must end in the same error as its first, so a check whose path came to depend on the cap itself
+/// fails here rather than going unseen.
+fn every_stop(whole: u64, run: impl Fn(&mut WorkMeter<'_>) -> Result<(), ContractError>) -> u64 {
+    let (mut budget, mut stretches) = (0, 0);
+    while budget < whole {
+        let mut m = WorkMeter::new(Budget::of_work(budget));
+        let e = run(&mut m).unwrap_err();
+        assert!(
+            matches!(e.error, Some(CurveError::Stopped(_))),
+            "budget {budget} of {whole}: {e}"
+        );
+        let next = u64::try_from(m.used().work).unwrap();
+        assert!(next > budget, "budget {budget}: the meter reached {next}");
+        let last = next.min(whole) - 1;
+        if last > budget {
+            let other = run(&mut WorkMeter::new(Budget::of_work(last))).unwrap_err();
+            assert_eq!(other, e, "budgets {budget} and {last} of {whole}");
+        }
+        budget = next;
+        stretches += 1;
+    }
+    stretches
 }
 
 struct Lcg(u64);
@@ -115,7 +150,44 @@ fn every_nurbs_surface_keeps_the_contract() {
         let kind = SurfaceKind::Nurbs(s.clone());
         check(&kind, &params(&s), t, &mut meter())
             .unwrap_or_else(|e| panic!("trial {trial} (enum): {e}"));
+        // Without the conversions: the same verdict, for less work.
+        let (mut whole, mut part) = (meter(), meter());
+        check(&kind, &params(&s), t, &mut whole).unwrap();
+        check_without_conversions(&kind, &params(&s), &mut part)
+            .unwrap_or_else(|e| panic!("trial {trial} (without conversions): {e}"));
+        assert!(
+            part.used().work <= whole.used().work,
+            "trial {trial}: {:?} against {:?}",
+            part.used(),
+            whole.used()
+        );
     }
+}
+
+#[test]
+fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
+    // On every budget short of what the whole check takes, the check ends with the meter's stop
+    // as the error of the law it was on: never a law broken with no error behind it, which the
+    // fuzz target reports as a finding. The repeat calls of the Deterministic law were once
+    // compared with the first answer as they came, so a stop on one read as a different answer.
+    let s = apex(false);
+    let (ps, t) = (params(&s), &transforms()[0]);
+    let mut m = meter();
+    check(&s, &ps, t, &mut m).unwrap();
+    let whole = u64::try_from(m.used().work).unwrap();
+    assert!(0 < whole && whole < 20_000, "{whole}");
+    let stretches = every_stop(whole, |m| check(&s, &ps, t, m));
+    assert!(stretches > 100, "{stretches} of {whole}");
+    assert!(check(&s, &ps, t, &mut WorkMeter::new(Budget::of_work(whole))).is_ok());
+    // The same for the entry without the conversions, which the fuzz target runs after a stop,
+    // on the first five pairs (every law it runs, at a fifth of the work).
+    let ps = &ps[..5];
+    let mut m = meter();
+    check_without_conversions(&s, ps, &mut m).unwrap();
+    let part = u64::try_from(m.used().work).unwrap();
+    assert!(0 < part && part < whole, "{part} of {whole}");
+    every_stop(part, |m| check_without_conversions(&s, ps, m));
+    assert!(check_without_conversions(&s, ps, &mut WorkMeter::new(Budget::of_work(part))).is_ok());
 }
 
 /// A cone patch whose u = 0 edge is its apex, rational or not.
@@ -154,18 +226,24 @@ fn a_pole_keeps_its_normals_direction() {
     );
 }
 
-/// A NURBS surface whose normal bound has the wrong sign.
-struct FlippedNormals(Surface<3>);
+/// A NURBS surface whose normal bound has the wrong sign, or whose conversions fail, or both.
+struct Broken {
+    inner: Surface<3>,
+    /// The normal bound has the wrong sign.
+    flip: bool,
+    /// Both conversions, the transform and the NURBS form, fail as a defect.
+    convert: bool,
+}
 
-impl ParamSurface for FlippedNormals {
+impl ParamSurface for Broken {
     fn domain(&self) -> ParamBox {
-        ParamSurface::domain(&self.0)
+        ParamSurface::domain(&self.inner)
     }
     fn point(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[f64; 3], CurveError> {
-        ParamSurface::point(&self.0, u, v, s)
+        ParamSurface::point(&self.inner, u, v, s)
     }
     fn partials(&self, u: f64, v: f64, s: (Limit, Limit)) -> Result<[[f64; 3]; 3], CurveError> {
-        self.0.partials(u, v, s)
+        self.inner.partials(u, v, s)
     }
     fn enclose(
         &self,
@@ -174,10 +252,10 @@ impl ParamSurface for FlippedNormals {
         s: (Limit, Limit),
         m: &mut WorkMeter<'_>,
     ) -> Result<[[Interval; 3]; 3], CurveError> {
-        self.0.enclose(u, v, s, m)
+        self.inner.enclose(u, v, s, m)
     }
     fn bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
-        ParamSurface::bound(&self.0, r, m)
+        ParamSurface::bound(&self.inner, r, m)
     }
     fn derivative_bound(
         &self,
@@ -185,7 +263,7 @@ impl ParamSurface for FlippedNormals {
         d: Direction,
         m: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<3>, CurveError> {
-        ParamSurface::derivative_bound(&self.0, r, d, m)
+        ParamSurface::derivative_bound(&self.inner, r, d, m)
     }
     fn partials_over(
         &self,
@@ -194,20 +272,26 @@ impl ParamSurface for FlippedNormals {
         k: usize,
         m: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; 3]>, CurveError> {
-        self.0.partials_over(r, s, k, m)
+        self.inner.partials_over(r, s, k, m)
     }
     fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
-        self.0.breaks()
+        self.inner.breaks()
     }
     fn normal_bound(&self, r: ParamBox, m: &mut WorkMeter<'_>) -> Result<Bounds<3>, CurveError> {
-        let b = self.0.normal_bound(r, m)?;
+        let b = self.inner.normal_bound(r, m)?;
+        if !self.flip {
+            return Ok(b);
+        }
         Ok(Bounds {
             lo: b.hi.map(|x| -x),
             hi: b.lo.map(|x| -x),
         })
     }
     fn to_nurbs(&self, m: &mut WorkMeter<'_>) -> Result<Changed<SurfaceForm>, CurveError> {
-        self.0.to_nurbs(m)
+        if self.convert {
+            return Err(CurveError::Defect);
+        }
+        self.inner.to_nurbs(m)
     }
     fn split(
         &self,
@@ -215,35 +299,68 @@ impl ParamSurface for FlippedNormals {
         t: f64,
         m: &mut WorkMeter<'_>,
     ) -> Result<(Changed<SurfaceKind>, Changed<SurfaceKind>), CurveError> {
-        ParamSurface::split(&self.0, d, t, m)
+        ParamSurface::split(&self.inner, d, t, m)
     }
     fn reversed(
         &self,
         d: Direction,
         m: &mut WorkMeter<'_>,
     ) -> Result<Changed<SurfaceKind>, CurveError> {
-        self.0.reversed(d, m)
+        self.inner.reversed(d, m)
     }
     fn transformed(
         &self,
         t: &TypedTransform,
         m: &mut WorkMeter<'_>,
     ) -> Result<Changed<SurfaceKind>, CurveError> {
-        self.0.transformed(t, m)
+        if self.convert {
+            return Err(CurveError::Defect);
+        }
+        self.inner.transformed(t, m)
     }
 }
 
 #[test]
 fn a_wrong_normal_bound_is_caught() {
     let s = apex(false);
-    let e = check(
-        &FlippedNormals(s.clone()),
-        &params(&s),
-        &transforms()[0],
-        &mut meter(),
-    )
-    .unwrap_err();
+    let flipped = Broken {
+        inner: s.clone(),
+        flip: true,
+        convert: false,
+    };
+    let e = check(&flipped, &params(&s), &transforms()[0], &mut meter()).unwrap_err();
     assert_eq!(e.law, Law::NormalBoundHoldsDirections, "{e}");
+}
+
+#[test]
+fn without_conversions_a_broken_kind_is_caught_as_check_catches_it() {
+    // Fault injection on the second entry: the flipped normal bound gives the error `check`
+    // gives, law, parameter and call's error alike, so the laws they share have not drifted
+    // apart. With its conversions failing as well, which `check` stops on first, the entry
+    // without them still finds it; and a kind broken in its conversions alone keeps every law
+    // that entry runs, since it never calls them.
+    let s = apex(false);
+    let (ps, t) = (params(&s), &transforms()[0]);
+    let kind = |flip, convert| Broken {
+        inner: s.clone(),
+        flip,
+        convert,
+    };
+    check_without_conversions(&kind(false, false), &ps, &mut meter()).unwrap();
+    let whole = check(&kind(true, false), &ps, t, &mut meter()).unwrap_err();
+    let part = check_without_conversions(&kind(true, false), &ps, &mut meter()).unwrap_err();
+    assert_eq!(part, whole);
+    let e = check(&kind(true, true), &ps, t, &mut meter()).unwrap_err();
+    assert_eq!(
+        (e.law, e.error),
+        (Law::TransformMovesTheCurve, Some(CurveError::Defect)),
+        "{e}"
+    );
+    let e = check_without_conversions(&kind(true, true), &ps, &mut meter()).unwrap_err();
+    assert_eq!(e, part);
+    let e = check(&kind(false, true), &ps, t, &mut meter()).unwrap_err();
+    assert_eq!(e.law, Law::TransformMovesTheCurve, "{e}");
+    check_without_conversions(&kind(false, true), &ps, &mut meter()).unwrap();
 }
 
 #[test]

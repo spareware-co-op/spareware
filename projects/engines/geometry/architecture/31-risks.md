@@ -37,7 +37,7 @@ Evidence is cited as in the chapters: a bracketed report number such as [03] is 
 | R13 | Proven-bound maths is late or does not port | Low for the five functions ported (G05); Medium for the rest | High | The maths piece not merged before the first survey piece |
 | R14 | Keeping every old version forever | Medium | High | Format museum failures; size of kept versions |
 | R15 | Hostile files | Medium | Medium to High | Reader fuzzing crashes, hangs or memory spikes |
-| R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | Unsearched families on the build path |
+| R16 | Patents on methods we use | Low each, Medium overall | Severe for core methods | A patent holder's notice about a method we use |
 | R17 | Licences and terms awaiting confirmation | High | Medium each | Number and age of ledger rows waiting on an owner |
 | R18 | Copyleft or non-free code hiding inside permissive sources | High that it is met; Medium that it gets in | High | A banned-source scanner hit |
 | R19 | Learning from proprietary programs crosses the line | Medium | High | An expected value that cites Revit or AutoCAD behaviour |
@@ -343,19 +343,16 @@ Some may stay open for years, leaving gaps where the incumbents give an approxim
 
 ### R16. Patents on methods we use
 
-**What could go wrong.** A patent protects a method, so writing our own code does not escape it. Only subdivision, T-splines, watertight trimming and lattices have been searched. Sixteen catalogue families have had no search at all (29.17), including booleans, Class-A blends, naming, offsets, clash, hidden lines and skeleton roofs. Nobody has searched EMBER, the method under the whole flat-solid core (11). Even inside the areas already searched, 18 methods adopted in chapters 13 and 16 have had no search, among them PCCM, Manifold Dual Contouring and Instant Meshes (13, 16). Known active patents sit near planned work: Autodesk's lattice hollowing (US 10,635,088), and the watertightCAD family (US 10,614,195 and two related patents), which is close to edge-first tessellation. The status of the patents found so far was read from Google Patents and is an assumption until counsel confirms it (16). Apache-2.0's patent grant does not clearly cover a re-implementation.
+**What could go wrong.** A method someone has patented may be used. A patent protects a method, so writing our own code does not escape it, and Apache-2.0's patent grant does not clearly cover a re-implementation. Known active patents sit near planned work: Autodesk's lattice hollowing (US 10,635,088), and the watertightCAD family (US 10,614,195 and two related patents), which is close to edge-first tessellation (29.17).
 
 **Likelihood:** Low for any one family; Medium over decades. **Impact:** Severe for a core method, which could be pulled after files depend on it; Medium for a niche one.
 
 **Mitigation built into the plan.**
-- The patent register. No family enters the Build stage without a recorded search and owner review, and CI enforces it (29.17; piece "Patent register").
-- The EMBER check is the first boolean piece.
 - Versioned operations let a method be replaced while old files still open from stored geometry (26.2).
-- Section 32.7 asks who searches, and who pays.
+- The owner accepts this risk as it stands (32.49).
 
 **Early warning.**
-- The register's count of unsearched families and methods on the build path.
-- Any hit in a search.
+- A patent holder's notice about a method we use.
 
 ### R17. Licences and terms awaiting confirmation
 
@@ -442,24 +439,22 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 
 ### R21. Legal work has no budget or counsel
 
-**What could go wrong.** The set leans on lawyers throughout: a patent search before the first geom-poly merge (32.7), a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait, and under 32.7's recommendation the boolean core cannot start.
+**What could go wrong.** The set leans on lawyers throughout: a legal review of OpenSubdiv's TOST licence (32.9), a reading of Onshape's terms for the ABC dataset and of step-conformance's parts (32.11), the Revit and AutoCAD terms checks (32.10), any clearance of DWG (README), and counsel's view on AI-written code (R20). K06's cost model leaves legal advice out, because no public rates were found. If no lawyer is funded, all of these wait.
 
 **Likelihood:** High. **Impact:** High.
 
 **Mitigation built into the plan.**
 - Work that needs counsel waits rather than going ahead without it.
 - Meanwhile methods come from papers and unclear data stays fetch-only (29).
-- Section 32.7 asks the owner to fund the work, and names a fallback if a lawyer cannot be funded in time.
 
 **Early warning (proposed).**
 - The number of items waiting on counsel, and the age of the oldest, in STATUS.md.
-- The first geom-poly piece ready to start with no recorded search.
 
 ## 31.5 People and process risks
 
 ### R22. Owner decisions and reviews become the bottleneck
 
-**What could go wrong.** The set raises 212 open questions and routes dozens of approvals to "an owner" or "a kernel owner": golden-hash changes, reference implementations, ledger rows, method notes, patent reviews and CI cost. Kernel owners are not named anywhere. The README also puts any change to an architecture decision to a member vote, and the set proposes dozens of amendments to the spine. A poll for each would stall the work. Pieces queue behind decisions, and contributors' tokens go elsewhere.
+**What could go wrong.** The set raises 212 open questions and routes dozens of approvals to "an owner" or "a kernel owner": golden-hash changes, reference implementations, ledger rows, method notes and CI cost. Kernel owners are not named anywhere. The README also puts any change to an architecture decision to a member vote, and the set proposes dozens of amendments to the spine. A poll for each would stall the work. Pieces queue behind decisions, and contributors' tokens go elsewhere.
 
 **Likelihood:** High. **Impact:** High.
 
@@ -544,7 +539,7 @@ A future person or AI who reads one chapter could build the wrong thing, against
 **Likelihood:** Medium to High. **Impact:** High.
 
 **Mitigation built into the plan.**
-- Deterministic count gates are cheap and run on every pull request; wall clock runs nightly.
+- Deterministic count gates are cheap and run on every pull request; wall clock runs once on a gate's commit (decision 32.53).
 - Each check runs at a stated tier (28.17).
 - Costs are recorded in K06.
 - OSS-Fuzz is an option (28).
@@ -599,7 +594,6 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The edition guarantee and checker fixes: the guarantee covers valid results only | 28 | 32.4 |
 | Who approves as a kernel owner; who reviews proofs; who accepts spine amendments; who sets the kernel's share of Spare Construct's targets | 23, 26, 28, 29 | 32.5 |
 | GPL and LGPL tools as out-of-process oracles; reading GPL source; Numerical Recipes code in oracle builds; the method-only procedure as the standard; the Unlicense and CC0-1.0 on the code allow-list | 24, 28, 29 | 32.6; the out-of-process oracles decided yes by owner action G75 |
-| Patent searches, who does them and who pays: EMBER, Lifted Surfacing, Topological Offsets, transfinite patches, developable lofts, sheet-metal unfolding, the section 16 methods, Autodesk US 10,635,088, nTop's filings, IntegrityWare's claim, the sixteen unsearched families, and the trade mark and any patent on "Viennese Bend". The Google Patents status of the Pixar, Stam, T-spline and watertightCAD patents is an assumption until counsel confirms | 11, 13, 16, 17, 29 | 32.7, then piece "Patent register" |
 | NLib's chain of title, the narrowing of option D, how "notices kept" is done, and an issue to NVIDIA | 12, 29 | 32.8, decided 2026-10-24: A, for all of the SMLib release |
 | Writing to EMBER's authors, the csgrs and Hyper author, CADCraft, tangency-labs, McNeel (openNURBS, and so Rhino subdivision exchange) and Pixar (OpenSubdiv's TOST licence); the order of contacts | 11, 14, 16, 24, 29 | 32.9 |
 | Revit exports in a public repository; anonymised real projects; an AutoCAD seat and terms check; the ruling on black-box observation of proprietary programs, and so CADCraft's test scenarios; checking our exports in proprietary programs | 14, 28, 29 | 32.10 |
@@ -705,8 +699,9 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Re-check 8.1's "the structure Parasolid documents publicly" against Siemens's own pages and cite Weiler, Mäntylä and Jackson, because the evidence read a third-party copy | 29 | Editorial fix to 8.1 |
 | Euler's formula for general, non-manifold bodies: the checker holds solids and sheets to it, shell by shell, and a general body only to the first stage of group 1; the non-manifold form (radial-edge counts) is to be chosen | G84 build | Kernel owners, with the first operation that makes a general body |
 | Where a body's exactness record lives: the checker takes it beside the body, from the operation's `OpOutput`; whether `Body` itself carries it, as the native format's body index stores it (24.2) | G84 build | Piece "Body records" |
-| The full checker in release test builds: `geom-check`'s `full` feature runs every group at `Level::of_build()`; which test builds turn it on, beside the shipped leg of the determinism matrix (28.4) | G84 build | Piece "Determinism matrix for operation logs" |
+| The full checker in release test builds: `geom-check`'s `full` feature runs every group at `Level::of_build()`; which test builds turn it on, beside the shipped leg of the determinism matrix (28.4) | G84 build | Decided, 32.48 (2026-11-13): every test build turns it on, through `geom-test`'s default feature `full-checker`; one leg builds without it, `kernel.yml`'s shipped-checker step, and no operation's answer may depend on which a build runs |
 | Regions when each face names one shell: a solid body's shells belong to its solid regions and the outside void has none, as G80's wall body is built, so a void cavity has no shell of its own; whether faces need a shell on each side, as Parasolid's do, for cellular models (rooms as regions, 8.1) | G84 build | Pieces "Builder, Euler operators and attributes" and "Cells, rooms and space boundaries" |
+| Chapter 23.9 says the instance record holds a persistent `InstanceKey` and leaves its box in the tree's leaf; 19.12 says the record is a definition handle, a placement and the box, and that it is the only place the record is defined. `geom_topo::placed::Placed` follows 19.12, and `InstanceKey` waits for the instance tree | G145 build | Piece "Spatial index and clash" |
 | Two shells where every vertex of one is a vertex of the other have no vertex to decide their nesting by, and fail closed as `PairUnchecked` (8.3, as built G102); a point inside a face would decide it, once a face has an exact interior point to offer | G102 build | Piece "Checker groups 2 and 3 for curved geometry" |
 | Which query on `Face.bound` of a curved face first needs the surface's certified extent: nothing culls on it yet, and group 3 tests every pair without culling | G102 build | Piece "Checker groups 2 and 3 for curved geometry" |
 | Bodies with implicit vertices: `geom_topo::mass` takes corners as a list, and `Body`'s points are grid points; how an implicit vertex reaches a body, and so how `query.volume` answers with an interval and a certified class | G102 build | Piece "Booleans of flat bodies" and its plane-based bodies |
@@ -743,7 +738,9 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Confirm the departures from the review: IfcBoxedHalfSpace treated as a plain half-space; Contact::Within replaced by close_near_contacts; the exact path chosen by form, not class; milling on the exact path | 11 | Acceptance of chapter 11 |
 | Can the arrangement split cells at grid positions that do not depend on content, so a local re-cut is bit-identical to a full one? Otherwise the 4 ms door move holds only up to about 50 openings | 23 | Pieces "Adaptive subdivision and the parallel task tree" and "Local re-cut" |
 | Names in symmetric selections: qualify by operand key only on a collision (chosen), or always | 11 | Piece "Boolean names and history" |
+| Can a local re-cut keep, beside the solved boxes, each later stage's state (operand preparation, the cell, box keys, the merge's sorted points and lines, names, the certificate) keyed by its inputs, and redo only what the move touched, so its cost follows the move while its result stays bit for bit a full cut's? Measured in the 300-opening wall: after the boxes and the merge's sorts, the door move is 1.66 billion instructions spread over the merge (43%), naming (26%), the cell (14%), box keys (12%) and preparation (9%), each paid for the whole wall (G139 build) | 11, 23 | Piece "Arrangement cache and incremental re-cut" (G139), owner's decision of 2026-11-03: yes, in G139; the law and design in `projects/kit/notes/G139-incremental-rebuild.md` |
 | Booleans with subdivision operands near extraordinary vertices depend on section 16's certified Stam bounds; otherwise they fail, with a NURBS conversion as the remedy | 11 | Piece "SubD limit surface kind" (16) |
+| What G148's "3 times EMBER's 1.6 ms" is timed against, when EMBER's output is a polygon soup (each output polygon part of an input polygon) and G148's boolean also merges into maximal faces and builds a mesh | G148 build | Decision note `projects/kit/notes/G148-stage-budgets.md`: the soup stage, `geom_mesh::boolean::soup`, against 3 times EMBER, unchanged; the merge and build against 0.5 µs for each kept piece and each result face, two of G146's builds; the whole time reported beside both |
 
 ### Chapter 12: Intersections
 
@@ -949,7 +946,7 @@ Proposed in 31.5 (R23) and 32.5: one consolidated crate-list note settles all of
 | The drawing checker in geom-draw (chosen), or one checker crate moved above geom-draw | 18 | Piece "Drawing checker" |
 | Continuous collision detection lives in geom-spatial | 19 | Piece "Time of first contact (Tight Inclusion method)" |
 | Sheet metal reuses geom-panel's unroll, or unrolling moves to a shared crate; subdivision displacement belongs to a content-creation toolkit | 16 | Decision note under 26.1 when a second program needs it |
-| Add geometry/PROVENANCE.md, NOTICE, methods/ and PATENTS.md to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
+| Add geometry/PROVENANCE.md, NOTICE and methods/ to 26.3's file table and 27's folder tree | 29 | Editorial fix; piece "Provenance records" |
 | Chapter 27's table and the scaffold's `table.rs` (G09) are two copies of the crate graph that nothing compares | G09 build | Piece "MAP.json generator and module-header grammar", or the merge gate |
 | The header grammar: G09's interim grammar (job, layer, invariants, sections), its Status and "dependencies still to add" lines, which name board pieces and go stale when a piece splits (30.7), and which chapters a Sections line lists. `geom-num` has no Layer line, which G09's table records as a known gap. G11's development crates state their job but no layer, invariants or sections in that grammar, so the scaffold check fails on them when G09 and G11 have both merged | G09 and G11 builds; 26, 27 | Piece "MAP.json generator and module-header grammar" |
 | Content hashes for reuse below `geom-format`: 23.8 puts hashing, `CacheKey` and the memo store in `geom-format` (27, accepted in 32.13), but `geom-bool`'s arrangement cache (11.6), `geom-draw`'s per-element caches (18.9) and `geom-spatial`'s instances (19.11, 19.12) key by content hash and sit below it. Either the caller passes the hash in as a key, or the hash of canonical bytes moves into `geom-op`'s canonical encoder, as NameId hashing already does (30.6) | 11, 18, 19, 23; G08 | Piece "Canonical encoder and safe hash" (G86) |

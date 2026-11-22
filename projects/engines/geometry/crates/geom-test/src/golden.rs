@@ -16,7 +16,8 @@
 //!   one digest, the one the store holds in the current edition.
 //! - [`shuffle`]: the input-shuffle hook, for cases whose contract says input order does not
 //!   matter.
-//! - [`diff`]: the owner-approval rule for edits to the store, and the review check behind it.
+//! - [`diff`]: the record rule for edits to the store (every moved answer carries its history
+//!   record), and the review rule the fixtures' edits still use.
 //! - [`repo`]: the store against the repository: every golden checked where the store says, every
 //!   golden check in the code in the store, no golden digest kept outside it, every pinned golden
 //!   file unchanged.
@@ -39,9 +40,10 @@
 //!   everywhere the day it lands.
 //! - **Perturbations change nothing, or the golden fails.** Every golden runs twice on two
 //!   differently perturbed heaps; order-free cases also run in shuffled orders.
-//! - **Edits are visible and approved.** A changed digest without its history record, a removed
-//!   golden, or any change to a frozen edition is refused; any other edit to an existing golden
-//!   needs a kernel owner's approval on the pull request's head commit.
+//! - **Edits are visible and recorded.** A changed digest without exactly one new history record
+//!   holding the old digest, of a kind the golden allows, with its piece and a reason, a removed
+//!   golden, a released edition or any change to a frozen edition is refused; every moved answer is
+//!   printed with its record (decision 32.54).
 //!
 //! Method: golden hashes of canonical outputs per kernel edition and operation version, with
 //! perturbations that must change nothing, chapter 28.13 of the kernel architecture

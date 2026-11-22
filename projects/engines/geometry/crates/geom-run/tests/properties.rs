@@ -28,6 +28,8 @@
 )]
 
 mod common;
+#[macro_use]
+mod slices;
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
@@ -60,6 +62,33 @@ fn cap() -> impl Strategy<Value = u64> {
     prop_oneof![0_u64..20, 0_u64..2000, Just(u64::MAX)]
 }
 
+// filter_ordered is a plain filter: in quarters of its one stream of cases from the fixed seed
+// (decision 32.78, `slices`).
+sliced!(
+    filter_ordered_is_a_plain_filter,
+    config(192),
+    (prop::collection::vec(0_u32..10, 0..400), 1_usize..80),
+    |(values, size)| {
+        let expected: Vec<usize> = (0..values.len()).filter(|&i| values[i] < 3).collect();
+        let keep = |_: usize, x: &u32, _: &mut WorkMeter<'_>| Ok::<_, Stopped>(*x < 3);
+        for (name, exec) in few_execs() {
+            let got = exec.filter_ordered(&mut unlimited(), PHASE, plan(size), &values, keep);
+            prop_assert_eq!(got, Ok(expected.clone()), "{}", name);
+        }
+        Ok(())
+    }
+);
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(config(192).cases, "a property's 192 cases");
+}
+
 proptest! {
     #![proptest_config(config(192))]
 
@@ -87,19 +116,6 @@ proptest! {
         for (name, exec) in few_execs() {
             let got = exec.find_first(&mut unlimited(), PHASE, plan(size), &hits, matches);
             prop_assert_eq!(got, Ok(expected), "{}", name);
-        }
-    }
-
-    #[test]
-    fn filter_ordered_is_a_plain_filter(
-        values in prop::collection::vec(0_u32..10, 0..400),
-        size in 1_usize..80,
-    ) {
-        let expected: Vec<usize> = (0..values.len()).filter(|&i| values[i] < 3).collect();
-        let keep = |_: usize, x: &u32, _: &mut WorkMeter<'_>| Ok::<_, Stopped>(*x < 3);
-        for (name, exec) in few_execs() {
-            let got = exec.filter_ordered(&mut unlimited(), PHASE, plan(size), &values, keep);
-            prop_assert_eq!(got, Ok(expected.clone()), "{}", name);
         }
     }
 

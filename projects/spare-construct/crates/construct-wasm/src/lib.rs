@@ -28,6 +28,10 @@ impl Session {
 
     /// Runs one command with its parameters as JSON text and gives the result as JSON text; an error is thrown as an `Error`
     /// whose message says what went wrong and which has `code` and `details` properties.
+    ///
+    /// # Errors
+    ///
+    /// That `Error`, when the parameters aren't JSON or the command fails.
     pub fn command(&mut self, name: &str, params_json: &str) -> Result<String, JsValue> {
         let params: serde_json_lite::Parsed = serde_json_lite::parse(params_json);
         match params {
@@ -37,7 +41,7 @@ impl Session {
                 Err(e) => Err(error_value(
                     e.code,
                     &e.message,
-                    e.details.as_ref().map(|d| d.to_string()),
+                    e.details.as_ref().map(ToString::to_string),
                 )),
             },
         }
@@ -49,6 +53,7 @@ impl Session {
     }
 
     /// Every command as JSON text: name, description, whether it changes the project and the JSON Schema of its parameters.
+    #[must_use]
     pub fn commands() -> String {
         ApiSession::commands_json()
     }
@@ -68,6 +73,13 @@ impl Session {
     }
 
     /// A number that goes up each time the project changes.
+    #[must_use]
+    // Bound: the revision goes up by one per change, so it stays far below 2^53, below which every
+    // whole number is exact as an f64 (JavaScript's number).
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a revision stays below 2^53, where f64 is exact"
+    )]
     pub fn revision(&self) -> f64 {
         self.inner.revision() as f64
     }

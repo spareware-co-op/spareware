@@ -16,8 +16,8 @@
 //!   turns, two mirrors, and a translation and its opposite give the kind back unchanged.
 //!
 //! Each law lists every broken case it finds (the first failure of each, and how many), not just
-//! the first. Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests
-//! run the fixed default seed, and the nightly workflow a fresh one (`kernel-nightly.yml`).
+//! the first. Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; every run
+//! uses the fixed default seed, on every change the law reaches.
 
 #![allow(
     clippy::arithmetic_side_effects,

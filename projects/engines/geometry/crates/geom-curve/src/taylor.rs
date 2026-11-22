@@ -29,6 +29,24 @@
 //!
 //! Cost: per piece, one enclosure of p derivatives, one derivative bound of order p + 1 and
 //! O(p²·D) interval operations; n pieces.
+//!
+//! What the work costs: the pieces are cut from the kind's data (a helix's or an involute's
+//! turns, an offset's or a transition's derivative bounds, a swept surface's rail), so the meter
+//! is what bounds them, and each piece is charged what it costs, at the curve kinds' rate of about
+//! 285 instructions a unit (`crate::offset`, "What the work costs"). The kind charges its own
+//! enclosures and derivative bounds; the stored coefficients are a unit each, n·p + 1 in all,
+//! charged before they are allocated; and each piece's change to Bernstein form is [`TERM_WORK`]
+//! for each coordinate and once more for the term's factor, in each of the (p + 1)·(p + 2) terms
+//! of its two sums ([`change_work`]): 440 units at degree 9 in three dimensions. Measured, in
+//! instructions of a release build (callgrind, 200 pieces of a polynomial at degrees 1, 2, 3, 5, 9
+//! and 12, in two and three dimensions): the change costs about 270 + 250·D a term, one interval
+//! product and one sum for each coordinate and for the factor (85,000 a piece at degree 9 in two
+//! dimensions, 113,000 in three), so its charge is 0.94 to 1.11 times its cost; the rest of a
+//! piece outside the kind (its Taylor coefficients, the remainder's arithmetic and its share of
+//! the curve built at the end) is 26,000 to 31,000 at degree 9, which the coefficients' units and
+//! the change's margin hold, so a piece of degree 9 costs about 320 instructions for each unit it
+//! is charged. Before issue #837 the change was free and a piece of degree 9 was charged its nine
+//! coefficients, about 30 times less than it costs.
 
 #![allow(
     clippy::many_single_char_names,
@@ -47,6 +65,36 @@ use crate::map::{NurbsForm, ParamMap};
 use crate::param::{DerivativeBound, ParamCurve};
 use crate::rational::{breaks, pieces};
 use crate::tight::{self, point};
+
+/// The work units one term of a piece's change to Bernstein form is charged for each coordinate,
+/// and once more for the term's factor (module documentation, "What the work costs"): one
+/// interval product and one sum, about 260 instructions.
+pub const TERM_WORK: u64 = 1;
+
+/// The work units the change to Bernstein form of one piece of degree `degree` in `dimension`
+/// coordinates is charged: [`TERM_WORK`] for each coordinate and for the factor, in each of the
+/// (degree + 1)·(degree + 2) terms of its two sums, the power form's and the Bernstein form's
+/// (module documentation, "What the work costs"). 440 at degree 9 in three dimensions.
+///
+/// # Errors
+///
+/// [`CurveError::Defect`] for a count that passes `u64`, which no degree a NURBS curve can have
+/// reaches.
+pub fn change_work(degree: usize, dimension: usize) -> Result<u64, CurveError> {
+    let terms = degree
+        .checked_add(1)
+        .and_then(|a| degree.checked_add(2).and_then(|b| a.checked_mul(b)));
+    let per = dimension.checked_add(1);
+    let (Some(terms), Some(per)) = (terms, per) else {
+        return Err(CurveError::Defect);
+    };
+    let terms = u64::try_from(terms).map_err(|_| CurveError::Defect)?;
+    let per = u64::try_from(per).map_err(|_| CurveError::Defect)?;
+    terms
+        .checked_mul(per)
+        .and_then(|x| x.checked_mul(TERM_WORK))
+        .ok_or(CurveError::Defect)
+}
 
 /// The binomial coefficient C(n, k) as an exact double (n ≤ 28: at most C(28, 14) = 40 116 600).
 fn binomial(n: usize, k: usize) -> Result<f64, CurveError> {
@@ -322,6 +370,7 @@ pub fn from_cuts<K: ParamCurve<D>, const D: usize>(
     let mut knots = Vec::with_capacity(count_points.saturating_add(p).saturating_add(1));
     let mut deviation = point(0.0)?;
     let order = p.checked_add(1).ok_or(CurveError::Defect)?;
+    let change = change_work(p, D)?;
     for k in 0..n {
         let (Some(&t0), Some(&t1), Some(e0), Some(e1)) = (
             cuts.get(k),
@@ -344,6 +393,8 @@ pub fn from_cuts<K: ParamCurve<D>, const D: usize>(
         }
         let alpha = tight::sub(point(t0)?, point(m)?)?;
         let beta = tight::sub(point(t1)?, point(t0)?)?;
+        // Charged before it is made, so the budget stops a conversion of too many pieces.
+        meter.charge(change)?;
         let coeffs = bernstein(&c, alpha, beta)?;
         let mut piece = point(0.0)?;
         if let Some(r) = remainder(kind, (t0, t1), p, meter)? {

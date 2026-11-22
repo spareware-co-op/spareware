@@ -38,14 +38,17 @@ pub struct Screenline {
 
 impl Screenline {
     /// `sl.type`.
+    #[must_use]
     pub fn type_text(&self) -> String {
         self.kind.js_string()
     }
     /// `sl.type === t`.
+    #[must_use]
     pub fn is_type(&self, t: &str) -> bool {
         self.kind.as_text_is(t)
     }
     /// `sl.role === 'valid'`.
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.role.as_text_is("valid")
     }
@@ -96,7 +99,7 @@ pub struct TurnSite {
     /// Id.
     #[serde(default)]
     pub id: String,
-    /// Site reference (the file's site_id).
+    /// Site reference (the file's `site_id`).
     #[serde(default, rename = "ref", skip_serializing_if = "Maybe::is_missing")]
     pub reference: Num,
     /// Name.
@@ -120,7 +123,7 @@ pub struct TurnSite {
     /// "valid", "me" or "off".
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub role: Num,
-    /// "measured_hour" or "modelled".
+    /// "`measured_hour`" or "modelled".
     #[serde(default, rename = "obs_method", skip_serializing_if = "Maybe::is_missing")]
     pub obs_method: Num,
     /// Longest count interval (minutes).
@@ -181,6 +184,7 @@ pub struct CalibStore {
 
 impl CalibStore {
     /// `store()` as a read: what the project holds (empty when it holds nothing; the project is not changed).
+    #[must_use]
     pub fn read(p: &Project) -> CalibStore {
         p.data
             .get()
@@ -198,14 +202,17 @@ impl CalibStore {
                 extra: Map::new(),
             });
         }
-        let v = serde_json::to_value(self).expect("a store serialises");
-        p.data
-            .get_mut()
-            .expect("just made")
-            .extra
-            .insert("calib".to_string(), v);
+        // A store is plain data with text keys, so serialising it to a JSON value cannot fail
+        let Ok(v) = serde_json::to_value(self) else {
+            return;
+        };
+        // P.data was made above when it was not set
+        if let Some(d) = p.data.get_mut() {
+            d.extra.insert("calib".to_string(), v);
+        }
     }
     /// `store().roles[id]`.
+    #[must_use]
     pub fn role(&self, id: &str) -> &Num {
         self.roles.num_at(id)
     }
