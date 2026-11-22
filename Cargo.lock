@@ -534,11 +534,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-formulas"
+version = "0.0.0"
+dependencies = [
+ "dashu-int 0.6.2",
+ "dashu-ratio 0.6.1",
+ "winnow 0.7.15",
+]
+
+[[package]]
 name = "construct-interop"
 version = "0.0.0"
 dependencies = [
  "construct-elements",
  "construct-model",
+]
+
+[[package]]
+name = "construct-materials"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-params",
+ "construct-styles",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -559,6 +580,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "engine-geometry",
  "kit-core",
  "kit-ops",
  "num-rational",
@@ -591,6 +613,7 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-types",
+ "engine-geometry",
  "hex",
  "kit-core",
  "kit-ops",
@@ -616,6 +639,7 @@ dependencies = [
 name = "construct-solver"
 version = "0.0.0"
 dependencies = [
+ "engine-geometry",
  "nalgebra",
  "num-dual",
  "serde",
@@ -697,6 +721,7 @@ dependencies = [
 name = "construct-workshop"
 version = "0.0.0"
 dependencies = [
+ "construct-formulas",
  "engine-geometry",
  "serde",
  "serde_json",

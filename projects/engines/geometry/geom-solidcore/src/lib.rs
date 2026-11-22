@@ -40,6 +40,10 @@
 //! point in grid steps, not `geom-curve` kinds; the converted body's entities are not named by
 //! role (chapter 20) yet.
 //!
+//! For programs: [`engine::SolidcoreEngine`] answers the kernel's engine seam (`geom_op::engine`,
+//! which programs reach through `engine-geometry`), extruding by solidcore and subtracting by the
+//! kernel's own `geom-bool`.
+//!
 //! Method: solidcore at commit 1d8e14b46dedccbb03572956e7c708782fef1b8f of the project's fork of
 //! tangency-labs/solidcore (Apache-2.0); its methods are SMLib's. Its record of a body is written
 //! by its own `solidcore-convert` and read here.
@@ -51,10 +55,11 @@
 //! SPDX-License-Identifier: Apache-2.0
 
 pub mod convert;
+pub mod engine;
 
 use std::fmt;
 
-use geom_num::{GridStep, P3, Steps};
+use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_topo::Body;
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -146,6 +151,8 @@ impl std::error::Error for Error {}
 pub struct Solid {
     brep: Brep,
     body: Body,
+    /// The exactness the body was checked at.
+    exactness: Exactness,
     /// The centre and radius the modeller made the solid with, when it is a ball.
     ball: Option<(P3, Steps)>,
 }
@@ -155,6 +162,12 @@ impl Solid {
     #[must_use]
     pub fn body(&self) -> &Body {
         &self.body
+    }
+
+    /// The exactness class the body was checked at.
+    #[must_use]
+    pub fn exactness(&self) -> Exactness {
+        self.exactness
     }
 }
 
@@ -399,8 +412,8 @@ impl Modeller {
             operation,
             what: u.0,
         };
-        let body = if solidcore::topology::brep::p1::num_faces(&brep) == 0 {
-            convert::empty().map_err(unconverted)?
+        let (body, exactness) = if solidcore::topology::brep::p1::num_faces(&brep) == 0 {
+            (convert::empty().map_err(unconverted)?, Exactness::Exact)
         } else {
             // The record is written from a copy: solidcore adds the pcurves it lacks to the body
             // it writes, and the body returned stays as solidcore made it.
@@ -412,17 +425,19 @@ impl Modeller {
                 })?;
             let (body, exactness) =
                 convert::body_of(&record, &order, self.step).map_err(unconverted)?;
-            convert::checked(body, exactness).map_err(|r| match r {
+            let body = convert::checked(body, exactness).map_err(|r| match r {
                 Refusal::Unconverted(u) => unconverted(u),
                 Refusal::Failed { first, faults } => Error::CheckFailed {
                     operation,
                     report: format!("geom-check found {faults} faults, the first: {first}"),
                 },
-            })?
+            })?;
+            (body, exactness)
         };
         Ok(Solid {
             brep,
             body,
+            exactness,
             ball: None,
         })
     }

@@ -1,9 +1,9 @@
 //! The exact values a drawing's pens and patterns are made of.
 //!
-//! A printed line is a fraction of a millimetre wide, so the whole-millimetre rule for model
-//! lengths (FORMAT.md of `construct-model`) is too coarse here. Printed lengths are stored as
-//! whole micrometres in a `u32`: 0.13 mm is 130. A drawing's printed sizes are not model
-//! lengths: they do not change when the model or the view scale does. A float appears only in
+//! A printed line is a fraction of a millimetre wide, and it is a size on paper, not a model
+//! length (model lengths are the geometry kernel's grid steps, note CON-A2-F3-P1, on which a
+//! micrometre is not whole). Printed lengths are stored as whole micrometres in a `u32`: 0.13 mm
+//! is 130. A drawing's printed sizes do not change when the model or the view scale does. A float appears only in
 //! [`Micrometres::as_mm`], for showing a value.
 
 use crate::error::StyleError;

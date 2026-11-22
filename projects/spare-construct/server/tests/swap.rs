@@ -51,6 +51,7 @@ impl Geometry for Prisms {
             engine: "test.prisms".to_owned(),
             version: 9,
             name_scheme: 4,
+            report: None,
         }
     }
 

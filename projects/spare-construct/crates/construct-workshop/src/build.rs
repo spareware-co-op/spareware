@@ -1,8 +1,11 @@
 //! A part's recipe, built by the geometry kernel.
 //!
-//! The recipe, as JSON: `{ params: [{ name, value }], features: [{ id, type, name, ... }], end }`. A
-//! value is a number of millimetres or counts, or the name of a parameter. Features before `end` are
-//! built in order; the rest are rolled back. The answer:
+//! The recipe, as JSON: `{ params: [{ name, value, kind }], features: [{ id, type, name, ... }], end }`.
+//! A value is a number of millimetres or counts, the name of a parameter, or a formula of parameters
+//! with units, such as `width / 2 - 4 mm` (`construct-formulas`, shared with families). A parameter's
+//! `kind` is `length` (the default), `angle` or `count`, and its formula may use the others in any
+//! order; a loop of formulas is refused. Features before `end` are built in order; the rest are
+//! rolled back. The answer:
 //! `{ engine, params, features: [{ id, state, message, bodies }], bodies, volume, bbox }`, where a
 //! feature's state is `built`, `waits`, `failed`, `suppressed` or `rolled_back`, and a body says how to
 //! draw it (its profile, height and the map from the profile's place to where it is) and what the
@@ -16,6 +19,7 @@
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
+use construct_formulas::{Entry, FormulaError, Kind, Quantity, evaluate, value_of};
 use engine_geometry::operations::{
     Instance, Made, Moved, PrismInput, RoundInput, bounding_box, cylinder, faces, mirror, move_by,
     pattern, prism, six_volume,
@@ -87,8 +91,12 @@ pub struct ParamRow {
     pub state: &'static str,
     /// Why it failed, or nothing.
     pub message: String,
-    /// Its value, once read.
+    /// Its value, once read, in millimetres, degrees or as a count.
     pub value: Option<f64>,
+    /// `length`, `angle` or `count`.
+    pub kind: &'static str,
+    /// Whether it is a formula of other parameters rather than a number.
+    pub formula: bool,
 }
 
 /// A feature, as built.
@@ -148,18 +156,18 @@ pub struct BodyOut {
 }
 
 /// Why a feature was not built.
-enum Refusal {
+pub(crate) enum Refusal {
     Failed(String),
     Waits(String),
 }
-type Res<T> = Result<T, Refusal>;
-fn fail<T>(m: impl Into<String>) -> Res<T> {
+pub(crate) type Res<T> = Result<T, Refusal>;
+pub(crate) fn fail<T>(m: impl Into<String>) -> Res<T> {
     Err(Refusal::Failed(m.into()))
 }
 fn waits<T>(m: impl Into<String>) -> Res<T> {
     Err(Refusal::Waits(m.into()))
 }
-fn refused(e: &OpError) -> Refusal {
+pub(crate) fn refused(e: &OpError) -> Refusal {
     Refusal::Failed(format!("The kernel refused it: {}", e.message()))
 }
 
@@ -193,11 +201,11 @@ enum Left {
     Bodies(Vec<String>),
 }
 
-const IDENTITY: [f64; 12] = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.];
+pub(crate) const IDENTITY: [f64; 12] = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.];
 
 /// `a` then `b`: the map that applies `a` first.
 #[allow(clippy::needless_range_loop)] // the indices are the matrix's rows and columns
-fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
+pub(crate) fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
     let mut r = [0.0; 12];
     for i in 0..3 {
         for j in 0..4 {
@@ -210,7 +218,7 @@ fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
     }
     r
 }
-fn translation(d: [f64; 3]) -> [f64; 12] {
+pub(crate) fn translation(d: [f64; 3]) -> [f64; 12] {
     [1., 0., 0., d[0], 0., 1., 0., d[1], 0., 0., 1., d[2]]
 }
 fn mirror_map(axis: usize, at: f64) -> [f64; 12] {
@@ -220,14 +228,14 @@ fn mirror_map(axis: usize, at: f64) -> [f64; 12] {
     m
 }
 
-fn mm(steps: i64) -> f64 {
+pub(crate) fn mm(steps: i64) -> f64 {
     // a coordinate is at most 2^40 - 1 steps, so it converts to f64 exactly
     #[allow(clippy::cast_precision_loss)]
     let v = steps as f64;
     v / STEPS_PER_MM
 }
 /// Millimetres to the nearest grid step, rounding a half step up, as the page's prototype rounds.
-fn steps(v: f64) -> Res<i64> {
+pub(crate) fn steps(v: f64) -> Res<i64> {
     let s = (v * STEPS_PER_MM + 0.5).floor();
     #[allow(clippy::cast_precision_loss)]
     let reach = COORD_MAX as f64;
@@ -242,28 +250,42 @@ fn q(v: f64) -> Res<f64> {
     Ok(mm(steps(v)?))
 }
 
-/// The parameters read so far.
-type Env = BTreeMap<String, f64>;
+/// The parameters that have values, exactly.
+type Env = BTreeMap<String, Quantity>;
 
-fn value(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
+/// A parameter's value for a formula, or why it has none.
+fn lookup(env: &Env, name: &str) -> Result<Quantity, FormulaError> {
+    env.get(name).cloned().ok_or_else(|| FormulaError {
+        code: "UnknownName",
+        message: format!("there is no parameter called {name}, or it fails."),
+    })
+}
+
+/// A field's value of `kind`: a number in the kind's own unit, a parameter's name or a formula. A
+/// formula is worked out exactly and meets one rounding, to the nearest double, here.
+fn value_as(env: &Env, v: Option<&Value>, what: &str, kind: Kind) -> Res<f64> {
     match v {
         Some(Value::Number(n)) => n
             .as_f64()
             .map_or_else(|| fail(format!("{what} is not a number.")), Ok),
         Some(Value::String(s)) if !s.trim().is_empty() => {
-            let t = s.trim();
-            if let Ok(x) = t.parse::<f64>()
-                && x.is_finite()
-            {
-                return Ok(x);
+            match value_of(s, kind, &mut |name| lookup(env, name)) {
+                Ok(x) => Ok(x.to_f64()),
+                Err(e) => fail(format!("{what}: {}", lower(&e.message))),
             }
-            env.get(t).copied().map_or_else(
-                || fail(format!("{what}: there is no parameter called {t}.")),
-                Ok,
-            )
         }
         _ => fail(format!("{what} is not set.")),
     }
+}
+fn value(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
+    value_as(env, v, what, Kind::Length)
+}
+/// A message, to follow a colon.
+fn lower(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_lowercase().collect::<String>() + chars.as_str()
+    })
 }
 fn length(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
     q(value(env, v, what)?)
@@ -276,7 +298,7 @@ fn positive(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
     Ok(x)
 }
 fn whole(env: &Env, v: Option<&Value>, what: &str, lo: u32, hi: u32) -> Res<u32> {
-    let x = value(env, v, what)?;
+    let x = value_as(env, v, what, Kind::Count)?;
     if x.fract() != 0.0 || x < f64::from(lo) || x > f64::from(hi) {
         return fail(format!("{what} must be a whole number from {lo} to {hi}."));
     }
@@ -412,14 +434,14 @@ fn profile(env: &Env, f: &Map<String, Value>) -> Res<Profile> {
 
 /// The context for one kernel operation: its path names the feature and the step within it, so every
 /// face the part has gets a name of its own (kernel chapter 20).
-fn ctx(feature: usize, step: u32) -> OpContext<'static> {
+pub(crate) fn ctx(feature: usize, step: u32) -> OpContext<'static> {
     let mut id = [0_u8; 16];
     id[..8].copy_from_slice(&(feature as u64).to_be_bytes());
     id[8..12].copy_from_slice(&step.to_be_bytes());
     OpContext::new(OpPath::new(OpId::from_bytes(id)), Budget::UNLIMITED)
 }
 
-fn class(e: Exactness) -> (&'static str, Option<u64>) {
+pub(crate) fn class(e: Exactness) -> (&'static str, Option<u64>) {
     match e {
         Exactness::Certified { bound, .. } => ("Certified", Some(bound.get())),
         Exactness::Approximate { .. } => ("Approximate", None),
@@ -494,7 +516,7 @@ fn axis_of(f: &Map<String, Value>) -> Res<(Axis, usize, char)> {
     }
 }
 
-fn fmt_mm(v: f64) -> String {
+pub(crate) fn fmt_mm(v: f64) -> String {
     let r = (v * 1000.0).round() / 1000.0;
     if r == r.trunc() {
         format!("{r:.0}")
@@ -519,7 +541,7 @@ fn length0(env: &Env, f: &Map<String, Value>, k: &str, what: &str) -> Res<f64> {
         v => length(env, v, what),
     }
 }
-fn point(p: [i64; 3]) -> Res<P3> {
+pub(crate) fn point(p: [i64; 3]) -> Res<P3> {
     P3::new(p[0], p[1], p[2])
         .map_err(|_| Refusal::Failed("A corner lands past the kernel's reach for parts.".into()))
 }
@@ -858,56 +880,81 @@ impl Builder<'_> {
     }
 }
 
-/// A parameter's value, checked.
-fn read_param(env: &Env, name: &str, v: Option<&Value>) -> Res<f64> {
-    let ok = name
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-    if !ok {
-        return fail("A name is letters, digits and _, starting with a letter.");
+/// The parameter table, worked out: every parameter's value of its kind, in any order, with loops
+/// of formulas refused (`construct_formulas::evaluate`).
+fn read_params(part: &Value) -> (Env, Vec<ParamRow>) {
+    let list: &[Value] = part
+        .get("params")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice);
+    let kind_of = |p: &Value| -> (Kind, &'static str) {
+        match p.get("kind").and_then(Value::as_str) {
+            Some("angle") => (Kind::Angle, "angle"),
+            Some("count") => (Kind::Count, "count"),
+            _ => (Kind::Length, "length"),
+        }
+    };
+    let entries: Vec<Entry> = list
+        .iter()
+        .map(|p| Entry {
+            name: p
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            text: match p.get("value") {
+                Some(Value::Number(n)) => n.to_string(),
+                Some(Value::String(s)) => s.clone(),
+                _ => String::new(),
+            },
+            kind: kind_of(p).0,
+        })
+        .collect();
+    let mut env = Env::new();
+    let mut rows = Vec::new();
+    for ((p, entry), result) in list.iter().zip(&entries).zip(evaluate(&entries)) {
+        let formula = matches!(p.get("value"), Some(Value::String(s))
+            if s.trim().parse::<f64>().is_err());
+        let kind = kind_of(p).1;
+        match result {
+            Ok(value) => {
+                rows.push(ParamRow {
+                    name: entry.name.clone(),
+                    state: "built",
+                    message: String::new(),
+                    value: Some(value.to_f64()),
+                    kind,
+                    formula,
+                });
+                env.insert(entry.name.clone(), value);
+            }
+            Err(e) => rows.push(ParamRow {
+                name: entry.name.clone(),
+                state: "failed",
+                message: if entry.text.trim().is_empty() {
+                    format!("{} is not set.", entry.name)
+                } else {
+                    e.message
+                },
+                value: None,
+                kind,
+                formula,
+            }),
+        }
     }
-    if env.contains_key(name) {
-        return fail("Another parameter has this name.");
-    }
-    value(env, v, name)
+    (env, rows)
 }
 
 /// Builds a part's recipe, given as a JSON value.
 #[must_use]
 pub fn build_part(part: &Value) -> Answer {
-    let mut env = Env::new();
-    let mut params = Vec::new();
-    for p in part
-        .get("params")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let name = p
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        match read_param(&env, &name, p.get("value")) {
-            Ok(v) => {
-                env.insert(name.clone(), v);
-                params.push(ParamRow {
-                    name,
-                    state: "built",
-                    message: String::new(),
-                    value: Some(v),
-                });
-            }
-            Err(Refusal::Failed(m) | Refusal::Waits(m)) => params.push(ParamRow {
-                name,
-                state: "failed",
-                message: m,
-                value: None,
-            }),
-        }
-    }
+    build_with_bodies(part).0
+}
+
+/// Builds a part, and keeps the kernel's bodies behind the answer's, in the same order, with their
+/// exactness, for an assembly to place.
+pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>) {
+    let (env, params) = read_params(part);
     let feats: &[Value] = part
         .get("features")
         .and_then(Value::as_array)
@@ -954,7 +1001,11 @@ pub fn build_part(part: &Value) -> Answer {
         }
         b.rows.push(row);
     }
-    let bodies: Vec<BodyOut> = b.live.into_iter().map(|l| l.out).collect();
+    let (bodies, kept): (Vec<BodyOut>, Vec<(Body, Exactness)>) = b
+        .live
+        .into_iter()
+        .map(|l| (l.out, (l.body, l.exactness)))
+        .unzip();
     let volume = bodies.iter().map(|x| x.volume).sum();
     let bbox = bodies.iter().map(|x| x.bbox).reduce(|a, x| {
         [
@@ -970,14 +1021,15 @@ pub fn build_part(part: &Value) -> Answer {
             ],
         ]
     });
-    Answer {
+    let answer = Answer {
         engine: "kernel",
         params,
         features: b.rows,
         bodies,
         volume,
         bbox,
-    }
+    };
+    (answer, kept)
 }
 /// Builds a part's recipe given as JSON text, and gives the answer as JSON text, or
 /// `{"failed": {code, message}}` for text that is not a recipe.

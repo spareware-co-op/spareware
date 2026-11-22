@@ -9,7 +9,7 @@
   { "name": "boss_radius", "value": 12 },
   { "name": "boss_height", "value": 30 },
   { "name": "boss_offset", "value": 40, "note": "From the middle to each boss" },
-  { "name": "lug_pitch", "value": 20 }
+  { "name": "lug_pitch", "value": "boss_offset / 2", "note": "A formula: half the boss offset" }
  ],
  "features": [
   { "id": "f1", "type": "sketch", "name": "Base outline", "z": 0, "shape": "rect", "w": "width", "h": "depth", "cx": 0, "cy": 0 },

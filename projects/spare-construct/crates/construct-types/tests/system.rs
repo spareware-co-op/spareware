@@ -20,7 +20,7 @@ const SYSTEM_ROW: &str = concat!(
     r#""placement":{"x":0,"y":0,"z":0},"#,
     r#""recipe":{"owner":"construct","schema":1,"op":"type","op_version":2,"args":{}},"#,
     r#""props":{"@category":"300","@params":"P-finish,P-height,P-mark,P-sill,P-width","#,
-    r#""@system.sample":"{\"a\":1}","P-width":"length:820"},"references":[]}"#
+    r#""@system.sample":"{\"a\":1}","P-width":"length:q0:5248000"},"references":[]}"#
 );
 
 fn sample() -> SystemData {
