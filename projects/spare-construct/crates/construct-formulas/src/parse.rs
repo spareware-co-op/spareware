@@ -14,13 +14,19 @@
 //! atom    := measure | name ('(' (expr (',' expr)*)? ')')? | '(' expr ')'
 //! measure := number unit? | number unit (number unit)+      e.g. 820 mm, 2 ft 8 in, 3
 //! number  := digits ('.' digits)? | '.' digits
-//! unit    := mm | cm | m | in | ft | deg
+//! unit    := a symbol of construct-params' unit table with a factor:
+//!            mm | cm | m | in | ft | mm2 | m2 | mm3 | m3 | deg
 //! name    := letter (letter | digit | '_')*
 //! ```
 //!
-//! A unit is read only straight after a number, so a parameter may be called `m` or `deg`.
+//! A unit is read only straight after a number, so a parameter may be called `m` or `deg`. The
+//! units and their exact factors are `construct_params::Unit`'s, the one table the program has.
+//!
+//! [`canonical`] writes a read formula in its one spelling, the form a formula is stored in.
 
+use crate::types::{Dim, Ty, of_kind};
 use crate::{FormulaError, MAX_CONDITIONALS, MAX_DEPTH, MAX_LEN};
+use construct_params::Unit;
 use winnow::ascii::{digit1, multispace0};
 use winnow::combinator::{alt, cut_err, delimited, opt, preceded, repeat, separated, terminated};
 use winnow::error::{ContextError, ErrMode};
@@ -59,8 +65,18 @@ pub enum Expr {
     Call(String, Vec<Expr>),
 }
 
-/// The units a number may carry.
-pub(crate) const UNITS: [&str; 6] = ["mm", "cm", "m", "in", "ft", "deg"];
+/// The unit a number may carry under `symbol`, from `construct-params`' table, and its dimension:
+/// every unit with an exact factor in stored units (not percent or a ratio, which are slopes'
+/// display forms).
+pub(crate) fn unit_of(symbol: &str) -> Option<(Unit, Dim)> {
+    let unit = Unit::ALL
+        .into_iter()
+        .find(|u| u.symbol() == symbol && u.factor().is_some())?;
+    match of_kind(unit.kind())? {
+        Ty::Q(dim) => Some((unit, dim)),
+        Ty::Truth => None,
+    }
+}
 
 type Res<O> = ModalResult<O>;
 
@@ -89,7 +105,7 @@ fn number(input: &mut &str) -> Res<String> {
 
 fn unit(input: &mut &str) -> Res<&'static str> {
     ws(identifier)
-        .verify_map(|word| UNITS.iter().find(|u| **u == word).copied())
+        .verify_map(|word| unit_of(word).map(|(unit, _)| unit.symbol()))
         .parse_next(input)
 }
 
@@ -253,6 +269,110 @@ pub fn parse(text: &str) -> Result<Expr, FormulaError> {
         };
         FormulaError::new("Syntax", message)
     })
+}
+
+/// How tightly each form binds, loosest first, as the grammar above nests them.
+fn level(e: &Expr) -> u8 {
+    match e {
+        Expr::If(..) => 0,
+        Expr::Binary(op, ..) => match op {
+            Op::Or => 1,
+            Op::And => 2,
+            Op::Lt | Op::Le | Op::Gt | Op::Ge | Op::Eq | Op::Ne => 3,
+            Op::Add | Op::Sub => 4,
+            Op::Mul | Op::Div => 5,
+        },
+        Expr::Neg(_) | Expr::Not(_) => 6,
+        Expr::Number(_) | Expr::Measure(_) | Expr::Name(_) | Expr::Call(..) => 7,
+    }
+}
+
+fn symbol(op: Op) -> &'static str {
+    match op {
+        Op::Add => "+",
+        Op::Sub => "-",
+        Op::Mul => "*",
+        Op::Div => "/",
+        Op::Lt => "<",
+        Op::Le => "<=",
+        Op::Gt => ">",
+        Op::Ge => ">=",
+        Op::Eq => "==",
+        Op::Ne => "!=",
+        Op::And => "&&",
+        Op::Or => "||",
+    }
+}
+
+/// A number in its one spelling: no leading zero but one before the point, no trailing zero after
+/// it, no point with nothing after it. `007.50` is `7.5`, `.5` is `0.5`.
+fn number_text(text: &str) -> String {
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
+    let whole = whole.trim_start_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{fraction}")
+    }
+}
+
+/// `e` written in the one spelling, bracketed if it binds more loosely than `at_least`.
+fn print(e: &Expr, at_least: u8) -> String {
+    let text = match e {
+        Expr::Number(n) => number_text(n),
+        Expr::Measure(parts) => parts
+            .iter()
+            .map(|(n, unit)| format!("{} {unit}", number_text(n)))
+            .collect::<Vec<_>>()
+            .join(" "),
+        Expr::Name(name) => name.clone(),
+        Expr::Neg(inner) => format!("-{}", print(inner, 6)),
+        Expr::Not(inner) => format!("!{}", print(inner, 6)),
+        Expr::Call(name, args) => format!(
+            "{name}({})",
+            args.iter()
+                .map(|a| print(a, 0))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Expr::If(test, yes, no) => {
+            format!("{} ? {} : {}", print(test, 1), print(yes, 0), print(no, 0))
+        }
+        Expr::Binary(op, left, right) => {
+            let at = level(e);
+            // A chain leans left; a comparison takes a sum either side.
+            let (l, r) = if at == 3 { (4, 4) } else { (at, at + 1) };
+            format!("{} {} {}", print(left, l), symbol(*op), print(right, r))
+        }
+    };
+    if level(e) < at_least {
+        format!("({text})")
+    } else {
+        text
+    }
+}
+
+/// A formula in its one spelling: one space either side of each operator and after each comma,
+/// a space between a number and its unit, brackets only where they change the meaning, numbers
+/// without leading or trailing zeros, a unary `+` dropped. Two formulas that read the same have
+/// the same spelling, and the spelling reads back to the same formula.
+///
+/// # Errors
+///
+/// As [`parse`]; `TooLarge` if the spelling is longer than a formula may be.
+pub fn canonical(text: &str) -> Result<String, FormulaError> {
+    let spelled = print(&parse(text)?, 0);
+    let again = parse(&spelled)?;
+    if print(&again, 0) == spelled {
+        Ok(spelled)
+    } else {
+        Err(FormulaError::new(
+            "Spelling",
+            "The formula has no one spelling that reads back the same.",
+        ))
+    }
 }
 
 #[cfg(test)]

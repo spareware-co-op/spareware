@@ -14,6 +14,8 @@ use construct_model::rows::{
     BuiltElement, BuiltResult, Hub, HubRole, Incoming, Item, Link, LinkKind, Model, Project,
     Stored, Team,
 };
+use construct_regen::catalog::{self, Catalog, TableView, TypesView};
+use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
 use kit_accounts::rows::Person;
 use kit_accounts::{Accounts, Cedar};
@@ -451,6 +453,121 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         };
         let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
         Ok(AreaView { through, pieces })
+    }
+
+    /// What the page shows of an element: its category, its type, and its parameters with the
+    /// values it reads and where each came from, shown in units. The same reader the commands
+    /// check against and the regenerator builds from (`construct_regen::parameters`).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, the store fails, or there is no such
+    /// element; [`Refusal::Bad`] when its stored values cannot be read, saying why.
+    pub async fn parameters(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        element: &Id,
+    ) -> Result<ElementView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let Some((_, record)) =
+            records::read_element(&mut snapshot, project, model, element).await?
+        else {
+            return Err(Refusal::NotFound);
+        };
+        let context = records::read_context(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let ty = match records::type_of(&record) {
+            None => None,
+            Some(type_id) => Some(
+                records::read_type(&mut snapshot, project, model, &type_id, &context)
+                    .await?
+                    .map_err(Refusal::Bad)?,
+            ),
+        };
+        context.view(&record, ty.as_ref()).map_err(Refusal::Bad)
+    }
+
+    /// The kinds of parameter and the categories of a model, for the page's lists: read from the
+    /// data crates, so the page holds no list of its own.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when its stored parameters cannot be read, saying why.
+    pub async fn catalog(&self, person: &Id, project: &Id, model: &Id) -> Result<Catalog, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_catalog(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's project parameters: each with its kind, who holds its value, its default and the
+    /// categories it is bound to, bound or not.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when its stored parameters cannot be read, saying why.
+    pub async fn project_parameters(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<TableView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_table_view(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's types, or those of one category: each with the parameters it lists, the values it
+    /// holds in units, and how many elements are of it.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when the category is unknown or stored values cannot be read, saying why.
+    pub async fn types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        category: Option<u32>,
+    ) -> Result<TypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_types_view(&mut snapshot, project, model, category)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// What this person can undo and redo in a model now: the step an undo would reverse and the
+    /// undo a redo would, read from the log the way `edit.undo` and `edit.redo` read it
+    /// ([`construct_api::cloud::undo`]). Nothing about it is kept anywhere but the log.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, or the store fails.
+    pub async fn undo(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::undo::State, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::undo::state(&mut snapshot, project, model, person).await?)
     }
 
     /// Who is working on what in a model: each claimed element, with its claim.

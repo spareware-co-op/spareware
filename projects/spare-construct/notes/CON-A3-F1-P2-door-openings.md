@@ -1,0 +1,23 @@
+# CON-A3-F1-P2, P6 (used): door openings cut from walls, and two levels of detail
+
+Part of CON-A3-F1-P2 (booleans) and CON-A3-F1-P6 (tessellation), as Spare Construct uses them through the kernel's engine seam ([FEATURES.md](../FEATURES.md)). Piece A42. Status: built in `construct-regen` (`src/kernel.rs`, `src/kernel/opening.rs`); not yet wired into the regenerator.
+
+## The question
+
+A door hosted in a wall must cut a real opening, the same model must give the same bytes, the wall's faces must keep their persistent names, and the cases at the edge must be built correctly or refused clearly. How is an opening made, named and checked, and what are the two levels of detail?
+
+## Decisions
+
+1. **Where it lives.** `Kernel::build_hosting(host, hosted)` builds a wall with the doors hosted in it; `Geometry::build` is the same with nothing hosted. Construct's `Geometry` trait builds one recipe alone, so the regenerator does not hand a wall its doors yet: that is the hosting job's (CON-A4-F3-P1), and the interim register says so.
+2. **What an opening is.** The door's width along the wall and its height, through the wall's whole thickness whatever the door's own thickness. Its cutter reaches 100 mm past both sides and, for a door to the floor, 100 mm below the base, as the engine seam's own suite cuts a door (geom-solidcore, `tests/suite`): no face of the cutter lies on a face of the wall it passes through. The door itself stays a simple box placed in its opening until families give it its real shape (CON-A7-F1).
+3. **Order.** Openings are cut one after another, sorted by the hosted element's permanent ID, so the order the doors are given in never changes the bytes.
+4. **Refused, never wrong.** Before the engine is asked, each of these is refused with a code and a message that starts with the door's key: touching or crossing an end (`OpeningAtEnd`, `OpeningPastEnd`: that is a shorter wall, not an opening), a head at or above the top (`OpeningTooTall`: it would cut the wall in two or leave no head), below the base, two openings that overlap or touch, a face within the tolerance band of another face without being on it (`OpeningNearFace`), a door across or beside its wall, one key twice, a host that is not a straight wall, a hosted element that is not a door, and corners that are not whole millimetres (a display mesh is in whole millimetres). A door flush with the base is the common case and is built.
+5. **The tolerance band.** The larger of the model's tolerance (0.01 mm, main's ruling of 22 Nov 2026) and the engine's largest length tolerance, in whole grid steps. Named fault SC-4 of geom-solidcore is solidcore's own difference losing a sliver inside that band. Construct's subtraction is the kernel's exact geom-bool, which keeps such a sliver (pinned in the server's `tests/kernel.rs`), but the builder refuses the case rather than build a sliver the model cannot tell from a face. It is built once lengths and meshes are on the kernel's grid (piece A39) and the engine is the kernel's exact one.
+6. **Names.** The wall's six faces keep their names. A face an opening makes is named as chapter 11.9 names a tool's faces, as the kernel's geom-bool does: `Created { op: the wall's operation, role: tool(key), from: [the opening's own face] }`, the key being the first 16 bytes of the SHA-256 of the door's permanent ID and the opening's own faces `jamb.start` (nearer the wall's `end0`), `jamb.end`, `head` and, above the base, `sill`. No length goes in, so the names stay when the wall is lengthened or another door is added. The engine seam reports no face of a result, so these names are written from the recipe, not read from the body; the two pieces a door to the floor cuts the base into share the base's one name (chapter 20.2 would name each a `Split` piece). Both are interim until the seam gives a body record with its names.
+7. **Two levels of detail.** Level 0 is the engine's mesh of the cut wall, straying by nothing (every face is flat). Level 1 is the engine's mesh of the wall before its openings were cut, for far views; its deviation is a bound, the larger of half the widest opening and half the wall's thickness, rounded up to a millimetre. A shape with no openings has the same mesh at both levels. Tessellation by on-screen error is CON-A3-F1-P6 proper, later.
+
+## Not done here
+
+- The regenerator and the server's commands do not yet cut a stored wall (decision 1).
+- One opening per door; windows, plain openings and shafts are CON-A4-F3-P2.
+- No layer of a layered wall is cut; walls are one solid until CON-A4-F2-P1.

@@ -1,0 +1,737 @@
+{
+  "format": 1,
+  "id": "01KAXF3M1Y0S1MP1ETAB1E0003",
+  "name": "Simple table",
+  "category": 1700,
+  "parameters": [
+    {
+      "key": "length",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.length",
+        "name": "Length",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:10240000"
+    },
+    {
+      "key": "width",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5120000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:4736000"
+    },
+    {
+      "key": "top_thickness",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.top_thickness",
+        "name": "Top thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:192000"
+    },
+    {
+      "key": "leg",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.leg",
+        "name": "Leg size",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:384000"
+    },
+    {
+      "key": "inset",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.inset",
+        "name": "Leg inset",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:320000"
+    },
+    {
+      "key": "wood",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.wood",
+        "name": "Material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-white-oak"
+    },
+    {
+      "key": "leg_height",
+      "definition": {
+        "id": "01KAXF3M1Y0S1MP1ETAB1E0003.leg_height",
+        "name": "Leg height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "height - top_thickness"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    },
+    {
+      "key": "underside",
+      "base": "xy",
+      "offset": "leg_height"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "top",
+      "plane": "underside",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t1",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:-2560000"
+        },
+        {
+          "key": "t2",
+          "x": "length:q0:5120000",
+          "y": "length:q0:-2560000"
+        },
+        {
+          "key": "t3",
+          "x": "length:q0:5120000",
+          "y": "length:q0:2560000"
+        },
+        {
+          "key": "t4",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:2560000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "front",
+          "start": "t1",
+          "end": "t2"
+        },
+        {
+          "key": "right",
+          "start": "t2",
+          "end": "t3"
+        },
+        {
+          "key": "back",
+          "start": "t3",
+          "end": "t4"
+        },
+        {
+          "key": "left",
+          "start": "t4",
+          "end": "t1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "horizontal",
+          "line": "front"
+        },
+        {
+          "kind": "vertical",
+          "line": "right"
+        },
+        {
+          "kind": "horizontal",
+          "line": "back"
+        },
+        {
+          "kind": "vertical",
+          "line": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "front",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "right",
+          "length": "length / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "back",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "left",
+          "length": "length / 2",
+          "side": "left"
+        }
+      ]
+    },
+    {
+      "key": "legs",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "r1",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "r2",
+          "x": "length:q0:4800000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "r3",
+          "x": "length:q0:4800000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "r4",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "a1",
+          "x": "length:q0:-4416000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "b1",
+          "x": "length:q0:-4416000",
+          "y": "length:q0:-1856000"
+        },
+        {
+          "key": "c1",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:-1856000"
+        },
+        {
+          "key": "a2",
+          "x": "length:q0:4416000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "b2",
+          "x": "length:q0:4416000",
+          "y": "length:q0:-1856000"
+        },
+        {
+          "key": "c2",
+          "x": "length:q0:4800000",
+          "y": "length:q0:-1856000"
+        },
+        {
+          "key": "a3",
+          "x": "length:q0:4416000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "b3",
+          "x": "length:q0:4416000",
+          "y": "length:q0:1856000"
+        },
+        {
+          "key": "c3",
+          "x": "length:q0:4800000",
+          "y": "length:q0:1856000"
+        },
+        {
+          "key": "a4",
+          "x": "length:q0:-4416000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "b4",
+          "x": "length:q0:-4416000",
+          "y": "length:q0:1856000"
+        },
+        {
+          "key": "c4",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:1856000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "rf",
+          "start": "r1",
+          "end": "r2"
+        },
+        {
+          "key": "rr",
+          "start": "r2",
+          "end": "r3"
+        },
+        {
+          "key": "rb",
+          "start": "r3",
+          "end": "r4"
+        },
+        {
+          "key": "rl",
+          "start": "r4",
+          "end": "r1"
+        },
+        {
+          "key": "l1a",
+          "start": "r1",
+          "end": "a1"
+        },
+        {
+          "key": "l1b",
+          "start": "a1",
+          "end": "b1"
+        },
+        {
+          "key": "l1c",
+          "start": "b1",
+          "end": "c1"
+        },
+        {
+          "key": "l1d",
+          "start": "c1",
+          "end": "r1"
+        },
+        {
+          "key": "l2a",
+          "start": "r2",
+          "end": "a2"
+        },
+        {
+          "key": "l2b",
+          "start": "a2",
+          "end": "b2"
+        },
+        {
+          "key": "l2c",
+          "start": "b2",
+          "end": "c2"
+        },
+        {
+          "key": "l2d",
+          "start": "c2",
+          "end": "r2"
+        },
+        {
+          "key": "l3a",
+          "start": "r3",
+          "end": "a3"
+        },
+        {
+          "key": "l3b",
+          "start": "a3",
+          "end": "b3"
+        },
+        {
+          "key": "l3c",
+          "start": "b3",
+          "end": "c3"
+        },
+        {
+          "key": "l3d",
+          "start": "c3",
+          "end": "r3"
+        },
+        {
+          "key": "l4a",
+          "start": "r4",
+          "end": "a4"
+        },
+        {
+          "key": "l4b",
+          "start": "a4",
+          "end": "b4"
+        },
+        {
+          "key": "l4c",
+          "start": "b4",
+          "end": "c4"
+        },
+        {
+          "key": "l4d",
+          "start": "c4",
+          "end": "r4"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "horizontal",
+          "line": "rf"
+        },
+        {
+          "kind": "vertical",
+          "line": "rr"
+        },
+        {
+          "kind": "horizontal",
+          "line": "rb"
+        },
+        {
+          "kind": "vertical",
+          "line": "rl"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "rf",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "rr",
+          "length": "length / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "rb",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "o",
+          "line": "rl",
+          "length": "length / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l1a"
+        },
+        {
+          "kind": "vertical",
+          "line": "l1b"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l1c"
+        },
+        {
+          "kind": "vertical",
+          "line": "l1d"
+        },
+        {
+          "kind": "distance",
+          "a": "r1",
+          "b": "a1",
+          "length": "leg"
+        },
+        {
+          "kind": "distance",
+          "a": "a1",
+          "b": "b1",
+          "length": "leg"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l2a"
+        },
+        {
+          "kind": "vertical",
+          "line": "l2b"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l2c"
+        },
+        {
+          "kind": "vertical",
+          "line": "l2d"
+        },
+        {
+          "kind": "distance",
+          "a": "r2",
+          "b": "a2",
+          "length": "leg"
+        },
+        {
+          "kind": "distance",
+          "a": "a2",
+          "b": "b2",
+          "length": "leg"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l3a"
+        },
+        {
+          "kind": "vertical",
+          "line": "l3b"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l3c"
+        },
+        {
+          "kind": "vertical",
+          "line": "l3d"
+        },
+        {
+          "kind": "distance",
+          "a": "r3",
+          "b": "a3",
+          "length": "leg"
+        },
+        {
+          "kind": "distance",
+          "a": "a3",
+          "b": "b3",
+          "length": "leg"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l4a"
+        },
+        {
+          "kind": "vertical",
+          "line": "l4b"
+        },
+        {
+          "kind": "horizontal",
+          "line": "l4c"
+        },
+        {
+          "kind": "vertical",
+          "line": "l4d"
+        },
+        {
+          "kind": "distance",
+          "a": "r4",
+          "b": "a4",
+          "length": "leg"
+        },
+        {
+          "kind": "distance",
+          "a": "a4",
+          "b": "b4",
+          "length": "leg"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "top",
+      "op": "extrude",
+      "sketch": "top",
+      "profile": [
+        "front",
+        "right",
+        "back",
+        "left"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "top_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "wood"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg1",
+      "op": "extrude",
+      "sketch": "legs",
+      "profile": [
+        "l1a",
+        "l1b",
+        "l1c",
+        "l1d"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "leg_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "wood"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg2",
+      "op": "extrude",
+      "sketch": "legs",
+      "profile": [
+        "l2a",
+        "l2b",
+        "l2c",
+        "l2d"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "leg_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "wood"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg3",
+      "op": "extrude",
+      "sketch": "legs",
+      "profile": [
+        "l3a",
+        "l3b",
+        "l3c",
+        "l3d"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "leg_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "wood"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg4",
+      "op": "extrude",
+      "sketch": "legs",
+      "profile": [
+        "l4a",
+        "l4b",
+        "l4c",
+        "l4d"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "leg_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "wood"
+      },
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [
+    {
+      "key": "t1200",
+      "name": "1200 x 800",
+      "values": [
+        {
+          "parameter": "length",
+          "value": "length:q0:7680000"
+        },
+        {
+          "parameter": "width",
+          "value": "length:q0:5120000"
+        }
+      ]
+    },
+    {
+      "key": "t1600",
+      "name": "1600 x 800",
+      "values": [
+        {
+          "parameter": "length",
+          "value": "length:q0:10240000"
+        },
+        {
+          "parameter": "width",
+          "value": "length:q0:5120000"
+        }
+      ]
+    },
+    {
+      "key": "t2000",
+      "name": "2000 x 1000",
+      "values": [
+        {
+          "parameter": "length",
+          "value": "length:q0:12800000"
+        },
+        {
+          "parameter": "width",
+          "value": "length:q0:6400000"
+        }
+      ]
+    }
+  ]
+}

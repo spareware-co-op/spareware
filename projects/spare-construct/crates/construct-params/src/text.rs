@@ -1,11 +1,13 @@
 //! Reading what people type and showing values. All unit arithmetic is in whole numbers, in 128
 //! bits, with one rounding rule: half to even, as the geometry kernel rounds onto its grid
-//! (geometry architecture chapters 6 and 17). Typed text rounds to the stored unit; a shown value
-//! rounds to its format's places and prints exactly that many.
+//! (geometry architecture chapters 6 and 17). A typed length, area or volume is never rounded: it
+//! is a whole number of grid steps (square or cubic steps) exactly, or it is refused naming the
+//! nearest two that are. A typed angle rounds to the angle unit. A shown value rounds to its
+//! format's places and prints exactly that many.
 
 use crate::definition::{Definition, Kind};
 use crate::error::ParamError;
-use crate::quantity::{Angle, Area, Length, Slope, Volume};
+use crate::quantity::{Angle, Area, Length, Slope, Volume, exact_decimal};
 use crate::units::{Format, Unit, Units};
 use crate::value::Value;
 use kit_core::Id;
@@ -163,15 +165,62 @@ fn numeric(def: &Definition, text: &str, units: &Units) -> Result<Value, ParamEr
             let (num, den) = unit.factor().ok_or_else(out_of_range)?;
             let top = mantissa.checked_mul(num).ok_or_else(out_of_range)?;
             let bottom = den.checked_mul(scale).ok_or_else(out_of_range)?;
-            let base = to_whole(top, 1, bottom).ok_or_else(out_of_range)?;
+            if kind == Kind::Angle {
+                let units = to_whole(top, 1, bottom).ok_or_else(out_of_range)?;
+                return Ok(Value::Angle(Angle::from_units(units)));
+            }
+            let base = on_grid(def, text, unit, top, bottom)?;
             Ok(match kind {
-                Kind::Length => Value::Length(Length::from_mm(base)),
-                Kind::Area => Value::Area(Area::from_mm2(base)),
-                Kind::Volume => Value::Volume(Volume::from_mm3(base)),
-                _ => Value::Angle(Angle::from_units(base)),
+                Kind::Length => Value::Length(Length::from_steps(
+                    i64::try_from(base).map_err(|_| out_of_range())?,
+                )),
+                Kind::Area => Value::Area(Area::from_square_steps(base)),
+                _ => Value::Volume(Volume::from_cubic_steps(base)),
             })
         }
     }
+}
+
+/// `top / bottom` stored units (grid steps, square or cubic steps) if it is a whole number of them
+/// that fits, typed in `unit`; otherwise [`ParamError::OffGrid`] naming the whole numbers either
+/// side, shown exactly in `unit`, or [`ParamError::OutOfRange`].
+fn on_grid(
+    def: &Definition,
+    text: &str,
+    unit: Unit,
+    top: i128,
+    bottom: i128,
+) -> Result<i128, ParamError> {
+    let out_of_range = || ParamError::OutOfRange {
+        parameter: def.name().to_owned(),
+        text: text.to_owned(),
+    };
+    let below = top.checked_div_euclid(bottom).ok_or_else(out_of_range)?;
+    let rest = top.checked_rem_euclid(bottom).ok_or_else(out_of_range)?;
+    let fits = |v: i128| def.kind() != Kind::Length || i64::try_from(v).is_ok();
+    if rest == 0 {
+        return if fits(below) {
+            Ok(below)
+        } else {
+            Err(out_of_range())
+        };
+    }
+    let above = below.checked_add(1).ok_or_else(out_of_range)?;
+    if !fits(below) || !fits(above) {
+        return Err(out_of_range());
+    }
+    let (num, den) = unit.factor().ok_or_else(out_of_range)?;
+    let show = |base: i128| -> Result<String, ParamError> {
+        let n = base.checked_mul(den).ok_or_else(out_of_range)?;
+        let number = exact_decimal(n, num).ok_or_else(out_of_range)?;
+        Ok(format!("{number}{}", unit.suffix()))
+    };
+    Err(ParamError::OffGrid {
+        parameter: def.name().to_owned(),
+        text: text.to_owned(),
+        below: show(below)?,
+        above: show(above)?,
+    })
 }
 
 /// Splits typed text into its number (digits and points, after an optional sign) and the rest.
@@ -264,18 +313,18 @@ pub(crate) fn format(def: &Definition, value: &Value, units: &Units) -> Result<S
         parameter: def.name().to_owned(),
         text: value.stored(),
     };
-    let measured = |base: i64| -> Result<String, ParamError> {
+    let measured = |base: i128| -> Result<String, ParamError> {
         let format = units.format(value.kind()).ok_or_else(out_of_range)?;
         let (num, den) = format.unit.factor().ok_or_else(out_of_range)?;
-        let top = i128::from(base).checked_mul(den).ok_or_else(out_of_range)?;
+        let top = base.checked_mul(den).ok_or_else(out_of_range)?;
         let number = shown(top, num, format.places).ok_or_else(out_of_range)?;
         Ok(format!("{number}{}", format.unit.suffix()))
     };
     match value {
-        Value::Length(v) => measured(v.mm()),
-        Value::Area(v) => measured(v.mm2()),
-        Value::Volume(v) => measured(v.mm3()),
-        Value::Angle(v) => measured(v.units()),
+        Value::Length(v) => measured(i128::from(v.steps())),
+        Value::Area(v) => measured(v.square_steps()),
+        Value::Volume(v) => measured(v.cubic_steps()),
+        Value::Angle(v) => measured(i128::from(v.units())),
         Value::Slope(v) => {
             let format = units.format(Kind::Slope).ok_or_else(out_of_range)?;
             show_slope(*v, format).ok_or_else(out_of_range)
