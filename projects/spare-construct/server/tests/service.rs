@@ -273,6 +273,81 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
     ));
 }
 
+/// Where a wall of the model is now, as Anna reads it.
+async fn placed(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> construct_model::element::Placement {
+    s.regenerate(project).await.unwrap();
+    let walls = s
+        .kind(&i("anna"), project, model, &i("wall"))
+        .await
+        .unwrap();
+    let hash = i(&walls.pieces[wall]);
+    s.record(&i("anna"), project, model, &hash)
+        .await
+        .unwrap()
+        .placement
+}
+
+/// Undo is an edit like any other: through the log, behind the same access, and each person's
+/// own. What each person can undo is read back from the log alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn undo_and_redo_go_through_the_log_and_are_each_persons_own() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let start = placed(s, &project, &model, "W-101").await;
+
+    // Ben has made no change to this model, so he has nothing to undo; Anna's last is the seed's.
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!((state.undo, state.redo), (None, None));
+    let state = s.undo(&anna, &project, &model).await.unwrap();
+    assert_eq!(state.undo.unwrap().cmd, "element.create");
+
+    let seq = s
+        .edit(
+            &ben,
+            &project,
+            &model,
+            "element.move",
+            moved("W-101", 1000, 2000),
+        )
+        .await
+        .unwrap();
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!(state.undo.as_ref().map(|step| step.seq), Some(seq));
+    s.edit(&ben, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(placed(s, &project, &model, "W-101").await, start);
+    let state = s.undo(&ben, &project, &model).await.unwrap();
+    assert_eq!(state.undo, None);
+    assert_eq!(state.redo.unwrap().cmd, "edit.undo");
+    s.edit(&ben, &project, &model, "edit.redo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(placed(s, &project, &model, "W-101").await.x, 1000);
+
+    // Dan can't read this model, so he can't ask, and he can't undo in it.
+    assert!(refused(s.undo(&dan, &project, &model).await));
+    assert!(refused(
+        s.edit(&dan, &project, &model, "edit.undo", json!({})).await
+    ));
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    verify_log(&mut snapshot, &Scope::Project(project))
+        .await
+        .unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_record_cant_be_reached_through_another_model() {
     let stack = seeded().await;

@@ -491,6 +491,25 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         context.view(&record, ty.as_ref()).map_err(Refusal::Bad)
     }
 
+    /// What this person can undo and redo in a model now: the step an undo would reverse and the
+    /// undo a redo would, read from the log the way `edit.undo` and `edit.redo` read it
+    /// ([`construct_api::cloud::undo`]). Nothing about it is kept anywhere but the log.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, or the store fails.
+    pub async fn undo(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::undo::State, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::undo::state(&mut snapshot, project, model, person).await?)
+    }
+
     /// Who is working on what in a model: each claimed element, with its claim.
     ///
     /// # Errors

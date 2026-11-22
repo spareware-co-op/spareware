@@ -6,6 +6,8 @@
 //! - [`elements`]: the `element.*` commands. They change inputs only, and never touch a shape.
 //! - [`params`]: parameters, types, and an element's parameter values and type, through the same
 //!   log.
+//! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
+//! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
 //! - [`directory`]: hubs, projects and teams, in the directory's log.
 //! - [`commands`]: a project's commands, each behind Cedar.
@@ -16,6 +18,8 @@ pub mod directory;
 pub mod elements;
 pub mod params;
 pub mod spaces;
+pub mod transaction;
+pub mod undo;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;
