@@ -13,11 +13,13 @@ use std::sync::Arc;
 /// The directory's command version, recorded in each entry.
 const VERSION: u32 = 1;
 
+/// The directory log's commands: the kit's people and Spare Construct's hubs, projects and teams.
 pub struct DirectoryCommands<K: Kv> {
     access: Arc<Access<K, Cedar>>,
 }
 
 impl<K: Kv> DirectoryCommands<K> {
+    /// The commands, with Cedar answering who may run them.
     #[must_use]
     pub fn new(access: Arc<Access<K, Cedar>>) -> Self {
         Self { access }

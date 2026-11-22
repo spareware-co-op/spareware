@@ -795,6 +795,138 @@ impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
     }
 }
 
+impl Canonical for crate::inputs::mesh::Terrain {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::boolean::Outcome {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Pair {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Layers {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Probe {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::build::Polygons {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::exact::ExactMesh {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::hull::Hull {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_mesh::slice::Contour {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::hull::HullError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::classify::Located {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::exact::MeshError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::model::Modelled {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::model::ModelError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_mesh::Cdt<u32> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_mesh::CdtError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.46's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
@@ -960,6 +1092,54 @@ impl Canonical for geom_op::History {
     }
 }
 
+// Persistent names, history, resolution and `PruneHistory` (decision 32.46's count benchmarks for
+// pieces G87, G88, G89 and G109).
+
+impl Canonical for geom_op::NameSet {
+    // The count, then each name in name order.
+    fn encode(&self, h: &mut Sha256) {
+        (self.names().len() as u64).encode(h);
+        for id in self.names() {
+            id.encode(h);
+        }
+    }
+}
+
+impl Canonical for geom_op::TopoName {
+    // Its `Debug` text writes its kind and every field.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_op::Relations {
+    // Its `Debug` text writes every list of the relations.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_name::resolve::Step {
+    // Its `Debug` text writes its kind, its paths, its history and the set held.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_name::resolve::Resolution {
+    // Its `Debug` text writes the outcome and every field.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::naming::Scene {
+    // Its `Debug` text writes the element's graph, steps, body and carriers, and the reference.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_format::operation::Operation {
     // Its `Debug` text writes every field.
     fn encode(&self, h: &mut Sha256) {
@@ -1076,7 +1256,9 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     // A built body, as a transform's input: its corners, then its class's rank.
     fn encode(&self, h: &mut Sha256) {
         for point in self.result.body.arenas().points.iter() {
-            point.encode(h);
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
         }
         u32::from(self.exactness.rank()).encode(h);
     }
@@ -1089,6 +1271,153 @@ impl Canonical for geom_num::brent::Zero {
     // prints each double in the shortest form that reads back to the same bits.
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
+    }
+}
+
+// The exact decisions on lines and quadrics (decision 32.46's count benchmarks for piece G159).
+
+impl Canonical for geom_num::quadric::Line {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Sphere {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Cylinder {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Cone {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::quadric::Torus {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::sturm::Roots {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_num::pencil::Topology {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+// `geom-intersect`'s results (decision 32.46's count benchmarks for piece G158), each through its
+// debug text: their fields are public only as far as the kernel needs, and a double's debug text
+// is the same on every target.
+
+impl<const D: usize> Canonical for geom_curve::CurveKind<D> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_surface::SurfaceKind {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<const N: usize, const D: usize> Canonical for geom_intersect::Projection<N, D> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::general::Subdivided {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::contact::Reading {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::march::Traced {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::march::Branch {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_curve::IntersectionCurve<3> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::selfcross::SelfCrossing {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::known::Known {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::LevelCurves {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Item {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Intersection {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::CanonicalKey {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_intersect::IntersectError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
     }
 }
 
@@ -1119,6 +1448,73 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
                 debug_text(e, h);
             }
         }
+    }
+}
+
+// The flat boolean's scenarios (piece G140).
+
+/// A body, as a scenario's input: its faces, edges and vertices counted, then its corners on the
+/// grid, in row order.
+fn body(b: &geom_topo::Body, h: &mut Sha256) {
+    let a = b.arenas();
+    for arena in [
+        geom_topo::Arena::Face,
+        geom_topo::Arena::Edge,
+        geom_topo::Arena::Vertex,
+    ] {
+        a.rows(arena).encode(h);
+    }
+    for point in a.points.iter() {
+        if let Some(p) = point.grid() {
+            p.encode(h);
+        }
+    }
+}
+
+/// Bodies, as a scenario's input: how many, then each.
+fn bodies(list: &[geom_topo::Body], h: &mut Sha256) {
+    u64::try_from(list.len()).unwrap_or(u64::MAX).encode(h);
+    for b in list {
+        body(b, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Host {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.host, h);
+        bodies(&self.tools, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Recut {
+    // The host and its tools after the move: the cache follows from the first cut of the same
+    // wall, which the tools before the move would give.
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.cache.boxes().len())
+            .unwrap_or(u64::MAX)
+            .encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Picks {
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.count).unwrap_or(u64::MAX).encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Many {
+    fn encode(&self, h: &mut Sha256) {
+        bodies(&self.bodies, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Storey {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.envelope, h);
+        bodies(&self.walls, h);
+        self.seeds.encode(h);
     }
 }
 

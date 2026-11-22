@@ -3,11 +3,11 @@
 use super::load::AT_LICENCE;
 use serde_json::{json, Value};
 
-/// The NZTA ArcGIS services folder.
+/// The NZTA `ArcGIS` services folder.
 pub const NZTA: &str = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services";
-/// The Auckland Transport ArcGIS services folder.
+/// The Auckland Transport `ArcGIS` services folder.
 pub const AT: &str = "https://services2.arcgis.com/JkPEgZJGxhSjYOo0/arcgis/rest/services";
-/// The Auckland Council ArcGIS services folder.
+/// The Auckland Council `ArcGIS` services folder.
 pub const AC: &str = "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services";
 /// The Mobility Database mirror.
 pub const MDB: &str = "https://files.mobilitydatabase.org";
@@ -37,6 +37,7 @@ pub struct Src {
 
 impl Src {
     /// The source as the prototype's object (only the keys it has).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut o = serde_json::Map::new();
         o.insert("label".into(), json!(self.label));
@@ -218,11 +219,13 @@ pub const SRC: [Src; 13] = [
 ];
 
 /// `SRC[id]`.
+#[must_use]
 pub fn src(id: &str) -> Option<&'static Src> {
     SRC.iter().find(|s| s.id == id)
 }
 
 /// `SRC` as the prototype's object, keyed by source.
+#[must_use]
 pub fn src_value() -> Value {
     Value::Object(SRC.iter().map(|s| (s.id.to_string(), s.to_value())).collect())
 }
@@ -261,11 +264,13 @@ pub const COUNCILS: [CouncilPreset; 2] = [
 ];
 
 /// `COUNCILS[key]`.
+#[must_use]
 pub fn council(key: &str) -> Option<&'static CouncilPreset> {
     COUNCILS.iter().find(|c| c.key == key)
 }
 
 /// `COUNCILS` as the prototype's object.
+#[must_use]
 pub fn councils_value() -> Value {
     Value::Object(
         COUNCILS
@@ -308,6 +313,7 @@ pub const NZ_FEEDS: [NzFeed; 6] = [
 ];
 
 /// `NZ_FEEDS` as the prototype's list.
+#[must_use]
 pub fn nz_feeds_value() -> Value {
     Value::Array(NZ_FEEDS.iter().map(|f| json!({ "id": f.id, "provider": f.provider, "box": f.box_ })).collect())
 }
@@ -366,6 +372,7 @@ pub const FLEET_DAYS: f64 = 90.0;
 pub const FLEET_TIMEOUT: f64 = 90.0;
 
 /// `RULES` as the prototype's object (regular expressions of the count field guesses are written as their source text).
+#[must_use]
 pub fn rules_value() -> Value {
     json!({
         "nslr": { "samples": NSLR_SAMPLES, "futureDay": NSLR_FUTURE_DAY, "source": "docs/spec/nslr-speeds (modal value of three samples along the link)", "verified": false },
@@ -398,11 +405,13 @@ pub const TERM_DATES: [(u32, [(&str, &str); 4]); 5] = [
 ];
 
 /// `TERMS.dates[year]`.
+#[must_use]
 pub fn term_dates(year: i64) -> Option<&'static [(&'static str, &'static str); 4]> {
-    TERM_DATES.iter().find(|(y, _)| *y as i64 == year).map(|(_, t)| t)
+    TERM_DATES.iter().find(|(y, _)| i64::from(*y) == year).map(|(_, t)| t)
 }
 
 /// `TERMS` as the prototype's object.
+#[must_use]
 pub fn terms_value() -> Value {
     json!({
         "source": TERMS_SOURCE, "verified": false,
@@ -427,6 +436,7 @@ pub const MATARIKI_DATES: [(u32, &str); 9] = [
 ];
 
 /// `MATARIKI` as the prototype's object.
+#[must_use]
 pub fn matariki_value() -> Value {
     json!({
         "source": MATARIKI_SOURCE, "verified": false,
@@ -435,6 +445,7 @@ pub fn matariki_value() -> Value {
 }
 
 /// `DEFAULTS` of the feeds settings as the prototype's object (timeout in seconds, nslrFuture, tmsDays, otherScenarios).
+#[must_use]
 pub fn defaults_value() -> Value {
     json!({ "timeout": 30, "nslrFuture": true, "tmsDays": TMS_DAYS, "otherScenarios": false })
 }

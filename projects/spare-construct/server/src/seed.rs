@@ -77,23 +77,45 @@ async fn seeded<K: Kv>(kv: &K) -> Result<bool, StoreError> {
 }
 
 /// Writes the example data. Does nothing to a store that has it.
+///
+/// # Errors
+///
+/// A [`Refusal`] when any step of it is refused, or the store fails.
 pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Result<(), Refusal> {
     service.accounts.start_directory().await?;
     if seeded(kv).await? {
         println!("already seeded");
         return Ok(());
     }
-    let system = id(SYSTEM);
-    let directory = async |cmd: &str, args: Value| -> Result<(), StoreError> {
-        service.accounts.edit_directory(&system, cmd, args).await
-    };
+    hubs_and_people(service).await?;
+    projects_and_teams(service).await?;
+    models(service).await?;
+    elements(service).await?;
+    packages_and_links(service).await?;
+    println!("seeded");
+    Ok(())
+}
 
+/// One directory command, from the system.
+async fn directory<K: Kv, F: FileStore>(
+    service: &Service<K, F>,
+    cmd: &str,
+    args: Value,
+) -> Result<(), StoreError> {
+    service
+        .accounts
+        .edit_directory(&id(SYSTEM), cmd, args)
+        .await
+}
+
+/// The three hubs, the five people, and which hubs permit bridges with which.
+async fn hubs_and_people<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), StoreError> {
     for (hub, name) in [
         ("company-1", "Company 1"),
         ("company-2", "Company 2"),
         ("company-3", "Company 3"),
     ] {
-        directory("hub.add", json!({ "id": hub, "name": name })).await?;
+        directory(service, "hub.add", json!({ "id": hub, "name": name })).await?;
     }
     for (person, name, home) in [
         ("anna", "Anna", "company-1"),
@@ -104,15 +126,13 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
     ] {
         let email_hash = email_hash(&format!("{person}@example.test"));
         let args = json!({ "id": person, "name": name, "email_hash": email_hash });
-        directory("person.add", args).await?;
-        directory("hub.user", json!({ "hub": home, "person": person })).await?;
+        directory(service, "person.add", args).await?;
+        let args = json!({ "hub": home, "person": person });
+        directory(service, "hub.user", args).await?;
     }
     for person in ["dan", "eve"] {
-        directory(
-            "hub.external",
-            json!({ "hub": "company-1", "person": person }),
-        )
-        .await?;
+        let args = json!({ "hub": "company-1", "person": person });
+        directory(service, "hub.external", args).await?;
     }
     // Company 1 and 2 permit each other. Company 1 permits Company 3, but not the other way round.
     for (hub, other) in [
@@ -120,8 +140,16 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
         ("company-2", "company-1"),
         ("company-1", "company-3"),
     ] {
-        directory("hub.permit", json!({ "hub": hub, "other": other })).await?;
+        let args = json!({ "hub": hub, "other": other });
+        directory(service, "hub.permit", args).await?;
     }
+    Ok(())
+}
+
+/// The four projects, their teams, and who is on each.
+async fn projects_and_teams<K: Kv, F: FileStore>(
+    service: &Service<K, F>,
+) -> Result<(), StoreError> {
     for (project, name, hub) in [
         ("example-1", "Example model 1", "company-1"),
         (
@@ -136,11 +164,8 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
             "company-3",
         ),
     ] {
-        directory(
-            "project.add",
-            json!({ "id": project, "name": name, "hub": hub }),
-        )
-        .await?;
+        let args = json!({ "id": project, "name": name, "hub": hub });
+        directory(service, "project.add", args).await?;
     }
     for (project, team, name) in [
         ("example-1", "arch", "Architecture team"),
@@ -149,11 +174,8 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
         ("riverside", "arch", "Architecture team"),
         ("riverside-bridged", "landscape", "Landscape team"),
     ] {
-        directory(
-            "team.add",
-            json!({ "project": project, "id": team, "name": name }),
-        )
-        .await?;
+        let args = json!({ "project": project, "id": team, "name": name });
+        directory(service, "team.add", args).await?;
     }
     for (project, team, person) in [
         ("example-1", "arch", "anna"),
@@ -163,21 +185,18 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
         ("riverside", "arch", "cara"),
         ("riverside-bridged", "landscape", "eve"),
     ] {
-        directory(
-            "team.person",
-            json!({ "project": project, "team": team, "person": person }),
-        )
-        .await?;
+        let args = json!({ "project": project, "team": team, "person": person });
+        directory(service, "team.person", args).await?;
     }
     for (project, person) in [("example-1", "dan"), ("riverside", "eve")] {
-        directory(
-            "project.person",
-            json!({ "project": project, "person": person }),
-        )
-        .await?;
+        let args = json!({ "project": project, "person": person });
+        directory(service, "project.person", args).await?;
     }
+    Ok(())
+}
 
-    // Package numbers carry on from the numbers in the sketch.
+/// The six models. Package numbers carry on from the numbers in the sketch.
+async fn models<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refusal> {
     for (person, project, model, name, team, package, last) in [
         (
             "anna",
@@ -239,91 +258,52 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
             .edit(&id(person), &id(project), &id(model), "model.add", args)
             .await?;
     }
+    Ok(())
+}
 
+/// Each floor of Example model 1, split between the models that draw it: the architecture with
+/// its doors, the joinery, the grid lines and the columns.
+fn example_floors() -> [Vec<Value>; 4] {
     let mut arch = Vec::new();
     let mut interiors = Vec::new();
     let mut setout = Vec::new();
     let mut structure = Vec::new();
     for level in [1, 2] {
         arch.extend(arch_floor(level));
-        arch.push(door(
-            &format!("D-{level}01"),
-            level,
-            2500,
-            -50,
-            900,
-            300,
-            "FD30",
-        ));
-        arch.push(door(
-            &format!("D-{level}02"),
-            level,
-            5950,
-            3000,
-            300,
-            900,
-            "none",
-        ));
-        arch.push(door(
-            &format!("D-{level}03"),
-            level,
-            9000,
-            7750,
-            900,
-            300,
-            "FD30",
-        ));
-        interiors.push(thing(
-            &format!("B-{level}01"),
-            "joinery",
-            level,
-            700,
-            700,
-            (3000, 600, 900),
-        ));
-        interiors.push(thing(
-            &format!("B-{level}02"),
-            "joinery",
-            level,
-            7000,
-            6500,
-            (2400, 600, 900),
-        ));
+        for (n, x, y, w, d, fire) in [
+            (1, 2500, -50, 900, 300, "FD30"),
+            (2, 5950, 3000, 300, 900, "none"),
+            (3, 9000, 7750, 900, 300, "FD30"),
+        ] {
+            arch.push(door(&format!("D-{level}0{n}"), level, x, y, w, d, fire));
+        }
+        for (n, x, y, width) in [(1, 700, 700, 3000), (2, 7000, 6500, 2400)] {
+            let name = format!("B-{level}0{n}");
+            interiors.push(thing(&name, "joinery", level, x, y, (width, 600, 900)));
+        }
         for (name, x) in [("A", 100), ("B", 6100), ("C", 11_900)] {
-            setout.push(thing(
-                &format!("GL-{name}{level}"),
-                "grid",
-                level,
-                x,
-                -1500,
-                (40, 11_000, 10),
-            ));
+            let name = format!("GL-{name}{level}");
+            setout.push(thing(&name, "grid", level, x, -1500, (40, 11_000, 10)));
         }
         for (name, y) in [("1", 100), ("2", 7900)] {
-            setout.push(thing(
-                &format!("GL-{name}{level}"),
-                "grid",
-                level,
-                -1500,
-                y,
-                (15_000, 40, 10),
-            ));
+            let name = format!("GL-{name}{level}");
+            setout.push(thing(&name, "grid", level, -1500, y, (15_000, 40, 10)));
         }
         for (index, (x, y)) in [(0, 0), (11_600, 0), (0, 7600), (11_600, 7600), (5900, 3900)]
             .iter()
             .enumerate()
         {
-            structure.push(thing(
-                &format!("C-{level}0{index}"),
-                "column",
-                level,
-                *x,
-                *y,
-                (400, 400, 3000),
-            ));
+            let name = format!("C-{level}0{index}");
+            structure.push(thing(&name, "column", level, *x, *y, (400, 400, 3000)));
         }
     }
     arch.push(door("D-104", 2, 8800, -50, 900, 300, "FD30"));
+    [arch, interiors, setout, structure]
+}
+
+/// Every element of every model.
+async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refusal> {
+    let [arch, interiors, setout, structure] = example_floors();
     let mut riverside = arch_floor(1);
     riverside.push(door("D-101", 1, 2500, -50, 900, 300, "FD30"));
     let planter = vec![thing("P-1", "planter", 1, 0, 0, (2000, 800, 600))];
@@ -348,7 +328,12 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
                 .await?;
         }
     }
+    Ok(())
+}
 
+/// The packages published, bridged and taken in, the links between models, and every project's
+/// shapes built.
+async fn packages_and_links<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refusal> {
     let (anna, ben, dan) = (id("anna"), id("ben"), id("dan"));
     let (example, bridged) = (id("example-1"), id("example-1-bridged"));
     let (arch_team, civil, structure_team) = (id("arch"), id("civil"), id("structure"));
@@ -377,36 +362,15 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
         .consume(&anna, &example, &arch_team, &incoming)
         .await?;
 
-    service
-        .add_link(
-            &anna,
-            &example,
-            &arch_model,
-            LinkKind::Live,
-            None,
-            &id("interiors-model"),
-        )
-        .await?;
-    service
-        .add_link(
-            &anna,
-            &example,
-            &arch_model,
-            LinkKind::Shared,
-            Some(&civil),
-            &id("site-setout-v3"),
-        )
-        .await?;
-    service
-        .add_link(
-            &anna,
-            &example,
-            &arch_model,
-            LinkKind::Consumed,
-            None,
-            &incoming,
-        )
-        .await?;
+    for (kind, team, source) in [
+        (LinkKind::Live, None, id("interiors-model")),
+        (LinkKind::Shared, Some(&civil), id("site-setout-v3")),
+        (LinkKind::Consumed, None, incoming.clone()),
+    ] {
+        service
+            .add_link(&anna, &example, &arch_model, kind, team, &source)
+            .await?;
+    }
     for project in [
         &example,
         &bridged,
@@ -415,6 +379,5 @@ pub async fn seed<K: Kv, F: FileStore>(kv: &K, service: &Service<K, F>) -> Resul
     ] {
         service.regenerate(project).await?;
     }
-    println!("seeded");
     Ok(())
 }

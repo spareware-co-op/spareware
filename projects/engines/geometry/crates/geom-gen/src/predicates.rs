@@ -1,6 +1,7 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
 //! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
+//! `predicate-line-sphere`, `predicate-line-cylinder`, `predicate-line-cone`, `predicate-line-cone-lead`, `predicate-cross-norm`, `predicate-axis-gap`,
 //! `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their
 //! descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`,
 //! `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`,
@@ -9,6 +10,7 @@
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
 //! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
+//! `fptaylor-line-sphere`, `fptaylor-line-cylinder`, `fptaylor-line-cone`, `fptaylor-line-cone-lead`, `fptaylor-cross-norm`, `fptaylor-axis-gap`,
 //! `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
 //! `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that
@@ -57,7 +59,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all eleven for the parent module and each
+//! Cost: each generator derives one predicate, or all seventeen for the parent module and each
 //! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
@@ -333,6 +335,155 @@ let s = oa * ob2 - ob * oa2
 sign s
 ";
 
+/// `line_sphere`: how the line through the grid points a and b meets the sphere of centre c and
+pub const LINE_SPHERE: &str = "\
+# line_sphere: how the line through the grid points a and b meets the sphere of centre c and
+# radius r. With d = b - a and w = a - c, the quadratic |w + t d|^2 = r^2 has a quarter of its
+# discriminant equal to r^2 |d|^2 - |d x w|^2, by Lagrange's identity: positive for two crossings,
+# zero for a tangent line, negative for none. r is a whole number of grid steps, below 2^41.
+predicate line_sphere
+input a b c: point3
+input r: rounded 41 in r
+let d_x = b.x - a.x
+let d_y = b.y - a.y
+let d_z = b.z - a.z
+let w_x = a.x - c.x
+let w_y = a.y - c.y
+let w_z = a.z - c.z
+let u_x = d_y * w_z - d_z * w_y
+let u_y = d_z * w_x - d_x * w_z
+let u_z = d_x * w_y - d_y * w_x
+let dd = d_x * d_x + d_y * d_y + d_z * d_z
+let uu = u_x * u_x + u_y * u_y + u_z * u_z
+let delta = r * r * dd - uu
+sign delta
+";
+
+/// `line_cylinder`: how the line through a and b meets the cylinder of radius r about the axis
+pub const LINE_CYLINDER: &str = "\
+# line_cylinder: how the line through a and b meets the cylinder of radius r about the axis
+# through c and f. With d = b - a, e = f - c and w = a - c, the discriminant of |(w + t d) x e|^2 =
+# r^2 |e|^2 is 4 |e|^2 (r^2 |d x e|^2 - [d, e, w]^2), and |e|^2 > 0, so its sign is the sign of
+# the bracket: the distance between the two lines against r. Zero |d x e| is a line parallel to
+# the axis, which cross_norm decides first.
+predicate line_cylinder
+input a b c f: point3
+input r: rounded 41 in r
+let d_x = b.x - a.x
+let d_y = b.y - a.y
+let d_z = b.z - a.z
+let e_x = f.x - c.x
+let e_y = f.y - c.y
+let e_z = f.z - c.z
+let w_x = a.x - c.x
+let w_y = a.y - c.y
+let w_z = a.z - c.z
+let n_x = d_y * e_z - d_z * e_y
+let n_y = d_z * e_x - d_x * e_z
+let n_z = d_x * e_y - d_y * e_x
+let nn = n_x * n_x + n_y * n_y + n_z * n_z
+let det = n_x * w_x + n_y * w_y + n_z * w_z
+let delta = r * r * nn - det * det
+sign delta
+";
+
+/// `line_cone`: how the line through a and b meets the double cone with apex c, axis through f and
+pub const LINE_CONE: &str = "\
+# line_cone: how the line through a and b meets the double cone with apex c, axis through f and
+# half-angle of tangent s / t. With d = b - a, e = f - c, w = a - c and n = w x d, a quarter of the
+# discriminant of t^2 |y x e|^2 = s^2 (y . e)^2 at y = w + u d is t^2 |e|^2 times
+# s^2 |e|^2 |n|^2 - (s^2 + t^2) (e . n)^2, so its sign is that of the difference (t and |e| are not
+# zero). It holds when line_cone_lead is not zero.
+predicate line_cone
+input a b c f: point3
+input s t: rounded 40 in slope
+let d_x = b.x - a.x
+let d_y = b.y - a.y
+let d_z = b.z - a.z
+let e_x = f.x - c.x
+let e_y = f.y - c.y
+let e_z = f.z - c.z
+let w_x = a.x - c.x
+let w_y = a.y - c.y
+let w_z = a.z - c.z
+let n_x = w_y * d_z - w_z * d_y
+let n_y = w_z * d_x - w_x * d_z
+let n_z = w_x * d_y - w_y * d_x
+let nn = n_x * n_x + n_y * n_y + n_z * n_z
+let ee = e_x * e_x + e_y * e_y + e_z * e_z
+let en = e_x * n_x + e_y * n_y + e_z * n_z
+let ss = s * s
+let delta = ss * ee * nn - (ss + t * t) * en * en
+sign delta
+";
+
+/// `line_cone_lead`: the sign of the leading coefficient of a line's quadratic with the cone of
+pub const LINE_CONE_LEAD: &str = "\
+# line_cone_lead: the sign of the leading coefficient of a line's quadratic with the cone of
+# line_cone: t^2 |d x e|^2 - s^2 (d . e)^2, positive when the line is steeper than the cone, zero
+# when it is parallel to a ruling of the cone, so that the quadratic drops to a line.
+predicate line_cone_lead
+input a b c f: point3
+input s t: rounded 40 in slope
+let d_x = b.x - a.x
+let d_y = b.y - a.y
+let d_z = b.z - a.z
+let e_x = f.x - c.x
+let e_y = f.y - c.y
+let e_z = f.z - c.z
+let u_x = d_y * e_z - d_z * e_y
+let u_y = d_z * e_x - d_x * e_z
+let u_z = d_x * e_y - d_y * e_x
+let uu = u_x * u_x + u_y * u_y + u_z * u_z
+let de = d_x * e_x + d_y * e_y + d_z * e_z
+let lead = t * t * uu - s * s * de * de
+sign lead
+";
+
+/// `cross_norm`: whether the directions b - a and d - c are parallel: the sign of the squared length
+pub const CROSS_NORM: &str = "\
+# cross_norm: whether the directions b - a and d - c are parallel: the sign of the squared length
+# of their cross product, which is zero exactly then and positive otherwise. Two axes that are
+# parallel, or a point on an axis (a, p, a, q), are Goldman and Miller's first special positions.
+predicate cross_norm
+input a b c d: point3
+let p_x = b.x - a.x
+let p_y = b.y - a.y
+let p_z = b.z - a.z
+let q_x = d.x - c.x
+let q_y = d.y - c.y
+let q_z = d.z - c.z
+let n_x = p_y * q_z - p_z * q_y
+let n_y = p_z * q_x - p_x * q_z
+let n_z = p_x * q_y - p_y * q_x
+let nn = n_x * n_x + n_y * n_y + n_z * n_z
+sign nn
+";
+
+/// `axis_gap`: the distance from the grid point c to the axis through a and b against a whole number
+pub const AXIS_GAP: &str = "\
+# axis_gap: the distance from the grid point c to the axis through a and b against a whole number
+# of steps g: the sign of |w x e|^2 - g^2 |e|^2, with e = b - a and w = c - a, the same as the sign of
+# that distance minus |g|. Parallel axes with g the sum or the difference of two radii decide
+# whether two cylinders meet in lines.
+predicate axis_gap
+input a b c: point3
+input g: rounded 42 in g
+let e_x = b.x - a.x
+let e_y = b.y - a.y
+let e_z = b.z - a.z
+let w_x = c.x - a.x
+let w_y = c.y - a.y
+let w_z = c.z - a.z
+let u_x = w_y * e_z - w_z * e_y
+let u_y = w_z * e_x - w_x * e_z
+let u_z = w_x * e_y - w_y * e_x
+let uu = u_x * u_x + u_y * u_y + u_z * u_z
+let ee = e_x * e_x + e_y * e_y + e_z * e_z
+let delta = uu - g * g * ee
+sign delta
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -349,7 +500,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 11] = [
+pub const PREDICATES: [Predicate; 17] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -515,6 +666,78 @@ pub const PREDICATES: [Predicate; 11] = [
             fpg: "— (Geogram has no implicit crossing point)",
         },
     },
+    Predicate {
+        generator: "predicate-line-sphere",
+        constant: "LINE_SPHERE",
+        text: LINE_SPHERE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_sphere.rs",
+        comparison: Comparison {
+            name: "line_sphere",
+            serves: "the sign of a quarter of the discriminant of a line through two grid points with a sphere: positive for two crossings, zero for a tangent line, negative for none. [`crate::quadric::line_sphere`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
+    Predicate {
+        generator: "predicate-line-cylinder",
+        constant: "LINE_CYLINDER",
+        text: LINE_CYLINDER,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cylinder.rs",
+        comparison: Comparison {
+            name: "line_cylinder",
+            serves: "the sign of the discriminant of a line through two grid points with a cylinder about an axis through two grid points: positive for two crossings, zero for a tangent line. [`crate::quadric::line_cylinder`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
+    Predicate {
+        generator: "predicate-line-cone",
+        constant: "LINE_CONE",
+        text: LINE_CONE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
+        comparison: Comparison {
+            name: "line_cone",
+            serves: "the sign of the discriminant of a line through two grid points with a cone of rational slope, its apex and a point of its axis on the grid. [`crate::quadric::line_cone`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
+    Predicate {
+        generator: "predicate-line-cone-lead",
+        constant: "LINE_CONE_LEAD",
+        text: LINE_CONE_LEAD,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
+        comparison: Comparison {
+            name: "line_cone_lead",
+            serves: "the sign of the leading coefficient of a line's quadratic with a cone of rational slope, zero when the line is parallel to a ruling. [`crate::quadric::line_cone`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
+    Predicate {
+        generator: "predicate-cross-norm",
+        constant: "CROSS_NORM",
+        text: CROSS_NORM,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/cross_norm.rs",
+        comparison: Comparison {
+            name: "cross_norm",
+            serves: "whether two directions between grid points are parallel: zero when they are, positive otherwise. [`crate::quadric::parallel`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
+    Predicate {
+        generator: "predicate-axis-gap",
+        constant: "AXIS_GAP",
+        text: AXIS_GAP,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/axis_gap.rs",
+        comparison: Comparison {
+            name: "axis_gap",
+            serves: "the distance from a grid point to an axis through two grid points against a whole number of steps. [`crate::quadric::axis_gap`] calls it",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (not in Geogram)",
+        },
+    },
 ];
 
 /// The parent module's generator.
@@ -609,6 +832,60 @@ pub fn generate_tpi_weight() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_tpi_side() -> Result<Vec<u8>, GenError> {
     module_of(named("tpi_side")?)
+}
+
+/// Generator `predicate-line-sphere`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_line_sphere() -> Result<Vec<u8>, GenError> {
+    module_of(named("line_sphere")?)
+}
+
+/// Generator `predicate-line-cylinder`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_line_cylinder() -> Result<Vec<u8>, GenError> {
+    module_of(named("line_cylinder")?)
+}
+
+/// Generator `predicate-line-cone`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_line_cone() -> Result<Vec<u8>, GenError> {
+    module_of(named("line_cone")?)
+}
+
+/// Generator `predicate-line-cone-lead`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_line_cone_lead() -> Result<Vec<u8>, GenError> {
+    module_of(named("line_cone_lead")?)
+}
+
+/// Generator `predicate-cross-norm`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_cross_norm() -> Result<Vec<u8>, GenError> {
+    module_of(named("cross_norm")?)
+}
+
+/// Generator `predicate-axis-gap`.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_axis_gap() -> Result<Vec<u8>, GenError> {
+    module_of(named("axis_gap")?)
 }
 
 /// Generator `predicate-lpi-weight`.
@@ -1092,6 +1369,70 @@ pub fn generate_fptaylor_tpi_side() -> Result<Vec<u8>, GenError> {
     certificate("tpi_side", "fptaylor-tpi-side", fptaylor_problem)
 }
 
+/// Generator `fptaylor-line-sphere`: `line_sphere`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_line_sphere() -> Result<Vec<u8>, GenError> {
+    certificate("line_sphere", "fptaylor-line-sphere", fptaylor_problem)
+}
+
+/// Generator `fptaylor-line-cylinder`: `line_cylinder`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_line_cylinder() -> Result<Vec<u8>, GenError> {
+    certificate("line_cylinder", "fptaylor-line-cylinder", fptaylor_problem)
+}
+
+/// Generator `fptaylor-line-cone`: `line_cone`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_line_cone() -> Result<Vec<u8>, GenError> {
+    certificate("line_cone", "fptaylor-line-cone", fptaylor_problem)
+}
+
+/// Generator `fptaylor-line-cone-lead`: `line_cone_lead`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_line_cone_lead() -> Result<Vec<u8>, GenError> {
+    certificate(
+        "line_cone_lead",
+        "fptaylor-line-cone-lead",
+        fptaylor_problem,
+    )
+}
+
+/// Generator `fptaylor-cross-norm`: `cross_norm`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_cross_norm() -> Result<Vec<u8>, GenError> {
+    certificate("cross_norm", "fptaylor-cross-norm", fptaylor_problem)
+}
+
+/// Generator `fptaylor-axis-gap`: `axis_gap`'s normalised filter for `FPTaylor`, whose certificate
+/// HOL Light checks.
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_axis_gap() -> Result<Vec<u8>, GenError> {
+    certificate("axis_gap", "fptaylor-axis-gap", fptaylor_problem)
+}
+
 /// Generator `fptaylor-lpi-weight`: `lpi_weight`'s normalised filter for `FPTaylor`, whose certificate
 /// HOL Light checks.
 ///
@@ -1168,7 +1509,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 12] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 18] = [
         (
             "mod.rs",
             generate_module,
@@ -1228,6 +1569,36 @@ mod tests {
             "ssi_side.rs",
             generate_ssi_side,
             include_bytes!("../../geom-num/src/generated/ssi_side.rs"),
+        ),
+        (
+            "line_sphere.rs",
+            generate_line_sphere,
+            include_bytes!("../../geom-num/src/generated/line_sphere.rs"),
+        ),
+        (
+            "line_cylinder.rs",
+            generate_line_cylinder,
+            include_bytes!("../../geom-num/src/generated/line_cylinder.rs"),
+        ),
+        (
+            "line_cone.rs",
+            generate_line_cone,
+            include_bytes!("../../geom-num/src/generated/line_cone.rs"),
+        ),
+        (
+            "line_cone_lead.rs",
+            generate_line_cone_lead,
+            include_bytes!("../../geom-num/src/generated/line_cone_lead.rs"),
+        ),
+        (
+            "cross_norm.rs",
+            generate_cross_norm,
+            include_bytes!("../../geom-num/src/generated/cross_norm.rs"),
+        ),
+        (
+            "axis_gap.rs",
+            generate_axis_gap,
+            include_bytes!("../../geom-num/src/generated/axis_gap.rs"),
         ),
     ];
 

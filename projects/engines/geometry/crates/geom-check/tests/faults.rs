@@ -17,8 +17,8 @@
 mod common;
 
 use common::{
-    CUBE, CUBE_FACES, Rows, acorn, certified, circle, cube, faces_into, faults, has, ix, kinds,
-    pcircle, polyhedron, report, sphere, square_sheet, wire,
+    CUBE, CUBE_FACES, Rows, acorn, certified, circle, cube, cylinder, faces_into, faults, has, ix,
+    kinds, pcircle, polyhedron, report, sphere, square_sheet, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, MAX_FAULTS};
 use geom_num::Exactness;
@@ -356,6 +356,202 @@ fn partners_in_different_shells() {
     assert!(!has(&f, FaultKind::PartnerShells, Entity::Edge(ix(3))));
 }
 
+/// The rows of a solid made of cubes of side 10, each named by its least corner in cubes: the
+/// boundary of their union, each face a square counter-clockwise from outside, in one shell of
+/// one solid region beside the outside void.
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    reason = "test code: a few cubes near the origin, and a few hundred rows"
+)]
+fn cubes(cells: &[[i64; 3]]) -> Rows {
+    let mut points: Vec<[i64; 3]> = Vec::new();
+    let mut faces: Vec<Vec<u32>> = Vec::new();
+    for cell in cells {
+        for axis in 0..3 {
+            for out in [false, true] {
+                let mut beside = *cell;
+                beside[axis] += if out { 1 } else { -1 };
+                if cells.contains(&beside) {
+                    continue;
+                }
+                // The next two axes, in turn: this order runs counter-clockwise about `axis`.
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                let mut ring = [[0, 0], [1, 0], [1, 1], [0, 1]];
+                if !out {
+                    ring.reverse();
+                }
+                let square = ring.map(|[i, j]| {
+                    let mut p = *cell;
+                    p[axis] += i64::from(out);
+                    p[u] += i;
+                    p[v] += j;
+                    let p = p.map(|x| 10 * x);
+                    let k = points.iter().position(|&q| q == p).unwrap_or_else(|| {
+                        points.push(p);
+                        points.len() - 1
+                    });
+                    k as u32
+                });
+                faces.push(square.to_vec());
+            }
+        }
+    }
+    let rings: Vec<&[u32]> = faces.iter().map(Vec::as_slice).collect();
+    polyhedron(&points, &rings)
+}
+
+/// The row of the vertex at `p`.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "test code: a few hundred rows"
+)]
+fn vertex_at(r: &Rows, p: [i64; 3]) -> u32 {
+    let at = r
+        .points
+        .iter()
+        .position(|q| [q.x.get(), q.y.get(), q.z.get()] == p)
+        .unwrap();
+    r.vertices
+        .iter()
+        .position(|v| v.point.row() as usize == at)
+        .unwrap() as u32
+}
+
+/// Eight cubes in a ring whose first and last touch only at a corner, (0, 10, 10): one shell,
+/// every edge on two faces, whose faces round that corner make two fans.
+const PINCHED: [[i64; 3]; 8] = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [1, 2, 0],
+    [0, 2, 0],
+    [-1, 2, 0],
+    [-1, 2, 1],
+    [-1, 1, 1],
+];
+
+/// Two cubes touching at one corner, vertex 7 of the first and the second's least corner, each
+/// the one shell of a solid region of its own.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a cube's corners moved by its side"
+)]
+fn cubes_touching_at_a_corner() -> Rows {
+    let mut r = cube();
+    let solid = r.region(RegionKind::Solid);
+    let s = r.shell(solid);
+    let rows: Vec<u32> = CUBE
+        .iter()
+        .enumerate()
+        .map(|(k, p)| {
+            if k == 0 {
+                7
+            } else {
+                r.vertex(p.map(|x| x + 10))
+            }
+        })
+        .collect();
+    let faces: Vec<Vec<u32>> = CUBE_FACES
+        .iter()
+        .map(|ring| ring.iter().map(|&k| rows[k as usize]).collect())
+        .collect();
+    let rings: Vec<&[u32]> = faces.iter().map(Vec::as_slice).collect();
+    faces_into(&mut r, s, &rings);
+    r
+}
+
+/// The fault of [`cubes_touching_at_a_corner`] as a solid: the first corner at vertex 7 is the
+/// first cube's, and the first of the second's is where fin 27, the last of its first face's,
+/// ends.
+fn corner_in_two_shells() -> Fault {
+    Fault::at(FaultKind::VertexShells, Entity::Vertex(ix(7))).with(Entity::Fin(ix(27)))
+}
+
+#[test]
+fn a_vertex_two_shells_share_is_not_a_solids() {
+    // Each shell closes, and the solids touch at that vertex (chapter 8.1, mixed and
+    // non-manifold), so the body is general, never solid.
+    let r = cubes_touching_at_a_corner();
+    let f = faults(&r, BodyKind::Solid);
+    assert_eq!(f, [corner_in_two_shells()]);
+    assert_eq!(
+        f[0].to_string(),
+        "group 1, vertex 7: the vertex of a solid has corners in two shells (fin 27)"
+    );
+    assert_eq!(faults(&r, BodyKind::General), []);
+}
+
+#[test]
+fn a_fin_on_a_closed_edge_without_vertices_has_no_corner_to_judge() {
+    // A cylinder's fins run on its two circles, closed edges without vertices: no fin has a
+    // corner, so the fans check's sets pass over each, and no vertex is judged by them. The two
+    // ways a solid reaches those sets, with the cylinder's fins among the solid's:
+    //
+    // - The touching cubes, with the cylinder as a third solid region: sound until the fans,
+    //   where the walk fan by fan finds vertex 7's second fan. Its fault is the cubes' own, at
+    //   the same rows (the cylinder's come after them), and nothing is found at the cylinder.
+    let mut r = cubes_touching_at_a_corner();
+    common::cylinder_into(&mut r);
+    assert_eq!((r.vertices.len(), r.fins.len()), (15, 52));
+    assert_eq!(faults(&r, BodyKind::Solid), [corner_in_two_shells()]);
+    // - A cylinder whose side runs the same way as its top along the top circle: a partner fault
+    //   before the fans, so the body is not sound and is judged by the sets. It has no vertex, so
+    //   the partners are all that is wrong.
+    let mut r = cylinder();
+    r.fins[2].sense = Sense::Forward;
+    assert_eq!(
+        faults(&r, BodyKind::Solid),
+        [Fault::at(FaultKind::PartnerSense, Entity::Edge(ix(0)))]
+    );
+}
+
+#[test]
+fn a_shell_whose_faces_make_two_fans_at_a_vertex_is_not_a_solids() {
+    // One shell pinched at one vertex: its two fans there make the body general. Its Euler
+    // characteristic is odd too, as one pinch makes it.
+    let r = cubes(&PINCHED);
+    let v = vertex_at(&r, [0, 10, 10]);
+    let f = faults(&r, BodyKind::Solid);
+    assert_eq!(
+        kinds(&f),
+        [FaultKind::VertexFans, FaultKind::Euler],
+        "{f:?}"
+    );
+    assert_eq!(f[0].at, Entity::Vertex(ix(v)));
+    let what = "the faces round the vertex of a solid make more than one fan";
+    assert!(
+        f[0].to_string()
+            .starts_with(&format!("group 1, vertex {v}: {what} (fin ")),
+        "{}",
+        f[0]
+    );
+    assert_eq!(faults(&r, BodyKind::General), []);
+    // The ring without its last cube does not pinch: one fan at every vertex, and a solid.
+    assert_eq!(faults(&cubes(&PINCHED[..7]), BodyKind::Solid), []);
+}
+
+#[test]
+fn fans_are_all_that_is_wrong_with_a_shell_pinched_twice() {
+    // Two pinched rings joined by a bar: two pinches, an even characteristic, so Euler's formula
+    // holds, and the two fans at each pinch are all that is wrong.
+    let mut cells: Vec<[i64; 3]> = PINCHED.to_vec();
+    cells.extend((0..6).map(|x| [x, -1, 0]));
+    cells.extend(PINCHED.iter().map(|&[x, y, z]| [x + 5, y, z]));
+    let r = cubes(&cells);
+    let f = faults(&r, BodyKind::Solid);
+    assert_eq!(
+        kinds(&f),
+        [FaultKind::VertexFans, FaultKind::VertexFans],
+        "{f:?}"
+    );
+    for p in [[0, 10, 10], [50, 10, 10]] {
+        let at = Entity::Vertex(ix(vertex_at(&r, p)));
+        assert!(has(&f, FaultKind::VertexFans, at), "{p:?}: {f:?}");
+    }
+    assert_eq!(faults(&r, BodyKind::General), []);
+}
+
 #[test]
 fn a_shell_in_pieces() {
     // Two cubes in one shell: not connected, and the characteristic is 4.
@@ -530,6 +726,8 @@ fn every_fault_says_what_is_wrong_in_its_group() {
         FaultKind::FinCount,
         FaultKind::PartnerSense,
         FaultKind::PartnerShells,
+        FaultKind::VertexShells,
+        FaultKind::VertexFans,
         FaultKind::ShellDisconnected,
         FaultKind::EmptyShell,
         FaultKind::EmptyRegion,
@@ -659,6 +857,8 @@ fn only_the_two_unchecked_kinds_say_nothing_is_wrong() {
         FaultKind::FinCount,
         FaultKind::PartnerSense,
         FaultKind::PartnerShells,
+        FaultKind::VertexShells,
+        FaultKind::VertexFans,
         FaultKind::ShellDisconnected,
         FaultKind::EmptyShell,
         FaultKind::EmptyRegion,

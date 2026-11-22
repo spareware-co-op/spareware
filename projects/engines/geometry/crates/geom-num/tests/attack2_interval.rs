@@ -1784,10 +1784,52 @@ mod roots {
         }
     }
 
-    /// Subnormal operands: every root is normal (at least 2^−537), the lower bound positive.
-    #[test]
-    fn sqrt_of_subnormals() {
-        for k in 0..52 {
+    /// Subnormal operands: every root is normal (at least 2^−537), the lower bound positive. In
+    /// quarters of the bit positions 0 to 51 (decision 32.78: whole, it was too long for one Miri
+    /// gate part), the root of the smallest subnormal in the first.
+    mod sqrt_of_subnormals {
+        use super::*;
+
+        #[test]
+        fn quarter_1() {
+            subnormal_roots(0..13);
+            let r = pt(TINY).sqrt().unwrap();
+            assert!(
+                r.lo() > 0.0 && r.contains(fp::pow2(-537)),
+                "sqrt 2^−1074 = {r:?}"
+            );
+        }
+
+        #[test]
+        fn quarter_2() {
+            subnormal_roots(13..26);
+        }
+
+        #[test]
+        fn quarter_3() {
+            subnormal_roots(26..39);
+        }
+
+        #[test]
+        fn quarter_4() {
+            subnormal_roots(39..52);
+        }
+
+        /// The quarters hold every bit position 0 to 51 once.
+        #[test]
+        fn the_quarters_join_to_every_bit_position() {
+            let quarters = [0..13, 13..26, 26..39, 39..52];
+            assert_eq!(quarters[0].start, 0);
+            for w in quarters.windows(2) {
+                assert_eq!(w[0].end, w[1].start);
+            }
+            assert_eq!(quarters[3].end, 52);
+        }
+    }
+
+    /// The roots of the subnormals with low bits up to and at bit `k`, for each `k` of `ks`.
+    fn subnormal_roots(ks: std::ops::Range<u32>) {
+        for k in ks {
             for x in [
                 f64::from_bits(1u64 << k),
                 f64::from_bits((1u64 << (k + 1)) - 1),
@@ -1798,11 +1840,6 @@ mod roots {
                 run(check_sqrt_nonneg(iv(-x, x)));
             }
         }
-        let r = pt(TINY).sqrt().unwrap();
-        assert!(
-            r.lo() > 0.0 && r.contains(fp::pow2(-537)),
-            "sqrt 2^−1074 = {r:?}"
-        );
     }
 
     /// The square of an interval, then its root: `sqrt_nonneg(square(a))` holds |x| for both

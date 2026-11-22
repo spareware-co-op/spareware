@@ -22,7 +22,14 @@ QUERY = """query($owner:String!,$name:String!,$cursor:String){ repository(owner:
 
 
 def run(*args):
-    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    """Runs a command and returns what it printed; on failure prints its error output first, so a
+    failed `gh` call says why in the job's log (20 Nov 2026: a failed GraphQL call left only its
+    exit code)."""
+    done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
+    if done.returncode != 0:
+        sys.stderr.write(done.stderr)
+        done.check_returncode()
+    return done.stdout
 
 
 def merged_prs():

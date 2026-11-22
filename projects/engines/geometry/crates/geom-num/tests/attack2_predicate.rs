@@ -53,6 +53,9 @@
     clippy::too_many_arguments
 )]
 
+#[macro_use]
+mod slices;
+
 use std::fmt::Debug;
 use std::sync::OnceLock;
 
@@ -96,6 +99,9 @@ mod grid {
 mod sign {
     pub use geom_num::sign::Sign;
 }
+mod step {
+    pub use geom_num::step::Step;
+}
 mod wide {
     pub use geom_num::wide::{I256, I384};
 }
@@ -108,7 +114,7 @@ mod generated {
 
 /// predicate.rs's code outside its comments and its test module, compiled again so the attack can
 /// call the private fast and total paths, followed by thin wrappers that expose them.
-#[allow(clippy::many_single_char_names)]
+#[allow(clippy::many_single_char_names, dead_code)]
 mod copy {
     use crate::{Pt2, Pt3};
 
@@ -127,6 +133,7 @@ mod copy {
         use crate::generated;
         use crate::grid::{COORD_BITS, P2, P3};
         use crate::sign::Sign;
+        use crate::step::Step;
         use crate::wide::{I256, I384};
         use bounded::Bounded;
         const fn exponent_sum(a: u32, b: u32) -> u32 {
@@ -157,14 +164,23 @@ mod copy {
         const _: () = {
             assert!(I256::ZERO.to_le_limbs().len() == 4, "I256 has four limbs");
             assert!(I128_MAGNITUDE_BITS == 127 && I256_MAGNITUDE_BITS == 255);
-            assert!(FAST_DIFF_BITS == 41 && FAST_PRODUCT_BITS == 82, "the figures at 40 bits");
+            assert!(
+                FAST_DIFF_BITS == 41 && FAST_PRODUCT_BITS == 82,
+                "the figures at 40 bits"
+            );
             assert!(FAST_DET2_BITS == 83 && FAST_LIFT2_BITS == 83 && FAST_LIFT3_BITS == 84);
             assert!(FAST_DET3_BITS == 126 && FAST_INCIRCLE_BITS == 168 && FAST_INSPHERE_BITS == 212);
             assert!(FAST_DET2_BITS <= I128_MAGNITUDE_BITS, "orient2d fits i128");
             assert!(FAST_DET3_BITS <= I128_MAGNITUDE_BITS, "orient3d fits i128");
             assert!(FAST_LIFT2_BITS <= I128_MAGNITUDE_BITS && FAST_LIFT3_BITS <= I128_MAGNITUDE_BITS);
-            assert!(FAST_INCIRCLE_BITS <= I256_MAGNITUDE_BITS, "incircle fits I256");
-            assert!(FAST_INSPHERE_BITS <= I256_MAGNITUDE_BITS, "insphere fits I256");
+            assert!(
+                FAST_INCIRCLE_BITS <= I256_MAGNITUDE_BITS,
+                "incircle fits I256"
+            );
+            assert!(
+                FAST_INSPHERE_BITS <= I256_MAGNITUDE_BITS,
+                "insphere fits I256"
+            );
         };
         fn diff(p: i64, q: i64) -> Option<i128> {
             i128::from(p).checked_sub(i128::from(q))
@@ -300,7 +316,10 @@ mod copy {
                 matches!(needed, Some(bits) if bits <= declared) && declared <= TOTAL_BITS
             }
             const _: () = assert!(TOTAL_BITS == 383, "I384 holds magnitudes below 2^383");
-            const _: () = assert!(declarable(Some(ANY_I64_DIFFERENCE_BITS), ANY_I64_DIFFERENCE_BITS));
+            const _: () = assert!(declarable(
+                Some(ANY_I64_DIFFERENCE_BITS),
+                ANY_I64_DIFFERENCE_BITS
+            ));
             struct Rule<const LEFT: usize, const RIGHT: usize, const OUT: usize>;
             impl<const LEFT: usize, const RIGHT: usize, const OUT: usize> Rule<LEFT, RIGHT, OUT> {
                 const PRODUCT: () = assert!(
@@ -451,6 +470,40 @@ mod copy {
         fn xyz(p: P3) -> [i64; 3] {
             [p.x.get(), p.y.get(), p.z.get()]
         }
+        const NARROW_2D_BITS: u32 = 31;
+        const I64_MAGNITUDE_BITS: u32 = 63;
+        const _: () = {
+            let products = exponent_sum(NARROW_2D_BITS, NARROW_2D_BITS);
+            assert!(
+                exponent_sum(products, 1) <= I64_MAGNITUDE_BITS,
+                "orient2d's narrow step fits i64"
+            );
+        };
+        fn narrow(p: i64, q: i64, bits: u32) -> Option<i64> {
+            let d = p.checked_sub(q)?;
+            (d.unsigned_abs() < u64::pow(2, bits)).then_some(d)
+        }
+        #[must_use]
+        #[allow(
+            clippy::many_single_char_names,
+            reason = "a, b and c are the points, and p, q, r and s the differences of the formula"
+        )]
+        pub fn orient2d_narrow(a: P2, b: P2, c: P2) -> Option<Sign> {
+            let [ax, ay] = xy(a);
+            let [bx, by] = xy(b);
+            let [cx, cy] = xy(c);
+            let (p, q) = (
+                narrow(bx, ax, NARROW_2D_BITS)?,
+                narrow(cy, ay, NARROW_2D_BITS)?,
+            );
+            let (r, s) = (
+                narrow(by, ay, NARROW_2D_BITS)?,
+                narrow(cx, ax, NARROW_2D_BITS)?,
+            );
+            Some(Sign::of_i64(
+                p.checked_mul(q)?.checked_sub(r.checked_mul(s)?)?,
+            ))
+        }
         pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             orient2d_routed(a, b, c)
         }
@@ -469,6 +522,16 @@ mod copy {
         fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             orient2d_exact(a, b, c)
         }
+        pub fn orient2d_step(a: P2, b: P2, c: P2) -> Result<(Sign, Step), NumError> {
+            let sign = orient2d(a, b, c)?;
+            let filtered = filtered(|| generated::orient2d::filter(a, b, c)).is_some();
+            let narrowed = orient2d_narrow(a, b, c).is_some();
+            Ok((sign, Step::route(ORIENT2D_FILTER_FIRST, filtered, narrowed)))
+        }
+        const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
+            target_pointer_width = "64",
+            not(target_family = "wasm")
+        ));
 
         pub const FILTERS: bool = !cfg!(feature = "reference");
 
@@ -480,9 +543,11 @@ mod copy {
         #[cfg(any(test, not(all(target_pointer_width = "64", not(target_family = "wasm")))))]
         #[inline(never)]
         fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-            orient2d_exact(a, b, c)
+            match orient2d_narrow(a, b, c) {
+                Some(sign) => Ok(sign),
+                None => orient2d_exact(a, b, c),
+            }
         }
-
         #[inline]
         fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             let exact = generated::orient2d::exact(a, b, c);
@@ -496,7 +561,10 @@ mod copy {
                 None => orient3d_unfiltered(a, b, c, d),
             }
         }
-
+        pub fn orient3d_step(a: P3, b: P3, c: P3, d: P3) -> Result<(Sign, Step), NumError> {
+            let filtered = filtered(|| generated::orient3d::filter(a, b, c, d)).is_some();
+            Ok((orient3d(a, b, c, d)?, Step::route(true, filtered, false)))
+        }
         #[inline(never)]
         fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
             let exact = generated::orient3d::exact(a, b, c, d);
@@ -510,7 +578,10 @@ mod copy {
                 None => incircle_unfiltered(a, b, c, d),
             }
         }
-
+        pub fn incircle_step(a: P2, b: P2, c: P2, d: P2) -> Result<(Sign, Step), NumError> {
+            let filtered = filtered(|| generated::incircle::filter(a, b, c, d)).is_some();
+            Ok((incircle(a, b, c, d)?, Step::route(true, filtered, false)))
+        }
         #[inline(never)]
         fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
             let exact = generated::incircle::exact(a, b, c, d);
@@ -528,7 +599,6 @@ mod copy {
                 None => insphere_unfiltered(a, b, c, d, e),
             }
         }
-
         #[inline(never)]
         #[allow(
             clippy::many_single_char_names,
@@ -1880,24 +1950,40 @@ fn direction<const D: usize>() -> impl Strategy<Value = [i64; D]> {
     uniform::<_, D>(-(1i64 << 20)..=1 << 20)
 }
 
-proptest! {
-    #![proptest_config(cfg(256))]
-
-    /// incircle with a, b, c on one line is exactly orient2d's determinant of (a, b, d) times
-    /// (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path.
-    #[test]
-    fn incircle_with_collinear_a_b_c_keeps_the_documented_identity(
-        base in uniform::<_, 2>(wild()),
-        w in direction::<2>(),
-        d in uniform::<_, 2>(wild()),
-        seed in any::<u64>(),
-    ) {
+// incircle with a, b, c on one line is exactly orient2d's determinant of (a, b, d) times
+// (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path. In quarters
+// of its one stream of cases, the longest of these under Miri (decision 32.78, `slices`).
+sliced!(
+    incircle_with_collinear_a_b_c_keeps_the_documented_identity,
+    cfg(256),
+    (
+        uniform::<_, 2>(wild()),
+        direction::<2>(),
+        uniform::<_, 2>(wild()),
+        any::<u64>(),
+    ),
+    |(base, w, d, seed)| {
         let [a, b, c] = collinear(base, w, seed);
         let p = [a, b, c, d];
         let expected = o2_exact([a, b, d]) * power_on_line(a, b, c);
         prop_assert_eq!(ic_total(p), expected.clone(), "incircle {:?}", p);
         prop_assert_eq!(copy::ic_routed(p), sign_of(&expected), "incircle {:?}", p);
+        Ok(())
     }
+);
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(cfg(256).cases, "a property's 256 cases");
+}
+
+proptest! {
+    #![proptest_config(cfg(256))]
 
     /// insphere with a, b, c on one line is exactly minus orient3d's determinant of (a, b, d, e)
     /// times (c − a) · (c − b), as the documentation derives, at `i64` scale on the total path.

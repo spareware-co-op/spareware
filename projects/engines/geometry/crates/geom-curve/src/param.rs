@@ -42,6 +42,7 @@ use crate::composite::Composite;
 use crate::conic::{Circle, Ellipse, Hyperbola, Parabola};
 use crate::error::CurveError;
 use crate::helix::Helix;
+use crate::intersection::IntersectionCurve;
 use crate::involute::Involute;
 use crate::line::Line;
 use crate::map::NurbsForm;
@@ -147,6 +148,26 @@ pub trait ParamCurve<const D: usize> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; D]>, CurveError>;
+
+    /// An enclosure of the exact point at `t`: item 0 of [`ParamCurve::enclose`] at order 0, with
+    /// the same work charged, and `None` where that list does not hold exactly one value. A kind
+    /// that encloses its point directly makes no list for it, so the engine's evaluation of a
+    /// point allocates nothing whatever the optimiser inlines.
+    ///
+    /// # Errors
+    ///
+    /// As [`ParamCurve::enclose`].
+    fn enclose_point(
+        &self,
+        t: f64,
+        side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        Ok(match self.enclose(t, side, 0, meter)?.as_slice() {
+            [p] => Some(*p),
+            _ => None,
+        })
+    }
 
     /// A box holding the curve at every parameter of `span`, inside the domain; over a span of
     /// one parameter, the point from both sides where the curve parts there (the trait's rule
@@ -256,6 +277,9 @@ pub enum CurveKind<const D: usize> {
     OnSurface(OnSurface<D>),
     /// A transition curve of an alignment (2D): a clothoid or another spiral, or a part of one.
     Transition(Transition<D>),
+    /// A branch where two surfaces meet: its definition, and its 3D curve and pcurves as certified
+    /// caches (G175).
+    Intersection(IntersectionCurve<D>),
 }
 
 impl<const D: usize> ParamCurve<D> for CurveKind<D> {
@@ -275,6 +299,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::domain(c),
             CurveKind::Offset(c) => ParamCurve::domain(c),
             CurveKind::OnSurface(c) => ParamCurve::domain(c),
+            CurveKind::Intersection(c) => ParamCurve::domain(c),
             CurveKind::Transition(c) => ParamCurve::domain(c),
         }
     }
@@ -295,6 +320,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::point(c, t, side),
             CurveKind::Offset(c) => ParamCurve::point(c, t, side),
             CurveKind::OnSurface(c) => ParamCurve::point(c, t, side),
+            CurveKind::Intersection(c) => ParamCurve::point(c, t, side),
             CurveKind::Transition(c) => ParamCurve::point(c, t, side),
         }
     }
@@ -323,6 +349,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::Offset(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::OnSurface(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Intersection(c) => ParamCurve::points(c, t, side, out, results),
             CurveKind::Transition(c) => ParamCurve::points(c, t, side, out, results),
         }
     }
@@ -343,6 +370,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::derivatives(c, t, side, out),
             CurveKind::Offset(c) => ParamCurve::derivatives(c, t, side, out),
             CurveKind::OnSurface(c) => ParamCurve::derivatives(c, t, side, out),
+            CurveKind::Intersection(c) => ParamCurve::derivatives(c, t, side, out),
             CurveKind::Transition(c) => ParamCurve::derivatives(c, t, side, out),
         }
     }
@@ -369,7 +397,34 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => c.enclose(t, side, order, meter),
             CurveKind::Offset(c) => c.enclose(t, side, order, meter),
             CurveKind::OnSurface(c) => c.enclose(t, side, order, meter),
+            CurveKind::Intersection(c) => c.enclose(t, side, order, meter),
             CurveKind::Transition(c) => c.enclose(t, side, order, meter),
+        }
+    }
+
+    fn enclose_point(
+        &self,
+        t: f64,
+        side: Limit,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; D]>, CurveError> {
+        match self {
+            CurveKind::Circle(c) => c.enclose_point(t, side, meter),
+            CurveKind::Ellipse(c) => c.enclose_point(t, side, meter),
+            CurveKind::Hyperbola(c) => c.enclose_point(t, side, meter),
+            CurveKind::Parabola(c) => c.enclose_point(t, side, meter),
+            CurveKind::Nurbs(c) => c.enclose_point(t, side, meter),
+            CurveKind::Line(c) => c.enclose_point(t, side, meter),
+            CurveKind::Helix(c) => c.enclose_point(t, side, meter),
+            CurveKind::Polynomial(c) => c.enclose_point(t, side, meter),
+            CurveKind::Involute(c) => c.enclose_point(t, side, meter),
+            CurveKind::Bulge(c) => c.enclose_point(t, side, meter),
+            CurveKind::Trimmed(c) => c.enclose_point(t, side, meter),
+            CurveKind::Composite(c) => c.enclose_point(t, side, meter),
+            CurveKind::Offset(c) => c.enclose_point(t, side, meter),
+            CurveKind::OnSurface(c) => c.enclose_point(t, side, meter),
+            CurveKind::Intersection(c) => c.enclose_point(t, side, meter),
+            CurveKind::Transition(c) => c.enclose_point(t, side, meter),
         }
     }
 
@@ -389,6 +444,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::bound(c, span, meter),
             CurveKind::Offset(c) => ParamCurve::bound(c, span, meter),
             CurveKind::OnSurface(c) => ParamCurve::bound(c, span, meter),
+            CurveKind::Intersection(c) => ParamCurve::bound(c, span, meter),
             CurveKind::Transition(c) => ParamCurve::bound(c, span, meter),
         }
     }
@@ -414,6 +470,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => c.derivative_bound(span, order, meter),
             CurveKind::Offset(c) => c.derivative_bound(span, order, meter),
             CurveKind::OnSurface(c) => c.derivative_bound(span, order, meter),
+            CurveKind::Intersection(c) => c.derivative_bound(span, order, meter),
             CurveKind::Transition(c) => c.derivative_bound(span, order, meter),
         }
     }
@@ -434,6 +491,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::breaks(c),
             CurveKind::Offset(c) => ParamCurve::breaks(c),
             CurveKind::OnSurface(c) => ParamCurve::breaks(c),
+            CurveKind::Intersection(c) => ParamCurve::breaks(c),
             CurveKind::Transition(c) => ParamCurve::breaks(c),
         }
     }
@@ -454,6 +512,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => c.to_nurbs(meter),
             CurveKind::Offset(c) => c.to_nurbs(meter),
             CurveKind::OnSurface(c) => c.to_nurbs(meter),
+            CurveKind::Intersection(c) => c.to_nurbs(meter),
             CurveKind::Transition(c) => c.to_nurbs(meter),
         }
     }
@@ -478,6 +537,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => ParamCurve::split(c, t, meter),
             CurveKind::Offset(c) => ParamCurve::split(c, t, meter),
             CurveKind::OnSurface(c) => ParamCurve::split(c, t, meter),
+            CurveKind::Intersection(c) => ParamCurve::split(c, t, meter),
             CurveKind::Transition(c) => ParamCurve::split(c, t, meter),
         }
     }
@@ -498,6 +558,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => c.reversed(meter),
             CurveKind::Offset(c) => c.reversed(meter),
             CurveKind::OnSurface(c) => c.reversed(meter),
+            CurveKind::Intersection(c) => c.reversed(meter),
             CurveKind::Transition(c) => c.reversed(meter),
         }
     }
@@ -522,6 +583,7 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Composite(c) => c.transformed(transform, meter),
             CurveKind::Offset(c) => c.transformed(transform, meter),
             CurveKind::OnSurface(c) => c.transformed(transform, meter),
+            CurveKind::Intersection(c) => c.transformed(transform, meter),
             CurveKind::Transition(c) => c.transformed(transform, meter),
         }
     }

@@ -673,7 +673,8 @@ mod tests {
             Some(ladder::ANGULAR.get().to_bits())
         );
         assert_eq!(power_of_two_bits(-1022), Some(f64::MIN_POSITIVE.to_bits()));
-        assert_eq!(power_of_two_bits(1023), Some(2f64.powi(1023).to_bits()));
+        // 2^1023: biased exponent 2046, zero fraction. Not `f64::powi`, whose last digit varies.
+        assert_eq!(power_of_two_bits(1023), Some(0x7fe0_0000_0000_0000));
         assert_eq!(power_of_two_bits(-1023), None);
         assert_eq!(power_of_two_bits(1024), None);
         assert_eq!(power_of_two_bits(i32::MIN), None);

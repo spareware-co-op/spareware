@@ -7,7 +7,6 @@
 //! cargo run -p geom-test --bin fixture -- run [--tier fast|slow|all]
 //! cargo run -p geom-test --bin fixture -- one <id> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- diff --base <commit> [--root <dir>]
-//!     [--reviews <file> --head <commit> --author <login> [--permissions <file>]]
 //! cargo run -p geom-test --bin fixture -- fixes --base <commit> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- fails [--timeout-seconds <n>] [--root <dir>] <id>...
 //! cargo run -p geom-test --bin fixture -- improve <id> [--root <dir>]
@@ -25,7 +24,8 @@
 //! - `one` replays one fixture from the working tree; it exits 0 only on Pass. `fails` is what
 //!   calls it.
 //! - `diff` compares the fixtures at `<commit>` with the working tree's and holds the change to the
-//!   rules of [`geom_test::fixture::diff`], with the golden store's approval rule.
+//!   rules of [`geom_test::fixture::diff`]: every changed expectation carries its history record,
+//!   and the report prints each one with its record (decision 32.55). It reads no review.
 //! - `fixes` prints, one per line, the ids of the fixtures new since `<commit>` that must fail on
 //!   the merge base.
 //! - `fails` runs at the merge base with the new fixtures copied in, and requires each to fail
@@ -63,7 +63,6 @@ use geom_test::fixture::replay::seeded;
 use geom_test::fixture::repo::{self, File, must_fail_on_base, parse_all, read_dir};
 use geom_test::fixture::run::{Replayed, Verdict, replay, run};
 use geom_test::fixture::{Expect, Fixture, Hash, Source, Speed, Status, diff};
-use geom_test::golden::diff::approved;
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 
@@ -113,18 +112,6 @@ enum Tool {
         /// The base commit.
         #[arg(long)]
         base: String,
-        /// GitHub's JSON list of the pull request's reviews.
-        #[arg(long)]
-        reviews: Option<PathBuf>,
-        /// The pull request's head commit.
-        #[arg(long)]
-        head: Option<String>,
-        /// The pull request's author.
-        #[arg(long)]
-        author: Option<String>,
-        /// A JSON object of reviewers' repository permissions.
-        #[arg(long)]
-        permissions: Option<PathBuf>,
         #[command(flatten)]
         root: Root,
     },
@@ -349,14 +336,7 @@ fn one(id: &str, root: &Root) -> Result<ExitCode, String> {
     }
 }
 
-struct Reviews<'a> {
-    list: Option<&'a Path>,
-    head: Option<&'a str>,
-    author: Option<&'a str>,
-    permissions: Option<&'a Path>,
-}
-
-fn diff_command(base: &str, reviews: &Reviews<'_>, root: &Root) -> Result<ExitCode, String> {
+fn diff_command(base: &str, root: &Root) -> Result<ExitCode, String> {
     let root = root_of(root)?;
     let before = parsed(&files_at(&root, base)?)?;
     let after = parsed(&read_dir(&root)?)?;
@@ -368,50 +348,12 @@ fn diff_command(base: &str, reviews: &Reviews<'_>, root: &Root) -> Result<ExitCo
             .find(|e| e.edition == edition)
             .map(|e| e.state)
     });
-    for id in &d.added {
-        println!("added: {id}");
-    }
-    for line in &d.free {
-        println!("{line}");
-    }
-    for line in &d.approval {
-        println!("needs a kernel owner's approval: {line}");
-    }
-    for line in &d.refused {
-        eprintln!("refused: {line}");
-    }
-    if !d.refused.is_empty() {
-        return Ok(ExitCode::from(1));
-    }
-    if d.approval.is_empty() {
-        return Ok(ExitCode::SUCCESS);
-    }
-    let (Some(list), Some(head), Some(author)) = (reviews.list, reviews.head, reviews.author)
-    else {
-        eprintln!(
-            "fixture diff: this change needs a kernel owner's approval; pass --reviews, --head \
-             and --author to check the pull request's reviews"
-        );
-        return Ok(ExitCode::from(1));
-    };
-    let list = std::fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
-    let permissions: BTreeMap<String, String> = match reviews.permissions {
-        None => BTreeMap::new(),
-        Some(file) => std::fs::read_to_string(file)
-            .map_err(|e| e.to_string())
-            .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
-            .map_err(|e| format!("{}: {e}", file.display()))?,
-    };
-    match approved(&list, head, author, &permissions) {
-        Ok(who) => {
-            println!("fixture diff: approved on {head} by {who}");
-            Ok(ExitCode::SUCCESS)
-        }
-        Err(e) => {
-            eprintln!("fixture diff: {e}");
-            Ok(ExitCode::from(1))
-        }
-    }
+    println!("{d}");
+    Ok(if d.is_acceptable() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
 }
 
 fn fixes(base: &str, root: &Root) -> Result<ExitCode, String> {
@@ -593,23 +535,7 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
         Tool::Check(root) => check(&root),
         Tool::Run { tier } => run_tier(tier),
         Tool::One { id, root } => one(&id, &root),
-        Tool::Diff {
-            base,
-            reviews,
-            head,
-            author,
-            permissions,
-            root,
-        } => diff_command(
-            &base,
-            &Reviews {
-                list: reviews.as_deref(),
-                head: head.as_deref(),
-                author: author.as_deref(),
-                permissions: permissions.as_deref(),
-            },
-            &root,
-        ),
+        Tool::Diff { base, root } => diff_command(&base, &root),
         Tool::Fixes { base, root } => fixes(&base, &root),
         Tool::Fails {
             timeout_seconds,

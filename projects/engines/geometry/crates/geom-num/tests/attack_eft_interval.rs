@@ -67,6 +67,9 @@
     clippy::indexing_slicing
 )]
 
+#[macro_use]
+mod slices;
+
 use proptest::test_runner::{Config, TestCaseError};
 
 /// The outcome of one check: `Err` carries the first disagreement with an oracle.
@@ -1392,8 +1395,10 @@ mod eft_attacks {
     /// to Ω. Each must still split exactly into two 26-bit halves, or be reported by a non-finite
     /// half; never a finite wrong split. And the whole contract: reported only when the high half
     /// would be 2^1024.
-    #[test]
-    fn split_outside_its_precondition_is_exact_or_reported() {
+    ///
+    /// In quarters of its inputs (decision 32.78, `slices`); each quarter that holds inputs at or
+    /// above 2^996 holds one that splits finitely.
+    pub fn split_inputs() -> Vec<f64> {
         let mut rng = Lcg(0xd15c);
         let mut inputs: Vec<f64> = (0..52).map(|k| f64::from_bits(1u64 << k)).collect();
         inputs.extend((0..52).map(|k| f64::from_bits(fp::FRAC >> k)));
@@ -1405,31 +1410,44 @@ mod eft_attacks {
             inputs.push(fp::make(false, e, 0));
             inputs.push(fp::make(false, e, fp::FRAC));
         }
-        let mut exact_large = 0;
-        for &x in &inputs {
-            for a in [x, -x] {
-                run(check_split_total(a));
-                let (hi, lo) = eft::split(a);
-                if !(hi.is_finite() && lo.is_finite()) {
-                    continue;
-                }
-                let (dh, dl) = (Dy::of(hi), Dy::of(lo));
-                assert_eq!(
-                    dh.add(&dl),
-                    Dy::of(a),
-                    "split({a:e}) = ({hi:e}, {lo:e}) is finite and wrong"
-                );
-                assert!(
-                    dh.significant_bits() <= 26 && dl.significant_bits() <= 26,
-                    "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits"
-                );
-                if a.abs() >= fp::pow2(996) {
-                    exact_large += 1;
+        inputs
+    }
+
+    quarters!(
+        split_outside_its_precondition_is_exact_or_reported,
+        |part| {
+            let inputs = split_inputs();
+            let inputs = &inputs[crate::slices::range_usize(inputs.len(), part)];
+            let large = inputs.iter().any(|x| x.abs() >= fp::pow2(996));
+            let mut exact_large = 0;
+            for &x in inputs {
+                for a in [x, -x] {
+                    run(check_split_total(a));
+                    let (hi, lo) = eft::split(a);
+                    if !(hi.is_finite() && lo.is_finite()) {
+                        continue;
+                    }
+                    let (dh, dl) = (Dy::of(hi), Dy::of(lo));
+                    assert_eq!(
+                        dh.add(&dl),
+                        Dy::of(a),
+                        "split({a:e}) = ({hi:e}, {lo:e}) is finite and wrong"
+                    );
+                    assert!(
+                        dh.significant_bits() <= 26 && dl.significant_bits() <= 26,
+                        "split({a:e}) = ({hi:e}, {lo:e}): a half has more than 26 bits"
+                    );
+                    if a.abs() >= fp::pow2(996) {
+                        exact_large += 1;
+                    }
                 }
             }
+            assert!(
+                !large || exact_large > 0,
+                "no input at or above 2^996 split finitely"
+            );
         }
-        assert!(exact_large > 0, "no input at or above 2^996 split finitely");
-    }
+    );
 
     /// `fast_two_sum` with its operands out of order (|a| < |b|), which its former precondition
     /// excluded without checking. Under the owner's bar such a pair must be reported or harmless,
@@ -1517,31 +1535,57 @@ mod eft_attacks {
 
     /// Products with a subnormal factor (excluded by the former precondition): reported or exact,
     /// never a finite wrong pair, and exact whenever an exact pair exists.
-    #[test]
-    fn two_prod_with_a_subnormal_factor_is_reported_or_exact() {
+    ///
+    /// In quarters of its 20,000 products, drawn by one helper from the same generator in the
+    /// same order (decision 32.78, `slices`).
+    pub fn subnormal_products() -> Vec<(f64, f64)> {
         let mut rng = Lcg(0x5b);
-        let mut wrong = Vec::new();
-        let mut total = 0u32;
-        for _ in 0..20_000 {
-            let a = f64::from_bits(
-                (u64::from(rng.sign()) << 63)
-                    | ((rng.next() & fp::FRAC) >> (rng.next() % 52)).max(1),
-            );
-            let b = fp::make(rng.sign(), rng.range(-1022, 995), rng.fraction());
-            run(check_two_prod_total(a, b));
-            let (p, e) = eft::two_prod(a, b);
-            total += 1;
-            if verdict(a, b, p, e, true) == Verdict::SilentlyWrong {
-                wrong.push((a, b, p, e));
+        (0..20_000)
+            .map(|_| {
+                let a = f64::from_bits(
+                    (u64::from(rng.sign()) << 63)
+                        | ((rng.next() & fp::FRAC) >> (rng.next() % 52)).max(1),
+                );
+                let b = fp::make(rng.sign(), rng.range(-1022, 995), rng.fraction());
+                (a, b)
+            })
+            .collect()
+    }
+
+    quarters!(
+        two_prod_with_a_subnormal_factor_is_reported_or_exact,
+        |part| {
+            let products = subnormal_products();
+            let mut wrong = Vec::new();
+            let mut total = 0u32;
+            for &(a, b) in &products[crate::slices::range_usize(products.len(), part)] {
+                run(check_two_prod_total(a, b));
+                let (p, e) = eft::two_prod(a, b);
+                total += 1;
+                if verdict(a, b, p, e, true) == Verdict::SilentlyWrong {
+                    wrong.push((a, b, p, e));
+                }
             }
+            assert!(
+                wrong.is_empty(),
+                "two_prod gave a finite wrong pair on {} of {} products with a subnormal factor, e.g. {:?} (as (a, b, p, e))",
+                wrong.len(),
+                total,
+                &wrong[..wrong.len().min(3)],
+            );
         }
-        assert!(
-            wrong.is_empty(),
-            "two_prod gave a finite wrong pair on {} of {} products with a subnormal factor, e.g. {:?} (as (a, b, p, e))",
-            wrong.len(),
-            total,
-            &wrong[..wrong.len().min(3)],
-        );
+    );
+
+    /// The slices' shares add up exactly to the whole's count, each once. A property of a random
+    /// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+    /// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+    /// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+    /// cases, is one stream cut into these ranges, nothing missing or repeated.
+    #[test]
+    fn the_slices_join_to_every_case_once() {
+        let n = |len: usize| u32::try_from(len).unwrap();
+        crate::slices::assert_joins(n(split_inputs().len()), "split's inputs");
+        crate::slices::assert_joins(n(subnormal_products().len()), "the subnormal products");
     }
 
     /// A factor at or above 2^996 (outside part 1 of the former precondition) with any partner

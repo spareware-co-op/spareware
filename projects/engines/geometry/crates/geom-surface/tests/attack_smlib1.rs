@@ -113,11 +113,32 @@ fn agree(a: [f64; 3], b: [f64; 3], rel: f64, what: &str) {
 /// mixed derivative was written over Duu. The input is the defects': a twisted surface offset by
 /// a distance that is not zero, every third and second partial against a central difference of
 /// the one below, taken in the other direction too, so each slot is checked against two routes.
-#[test]
-fn wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials() {
+///
+/// One test for each of its three points (decision 32.78: the three together were too long for
+/// one Miri gate part).
+mod wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials {
+    #[test]
+    fn at_0_31_0_47() {
+        super::twisted_offset_partials_at(0.31, 0.47);
+    }
+
+    #[test]
+    fn at_0_62_0_21() {
+        super::twisted_offset_partials_at(0.62, 0.21);
+    }
+
+    #[test]
+    fn at_0_5_0_73() {
+        super::twisted_offset_partials_at(0.5, 0.73);
+    }
+}
+
+/// The check of `wr_160_161_162_the_offset_of_a_twisted_surface_has_the_right_higher_partials` at
+/// the point (`u`, `v`).
+fn twisted_offset_partials_at(u: f64, v: f64) {
     let off = SurfaceKind::Offset(Offset::new(SurfaceKind::Nurbs(twisted()), 0.45).unwrap());
     let h = 1e-4;
-    for (u, v) in [(0.31, 0.47), (0.62, 0.21), (0.5, 0.73)] {
+    {
         // The order-2 partials against differences of the first partials.
         // Duu (2,0) is d/du of Du; Duv (1,1) is d/dv of Du and d/du of Dv; Dvv (0,2) is d/dv of Dv.
         let d = |i, j, du: f64, dv: f64| {

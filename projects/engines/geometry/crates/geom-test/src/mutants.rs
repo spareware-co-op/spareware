@@ -23,17 +23,18 @@
 //!   ran. A ledger entry those mutants match must not match more survivors than it counts, and if
 //!   every mutant it matches is now caught or unviable, it is stale: remove it. A survivor may be kept
 //!   as `known` only by an entry the base branch's ledger already holds (`base`): a `known` entry
-//!   is an old gap the weekly run found, so a pull request that adds one for a survivor it made
+//!   is an old gap a full run found, so a pull request that adds one for a survivor it made
 //!   would merge a new unexplained survivor, which 28.8 forbids. A ledger-only pull request may
-//!   still add `known` entries for the weekly run's survivors, because no mutant of its diff
-//!   matches them, and the weekly run then holds each entry to its count.
-//! - [`Mode::Full`], weekly, over shards (`cargo mutants --shard k/n`): `expected`, the list of
+//!   still add `known` entries for a full run's survivors, because no mutant of its diff matches
+//!   them, and the full runs then hold each entry to its count.
+//! - [`Mode::Full`], over shards (`cargo mutants --shard k/n`): `expected`, the list of
 //!   every mutant (`cargo mutants --list --json` with the same filters), must equal the union of
 //!   the shards' mutants exactly, with no mutant in two shards, so a lost or truncated shard
 //!   fails. Every ledger entry must match exactly as many surviving mutants as it counts; one that
 //!   matches none is stale and fails, so the ledger never keeps a reason for code that changed.
-//!   A full run may be narrowed, on demand, to the files a regular expression matches
-//!   (`cargo mutants --re`): [`check_narrowed`] proves the list holds every mutant of those files,
+//!   A full run may be narrowed to the files a regular expression matches (`cargo mutants
+//!   --re`), on demand or on a push to main, whose run mutates [`push_files`]:
+//!   [`check_narrowed`] proves the list holds every mutant of those files,
 //!   and of other files only the struct-field deletions cargo-mutants 27.1.0 does not filter, and
 //!   the judge then counts only those files' ledger entries, since no other file was mutated
 //!   whole.
@@ -488,7 +489,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
 pub enum Mode {
     /// A pull request's diff.
     Diff,
-    /// The weekly run over everything, in shards.
+    /// A full run over every mutant of the files it covers, in shards.
     Full,
 }
 
@@ -992,7 +993,12 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// geom-linalg 0.8 (40866622419 and 40964349843), geom-math 22.1 (40866622419; 10.6 over the whole
 /// crate in 40964349843), geom-num 33.2 (40866610641; 25.9 over the whole crate in 40964349843),
 /// geom-nurbs 6.2 (40964349843), geom-pool 6.0 (40859780064), geom-run 11.7 (40964349843),
-/// geom-surface 2.4 (40964349843).
+/// geom-surface 2.4 (40964349843). The diff run of the Phase 5 train (43568172161, 6,738 mutants
+/// run, every outcome counted) found geom-curve 2.5, geom-format 5.7, geom-intersect 55.5,
+/// geom-num 34.5, geom-nurbs 6.7 and geom-surface 12.3, and each row rose to twice that where it
+/// was less. geom-intersect's slices differ eightfold, from 14 s a mutant to 117.8 s over one
+/// shard's, whose job reached the 345 minutes unfinished, as did another's; its row is 160, so that
+/// slice takes 0.74 of its planned time, the margin below.
 ///
 /// A run narrowed to some files is not a measure of its crates while cargo-mutants 27.1.0 is
 /// pinned. Its struct-field strays (see [`UNFILTERED_GENRE`]) put other crates' tests into a
@@ -1005,16 +1011,18 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// stretch of one crate. In those runs, the slowest stretch of each crate as long as a shard of it
 /// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run
 /// 40859780064. In 40964349843 it was 0.57, and the longest shard job took 135 minutes.
-pub const SECONDS_PER_MUTANT: [(&str, u64); 9] = [
+pub const SECONDS_PER_MUTANT: [(&str, u64); 11] = [
     ("geom-bvh", 4),
-    ("geom-curve", 3),
+    ("geom-curve", 5),
+    ("geom-format", 12),
+    ("geom-intersect", 160),
     ("geom-linalg", 2),
     ("geom-math", 45),
-    ("geom-num", 67),
-    ("geom-nurbs", 13),
+    ("geom-num", 69),
+    ("geom-nurbs", 14),
     ("geom-pool", 13),
     ("geom-run", 24),
-    ("geom-surface", 5),
+    ("geom-surface", 25),
 ];
 
 /// The seconds a mutant of `package` is planned at: its row of [`SECONDS_PER_MUTANT`], or, for a
@@ -1028,9 +1036,17 @@ pub fn seconds_per_mutant(package: &str) -> u64 {
         .map_or(0, |(_, s)| *s)
 }
 
-/// The minutes of mutation one shard may plan for: the shard job's timeout (345 minutes, under
+/// The minutes of mutation a shard is planned at when the run fits [`MAX_SHARDS`] shards so: a
+/// push's checks end in about a quarter of an hour (the owner, 16 Nov 2026), and a shard's job adds
+/// its setup and its baseline build and test to the mutants' time. Planned times are twice the
+/// largest measured mean ([`SECONDS_PER_MUTANT`]), and the slowest stretch measured took at most
+/// 0.69 of its plan, so ten planned minutes run in about seven.
+pub const SHARD_MINUTES: u64 = 10;
+
+/// The most minutes of mutation one shard may plan for, for a run too large to fit
+/// [`MAX_SHARDS`] shards of [`SHARD_MINUTES`]: the shard job's timeout (345 minutes, under
 /// GitHub's six-hour limit for a job) less its setup and a margin for runs slower than the mean.
-pub const SHARD_MINUTES: u64 = 240;
+pub const SHARD_LIMIT_MINUTES: u64 = 240;
 
 /// The most jobs one GitHub Actions matrix may hold
 /// (<https://docs.github.com/en/actions/reference/limits>).
@@ -1043,48 +1059,91 @@ pub const SHARD_JOBS: u64 = 2;
 /// The most shards a run may have: [`MATRIX_JOBS`] in each of the [`SHARD_JOBS`].
 pub const MAX_SHARDS: u64 = MATRIX_JOBS.saturating_mul(SHARD_JOBS);
 
-/// How many shards a run of `mutants` needs so each shard plans for at most [`SHARD_MINUTES`], and
-/// no more: none for no mutant (a diff that touches none), whose judge then has nothing to wait
-/// for.
+/// The mutants cargo-mutants gives shard `k` of `n` (`--sharding slice`, its default; src/shard.rs
+/// at v27.1.0): positions `k c` to `(k + 1) c - 1` of the list, `c = ceil(len / n)`, the last
+/// fewer, so a shard can be empty when `n` does not divide the list well.
+#[must_use]
+pub fn slice(len: usize, k: u64, n: u64) -> std::ops::Range<usize> {
+    let n = usize::try_from(n.max(1)).unwrap_or(usize::MAX);
+    let k = usize::try_from(k).unwrap_or(usize::MAX);
+    let c = len.div_ceil(n);
+    let start = k.saturating_mul(c).min(len);
+    start..k.saturating_add(1).saturating_mul(c).min(len)
+}
+
+/// The planned seconds of each shard of `n` over `mutants`: the sum of [`seconds_per_mutant`] of
+/// the mutants its [`slice`] holds, each at its own crate's rate. An empty shard reads `None`.
+#[must_use]
+pub fn shard_seconds(mutants: &[Mutant], n: u64) -> Vec<Option<u64>> {
+    (0..n)
+        .map(|k| {
+            let part = mutants.get(slice(mutants.len(), k, n))?;
+            (!part.is_empty()).then(|| {
+                part.iter()
+                    .map(|m| seconds_per_mutant(&m.package))
+                    .fold(0, u64::saturating_add)
+            })
+        })
+        .collect()
+}
+
+/// Whether every shard of `n` holds a mutant and is planned at no more than `minutes`.
+fn fits(mutants: &[Mutant], n: u64, minutes: u64) -> bool {
+    let budget = minutes.saturating_mul(60);
+    shard_seconds(mutants, n)
+        .iter()
+        .all(|s| s.is_some_and(|s| s <= budget))
+}
+
+/// How many shards a run of `mutants` needs, by each mutant's measured time: the fewest shards of
+/// which every one holds a mutant and is planned at no more than [`SHARD_MINUTES`]; when the run
+/// is too large for [`MAX_SHARDS`] such shards, [`MAX_SHARDS`] shards, each planned at no more than
+/// [`SHARD_LIMIT_MINUTES`]. None for no mutant (a diff that touches none), whose judge then has
+/// nothing to wait for.
 ///
-/// cargo-mutants gives each shard a run of consecutive mutants, as many as it can share out evenly
-/// (`--sharding slice`), and one run can lie inside a single crate, so every shard is sized at the
-/// slowest crate in the list: it takes at most `SHARD_MINUTES × 60 / s` mutants for the largest
-/// [`seconds_per_mutant`] `s`. With n shards of at most that many each, every shard has at least
-/// one mutant, so none runs empty.
+/// cargo-mutants gives each shard a run of consecutive mutants ([`slice`]), so the plan sums each
+/// shard's own mutants at their own crates' rates ([`shard_seconds`]): a slice of fast crates holds
+/// as many as its count, and only a slice of geom-num's mutants is sized at geom-num's rate. What
+/// each shard tests is cargo-mutants' choice from `--shard k/n`, never this plan's: the plan picks
+/// only `n`, and the judge proves the shards together tested every mutant of the list
+/// (`--expected`), whatever `n` is.
 ///
 /// # Errors
 ///
-/// A description, when the run would need more than [`MAX_SHARDS`] shards, or one mutant is
-/// planned at more than a shard's time: raise the shard budget or split the run before the gate
-/// silently loses mutants.
+/// A description, when no number of shards up to [`MAX_SHARDS`] keeps every shard within
+/// [`SHARD_LIMIT_MINUTES`]: split the run before the gate silently loses mutants.
 pub fn shard_count(mutants: &[Mutant]) -> Result<u64, String> {
-    let Some((slowest, seconds)) = mutants
-        .iter()
-        .map(|m| (m.package.as_str(), seconds_per_mutant(&m.package)))
-        .max_by_key(|(_, s)| *s)
-    else {
+    if mutants.is_empty() {
         return Ok(0);
-    };
-    let per_shard = SHARD_MINUTES
-        .saturating_mul(60)
-        .checked_div(seconds)
-        .unwrap_or(u64::MAX);
-    if per_shard == 0 {
-        return Err(format!(
-            "a {slowest} mutant is planned at {seconds} s, more than a shard's {SHARD_MINUTES} min"
-        ));
     }
-    let n = mutants.len();
-    let shards = u64::try_from(n).unwrap_or(u64::MAX).div_ceil(per_shard);
-    if shards > MAX_SHARDS {
-        return Err(format!(
-            "{n} mutants, {per_shard} to a shard of {SHARD_MINUTES} min at {seconds} s each \
-             ({slowest}'s), need {shards} shards, more than the {MAX_SHARDS} the workflow's \
-             {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold"
-        ));
+    let total: u64 = mutants
+        .iter()
+        .map(|m| seconds_per_mutant(&m.package))
+        .fold(0, u64::saturating_add);
+    let lower = total
+        .div_ceil(SHARD_MINUTES.saturating_mul(60))
+        .clamp(1, MAX_SHARDS);
+    if let Some(n) = (lower..=MAX_SHARDS).find(|&n| fits(mutants, n, SHARD_MINUTES)) {
+        return Ok(n);
     }
-    Ok(shards)
+    // Too large for shards of SHARD_MINUTES: the plan whose slowest shard is planned at least,
+    // the fewer shards on a tie, when it is within the job's limit.
+    let best = (1..=MAX_SHARDS)
+        .filter_map(|n| {
+            let seconds = shard_seconds(mutants, n);
+            let slowest = seconds.iter().copied().collect::<Option<Vec<u64>>>()?;
+            Some((slowest.into_iter().max().unwrap_or(0), n))
+        })
+        .min();
+    match best {
+        Some((slowest, n)) if slowest <= SHARD_LIMIT_MINUTES.saturating_mul(60) => Ok(n),
+        _ => Err(format!(
+            "{} mutants, planned at {total} s, need more than the {MAX_SHARDS} shards the \
+             workflow's {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold: no plan of at most \
+             {MAX_SHARDS} keeps every shard within {SHARD_LIMIT_MINUTES} min",
+            mutants.len()
+        )),
+    }
 }
 
 /// The shard plan as JSON for the workflow: `{"count": n, "shards": [...], "count_2": m,
@@ -1101,6 +1160,98 @@ pub fn shard_matrix(count: u64) -> String {
     let second: Vec<u64> = (MATRIX_JOBS..MATRIX_JOBS.saturating_add(count_2.max(1))).collect();
     serde_json::json!({"count": count, "shards": first, "count_2": count_2, "shards_2": second})
         .to_string()
+}
+
+/// The function a ledger entry's mutant is in: the last path segment after the description's last
+/// ` in ` (`replace < with <= in Rotation::givens` is in `givens`), or `None` when it names none.
+#[must_use]
+pub fn mutant_function(description: &str) -> Option<&str> {
+    let (_, path) = description.rsplit_once(" in ")?;
+    let name = path.rsplit("::").next()?.trim();
+    let name = name.split(['<', '(', ' ']).next()?;
+    (!name.is_empty()).then_some(name)
+}
+
+/// The functions a unified diff's added and removed lines declare (`fn <name>`), by name.
+#[must_use]
+pub fn declared_functions(diff: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("---") {
+            continue;
+        }
+        let Some(body) = line.strip_prefix(['+', '-']) else {
+            continue;
+        };
+        let mut words = body.split(|c: char| !(c.is_alphanumeric() || c == '_'));
+        while let Some(word) = words.next() {
+            if word == "fn" {
+                if let Some(name) = words.find(|w| !w.is_empty()) {
+                    out.insert(name.to_owned());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The folder of the kernel's crates, from the repository root.
+pub const KERNEL_FOLDER: &str = "projects/engines/geometry/crates/";
+
+/// The files a push to main's full mutation run mutates (the owner's testing principle 5, decision
+/// 32.53): every changed file that holds a kernel crate's sources (`<kernel>/src/**.rs`, deleted
+/// ones included, so their ledger entries are found stale), and every kernel source file one of
+/// whose ledger entries is in a function the push's diff declares, added or removed: a function
+/// that moved, was renamed or had its signature changed may leave its entries behind in a file the
+/// push did not touch. `kernel` names the kernel crates; `diff` is the push's unified diff of its
+/// Rust files. In path order, each once.
+#[must_use]
+pub fn push_files(
+    changed: &[String],
+    diff: &str,
+    ledger: &Ledger,
+    kernel: &[String],
+) -> Vec<String> {
+    let is_kernel_source = |file: &str| {
+        let Some(rest) = file.strip_prefix(KERNEL_FOLDER) else {
+            return false;
+        };
+        let Some((krate, inside)) = rest.split_once('/') else {
+            return false;
+        };
+        kernel.iter().any(|k| k == krate)
+            && inside.starts_with("src/")
+            && Path::new(inside)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("rs"))
+    };
+    let mut out: BTreeSet<String> = changed
+        .iter()
+        .map(|f| f.trim().to_owned())
+        .filter(|f| is_kernel_source(f))
+        .collect();
+    let moved = declared_functions(diff);
+    for s in &ledger.survivors {
+        if is_kernel_source(&s.file)
+            && mutant_function(&s.mutant).is_some_and(|f| moved.contains(f))
+        {
+            out.insert(s.file.clone());
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// A regular expression for `cargo mutants --re` and the judge's `--files` that matches exactly
+/// `files`: a mutant's name (`<file>:<line>:...`) or a ledger entry's file, each path matched
+/// whole. Empty for no file; a caller must then run no mutation, since an empty `--files` means
+/// every mutant.
+#[must_use]
+pub fn files_pattern(files: &[String]) -> String {
+    if files.is_empty() {
+        return String::new();
+    }
+    let alternatives: Vec<String> = files.iter().map(|f| regex_lite::escape(f)).collect();
+    format!("(?:{})(?::|$)", alternatives.join("|"))
 }
 
 #[cfg(test)]

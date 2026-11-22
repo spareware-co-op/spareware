@@ -115,8 +115,9 @@ fn the_real_tree_passes_and_lists_everything() {
         .collect();
     names.sort_unstable();
     assert_eq!(names, expected);
-    // Fifteen curve kinds and eleven surface kinds (chapter 7).
-    assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
+    // Sixteen curve kinds (G175's intersection curve the sixteenth) and eleven surface kinds
+    // (chapter 7).
+    assert_eq!(map["kinds"].as_array().unwrap().len(), 27);
 }
 
 #[cfg_attr(
@@ -125,22 +126,29 @@ fn the_real_tree_passes_and_lists_everything() {
 )]
 #[test]
 fn every_real_entry_carries_its_contract() {
+    // Every operation, Preview or not, has its driver in `contract_laws.rs`: the gate's rule lets
+    // a Preview entry lack a part it lists, and this test holds the real tree tighter than that.
     for entry in map()["operations"].as_array().unwrap() {
-        // A Preview operation may lack the contract evidence if its entry says so (the gate's own
-        // rule; the queries of piece G102 have no driver in `contract_laws.rs` yet).
-        let says_so = entry["tier"]
-            .as_str()
-            .is_some_and(|t| t.starts_with("Preview"))
-            && entry["missing"]
-                .as_array()
-                .is_some_and(|m| m.iter().any(|p| p == "contract"));
-        assert!(
-            entry["evidence"].get("contract").is_some() || says_so,
-            "{entry}"
-        );
+        assert!(entry["evidence"].get("contract").is_some(), "{entry}");
     }
     for entry in map()["kinds"].as_array().unwrap() {
         assert!(entry["evidence"].get("contract").is_some(), "{entry}");
+    }
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_queries_lack_no_part() {
+    // Piece G102's queries carry every part chapter 28.2 asks of an operation: the contract, the
+    // Query family's laws, a fuzz target, a property test, unit tests and a count benchmark.
+    let map = map();
+    let operations = map["operations"].as_array().unwrap();
+    for name in QUERY_OPERATIONS {
+        let entry = operations.iter().find(|o| o["name"] == name).unwrap();
+        assert_eq!(entry["missing"], json!([]), "{entry}");
     }
 }
 
