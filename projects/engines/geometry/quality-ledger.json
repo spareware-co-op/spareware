@@ -8013,6 +8013,30 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace && with || in on_arc",
+      "line_text": "chord.lo() == 0.0 && chord.hi() == 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Read only where the curves' images touch; the two differ only for an enclosure with exactly one end at zero. A point enclosure, the only kind tight arithmetic leaves unwidened, has equal ends; geom-num widens every other bound outward by one step and stores a zero bound as +0, so an end is exactly zero only where its rounded value was ±2^-1074. A difference of two doubles is that small only where both are at most 2^-1021: here r² and k²/|d|², so a radius below 2^-510 steps, far under the finest grid step Q2 (1/625 of Q0): nothing the kernel promises. line_and_circle's own test of its discriminant is kept for the same reason."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace > with >= in on_arc",
+      "line_text": "if toward.lo() > 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "toward's lower bound is exactly zero in two ways only. As the point 0: every operand is then a point, so the end is at a whole number of half-turns and the meeting stands exactly a quarter turn from it; its turn's enclosure, a few steps wide about that place, does not reach the end, and the loop has passed on before this test. Or as a widened bound stepped down from 2^-1074: geom-num's step outward puts the true value strictly above the bound, so toward is truly positive, the meeting is within a quarter turn of the end, and from_end's answer is the proof it is for any positive bound. So the mutant differs only by answering, truly, a meeting the original leaves to the general paths (None)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace > with >= in from_end",
+      "line_text": "} else if d.lo() > room.hi() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only where d's lower bound equals room's upper bound. d is turn_of's quotient by π, or its negative, and geom-num steps each bound of a quotient outward past its rounded value, so the true offset is strictly above d's lower bound; room's true value is at most its upper bound. The meeting is then truly past the room the arc leaves it, off the arc, which is what the mutant answers; the original leaves the pair to the general paths (None). No answer becomes a wrong one, and a test of the true answer cannot tell the original from the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
       "mutant": "replace match guard square_to(p, e) with true in meridians",
       "line_text": "SurfaceKind::Plane(p) if square_to(p, e) => {",
       "occurrences": 1,
