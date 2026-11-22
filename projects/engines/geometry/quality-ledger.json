@@ -6988,14 +6988,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace == with != in strip",
-      "line_text": "if dx == 0.0 && dy == 0.0 {",
-      "occurrences": 2,
-      "kind": "harmless",
-      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace * with / in second_order",
       "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
       "occurrences": 1,
@@ -7297,22 +7289,6 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The mutant moves a parameter exactly at lo a turn on, to hi. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace > with >= in Seam::wrapped",
-      "line_text": "} else if self.closed && t > hi {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant moves a parameter exactly at hi a turn back, to lo. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace < with <= in Seam::spans",
-      "line_text": "(a < b).then_some((a, b))",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant keeps a stretch of no length, a single point where a box moved by a turn just reaches the join; its bound is the curve's point there, which the box's other stretch already reaches at the other end of the domain, so the box's bound changes by rounding at most. On a closed curve lo and hi are the join, one point of the curve, so a parameter or bound exactly on one of them reads the same point either way; geom_num::interval widens every computed bound outward by a step, so a bound lands exactly on the join only by coincidence, and then the two differ only in which end of the domain writes it, up to the rounding of the enclosures. Crossings on the join and within the pad either side of it, for turns from 0 and from 1, are found the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
@@ -7724,14 +7700,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace < with <= in on",
-      "line_text": "if x.hi() < domain.0 || x.lo() > domain.1 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only for an enclosure of a parameter whose upper bound is exactly the domain's start. Its bounds are widened a full step past the rounded value, so the value itself lies below the start by less than its own rounding: the original holds it to the start, the mutant calls it off. The answer differs only within rounding at a domain's end."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace < with <= in parameters",
       "line_text": "let flip = if rho.hi() < 0.0 { -1.0 } else { 1.0 };",
       "occurrences": 1,
@@ -7828,14 +7796,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace > with >= in on",
-      "line_text": "if x.hi() < domain.0 || x.lo() > domain.1 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only for an enclosure of a parameter whose lower bound is exactly the domain's end. Its bounds are widened a full step past the rounded value, so the value itself lies past the end by less than its own rounding: the original holds it to the end, the mutant calls it off. The answer differs only within rounding at a domain's end."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace > with >= in trimmed",
       "line_text": "if *t > last + room && *t < stop - room {",
       "occurrences": 1,
@@ -7908,27 +7868,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
-      "mutant": "replace > with < in diagonal",
-      "line_text": "if pair.2 > best.1 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The test only picks which pivot elimination of Lagrange takes next: the largest diagonal entry, or a sum of two rows. Any pivot that is not zero gives another congruence T^T m T = D of the same member, and one that cannot be told from zero returns None, after which ruled tries the next member. The ruling parameterised is then another basis of the same ruled quadric, so the curve, its topology and its arcs' sign changes are the same; only the enclosures' rounding differs, which the crate does not promise."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
       "mutant": "replace > with >= in diagonal",
       "line_text": "if pair.2 > best.1 {",
       "occurrences": 1,
       "kind": "harmless",
       "reason": "On a tie of the largest off-diagonal and diagonal sizes the mutant takes the sum of two rows instead of the diagonal pivot. Either is a valid pivot of elimination of Lagrange, or a refusal ruled moves past, so the diagonal form is another congruence of the same ruled member and the curve, its topology and its arcs are the same; only the enclosures' rounding differs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
-      "mutant": "replace == with != in normalised",
-      "line_text": "if top == 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "With != every matrix that is not zero comes back unscaled. normalised only divides the quadratic's coefficients by their largest bound so they stand near one: s/t = (-beta +- sqrt(Delta)) / 2 alpha and the sign of Delta do not change under a positive scale, so the curve and its arcs are the same, and only the doubles' range in use differs. A zero matrix, where the mutant would divide by zero, needs the other quadric to vanish on every ruling of the ruled member, which two distinct quadrics never do."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
@@ -7945,14 +7889,6 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The two differ only when a diagonal entry's upper bound is exactly 0.0. geom_num::interval widens every bound outward by a step and writes -0.0 as 0.0, so an upper bound of 0.0 comes only from a rounded bound of -2^-1074, the least subnormal: quadrics whose entries are below about 10^-160, nowhere near a model's coordinates. Only there would the mutant take an entry that may be zero as negative."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
-      "mutant": "replace == with != in ruled",
-      "line_text": "let other = if q == 0 { b } else { a };",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "q is never 0 here: the member at q = 0 is a itself, and a sphere, cylinder or cone never has inertia (2, 2), so ruled has passed it by. The mutant then takes b as the other quadric instead of a. Both are members of the pencil other than the ruled one, and on its rulings any other member is the same quadratic times a nonzero factor (it differs by a multiple of the ruled member, which vanishes there), so alpha, beta and gamma scale together and s/t and the sign of Delta are the same."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
@@ -9354,6 +9290,174 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "They differ only where the stretch's start s and end e have s.hi == e.lo along the parameter. A stretch holds at least two vertices (k to k + 2 of the curve's), so the loop over its windows always runs. The original then reads the stretch as decreasing and needs each window strictly decreasing, so e.hi < s.lo; but s.lo <= s.hi = e.lo <= e.hi. The mutant reads it as increasing and needs each window strictly increasing, so s.hi < e.lo; but they are equal. Either way a window fails and tangent_cell gives None, for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
+      "mutant": "replace || with && in lies_in",
+      "line_text": "if lo.is_nan() || hi.is_nan() || hi <= lo {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when exactly one of lo and hi is NaN, and neither caller can pass a NaN. general::runs_along passes the edge's length, an end pair of a patch of the subdivision, whose sides are the finite domain's ends and halves of them; march::along_an_edge passes larger(smaller(ta, tb), run_lo) and smaller(larger(ta, tb), run_hi), where ta and tb are midpoints lo/2 + hi/2 of start enclosures, whose bounds are finite (geom_num::interval refuses any other) and so are finite, and run_lo and run_hi are the own surface's finite domain ends. With both ends finite both forms test hi <= lo alone."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
+      "mutant": "replace > with >= in best_rows",
+      "line_text": "if size.is_finite() && size > 0.0 && best.is_none_or(|(b, _)| size > b) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only when a minor's size is exactly 0.0 while no earlier minor was kept: any positive finite minor still replaces a kept 0.0 (size > b), so the choice changes only when every one of the three 2x2 minors of the middle's (s, r) columns is exactly 0.0 or not finite. There the original returns None and the piece is not proven; the mutant keeps the first zero minor's rows and piece goes on. Whatever it then returns has passed the same tests as any other piece: inverse must invert those rows' entries (it returns None on an exactly zero pivot, as at a pole, where a column is all zeros), K must lie strictly inside the box, which by Krawczyk's theorem proves one solution for every t in the piece whatever Y is, and the left-over row must be within the floor's share of zero. So every run the mutant adds is a true one and every edge it says lies in the other surface does, and the answer stays complete and certified; only where a run whose middle partials round to a singular matrix is proven rather than left to the flagged boxes changes, with the work."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace || with && in sine",
+      "line_text": "if size.hi() <= 0.0 || !size.hi().is_finite() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Neither condition can hold, so both forms always go on. size is an Interval and geom_num::interval keeps only finite bounds (an operation that would leave them errors), so !size.hi().is_finite() is false. sine is called only from piece, over the boxes w on which turning has just proven the lower bound of |S_u x S_v| above 0, so the normal is nonzero at every point of each box; normal_bound gives a box holding a positive multiple of S_u x S_v at every point of the region (geom_surface::ParamSurface::normal_bound), so each box holds a nonzero vector, Interval::norm's upper bound is at least that vector's norm, above 0, and the outward-rounded product of two such norms has an upper bound above 0. So size.hi() <= 0.0 is false too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace > with >= in piece",
+      "line_text": "if up(reach, di)? / sigma_w > by {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only when x / sigma_w equals by exactly, by = 2.0 * x / sigma, x = up(reach, di). x is never 0: di is gap's upper bound of an outward-rounded sum of norms, and geom_num::interval widens every bound outward by a step, so it is at least 2^-1074. With x above 0 the two are equal only when the two separately rounded quotients land on one double, a coincidence of rounding (in exact arithmetic it is sigma_w = sigma/2 exactly). There the original goes on with w, which then just holds every point within the reach, and the mutant gives up the piece, as it does for any piece whose box cannot be bounded: the span is halved or refined. Every span the fit keeps is still proven within the ceiling, or there is no curve; only the work and which certified fit is kept can change, at that coincidence."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace < with <= in span",
+      "line_text": "if !fits && depth < PIECES && a < m && m < b {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Both mutants (a <= m, m <= b) differ only for a piece whose middle m = a/2 + b/2 rounds onto one of its ends, that is a piece whose ends are adjacent doubles, and only when its read does not fit. There the original keeps that read; the mutant halves it into the same piece and a piece of no width, both one level deeper, until PIECES stops it. piece takes no depth and reads the same surfaces and caches, so the same piece reads the same at every depth: its read again does not fit (or is None). A piece of no width is read as a point: check_span takes lo == hi, a side of no width is a line for the kinds (thick leaves it), and partials and turning are read over point boxes elsewhere too. The span's bound is the largest of its pieces', so it is over the ceiling or None in both forms, and fit counts both alike as failing: the same spans fail and are refined, and the fit is the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace < with <= in fit",
+      "line_text": "if !failing.iter().any(|&(a, b)| ta < b && a < tb) {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Both mutants (ta <= b, a <= tb) differ only for a data interval that touches a failing span at one end and no more: ta equal to the span's end b, or tb equal to its start a, a knot of the cache landing exactly on a data parameter. There the mutant also refines that neighbouring interval, adding a point of the true curve between its two data points (settle_point, the same as for any refined interval), so the next round fits more data. Every point added is a point of the true curve within both domains, and every round's spans are proven as before: the answer is still a curve with every span certified within the ceiling, or no curve after ROUNDS, as fit's guarantee says. Only which true points are fit data changes, and with it the work and the cache's control points, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace steps_at -> f64 with 0.0",
+      "line_text": "let size = p.iter().fold(1.0, |m, x| larger(m, x.abs()));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "steps_at is the floor of Across, which true_point and settle_point build; settle_point reads only at and slope, never reach. With 0.0 the floor is 0, so reach is +inf, or NaN for an image of no width, and neither is below or at RESOLUTION_FLOOR. Across::reach, the image of a box over the floor, is read only by solve and refined. refined stops when reach < RESOLUTION_FLOOR, so with a smaller floor it steps on, until the operator stops shrinking the box or REFINE steps: Krawczyk's image of a box that holds one zero holds it, so the enclosure is the same zero, only narrower. solve flags a box when reach <= RESOLUTION_FLOOR, so with a smaller floor a box the original would flag is split on, until halves cannot split it and it is flagged with the same reason, unless a piece of it is first proven, ruled out by its range or emptied by the operator, by the same tests. solve's guarantees, that a zero is proven and nothing is lost, hold for any floor, so every point true_point returns is still proven alone in its box; the mutant can only prove a point that the original leaves flagged in a box reaching under a few steps of the double, or spend more work. Only the work and the enclosures' widths change, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/fit.rs",
+      "mutant": "replace * with / in steps_at",
+      "line_text": "4.0 * f64::EPSILON * size",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "size is at least 1.0 (the fold starts there), so the forms are equal for a point with every coordinate at most 1 in size, and past that the mutant's floor 4.0 * EPSILON / size is below the original's 4.0 * EPSILON * size. steps_at is the floor of Across, which true_point and settle_point build; settle_point reads only at and slope, never reach. Across::reach, the image of a box over the floor, is read only by solve and refined. refined stops when reach < RESOLUTION_FLOOR, so with a smaller floor it steps on, until the operator stops shrinking the box or REFINE steps: Krawczyk's image of a box that holds one zero holds it, so the enclosure is the same zero, only narrower. solve flags a box when reach <= RESOLUTION_FLOOR, so with a smaller floor a box the original would flag is split on, until halves cannot split it and it is flagged with the same reason, unless a piece of it is first proven, ruled out by its range or emptied by the operator, by the same tests. solve's guarantees, that a zero is proven and nothing is lost, hold for any floor, so every point true_point returns is still proven alone in its box; the mutant can only prove a point that the original leaves flagged in a box reaching under a few steps of the double, or spend more work. Only the work and the enclosures' widths change, none of which the crate promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/march.rs",
+      "mutant": "replace && with || in unique_over",
+      "line_text": "if !(within(first, one) && within(second, two)) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "unique_over is pub(crate) and its one caller is known.rs crossing_cell, whose box comes from hull with domains = [first.domain(), second.domain()]: each side is clamped to larger(lo - room, d0) and smaller(hi + room, d1), and Interval::new refuses the box before the call if that leaves lo > hi. So every side of the box lies in its own surface's domain, both within calls are true on every input that reaches the line, and && and || agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace < with <= in middle_of",
+      "line_text": "let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when between is given lo == hi. It is given a block's two pave ends or a curve's domain. Every block middle_of reads comes from pave::blocks over paves that order_on put in order (interfere's finish through order and order_on, the sections through section_order): order_on keeps a pave only when the last one's enclosure ends strictly before it begins (last.t.hi() < pave.t.lo()), merges two of one vertex into their meet, and the join loop only narrows the first pave to a part of its own enclosure. So the paves of a block that does not wrap have from.t.hi() < to.t.lo(). The block with no paves is a closed edge's whole curve, and every curve kind of three dimensions keeps a domain with a < b: Line::new and the NURBS basis (EmptyDomain) refuse anything else, the conics, helix, polynomial, involute and Trimmed check it (form::check_domain, check_turn), Offset and OnSurface take a Trimmed's interval, Composite needs strictly increasing starts, a transition 0 <= a < b, an intersection curve its NURBS cache's domain, splits cut strictly inside (split_domain), and a bulge polyline exists only in two dimensions. So lo < hi at every call and both forms return the same middle."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+      "mutant": "replace exact_cylinder -> Option<Meeting> with None",
+      "line_text": "let (base, along) = on_axis(&cylinder.center(), &cylinder.frame())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "line_cylinder reads exact_cylinder's answer only as == Some(Meeting::Within), and then calls along_ruling. Within means the exact sum found the line parallel to the axis (d x n = 0) and at the radius from it, on whole data no larger than COORD_MAX. For those same inputs the fallback reaches the same call: the line's direction parts across the axis are enclosures of an exact 0, so lead contains 0; parallel_to's whole numbers fit its Wide<12> and give Some(true); and beside_axis's constant encloses the exact 0 while axis_gap gives Sign::Zero. parallel_to and axis_gap take no meter, so the work charged before along_ruling is the same and no answer or work moves."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in Parameterised::point",
+      "line_text": "let adds = (b.lo() > 0.0) != upper;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when beta's lower bound is exactly 0.0, which geom_num::interval's outward widening gives only from a rounded bound of 2^-1074, the least subnormal. Only there would the mutant take the other form of the root. The forms (-beta + s sqrt(Delta), 2 alpha) and (2 gamma, -beta - s sqrt(Delta)) are proportional, since (-beta + s sqrt(Delta))(-beta - s sqrt(Delta)) = beta^2 - Delta = 4 alpha gamma, so both give the same projective point X / w; and with beta not negative the mutant's pick is the one that does not cancel. Only the enclosure's rounding differs, which the crate does not promise."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/quartic.rs",
+      "mutant": "replace > with >= in diagonal",
+      "line_text": "if here > pair.2 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "On a tie of the largest off-diagonal sizes the mutant takes the last such pair instead of the first, and the pair is read only where it beats every diagonal entry (pair.2 > best.1), so a tie at zero changes nothing. Either pair's sum of two rows is a valid pivot of elimination of Lagrange, or a refusal ruled moves past, so the diagonal form is another congruence of the same ruled member and the curve, its topology and its arcs are the same; only the enclosures' rounding differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+      "mutant": "replace < with <= in clear_of_slab",
+      "line_text": "Ok(away.hi() < slab.lo() || slab.hi() < away.lo())",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either < becomes <=: the forms differ only when away and slab share one bound exactly. Every bound of both is the last result of an interval operation (dot's sums, the slab's adds) that rounds and then steps one double outward, so it lies strictly outside the exact range of what it encloses: the other patch's points along the normal lie strictly below away.hi and the patch's own strictly above slab.lo (the mirror for the other test). A shared bound therefore puts a plane strictly between the two patches, which then have no common point, and the mutant culls only such a pair. The original goes on with it, and since nothing there is common to both, all it can add is work, a flag at the floor, or a meeting taken within the floor on a domain's end or at a pole, as 12.10's floor allows; the mutant reports the pair as empty, which is exact. It never drops a point the surfaces share, and it does no more work than the original on any input, so it keeps within every budget the original keeps within."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+      "mutant": "replace || with && in roomy",
+      "line_text": "if !free || room.is_nan() || room <= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "&& binds tighter than ||, so the mutant reads !free || (room.is_nan() && room <= 0.0), and a NaN compares false, so it returns early exactly when !free. The original also returns early when free and room is NaN or at most 0. room = (b - a) / 16 for a patch side: every patch has a < b (Plane::new and the kinds' checks require it, and subdivision cuts only strictly inside, never a side with an infinite end, whose cut is NaN and refused), so b - a is positive or +infinity and room is never NaN or negative. That leaves room == 0, when (b - a) / 16 underflows, and the mutant then widens by zero: a - 0.0, b + 0.0, lo - 0.0 and hi + 0.0 are a, b, lo and hi exactly, the signs of zeros and infinities included. It returns the values the original returns unchanged, and the test (ru, rv) == there gives the same None."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+      "mutant": "replace / with * in wraps",
+      "line_text": "let (lo, hi) = ((a.0 - b.1) / 2.0, (a.1 - b.0) / 2.0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "wraps is read only by shared_carrier, which returns a region only when the count is 1 and the copy k = 0 shares a width (here is Some), and here is the same test of k = 0 either way. Its ranges are turns of a cylinder, sphere or torus, each at most 2 wide (check_turn, exactly, on every domain). When k = 0 shares, a.0 < b.1 <= b.0 + 2 < a.1 + 2 <= a.0 + 4, so -2 < lo < 0 and likewise 0 < hi < 2; the mutant's lo or hi is then 4 times as large, under 8 in size, passes the 1e9 test and only widens the loop on its side. A shift k past lo shares nothing: k < lo gives 2k < a.0 - b.1, so b.1 + 2k < a.0 exactly and its rounding is at most a.0, since rounding keeps order and a.0 is a double; past hi likewise. So the loops count the same shares and give the same here. When k = 0 does not share, here is None for both, and shared_carrier returns None for both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+      "mutant": "replace && with || in wraps",
+      "line_text": "if !(lo.is_finite() && hi.is_finite() && lo.abs() < 1e9 && hi.abs() < 1e9) {",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "lo.abs() < 1e9 and hi.abs() < 1e9 are false for NaN and the infinities, so they imply the two is_finite tests: with the first && changed the guard is unchanged, and with the second or third it passes more only where |hi| < 1e9 while lo is not finite or |lo| >= 1e9. The ranges are turns of a cylinder, sphere or torus, each at most 2 wide (check_turn, exactly), so before rounding hi - lo = (width of a + width of b) / 2 <= 2: there lo and hi are of one sign and at least 1e9 - 3 in size (a lo past the doubles brings hi past 1e9 too, which the guard still refuses). The loop from ceil(lo) to floor(hi) then leaves out k = 0, so here is None and shared_carrier, the one reader of wraps, returns None, as the original's early None makes it; math::ceil, math::floor and the i32 conversion return None rather than fail."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+      "mutant": "replace < with <= in wraps",
+      "line_text": "if !(lo.is_finite() && hi.is_finite() && lo.abs() < 1e9 && hi.abs() < 1e9) {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only when |lo| or |hi| is exactly 1e9. The ranges are turns of a cylinder, sphere or torus, each at most 2 wide (check_turn, exactly), so before rounding hi - lo <= 2 and the other bound has the same sign and is within 3 of it. The loop from ceil(lo) to floor(hi) then leaves out k = 0, so here is None and shared_carrier, the one reader of wraps, returns None, as the original's early None makes it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in Crossing::between",
+      "line_text": "let area = Interval::new(if area.lo() < 0.0 { 0.0 } else { area.lo() }, area.hi())?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ only when area.lo() == 0.0. Interval's fields are private and every constructor sends -0.0 to +0.0, so lo() is then +0.0 and both branches pass 0.0 to Interval::new: the same interval, bit for bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic_with",
+      "line_text": "let root = Interval::new(if d.lo() < 0.0 { 0.0 } else { d.lo() }, d.hi())?.sqrt()?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two comparisons differ only when d.lo() == 0.0. Interval's fields are private and every constructor sends -0.0 to +0.0, so lo() is then +0.0 and both branches pass 0.0 to Interval::new: the same interval, so the same root."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in quadratic_with",
+      "line_text": "None if d.hi() < 0.0 => Meeting::Nowhere,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant differs only when d.hi() is exactly 0 and no exact count is given. Every discriminant passed without a count is the result of Interval arithmetic (b*b - a*c, or line_conic's meet of two such results), and Interval add, sub and mul always move the upper bound one double up from the round-to-nearest bound. An upper bound of 0 therefore means the rounded bound was -2^-1074, so the exact bound, which is at least the true discriminant, is below -2^-1075: the true discriminant is negative and there are no real roots. The mutant answers Nowhere, which is true; the original hands the pair to the engine. Only the route and its closed-form-to-engine diagnostic change, never the answer."
     }
   ],
   "coverage_off": [
