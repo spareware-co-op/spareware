@@ -8,23 +8,38 @@
 //!   its axis (x, or y when `axis` is `y`), extruded straight up by its height through
 //!   [`Engine::extrude`]. Its bounds are the stand-in's box, so placement means the same.
 //! - `block`: its plan rectangle, width by depth, extruded the same way.
-//! - `door.single`: a box in the wall's thickness, extruded the same way. Its opening is not cut
-//!   from the host wall here: that is the next job's (CON-A3-F1-P2, P6), in this crate's `mesh.rs`
-//!   to come, and [`Extrusion::door`] is the one place a door's shape is decided.
-//! - Every display mesh comes from [`Engine::mesh`], in whole millimetres.
+//! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
+//!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
+//!   a door's shape is decided.
+//! - A wall with doors hosted in it ([`Kernel::build_hosting`], [`Hosted`]): the wall's extrusion
+//!   less each door's opening, through [`Engine::subtract`], one door after another in the order
+//!   of their keys, so the same model gives the same bytes whatever order the doors come in. An
+//!   opening is the door's width and height through the wall's thickness; where it is placed, and
+//!   every case it refuses (an opening at or past the wall's ends, as tall as the wall or taller,
+//!   below its base, overlapping or touching another, or with a face within the engine's
+//!   tolerance of another face without being on it), is decided in [`opening`] before the engine
+//!   is asked, each refusal a [`GeometryError`] naming the door and why.
+//! - Two levels of detail, each from [`Engine::mesh`] in whole millimetres: level 0 the body
+//!   itself, openings cut, straying from it by nothing; level 1 the extrusion before its openings
+//!   were cut, straying by at most the bound [`opening`] gives (none for a wall without openings).
 //! - Every face carries a persistent name for its role (chapter 20.2): a wall's and a door's
 //!   `exterior`, `interior`, `top`, `base`, `end0` and `end1`; a block's `cap.start`, `cap.end` and
 //!   `side.0` to `side.3`. A name is the kernel's `NameScheme v1` id of the face's `Created` name:
 //!   the step is the recipe's operation (`owner/op`), the role is the face's, and nothing of the
 //!   recipe's lengths goes in, so a wall rebuilt or lengthened keeps every name, and a door hosted
-//!   on its exterior keeps its face.
+//!   on its exterior keeps its face. An opening keeps them too: a face it cuts into keeps its name
+//!   (a base a door to the floor cuts in two is named once, as its carrier), and the faces it
+//!   makes, its jambs, its head and, above the base, its sill, are named by the door that made
+//!   them as chapter 11.9 names a tool's faces: `Created { op, role: tool(door), from: [the
+//!   opening's own face] }`.
 //! - Its [`Edition`] is `construct.kernel`, this builder's version, `NameScheme` 1, and the
 //!   engine's own report ([`Engine::edition`]: its name, its version or pin, its grid step, its
 //!   tolerances and which part answers each operation). A document built on another edition is
 //!   not built here; the regenerator reports it (FORMAT.md, "A document").
 //!
 //! Units: [`Units`] is the one place whole millimetres become the engine's grid steps and come
-//! back, exactly or not at all (chapter 6: on `Q0` one millimetre is 6,400 steps).
+//! back, exactly or not at all (chapter 6: on `Q0` one millimetre is 6,400 steps). A hosted door's
+//! place in its wall is a grid point ([`Units::offset`] makes it from the two placements).
 //!
 //! Guarantees: pure and deterministic as the [`Geometry`] trait asks: the same recipe on the same
 //! engine gives the same bytes, and the engine's results are the kernel's checked solids, as the
@@ -38,11 +53,24 @@
 //!
 //! - The engine behind [`Engine`] is not yet an exact engine of the kernel's own: the program's
 //!   choice, and the interim register beside that engine's named faults, say which parts answer.
-//! - A body's bytes are the engine's request (profile and vector in grid steps), not the body: the
-//!   trait has no record of a body yet (chapter 24.4).
-//! - Both levels of detail are the engine's one mesh, until the next job meshes per detail level
-//!   (CON-A3-F1-P2, P6).
+//! - A body's bytes are the engine's request (profile and vector in grid steps, and each opening's
+//!   cutter by its door's key), not the body: the trait has no record of a body yet (chapter 24.4).
+//! - A shape's names are written from its recipe and its doors, not read from the body, since the
+//!   trait reports no face of a result; the pieces a door to the floor cuts the base into share
+//!   the base's one name, where chapter 20.2 names each piece `Split` (CON-A3-F1-P2 with the body
+//!   record).
+//! - Whether a hosted door cuts its wall is the caller's to say: Construct's [`Geometry`] builds a
+//!   recipe alone, so the regenerator does not yet hand a wall its doors (the hosting job,
+//!   CON-A4-F3-P1).
+//! - A face within the engine's tolerance of another is refused, not built (named fault SC-4 of
+//!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
+//!   kernel's grid and the engine is the kernel's exact one.
 
+pub mod opening;
+
+pub use opening::Hosted;
+
+use construct_model::element::Placement;
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, EngineAnswer, EngineReport, EngineTolerance, FaceName,
     Geometry, GeometryError, Mesh, Recipe,
@@ -54,6 +82,7 @@ use engine_geometry::value::grid::{GridStep, P3};
 use engine_geometry::value::name::{Role, TopoName};
 use engine_geometry::value::op::{OpId, OpPath};
 use kit_ops::sha256_hex;
+use opening::Cut;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -186,6 +215,60 @@ impl Units {
         P3::new(self.steps(x)?, self.steps(y)?, self.steps(z)?).map_err(|_| too_big())
     }
 
+    /// Where `hosted` sits in the frame of `host`, the element it is hosted in: the difference of
+    /// their placements, as a grid point.
+    ///
+    /// # Errors
+    ///
+    /// `TooBig` when it is beyond the kernel's grid.
+    pub fn offset(self, host: &Placement, hosted: &Placement) -> Result<P3, GeometryError> {
+        let less = |a: i64, b: i64| a.checked_sub(b).ok_or_else(too_big);
+        self.point([
+            less(hosted.x, host.x)?,
+            less(hosted.y, host.y)?,
+            less(hosted.z, host.z)?,
+        ])
+    }
+
+    /// `steps`, at or above zero, in millimetres rounded up: a bound in whole millimetres.
+    fn millimetres_up(self, steps: i64) -> i64 {
+        let whole = steps.checked_div(self.per_mm).unwrap_or(0);
+        match steps.checked_rem(self.per_mm) {
+            Some(0) | None => whole,
+            Some(_) => whole.saturating_add(1),
+        }
+    }
+
+    /// How near two faces may come without being one, in steps: the model's tolerance (0.01 mm,
+    /// main's ruling of 22 Nov 2026) or the engine's largest length tolerance, whichever is the
+    /// larger, rounded up to a whole step.
+    fn band(self, report: &EngineEdition) -> i64 {
+        // A hundredth of a millimetre, rounded up to a whole step.
+        let model = self.per_mm.saturating_add(99).checked_div(100).unwrap_or(1);
+        report
+            .tolerances
+            .iter()
+            .filter(|t| t.unit == "m" && t.value.is_finite() && t.value > 0.0)
+            .map(|t| {
+                #[allow(
+                    clippy::cast_precision_loss,
+                    reason = "steps per millimetre, far under 2^53, which an f64 holds exactly"
+                )]
+                let steps = (t.value * 1000.0 * self.per_mm as f64).ceil();
+                if steps < EXACT_F64 {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        reason = "a whole number under 2^53, checked above, which an i64 holds"
+                    )]
+                    let steps = steps as i64;
+                    steps
+                } else {
+                    i64::MAX
+                }
+            })
+            .fold(model, i64::max)
+    }
+
     /// A mesh coordinate, in steps as the engine gives it, in whole millimetres.
     fn coordinate(self, steps: f64) -> Result<i64, GeometryError> {
         if steps.fract() != 0.0 || steps.abs() >= EXACT_F64 {
@@ -215,6 +298,8 @@ struct Extrusion {
     caps: [&'static str; 2],
     /// The role of the side each edge of the plan sweeps, edge `i` from corner `i` to `i + 1`.
     sides: [&'static str; 4],
+    /// The plan's axis a linear element runs along: 0 for x, 1 for y.
+    along: usize,
 }
 
 fn whole(args: &BTreeMap<String, Value>, name: &str) -> Result<i64, GeometryError> {
@@ -243,6 +328,7 @@ impl Extrusion {
                 height: whole(args, "height")?,
                 caps: ["cap.start", "cap.end"],
                 sides: ["side.0", "side.1", "side.2", "side.3"],
+                along: 0,
             }),
             other => Err(fault(
                 "UnknownOperation",
@@ -251,8 +337,9 @@ impl Extrusion {
         }
     }
 
-    /// A door: today a box in its wall's thickness with a wall's roles. The opening it makes in its
-    /// host is the next job's (CON-A3-F1-P2, P6).
+    /// A door: a box in its wall's thickness with a wall's roles, a simple solid placed in its
+    /// opening until families give it its real shape. The opening it cuts from its host is its
+    /// width and height through the host's thickness ([`opening`]).
     fn door(args: &BTreeMap<String, Value>) -> Result<Extrusion, GeometryError> {
         Extrusion::linear(args, "width", "thickness")
     }
@@ -278,6 +365,7 @@ impl Extrusion {
                 height,
                 caps,
                 sides: ["end0", "exterior", "end1", "interior"],
+                along: 1,
             }
         } else {
             // Walking along +x, the right hand is −y: the side at y = 0.
@@ -286,8 +374,15 @@ impl Extrusion {
                 height,
                 caps,
                 sides: ["exterior", "end1", "interior", "end0"],
+                along: 0,
             }
         })
+    }
+
+    /// Its length along its axis and its thickness across it, in millimetres.
+    fn long_and_across(&self) -> (i64, i64) {
+        let [a, b] = self.size;
+        if self.along == 1 { (b, a) } else { (a, b) }
     }
 
     /// The plan's corners, in millimetres, counter-clockwise from above, from the origin.
@@ -332,11 +427,30 @@ fn name(op: OpId, role: &str) -> Result<FaceName, GeometryError> {
     })
 }
 
-/// A body's bytes: what the engine was asked, in grid steps.
+/// A body's bytes: what the engine was asked, in grid steps. A shape with no openings writes no
+/// `subtract`, so its bytes are as they were before openings were cut.
 #[derive(Serialize)]
 struct Asked {
     extrude: Vec<[i64; 3]>,
     by: [i64; 3],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    subtract: Vec<AskedCut>,
+}
+
+/// One opening's cutter as the engine was asked for it, by its door's key.
+#[derive(Serialize)]
+struct AskedCut {
+    key: String,
+    extrude: Vec<[i64; 3]>,
+    by: [i64; 3],
+}
+
+/// The grid points of `points`, as whole steps.
+fn as_steps(points: &[P3]) -> Vec<[i64; 3]> {
+    points
+        .iter()
+        .map(|p| [p.x.get(), p.y.get(), p.z.get()])
+        .collect()
 }
 
 /// The engine's mesh in whole millimetres.
@@ -411,6 +525,8 @@ pub struct Kernel<E> {
     engine: Mutex<E>,
     units: Units,
     edition: Edition,
+    /// How near two faces may come without being one, in steps ([`Units::band`]).
+    band: i64,
 }
 
 impl<E: Engine> Kernel<E> {
@@ -424,6 +540,7 @@ impl<E: Engine> Kernel<E> {
         let units = Units::on(report.step)?;
         Ok(Kernel {
             edition: edition_of(&report, units),
+            band: units.band(&report),
             units,
             engine: Mutex::new(engine),
         })
@@ -434,6 +551,113 @@ impl<E: Engine> Kernel<E> {
     pub fn units(&self) -> Units {
         self.units
     }
+
+    /// How near two faces may come without being one, in the engine's grid steps: the larger of
+    /// the model's tolerance (0.01 mm) and the engine's largest length tolerance. An opening with a
+    /// face this near another face, and not on it, is refused (`OpeningNearFace`).
+    #[must_use]
+    pub fn band(&self) -> i64 {
+        self.band
+    }
+
+    /// Builds `host` with an opening cut through it for each element in `hosted`: the host's
+    /// extrusion less each opening, through [`Engine::subtract`], in the order of the hosted
+    /// elements' keys. With nothing hosted it is [`Geometry::build`].
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Geometry::build`]; for an opening, [`opening`]'s refusals, each naming the
+    /// hosted element and why; and the engine's own, with the hosted element's key in front.
+    pub fn build_hosting(
+        &self,
+        host: &Recipe,
+        hosted: &[Hosted<'_>],
+    ) -> Result<Built, GeometryError> {
+        let shape = Extrusion::of(host)?;
+        let units = self.units;
+        let op = op_id(host)?;
+        let cuts = opening::plan(host, &shape, hosted, units, self.band)?;
+        let corners = shape.corners();
+        let outer = corners
+            .iter()
+            .map(|&[x, y]| units.point([x, y, 0]))
+            .collect::<Result<Vec<P3>, _>>()?;
+        let by = [0, 0, units.steps(shape.height)?];
+        let mut asked = Asked {
+            extrude: as_steps(&outer),
+            by,
+            subtract: Vec::new(),
+        };
+        let profile = Profile {
+            outer,
+            holes: Vec::new(),
+        };
+        let tools = cuts
+            .iter()
+            .map(Cut::profile)
+            .collect::<Result<Vec<_>, _>>()?;
+        for (cut, (tool, by)) in cuts.iter().zip(&tools) {
+            asked.subtract.push(AskedCut {
+                key: cut.key().to_owned(),
+                extrude: as_steps(&tool.outer),
+                by: *by,
+            });
+        }
+        let (coarse, fine) = {
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            let mut solid = engine.extrude(&profile, by).map_err(from_engine)?;
+            let coarse = engine.mesh(&solid).map_err(from_engine)?;
+            for (cut, (tool, by)) in cuts.iter().zip(&tools) {
+                let named = |e: EngineError| cut.engine_error(from_engine(e));
+                let tool = engine.extrude(tool, *by).map_err(named)?;
+                solid = engine.subtract(&solid, &tool).map_err(named)?;
+            }
+            let fine = if cuts.is_empty() {
+                None
+            } else {
+                Some(engine.mesh(&solid).map_err(from_engine)?)
+            };
+            (coarse, fine)
+        };
+        let coarse = millimetres(&coarse, units)?;
+        let fine = fine.map_or_else(|| Ok(coarse.clone()), |m| millimetres(&m, units))?;
+        let bounds = bounds(&fine)?;
+        let mut names = shape
+            .roles()
+            .map(|role| name(op, role))
+            .collect::<Result<Vec<_>, _>>()?;
+        for cut in &cuts {
+            names.extend(cut.names(op)?);
+        }
+        names.sort_by(|a, b| a.name.cmp(&b.name));
+        let outline = corners.to_vec();
+        // Level 0 is the body itself; level 1 the extrusion before its openings were cut, which
+        // strays from the body by at most the openings' bound. A shape with no openings has the
+        // same mesh at both levels; their records still stand apart by their level.
+        let displays = vec![
+            Display {
+                lod: 0,
+                deviation: 0,
+                mesh: fine,
+                outline: outline.clone(),
+            },
+            Display {
+                lod: 1,
+                deviation: opening::deviation(&cuts, units),
+                mesh: coarse,
+                outline,
+            },
+        ];
+        Ok(Built {
+            body: serde_json::to_vec(&asked).unwrap_or_default(),
+            bounds,
+            names,
+            displays,
+        })
+    }
 }
 
 impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
@@ -442,58 +666,7 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
-        let shape = Extrusion::of(recipe)?;
-        let units = self.units;
-        let corners = shape.corners();
-        let outer = corners
-            .iter()
-            .map(|&[x, y]| units.point([x, y, 0]))
-            .collect::<Result<Vec<P3>, _>>()?;
-        let by = [0, 0, units.steps(shape.height)?];
-        let asked = Asked {
-            extrude: outer
-                .iter()
-                .map(|p| [p.x.get(), p.y.get(), p.z.get()])
-                .collect(),
-            by,
-        };
-        let profile = Profile {
-            outer,
-            holes: Vec::new(),
-        };
-        let mesh = {
-            let mut engine = self
-                .engine
-                .lock()
-                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
-            let solid = engine.extrude(&profile, by).map_err(from_engine)?;
-            engine.mesh(&solid).map_err(from_engine)?
-        };
-        let mesh = millimetres(&mesh, units)?;
-        let bounds = bounds(&mesh)?;
-        let op = op_id(recipe)?;
-        let mut names = shape
-            .roles()
-            .map(|role| name(op, role))
-            .collect::<Result<Vec<_>, _>>()?;
-        names.sort_by(|a, b| a.name.cmp(&b.name));
-        let outline = corners.to_vec();
-        // One mesh for both levels until the next job meshes per detail level; their records still
-        // stand apart by their level.
-        let displays = (0..2)
-            .map(|lod| Display {
-                lod,
-                deviation: 0,
-                mesh: mesh.clone(),
-                outline: outline.clone(),
-            })
-            .collect();
-        Ok(Built {
-            body: serde_json::to_vec(&asked).unwrap_or_default(),
-            bounds,
-            names,
-            displays,
-        })
+        self.build_hosting(recipe, &[])
     }
 }
 
@@ -536,6 +709,54 @@ mod tests {
         assert_eq!(q1.steps_per_mm(), 160_000);
         assert_eq!(q1.millimetres(q1.steps(3).unwrap()).unwrap(), 3);
         assert_eq!(Units::on(STEP).unwrap(), q0);
+    }
+
+    /// A hosted element's place in its host is the difference of their placements, on the grid;
+    /// a bound in millimetres rounds up; the band two faces may not come within is the model's
+    /// 0.01 mm or the engine's largest length tolerance, whichever is larger, in whole steps.
+    #[test]
+    fn a_hosted_place_a_bound_and_the_band_are_on_the_grid() {
+        let q0 = Units::on(GridStep::Q0).unwrap();
+        let wall = Placement {
+            x: 100,
+            y: -55,
+            z: 0,
+        };
+        let door = Placement {
+            x: 1100,
+            y: -150,
+            z: 900,
+        };
+        assert_eq!(
+            q0.offset(&wall, &door).unwrap(),
+            P3::new(6_400_000, -608_000, 5_760_000).unwrap()
+        );
+        let far = Placement {
+            x: i64::MIN,
+            y: 0,
+            z: 0,
+        };
+        assert_eq!(q0.offset(&door, &far).unwrap_err().code, "TooBig");
+        assert_eq!(q0.millimetres_up(0), 0);
+        assert_eq!(q0.millimetres_up(6400), 1);
+        assert_eq!(q0.millimetres_up(6401), 2);
+        assert_eq!(q0.millimetres_up(3200), 1);
+        let report = |value: f64, unit: &str| EngineEdition {
+            engine: String::new(),
+            version: String::new(),
+            step: GridStep::Q0,
+            tolerances: vec![engine_geometry::value::engine::Tolerance {
+                name: "t".to_owned(),
+                value,
+                unit: unit.to_owned(),
+            }],
+            answers: Vec::new(),
+        };
+        assert_eq!(q0.band(&report(0.0, "m")), 64);
+        assert_eq!(q0.band(&report(1.0e-6, "m")), 64);
+        assert_eq!(q0.band(&report(1.0, "degree")), 64);
+        assert_eq!(q0.band(&report(0.25, "m")), 1_600_000);
+        assert_eq!(q0.band(&report(f64::NAN, "m")), 64);
     }
 
     /// A wall's exterior is the side on the right walking it from start to end: y = 0 along x,
