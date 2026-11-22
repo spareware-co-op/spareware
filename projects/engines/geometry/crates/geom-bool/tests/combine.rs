@@ -441,6 +441,7 @@ fn sheet(axis: usize, at: i64, low: [i64; 2], high: [i64; 2]) -> Body {
     let rules = Rules {
         cuts: &[],
         open: true,
+        crossing: &[],
     };
     let body = rebuild_with(
         &pieces,

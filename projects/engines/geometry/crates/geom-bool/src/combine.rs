@@ -571,7 +571,11 @@ impl<'a> Scene<'a> {
     ) -> Result<Picked, Refused> {
         let kept = self.sourced(select(test, self.classified)?);
         labelled(&kept, test, meter)?;
-        let rules = Rules { cuts, open: false };
+        let rules = Rules {
+            cuts,
+            open: false,
+            crossing: &[],
+        };
         let reuse = self.reuse.map(|(memo, _)| memo);
         let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, reuse, meter)?;
         let job = Job {
@@ -878,6 +882,7 @@ impl<'a> Scene<'a> {
         let rules = Rules {
             cuts: &cuts,
             open: false,
+            crossing: &[],
         };
         let merged = merge_with(&pieces, Merge::RemoveRedundant, rules, meter)?;
         Ok((pieces, merged))
@@ -942,9 +947,12 @@ impl<'a> Scene<'a> {
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
+        // The other operands' pieces name the sheet's rim where it ends on them (#1182).
+        let crossing = self.others(target);
         let rules = Rules {
             cuts: &[],
             open: true,
+            crossing: &crossing,
         };
         let merged = merge_with(pieces, self.merge, rules, meter)?;
         let job = Job {
@@ -982,6 +990,7 @@ impl<'a> Scene<'a> {
         let rules = Rules {
             cuts: &cuts,
             open: true,
+            crossing: &[],
         };
         let merged = merge_with(&pieces, self.merge, rules, meter)?;
         let mut chosen: Vec<usize> = Vec::with_capacity(seeds.len());
