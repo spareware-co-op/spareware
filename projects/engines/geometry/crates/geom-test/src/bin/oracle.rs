@@ -23,20 +23,23 @@
 //!   (`--cases`, `seeded` by default; `geom_test::oracle::meshes::CASE_SETS`): the seeded set from
 //!   the seed and count, a stored set from nothing else. A job of a model the set records as
 //!   refused (`meshes::REFUSED_MODELS`) is not written: the oracle is not asked.
-//! - `compare` judges each answer and prints the differences by signature. It fails only on a
-//!   signature the triage register does not hold: each is judged once (28.10). A mesh oracle's
-//!   comparison names its case set (`--cases`, `seeded` by default), every job must be of it, and
+//! - `compare` judges each answer and prints the differences by signature. It fails on a
+//!   difference the triage register does not hold, its signature on its job: a record covers only
+//!   the job it was triaged on, so a second cause under a triaged signature fails, and each is
+//!   judged once (28.10). A mesh oracle's comparison names its case set (`--cases`, `seeded` by
+//!   default), every job must be of it, and
 //!   the kernel must refuse each job the set records as refused with exactly that refusal, or the
 //!   comparison fails. A job on a model that crosses itself, which the oracle's documentation says
 //!   it does not take, is judged by the exact reference alone and printed as outside the oracle's
 //!   stated input (decision 32.59).
-//! - `triage` records one signature's outcome in the register and writes its fixture from what the
-//!   kernel gives for that job today, so "ours" comes after its fix.
+//! - `triage` records one signature's outcome on one job in the register, the job pinned by its
+//!   SHA-256, and writes its fixture from what the kernel gives for that job today, so "ours" comes
+//!   after its fix.
 //!
 //! Guarantees: nothing here runs an oracle, and only `triage` writes a file: the register and the
-//! one fixture. Exit codes: 0 when everything checked
-//! holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line
-//! that cannot be read (a broken harness is never a pass).
+//! one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a difference
+//! is not triaged; 2 for a usage error, or a file or a line that cannot be read (a broken harness is
+//! never a pass).
 //!
 //! Method: none; it parses its arguments and calls [`geom_test::oracle`], whose module headers
 //! carry the methods.
@@ -60,7 +63,9 @@ use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
 use geom_test::oracle::geomdl::{self, Compared};
 use geom_test::oracle::meshes;
-use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
+use geom_test::oracle::triage::{
+    self, Difference, Record, Register, Signature, fixture as fixture_of, group, job_digest,
+};
 use geom_test::seed::Seed;
 
 /// The outside oracles' tool.
@@ -281,15 +286,15 @@ fn lines<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<Vec<T
 }
 
 /// Each answer in `answers` judged against its job in `jobs`, each difference printed, and each
-/// job outside the oracle's stated input: how many jobs there were, and the differences'
-/// signatures.
+/// job outside the oracle's stated input: how many jobs there were, and each difference with its
+/// job's number.
 fn judged<J, A>(
     jobs: &str,
     answers: &str,
     mut judge: impl FnMut(&J, &A) -> Result<(u64, Compared), String>,
-) -> Result<(usize, Vec<Signature>), String>
+) -> Result<(usize, Vec<(u64, Difference)>), String>
 where
-    J: serde::de::DeserializeOwned,
+    J: serde::de::DeserializeOwned + serde::Serialize,
     A: serde::de::DeserializeOwned,
 {
     let jobs: Vec<J> = lines(jobs, "a job")?;
@@ -307,7 +312,8 @@ where
         match judge(job, answer)? {
             (id, Compared::Differ { signature, settled }) => {
                 println!("job {id}: {signature}: {settled}");
-                differences.push(signature);
+                let job = pin(job)?;
+                differences.push((id, Difference { signature, job }));
             }
             (id, Compared::Outside { why }) => {
                 println!("job {id}: outside the oracle's stated input: {why}");
@@ -361,18 +367,24 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
         })?
     };
     let register = Register::embedded().map_err(|e| e.to_string())?;
-    for (signature, count) in group(&differences) {
+    for (signature, count) in group(differences.iter().map(|(_, d)| &d.signature)) {
         println!("{signature}: {count}");
     }
-    let new = register.new_signatures(&differences);
+    let new: Vec<&(u64, Difference)> = differences
+        .iter()
+        .filter(|(_, d)| !register.knows(d))
+        .collect();
     println!(
-        "oracle compare: {} jobs, {} differences, {} new signatures",
+        "oracle compare: {} jobs, {} differences, {} not triaged",
         count,
         differences.len(),
         new.len()
     );
-    for signature in &new {
-        eprintln!("oracle compare: new signature {signature}: triage it (28.10)");
+    for (id, d) in &new {
+        eprintln!(
+            "oracle compare: job {id}: {} is not triaged on this job (job {}): triage it (28.10)",
+            d.signature, d.job
+        );
     }
     if !held {
         eprintln!("oracle compare: a job recorded as refused was not refused so");
@@ -384,19 +396,29 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path, cases: &str) -> Result<Exi
     })
 }
 
-/// Job `id` of `text`: its operation's name, its family, and its operation for a log.
-fn chosen(oracle: &str, text: &str, id: u64) -> Result<(String, String, Operation), String> {
+/// The pin of `job` ([`job_digest`]): of its line as `jobs` prints it.
+fn pin<T: serde::Serialize>(job: &T) -> Result<String, String> {
+    let line = serde_json::to_string(job).map_err(|e| e.to_string())?;
+    Ok(job_digest(&line))
+}
+
+/// Job `id` of `text`: its operation's name, its family, its operation for a log, and its pin.
+fn chosen(
+    oracle: &str,
+    text: &str,
+    id: u64,
+) -> Result<(String, String, Operation, String), String> {
     let missing = || format!("no job {id}");
     if meshes::holds(oracle) {
         let jobs: Vec<meshes::Job> = lines(text, "a job")?;
         let job = jobs.iter().find(|j| j.id == id).ok_or_else(missing)?;
         let name = job.op.name().to_owned();
-        Ok((name, job.family.clone(), meshes::operation(job)?))
+        Ok((name, job.family.clone(), meshes::operation(job)?, pin(job)?))
     } else {
         let jobs: Vec<geomdl::Job> = lines(text, "a job")?;
         let job = jobs.iter().find(|j| j.id == id).ok_or_else(missing)?;
         let name = job.op.name().to_owned();
-        Ok((name, job.family.clone(), geomdl::operation(job)?))
+        Ok((name, job.family.clone(), geomdl::operation(job)?, pin(job)?))
     }
 }
 
@@ -406,7 +428,7 @@ fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
         Some(r) => r.clone(),
         None => workspace_root().map_err(|e| e.to_string())?,
     };
-    let (operation, family, logged) = chosen(&t.oracle, &read(&t.jobs)?, t.id)?;
+    let (operation, family, logged, job) = chosen(&t.oracle, &read(&t.jobs)?, t.id)?;
     let outcome: Triage = serde_json::from_value(serde_json::Value::String(t.outcome.clone()))
         .map_err(|e| format!("the outcome {:?}: {e}", t.outcome))?;
     let record = Record {
@@ -416,6 +438,7 @@ fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
             kind: t.kind.clone(),
             family,
         },
+        job,
         outcome,
         fixture: t.fixture.clone(),
         reference: t.reference.clone(),
@@ -423,8 +446,15 @@ fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
     };
     let register_path = joined(&root, &triage::REGISTER_PATH);
     let mut register = Register::parse(&read(&register_path)?).map_err(|e| e.to_string())?;
-    if register.knows(&record.signature) {
-        eprintln!("oracle triage: {} is already triaged", record.signature);
+    let difference = Difference {
+        signature: record.signature.clone(),
+        job: record.job.clone(),
+    };
+    if register.knows(&difference) {
+        eprintln!(
+            "oracle triage: {} on job {} is already triaged",
+            record.signature, t.id
+        );
         return Ok(ExitCode::from(1));
     }
     let log = OpLog::new(Vec::new(), vec![logged]);

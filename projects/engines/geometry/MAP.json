@@ -14929,7 +14929,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/oracle.rs",
           "guarantees": [
-            "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
+            "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a difference is not triaged; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
           ],
           "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a run's jobs, compare the answers, and record a triage.",
           "method": {
@@ -16652,15 +16652,15 @@
         },
         {
           "cost": "linear in the register for each lookup.",
-          "does": "a [`Signature`] groups differences: operation, oracle, kind of difference, input family. [`Register`] is the record of triaged signatures (`oracles/triaged.json`, [`REGISTER_PATH`]): [`Register::new_signatures`] says which of a night's are new, and only those fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.",
+          "does": "a [`Signature`] groups differences: operation, oracle, kind of difference, input family. A [`Difference`] is one of them as the register reads it: its signature and its job, pinned by [`job_digest`], the SHA-256 of the job's line as the oracle received it. [`Register`] is the record of triaged differences (`oracles/triaged.json`, [`REGISTER_PATH`]): each record holds a signature and the job it was triaged on, the one its fixture logs ([`logged_job`]). [`Register::new_differences`] says which of a run's are not triaged, and those fail it. [`fixture`] turns a triaged case into the [`Fixture`] 28.16 asks for.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/triage.rs",
           "guarantees": [
-            "**One record per signature**, and every record names its fixture.",
+            "**One record per signature and job**, and every record names its fixture.",
             "**\"Theirs\" names its report**, and \"ours\" its fix: neither can be recorded empty.",
-            "**An oracle run fails only on a new signature**, so a known difference never hides a new one and is never argued twice."
+            "**A record covers only the job it was triaged on**: a difference is known only when one record holds both its signature and its job, so a second cause under a triaged signature, on any other job, is not triaged and fails the run. A known difference never hides a new one and is never argued twice."
           ],
-          "job": "Triage: every difference ends in one of four outcomes, each a fixture, and each signature is recorded once (chapter 28.10; piece G113).",
+          "job": "Triage: every difference ends in one of four outcomes, each a fixture, and each is recorded once, by its signature and the job it was triaged on (chapter 28.10; piece G113).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"

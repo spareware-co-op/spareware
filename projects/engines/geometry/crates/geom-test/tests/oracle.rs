@@ -12,7 +12,8 @@
 //!   `audit` finds a published image and an unpinned base.
 //! - Inputs read back bit for bit, and a change of unit states a bound the exact value keeps.
 //! - The allowance is what 28.10 says, capped whatever the oracle states.
-//! - A difference has one signature, each is judged once, and every outcome ends as its fixture.
+//! - A difference has one signature, each is judged once on its job, a record covers only the job
+//!   it was triaged on (the one its fixture logs), and every outcome ends as its fixture.
 //! - geomdl's jobs are the same from one seed; a correct answer agrees; a wrong one is a difference
 //!   the exact reference settles; a refusal, a wrong shape and a broken answer are each caught.
 
@@ -38,13 +39,15 @@ use geom_op::ErrorKind;
 use geom_run::{Budget, WorkMeter};
 use geom_test::fixture::run::Replayed;
 use geom_test::fixture::{
-    Class, Counts, Expect, Hash, Measures, OpLog, Source, Spend, Status, Triage,
+    Class, Counts, Expect, Fixture, Hash, Measures, OpLog, Source, Spend, Status, Triage,
 };
 use geom_test::oracle::catalogue::{Catalogue, CatalogueError, Oracle, Run, State, audit, linked};
 use geom_test::oracle::compare::{Allowance, exact, within};
 use geom_test::oracle::exact::{float, read_float, steps, to_millimetres};
 use geom_test::oracle::geomdl::{Answer, Compared, ID, Job, Op, bound, gamma, jobs, judge, settle};
-use geom_test::oracle::triage::{Record, Register, Signature, TriageError, fixture, group};
+use geom_test::oracle::triage::{
+    Difference, Record, Register, Signature, TriageError, fixture, group, job_digest, logged_job,
+};
 use geom_test::seed::Seed;
 
 fn oracle(id: &str, licence: &str, run: Run) -> Oracle {
@@ -318,9 +321,13 @@ fn signature(family: &str) -> Signature {
     }
 }
 
+/// The job every test record is triaged on.
+const JOB: &str = "{\"id\":0}";
+
 fn record(family: &str, outcome: Triage, reference: Option<&str>) -> Record {
     Record {
         signature: signature(family),
+        job: job_digest(JOB),
         outcome,
         fixture: "oracle/0001-a".to_owned(),
         reference: reference.map(str::to_owned),
@@ -330,25 +337,87 @@ fn record(family: &str, outcome: Triage, reference: Option<&str>) -> Record {
 
 fn register(records: Vec<Record>) -> Result<Register, TriageError> {
     let r = Register {
-        format: 1,
+        format: 2,
         about: "a".to_owned(),
         records,
     };
     Register::parse(&r.to_json().unwrap())
 }
 
+fn found(family: &str, job: &str) -> Difference {
+    Difference {
+        signature: signature(family),
+        job: job_digest(job),
+    }
+}
+
 #[test]
-fn each_signature_is_judged_once() {
+fn each_difference_is_judged_once() {
     let a = signature("a");
     let b = signature("b");
     assert_eq!(a.to_string(), "nurbs.point/geomdl/value/a");
     let groups = group([&a, &b, &a]);
     assert_eq!((groups[&a], groups[&b]), (2, 1));
     let reg = register(vec![record("a", Triage::Theirs, Some("issue 1"))]).unwrap();
-    assert!(reg.knows(&a));
-    assert!(!reg.knows(&b));
-    assert_eq!(reg.new_signatures([&a, &b, &b]), std::slice::from_ref(&b));
-    assert_eq!(reg.new_signatures([&a]), Vec::<Signature>::new());
+    let (known, other) = (found("a", JOB), found("b", JOB));
+    assert!(reg.knows(&known));
+    assert!(!reg.knows(&other));
+    assert_eq!(
+        reg.new_differences([&known, &other, &other]),
+        std::slice::from_ref(&other)
+    );
+    assert_eq!(reg.new_differences([&known]), Vec::<Difference>::new());
+    assert_eq!(
+        job_digest(""),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+}
+
+/// Issue 880: a record covers its signature on the job it was triaged on, and nothing else, so a
+/// second cause under the same signature, on another job, is a difference not triaged.
+#[test]
+fn a_triaged_signature_hides_no_other_job() {
+    let reg = register(vec![record("a", Triage::Theirs, Some("issue 1"))]).unwrap();
+    let triaged = found("a", JOB);
+    let second = found("a", "{\"id\":1}");
+    assert!(reg.knows(&triaged));
+    assert!(!reg.knows(&second));
+    assert_eq!(
+        reg.new_differences([&triaged, &second]),
+        std::slice::from_ref(&second)
+    );
+    // The second cause triaged on its own job is a second record, and both are known.
+    let mut again = record("a", Triage::Undecided, Some("recompute at 400 bits"));
+    again.job = second.job.clone();
+    again.fixture = "oracle/0002-a".to_owned();
+    let both = register(vec![record("a", Triage::Theirs, Some("issue 1")), again]).unwrap();
+    assert!(both.knows(&triaged) && both.knows(&second));
+    assert!(!both.knows(&found("a", "{\"id\":2}")));
+}
+
+/// Every stored record pins the job its fixture logs, so each covers exactly the job it was
+/// triaged on.
+#[test]
+fn every_record_pins_the_job_its_fixture_logs() {
+    use geom_test::fixture::repo;
+    let fixtures: Vec<Fixture> = repo::embedded()
+        .iter()
+        .map(|f| Fixture::parse(&f.text).unwrap())
+        .collect();
+    let reg = Register::embedded().unwrap();
+    assert_ne!(reg.records.len(), 0);
+    for r in &reg.records {
+        let f = fixtures.iter().find(|f| f.id == r.fixture).unwrap();
+        let line = logged_job(&f.log).unwrap();
+        assert_eq!(r.job, job_digest(&line), "{}: {line}", r.fixture);
+        assert!(matches!(
+            &f.source,
+            Source::Oracle { signature, .. } if *signature == r.signature.to_string()
+        ));
+    }
+    // A log of no operation, or of a parameter that is not a job's text, holds no job.
+    assert!(logged_job(&OpLog::new(Vec::new(), Vec::new())).is_err());
+    assert!(logged_job(&log()).is_err());
 }
 
 #[test]
@@ -367,18 +436,29 @@ fn the_register_keeps_its_rules() {
     let mut bad = record("a", Triage::WithinBounds, None);
     bad.why = " ".to_owned();
     assert!(matches!(register(vec![bad]), Err(TriageError::Rule(w)) if w.contains("reason")));
+    let upper = job_digest(JOB).to_uppercase();
+    for job in ["", "abc", upper.as_str()] {
+        let mut bad = record("a", Triage::WithinBounds, None);
+        bad.job = job.to_owned();
+        assert!(matches!(register(vec![bad]), Err(TriageError::Rule(w)) if w.contains("job")));
+    }
     let one = record("a", Triage::WithinBounds, None);
     assert!(matches!(
-        register(vec![one.clone(), one]),
+        register(vec![one.clone(), one.clone()]),
         Err(TriageError::Rule(w)) if w.contains("twice")
     ));
+    let mut other_job = one.clone();
+    other_job.job = job_digest("{\"id\":1}");
+    assert!(register(vec![one, other_job]).is_ok());
     assert!(matches!(Register::parse("{"), Err(TriageError::Json(_))));
     let text = register(Vec::new()).unwrap().to_json().unwrap();
     assert!(text.ends_with("}\n"));
-    assert!(matches!(
-        Register::parse(&text.replace("\"format\": 1", "\"format\": 2")),
-        Err(TriageError::Rule(w)) if w.contains("format")
-    ));
+    for format in ["1", "3"] {
+        assert!(matches!(
+            Register::parse(&text.replace("\"format\": 2", &format!("\"format\": {format}"))),
+            Err(TriageError::Rule(w)) if w.contains("format")
+        ));
+    }
 }
 
 fn log() -> OpLog {

@@ -2,8 +2,9 @@
 //!
 //! What this file proves: `check` holds on the real tree and audits a checkout of the oracle
 //! repository; `jobs` and `compare` run the round a night runs, with a stand-in answer file;
-//! `compare` fails on a new signature and not on a triaged one; `triage` writes the record and the
-//! fixture and will not record a signature twice.
+//! `compare` fails on a difference not triaged, a second cause under a triaged signature among
+//! them, and not on the triaged job itself; `triage` writes the record, pinned to its job, and the
+//! fixture, and will not record a signature on a job twice.
 //!
 //! Native only: WebAssembly has no processes.
 #![cfg(not(target_family = "wasm"))]
@@ -19,9 +20,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use geom_test::fixture::Fixture;
-use geom_test::fixture::repo::DIR;
+use geom_test::fixture::repo::{DIR, embedded};
+use geom_test::oracle::exact::{float, read_float};
 use geom_test::oracle::geomdl::{Answer, Job};
-use geom_test::oracle::triage::{REGISTER_PATH, Register};
+use geom_test::oracle::meshes;
+use geom_test::oracle::triage::{REGISTER_PATH, Register, job_digest, logged_job};
+use geom_test::seed::Seed;
 
 fn tool(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_oracle"))
@@ -175,7 +179,7 @@ fn a_new_signature_fails_the_night() {
     let (j, a) = (at(&jobs), at(&refusals));
     let out = tool(&["compare", "geomdl", "--jobs", &j, "--answers", &a]);
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
-    assert!(text(&out).contains("new signature"));
+    assert!(text(&out).contains("is not triaged on this job"));
     // One answer short: the harness stopped, which is no pass.
     fs::write(&refusals, "").unwrap();
     assert_eq!(
@@ -184,6 +188,79 @@ fn a_new_signature_fails_the_night() {
             .code(),
         Some(2)
     );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// `job`'s own answer, each triangle moved 1,000 steps along x: the volume and area stand, so the
+/// one difference is the Hausdorff distance.
+fn moved_answer(job: &meshes::Job) -> String {
+    let mut answer = meshes::own_answer(job).unwrap();
+    for triangle in answer.triangles.as_mut().unwrap() {
+        for corner in triangle.iter_mut() {
+            let x = read_float(&corner[0]).unwrap() + 1000.0;
+            corner[0] = float(x).unwrap();
+        }
+    }
+    serde_json::to_string(&answer).unwrap()
+}
+
+/// `oracle compare` on one Manifold job and its moved answer.
+fn compared_one(dir: &Path, job: &meshes::Job) -> Output {
+    let (jobs, answers) = (dir.join("jobs.jsonl"), dir.join("answers.jsonl"));
+    fs::write(&jobs, serde_json::to_string(job).unwrap() + "\n").unwrap();
+    fs::write(&answers, moved_answer(job) + "\n").unwrap();
+    tool(&[
+        "compare",
+        "manifold",
+        "--jobs",
+        jobs.to_str().unwrap(),
+        "--answers",
+        answers.to_str().unwrap(),
+    ])
+}
+
+/// Issue 880: a Hausdorff difference on a Manifold union of tetrahedra, on a job other than the one
+/// record 0001 was triaged on, has that record's signature but not its cause, so it fails the run;
+/// the same difference on the triaged job itself stays known.
+#[test]
+fn a_second_cause_under_a_triaged_signature_fails_the_run() {
+    let dir = scratch("second-cause");
+    let record = Register::embedded()
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|r| r.fixture == "meshes/0001-union-fold-in-the-export")
+        .unwrap();
+    assert_eq!(
+        record.signature.to_string(),
+        "mesh.union/manifold/hausdorff/tetrahedra"
+    );
+    let stored = embedded()
+        .into_iter()
+        .find(|f| f.path == "meshes/0001-union-fold-in-the-export.json")
+        .unwrap();
+    let triaged: meshes::Job =
+        serde_json::from_str(&logged_job(&Fixture::parse(&stored.text).unwrap().log).unwrap())
+            .unwrap();
+    let other = meshes::jobs(Seed(0xab), 400)
+        .into_iter()
+        .find(|j| j.family == "tetrahedra" && j.op == meshes::Op::Union)
+        .unwrap();
+    assert_ne!(other, triaged);
+    for (job, code, untriaged) in [(&triaged, 0, false), (&other, 1, true)] {
+        let out = compared_one(&dir, job);
+        let said = text(&out);
+        assert!(
+            said.contains("mesh.union/manifold/hausdorff/tetrahedra: 1"),
+            "{said}"
+        );
+        assert_eq!(out.status.code(), Some(code), "{said}");
+        assert_eq!(
+            said.contains("is not triaged on this job"),
+            untriaged,
+            "{said}"
+        );
+    }
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -197,7 +274,7 @@ fn triage_writes_the_record_and_the_fixture_once() {
     fs::write(
         &register,
         Register {
-            format: 1,
+            format: 2,
             about: "a".to_owned(),
             records: Vec::new(),
         }
@@ -235,7 +312,11 @@ fn triage_writes_the_record_and_the_fixture_once() {
     let saved = Register::parse(&fs::read_to_string(&register).unwrap()).unwrap();
     assert_eq!(saved.records.len(), 1);
     assert_eq!(saved.records[0].signature.family, list[3].family);
-    // Each signature is judged once.
+    // The record pins the job it was triaged on: the line `jobs` wrote, which its fixture logs.
+    let line = serde_json::to_string(&list[3]).unwrap();
+    assert_eq!(logged_job(&f.log).unwrap(), line);
+    assert_eq!(saved.records[0].job, job_digest(&line));
+    // Each signature is judged once on its job.
     assert_eq!(tool(&args).status.code(), Some(1));
     // A bad outcome and an unknown job are usage errors.
     let mut bad = args;

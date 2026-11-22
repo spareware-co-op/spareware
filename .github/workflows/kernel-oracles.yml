@@ -31,7 +31,8 @@ name: Kernel oracles
 #   has kept it; `meshes` runs one leg per oracle and case set (`geom_test::oracle::meshes::
 #   CASE_SETS`: the seeded solids and Manifold's stored models), each writing its jobs with
 #   `oracle jobs`, running the image on them without a network, and judging the answers with
-#   `oracle compare`, which fails on any signature `geom-test/oracles/triaged.json` does not hold.
+#   `oracle compare`, which fails on any difference whose signature and job
+#   `geom-test/oracles/triaged.json` does not hold.
 #   The comparison names the leg's case set: a model the set records as refused is not sent to the
 #   oracle, and the kernel must refuse it exactly as recorded; a job on a model that crosses itself,
 #   which the oracle's documentation says it does not take, is judged by the exact reference alone

@@ -12,7 +12,7 @@
 
 use geom_test::oracle::exact::float;
 use geom_test::oracle::meshes::{Answer, Compared, Job, MANIFOLD_RUST, Op, Solid, jobs, judge};
-use geom_test::oracle::triage::Register;
+use geom_test::oracle::triage::{Difference, Register, job_digest};
 use geom_test::seed::Seed;
 use manifold_rust::manifold::Manifold;
 use manifold_rust::types::{BooleanEngine, MeshGL64, OpType};
@@ -65,9 +65,10 @@ fn a_runs_differences_are_all_triaged() {
         {
             println!("job {}: {signature}: {settled}", job.id);
             assert!(!settled.starts_with("ours"), "{signature}: {settled}");
-            differences.push(signature);
+            let job = job_digest(&serde_json::to_string(&job).unwrap());
+            differences.push(Difference { signature, job });
         }
     }
-    let new = Register::embedded().unwrap().new_signatures(&differences);
-    assert!(new.is_empty(), "new signatures: {new:?}");
+    let new = Register::embedded().unwrap().new_differences(&differences);
+    assert!(new.is_empty(), "differences not triaged: {new:?}");
 }
