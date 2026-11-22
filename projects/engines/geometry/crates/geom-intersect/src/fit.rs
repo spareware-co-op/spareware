@@ -21,6 +21,10 @@
 //!   value of f(t) = Sᵢ(pᵢ(t)) − C(t) is within h·sup|f′| of f(m), and f′ = `S_u`·p′ᵤ + `S_v`·p′ᵥ − C′
 //!   is enclosed from the kinds' own bounds over the pcurve's box. A span is cut into up to
 //!   2^[`PIECES`] pieces until its bounds come within the ceiling.
+//! - **A curve along an edge.** Where every datum of a pcurve lies on one edge of its surface's
+//!   domain in a coordinate, the pcurve's control points are that edge there, the least-squares
+//!   fit without its rounding, and the pcurve is read there as the edge exactly: its rounded reads
+//!   reach past the edge, where the kinds read nothing, so no piece would have a bound.
 //! - **The curve bound.** C(t) is within d₁ of S₁ and d₂ of S₂. Within r of C(t), where the surfaces
 //!   cross at a sine of at least s and turn their normals by at most κ per unit length, the crossing
 //!   is within e/(s − 2κ·r₀) of C(t), e = d₁ + d₂ and r₀ = 2e/s, whenever s − 2κ·r₀ ≥ s/2: 12.2's
@@ -114,10 +118,82 @@ fn at(surface: &SurfaceKind, u: f64, v: f64) -> Result<[f64; 3], IntersectError>
 /// The caches fitted through `data`, and each datum's parameter.
 type Fitted = (Curve<3>, [Curve<2>; 2], Vec<f64>);
 
+/// Whether `x` is `edge` exactly.
+fn on(x: f64, edge: f64) -> bool {
+    (edge..=edge).contains(&x)
+}
+
+/// `pcurve`, fitted through `pts` on a surface over `domain`, with each coordinate in which every
+/// point lies on one edge of the domain set to that edge at every control point. The least-squares
+/// fit of points that are all e in a coordinate, its ends held at e, is e there exactly: a constant
+/// leaves no residual, and the basis sums to one. The fit as computed rounds that constant, and its
+/// control points can stand a rounding past the edge, where the kinds read nothing (#1179); so the
+/// edge is held, as [`true_point`] holds a parameter at its edge, and the curve is that fit without
+/// its rounding.
+fn held_on_edges(
+    pcurve: Curve<2>,
+    pts: &[[f64; 2]],
+    ((u0, u1), (v0, v1)): Region,
+) -> Result<Curve<2>, IntersectError> {
+    if pcurve.is_rational() {
+        return Ok(pcurve);
+    }
+    let mut points = pcurve.homogeneous().to_vec();
+    let mut moved = false;
+    for (j, (lo, hi)) in [(u0, u1), (v0, v1)].into_iter().enumerate() {
+        for edge in [lo, hi] {
+            if pts.iter().all(|p| p.get(j).is_some_and(|&x| on(x, edge))) {
+                for c in &mut points {
+                    if let Some(x) = c.get_mut(j) {
+                        *x = edge;
+                    }
+                }
+                moved = true;
+            }
+        }
+    }
+    if !moved {
+        return Ok(pcurve);
+    }
+    Ok(Curve::new(pcurve.basis().clone(), &points).map_err(CurveError::from)?)
+}
+
+/// Each coordinate in which every control point of `pcurve` lies on one edge of `domain`, and that
+/// edge: a nonrational curve whose control points all have one value in a coordinate has that
+/// value there for every t (the basis is nonnegative and sums to one), so it runs along the edge.
+fn edges_of(pcurve: &Trimmed<2>, ((u0, u1), (v0, v1)): Region) -> [Option<f64>; 2] {
+    let mut out = [None; 2];
+    let Leaf::Nurbs(c) = pcurve.basis() else {
+        return out;
+    };
+    if c.is_rational() {
+        return out;
+    }
+    for (j, (slot, (lo, hi))) in out.iter_mut().zip([(u0, u1), (v0, v1)]).enumerate() {
+        for edge in [lo, hi] {
+            if c.homogeneous()
+                .iter()
+                .all(|p| p.get(j).is_some_and(|&x| on(x, edge)))
+            {
+                *slot = Some(edge);
+            }
+        }
+    }
+    out
+}
+
+/// `b` with each coordinate that `edges` holds read as its edge, a point.
+fn held(b: Region, [u, v]: [Option<f64>; 2]) -> Region {
+    let (bu, bv) = b;
+    (u.map_or(bu, |e| (e, e)), v.map_or(bv, |e| (e, e)))
+}
+
 /// The caches through `data`, (u₁, v₁, u₂, v₂) on the curve, the 3D one within `tol` of the
-/// surfaces' points there.
+/// surfaces' points there, each pcurve held on any edge of its surface's domain (`domains`) that
+/// all its data lie on.
 fn caches(
     first: &SurfaceKind,
+    domains: [Region; 2],
     data: &[[f64; 4]],
     tol: f64,
     meter: &mut WorkMeter<'_>,
@@ -134,7 +210,7 @@ fn caches(
         return Err(IntersectError::Internal);
     };
     let mut pcurves = Vec::with_capacity(2);
-    for k in [0, 2] {
+    for (k, domain) in [0, 2].into_iter().zip(domains) {
         let pts: Vec<[f64; 2]> = data
             .iter()
             .map(|x| {
@@ -167,7 +243,7 @@ fn caches(
             meter,
         )
         .map_err(CurveError::from)?;
-        pcurves.push(fit.curve);
+        pcurves.push(held_on_edges(fit.curve, &pts, domain)?);
     }
     let [p, q]: [Curve<2>; 2] = pcurves.try_into().map_err(|_| IntersectError::Internal)?;
     Ok((f3.curve, [p, q], f3.parameters))
@@ -221,20 +297,25 @@ fn smaller(a: f64, b: f64) -> f64 {
 /// the box's width, and over a box a step or so wide the cut keeps only rounding, scaled far past
 /// the partials themselves (only where the scale would leave the doubles does it read the whole
 /// patch's partial forms instead, #1140). A side of no width is a line, which the kinds read as
-/// one. The wider box holds every point of `b`, so its bounds hold over `b` too.
+/// one, but for a line on an edge of the domain, a pcurve held there ([`held_on_edges`]), which
+/// is widened so too: the box about it that the cache's reach asks for ([`piece`]) can only grow
+/// away from the edge, a strip as thin as that reach, where the cut keeps only rounding in the same
+/// way (#1179: κ some 7·10¹³ on the sheet z = y − x²/2 along its edge u = 1). The wider box holds
+/// every point of `b`, so its bounds hold over `b` too.
 fn thick(b: Region, domain: Region) -> Region {
     let ((a, c), (d, e)) = b;
     let wide = larger(c - a, e - d) / 2.0;
-    let side = |(lo, hi): (f64, f64)| {
+    let side = |(lo, hi): (f64, f64), (start, end): (f64, f64)| {
         let step = 4.0 * f64::EPSILON * (1.0 + larger(lo.abs(), hi.abs()));
-        if lo < hi && hi - lo < step {
+        let edge = on(lo, hi) && (on(lo, start) || on(lo, end));
+        if (lo < hi && hi - lo < step) || edge {
             (lo - wide, hi + wide)
         } else {
             (lo, hi)
         }
     };
-    let (u, v) = b;
-    widened((side(u), side(v)), 0.0, domain)
+    let ((u, v), (us, vs)) = (b, domain);
+    widened((side(u, us), side(v, vs)), 0.0, domain)
 }
 
 /// Whether `b` lies inside `domain`.
@@ -263,8 +344,11 @@ fn gap(
         return Err(IntersectError::Internal);
     };
     let (pm, cm) = (*pm, *cm);
-    let here = region(&pm);
-    let over = region(&boxed(&pcurve.bound((a, b), meter)?)?);
+    // A coordinate the pcurve holds on an edge is the edge for every t, and is read so, a point:
+    // its enclosures reach a rounding past the edge, outside the domain (#1179).
+    let edges = edges_of(pcurve, domain);
+    let here = held(region(&pm), edges);
+    let over = held(region(&boxed(&pcurve.bound((a, b), meter)?)?), edges);
     if !inside(here, domain) || !inside(over, domain) {
         return Ok(None);
     }
@@ -1118,7 +1202,8 @@ pub fn fit(
     }
     for _ in 0..ROUNDS {
         meter.charge(1)?;
-        let (cache, [p, q], parameters) = caches(first, &data, ceiling / 8.0, meter)?;
+        let domains = [first.domain(), second.domain()];
+        let (cache, [p, q], parameters) = caches(first, domains, &data, ceiling / 8.0, meter)?;
         let pcurves = [
             Trimmed::whole(Leaf::Nurbs(p))?,
             Trimmed::whole(Leaf::Nurbs(q))?,
