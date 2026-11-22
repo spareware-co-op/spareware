@@ -14,6 +14,7 @@ use construct_model::rows::{
     BuiltElement, BuiltResult, Hub, HubRole, Incoming, Item, Link, LinkKind, Model, Project,
     Stored, Team,
 };
+use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
 use kit_accounts::rows::Person;
 use kit_accounts::{Accounts, Cedar};
@@ -421,6 +422,73 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         };
         let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
         Ok(AreaView { through, pieces })
+    }
+
+    /// The elements of a model of one kind, built or not, as `area` gives them: a page that works
+    /// on one kind (Workshop's parts and assemblies) finds them without a place in the plan.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, or the store fails.
+    pub async fn kind(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        kind: &Id,
+    ) -> Result<AreaView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let mut pieces = BTreeMap::new();
+        for (key, hash) in snapshot.scan(&list::kind(project, model, kind)).await? {
+            let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
+                continue;
+            };
+            pieces.insert(element.to_string(), from_row::<String>(&hash)?);
+        }
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        };
+        let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
+        Ok(AreaView { through, pieces })
+    }
+
+    /// What the page shows of an element: its category, its type, and its parameters with the
+    /// values it reads and where each came from, shown in units. The same reader the commands
+    /// check against and the regenerator builds from (`construct_regen::parameters`).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not do it, the store fails, or there is no such
+    /// element; [`Refusal::Bad`] when its stored values cannot be read, saying why.
+    pub async fn parameters(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        element: &Id,
+    ) -> Result<ElementView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let Some((_, record)) =
+            records::read_element(&mut snapshot, project, model, element).await?
+        else {
+            return Err(Refusal::NotFound);
+        };
+        let context = records::read_context(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let ty = match records::type_of(&record) {
+            None => None,
+            Some(type_id) => Some(
+                records::read_type(&mut snapshot, project, model, &type_id, &context)
+                    .await?
+                    .map_err(Refusal::Bad)?,
+            ),
+        };
+        context.view(&record, ty.as_ref()).map_err(Refusal::Bad)
     }
 
     /// Who is working on what in a model: each claimed element, with its claim.

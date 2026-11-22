@@ -126,7 +126,7 @@ The database every element lives in, the project file, the operation log behind 
 | CON-A2-F1-P4 | **Discipline ownership**. Every element has an owning discipline that views, permissions and exports can filter on. | library | small | CON-A2-F1-P1 |  |
 | CON-A2-F2-P1 | **Typed parameters**. Length, area, volume, angle, number, text, yes or no, choice, element link, material and web link values. | library | medium | CON-A2-F1-P1 |  |
 | CON-A2-F2-P2 | **Formula language**. A small, safe expression language for parameter formulas, with units checked. | library | medium | CON-A2-F2-P1 |  |
-| CON-A2-F2-P3 | **Shared parameters**. Parameters keyed by GUID so they match across projects, families and schedules. | data | small | CON-A2-F2-P1 |  |
+| CON-A2-F2-P3 | **Shared parameters**. Parameters keyed by GUID so they match across projects, families and schedules, and a shared parameter can be bound to chosen categories. | data | small | CON-A2-F2-P1 |  |
 | CON-A2-F2-P4 | **Project-wide values**. Named values that drive dimensions and parameters across the whole project. | library | small | CON-A2-F2-P1, CON-A2-F6-P1 |  |
 | CON-A2-F2-P5 | **Project information**. Client, address, project number, stage and other project data that title blocks and exports read. | data | small | CON-A2-F2-P1 |  |
 | CON-A2-F2-P6 | **Categories and subcategories**. A fixed built-in tree of what an element is, such as wall, door and floor, with subcategories such as door panel and door frame, kept as data; a project adds its own subcategories and cannot change the built-in ones. Visibility, line styles, schedules, tags and exports read it. | data | small | CON-A2-F1-P1 |  |

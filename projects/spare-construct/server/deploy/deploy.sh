@@ -25,7 +25,8 @@ ssh=(ssh -i "$key" -o StrictHostKeyChecking=accept-new "$user@$server")
 "${ssh[@]}" 'sudo mkdir -p /opt/spare-stack/src /etc/spare-stack && sudo chmod 700 /etc/spare-stack'
 git -C "$root" archive HEAD Cargo.toml rust-toolchain.toml projects/spare-construct/server \
   projects/spare-construct/app projects/spare-construct/crates \
-  projects/spare-construct/demo/index.html projects/kit/crates projects/kit/services \
+  projects/spare-construct/demo/index.html projects/spare-construct/demo/workshop \
+  projects/kit/crates projects/kit/services \
   projects/engines/crates projects/engines/geometry/crates design/ribbon \
   | "${ssh[@]}" 'sudo tar -x -C /opt/spare-stack/src'
 "${ssh[@]}" 'sudo tee /etc/spare-stack/owner.env >/dev/null && sudo chmod 600 /etc/spare-stack/owner.env' \

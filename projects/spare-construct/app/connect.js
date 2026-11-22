@@ -19,7 +19,7 @@
   const WORKS = new Set([
     'go', 'view', 'vtab', 'vclose', 'vcloseothers', 'browser', 'uipal', 'dockreset', 'pref', 'zoom',
     'tool', 'dtool', 'seltool', 'deselect', 'closeAll', 'dgclose', 'discmenu', 'account', 'vbmenu',
-    'detailset',
+    'detailset', 'disc',
   ]);
 
   const C = {
@@ -95,7 +95,8 @@
     VB.l2 = VB.l1;
     FLOORV.splice(0, FLOORV.length, 'l1', 'l2');
     HOMEV.architecture = 'l1';
-    for (const discipline of DISCS) discipline[4] = discipline[0] === 'architecture' ? 1 : 0;
+    // Architecture is connected to the project; Workshop builds its parts with the geometry kernel in the browser
+    for (const discipline of DISCS) discipline[4] = ['architecture', 'workshop'].includes(discipline[0]) ? 1 : 0;
     renderDisc();
     for (const side of $$('#props-host .side')) side.remove();
     S.view = 'l1';
@@ -150,7 +151,9 @@
     };
     ACT.account = account;
 
-    R.plan = plan;
+    // a discipline whose view is its own page (Workshop's) keeps the demo's way of opening it
+    const framePlan = R.plan;
+    R.plan = () => (FRAMEV[S.view] ? framePlan() : plan());
     R['3d'] = threeD;
     for (const [screen] of SCREENS) {
       if (screen !== 'plan' && screen !== '3d') {
@@ -522,6 +525,9 @@
     C.claims.clear();
     C.links = [];
     S.sel = null;
+    WS.elements.clear();
+    WS.loaded = false;
+    workshopChanged({});
   }
 
   async function openModel(team, model) {
@@ -535,6 +541,7 @@
     await loadPieces();
     await loadClaims();
     await loadLinks();
+    await loadWorkshop();
   }
 
   async function openPackage(team, folder, id) {
@@ -545,6 +552,11 @@
     const file = await api(fileUrl(team, folder, id));
     showPackage(file);
     C.file = file;
+    for (const piece of file.elements) {
+      if (isWorkshop(piece.element)) WS.elements.set(piece.element.id, { el: piece.element, hash: null, seq: 0 });
+    }
+    WS.loaded = true;
+    workshopChanged({});
     say(`A fixed version: ${file.elements.length} elements.`);
   }
 
@@ -674,8 +686,14 @@
     }
   }
 
-  async function loadPiece(model, id, hash, seq, into) {
+  async function loadPiece(model, id, hash, seq, into, mine = false) {
     const record = await api(`${modelUrl(model)}/record/${hash}`);
+    // A type or the parameter table has no place in the plan: the properties palette reads them.
+    if (!hasShape(record)) return;
+    if (isWorkshop(record)) {
+      if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
+      return;
+    }
     const answer = await shapeFor(model, record);
     if (record.level === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
   }
@@ -775,6 +793,10 @@
     const edit = C.pending.find((e) => e.counter === counter);
     C.pending = C.pending.filter((e) => e.counter !== counter);
     say(reason);
+    if (edit && (WS.elements.has(edit.args.element) || isWorkshop(edit.args))) {
+      await workshopTurnBack(edit, reason);
+      return;
+    }
     const piece = edit && C.elements.get(edit.args.element);
     if (piece?.hash && C.model) {
       piece.el = await api(`${modelUrl(C.model.id)}/record/${piece.hash}`);
@@ -799,6 +821,10 @@
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
     for (const change of entry.changes) {
+      if (entry.target === C.model?.id && WS.elements.has(change.piece)) {
+        workshopEntry(entry, change, mine);
+        continue;
+      }
       const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
       const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
@@ -810,8 +836,16 @@
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into).then(queueDraw);
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, mine).then(() => {
+          queueDraw();
+          if (change.piece === S.sel) refreshSide();
+        });
       }
+    }
+    // A type or a parameter changed: what the selected element reads may have too.
+    if (/^(type|parameter)\./.test(entry.cmd) && entry.target === C.model?.id) {
+      C.paramsEpoch += 1;
+      refreshSide();
     }
     if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
@@ -829,6 +863,8 @@
     'element.delete': 'deleted',
     'element.claim': 'took',
     'element.release': 'let go of',
+    'element.param': 'set a value of',
+    'element.type': 'changed the type of',
   };
 
   function logEntry(entry) {
@@ -861,12 +897,169 @@
     }
   }
 
+  // --- Parameters ---
+  // The selected element's category, type and parameters come from the server, which reads them
+  // the way it checks a change and builds a shape (construct-model's FORMAT.md, "Categories, types
+  // and parameter values"). A change is the `element.param` edit, through the same log as a move:
+  // the server parses the typed text with its units, and a refusal comes back as its reason.
+
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  function hasShape(record) {
+    return record.kind !== 'type' && record.kind !== 'parameters';
+  }
+  C.params = null; // { key, view } of the selected element
+  C.paramsEpoch = 0; // goes up when a type or a parameter changes
+  C.edit = edit; // the browser test defines parameters through the page's own edit path
+
+  function paramsFor(piece) {
+    if (!C.model) return null;
+    const key = `${piece.el.id}/${piece.hash}/${C.paramsEpoch}`;
+    if (C.params?.key !== key && C.paramsLoading !== key) {
+      C.paramsLoading = key;
+      api(`${modelUrl(C.model.id)}/parameters/${piece.el.id}`)
+        .then((view) => {
+          C.params = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.params?.view.element === piece.el.id ? C.params.view : null;
+  }
+
+  function parametersTable(view) {
+    const editable = !C.readOnly && !C.viewing;
+    let html = '<span class="lbl">Parameters</span><table class="props">';
+    for (const p of view.parameters) {
+      const value = p.shown ?? '';
+      const field =
+        p.holder === 'instance' && editable
+          ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
+          : esc(value);
+      html += prow(esc(p.name), field, FROM[p.from] || '');
+    }
+    return `${html}</table>`;
+  }
+
+  /** Draws the properties palette again, unless someone is typing in it. */
+  function refreshSide() {
+    for (const side of ['#pv-side', '#iso-side']) {
+      const el = $(side);
+      if (el && !el.contains(document.activeElement)) el.innerHTML = propertiesPalette();
+    }
+  }
+
+  CHG.stackparam = (input) => {
+    if (S.sel && C.model && !C.readOnly) {
+      edit('element.param', { element: S.sel, parameter: input.dataset.a, value: input.value });
+      input.blur();
+    }
+  };
+
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
       edit('element.delete', { element: S.sel });
       S.sel = null;
       refresh();
     }
+  };
+
+  // --- Workshop's elements ---
+  // Workshop, a page of its own in a frame, keeps its parts and its assembly as elements of the open
+  // model, through the same edit log as walls and doors (construct-model's FORMAT.md, "Workshop's
+  // elements"). They have no place in the plan, so this finds them by kind, keeps them live, and lets
+  // the page read and change them through `spare.workshop`.
+
+  const WORKSHOP_KINDS = ['workshop.part', 'workshop.assembly'];
+  const isWorkshop = (record) => WORKSHOP_KINDS.includes(record?.kind);
+  const WS = { loaded: false, elements: new Map(), listeners: new Set() }; // id -> { el, hash, seq }
+
+  /** Tells the page. `why.turnedBack` says why an edit of its own was refused. */
+  function workshopChanged(why) {
+    for (const listener of WS.listeners) {
+      try {
+        listener(why);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+
+  async function loadWorkshop() {
+    const model = C.model?.id;
+    WS.elements.clear();
+    if (model) {
+      for (const kind of WORKSHOP_KINDS) {
+        const seen = await api(`${modelUrl(model)}/kind/${kind}`);
+        if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+        await Promise.all(
+          Object.entries(seen.pieces).map(async ([id, hash]) => {
+            const el = await api(`${modelUrl(model)}/record/${hash}`);
+            if (C.model?.id === model) keepWorkshop(id, el, hash, seen.through, true);
+          }),
+        );
+      }
+      if (C.model?.id !== model) return;
+    }
+    WS.loaded = true;
+    workshopChanged({});
+  }
+
+  /** A record arrived. The page hears of it unless it came from its own edit, which it already shows. */
+  function keepWorkshop(id, el, hash, seq, quiet) {
+    const known = WS.elements.get(id);
+    if (known && known.seq > seq) return;
+    const stillMine = C.pending.some((edit) => edit.args.element === id);
+    WS.elements.set(id, { el: quiet && stillMine && known ? known.el : el, hash, seq });
+    if (!quiet) workshopChanged({});
+  }
+
+  function workshopEntry(entry, change, mine) {
+    if (!change.after) {
+      WS.elements.delete(change.piece);
+      if (!mine) workshopChanged({});
+      return;
+    }
+    api(`${modelUrl(entry.target)}/record/${change.after}`).then((el) => {
+      if (entry.target === C.model?.id) keepWorkshop(change.piece, el, change.after, entry.seq, mine);
+    });
+  }
+
+  /** The server said no to one of the page's edits: back to the last confirmed version. */
+  async function workshopTurnBack(edit, reason) {
+    const id = edit.args.element;
+    const known = WS.elements.get(id);
+    if (known?.hash && C.model) known.el = await api(`${modelUrl(C.model.id)}/record/${known.hash}`);
+    else if (known && !known.hash) WS.elements.delete(id);
+    workshopChanged({ turnedBack: reason });
+  }
+
+  /** Workshop's way in: what is open, its elements, and the three commands it uses. */
+  C.workshop = {
+    state: () => ({
+      loaded: WS.loaded,
+      model: C.model ? { id: C.model.id, name: C.model.name } : null,
+      fixed: !C.model && C.readOnly && WS.loaded, // a package: a fixed version
+      editable: Boolean(C.model) && !C.readOnly,
+    }),
+    elements: () => [...WS.elements.values()].map(({ el }) => el),
+    create(kind, element, name, recipe) {
+      const args = { element, kind, name, level: 0, placement: { x: 0, y: 0, z: 0 }, recipe, props: { category: 'Workshop' } };
+      WS.elements.set(element, { el: { id: element, ...args, references: [] }, hash: null, seq: C.head });
+      edit('element.create', args);
+    },
+    set(element, name, recipe) {
+      const known = WS.elements.get(element);
+      if (known) known.el = { ...known.el, name, recipe };
+      edit('element.set', { element, name, recipe });
+    },
+    remove(element) {
+      WS.elements.delete(element);
+      edit('element.delete', { element });
+    },
+    subscribe(listener) {
+      WS.listeners.add(listener);
+      return () => WS.listeners.delete(listener);
+    },
   };
 
   // --- The plan viewport ---
@@ -904,7 +1097,9 @@
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
+      const view = paramsFor(piece);
       html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', esc(view.type?.name || 'None'));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
         html += prow('Size', `${max[0] - min[0]} × ${max[1] - min[1]} × ${max[2] - min[2]} mm`);
@@ -913,9 +1108,13 @@
         html += prow('Shape', esc(failed?.message || 'Not built yet'));
       }
       for (const host of e.references) html += prow('Hosted on', esc(host.element));
-      for (const [key, value] of Object.entries(e.props)) html += prow(esc(key), esc(value));
+      const shown = new Set((view?.parameters || []).map((p) => p.id));
+      for (const [key, value] of Object.entries(e.props)) {
+        if (!key.startsWith('@') && !shown.has(key)) html += prow(esc(key), esc(value));
+      }
       html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
       html += '</table>';
+      if (view?.parameters.length) html += parametersTable(view);
     } else {
       const view = VIEWS[S.view];
       html += typeSel('plan', esc(view?.kind || ''), `<b>${esc(C.model?.name || view?.name || '')}</b>`);
