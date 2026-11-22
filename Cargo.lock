@@ -606,6 +606,7 @@ dependencies = [
  "bolero",
  "construct-model",
  "construct-regen",
+ "engine-geometry",
  "hex",
  "kit-core",
  "kit-ops",

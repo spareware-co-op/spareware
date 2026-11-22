@@ -51,7 +51,7 @@ The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole n
 
 ## A document
 
-`p:<project>/model/<model>` holds a document's header, including `edition`: `{engine, version, name_scheme}`, what builds its shapes. A document runs one edition. Moving to another is an ordered operation that reports what changed; a server or browser without that edition doesn't build it, because it would give different bytes under the same recipe. A browser in that position is a viewer of the stored shapes.
+`p:<project>/model/<model>` holds a document's header, including `edition`: `{engine, version, name_scheme}`, what builds its shapes, and, when a geometry engine of the kernel builds them, `report`: the engine's own account of itself, `{engine, version, steps_per_mm, tolerances, answers}` (its name, its version or pinned source, its grid step in steps per millimetre, each tolerance as `{name, value, unit}` with the value as decimal text, and which part answers each operation as `{operation, case, by}`). An edition without an engine, such as the stand-in's, has no `report` key, so editions written before it existed read and compare as they did. Two editions are the same only when every field, the report's included, is the same. A document runs one edition. Moving to another is an ordered operation that reports what changed; a server or browser without that edition doesn't build it, because it would give different bytes under the same recipe. A browser in that position is a viewer of the stored shapes.
 
 ## A project's tables
 
