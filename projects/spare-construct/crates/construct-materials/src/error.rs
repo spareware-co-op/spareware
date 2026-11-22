@@ -65,6 +65,9 @@ pub enum MaterialError {
     },
     /// A mass was asked for a volume below zero.
     NegativeVolume,
+    /// The mass is more whole grams than a `u64` holds (over 1.8 x 10^13 tonnes): a volume far
+    /// beyond any building.
+    MassTooLarge,
     /// Stored bytes that are not valid JSON of the shape this crate writes, or hold data that
     /// breaks a rule (the rule's refusal is the message).
     Format(String),
@@ -102,6 +105,7 @@ impl fmt::Display for MaterialError {
                 write!(out, "built-in material {id} cannot be deleted")
             }
             Self::NegativeVolume => write!(out, "a volume below zero has no mass"),
+            Self::MassTooLarge => write!(out, "the mass is too large to store in grams"),
             Self::Format(why) => write!(out, "not a materials document: {why}"),
             Self::Version { found } => write!(out, "materials format {found} is not known"),
             Self::NotCanonical => write!(out, "materials document is not in its one spelling"),

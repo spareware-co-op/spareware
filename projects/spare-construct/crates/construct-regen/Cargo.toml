@@ -26,6 +26,8 @@ serde_json = "1.0.154"
 [dev-dependencies]
 # Fuzz harnesses: see kit-store's tests/fuzz_keys.rs. MIT.
 bolero = "0.13.7"
+# The stored length's steps per millimetre, which Units must agree with. This repository's own.
+construct-params = { path = "../construct-params" }
 construct-regen = { path = ".", features = ["server"] }
 kit-store = { path = "../../../kit/crates/kit-store", features = ["memory"] }
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

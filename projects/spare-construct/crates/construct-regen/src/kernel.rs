@@ -516,6 +516,10 @@ mod tests {
     fn whole_millimetres_map_to_the_grid_both_ways() {
         let q0 = Units::on(GridStep::Q0).unwrap();
         assert_eq!(q0.steps_per_mm(), 6400);
+        assert_eq!(
+            q0.steps_per_mm(),
+            u64::try_from(construct_params::Length::STEPS_PER_MM).unwrap()
+        );
         assert_eq!(q0.steps(1).unwrap(), 6400);
         assert_eq!(q0.steps(-2700).unwrap(), -17_280_000);
         assert_eq!(q0.millimetres(17_280_000).unwrap(), 2700);
