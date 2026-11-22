@@ -44,14 +44,22 @@ name: Kernel quality
 #   merges.
 # - The full run: every mutant of the files it covers, judged against those files' ledger entries
 #   as a whole; the judge also fails on any such entry that no survivor matches any more. Both runs
-#   are sharded across runners: the plan job lists the mutants and asks the judge how many shards
-#   they need, and the judge proves the shards together tested exactly that list. The plan sums
-#   each shard's own mutants at their crates' measured rates and takes the fewest shards of about
-#   ten planned minutes each (geom_test::mutants::shard_count), so a shard's job ends in about a
-#   quarter of an hour; a run too large for 512 such shards takes 512, each within the job's limit.
-#   A matrix holds
-#   at most 256 jobs, so two jobs run the shards, `mutants` shards 0 to 255 and `mutants-2` shards
-#   256 to 511, each numbered in the whole run (`--shard k/n`). A full run narrowed to some files
+#   are sharded across runners: the plan job lists the mutants and asks the judge which shards
+#   they need, and the judge proves the shards together tested exactly that list. The plan gives
+#   each crate shards of its own, planned at its measured rate, the fewest of about ten planned
+#   minutes each (geom_test::mutants::shard_plan), so a shard's job ends in about a quarter of an
+#   hour; a run too large for 512 such shards takes at most 512, the slowest planned least, each
+#   within the job's limit. A shard runs one crate's mutants (`--package`), which cargo-mutants
+#   deals among that crate's shards in turn (`--shard k/n --sharding round-robin`), so a run of
+#   neighbouring survivors, each running the crate's whole suite, is spread over the crate's
+#   shards, not held by one. Each crate's baseline (its tests on the unmutated code) runs once, in
+#   `mutants-baseline` beside the shards, and its shards skip theirs (`--baseline=skip`) with the
+#   test timeout cargo-mutants would set from it, five times the slowest measured baseline
+#   (geom_test::mutants::TEST_TIMEOUT_SECONDS); the judge fails unless each such crate's baseline
+#   passed and five times its test time fits that timeout. A crate with no row runs its baseline
+#   in its shards, as before. A matrix holds at most
+#   256 jobs, so two jobs run the shards, `mutants` shards 0 to 255 and `mutants-2` shards 256 to
+#   511, numbered in the whole run. A full run narrowed to some files
 #   (`cargo mutants --re`) has its plan check that cargo-mutants selected every mutant of the
 #   matching files and, of other files, only the struct-field deletions cargo-mutants 27.1.0 lists
 #   whatever --re says (geom_test::mutants::UNFILTERED_GENRE), which the shards then test too. A
@@ -460,6 +468,8 @@ jobs:
       shards: ${{ steps.plan.outputs.shards }}
       count_2: ${{ steps.plan.outputs.count_2 }}
       shards_2: ${{ steps.plan.outputs.shards_2 }}
+      count_baselines: ${{ steps.plan.outputs.count_baselines }}
+      baselines: ${{ steps.plan.outputs.baselines }}
     env:
       MODE: ${{ needs.when.outputs.mode }}
       BASE: ${{ needs.when.outputs.base }}
@@ -549,14 +559,82 @@ jobs:
           echo "shards=$(jq -c .shards <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "count_2=$(jq -r .count_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "shards_2=$(jq -c .shards_2 <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "count_baselines=$(jq -r .count_baselines <<<"$plan")" >> "$GITHUB_OUTPUT"
+          echo "baselines=$(jq -c .baselines <<<"$plan")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutants-plan
           path: ${{ runner.temp }}/plan
           if-no-files-found: error
 
+  mutants-baseline:
+    name: Mutants, the baseline of ${{ matrix.package }}
+    needs: [when, mutants-plan]
+    # Each crate whose shards skip their baseline: its tests on the unmutated code, once, beside the
+    # shards, with the commands, profile and limits cargo-mutants' own baseline uses (src/cargo.rs
+    # at v27.1.0: `cargo test --no-run`, then `cargo test`, each `--profile=release --verbose
+    # --package=<crate>` and .cargo/mutants.toml's arguments). The record it leaves is written only
+    # once both passed; the judge reads it. A plan with no such crate runs none; its matrix still
+    # lists one, because a matrix may not be empty.
+    if: needs.mutants-plan.outputs.count_baselines != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      # Every crate reports, so the judge names each one that failed.
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.mutants-plan.outputs.baselines) }}
+    env:
+      PACKAGE: ${{ matrix.package }}
+      # The shards' release profile, so the baseline builds and times what they build.
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: mutants
+      - name: Test the unmutated ${{ matrix.package }}
+        env:
+          CARGO_TERM_COLOR: never
+          # As cargo-mutants sets them for every cargo it runs.
+          INSTA_UPDATE: "no"
+          INSTA_FORCE_PASS: "0"
+        run: |
+          export CARGO_INCREMENTAL=1
+          # The shards' limit (see `mutants`), so a test that needs more fails here too.
+          ulimit -d $((8 * 1024 * 1024))
+          cargo test --no-run --profile=release --verbose --package="$PACKAGE" --locked
+          start=$(date +%s.%N)
+          cargo test --profile=release --verbose --package="$PACKAGE" --locked --test '*'
+          end=$(date +%s.%N)
+          mkdir -p "$RUNNER_TEMP/baseline"
+          seconds=$(awk -v a="$start" -v b="$end" 'BEGIN { printf "%.3f", b - a }')
+          jq -n --arg package "$PACKAGE" --argjson seconds "$seconds" \
+            '{package: $package, passed: true, test_seconds: $seconds}' \
+            > "$RUNNER_TEMP/baseline/$PACKAGE.json"
+          echo "$PACKAGE: the unmutated tests passed in $seconds s" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutants-baseline-${{ matrix.package }}
+          path: ${{ runner.temp }}/baseline
+          if-no-files-found: error
+
   mutants:
-    name: Mutants (shard ${{ matrix.shard }})
+    name: Mutants (shard ${{ matrix.shard.index }}, ${{ matrix.shard.package }} ${{ matrix.shard.k }}/${{ matrix.shard.n }})
     needs: [when, mutants-plan]
     # A plan of no shard (a diff that touches no mutant) runs none; its matrix still lists shard 0,
     # because a matrix may not be empty.
@@ -569,7 +647,11 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.mutants-plan.outputs.shards) }}
     env:
-      SHARDS: ${{ needs.mutants-plan.outputs.count }}
+      # The plan's shard: shard k of the n this crate's mutants are dealt among in turn.
+      PACKAGE: ${{ matrix.shard.package }}
+      SHARD: ${{ matrix.shard.k }}/${{ matrix.shard.n }}
+      # The crate's test timeout when its baseline runs in `mutants-baseline`; 0 runs it here.
+      TIMEOUT: ${{ matrix.shard.timeout }}
       MODE: ${{ needs.when.outputs.mode }}
       FILES: ${{ needs.when.outputs.files }}
       # Mutated builds are tests only: optimise lightly and build incrementally, so each mutant
@@ -594,13 +676,19 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: mutants
+      # The release's own binary, as cargo-mutants' book recommends for CI (book/src/ci.md), which
+      # install-action checks against the sha256 its manifest records for this version; never
+      # built here, and never fetched another way.
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
-        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: cargo-mutants@${{ env.CARGO_MUTANTS_VERSION }}
+          fallback: none
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mutants-plan
           path: ${{ runner.temp }}/plan
-      - name: Mutate the kernel code (shard ${{ matrix.shard }})
+      - name: Mutate the kernel code (shard ${{ matrix.shard.index }})
         env:
           # The judge reads each mutant's log for a compiler error (geom_test::mutants); colour
           # codes before `error[E...]` would hide it, so the logs are written without colour.
@@ -623,9 +711,16 @@ jobs:
           elif [ -n "$FILES" ]; then
             only=(--re "$FILES")
           fi
+          # The crate's baseline runs once in `mutants-baseline`, and the judge holds this shard to
+          # it; the timeout is the one cargo-mutants would set from it (no build timeout, as
+          # with a baseline of its own).
+          baseline=()
+          if [ "$TIMEOUT" != 0 ]; then
+            baseline=(--baseline=skip --timeout "$TIMEOUT")
+          fi
           set +e
-          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
-            -vV --output "$RUNNER_TEMP/out"
+          cargo mutants "${only[@]}" --package "$PACKAGE" --shard "$SHARD" --sharding round-robin \
+            "${baseline[@]}" --no-shuffle --in-place -vV --output "$RUNNER_TEMP/out"
           code=$?
           set -e
           # 0: every mutant caught; 2: survivors; 3: timeouts. The judge decides those. Any other
@@ -636,15 +731,15 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: mutants-${{ matrix.shard }}
+          name: mutants-${{ matrix.shard.index }}
           path: ${{ runner.temp }}/out
           if-no-files-found: error
 
   mutants-2:
-    name: Mutants (shard ${{ matrix.shard }})
+    name: Mutants (shard ${{ matrix.shard.index }}, ${{ matrix.shard.package }} ${{ matrix.shard.k }}/${{ matrix.shard.n }})
     needs: [when, mutants-plan]
     # Shards 256 on, for a run of more shards than one matrix may hold: the same steps as `mutants`,
-    # word for word, with the same `--shard k/n`. A plan of 256 shards or fewer runs none; its
+    # word for word, each shard as the plan gives it. A plan of 256 shards or fewer runs none; its
     # matrix still lists shard 256, because a matrix may not be empty.
     if: needs.mutants-plan.outputs.count_2 != '0'
     runs-on: ubuntu-latest
@@ -655,7 +750,11 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.mutants-plan.outputs.shards_2) }}
     env:
-      SHARDS: ${{ needs.mutants-plan.outputs.count }}
+      # The plan's shard: shard k of the n this crate's mutants are dealt among in turn.
+      PACKAGE: ${{ matrix.shard.package }}
+      SHARD: ${{ matrix.shard.k }}/${{ matrix.shard.n }}
+      # The crate's test timeout when its baseline runs in `mutants-baseline`; 0 runs it here.
+      TIMEOUT: ${{ matrix.shard.timeout }}
       MODE: ${{ needs.when.outputs.mode }}
       FILES: ${{ needs.when.outputs.files }}
       # Mutated builds are tests only: optimise lightly and build incrementally, so each mutant
@@ -680,13 +779,19 @@ jobs:
           # caches filled the repository's cache limit and evicted what main saved).
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: mutants
+      # The release's own binary, as cargo-mutants' book recommends for CI (book/src/ci.md), which
+      # install-action checks against the sha256 its manifest records for this version; never
+      # built here, and never fetched another way.
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
-        run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: cargo-mutants@${{ env.CARGO_MUTANTS_VERSION }}
+          fallback: none
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mutants-plan
           path: ${{ runner.temp }}/plan
-      - name: Mutate the kernel code (shard ${{ matrix.shard }})
+      - name: Mutate the kernel code (shard ${{ matrix.shard.index }})
         env:
           # The judge reads each mutant's log for a compiler error (geom_test::mutants); colour
           # codes before `error[E...]` would hide it, so the logs are written without colour.
@@ -709,9 +814,16 @@ jobs:
           elif [ -n "$FILES" ]; then
             only=(--re "$FILES")
           fi
+          # The crate's baseline runs once in `mutants-baseline`, and the judge holds this shard to
+          # it; the timeout is the one cargo-mutants would set from it (no build timeout, as
+          # with a baseline of its own).
+          baseline=()
+          if [ "$TIMEOUT" != 0 ]; then
+            baseline=(--baseline=skip --timeout "$TIMEOUT")
+          fi
           set +e
-          cargo mutants "${only[@]}" --shard "${{ matrix.shard }}/$SHARDS" --no-shuffle --in-place \
-            -vV --output "$RUNNER_TEMP/out"
+          cargo mutants "${only[@]}" --package "$PACKAGE" --shard "$SHARD" --sharding round-robin \
+            "${baseline[@]}" --no-shuffle --in-place -vV --output "$RUNNER_TEMP/out"
           code=$?
           set -e
           # 0: every mutant caught; 2: survivors; 3: timeouts. The judge decides those. Any other
@@ -722,13 +834,13 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: mutants-${{ matrix.shard }}
+          name: mutants-${{ matrix.shard.index }}
           path: ${{ runner.temp }}/out
           if-no-files-found: error
 
   mutants-judge:
     name: Mutants, judged against the ledger
-    needs: [when, mutants-plan, mutants, mutants-2]
+    needs: [when, mutants-plan, mutants-baseline, mutants, mutants-2]
     if: ${{ !cancelled() && needs.when.outputs.mutants == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -741,8 +853,9 @@ jobs:
     steps:
       - name: Every job the judge reads succeeded
         run: |
-          echo "plan: ${{ needs.mutants-plan.result }}; shards: ${{ needs.mutants.result }}; shards 256 on: ${{ needs.mutants-2.result }}"
+          echo "plan: ${{ needs.mutants-plan.result }}; baselines: ${{ needs.mutants-baseline.result }}; shards: ${{ needs.mutants.result }}; shards 256 on: ${{ needs.mutants-2.result }}"
           test "${{ needs.mutants-plan.result }}" = success
+          case "${{ needs.mutants-baseline.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count_baselines }}" = 0 ;; *) exit 1 ;; esac
           case "${{ needs.mutants.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count }}" = 0 ;; *) exit 1 ;; esac
           case "${{ needs.mutants-2.result }}" in success) ;; skipped) test "${{ needs.mutants-plan.outputs.count_2 }}" = 0 ;; *) exit 1 ;; esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -766,6 +879,12 @@ jobs:
         with:
           pattern: mutants-[0-9]*
           path: ${{ runner.temp }}/shards
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.mutants-plan.outputs.count_baselines != '0'
+        with:
+          pattern: mutants-baseline-*
+          path: ${{ runner.temp }}/baselines
+          merge-multiple: true
       - name: Judge every mutant against the ledger
         run: |
           shopt -s nullglob
@@ -776,6 +895,11 @@ jobs:
             outs+=("$RUNNER_TEMP/shards/mutants.out")
           fi
           args=(--expected "$RUNNER_TEMP/plan/list.json")
+          # Each crate's baseline record: the only thing that vouches for shards that skipped
+          # their baseline (geom_test::mutants::vouch).
+          for f in "$RUNNER_TEMP"/baselines/*.json; do
+            args+=(--baseline "$f")
+          done
           if [ "$MODE" = diff ]; then
             args+=(--mode diff)
             if [ -f "$RUNNER_TEMP/plan/base-ledger.json" ]; then
@@ -1848,7 +1972,7 @@ jobs:
   # a change it leaves the mark that spares the same tree a second run.
   done:
     name: Kernel quality checks pass
-    needs: [when, cheap, mutants-plan, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri-plan, miri, miri-2, miri-pool, miri-measure-plan, miri-measure, miri-measure-2]
+    needs: [when, cheap, mutants-plan, mutants-baseline, mutants, mutants-2, mutants-judge, coverage-plan, coverage-parts, coverage, gates-seeded, miri-plan, miri, miri-2, miri-pool, miri-measure-plan, miri-measure, miri-measure-2]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

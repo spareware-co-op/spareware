@@ -54,11 +54,15 @@
 //! `outcomes.json` must then exist (cargo-mutants writes none when it was given no mutants), hold
 //! a passing baseline, have an end time (written only when the run finished), give every listed
 //! mutant exactly one outcome and no other mutant any, and its counts must agree with its outcomes.
+//! A shard may skip its baseline (`--baseline=skip`, its crate's baseline then runs once in a job
+//! of its own): the judge then fails it unless every crate of its mutants has a passing baseline
+//! record whose tests, five times over (cargo-mutants' own timeout rule), fit the timeout the
+//! shard was given ([`vouch`], [`TEST_TIMEOUT_SECONDS`]).
 //!
 //! Guarantees:
 //!
-//! - **A gate that cannot see everything fails.** A run that did not finish, a failed or missing
-//!   baseline, a mutant with no outcome or two, totals that disagree with the outcomes, a shard
+//! - **A gate that cannot see everything fails.** A run that did not finish, a failed baseline, a
+//!   skipped one no passing record of its crates vouches for, a mutant with no outcome or two, totals that disagree with the outcomes, a shard
 //!   missing from the full run or two shards that overlap are each a failure or a [`RunError`],
 //!   never a smaller set of mutants judged.
 //! - **Untested is never caught.** An unviable mutant counts only when its log shows a compiler
@@ -155,6 +159,22 @@ pub struct Run {
     pub outcomes: Vec<Outcome>,
     /// How long each took, build and test, in the same order.
     pub durations: Vec<Duration>,
+    /// Whether the run tested the unmutated code itself first.
+    pub baseline: Baseline,
+}
+
+/// Whether a run's baseline (its crates' tests on the unmutated code) is known to pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Baseline {
+    /// The run ran its baseline and it passed, or the run had no mutant to test.
+    #[default]
+    Passed,
+    /// The run skipped its baseline (`--baseline=skip`): the judge fails it unless [`vouch`]
+    /// finds a passing baseline record of each of its crates.
+    Skipped,
+    /// The run skipped its baseline, and every crate of its mutants has a passing baseline record
+    /// whose tests fit the timeout its shards were given ([`vouch`]).
+    Vouched,
 }
 
 /// Why an output directory or a list could not be used.
@@ -367,17 +387,22 @@ fn listed_outcomes(f: &Path, value: &Value) -> Result<Listed, RunError> {
     Ok(listed)
 }
 
-/// Checks the run's own totals against its outcomes.
-fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError> {
-    if listed.baseline != ["Success"] {
-        return Err(run_err(
-            f,
-            format!(
-                "the baseline (the tests on unmutated code) must run once and pass; found {:?}",
-                listed.baseline
-            ),
-        ));
-    }
+/// Checks the run's own totals against its outcomes, and tells whether it ran its baseline.
+fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<Baseline, RunError> {
+    let baseline = match listed.baseline.as_slice() {
+        [] => Baseline::Skipped,
+        [one] if one == "Success" => Baseline::Passed,
+        _ => {
+            return Err(run_err(
+                f,
+                format!(
+                    "the baseline (the tests on unmutated code) must pass when it runs, and run \
+                     at most once; found {:?}",
+                    listed.baseline
+                ),
+            ));
+        }
+    };
     let total = value.get("total_mutants").and_then(Value::as_u64);
     if total != u64::try_from(listed.by_name.len()).ok() {
         return Err(run_err(
@@ -407,7 +432,7 @@ fn check_totals(f: &Path, value: &Value, listed: &Listed) -> Result<(), RunError
             ));
         }
     }
-    Ok(())
+    Ok(baseline)
 }
 
 /// Checks that an unviable mutant's log shows a compiler error.
@@ -433,9 +458,10 @@ fn check_unviable(dir: &Path, name: &str, log: Option<&String>) -> Result<(), Ru
 ///
 /// # Errors
 ///
-/// [`RunError`] for a missing or malformed file, a failed or missing baseline, an unfinished run,
+/// [`RunError`] for a missing or malformed file, a failed baseline or two, an unfinished run,
 /// counts that disagree, a mutant without an outcome or an outcome without a listed mutant, or an
-/// unviable mutant whose log shows no compiler error.
+/// unviable mutant whose log shows no compiler error. A run with no baseline reads as
+/// [`Baseline::Skipped`], which [`judge`] fails unless [`vouch`] vouches for it.
 pub fn read_run(dir: &Path) -> Result<Run, RunError> {
     let mutants = read_mutant_list(&dir.join("mutants.json"))?;
     let f = dir.join("outcomes.json");
@@ -454,7 +480,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
         return Err(run_err(&f, "has no end time: the run did not finish"));
     }
     let mut listed = listed_outcomes(&f, &value)?;
-    check_totals(&f, &value, &listed)?;
+    let baseline = check_totals(&f, &value, &listed)?;
     let mut outcomes = Vec::new();
     let mut durations = Vec::new();
     for m in &mutants {
@@ -481,6 +507,7 @@ pub fn read_run(dir: &Path) -> Result<Run, RunError> {
         mutants,
         outcomes,
         durations,
+        baseline,
     })
 }
 
@@ -822,6 +849,14 @@ pub fn judge(
     files: Option<&Regex>,
 ) -> Verdict {
     let mut verdict = Verdict::default();
+    for run in runs {
+        if run.baseline == Baseline::Skipped && !run.mutants.is_empty() {
+            verdict.failures.push(format!(
+                "{}: the run skipped its baseline, and no passing baseline record of its crates                  vouches for it, so nothing shows the unmutated code passed",
+                run.dir.display()
+            ));
+        }
+    }
     check_entries(ledger, repo, &mut verdict.failures);
     let (judged, seen) = collect(runs, repo, &mut verdict.failures);
     for run in runs {
@@ -988,12 +1023,17 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// shards of the full runs 40859780064 (6954 mutants of geom-math, geom-num, geom-pool and
 /// geom-run) and 40964349843 (all 17,589 of the kernel), and of the diff runs of pieces G54, G55,
 /// G60, G61, G62, G65 and G66 (40859433175, 40859444605, 40866610641, 40866622419, 40882301597,
-/// 40882313615 and 40898596532). The largest mean of each crate, in seconds, with the run that
-/// found it: geom-bvh 1.9 (40882313615), geom-curve 1.4 (40882301597 and 40964349843),
-/// geom-linalg 0.8 (40866622419 and 40964349843), geom-math 22.1 (40866622419; 10.6 over the whole
-/// crate in 40964349843), geom-num 33.2 (40866610641; 25.9 over the whole crate in 40964349843),
-/// geom-nurbs 6.2 (40964349843), geom-pool 6.0 (40859780064), geom-run 11.7 (40964349843),
-/// geom-surface 2.4 (40964349843).
+/// 40882313615 and 40898596532); and in the diff run 44881938610 (pull request #862: 9034 mutants
+/// of geom-bool, geom-check, geom-curve, geom-format, geom-intersect, geom-num, geom-nurbs and
+/// geom-surface), each mutant's build and test seconds as its shard's log prints them, in whole
+/// seconds. The largest mean of each crate, in seconds, with the run that found it: geom-bool 11.9
+/// (44881938610), geom-bvh 1.9 (40882313615), geom-check 5.5 (44881938610, its only 2 mutants),
+/// geom-curve 2.7 (44881938610; 1.4 in 40882301597 and 40964349843), geom-format 6.5
+/// (44881938610, its only 13 mutants), geom-intersect 64.3 (44881938610), geom-linalg 0.8
+/// (40866622419 and 40964349843), geom-math 22.1 (40866622419; 10.6 over the whole crate in
+/// 40964349843), geom-num 33.2 (40866610641; 25.9 over the whole crate in 40964349843, 31.9 in
+/// 44881938610), geom-nurbs 7.5 (44881938610; 6.2 in 40964349843), geom-pool 6.0 (40859780064),
+/// geom-run 11.7 (40964349843), geom-surface 11.0 (44881938610; 2.4 in 40964349843).
 ///
 /// A run narrowed to some files is not a measure of its crates while cargo-mutants 27.1.0 is
 /// pinned. Its struct-field strays (see [`UNFILTERED_GENRE`]) put other crates' tests into a
@@ -1001,21 +1041,29 @@ pub fn check_narrowed(list: &[Mutant], all: &[Mutant], files: &Regex) -> Result<
 /// 40964341569, narrowed to geom-run, geom-run's 17 timeouts took 466 s each in one shard and
 /// 105 s in the other.
 ///
-/// The margin covers a shard of mutants slower than their crate's mean: cargo-mutants gives each
-/// shard a run of consecutive mutants (its default `--sharding slice`), so a shard can hold one
-/// stretch of one crate. In those runs, the slowest stretch of each crate as long as a shard of it
-/// took at most 0.69 of its planned time: 214 geom-num mutants in 164 minutes of the full run
-/// 40859780064. In 40964349843 it was 0.57, and the longest shard job took 135 minutes.
-pub const SECONDS_PER_MUTANT: [(&str, u64); 9] = [
+/// The margin covers a shard of mutants slower than their crate's mean. A survivor runs its crate's
+/// whole suite (geom-intersect's 293 in 44881938610: 167 s each on average, against 68 s for a
+/// caught one), and survivors sit side by side in the list. Under cargo-mutants' default
+/// `--sharding slice` a shard holds consecutive mutants, so it can hold a run of them: in
+/// 44881938610 shard 396 held 18 geom-intersect mutants, 15 of them survivors, and took 63
+/// minutes, 3.1 times its plan. The plan now deals each crate's mutants among shards of its own in
+/// turn (`--sharding round-robin`, [`shard_plan`]): over that run's measured seconds, no shard of
+/// such a plan takes more than 0.80 of its planned time, but for the two that hold one of its two
+/// timeouts (892 and 936 s), at most 1.14.
+pub const SECONDS_PER_MUTANT: [(&str, u64); 13] = [
+    ("geom-bool", 24),
     ("geom-bvh", 4),
-    ("geom-curve", 3),
+    ("geom-check", 11),
+    ("geom-curve", 6),
+    ("geom-format", 13),
+    ("geom-intersect", 129),
     ("geom-linalg", 2),
     ("geom-math", 45),
     ("geom-num", 67),
-    ("geom-nurbs", 13),
+    ("geom-nurbs", 16),
     ("geom-pool", 13),
     ("geom-run", 24),
-    ("geom-surface", 5),
+    ("geom-surface", 22),
 ];
 
 /// The seconds a mutant of `package` is planned at: its row of [`SECONDS_PER_MUTANT`], or, for a
@@ -1029,11 +1077,160 @@ pub fn seconds_per_mutant(package: &str) -> u64 {
         .map_or(0, |(_, s)| *s)
 }
 
+/// The test timeout, in seconds, of a shard that skips its baseline (`--baseline=skip
+/// --timeout <s>`), by crate: cargo-mutants' own rule for the timeout it sets from a baseline
+/// (src/timeouts.rs at v27.1.0: five times the baseline's test time, rounded up, and at least its
+/// 20 s minimum), applied to the slowest baseline test measured for the crate. A crate's baseline
+/// then runs once, in a job of its own beside the shards, and [`vouch`] fails the gate when five
+/// times that baseline's test time is over the crate's row: raise the row to five times the new
+/// time. A crate with no row has its shards run their own baseline, as every shard did before.
+///
+/// Measured: the baseline line (`Unmutated baseline in <b>s build + <t>s test`) of every shard of
+/// the full run 40964349843 and of the diff run 44881938610, the largest test time of a shard of
+/// that crate alone, in seconds: geom-bool 27, geom-bvh 2, geom-curve 24, geom-intersect 192,
+/// geom-linalg 0, geom-math 31, geom-num 56, geom-nurbs 24, geom-surface 20. No shard held
+/// geom-check, geom-format, geom-pool or geom-run alone; their rows take the smallest shard that
+/// held them with others, whose time is at least theirs: geom-check 46 (with geom-bool and
+/// geom-curve), geom-format 16 (with geom-curve), geom-pool 32 (with geom-nurbs and geom-run),
+/// geom-run 19 (with geom-surface).
+pub const TEST_TIMEOUT_SECONDS: [(&str, u64); 13] = [
+    ("geom-bool", 135),
+    ("geom-bvh", 20),
+    ("geom-check", 230),
+    ("geom-curve", 120),
+    ("geom-format", 80),
+    ("geom-intersect", 960),
+    ("geom-linalg", 20),
+    ("geom-math", 155),
+    ("geom-num", 280),
+    ("geom-nurbs", 120),
+    ("geom-pool", 160),
+    ("geom-run", 95),
+    ("geom-surface", 100),
+];
+
+/// The test timeout, in seconds, of a shard of `package` that skips its baseline: its row of
+/// [`TEST_TIMEOUT_SECONDS`], or `None` for a crate with none, whose shards run their own baseline.
+#[must_use]
+pub fn test_timeout(package: &str) -> Option<u64> {
+    TEST_TIMEOUT_SECONDS
+        .iter()
+        .find(|(p, _)| *p == package)
+        .map(|(_, s)| *s)
+}
+
+/// One crate's baseline, as the workflow's `mutants-baseline` job writes it once its crate's
+/// tests passed on the unmutated code: `{"package": p, "passed": true, "test_seconds": t}`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BaselineRecord {
+    /// The crate.
+    pub package: String,
+    /// Whether its tests passed.
+    pub passed: bool,
+    /// How long its tests took, in seconds (the test phase, as cargo-mutants times a baseline).
+    pub test_seconds: f64,
+}
+
+/// Reads one baseline record.
+///
+/// # Errors
+///
+/// [`RunError`] for a missing or malformed file.
+pub fn read_baseline(path: &Path) -> Result<BaselineRecord, RunError> {
+    let value = read_json(path)?;
+    let package = value
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| run_err(path, "a baseline record without a package"))?;
+    let passed = value
+        .get("passed")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| run_err(path, "a baseline record without `passed`"))?;
+    let test_seconds = value
+        .get("test_seconds")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| run_err(path, "a baseline record without `test_seconds`"))?;
+    Ok(BaselineRecord {
+        package: package.to_owned(),
+        passed,
+        test_seconds,
+    })
+}
+
+/// What keeps a crate's baseline record from vouching for its shards, if anything.
+fn record_problem(package: &str, records: &[&BaselineRecord]) -> Option<String> {
+    let Some(timeout) = test_timeout(package) else {
+        return Some(format!(
+            "{package} has no row in TEST_TIMEOUT_SECONDS, so its shards must run their own \
+             baseline"
+        ));
+    };
+    let record = match records {
+        [] => {
+            return Some(format!(
+                "{package}: no baseline record, so nothing shows its tests pass on the unmutated \
+                 code"
+            ));
+        }
+        [one] => one,
+        _ => return Some(format!("{package}: {} baseline records", records.len())),
+    };
+    if !record.passed {
+        return Some(format!(
+            "{package}: its baseline failed, so the unmutated code does not pass its tests"
+        ));
+    }
+    let Ok(took) = Duration::try_from_secs_f64(record.test_seconds) else {
+        return Some(format!(
+            "{package}: its baseline's test time, {}, is not a time",
+            record.test_seconds
+        ));
+    };
+    (took.saturating_mul(5) > Duration::from_secs(timeout)).then(|| {
+        format!(
+            "{package}: its baseline's tests took {:.1} s, and five times that is over its {timeout} \
+             s timeout: raise its row of TEST_TIMEOUT_SECONDS to at least five times the time",
+            record.test_seconds
+        )
+    })
+}
+
+/// Vouches for the runs that skipped their baseline: a run becomes [`Baseline::Vouched`] when
+/// every crate of its mutants has exactly one baseline record, that record passed, and five times
+/// its test time is within the crate's row of [`TEST_TIMEOUT_SECONDS`], the timeout the shard was
+/// given (cargo-mutants would have set at least that from a baseline of its own). Returns each
+/// crate's problem, once, for the crates a skipped run needs; a run left [`Baseline::Skipped`]
+/// fails [`judge`].
+pub fn vouch(runs: &mut [Run], records: &[BaselineRecord]) -> Vec<String> {
+    let mut problems: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for run in runs.iter_mut() {
+        if run.baseline != Baseline::Skipped || run.mutants.is_empty() {
+            continue;
+        }
+        let packages: BTreeSet<&str> = run.mutants.iter().map(|m| m.package.as_str()).collect();
+        let mut whole = true;
+        for package in packages {
+            let problem = problems.entry(package.to_owned()).or_insert_with(|| {
+                let own: Vec<&BaselineRecord> =
+                    records.iter().filter(|r| r.package == package).collect();
+                record_problem(package, &own)
+            });
+            whole &= problem.is_none();
+        }
+        if whole {
+            run.baseline = Baseline::Vouched;
+        }
+    }
+    problems.into_values().flatten().collect()
+}
+
 /// The minutes of mutation a shard is planned at when the run fits [`MAX_SHARDS`] shards so: a
 /// push's checks end in about a quarter of an hour (the owner, 16 Nov 2026), and a shard's job adds
-/// its setup and its baseline build and test to the mutants' time. Planned times are twice the
-/// largest measured mean ([`SECONDS_PER_MUTANT`]), and the slowest stretch measured took at most
-/// 0.69 of its plan, so ten planned minutes run in about seven.
+/// its setup and its first, whole build (and, for a crate with no row of
+/// [`TEST_TIMEOUT_SECONDS`], its baseline's tests) to the mutants' time. Planned times are twice the
+/// largest measured mean ([`SECONDS_PER_MUTANT`]), and dealt in turn no shard of the measured run
+/// 44881938610 took more than 0.80 of its plan but for a timeout, so ten planned minutes run in
+/// about eight.
 pub const SHARD_MINUTES: u64 = 10;
 
 /// The most minutes of mutation one shard may plan for, for a run too large to fit
@@ -1052,107 +1249,206 @@ pub const SHARD_JOBS: u64 = 2;
 /// The most shards a run may have: [`MATRIX_JOBS`] in each of the [`SHARD_JOBS`].
 pub const MAX_SHARDS: u64 = MATRIX_JOBS.saturating_mul(SHARD_JOBS);
 
-/// The mutants cargo-mutants gives shard `k` of `n` (`--sharding slice`, its default; src/shard.rs
-/// at v27.1.0): positions `k c` to `(k + 1) c - 1` of the list, `c = ceil(len / n)`, the last
-/// fewer, so a shard can be empty when `n` does not divide the list well.
-#[must_use]
-pub fn slice(len: usize, k: u64, n: u64) -> std::ops::Range<usize> {
+/// The positions of a list of `len` mutants that cargo-mutants gives shard `k` of `n` under
+/// `--sharding round-robin` (src/shard.rs at v27.1.0, `Sharding::RoundRobin`): every position
+/// whose remainder by `n` is `k`. The shards `0` to `n - 1` together hold every position exactly
+/// once, and each holds one at least when `n` is at most `len`.
+pub fn round_robin(len: usize, k: u64, n: u64) -> impl Iterator<Item = usize> {
     let n = usize::try_from(n.max(1)).unwrap_or(usize::MAX);
     let k = usize::try_from(k).unwrap_or(usize::MAX);
-    let c = len.div_ceil(n);
-    let start = k.saturating_mul(c).min(len);
-    start..k.saturating_add(1).saturating_mul(c).min(len)
+    (k..len).step_by(n)
 }
 
-/// The planned seconds of each shard of `n` over `mutants`: the sum of [`seconds_per_mutant`] of
-/// the mutants its [`slice`] holds, each at its own crate's rate. An empty shard reads `None`.
+/// One shard of a run: shard `k` of the `n` that cargo-mutants deals `package`'s mutants among in
+/// turn (`--package <package> --shard k/n --sharding round-robin`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Shard {
+    /// The package whose mutants the shard tests.
+    pub package: String,
+    /// The shard's number among its package's, from 0.
+    pub k: u64,
+    /// How many shards its package's mutants are dealt among.
+    pub n: u64,
+    /// The test timeout, in seconds, when the shard skips its baseline (`--baseline=skip
+    /// --timeout`): its package's row of [`TEST_TIMEOUT_SECONDS`]. `None` runs its own baseline.
+    pub timeout: Option<u64>,
+}
+
+/// Each package's mutants, in the list's order, by package name.
+fn by_package(mutants: &[Mutant]) -> BTreeMap<&str, Vec<&Mutant>> {
+    let mut out: BTreeMap<&str, Vec<&Mutant>> = BTreeMap::new();
+    for m in mutants {
+        out.entry(m.package.as_str()).or_default().push(m);
+    }
+    out
+}
+
+/// The planned seconds of each shard of `plan` over `mutants`: the sum of [`seconds_per_mutant`]
+/// of the mutants of its package that [`round_robin`] gives it. A shard with none reads `None`.
 #[must_use]
-pub fn shard_seconds(mutants: &[Mutant], n: u64) -> Vec<Option<u64>> {
-    (0..n)
-        .map(|k| {
-            let part = mutants.get(slice(mutants.len(), k, n))?;
-            (!part.is_empty()).then(|| {
-                part.iter()
-                    .map(|m| seconds_per_mutant(&m.package))
-                    .fold(0, u64::saturating_add)
-            })
+pub fn shard_seconds(mutants: &[Mutant], plan: &[Shard]) -> Vec<Option<u64>> {
+    let packages = by_package(mutants);
+    plan.iter()
+        .map(|s| {
+            let own = packages.get(s.package.as_str())?;
+            let mut held = round_robin(own.len(), s.k, s.n)
+                .filter_map(|i| own.get(i))
+                .peekable();
+            held.peek()?;
+            Some(
+                held.map(|m| seconds_per_mutant(&m.package))
+                    .fold(0, u64::saturating_add),
+            )
         })
         .collect()
 }
 
-/// Whether every shard of `n` holds a mutant and is planned at no more than `minutes`.
-fn fits(mutants: &[Mutant], n: u64, minutes: u64) -> bool {
-    let budget = minutes.saturating_mul(60);
-    shard_seconds(mutants, n)
+/// How many shards each package needs for every shard to be planned at no more than `seconds`:
+/// the fewest, `ceil(len / floor(seconds / rate))`, so a shard holds at most `floor(seconds /
+/// rate)` of its package's mutants. `None` when one mutant of a package is planned at more.
+fn shards_within<'a>(
+    packages: &BTreeMap<&'a str, u64>,
+    seconds: u64,
+) -> Option<Vec<(&'a str, u64)>> {
+    packages
         .iter()
-        .all(|s| s.is_some_and(|s| s <= budget))
+        .map(|(&package, &len)| {
+            let per_shard = seconds.checked_div(seconds_per_mutant(package).max(1))?;
+            (per_shard > 0).then(|| (package, len.div_ceil(per_shard)))
+        })
+        .collect()
 }
 
-/// How many shards a run of `mutants` needs, by each mutant's measured time: the fewest shards of
-/// which every one holds a mutant and is planned at no more than [`SHARD_MINUTES`]; when the run
-/// is too large for [`MAX_SHARDS`] such shards, [`MAX_SHARDS`] shards, each planned at no more than
-/// [`SHARD_LIMIT_MINUTES`]. None for no mutant (a diff that touches none), whose judge then has
-/// nothing to wait for.
+/// The shards a run of `mutants` needs, by each mutant's measured time: each package's mutants
+/// dealt in turn among shards of their own, the fewest shards of which every one is planned at no
+/// more than [`SHARD_MINUTES`]; when the run is too large for [`MAX_SHARDS`] such shards, at most
+/// [`MAX_SHARDS`] shards whose slowest is planned at least, the fewest for it, each within
+/// [`SHARD_LIMIT_MINUTES`]. In package order, each package's shards from `k = 0`. None for no
+/// mutant (a diff that touches none), whose judge then has nothing to wait for.
 ///
-/// cargo-mutants gives each shard a run of consecutive mutants ([`slice`]), so the plan sums each
-/// shard's own mutants at their own crates' rates ([`shard_seconds`]): a slice of fast crates holds
-/// as many as its count, and only a slice of geom-num's mutants is sized at geom-num's rate. What
-/// each shard tests is cargo-mutants' choice from `--shard k/n`, never this plan's: the plan picks
-/// only `n`, and the judge proves the shards together tested every mutant of the list
-/// (`--expected`), whatever `n` is.
+/// A shard holds one package's mutants, so it builds that package alone, and its test timeout is
+/// that suite's: its crate's row of [`TEST_TIMEOUT_SECONDS`], whose baseline then runs once beside
+/// the shards ([`Shard::timeout`], [`vouch`]), or, for a crate with no row, set by cargo-mutants
+/// from the shard's own baseline of that crate. A shard of several crates would build them all
+/// first (geom-num's tests alone take minutes to build). Dealt
+/// in turn ([`round_robin`]), a package's neighbouring survivors, which each run its whole suite,
+/// fall to different shards. Every mutant of a package is planned at its rate, so each shard is
+/// planned at its count of them ([`shard_seconds`]). What each shard tests is cargo-mutants' choice
+/// from `--package`, `--shard k/n` and `--sharding round-robin`, never this plan's: the plan picks
+/// only each package's `n`, and the judge proves the shards together tested every mutant of the
+/// list (`--expected`), whatever the plan is.
 ///
 /// # Errors
 ///
-/// A description, when no number of shards up to [`MAX_SHARDS`] keeps every shard within
+/// A description, when no plan of at most [`MAX_SHARDS`] shards keeps every shard within
 /// [`SHARD_LIMIT_MINUTES`]: split the run before the gate silently loses mutants.
-pub fn shard_count(mutants: &[Mutant]) -> Result<u64, String> {
-    if mutants.is_empty() {
-        return Ok(0);
+pub fn shard_plan(mutants: &[Mutant]) -> Result<Vec<Shard>, String> {
+    let mut packages: BTreeMap<&str, u64> = BTreeMap::new();
+    for m in mutants {
+        let len = packages.entry(m.package.as_str()).or_insert(0);
+        *len = len.saturating_add(1);
     }
-    let total: u64 = mutants
-        .iter()
-        .map(|m| seconds_per_mutant(&m.package))
-        .fold(0, u64::saturating_add);
-    let lower = total
-        .div_ceil(SHARD_MINUTES.saturating_mul(60))
-        .clamp(1, MAX_SHARDS);
-    if let Some(n) = (lower..=MAX_SHARDS).find(|&n| fits(mutants, n, SHARD_MINUTES)) {
-        return Ok(n);
-    }
-    // Too large for shards of SHARD_MINUTES: the plan whose slowest shard is planned at least,
-    // the fewer shards on a tie, when it is within the job's limit.
-    let best = (1..=MAX_SHARDS)
-        .filter_map(|n| {
-            let seconds = shard_seconds(mutants, n);
-            let slowest = seconds.iter().copied().collect::<Option<Vec<u64>>>()?;
-            Some((slowest.into_iter().max().unwrap_or(0), n))
+    let fits = |seconds: u64| {
+        shards_within(&packages, seconds)
+            .filter(|n| n.iter().map(|(_, n)| *n).fold(0, u64::saturating_add) <= MAX_SHARDS)
+    };
+    let limit = SHARD_LIMIT_MINUTES.saturating_mul(60);
+    let plan = if let Some(plan) = fits(SHARD_MINUTES.saturating_mul(60)) {
+        plan
+    } else {
+        // Too large for shards of SHARD_MINUTES: the least seconds the slowest shard can be
+        // planned at in MAX_SHARDS shards (each package's count of shards only falls as the
+        // seconds grow), when that is within the job's limit.
+        if fits(limit).is_none() {
+            let total: u64 = mutants
+                .iter()
+                .map(|m| seconds_per_mutant(&m.package))
+                .fold(0, u64::saturating_add);
+            return Err(format!(
+                "{} mutants, planned at {total} s, need more than the {MAX_SHARDS} shards the \
+                 workflow's {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold: no plan of at most \
+                 {MAX_SHARDS} keeps every shard within {SHARD_LIMIT_MINUTES} min",
+                mutants.len()
+            ));
+        }
+        let (mut low, mut high) = (1, limit);
+        while low < high {
+            let mid = low.saturating_add(high.saturating_sub(low) / 2);
+            if fits(mid).is_some() {
+                high = mid;
+            } else {
+                low = mid.saturating_add(1);
+            }
+        }
+        fits(low).unwrap_or_default()
+    };
+    Ok(plan
+        .into_iter()
+        .flat_map(|(package, n)| {
+            (0..n).map(move |k| Shard {
+                package: package.to_owned(),
+                k,
+                n,
+                timeout: test_timeout(package),
+            })
         })
-        .min();
-    match best {
-        Some((slowest, n)) if slowest <= SHARD_LIMIT_MINUTES.saturating_mul(60) => Ok(n),
-        _ => Err(format!(
-            "{} mutants, planned at {total} s, need more than the {MAX_SHARDS} shards the \
-             workflow's {SHARD_JOBS} shard jobs of {MATRIX_JOBS} may hold: no plan of at most \
-             {MAX_SHARDS} keeps every shard within {SHARD_LIMIT_MINUTES} min",
-            mutants.len()
-        )),
-    }
+        .collect())
 }
 
-/// The shard plan as JSON for the workflow: `{"count": n, "shards": [...], "count_2": m,
-/// "shards_2": [...]}`. `count` is every shard of the run, the `n` of each shard's `--shard k/n`;
-/// `shards` lists the first job's, 0 to `min(n, 256) - 1`, and `shards_2` the second job's, 256 to
-/// `n - 1`, `count_2` of them. A GitHub Actions matrix may not be empty, so a job with no shard
-/// still lists its first (0 or 256); the workflow runs a job only when its count is not 0.
-/// [`shard_count`] gives at most [`MAX_SHARDS`] shards, so neither list holds more than
-/// [`MATRIX_JOBS`].
+/// The shard plan as JSON for the workflow: `{"count": c, "shards": [...], "count_2": m,
+/// "shards_2": [...], "count_baselines": b, "baselines": [...]}`, each shard `{"index": i,
+/// "package": p, "k": k, "n": n, "timeout": t}`. `count` is every shard of the run; `index` numbers
+/// them in the whole run, from 0, in the plan's order; `shards` lists the first job's, indices 0 to
+/// `min(c, 256) - 1`, and `shards_2` the second job's, 256 to `c - 1`, `count_2` of them. `timeout`
+/// is the shard's [`Shard::timeout`], or 0 when it runs its own baseline. `baselines` names, once
+/// each in the plan's order, the crates whose shards skip their baseline, `count_baselines` of
+/// them: the workflow runs each one's baseline in a job of its own. A GitHub Actions matrix may not
+/// be empty, so a job with nothing to run still lists one entry, index 0 or 256 of no package, or
+/// no crate; the workflow runs a job only when its count is not 0. [`shard_plan`] gives at most
+/// [`MAX_SHARDS`] shards, so neither shard list holds more than [`MATRIX_JOBS`].
 #[must_use]
-pub fn shard_matrix(count: u64) -> String {
-    let first: Vec<u64> = (0..count.clamp(1, MATRIX_JOBS)).collect();
-    let count_2 = count.saturating_sub(MATRIX_JOBS);
-    let second: Vec<u64> = (MATRIX_JOBS..MATRIX_JOBS.saturating_add(count_2.max(1))).collect();
-    serde_json::json!({"count": count, "shards": first, "count_2": count_2, "shards_2": second})
-        .to_string()
+pub fn shard_matrix(plan: &[Shard]) -> String {
+    let jobs = usize::try_from(MATRIX_JOBS).unwrap_or(usize::MAX);
+    let entry = |(index, s): (usize, &Shard)| {
+        matrix_entry(index, &s.package, s.k, s.n, s.timeout.unwrap_or(0))
+    };
+    let first: Vec<Value> = plan.iter().enumerate().take(jobs).map(entry).collect();
+    let second: Vec<Value> = plan.iter().enumerate().skip(jobs).map(entry).collect();
+    let (count, count_2) = (plan.len(), second.len());
+    let first = if first.is_empty() {
+        vec![matrix_entry(0, "", 0, 1, 0)]
+    } else {
+        first
+    };
+    let second = if second.is_empty() {
+        vec![matrix_entry(jobs, "", 0, 1, 0)]
+    } else {
+        second
+    };
+    let mut baselines: Vec<&str> = Vec::new();
+    for s in plan {
+        if s.timeout.is_some() && !baselines.contains(&s.package.as_str()) {
+            baselines.push(&s.package);
+        }
+    }
+    let count_baselines = baselines.len();
+    if baselines.is_empty() {
+        baselines.push("");
+    }
+    serde_json::json!({
+        "count": count,
+        "shards": first,
+        "count_2": count_2,
+        "shards_2": second,
+        "count_baselines": count_baselines,
+        "baselines": baselines,
+    })
+    .to_string()
+}
+
+/// One shard of a matrix of [`shard_matrix`].
+fn matrix_entry(index: usize, package: &str, k: u64, n: u64, timeout: u64) -> Value {
+    serde_json::json!({"index": index, "package": package, "k": k, "n": n, "timeout": timeout})
 }
 
 /// The function a ledger entry's mutant is in: the last path segment after the description's last

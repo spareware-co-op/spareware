@@ -5,15 +5,17 @@
 //! `geom_test`; `kernel-quality --help` lists them and `kernel-quality <command> --help` gives each
 //! one's options.
 //!
-//! - `mutants-plan` reads the mutants of a run from `cargo mutants --list --json` and prints how
-//!   many shards the run needs ([`geom_test::mutants::shard_count`]), with the shard lists for the
-//!   workflow's two shard jobs, one GitHub Actions matrix each. For a full run narrowed to the
+//! - `mutants-plan` reads the mutants of a run from `cargo mutants --list --json` and prints the
+//!   shards the run needs, each crate's mutants dealt in turn among shards of their own
+//!   ([`geom_test::mutants::shard_plan`]), in the shard lists for the workflow's two shard jobs,
+//!   one GitHub Actions matrix each. For a full run narrowed to the
 //!   files a regular expression matches, `--files` and `--all` (the listing without `--re`) check
 //!   the list holds exactly those files' mutants ([`geom_test::mutants::check_narrowed`]).
 //! - `mutants` judges cargo-mutants output directories (`mutants.out`, one per shard) against the
 //!   ledger ([`geom_test::mutants`]); `--expected`, the same list, proves no shard is missing, and
 //!   in a pull request `--base-ledger` is the base branch's ledger, the only source of `known`
-//!   entries a pull request may use.
+//!   entries a pull request may use. Each `--baseline` is a crate's baseline record, the only
+//!   thing that vouches for shards that skipped their baseline ([`geom_test::mutants::vouch`]).
 //! - `coverage` judges `DIR/<crate>.lcov`, one LCOV file per kernel crate measured by its own
 //!   tests, with `DIR/<crate>.log`, the output of the cargo-llvm-cov run that wrote it, for every
 //!   crate `affected` names, and checks every `coverage(off)` mark in the kernel
@@ -161,7 +163,8 @@ enum Which {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Prints the number of shards a mutation run needs, and each shard job's list, as JSON.
+    /// Prints the shards a mutation run needs, each a crate's shard k of n, in each shard job's
+    /// list, as JSON.
     MutantsPlan {
         /// The output of `cargo mutants --list --json` for the run (an empty file: no mutants).
         #[arg(long, value_name = "LIST.json")]
@@ -190,6 +193,10 @@ enum Command {
         /// those files' ledger entries are counted.
         #[arg(long, value_name = "REGEX")]
         files: Option<String>,
+        /// A crate's baseline record (`mutants-baseline`'s `<crate>.json`), one per crate whose
+        /// shards skipped their baseline: only these vouch for those shards.
+        #[arg(long = "baseline", value_name = "FILE")]
+        baselines: Vec<PathBuf>,
         #[command(flatten)]
         repo: Repo,
         /// The output directories, one per shard (`mutants.out`).
@@ -732,6 +739,7 @@ fn judge_mutants(
     expected: &Path,
     base_ledger: Option<&Path>,
     files: Option<&str>,
+    baselines: &[PathBuf],
     repo: &Repo,
     outs: &[PathBuf],
 ) -> Result<bool, String> {
@@ -745,6 +753,11 @@ fn judge_mutants(
     for dir in outs {
         runs.push(mutants::read_run(dir).map_err(|e| e.to_string())?);
     }
+    let mut records = Vec::new();
+    for f in baselines {
+        records.push(mutants::read_baseline(f).map_err(|e| e.to_string())?);
+    }
+    let problems = mutants::vouch(&mut runs, &records);
     let mode = match mode {
         ModeArg::Diff => Mode::Diff,
         ModeArg::Full => Mode::Full,
@@ -767,7 +780,7 @@ fn judge_mutants(
             if outside == 1 { "y" } else { "ies" }
         );
     }
-    let verdict = mutants::judge(
+    let mut verdict = mutants::judge(
         &runs,
         &ledger,
         &root,
@@ -776,6 +789,7 @@ fn judge_mutants(
         base.as_ref(),
         files.as_ref(),
     );
+    verdict.failures.extend(problems);
     print!("{}", mutants::report(&verdict));
     Ok(verdict.passes())
 }
@@ -821,8 +835,8 @@ fn run(cli: Cli) -> Result<bool, String> {
                     );
                 }
             }
-            let count = mutants::shard_count(&mutants)?;
-            println!("{}", mutants::shard_matrix(count));
+            let plan = mutants::shard_plan(&mutants)?;
+            println!("{}", mutants::shard_matrix(&plan));
             Ok(true)
         }
         Command::Mutants {
@@ -830,6 +844,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             expected,
             base_ledger,
             files,
+            baselines,
             repo,
             outs,
         } => judge_mutants(
@@ -837,6 +852,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             &expected,
             base_ledger.as_deref(),
             files.as_deref(),
+            &baselines,
             &repo,
             &outs,
         ),

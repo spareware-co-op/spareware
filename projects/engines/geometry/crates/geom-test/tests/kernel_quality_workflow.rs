@@ -21,10 +21,15 @@
 //! - **Pins.** Every action pinned to a full commit, the same commit as `kernel.yml` where both use
 //!   an action; one `RUST_TOOLCHAIN`, equal to `rust-toolchain.toml`; the nightly pinned by its
 //!   date; cargo-mutants, cargo-llvm-cov and cargo-nextest installed at exact versions with
-//!   `--locked`, and nothing installed another way.
+//!   `--locked`, but for the mutation shards' cargo-mutants, the release's own binary at that
+//!   version through install-action with no fallback; and nothing installed another way.
+//! - **One baseline per crate.** A crate whose shards skip their baseline has it run once, beside
+//!   the shards, by cargo-mutants' own commands with the shards' profile and limit, its record
+//!   written only once its tests passed, and the judge reads every record.
 //! - **Shards and partitions.** The mutation shards come from the plan, in as many jobs as
-//!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs `--shard k/n`
-//!   with the plan's count of the whole run; Miri's partitions are its plan's, in two jobs as the
+//!   `geom_test::mutants::SHARD_JOBS`, each with the same steps, and each shard runs the plan's
+//!   crate and its shard of that crate's, `--package P --shard k/n --sharding round-robin`;
+//!   Miri's partitions are its plan's, in two jobs as the
 //!   shards are, `miri` and `miri-2`, the second the first word for word but for its matrix and
 //!   condition (32.105), shown by planted changes to it alone.
 //! - **Every gate is judged.** The judge reads the plan's list; cargo-mutants' exit status is passed
@@ -284,10 +289,11 @@ fn the_coverage_judge_reads_every_part() {
 }
 
 /// The workflow's jobs, in file order.
-const JOBS: [&str; 18] = [
+const JOBS: [&str; 19] = [
     "when",
     "cheap",
     "mutants-plan",
+    "mutants-baseline",
     "mutants",
     "mutants-2",
     "mutants-judge",
@@ -339,6 +345,7 @@ fn each_job_runs_on_the_events_its_gate_names() {
         text(&jobs["mutants-2"]["if"]),
         "needs.mutants-plan.outputs.count_2 != '0'"
     );
+    // (`mutants-baseline`'s: `each_crates_baseline_runs_once_beside_the_shards`.)
     // Miri's partitions 257 on: only when the plan gives them, and never on a pull request, which
     // runs partition 1 alone (32.105).
     assert_eq!(
@@ -356,12 +363,17 @@ fn each_job_runs_on_the_events_its_gate_names() {
         .iter()
         .map(text)
         .collect();
-    assert_eq!(needs, ["when", "mutants-plan", "mutants", "mutants-2"]);
+    let judged = "when mutants-plan mutants-baseline mutants mutants-2";
+    assert_eq!(needs.join(" "), judged);
     // The judge checks the jobs it reads before it judges: a shard job may be skipped only when
-    // the plan gave it no shard.
+    // the plan gave it no shard, and the baselines' only when no crate's shards skip theirs.
     let first = text(&jobs["mutants-judge"]["steps"][0]["run"]);
     assert!(first.contains("needs.mutants-plan.result"), "{first}");
-    for (job, count) in [("mutants", "count"), ("mutants-2", "count_2")] {
+    for (job, count) in [
+        ("mutants-baseline", "count_baselines"),
+        ("mutants", "count"),
+        ("mutants-2", "count_2"),
+    ] {
         assert!(
             first.contains(&format!(
                 "case \"${{{{ needs.{job}.result }}}}\" in success) ;; skipped) test \
@@ -582,6 +594,43 @@ fn toolchains_and_tools_are_pinned() {
     assert!(!all_runs.contains("curl ") && !all_runs.contains("wget "));
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn the_shards_take_the_released_cargo_mutants() {
+    let w = workflow();
+    // The mutation shards take cargo-mutants' own release binary at the pinned version, which
+    // install-action checks against its manifest's sha256, and build or fetch nothing else for it
+    // (no fallback, checksums on); no other job uses install-action, and the shards build no
+    // cargo-mutants.
+    let installing: Vec<(String, Yaml)> = steps(&w)
+        .into_iter()
+        .filter(|(_, s)| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("taiki-e/install-action@"))
+        })
+        .collect();
+    let jobs: Vec<&str> = installing.iter().map(|(j, _)| j.as_str()).collect();
+    assert_eq!(jobs, ["mutants", "mutants-2"]);
+    for (job, step) in &installing {
+        assert_eq!(
+            keys(&step["with"]),
+            ["tool", "fallback"],
+            "{job}: checksums stay on"
+        );
+        assert_eq!(
+            text(&step["with"]["tool"]),
+            "cargo-mutants@${{ env.CARGO_MUTANTS_VERSION }}",
+            "{job}"
+        );
+        assert_eq!(text(&step["with"]["fallback"]), "none", "{job}");
+        assert!(!runs(&w, job).contains("cargo install"), "{job}");
+    }
+}
+
 fn keys_or_empty(y: &Yaml) -> Vec<String> {
     if y.is_badvalue() { Vec::new() } else { keys(y) }
 }
@@ -675,18 +724,53 @@ fn every_shard_and_partition_runs_once() {
             text(&shards["strategy"]["matrix"]["shard"]),
             format!("${{{{ fromJSON(needs.mutants-plan.outputs.{list}) }}}}")
         );
-        // Shards are numbered in the whole run: every job divides by the plan's full count.
+        // Each shard runs the plan's crate and its shard of that crate's mutants, dealt in turn,
+        // exactly as the plan gives them (geom_test::mutants::shard_plan).
         assert_eq!(
-            text(&shards["env"]["SHARDS"]),
-            "${{ needs.mutants-plan.outputs.count }}"
+            text(&shards["env"]["PACKAGE"]),
+            "${{ matrix.shard.package }}"
+        );
+        assert_eq!(
+            text(&shards["env"]["SHARD"]),
+            "${{ matrix.shard.k }}/${{ matrix.shard.n }}"
+        );
+        assert!(shards["env"]["SHARDS"].is_badvalue());
+        // A crate whose baseline runs in `mutants-baseline` skips it here, with the plan's timeout
+        // for the crate and no build timeout; any other runs its own.
+        assert_eq!(
+            text(&shards["env"]["TIMEOUT"]),
+            "${{ matrix.shard.timeout }}"
         );
         assert_eq!(shards["strategy"]["fail-fast"].as_bool(), Some(false));
         let run = runs(&w, job);
         assert!(
-            run.contains("--shard \"${{ matrix.shard }}/$SHARDS\""),
+            run.contains(
+                "cargo mutants \"${only[@]}\" --package \"$PACKAGE\" --shard \"$SHARD\" \
+                 --sharding round-robin \\\n"
+            ),
             "{run}"
         );
         assert!(run.contains("--no-shuffle"), "{run}");
+        let skip = "baseline=()\nif [ \"$TIMEOUT\" != 0 ]; then\n  \
+                    baseline=(--baseline=skip --timeout \"$TIMEOUT\")\nfi\n";
+        assert!(run.contains(skip), "{run}");
+        assert!(run.contains("\n  \"${baseline[@]}\" --no-shuffle"), "{run}");
+        assert!(!run.contains("build-timeout"), "{run}");
+        // Each shard's report under its index in the whole run, as the judge downloads them.
+        let upload = shards["steps"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .find(|s| {
+                s["uses"]
+                    .as_str()
+                    .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+            })
+            .unwrap();
+        assert_eq!(
+            text(&upload["with"]["name"]),
+            "mutants-${{ matrix.shard.index }}"
+        );
         // The second job is the first, word for word, but for its matrix and condition.
         for key in ["runs-on", "timeout-minutes", "env", "defaults", "steps"] {
             assert_eq!(shards[key], w["jobs"]["mutants"][key], "{job} {key}");
@@ -702,7 +786,7 @@ fn every_shard_and_partition_runs_once() {
             "{plan_run}"
         );
     }
-    for count in ["count", "count_2"] {
+    for count in ["count", "count_2", "count_baselines"] {
         assert_eq!(
             text(&plan[count]),
             format!("${{{{ steps.plan.outputs.{count} }}}}")
@@ -715,6 +799,116 @@ fn every_shard_and_partition_runs_once() {
         );
     }
     // (Miri's partitions are its plan's: `miris_jobs_run_from_one_plan_each_within_fifteen_minutes`.)
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
+#[test]
+fn each_crates_baseline_runs_once_beside_the_shards() {
+    let w = workflow();
+    let job = &w["jobs"]["mutants-baseline"];
+    let list = |y: &Yaml| -> Vec<String> {
+        y.as_vec()
+            .unwrap()
+            .iter()
+            .map(|v| text(v).to_owned())
+            .collect()
+    };
+    // From the plan, beside the shards: neither waits for the other, and only the judge reads it.
+    assert_eq!(list(&job["needs"]), ["when", "mutants-plan"]);
+    assert_eq!(
+        text(&job["if"]),
+        "needs.mutants-plan.outputs.count_baselines != '0'"
+    );
+    for shards in ["mutants", "mutants-2"] {
+        assert_eq!(list(&w["jobs"][shards]["needs"]), ["when", "mutants-plan"]);
+    }
+    assert_eq!(
+        text(&job["strategy"]["matrix"]["package"]),
+        "${{ fromJSON(needs.mutants-plan.outputs.baselines) }}"
+    );
+    assert_eq!(job["strategy"]["fail-fast"].as_bool(), Some(false));
+    assert_eq!(
+        text(&w["jobs"]["mutants-plan"]["outputs"]["baselines"]),
+        "${{ steps.plan.outputs.baselines }}"
+    );
+    assert!(
+        runs(&w, "mutants-plan")
+            .contains("echo \"baselines=$(jq -c .baselines <<<\"$plan\")\" >> \"$GITHUB_OUTPUT\"")
+    );
+    // The shards' profile and limit, and cargo-mutants' own two baseline commands (src/cargo.rs at
+    // v27.1.0) with .cargo/mutants.toml's arguments: the build, then the timed tests.
+    assert_eq!(text(&job["env"]["PACKAGE"]), "${{ matrix.package }}");
+    for key in [
+        "CARGO_PROFILE_RELEASE_OPT_LEVEL",
+        "CARGO_PROFILE_RELEASE_INCREMENTAL",
+        "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
+    ] {
+        assert_eq!(job["env"][key], w["jobs"]["mutants"]["env"][key], "{key}");
+    }
+    let config = toml_file(".cargo/mutants.toml");
+    let strings = |key: &str| -> Vec<String> {
+        config[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(config["profile"].as_str(), Some("release"));
+    assert_eq!(strings("additional_cargo_args"), ["--locked"]);
+    assert_eq!(strings("additional_cargo_test_args"), ["--test", "*"]);
+    let run = runs(&w, "mutants-baseline");
+    let build = "cargo test --no-run --profile=release --verbose --package=\"$PACKAGE\" --locked\n";
+    let test =
+        "cargo test --profile=release --verbose --package=\"$PACKAGE\" --locked --test '*'\n";
+    let at = |needle: &str| {
+        run.find(needle)
+            .unwrap_or_else(|| panic!("the baseline does not run {needle:?}: {run}"))
+    };
+    assert!(at("ulimit -d $((8 * 1024 * 1024))") < at(build));
+    assert!(at(build) < at("start=$(date +%s.%N)"));
+    assert!(at("start=$(date +%s.%N)") < at(test));
+    assert!(at(test) < at("end=$(date +%s.%N)"));
+    // Its record is written only after both passed (bash stops at a failed command), and says so.
+    assert!(at("end=$(date +%s.%N)") < at("jq -n"));
+    assert!(run.contains("'{package: $package, passed: true, test_seconds: $seconds}'"));
+    assert!(run.contains("> \"$RUNNER_TEMP/baseline/$PACKAGE.json\""));
+    assert!(!run.contains("set +e") && !run.contains("|| true"), "{run}");
+    let upload = job["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .find(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+        })
+        .unwrap();
+    assert_eq!(
+        text(&upload["with"]["name"]),
+        "mutants-baseline-${{ matrix.package }}"
+    );
+    assert_eq!(text(&upload["with"]["path"]), "${{ runner.temp }}/baseline");
+    assert_eq!(text(&upload["with"]["if-no-files-found"]), "error");
+    // The judge takes every record, and nothing else vouches for a shard that skipped its baseline.
+    let judge = &w["jobs"]["mutants-judge"];
+    let download = judge["steps"]
+        .as_vec()
+        .unwrap()
+        .iter()
+        .find(|s| s["with"]["pattern"].as_str() == Some("mutants-baseline-*"))
+        .unwrap();
+    assert_eq!(
+        text(&download["with"]["path"]),
+        "${{ runner.temp }}/baselines"
+    );
+    assert_eq!(download["with"]["merge-multiple"].as_bool(), Some(true));
+    assert!(runs(&w, "mutants-judge").contains(
+        "for f in \"$RUNNER_TEMP\"/baselines/*.json; do\n  args+=(--baseline \"$f\")\ndone"
+    ));
 }
 
 #[cfg_attr(
@@ -932,7 +1126,7 @@ fn every_gate_is_judged_and_tool_failures_are_not_swallowed() {
     for needle in [
         "only=(--in-diff \"$RUNNER_TEMP/plan/pr.diff\")",
         "elif [ -n \"$FILES\" ]; then\n  only=(--re \"$FILES\")",
-        "cargo mutants \"${only[@]}\" --shard",
+        "cargo mutants \"${only[@]}\" --package \"$PACKAGE\" --shard",
         // A runaway mutant aborts its own test instead of shutting the runner down.
         "ulimit -d $((8 * 1024 * 1024))",
     ] {
