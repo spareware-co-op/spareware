@@ -279,15 +279,15 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-topo",      3, Accepted,   Elsewhere("G80"), "base math curve surface"),
     kernel("geom-name",      3, Accepted,   Elsewhere("G87"), "base topo"),
     // 4. Intersections.
-    kernel("geom-intersect", 4, Accepted,   Here, "base math nurbs curve surface bvh"),
+    kernel("geom-intersect", 4, Accepted,   Elsewhere("G158"), "base math nurbs curve surface bvh"),
     // 5. Checker.
     kernel("geom-check",     5, Accepted,   Elsewhere("G84"), "base curve topo intersect"),
     // 6. Arrangements.
-    kernel("geom-poly",      6, Accepted,   Here, "base math topo"),
-    kernel("geom-bool",      6, Accepted,   Here, "base poly intersect topo name check bvh"),
+    kernel("geom-poly",      6, Accepted,   Elsewhere("G123"), "base math topo"),
+    kernel("geom-bool",      6, Accepted,   Elsewhere("G129"), "base poly intersect topo name check bvh"),
     kernel("geom-2d",        6, Accepted,   Here, "base math curve topo name intersect bvh"),
     // 7. Meshes and spatial.
-    kernel("geom-mesh",      7, Accepted,   Here,
+    kernel("geom-mesh",      7, Accepted,   Elsewhere("G153"),
         "base math topo poly curve surface intersect bvh linalg 2d"),
     kernel("geom-spatial",   7, Accepted,   Here, "base math mesh bvh poly intersect"),
     // 8. Other representations.
@@ -314,7 +314,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-combine",  10, Amended27, Here, "base bool mesh field convert check subd"),
     kernel("geom-panel",    10, Amended27, Here,
         "base topo check surface intersect poly mesh 2d linalg"),
-    kernel("geom-analysis", 10, Amended27, Here, "base surface topo intersect spatial"),
+    kernel("geom-analysis", 10, Amended27, Elsewhere("G346"), "base surface topo intersect spatial"),
     // 11. Domain toolkits: a toolkit enters the kernel when a second program needs it (26.1),
     // so none is built yet; owner action G238 decides whether geom-civil, geom-thread and
     // geom-stair enter as exceptions. Chapter 27 gives the sheet, thread and stair toolkits "base and the
@@ -332,7 +332,7 @@ const ROWS: &[Row<'static>] = &[
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
     kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
-    kernel("geom-p21",      12, Amended27, Here, "base format"),
+    kernel("geom-p21",      12, Amended27, Elsewhere("G415"), "base format"),
     kernel("geom-heal",     12, Amended27, Here, "base topo check mesh exchange"),
     kernel("geom-ifc",      12, Accepted,   Here, concat!(
         "base format exchange heal p21 ",

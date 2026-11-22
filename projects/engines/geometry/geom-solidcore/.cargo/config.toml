@@ -1,0 +1,10 @@
+# solidcore's own README asks for an 8 MiB stack: some of its methods recurse, and a test thread's
+# default 2 MiB is too little for them in an unoptimised build. This sets it for every test thread
+# of this workspace (cargo's [env] table), the way solidcore's own .cargo/config.toml does.
+[env]
+RUST_MIN_STACK = "8388608"
+
+# On wasm32-wasip1 there are no threads: every test runs on the module's one stack, which is set
+# when the module is linked, and the same README asks wasm builds for 8 MiB of it.
+[target.wasm32-wasip1]
+rustflags = ["-C", "link-arg=-zstack-size=8388608"]

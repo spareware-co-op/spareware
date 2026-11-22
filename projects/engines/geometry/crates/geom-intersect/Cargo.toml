@@ -19,6 +19,10 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
 geom-surface = { path = "../geom-surface" }
 
+[dev-dependencies]
+# The kernel development crate: seeds and generators, a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

@@ -1,10 +1,12 @@
-//! The bulge polyline, trimmed, composite, offset and curve-on-surface kinds (piece G62) under the
-//! kind contract, and their own claims: a bulge arc lies on its circle and converts exactly; a
-//! trimmed NURBS curve keeps its knots; a composite's joints are exact and its NURBS form one
-//! curve; an offset of a circle is a circle; a curve on a surface carries its cache's error.
+//! The bulge polyline, trimmed, composite, offset and curve-on-surface kinds (piece G62) and the
+//! intersection curve (piece G175) under the kind contract, and their own claims: a bulge arc lies
+//! on its circle and converts exactly; a trimmed NURBS curve keeps its knots; a composite's joints
+//! are exact and its NURBS form one curve; an offset of a circle is a circle; a curve on a surface
+//! carries its cache's error; an intersection curve carries its caches' bounds through a split, a
+//! reversal and a transform.
 //!
 //! Covers: `CurveKind::Bulge`, `CurveKind::Trimmed`, `CurveKind::Composite`, `CurveKind::Offset`,
-//! `CurveKind::OnSurface`.
+//! `CurveKind::OnSurface`, `CurveKind::Intersection`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -22,10 +24,11 @@
 use geom_curve::contract::check;
 use geom_curve::{
     Axes, Basis, BulgePolyline, Circle, Composite, CurveError, CurveKind, Ellipse, Frame, Helix,
-    HelixAxes, Line, Offset, OffsetLaw, OnSurface, ParamCurve, ParamMap, Station, SurfaceRef,
-    Trimmed,
+    HelixAxes, IntersectionCurve, Line, Marched, Offset, OffsetLaw, OnSurface, ParamCurve,
+    ParamMap, Span, Station, SurfaceRef, Trimmed,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
+use geom_num::interval::Interval;
 use geom_num::math;
 use geom_nurbs::{Basis as Knots, Curve, Limit};
 use geom_run::{Budget, WorkMeter};
@@ -424,6 +427,163 @@ fn a_curve_on_a_surface_carries_its_cache() {
         .err(),
         Some(CurveError::Dimension { dimension: 2 })
     );
+}
+
+#[test]
+fn an_intersection_curve_carries_its_caches() {
+    let m = &mut meter();
+    let uv = |a: [f64; 2], b: [f64; 2]| {
+        Trimmed::whole(Basis::Line(Line::new(a, b, (0.0, 1.0)).unwrap())).unwrap()
+    };
+    let knots = || Knots::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let points = [
+        [0.0, 0.0, 0.0],
+        [1.0, 2.0, 0.5],
+        [2.0, 1.0, 1.0],
+        [3.0, 3.0, 0.0],
+        [4.0, 2.0, 2.0],
+    ];
+    let cache = Curve::new(knots(), &points).unwrap();
+    let span = |at: (f64, f64), e: f64| Span {
+        at,
+        curve: e,
+        pcurves: [e / 2.0, e / 4.0],
+    };
+    let chain = |t: f64| Marched {
+        at: [Interval::point(t).unwrap(); 4],
+        t,
+    };
+    let make = |spans: Vec<Span>, marched: Vec<Marched>| {
+        IntersectionCurve::new(
+            [SurfaceRef(3), SurfaceRef(4)],
+            marched,
+            cache.clone(),
+            [uv([0.0, 0.0], [1.0, 1.0]), uv([1.0, 0.0], [0.0, 1.0])],
+            spans,
+        )
+    };
+    let curve = make(
+        vec![span((0.0, 0.5), 1e-9), span((0.5, 1.0), 2e-9)],
+        vec![chain(0.0), chain(0.25), chain(0.75), chain(1.0)],
+    )
+    .unwrap();
+    assert_eq!(curve.error(), 2e-9);
+    // Every transform of `spatial` natively; under Miri one of each kind it holds, the exact
+    // mirror, the rational turn, and in doubles a turn off the z axis and a stretch along all
+    // three: each one is the contract's whole walk, and with all nine the test took 513 yardstick
+    // seconds there.
+    let all = spatial();
+    let moves = if cfg!(miri) {
+        vec![&all[1], &all[2], &all[7], &all[8]]
+    } else {
+        all.iter().collect()
+    };
+    for t in moves {
+        check(&curve, &params((0.0, 1.0)), t, m).unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+    // A split tiles both halves, cuts the span it falls in and parts the chain.
+    let (left, right) = curve.split(0.25, m).unwrap();
+    let (CurveKind::Intersection(l), CurveKind::Intersection(r)) = (left.value, right.value) else {
+        panic!("still intersection curves")
+    };
+    let ats = |c: &IntersectionCurve<3>| c.spans().iter().map(|s| s.at).collect::<Vec<_>>();
+    assert_eq!(ats(&l), vec![(0.0, 0.25)]);
+    assert_eq!(ats(&r), vec![(0.25, 0.5), (0.5, 1.0)]);
+    assert_eq!(l.chain().len(), 2);
+    assert_eq!(r.chain().len(), 3);
+    assert!(r.spans()[1].curve >= 2e-9 && l.spans()[0].pcurves[0] >= 5e-10);
+    // A reversal mirrors the spans and the chain.
+    let CurveKind::Intersection(b) = curve.reversed(m).unwrap().value else {
+        panic!("still an intersection curve")
+    };
+    assert_eq!(ats(&b), vec![(-1.0, -0.5), (-0.5, 0.0)]);
+    assert_eq!(b.spans()[0].curve, 2e-9);
+    assert_eq!(b.chain()[0].t, -1.0);
+    // A scale by two at least doubles every bound and leaves the pcurves.
+    let grow = TypedTransform::from(Transform::uniform_scale(2.0).unwrap());
+    let CurveKind::Intersection(g) = curve.transformed(&grow, m).unwrap().value else {
+        panic!("still an intersection curve")
+    };
+    assert!(g.error() >= 4e-9 && g.error() < 8e-9, "{}", g.error());
+    assert_eq!(g.pcurves(), curve.pcurves());
+    assert_eq!(g.surfaces(), [SurfaceRef(3), SurfaceRef(4)]);
+    // Refused: spans that leave a gap, a bound that is not finite, a chain out of order or
+    // outside the domain.
+    for (spans, marched, why) in [
+        (
+            vec![span((0.0, 0.4), 1e-9), span((0.5, 1.0), 1e-9)],
+            vec![],
+            CurveError::SpanOutside,
+        ),
+        (
+            vec![span((0.0, 1.0), f64::NAN)],
+            vec![],
+            CurveError::NotFinite,
+        ),
+        (vec![span((0.0, 1.0), -1.0)], vec![], CurveError::NotFinite),
+        (
+            vec![span((0.0, 1.0), 1e-9)],
+            vec![chain(0.5), chain(0.25)],
+            CurveError::SpanOutside,
+        ),
+        (
+            vec![span((0.0, 1.0), 1e-9)],
+            vec![chain(1.5)],
+            CurveError::SpanOutside,
+        ),
+        (vec![], vec![], CurveError::SpanOutside),
+    ] {
+        assert_eq!(make(spans, marched).err(), Some(why));
+    }
+}
+
+/// An intersection curve's domain is its cache's, here (2, 5) and not (0, 1), and its spans must
+/// tile that domain: from its start to its end, each rising from where the one before it ended.
+#[test]
+fn an_intersection_curve_tiles_its_own_domain() {
+    let m = &mut meter();
+    let uv = |a: [f64; 2], b: [f64; 2]| {
+        Trimmed::whole(Basis::Line(Line::new(a, b, (2.0, 5.0)).unwrap())).unwrap()
+    };
+    let cache = Curve::new(
+        Knots::new(1, vec![2.0, 2.0, 5.0, 5.0]).unwrap(),
+        &[[0.0, 0.0, 0.0], [3.0, 6.0, 9.0]],
+    )
+    .unwrap();
+    let span = |a: f64, b: f64| Span {
+        at: (a, b),
+        curve: 1e-9,
+        pcurves: [1e-9, 1e-9],
+    };
+    let make = |spans: Vec<Span>| {
+        IntersectionCurve::new(
+            [SurfaceRef(1), SurfaceRef(2)],
+            vec![],
+            cache.clone(),
+            [uv([0.0, 0.0], [1.0, 1.0]), uv([1.0, 0.0], [0.0, 1.0])],
+            spans,
+        )
+    };
+    let curve = make(vec![span(2.0, 3.0), span(3.0, 5.0)]).unwrap();
+    assert_eq!(ParamCurve::domain(&curve), (2.0, 5.0));
+    let kind = CurveKind::Intersection(curve.clone());
+    assert_eq!(ParamCurve::domain(&kind), (2.0, 5.0));
+    let back = curve.reversed(m).unwrap().value;
+    assert_eq!(ParamCurve::domain(&back), (-5.0, -2.0));
+    for (spans, why) in [
+        (vec![span(2.0, 3.0)], "stops short of the end"),
+        (
+            vec![span(2.0, 3.0), span(3.0, 3.0), span(3.0, 5.0)],
+            "a span of no width",
+        ),
+        (
+            vec![span(2.0, 4.0), span(4.0, 3.0), span(3.0, 5.0)],
+            "a span that runs backwards",
+        ),
+        (vec![span(2.5, 5.0)], "starts after the start"),
+    ] {
+        assert_eq!(make(spans).err(), Some(CurveError::SpanOutside), "{why}");
+    }
 }
 
 /// 2^60, the scale of the fuzz campaign's finding below.

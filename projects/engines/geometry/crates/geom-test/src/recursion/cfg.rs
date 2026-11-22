@@ -7,6 +7,8 @@
 //! documentation, proof and interpreter builds are not what ships); every other option (`feature
 //! = "..."`, `target_arch = "..."`, `debug_assertions`, ...) is unknown, because some build that
 //! ships may set it. `all`, `any` and `not` combine them as Kleene's strong three-valued logic.
+//! [`predicate_under`] and [`effective_under`] read the same way in any other set of builds, given
+//! each option's value there.
 //!
 //! Guarantees:
 //!
@@ -31,12 +33,12 @@ use syn::{Attribute, Meta, Token};
 /// The configuration options that are false in every build that ships.
 pub const NOT_SHIPPED: [&str; 5] = ["test", "doc", "doctest", "kani", "miri"];
 
-/// A predicate's value over the builds that ship.
+/// A predicate's value over a set of builds: here, the builds that ship.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Truth {
-    /// True in every build that ships.
+    /// True in every build of the set.
     True,
-    /// False in every build that ships.
+    /// False in every build of the set.
     False,
     /// True in some and false in others, or not known.
     Unknown,
@@ -52,24 +54,36 @@ impl Truth {
     }
 }
 
-/// The value of one configuration predicate.
+/// An option's value over the builds that ship: false for the [`NOT_SHIPPED`] names, unknown for
+/// every other name and every `name = "value"`.
+fn shipping(option: &Meta) -> Truth {
+    match option {
+        Meta::Path(path) if NOT_SHIPPED.iter().any(|name| path.is_ident(name)) => Truth::False,
+        _ => Truth::Unknown,
+    }
+}
+
+/// The value of one configuration predicate over the builds that ship.
 #[must_use]
 pub fn predicate(meta: &Meta) -> Truth {
+    predicate_under(meta, &shipping)
+}
+
+/// The value of one configuration predicate in the builds `option` describes: `option` gives the
+/// value of each option, a name (`test`) or a name and a value (`target_os = "wasi"`), and `all`,
+/// `any` and `not` combine them. A list it cannot read, or any other list, is unknown. Other
+/// readers than the recursion check use it for builds of their own, such as one CI leg's tests
+/// (geom-test's `tests/corpus_runs.rs`).
+#[must_use]
+pub fn predicate_under(meta: &Meta, option: &dyn Fn(&Meta) -> Truth) -> Truth {
     match meta {
-        Meta::Path(path) => {
-            if NOT_SHIPPED.iter().any(|name| path.is_ident(name)) {
-                Truth::False
-            } else {
-                Truth::Unknown
-            }
-        }
-        Meta::NameValue(_) => Truth::Unknown,
+        Meta::Path(_) | Meta::NameValue(_) => option(meta),
         Meta::List(list) => {
             let Ok(parts) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
             else {
                 return Truth::Unknown;
             };
-            let values: Vec<Truth> = parts.iter().map(predicate).collect();
+            let values: Vec<Truth> = parts.iter().map(|p| predicate_under(p, option)).collect();
             if list.path.is_ident("all") {
                 if values.contains(&Truth::False) {
                     Truth::False
@@ -102,6 +116,13 @@ pub fn predicate(meta: &Meta) -> Truth {
 /// attributes it adds (themselves expanded), every other attribute as written.
 #[must_use]
 pub fn effective(attrs: &[Attribute]) -> Vec<Meta> {
+    effective_under(attrs, &shipping)
+}
+
+/// [`effective`] in the builds `option` describes, as [`predicate_under`] reads them: a
+/// `cfg_attr` is expanded unless its predicate is false there.
+#[must_use]
+pub fn effective_under(attrs: &[Attribute], option: &dyn Fn(&Meta) -> Truth) -> Vec<Meta> {
     let mut out = Vec::new();
     let mut work: Vec<Meta> = attrs.iter().rev().map(|a| a.meta.clone()).collect();
     while let Some(meta) = work.pop() {
@@ -123,7 +144,7 @@ pub fn effective(attrs: &[Attribute]) -> Vec<Meta> {
         let Some(condition) = parts.next() else {
             continue;
         };
-        if predicate(&condition) == Truth::False {
+        if predicate_under(&condition, option) == Truth::False {
             continue;
         }
         let added: Vec<Meta> = parts.collect();

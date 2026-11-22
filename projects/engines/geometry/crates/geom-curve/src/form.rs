@@ -418,6 +418,18 @@ pub(crate) fn enclose_at<const D: usize>(
     Ok(out)
 }
 
+/// The point at `t`, enclosed: [`enclose_at`] at order 0 without its list, the same work charged.
+pub(crate) fn enclose_point_at<const D: usize>(
+    form: &Form<D>,
+    domain: (f64, f64),
+    t: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; D], CurveError> {
+    check_parameter(domain, t)?;
+    meter.charge(1)?;
+    form.enclose(point(t)?, 0)
+}
+
 /// cos(x + k·π/2) and sin(x + k·π/2) as their coefficients on (cos x, sin x).
 fn turned(k: usize) -> ([f64; 2], [f64; 2]) {
     shifted([1.0, 0.0], [0.0, 1.0], k, |[x, y]: [f64; 2]| [-x, -y])

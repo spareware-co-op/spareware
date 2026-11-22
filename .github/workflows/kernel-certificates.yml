@@ -13,7 +13,28 @@ name: Kernel certificates
 # - FPTaylor bounds each filter's normalised problem (each step divided by its scale, with a ratio
 #   parameter where a sum's operand has a smaller scale) with a proof certificate, HOL Light checks
 #   the certificate, one job per problem, and each job reports whether its bound is within the K
-#   Gappa's goal uses; the error model is homogeneous, so the bound holds at every scale.
+#   Gappa's goal uses; the error model is homogeneous, so the bound holds at every scale. A problem
+#   whose terms take HOL Light longer than a runner's six hours names shards
+#   (`// hol-light-shards: n`, geom-gen's SHARDED): FPTaylor runs once on it, and n jobs each check
+#   the terms of that certificate its `// hol-light-shard k:` line names, shared out by what each
+#   took to check, assuming the others; every term is in one shard, so the n together prove every
+#   term of the one certificate. A term too costly for one job is cut into pieces
+#   (`// hol-light-cut t: d`, 2^d sub-boxes of its box) shared out the same way; a shard with
+#   pieces of it proves the term from its own pieces and the others assumed.
+#   Loading HOL Light with its verifier takes a shard about an hour,
+#   so one job of this run loads it once for each such problem and saves the process (DMTCP, run
+#   by fptaylor.sh), and each shard restores that state, only from this run's own artifact and only
+#   if its sha256 is the one the saving job gave as its output; it then loads FPTaylor's checker
+#   and proves its terms as before.
+#   A cut term's pieces are one function on different boxes, and the verifier builds the
+#   function's Taylor theorems before it checks any box, which for line_cone's term 38 takes
+#   longer than a piece. So a second job of this run restores the loaded state, has HOL Light
+#   build each cut term's Taylor theorems, proving no term and no piece, and saves the process
+#   again; a shard of pieces (`fptaylor-pieces`) restores that second state under the same rules
+#   and proves its pieces as before. A shard has pieces only or whole terms only, and each shard
+#   of a problem is one job of this run, of one kind or the other: what a shard's theorem assumes
+#   (the terms and pieces it does not prove) is proved by the other shards of the same run, and
+#   the problem is proved only when all of them are green (decision 32.63).
 #
 # The method note, projects/kit/notes/G35-filter-certificates.md, says what each proof covers and
 # what the written argument covers.
@@ -25,13 +46,14 @@ name: Kernel certificates
 # the job's own command, with the line planted for that run only. Nothing here is a dependency: the tools run as separate
 # programs and never touch the kernel's code.
 #
-# On a pull request, a problem is proved again only if it differs from the pull request's base:
-# a problem byte for byte the base's, with the scripts in certificates/ and this workflow also the
-# base's, was proved there, and the nightly run proves it again. Its FPTaylor job still shows, says
-# so and skips the proof, and the Gappa job says so for each such problem and sets it aside, with
-# the planted run's file for it. The planted runs come first and always run: each needs orient2d's
-# problem. The nightly, dispatched and called runs (kernel-release.yml's, on a tag) prove every
-# problem.
+# A problem is proved again only when it, or what proves it, changed (the owner's testing
+# principle 2, decision 32.53): on a pull request, against the pull request's base; on a push to
+# main, against the commit main was at before it. A problem byte for byte the base's, with the
+# scripts in certificates/ and this workflow (which pins every tool's image) also the base's, was
+# proved there. Its FPTaylor job still shows, says so and skips the proof, and the Gappa job says so
+# for each such problem and sets it aside, with the planted run's file for it. The planted runs come
+# first and always run: each needs orient2d's problem. A run by hand and a release's run
+# (kernel-release.yml's, on a tag) prove every problem. Nothing runs on a timer.
 
 on:
   pull_request:
@@ -39,10 +61,14 @@ on:
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-num/src/generated/**"
       - ".github/workflows/kernel-certificates.yml"
-  # Every night on main, so a proof that stops checking (a tool's image, a dependency) is seen
-  # even when no pull request touches the filters (piece G40).
-  schedule:
-    - cron: "17 14 * * *"
+  # A push to main that changes a problem, a script or this workflow proves what it changed.
+  push:
+    branches: [main]
+    paths:
+      - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-num/src/generated/**"
+      - ".github/workflows/kernel-certificates.yml"
+  # By hand: every problem.
   workflow_dispatch:
   # Run whole by kernel-release.yml on a release tag, with every other kernel workflow (28.17).
   workflow_call:
@@ -63,8 +89,9 @@ env:
   PROBLEMS: projects/engines/geometry/crates/geom-gen/generated
   # The Rust release rust-toolchain.toml pins, for the trip binary; nothing here builds the kernel.
   RUST_TOOLCHAIN: "1.99.0"
-  # A pull request's base, whose problems were proved there; empty on every other run.
-  BASE: ${{ github.event.pull_request.base.sha }}
+  # The base whose problems were proved there: a pull request's base, or the commit main was at
+  # before a push; empty (every problem) by hand and on a release tag.
+  BASE: ${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/main' && github.event.before) || '' }}
 
 jobs:
   gappa:
@@ -88,12 +115,12 @@ jobs:
       # planted run's file for it is removed, so no unchecked file is kept as a proof.
       - name: Set aside the problems the base proved
         id: base
-        if: github.event_name == 'pull_request'
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
         run: |
           git fetch -q --no-tags --depth 1 origin "$BASE"
           for problem in "$PROBLEMS"/gappa-*.g; do
             if git diff --quiet "$BASE" HEAD -- "$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
-              echo "$(basename "$problem"): same problem as $BASE, proved there; the nightly run proves it again"
+              echo "$(basename "$problem"): same problem as $BASE, proved there"
               rm "$problem"
               rm -f "$RUNNER_TEMP/proofs/$(basename "$problem" .g | tr - _)_gappa.v"
             fi
@@ -113,20 +140,269 @@ jobs:
           name: gappa-rocq-proofs
           path: ${{ runner.temp }}/proofs
 
+  # The problems that name no shards, one `fptaylor` job each; the shards of those that do, each
+  # problem with the shards its `// hol-light-shards:` line names: a shard of whole terms is one
+  # `fptaylor-shards` job and a shard of pieces (its line names `t.p`) one `fptaylor-pieces` job,
+  # so every shard is one job of this run; the problems that name some shards; and those that cut
+  # a term into pieces.
   fptaylor-problems:
     name: The FPTaylor problems
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       problems: ${{ steps.list.outputs.problems }}
+      shards: ${{ steps.list.outputs.shards }}
+      pieces: ${{ steps.list.outputs.pieces }}
+      sharded: ${{ steps.list.outputs.sharded }}
+      cut: ${{ steps.list.outputs.cut }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: List them
         id: list
         run: |
-          problems=$(cd "$PROBLEMS" && ls fptaylor-*.fpt | jq -R . | jq -sc .)
+          set -o pipefail
+          cd "$PROBLEMS"
+          problems=$(for problem in fptaylor-*.fpt; do
+            if ! grep -q '^// hol-light-shards: ' "$problem"; then jq -nc --arg problem "$problem" '{problem: $problem}'; fi
+          done | jq -sc '{include: .}')
+          legs=$(for problem in fptaylor-*.fpt; do
+            shards=$(sed -n 's|^// hol-light-shards: ||p' "$problem")
+            for shard in $(seq "${shards:-0}"); do
+              if grep -q "^// hol-light-shard $shard: .*\." "$problem"; then pieces=true; else pieces=false; fi
+              jq -nc --arg problem "$problem" --argjson shard "$shard" --argjson shards "$shards" --argjson pieces "$pieces" \
+                '{problem: $problem, shard: $shard, shards: $shards, pieces: $pieces}'
+            done
+          done | jq -sc .)
+          # Each shard goes to exactly one of the two lists.
+          shards=$(jq -c '{include: map(select(.pieces == false) | del(.pieces))}' <<<"$legs")
+          pieces=$(jq -c '{include: map(select(.pieces == true) | del(.pieces))}' <<<"$legs")
+          [ "$(jq -n --argjson a "$shards" --argjson b "$pieces" --argjson all "$legs" '($a.include | length) + ($b.include | length) == ($all | length)')" = true ] ||
+            { echo "a shard is in neither list"; exit 1; }
+          sharded=$(grep -l '^// hol-light-shards: ' fptaylor-*.fpt | tr '\n' ' ' || true)
+          cut=$(grep -l '^// hol-light-cut ' fptaylor-*.fpt | tr '\n' ' ' || true)
+          # The problems with shards of pieces are those that cut a term: each has its second state.
+          [ "$(jq -c '.include | map(.problem) | unique' <<<"$pieces")" = "$(jq -nc '$ARGS.positional | unique' --args $cut)" ] ||
+            { echo "the problems with shards of pieces are not those that cut a term"; exit 1; }
           echo "$problems"
+          echo "$shards"
+          echo "$pieces"
+          echo "sharded: $sharded"
+          echo "cut: $cut"
           echo "problems=$problems" >> "$GITHUB_OUTPUT"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+          echo "pieces=$pieces" >> "$GITHUB_OUTPUT"
+          echo "sharded=$sharded" >> "$GITHUB_OUTPUT"
+          echo "cut=$cut" >> "$GITHUB_OUTPUT"
+
+  # FPTaylor once on each problem whose terms HOL Light checks in shards, so that every shard of
+  # the next job checks the one certificate: shards 1 to n, each green, prove all of its terms.
+  fptaylor-certificates:
+    name: The FPTaylor certificates the shards check
+    needs: fptaylor-problems
+    if: needs.fptaylor-problems.outputs.sharded != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SHARDED: ${{ needs.fptaylor-problems.outputs.sharded }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As the shards do, so a problem the base proved needs no certificate here.
+      - name: Set aside the problems the base proved
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          for problem in $SHARDED; do
+            if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+              echo "$problem: same problem as $BASE, proved there; the nightly run proves it again"
+              rm "$PROBLEMS/$problem"
+            fi
+          done
+      - name: Run FPTaylor on each
+        run: |
+          mkdir -m 777 "$RUNNER_TEMP/certificates"
+          kept=()
+          for problem in $SHARDED; do
+            if [ -f "$PROBLEMS/$problem" ]; then kept+=("$PROBLEMS/$problem"); fi
+          done
+          if [ ${#kept[@]} -gt 0 ]; then
+            docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/out" -e FPTAYLOR_OUT=/out \
+              -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "${kept[@]}"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+          if-no-files-found: ignore
+
+  # HOL Light loaded once for each problem whose terms it checks in shards, with that problem's
+  # Taylor tables, and saved (fptaylor.sh's FPTAYLOR_STATE_OUT): the shards of this run restore it
+  # instead of each loading it. The states go to the shards as this run's own artifact, kept a day,
+  # and the job's output holds each state's sha256, which the shard checks before it restores.
+  # Nothing is cached between runs.
+  hol-light-states:
+    name: The HOL Light states the shards restore
+    needs: fptaylor-problems
+    if: needs.fptaylor-problems.outputs.sharded != ''
+    runs-on: ubuntu-24.04
+    # One problem after another: lpi_side's load took 92 minutes on a middling runner (run
+    # 44024494683) and line_cone's is 32 to 60 by the runner, with a few minutes to save each.
+    timeout-minutes: 350
+    env:
+      SHARDED: ${{ needs.fptaylor-problems.outputs.sharded }}
+    outputs:
+      sha256: ${{ steps.save.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As the shards do, so a problem the base proved needs no state.
+      - name: Set aside the problems the base proved
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          for problem in $SHARDED; do
+            if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+              echo "$problem: same problem as $BASE, proved there"
+              rm "$PROBLEMS/$problem"
+            fi
+          done
+      # One container each, one after another, never side by side: line_cone's process held
+      # 10.4 GB when it was saved on a development machine and lpi_side's about 5, and a runner
+      # has 16. Each line of a container's output names its problem.
+      - name: Load HOL Light for each and save it
+        id: save
+        # A container that fails fails the step (the default shell has no pipefail), and every
+        # problem kept must have its state: a shard never starts without one.
+        run: |
+          set -o pipefail
+          mkdir -m 777 "$RUNNER_TEMP/states"
+          for problem in $SHARDED; do
+            if [ -f "$PROBLEMS/$problem" ]; then
+              name=$(basename "$problem" .fpt)
+              mkdir -m 777 "$RUNNER_TEMP/states/$name"
+              docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/states/$name:/state" -e FPTAYLOR_STATE_OUT=/state \
+                -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$problem" 2>&1 | sed -u "s|^|$name: |"
+              df -h "$RUNNER_TEMP" | tail -n 1
+            fi
+          done
+          for problem in $SHARDED; do
+            if [ -f "$PROBLEMS/$problem" ] && [ ! -f "$RUNNER_TEMP/states/$(basename "$problem" .fpt)/hol-light-state.tar" ]; then
+              echo "$problem: no saved state"; exit 1
+            fi
+          done
+          sha256=$(for state in "$RUNNER_TEMP"/states/*/hol-light-state.tar; do
+            if [ -f "$state" ]; then
+              jq -nc --arg problem "$(basename "$(dirname "$state")").fpt" --arg sha256 "$(sha256sum <"$state" | cut -d' ' -f1)" '{($problem): $sha256}'
+            fi
+          done | jq -sc 'add // {}')
+          echo "sha256: $sha256"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hol-light-states
+          path: ${{ runner.temp }}/states
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # For each problem that cuts a term into pieces, the loaded state restored, the cut terms'
+  # Taylor theorems built in it once, and the process saved again (fptaylor.sh's
+  # FPTAYLOR_CUT_STATE_OUT): the shards of pieces restore this second state instead of each
+  # building the theorems. It restores the first state as a shard does: this run's own artifact,
+  # and only if its sha256 is the one `hol-light-states` gave. It proves no term and no piece
+  # (fptaylor.sh fails it if it does). The second states go to the shards of pieces as this run's
+  # own artifact, kept a day, and the job's output holds each one's sha256, which a shard of
+  # pieces checks before it restores. Nothing is cached between runs.
+  hol-light-cut-states:
+    name: The HOL Light states the shards of pieces restore
+    needs: [fptaylor-problems, fptaylor-certificates, hol-light-states]
+    if: ${{ !cancelled() && needs.fptaylor-problems.result == 'success' && needs.fptaylor-problems.outputs.cut != '' && needs.hol-light-states.result == 'success' }}
+    runs-on: ubuntu-24.04
+    # line_cone's term 38: its theorems took 55 minutes on a development machine, which by the
+    # runners' loads is about 107 to 245 on a runner, after about 15 to restore and load the checker.
+    timeout-minutes: 350
+    env:
+      CUT: ${{ needs.fptaylor-problems.outputs.cut }}
+    outputs:
+      sha256: ${{ steps.save.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As the shards do, so a problem the base proved needs no state.
+      - name: Set aside the problems the base proved
+        id: base
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          none=true
+          for problem in $CUT; do
+            if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$problem" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+              echo "$problem: same problem as $BASE, proved there"
+              rm "$PROBLEMS/$problem"
+            else
+              none=false
+            fi
+          done
+          echo "none=$none" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.none != 'true'
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+      # This run's own states, as a shard downloads them.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.none != 'true'
+        with:
+          name: hol-light-states
+          path: ${{ runner.temp }}/states
+      # One container each, one after another. fptaylor.sh refuses a first state whose sha256 is
+      # not the one the states job gave for the problem, and fails unless HOL Light built each cut
+      # term's theorems and proved nothing.
+      - name: Build each cut term's Taylor theorems and save the state again
+        id: save
+        # A container that fails fails the step (the default shell has no pipefail), and every
+        # problem kept must have its state: a shard of pieces never starts without one.
+        env:
+          FPTAYLOR_STATE_SHA256: ${{ needs.hol-light-states.outputs.sha256 }}
+        run: |
+          set -o pipefail
+          mkdir -m 777 "$RUNNER_TEMP/cut-states"
+          sha256s=${FPTAYLOR_STATE_SHA256:-'{}'}
+          # The artifact holds every sharded problem's state: those of problems with no cut go,
+          # to leave the disk room.
+          for state in "$RUNNER_TEMP"/states/*/; do
+            case " $CUT " in
+              *" $(basename "$state").fpt "*) ;;
+              *) rm -rf "$state" ;;
+            esac
+          done
+          df -h "$RUNNER_TEMP" | tail -n 1
+          for problem in $CUT; do
+            if [ -f "$PROBLEMS/$problem" ]; then
+              name=$(basename "$problem" .fpt)
+              mkdir -m 777 "$RUNNER_TEMP/cut-states/$name"
+              FPTAYLOR_STATE_SHA256=$(jq -r --arg problem "$problem" '.[$problem] // ""' <<<"$sha256s")
+              docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/certificates:ro" \
+                -v "$RUNNER_TEMP/states/$name:/state:ro" -v "$RUNNER_TEMP/cut-states/$name:/cut-state" \
+                -e FPTAYLOR_CUT_STATE_OUT=/cut-state -e FPTAYLOR_CERTIFICATES=/certificates -e FPTAYLOR_STATE=/state \
+                -e FPTAYLOR_STATE_SHA256 -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$problem" 2>&1 | sed -u "s|^|$name: |"
+              df -h "$RUNNER_TEMP" | tail -n 1
+            fi
+          done
+          for problem in $CUT; do
+            if [ -f "$PROBLEMS/$problem" ] && [ ! -f "$RUNNER_TEMP/cut-states/$(basename "$problem" .fpt)/hol-light-state.tar" ]; then
+              echo "$problem: no saved cut state"; exit 1
+            fi
+          done
+          sha256=$(for state in "$RUNNER_TEMP"/cut-states/*/hol-light-state.tar; do
+            if [ -f "$state" ]; then
+              jq -nc --arg problem "$(basename "$(dirname "$state")").fpt" --arg sha256 "$(sha256sum <"$state" | cut -d' ' -f1)" '{($problem): $sha256}'
+            fi
+          done | jq -sc 'add // {}')
+          echo "sha256: $sha256"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hol-light-cut-states
+          path: ${{ runner.temp }}/cut-states
+          retention-days: 1
+          if-no-files-found: ignore
 
   # One job per problem: each sizes HOL Light's Taylor tables to its own problem's variables, and
   # has a runner's whole budget to itself.
@@ -139,8 +415,7 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
-      matrix:
-        problem: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
+      matrix: ${{ fromJSON(needs.fptaylor-problems.outputs.problems) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
@@ -160,13 +435,13 @@ jobs:
       # After the planted run, which runs whatever the base holds.
       - name: Set aside the problem if the base proved it
         id: base
-        if: github.event_name == 'pull_request'
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
         env:
           PROBLEM: ${{ matrix.problem }}
         run: |
           git fetch -q --no-tags --depth 1 origin "$BASE"
           if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$PROBLEM" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
-            echo "$PROBLEM: same problem as $BASE, proved there; the nightly run proves it again"
+            echo "$PROBLEM: same problem as $BASE, proved there"
             echo "same=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Bound the filter and check the certificate
@@ -175,3 +450,123 @@ jobs:
           PROBLEM: ${{ matrix.problem }}
         run: |
           docker run --rm -v "$PWD:/work:ro" -w /work "$OCAML_IMAGE"             bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"
+
+  # One job per shard of a problem's whole terms, each with a runner's whole budget to itself (a
+  # shard of pieces is a job of `fptaylor-pieces`, from the same list). It starts
+  # only once the states job has passed, which it does only with a state for every problem it
+  # kept; it runs whether or not the certificates job ran or passed: a shard without its
+  # certificate fails on its own.
+  fptaylor-shards:
+    name: FPTaylor, checked by HOL Light (${{ matrix.problem }}, shard ${{ matrix.shard }} of ${{ matrix.shards }})
+    needs: [fptaylor-problems, fptaylor-certificates, hol-light-states]
+    if: ${{ !cancelled() && needs.fptaylor-problems.result == 'success' && needs.fptaylor-problems.outputs.sharded != '' && needs.hol-light-states.result == 'success' }}
+    runs-on: ubuntu-24.04
+    # GitHub stops a hosted runner's job at six hours; the restored state spares a shard the
+    # hour HOL Light takes to load.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.fptaylor-problems.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set aside the problem if the base proved it
+        id: base
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
+        env:
+          PROBLEM: ${{ matrix.problem }}
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$PROBLEM" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+            echo "$PROBLEM: same problem as $BASE, proved there"
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.same != 'true'
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+      # This run's own states: an artifact is named here with no other run or repository, so it is
+      # one this run's states job uploaded.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.same != 'true'
+        with:
+          name: hol-light-states
+          path: ${{ runner.temp }}/states
+      # The shard's terms of the one certificate, the others assumed, from the saved state whose
+      # sha256 the states job gave; fptaylor.sh refuses a state with any other digest, and fails
+      # unless the certificate has the terms the problem shares out and it proved exactly its
+      # shard's.
+      - name: Check this shard's terms of the certificate
+        if: steps.base.outputs.same != 'true'
+        env:
+          PROBLEM: ${{ matrix.problem }}
+          FPTAYLOR_SHARD: ${{ matrix.shard }}
+          FPTAYLOR_STATE_SHA256: ${{ fromJSON(needs.hol-light-states.outputs.sha256 || '{}')[matrix.problem] }}
+        run: |
+          # The artifact holds every problem's state: the others go, to leave the disk room.
+          find "$RUNNER_TEMP/states" -mindepth 1 -maxdepth 1 ! -name "$(basename "$PROBLEM" .fpt)" -exec rm -rf {} +
+          df -h "$RUNNER_TEMP" | tail -n 1
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/certificates:ro" \
+            -v "$RUNNER_TEMP/states/$(basename "$PROBLEM" .fpt):/state:ro" \
+            -e FPTAYLOR_SHARD -e FPTAYLOR_CERTIFICATES=/certificates -e FPTAYLOR_STATE=/state \
+            -e FPTAYLOR_STATE_SHA256 -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"
+
+  # One job per shard of a cut term's pieces, as `fptaylor-shards` is for a shard of whole terms,
+  # each with a runner's whole budget to itself. It starts only once the cut states job has
+  # passed, which it does only with a second state for every problem it kept, and restores that
+  # state: the loaded HOL Light with the cut terms' Taylor theorems built. It proves its pieces
+  # and assumes the rest, which the other shards of this run prove.
+  fptaylor-pieces:
+    name: FPTaylor, checked by HOL Light (${{ matrix.problem }}, shard ${{ matrix.shard }} of ${{ matrix.shards }}, pieces)
+    needs: [fptaylor-problems, fptaylor-certificates, hol-light-cut-states]
+    if: ${{ !cancelled() && needs.fptaylor-problems.result == 'success' && needs.fptaylor-problems.outputs.cut != '' && needs.hol-light-cut-states.result == 'success' }}
+    runs-on: ubuntu-24.04
+    # GitHub stops a hosted runner's job at six hours. A shard is one piece of line_cone's term 38:
+    # 9 to 16.3 minutes by the runner, from run 44161231205, where three pieces took 16.7 to 34.5.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.fptaylor-problems.outputs.pieces) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set aside the problem if the base proved it
+        id: base
+        if: env.BASE != '' && env.BASE != '0000000000000000000000000000000000000000'
+        env:
+          PROBLEM: ${{ matrix.problem }}
+        run: |
+          git fetch -q --no-tags --depth 1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- "$PROBLEMS/$PROBLEM" "$SCRIPTS" .github/workflows/kernel-certificates.yml; then
+            echo "$PROBLEM: same problem as $BASE, proved there"
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.same != 'true'
+        with:
+          name: fptaylor-certificates
+          path: ${{ runner.temp }}/certificates
+      # This run's own second states: an artifact is named here with no other run or repository,
+      # so it is one this run's cut states job uploaded.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.base.outputs.same != 'true'
+        with:
+          name: hol-light-cut-states
+          path: ${{ runner.temp }}/cut-states
+      # The shard's pieces of the one certificate, the rest assumed, from the saved state whose
+      # sha256 the cut states job gave; fptaylor.sh refuses a state with any other digest, and
+      # fails unless the certificate has the terms the problem shares out and it proved exactly
+      # its shard's pieces.
+      - name: Check this shard's pieces of the certificate
+        if: steps.base.outputs.same != 'true'
+        env:
+          PROBLEM: ${{ matrix.problem }}
+          FPTAYLOR_SHARD: ${{ matrix.shard }}
+          FPTAYLOR_STATE_SHA256: ${{ fromJSON(needs.hol-light-cut-states.outputs.sha256 || '{}')[matrix.problem] }}
+        run: |
+          # The artifact holds every cut problem's state: the others go, to leave the disk room.
+          find "$RUNNER_TEMP/cut-states" -mindepth 1 -maxdepth 1 ! -name "$(basename "$PROBLEM" .fpt)" -exec rm -rf {} +
+          df -h "$RUNNER_TEMP" | tail -n 1
+          docker run --rm -v "$PWD:/work:ro" -v "$RUNNER_TEMP/certificates:/certificates:ro" \
+            -v "$RUNNER_TEMP/cut-states/$(basename "$PROBLEM" .fpt):/state:ro" \
+            -e FPTAYLOR_SHARD -e FPTAYLOR_CERTIFICATES=/certificates -e FPTAYLOR_STATE=/state \
+            -e FPTAYLOR_STATE_SHA256 -w /work "$OCAML_IMAGE" bash "$SCRIPTS/fptaylor.sh" "$PROBLEMS/$PROBLEM"

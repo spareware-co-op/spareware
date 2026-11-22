@@ -6,51 +6,76 @@
 //! (the sign of a line-search derivative near zero), so to repeat the prototype's iterations
 //! these are ported from fdlibm, with V8's changes to it (exp(1) is exactly e; results are
 //! scaled by an exact power of two). They agree with Node bit for bit on every argument tried
-//! (tests/jsmath_truth.rs). Arguments of sin and cos beyond 2^19 pi/2 (about 823,550) use the
+//! (`tests/jsmath_truth.rs`). Arguments of sin and cos beyond 2^19 pi/2 (about 823,550) use the
 //! platform's functions: the prototype only passes angles in radians of a map.
 //!
 //! `Math.pow` is the exception: see [`pow`].
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the names are fdlibm's, so the port reads line by line against its C source"
+)]
+
 // fdlibm's constants are written as it writes them (some equal std's constants, which must not stand in for them)
 #![allow(clippy::excessive_precision, clippy::approx_constant)]
 
+// fdlibm's words of a double: the high 32 bits read as signed (GET_HIGH_WORD), the low 32 bits
 fn hi(x: f64) -> i32 {
-    (x.to_bits() >> 32) as u32 as i32
+    let [_, _, _, _, b4, b5, b6, b7] = x.to_bits().to_le_bytes();
+    i32::from_le_bytes([b4, b5, b6, b7])
 }
 
 fn lo(x: f64) -> u32 {
-    x.to_bits() as u32
+    let [b0, b1, b2, b3, ..] = x.to_bits().to_le_bytes();
+    u32::from_le_bytes([b0, b1, b2, b3])
 }
 
 fn with_lo(x: f64, l: u32) -> f64 {
-    f64::from_bits((x.to_bits() & 0xffff_ffff_0000_0000) | l as u64)
+    f64::from_bits((x.to_bits() & 0xffff_ffff_0000_0000) | u64::from(l))
 }
 
 fn words(h: i32, l: u32) -> f64 {
-    f64::from_bits(((h as u32 as u64) << 32) | l as u64)
+    f64::from_bits((u64::from(h.cast_unsigned()) << 32) | u64::from(l))
+}
+
+// C's (int) conversion of a double, as fdlibm uses it. Bound: every caller passes a value far
+// inside i32's range (exp's k is within -1075..=1025, rem_pio2's n at most 2^19 + 1, and the
+// kernels' arguments are below 2^-27), where `as` truncates toward zero exactly as C does.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "callers pass values far inside i32's range"
+)]
+fn c_int(x: f64) -> i32 {
+    x as i32
 }
 
 /// `Math.exp(x)`.
+#[must_use]
 pub fn exp(x: f64) -> f64 {
-    const HALF: [f64; 2] = [0.5, -0.5];
-    const O_THRESHOLD: f64 = 7.09782712893383973096e+02;
-    const U_THRESHOLD: f64 = -7.45133219101941108420e+02;
-    const LN2_HI: [f64; 2] = [6.93147180369123816490e-01, -6.93147180369123816490e-01];
-    const LN2_LO: [f64; 2] = [1.90821492927058770002e-10, -1.90821492927058770002e-10];
-    const INVLN2: f64 = 1.44269504088896338700e+00;
-    const P1: f64 = 1.66666666666666019037e-01;
-    const P2: f64 = -2.77777777770155933842e-03;
-    const P3: f64 = 6.61375632143793436117e-05;
-    const P4: f64 = -1.65339022054652515390e-06;
-    const P5: f64 = 4.13813679705723846039e-08;
-    const E: f64 = 2.718281828459045;
-    const TWOM1000: f64 = 9.33263618503218878990e-302;
-    const TWO1023: f64 = 8.988465674311579539e307;
+    // fdlibm's halF, ln2HI and ln2LO hold each constant and its negation, picked by the sign bit
+    const O_THRESHOLD: f64 = 7.097_827_128_933_839_730_96e+02;
+    const U_THRESHOLD: f64 = -7.451_332_191_019_411_084_20e+02;
+    const LN2_HI: f64 = 6.931_471_803_691_238_164_90e-01;
+    const LN2_LO: f64 = 1.908_214_929_270_587_700_02e-10;
+    const INVLN2: f64 = 1.442_695_040_888_963_387_00e+00;
+    const P1: f64 = 1.666_666_666_666_660_190_37e-01;
+    const P2: f64 = -2.777_777_777_701_559_338_42e-03;
+    const P3: f64 = 6.613_756_321_437_934_361_17e-05;
+    const P4: f64 = -1.653_390_220_546_525_153_90e-06;
+    const P5: f64 = 4.138_136_797_057_238_460_39e-08;
+    const E: f64 = 2.718_281_828_459_045;
+    const TWOM1000: f64 = 9.332_636_185_032_188_789_90e-302;
+    const TWO1023: f64 = 8.988_465_674_311_579_539e307;
     let mut x = x;
     let (mut hh, mut ll) = (0.0f64, 0.0f64);
     let mut k: i32 = 0;
-    let mut hx = hi(x) as u32;
-    let xsb = ((hx >> 31) & 1) as usize;
+    let mut hx = hi(x).cast_unsigned();
+    let negative = (hx >> 31) & 1 == 1;
+    let (half, ln2_hi, ln2_lo) = if negative {
+        (-0.5, -LN2_HI, -LN2_LO)
+    } else {
+        (0.5, LN2_HI, LN2_LO)
+    };
     hx &= 0x7fff_ffff;
     // filter out non-finite argument
     if hx >= 0x4086_2E42 {
@@ -58,7 +83,7 @@ pub fn exp(x: f64) -> f64 {
             if ((hx & 0xfffff) | lo(x)) != 0 {
                 return x + x; // NaN
             }
-            return if xsb == 0 { x } else { 0.0 };
+            return if negative { 0.0 } else { x };
         }
         if x > O_THRESHOLD {
             return f64::INFINITY;
@@ -73,14 +98,14 @@ pub fn exp(x: f64) -> f64 {
             if x == 1.0 {
                 return E;
             }
-            hh = x - LN2_HI[xsb];
-            ll = LN2_LO[xsb];
-            k = 1 - xsb as i32 - xsb as i32;
+            hh = x - ln2_hi;
+            ll = ln2_lo;
+            k = if negative { -1 } else { 1 };
         } else {
-            k = (INVLN2 * x + HALF[xsb]) as i32;
-            let t = k as f64;
-            hh = x - t * LN2_HI[0];
-            ll = t * LN2_LO[0];
+            k = c_int(INVLN2 * x + half);
+            let t = f64::from(k);
+            hh = x - t * LN2_HI;
+            ll = t * LN2_LO;
         }
         x = hh - ll;
     } else if hx < 0x3e30_0000 {
@@ -95,7 +120,7 @@ pub fn exp(x: f64) -> f64 {
     let twopk = if k >= -1021 {
         words(0x3ff0_0000i32.wrapping_add(k << 20), 0)
     } else {
-        words(0x3ff0_0000i32.wrapping_add((k + 1000) << 20), 0)
+        words(0x3ff0_0000i32.wrapping_add(k.wrapping_add(1000) << 20), 0)
     };
     let c = x - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
     if k == 0 {
@@ -122,6 +147,7 @@ pub fn exp(x: f64) -> f64 {
 /// arguments (measured against Node 24 on Windows for exponents 0.7 to 4). Code that
 /// iterates to a fixed point can show this as a different iteration count at the
 /// rounding-noise level.
+#[must_use]
 pub fn pow(x: f64, y: f64) -> f64 {
     if y.is_nan() {
         return f64::NAN;
@@ -143,16 +169,16 @@ pub fn pow(x: f64, y: f64) -> f64 {
 
 /* ---------------- sin and cos ---------------- */
 
-const S1: f64 = -1.66666666666666324348e-01;
-const S2: f64 = 8.33333333332248946124e-03;
-const S3: f64 = -1.98412698298579493134e-04;
-const S4: f64 = 2.75573137070700676789e-06;
-const S5: f64 = -2.50507602534068634195e-08;
-const S6: f64 = 1.58969099521155010221e-10;
+const S1: f64 = -1.666_666_666_666_663_243_48e-01;
+const S2: f64 = 8.333_333_333_322_489_461_24e-03;
+const S3: f64 = -1.984_126_982_985_794_931_34e-04;
+const S4: f64 = 2.755_731_370_707_006_767_89e-06;
+const S5: f64 = -2.505_076_025_340_686_341_95e-08;
+const S6: f64 = 1.589_690_995_211_550_102_21e-10;
 
 fn kernel_sin(x: f64, y: f64, iy: i32) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
-    if ix < 0x3e40_0000 && (x as i32) == 0 {
+    if ix < 0x3e40_0000 && c_int(x) == 0 {
         return x;
     }
     let z = x * x;
@@ -165,16 +191,16 @@ fn kernel_sin(x: f64, y: f64, iy: i32) -> f64 {
     }
 }
 
-const C1: f64 = 4.16666666666666019037e-02;
-const C2: f64 = -1.38888888888741095749e-03;
-const C3: f64 = 2.48015872894767294178e-05;
-const C4: f64 = -2.75573143513906633035e-07;
-const C5: f64 = 2.08757232129817482790e-09;
-const C6: f64 = -1.13596475577881948265e-11;
+const C1: f64 = 4.166_666_666_666_660_190_37e-02;
+const C2: f64 = -1.388_888_888_887_410_957_49e-03;
+const C3: f64 = 2.480_158_728_947_672_941_78e-05;
+const C4: f64 = -2.755_731_435_139_066_330_35e-07;
+const C5: f64 = 2.087_572_321_298_174_827_90e-09;
+const C6: f64 = -1.135_964_755_778_819_482_65e-11;
 
 fn kernel_cos(x: f64, y: f64) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
-    if ix < 0x3e40_0000 && (x as i32) == 0 {
+    if ix < 0x3e40_0000 && c_int(x) == 0 {
         return 1.0;
     }
     let z = x * x;
@@ -182,7 +208,7 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
     if ix < 0x3fd3_3333 {
         1.0 - (0.5 * z - (z * r - x * y))
     } else {
-        let qx = if ix > 0x3fe9_0000 { 0.28125 } else { words(ix - 0x0020_0000, 0) };
+        let qx = if ix > 0x3fe9_0000 { 0.28125 } else { words(ix.wrapping_sub(0x0020_0000), 0) };
         let hz = 0.5 * z - qx;
         let a = 1.0 - qx;
         a - (hz - (z * r - x * y))
@@ -191,13 +217,13 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
 
 // __ieee754_rem_pio2 for |x| up to 2^19 pi/2: n (mod 4 matters) and the remainder as y0 + y1
 fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
-    const INVPIO2: f64 = 6.36619772367581382433e-01;
-    const PIO2_1: f64 = 1.57079632673412561417e+00;
-    const PIO2_1T: f64 = 6.07710050650619224932e-11;
-    const PIO2_2: f64 = 6.07710050630396597660e-11;
-    const PIO2_2T: f64 = 2.02226624879595063154e-21;
-    const PIO2_3: f64 = 2.02226624871116645580e-21;
-    const PIO2_3T: f64 = 8.47842766036889956997e-32;
+    const INVPIO2: f64 = 6.366_197_723_675_813_824_33e-01;
+    const PIO2_1: f64 = 1.570_796_326_734_125_614_17e+00;
+    const PIO2_1T: f64 = 6.077_100_506_506_192_249_32e-11;
+    const PIO2_2: f64 = 6.077_100_506_303_965_976_60e-11;
+    const PIO2_2T: f64 = 2.022_266_248_795_950_631_54e-21;
+    const PIO2_3: f64 = 2.022_266_248_711_166_455_80e-21;
+    const PIO2_3T: f64 = 8.478_427_660_368_899_569_97e-32;
     let hx = hi(x);
     let ix = hx & 0x7fff_ffff;
     if ix <= 0x3fe9_21fb {
@@ -208,39 +234,39 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
         if hx > 0 {
             let mut z = x - PIO2_1;
             let (y0, y1);
-            if ix != 0x3ff9_21fb {
-                y0 = z - PIO2_1T;
-                y1 = (z - y0) - PIO2_1T;
-            } else {
+            if ix == 0x3ff9_21fb {
                 z -= PIO2_2;
                 y0 = z - PIO2_2T;
                 y1 = (z - y0) - PIO2_2T;
+            } else {
+                y0 = z - PIO2_1T;
+                y1 = (z - y0) - PIO2_1T;
             }
             return Some((1, y0, y1));
-        } else {
-            let mut z = x + PIO2_1;
-            let (y0, y1);
-            if ix != 0x3ff9_21fb {
-                y0 = z + PIO2_1T;
-                y1 = (z - y0) + PIO2_1T;
-            } else {
-                z += PIO2_2;
-                y0 = z + PIO2_2T;
-                y1 = (z - y0) + PIO2_2T;
-            }
-            return Some((-1, y0, y1));
         }
+        let mut z = x + PIO2_1;
+        let (y0, y1);
+        if ix == 0x3ff9_21fb {
+            z += PIO2_2;
+            y0 = z + PIO2_2T;
+            y1 = (z - y0) + PIO2_2T;
+        } else {
+            y0 = z + PIO2_1T;
+            y1 = (z - y0) + PIO2_1T;
+        }
+        return Some((-1, y0, y1));
     }
     if ix <= 0x4139_21fb {
         // medium size
         let t = x.abs();
-        let n = (t * INVPIO2 + 0.5) as i32;
-        let fn_ = n as f64;
+        let n = c_int(t * INVPIO2 + 0.5);
+        let fn_ = f64::from(n);
         let mut r = t - fn_ * PIO2_1;
         let mut w = fn_ * PIO2_1T;
         let j = ix >> 20;
         let mut y0 = r - w;
-        let mut i = j - ((hi(y0) >> 20) & 0x7ff);
+        // Both are 11-bit exponent fields, so the difference cannot wrap
+        let mut i = j.wrapping_sub((hi(y0) >> 20) & 0x7ff);
         if i > 16 {
             // 2nd iteration needed, good to 118 bits
             let t = r;
@@ -248,7 +274,7 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
             r = t - w;
             w = fn_ * PIO2_2T - ((t - r) - w);
             y0 = r - w;
-            i = j - ((hi(y0) >> 20) & 0x7ff);
+            i = j.wrapping_sub((hi(y0) >> 20) & 0x7ff);
             if i > 49 {
                 // 3rd iteration, 151 bits
                 let t = r;
@@ -259,12 +285,13 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
             }
         }
         let y1 = (r - y0) - w;
-        return if hx < 0 { Some((-n, -y0, -y1)) } else { Some((n, y0, y1)) };
+        return if hx < 0 { Some((n.wrapping_neg(), -y0, -y1)) } else { Some((n, y0, y1)) };
     }
     None
 }
 
 /// `Math.sin(x)`.
+#[must_use]
 pub fn sin(x: f64) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
     if ix <= 0x3fe9_21fb {
@@ -285,6 +312,7 @@ pub fn sin(x: f64) -> f64 {
 }
 
 /// `Math.cos(x)`.
+#[must_use]
 pub fn cos(x: f64) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
     if ix <= 0x3fe9_21fb {
@@ -305,24 +333,25 @@ pub fn cos(x: f64) -> f64 {
 }
 
 /// `Math.asin(x)`.
+#[must_use]
 pub fn asin(x: f64) -> f64 {
-    const PIO2_HI: f64 = 1.57079632679489655800e+00;
-    const PIO2_LO: f64 = 6.12323399573676603587e-17;
-    const PIO4_HI: f64 = 7.85398163397448278999e-01;
-    const PS0: f64 = 1.66666666666666657415e-01;
-    const PS1: f64 = -3.25565818622400915405e-01;
-    const PS2: f64 = 2.01212532134862925881e-01;
-    const PS3: f64 = -4.00555345006794114027e-02;
-    const PS4: f64 = 7.91534994289814532176e-04;
-    const PS5: f64 = 3.47933107596021167570e-05;
-    const QS1: f64 = -2.40339491173441421878e+00;
-    const QS2: f64 = 2.02094576023350569471e+00;
-    const QS3: f64 = -6.88283971605453293030e-01;
-    const QS4: f64 = 7.70381505559019352791e-02;
+    const PIO2_HI: f64 = 1.570_796_326_794_896_558_00e+00;
+    const PIO2_LO: f64 = 6.123_233_995_736_766_035_87e-17;
+    const PIO4_HI: f64 = 7.853_981_633_974_482_789_99e-01;
+    const PS0: f64 = 1.666_666_666_666_666_574_15e-01;
+    const PS1: f64 = -3.255_658_186_224_009_154_05e-01;
+    const PS2: f64 = 2.012_125_321_348_629_258_81e-01;
+    const PS3: f64 = -4.005_553_450_067_941_140_27e-02;
+    const PS4: f64 = 7.915_349_942_898_145_321_76e-04;
+    const PS5: f64 = 3.479_331_075_960_211_675_70e-05;
+    const QS1: f64 = -2.403_394_911_734_414_218_78e+00;
+    const QS2: f64 = 2.020_945_760_233_505_694_71e+00;
+    const QS3: f64 = -6.882_839_716_054_532_930_30e-01;
+    const QS4: f64 = 7.703_815_055_590_193_527_91e-02;
     let hx = hi(x);
     let ix = hx & 0x7fff_ffff;
     if ix >= 0x3ff0_0000 {
-        if ((ix - 0x3ff0_0000) as u32 | lo(x)) == 0 {
+        if (ix.wrapping_sub(0x3ff0_0000).cast_unsigned() | lo(x)) == 0 {
             return x * PIO2_HI + x * PIO2_LO;
         }
         return f64::NAN;

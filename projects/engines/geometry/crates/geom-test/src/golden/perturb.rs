@@ -192,10 +192,17 @@ fn boxed_at<const N: usize, const SITE: usize>() -> Box<MaybeUninit<[u8; N]>> {
 
 /// Pushes one or two boxes of `$n` bytes (the count from `$rng`) from each call site listed, onto
 /// `$pool`. The list names every site number below [`BOX_SITES`] once (a test checks the count).
+///
+/// A first box, then a second if the count is two, with no loop: 32 short loops in a row, each
+/// counted in `u64` and pushing onto a `Vec` counted in 32-bit `usize`, made LLVM's loop strength
+/// reduction recurse past rustc's stack in a wasm32 release build (rustc 1.99.0). The count is
+/// drawn first, as before, and each site allocates the same boxes in the same order.
 macro_rules! from_sites {
     ($pool:ident, $n:ident, $rng:ident; $($site:literal)*) => {
         $(
-            for _ in 0..between($rng, 1, 2) {
+            let two = between($rng, 1, 2) == 2;
+            $pool.push(boxed_at::<$n, $site>());
+            if two {
                 $pool.push(boxed_at::<$n, $site>());
             }
         )*

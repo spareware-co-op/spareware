@@ -142,6 +142,9 @@ impl<'c> WorkMeter<'c> {
     ///
     /// [`Stopped`] if the meter had stopped, if this charge takes its work over the cap, or if the
     /// periodic read of the cancellation finds a request.
+    // Inlined across crates: the classifier charges once for every polygon each segment of a path
+    // tests, so the call itself cost more than the few comparisons it makes.
+    #[inline]
     pub fn charge(&mut self, work: u64) -> Result<(), Stopped> {
         self.add(BudgetKind::Work, u128::from(work))
     }
@@ -186,6 +189,7 @@ impl<'c> WorkMeter<'c> {
     /// # Errors
     ///
     /// [`Stopped`] if it has.
+    #[inline]
     pub fn check(&self) -> Result<(), Stopped> {
         match self.stop {
             Some(reason) => Err(Stopped { reason }),
@@ -250,6 +254,7 @@ impl<'c> WorkMeter<'c> {
 
     /// Add `amount` of `kind`, stop if it passes the cap, and read the cancellation every
     /// [`POLL_EVERY`] calls.
+    #[inline]
     fn add(&mut self, kind: BudgetKind, amount: u128) -> Result<(), Stopped> {
         self.check()?;
         self.used = self

@@ -6,6 +6,25 @@
 //! factors, banned turns) and wrote fixtures/data/junction-tools-*.json (project and results) and expected/junction-tools-*.json
 //! (every call and its answer); these tests make the same calls on the Rust port and compare (text character for character).
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly. Tests
+// may use native arithmetic and casts (Cargo.toml), and as in the kernel's tests a case table may run
+// long and name its values with single letters.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod junction_tools_support;
 mod support;
 
@@ -126,16 +145,13 @@ fn run(t: &Tools, v: &Variant, c: &Value) -> Value {
         }
         "summary" | "checks" | "xid" | "moves" | "banSvg" | "approaches" | "upstreamLen" => {
             let (sc, res) = res_of(t, c);
-            match f {
-                "approaches" => {
-                    return Value::Array(
-                        node_approaches(sc.sc, &entries(sc.sc, res.expect("result"), true).iter().find(|e| e.id == s(&c["id"])).expect("entry").node)
-                            .iter()
-                            .map(|a| a.to_value())
-                            .collect(),
-                    )
-                }
-                _ => {}
+            if f == "approaches" {
+                return Value::Array(
+                    node_approaches(sc.sc, &entries(sc.sc, res.expect("result"), true).iter().find(|e| e.id == s(&c["id"])).expect("entry").node)
+                        .iter()
+                        .map(construct_transport::junction_tools::ApproachInfo::to_value)
+                        .collect(),
+                )
             }
             let res = res.expect("result");
             let es = entries(sc.sc, res, true);
@@ -144,7 +160,7 @@ fn run(t: &Tools, v: &Variant, c: &Value) -> Value {
                 "summary" => t.summary(sc.sc, res, e).map_or(Value::Null, |x| x.to_value()),
                 "checks" => checks(sc.sc, st, res, e).to_value(),
                 "xid" => json!(xid(e)),
-                "moves" => Value::Array(t.moves(sc.sc, Some(res), &e.node).iter().map(|m| m.to_value()).collect()),
+                "moves" => Value::Array(t.moves(sc.sc, Some(res), &e.node).iter().map(construct_transport::junction_tools::MoveRow::to_value).collect()),
                 "banSvg" => {
                     let list = t.moves(sc.sc, Some(res), &e.node);
                     json!(t.ban_svg(&e.node, &list, c.get("size").and_then(Value::as_f64)))
@@ -180,7 +196,7 @@ fn run(t: &Tools, v: &Variant, c: &Value) -> Value {
         }
         "mergeCandidates" => {
             let sc = t.sc(u(&c["sc"]));
-            Value::Array(merge_candidates(sc.sc, s(&c["id"])).iter().map(|m| m.to_value()).collect())
+            Value::Array(merge_candidates(sc.sc, s(&c["id"])).iter().map(construct_transport::junction_tools::MergeCandidate::to_value).collect())
         }
         "flowScale" => {
             let (sc, res) = res_of(t, c);
@@ -194,7 +210,7 @@ fn run(t: &Tools, v: &Variant, c: &Value) -> Value {
         "losTable" => json!(los_table(s(&c["method"]))),
         "j2" => {
             let sc = t.sc(u(&c["sc"]));
-            Value::Array(t.j2(sc, &sc.periods()).iter().map(|r| r.to_value()).collect())
+            Value::Array(t.j2(sc, &sc.periods()).iter().map(construct_transport::junction_tools::J2Row::to_value).collect())
         }
         "j2Html" => {
             let sc = t.sc(u(&c["sc"]));
@@ -223,7 +239,7 @@ fn run(t: &Tools, v: &Variant, c: &Value) -> Value {
             let sc = t.sc(u(&c["sc"]));
             let o = opts_of(c);
             let list = t.both_res(sc);
-            Value::Array(t.volume_rows(sc.sc, &list, None, &o.scope).iter().map(|r| r.to_value()).collect())
+            Value::Array(t.volume_rows(sc.sc, &list, None, &o.scope).iter().map(construct_transport::junction_tools::VolumeRow::to_value).collect())
         }
         "asCountCSV" => {
             let sc = t.sc(u(&c["sc"]));
@@ -334,13 +350,12 @@ fn every_recorded_call_matches_the_prototype() {
             let at = format!("{name}[{i}] {}", c["fn"]);
             let f = s(&c["fn"]);
             let want = &c["out"];
-            if is_text(f) || want.is_string() {
-                if let (Some(g), Some(w)) = (got.as_str(), want.as_str()) {
+            if (is_text(f) || want.is_string())
+                && let (Some(g), Some(w)) = (got.as_str(), want.as_str()) {
                     ck.same_text(&at, g, w);
                     n += 1;
                     continue;
                 }
-            }
             ck.check(&at, &got, want);
             n += 1;
         }

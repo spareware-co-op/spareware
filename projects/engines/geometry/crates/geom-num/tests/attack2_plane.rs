@@ -646,15 +646,100 @@ fn small_step() -> impl Strategy<Value = [i64; 3]> {
 /// exactly M² and M³ times the unit cube's. The documented largest values, |`n_i`| = 4M² and
 /// |d| = 4M³, are reached, and by one plane at once; and the largest grid point against a plane,
 /// |n · p + d| = 16M³ (124 bits, within the 126-bit budget of `side`), is reached too.
-#[test]
-fn corner_planes_reach_both_documented_maxima_at_once() {
+///
+/// It runs in quarters of the first corner (decision 32.78: whole, it was too long for one Miri
+/// gate part). Each quarter holds its own triples to the bounds, exactly as the whole did, and
+/// pins which maxima it reaches and how many of its planes reach both at once; the join test holds
+/// the quarters to the whole: each maximum reached in some quarter, a plane with both in some.
+mod corner_planes_reach_both_documented_maxima_at_once {
+    use super::*;
+
+    /// For each quarter: whether its triples reach |`n_i`| = 4M², |d| = 4M³ and |n · p + d| =
+    /// 16M³, and how many of its planes reach both 4M² and 4M³ at once.
+    const PINNED: [(bool, bool, bool, usize); 4] = [
+        (true, true, true, 12),
+        (true, true, true, 12),
+        (true, true, true, 12),
+        (true, true, true, 12),
+    ];
+
+    fn quarter(part: usize) {
+        let (cap_n, cap_d, cap_side) = caps();
+        let (top_n, top_d, top_side, both) = corner_triples(2 * part..2 * part + 2);
+        assert!(top_n <= cap_n, "|n_i| past 4M²: {top_n}");
+        assert!(top_d <= cap_d, "|d| past 4M³: {top_d}");
+        assert!(top_side <= cap_side, "|n · p + d| past 16M³: {top_side}");
+        assert_eq!(
+            (top_n == cap_n, top_d == cap_d, top_side == cap_side, both),
+            PINNED[part],
+            "quarter {}",
+            part + 1
+        );
+    }
+
+    #[test]
+    fn quarter_1() {
+        quarter(0);
+    }
+
+    #[test]
+    fn quarter_2() {
+        quarter(1);
+    }
+
+    #[test]
+    fn quarter_3() {
+        quarter(2);
+    }
+
+    #[test]
+    fn quarter_4() {
+        quarter(3);
+    }
+
+    /// The quarters hold the first corners 0 to 7 once, and their pinned shares make the whole:
+    /// the largest |`n_i`| over the frame's corners is 4M² (82 bits), the largest |d| 4M³ (122
+    /// bits), the largest |n · p + d| 16M³ (within side's 2^126), and some plane has both.
+    #[test]
+    fn the_quarters_join_to_the_whole() {
+        assert_eq!(CORNERS.len(), 8);
+        let (cap_n, cap_d, cap_side) = caps();
+        assert_eq!(
+            (cap_n.bits(), cap_d.bits()),
+            (82, 122),
+            "module docs: n, d reach 82, 122 bits"
+        );
+        assert!(cap_side.bits() <= 126, "side's documented budget is 2^126");
+        assert!(PINNED.iter().any(|p| p.0), "4M² reached");
+        assert!(PINNED.iter().any(|p| p.1), "4M³ reached");
+        assert!(PINNED.iter().any(|p| p.2), "16M³ reached");
+        assert!(
+            PINNED.iter().map(|p| p.3).sum::<usize>() > 0,
+            "no corner plane has every |n_i| = 4M² and |d| = 4M³"
+        );
+    }
+}
+
+/// The documented largest values: 4M², 4M³ and 16M³.
+fn caps() -> (BigInt, BigInt, BigInt) {
     let cap_n = big(4) * big(M) * big(M);
     let cap_d = &cap_n * big(M);
+    (cap_n, cap_d, big(16) * m_pow(3))
+}
+
+/// Every ordered triple of the frame's corners whose first corner is in `first`: checked as the
+/// module's text says, with the largest |`n_i`|, |d| and |n · p + d| it reaches and how many of its
+/// planes have every |`n_i`| = 4M² and |d| = 4M³ at once.
+fn corner_triples(first: std::ops::Range<usize>) -> (BigInt, BigInt, BigInt, usize) {
+    let (cap_n, cap_d, _) = caps();
     let mut top_n = BigInt::zero();
     let mut top_d = BigInt::zero();
     let mut top_side = BigInt::zero();
     let mut both_at_once = Vec::new();
     for (i, (&a, &ua)) in CORNERS.iter().zip(&UNIT).enumerate() {
+        if !first.contains(&i) {
+            continue;
+        }
         for (j, (&b, &ub)) in CORNERS.iter().zip(&UNIT).enumerate() {
             for (k, (&c, &uc)) in CORNERS.iter().zip(&UNIT).enumerate() {
                 let got = Plane::through(p3(a), p3(b), p3(c));
@@ -690,29 +775,7 @@ fn corner_planes_reach_both_documented_maxima_at_once() {
             }
         }
     }
-    assert_eq!(
-        top_n, cap_n,
-        "the largest |n_i| over the frame's corners must be 4M²"
-    );
-    assert_eq!(
-        top_d, cap_d,
-        "the largest |d| over the frame's corners must be 4M³"
-    );
-    assert_eq!(
-        (top_n.bits(), top_d.bits()),
-        (82, 122),
-        "module docs: n, d reach 82, 122 bits"
-    );
-    assert!(
-        !both_at_once.is_empty(),
-        "no corner plane has every |n_i| = 4M² and |d| = 4M³"
-    );
-    assert_eq!(
-        top_side,
-        big(16) * m_pow(3),
-        "largest |n · p + d| at the corners"
-    );
-    assert!(top_side.bits() <= 126, "side's documented budget is 2^126");
+    (top_n, top_d, top_side, both_at_once.len())
 }
 
 /// Every distinct oriented plane through three corners of the frame's cube, with its coefficients

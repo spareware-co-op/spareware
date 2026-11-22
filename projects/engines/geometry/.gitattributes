@@ -1,0 +1,12 @@
+# The kernel's text files are the same bytes on every checkout: tests read source files and stored
+# tables with `include_str!` and compare or cut them at `\n`, so a Windows checkout must never turn
+# their line ends into \r\n. Every text file here is checked out with \n, whatever the machine's git
+# settings; git still leaves files it sees as binary alone.
+* text=auto eol=lf
+
+# Files kept as their exact bytes, never converted. Folders of stored bytes with their own
+# `.gitattributes` (`* -text`) say so there; this one cannot, because a file added inside it would
+# change its digest.
+# Manifold's stored models, unmodified (two of them have \r\n line ends): the corpus register checks
+# the folder's SHA-256 over the raw bytes.
+crates/geom-test/corpora/manifold-models/** -text

@@ -2,39 +2,54 @@
 
 use super::sites::site_index;
 use super::sort::js_sort_by;
-use crate::jsnum::math_hypot;
+use crate::jsnum::{math_hypot, usize_to_f64};
 use crate::project::{OrderedMap, Scenario, Settings, Zone, road_class};
 use crate::util::{Flat, clamp, flat};
 use std::collections::{HashMap, HashSet};
 
 /// `mainComponent(N, arcs)`: flags (1) the nodes of the largest weakly connected piece of network, given each arc's (from, to).
+#[must_use]
 pub fn main_component(n: usize, edges: &[(usize, usize)]) -> Vec<u8> {
     let mut p: Vec<usize> = (0..n).collect();
-    fn find(p: &mut [usize], mut i: usize) -> usize {
-        while p[i] != i {
-            p[i] = p[p[i]];
-            i = p[i];
-        }
-        i
-    }
     for &(a, b) in edges {
-        let x = find(&mut p, a);
-        let y = find(&mut p, b);
-        if x != y {
-            p[x] = y;
+        let x = uf_find(&mut p, a);
+        let y = uf_find(&mut p, b);
+        if x != y
+            && let Some(slot) = p.get_mut(x)
+        {
+            *slot = y;
         }
     }
     let mut size = vec![0usize; n];
     let (mut best, mut bs) = (usize::MAX, 0usize);
     for i in 0..n {
-        let r = find(&mut p, i);
-        size[r] += 1;
-        if size[r] > bs {
-            bs = size[r];
-            best = r;
+        let r = uf_find(&mut p, i);
+        if let Some(sz) = size.get_mut(r) {
+            *sz = sz.saturating_add(1);
+            if *sz > bs {
+                bs = *sz;
+                best = r;
+            }
         }
     }
-    (0..n).map(|i| u8::from(find(&mut p, i) == best)).collect()
+    (0..n).map(|i| u8::from(uf_find(&mut p, i) == best)).collect()
+}
+
+/// Union-find's root of k in the parent array p, halving the path as it goes (an index past the end is its own root).
+pub(super) fn uf_find(p: &mut [usize], mut k: usize) -> usize {
+    loop {
+        let Some(&up) = p.get(k) else {
+            return k;
+        };
+        if up == k {
+            return k;
+        }
+        let next = p.get(up).copied().unwrap_or(up);
+        if let Some(slot) = p.get_mut(k) {
+            *slot = next;
+        }
+        k = next;
+    }
 }
 
 /// A candidate node for zone connectors, in flat coordinates.
@@ -49,7 +64,7 @@ pub(crate) fn connector_targets(
     sc: &Scenario,
     z: &Zone,
     cand: &[Cand],
-    f: &Flat,
+    fl: &Flat,
     s: &Settings,
 ) -> Vec<String> {
     if let Some(node) = z.node.as_str()
@@ -58,28 +73,28 @@ pub(crate) fn connector_targets(
     {
         return vec![node.to_string()];
     }
-    let k = if z.kind.is("gateway") {
+    let want = if z.kind.is("gateway") {
         1.0
     } else {
-        let c = if z.connectors.truthy() {
+        let count = if z.connectors.truthy() {
             z.connectors.int32()
         } else if s.connectors.truthy() {
             s.connectors.int32()
         } else {
             2
         };
-        clamp(c as f64, 1.0, 4.0)
+        clamp(f64::from(count), 1.0, 4.0)
     };
     let ll = z.ll();
-    let zx = f.x(&ll);
-    let zy = f.y(&ll);
+    let zx = fl.x(&ll);
+    let zy = fl.y(&ll);
     let mut best: Vec<(String, f64)> = Vec::new();
-    for c in cand {
-        let d = math_hypot(&[c.x - zx, c.y - zy]);
-        if (best.len() as f64) < k || d < best[best.len() - 1].1 {
-            best.push((c.id.clone(), d));
+    for cn in cand {
+        let dist = math_hypot(&[cn.x - zx, cn.y - zy]);
+        if usize_to_f64(best.len()) < want || best.last().is_some_and(|b| dist < b.1) {
+            best.push((cn.id.clone(), dist));
             js_sort_by(&mut best, |a, b| a.1 - b.1);
-            if best.len() as f64 > k {
+            if usize_to_f64(best.len()) > want {
                 best.pop();
             }
         }
@@ -90,6 +105,7 @@ pub(crate) fn connector_targets(
 /// `connectorMap(sc)`: connector targets for every zone without building a full graph (used for drawing).
 ///
 /// s is the project's settings (`Store.S` in the prototype).
+#[must_use]
 pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
     let ids: Vec<&str> = sc.nodes.keys().collect();
     let idx: HashMap<String, usize> = ids
@@ -120,8 +136,8 @@ pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
         .values()
         .filter(|n| {
             deg.contains(n.id.as_str())
-                && idx.get(&n.id).is_some_and(|&i| main[i] != 0)
-                && !idx.get(&n.id).is_some_and(|&i| in_site[i].is_some())
+                && idx.get(&n.id).is_some_and(|&i| main.get(i).is_some_and(|&m| m != 0))
+                && idx.get(&n.id).is_none_or(|&i| in_site.get(i).is_none_or(Option::is_none))
         })
         .collect();
     let lat0 = nodes.first().map_or(-36.85, |n| n.lat.num());
@@ -145,6 +161,7 @@ pub fn connector_map(sc: &Scenario, s: &Settings) -> OrderedMap<Vec<String>> {
 }
 
 /// `zoneClass(z)`: "external" for a gateway, else the zone's role when it is existing, committed or development, else existing (`existing === true`) or development.
+#[must_use]
 pub fn zone_class(z: Option<&Zone>) -> &'static str {
     let Some(z) = z else {
         return "existing";
@@ -167,6 +184,7 @@ pub fn zone_class(z: Option<&Zone>) -> &'static str {
 }
 
 /// `zcIdx(z)`: 2 development, 1 committed, otherwise 0.
+#[must_use]
 pub fn zc_idx(z: Option<&Zone>) -> usize {
     match zone_class(z) {
         "development" => 2,

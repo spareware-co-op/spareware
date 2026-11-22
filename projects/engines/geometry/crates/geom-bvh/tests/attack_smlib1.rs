@@ -219,8 +219,22 @@ fn ub_36_an_empty_cell_index_answers_every_search_with_nothing() {
 /// keys repeat, a refit that names a key the tree does not hold, and every box identical (the
 /// split that never separates). Each must give the brute-force answer or a defined refusal, and
 /// the depth stays within `MAX_DEPTH`.
-#[test]
-fn ub_221_the_box_tree_never_has_links_that_disagree() {
+///
+/// One test for the empty, one-entry and refused trees and their refits, one for the many
+/// identical boxes (decision 32.78: together they were too long for one Miri gate part).
+mod ub_221_the_box_tree_never_has_links_that_disagree {
+    #[test]
+    fn small_and_refused_trees() {
+        super::small_and_refused_box_trees();
+    }
+
+    #[test]
+    fn many_identical_boxes() {
+        super::many_identical_boxes();
+    }
+}
+
+fn small_and_refused_box_trees() {
     let exec = Exec::serial();
     let b = |lo: [i64; 3], hi: [i64; 3]| Aabb::<3>::new(lo, hi).unwrap();
     let query = b([-1, -1, -1], [1, 1, 1]);
@@ -275,9 +289,14 @@ fn ub_221_the_box_tree_never_has_links_that_disagree() {
         Err(BvhError::DuplicateKey(4))
     );
     assert_eq!(tree, before);
+}
 
-    // Many identical boxes: no split separates them, and the tree is still shallow, and every
-    // pair is found (n choose 2), against the brute-force count.
+/// Many identical boxes: no split separates them, and the tree is still shallow, and every pair
+/// is found (n choose 2), against the brute-force count.
+fn many_identical_boxes() {
+    let exec = Exec::serial();
+    let b = |lo: [i64; 3], hi: [i64; 3]| Aabb::<3>::new(lo, hi).unwrap();
+    let query = b([-1, -1, -1], [1, 1, 1]);
     let same: Vec<Entry<3>> = (0..300u64)
         .map(|k| Entry {
             key: k,

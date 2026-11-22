@@ -29,6 +29,8 @@
 )]
 
 mod common;
+#[macro_use]
+mod slices;
 
 use common::config;
 use geom_math::vector::VEC_MAX;
@@ -131,12 +133,26 @@ proptest! {
         }
         prop_assert_eq!(a.sub(c).ok(), a.add(c.neg().unwrap()).ok());
     }
+}
 
-    #[test]
-    fn between_and_offset_round_trip(
-        p in (-COORD_MAX..=COORD_MAX, -COORD_MAX..=COORD_MAX, -COORD_MAX..=COORD_MAX),
-        q in (-COORD_MAX..=COORD_MAX, -COORD_MAX..=COORD_MAX, -COORD_MAX..=COORD_MAX),
-    ) {
+// Between and offset round trip: in quarters of its one stream of cases (decision 32.78,
+// `slices`).
+sliced!(
+    between_and_offset_round_trip,
+    config(4096),
+    (
+        (
+            -COORD_MAX..=COORD_MAX,
+            -COORD_MAX..=COORD_MAX,
+            -COORD_MAX..=COORD_MAX
+        ),
+        (
+            -COORD_MAX..=COORD_MAX,
+            -COORD_MAX..=COORD_MAX,
+            -COORD_MAX..=COORD_MAX
+        ),
+    ),
+    |(p, q)| {
         let p = P3::new(p.0, p.1, p.2).unwrap();
         let q = P3::new(q.0, q.1, q.2).unwrap();
         let v = V3::between(p, q).unwrap();
@@ -145,7 +161,18 @@ proptest! {
         let p2 = P2 { x: p.x, y: p.y };
         let q2 = P2 { x: q.x, y: q.y };
         prop_assert_eq!(V2::between(p2, q2).unwrap().offset(p2).unwrap(), q2);
+        Ok(())
     }
+);
+
+/// The slices' shares add up exactly to the whole's count, each once. A property of a random
+/// seed draws new cases on every run, natively and under Miri alike, so its cases are not a fixed
+/// set: each slice draws its own share of fresh cases from the same strategy and `Config`, never
+/// fewer (the main session's ruling of 19 Nov 2026). A property of a fixed seed, and a list of
+/// cases, is one stream cut into these ranges, nothing missing or repeated.
+#[test]
+fn the_slices_join_to_every_case_once() {
+    slices::assert_joins(config(4096).cases, "a property's 4,096 cases");
 }
 
 #[test]

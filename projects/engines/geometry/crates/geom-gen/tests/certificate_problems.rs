@@ -30,6 +30,10 @@
 //!   (k + 1) · 2^−53. Each `FPTaylor` problem bounds the sum of its error terms at once exactly
 //!   when `predicate_certificates::EXACT_OPTIMISATION` names its filter, and then the total HOL
 //!   Light proves is the largest double at most K; otherwise it bounds each term and names none.
+//!   A problem names the shards HOL Light checks its terms in exactly when
+//!   `predicate_certificates::SHARDED` names its filter, more than one, and only term by term,
+//!   with its number of terms and each shard's terms, every term in exactly one shard
+//!   (`a_term_left_out_or_shared_is_refused` shows that check failing).
 //! - `the_problems_are_current_and_registered`: the committed problems are what the registered
 //!   generators write now, the registry generates no other problem, and every generated filter is
 //!   held here.
@@ -62,7 +66,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use geom_gen::Generate;
 use geom_gen::predicate_certificates::{
-    EXACT_OPTIMISATION, UNPROVEN, fptaylor_problem, gappa_case_problem, gappa_cases, gappa_problem,
+    EXACT_OPTIMISATION, Part, SHARDED, Shards, UNPROVEN, fptaylor_problem, gappa_case_problem,
+    gappa_cases, gappa_problem,
 };
 use geom_gen::predicates::{PREDICATES, derivation};
 use geom_gen::registry::REGISTRY;
@@ -77,7 +82,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 11] = [
+const FILTERS: [Filter; 17] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -187,6 +192,60 @@ const FILTERS: [Filter; 11] = [
         fptaylor: (
             "fptaylor-tpi-side.fpt",
             include_str!("../generated/fptaylor-tpi-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_sphere",
+        module: include_str!("../../geom-num/src/generated/line_sphere.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-sphere.fpt",
+            include_str!("../generated/fptaylor-line-sphere.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cylinder",
+        module: include_str!("../../geom-num/src/generated/line_cylinder.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cylinder.fpt",
+            include_str!("../generated/fptaylor-line-cylinder.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cone",
+        module: include_str!("../../geom-num/src/generated/line_cone.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cone.fpt",
+            include_str!("../generated/fptaylor-line-cone.fpt"),
+        ),
+    },
+    Filter {
+        name: "line_cone_lead",
+        module: include_str!("../../geom-num/src/generated/line_cone_lead.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-line-cone-lead.fpt",
+            include_str!("../generated/fptaylor-line-cone-lead.fpt"),
+        ),
+    },
+    Filter {
+        name: "cross_norm",
+        module: include_str!("../../geom-num/src/generated/cross_norm.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-cross-norm.fpt",
+            include_str!("../generated/fptaylor-cross-norm.fpt"),
+        ),
+    },
+    Filter {
+        name: "axis_gap",
+        module: include_str!("../../geom-num/src/generated/axis_gap.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-axis-gap.fpt",
+            include_str!("../generated/fptaylor-axis-gap.fpt"),
         ),
     },
     Filter {
@@ -1019,6 +1078,423 @@ fn the_bounds_are_the_constant_less_its_roundings() {
             }
             None => assert!(!exact, "{name}, {file}: no total for the exact problem"),
         }
+        check_shards(name, file, fptaylor, exact);
+    }
+}
+
+/// The shards HOL Light checks a problem's terms in: exactly those SHARDED names, more than one,
+/// only for a problem bounded term by term (`exact` false), each line naming its shard's terms,
+/// and every term of the certificate in exactly one shard.
+fn check_shards(name: &str, file: &str, fptaylor: &str, exact: bool) {
+    let header = |key: &str| {
+        fptaylor
+            .lines()
+            .find_map(|l| l.strip_prefix(&format!("// {key}: ")))
+    };
+    let sharded = SHARDED.iter().find(|(n, _)| *n == name).map(|(_, s)| *s);
+    assert_eq!(
+        header("hol-light-shards").map(|s| s.parse::<usize>().unwrap()),
+        sharded.map(|s| s.shards.len()),
+        "{name}, {file}: the shards"
+    );
+    assert_eq!(
+        header("hol-light-terms").map(|s| s.parse::<u32>().unwrap()),
+        sharded.map(|s| s.terms),
+        "{name}, {file}: the terms"
+    );
+    let lines: Vec<&str> = fptaylor
+        .lines()
+        .filter(|l| l.starts_with("// hol-light-shard "))
+        .collect();
+    let Some(shards) = sharded else {
+        assert!(
+            lines.is_empty(),
+            "{name}, {file}: shard lines without shards"
+        );
+        return;
+    };
+    assert!(
+        shards.shards.len() > 1,
+        "{name}, {file}: one shard is the whole problem"
+    );
+    assert!(
+        !exact,
+        "{name}, {file}: the exact problem has no terms to share"
+    );
+    let cuts: Vec<&str> = fptaylor
+        .lines()
+        .filter(|l| l.starts_with("// hol-light-cut "))
+        .collect();
+    let want: Vec<String> = shards
+        .cuts
+        .iter()
+        .map(|(t, d)| format!("// hol-light-cut {t}: {d}"))
+        .collect();
+    assert_eq!(cuts, want, "{name}, {file}: the cut terms");
+    assert_eq!(lines.len(), shards.shards.len(), "{name}, {file}");
+    for ((k, terms), l) in (1..).zip(shards.shards).zip(&lines) {
+        let listed: Vec<String> = terms.iter().map(Part::to_string).collect();
+        assert_eq!(
+            *l,
+            format!("// hol-light-shard {k}: {}", listed.join(" ")),
+            "{name}, {file}: shard {k}'s line"
+        );
+    }
+    assert_eq!(
+        every_term_once(&shards),
+        Ok(()),
+        "{name}, {file}: the shards' terms"
+    );
+    assert_eq!(
+        one_state_a_shard(&shards),
+        Ok(()),
+        "{name}, {file}: the state each shard restores"
+    );
+}
+
+/// The most halvings a cut term's box takes: 2^12 pieces is far more than any job needs.
+const MOST_DEPTH: u32 = 12;
+
+/// Whether `shards` names every term 1 to `terms` exactly once, a term it cuts by each of its
+/// pieces 1 to 2^depth exactly once and never whole, each shard non-empty and in increasing order:
+/// then shards 1 to n, each proving its own terms and pieces and assuming the others, together
+/// prove every piece, so every term, of the certificate.
+fn every_term_once(shards: &Shards) -> Result<(), String> {
+    let n = shards.terms as usize + 1;
+    let mut depth = vec![None; n];
+    let mut last = 0;
+    for &(t, d) in shards.cuts {
+        if t <= last || t > shards.terms {
+            return Err(format!(
+                "cut term {t} is out of order or outside 1 to {}",
+                shards.terms
+            ));
+        }
+        if d == 0 || d > MOST_DEPTH {
+            return Err(format!("term {t} is cut {d} times, not 1 to {MOST_DEPTH}"));
+        }
+        last = t;
+        depth[t as usize] = Some(d);
+    }
+    let mut seen: Vec<Vec<u32>> = depth
+        .iter()
+        .map(|d| vec![0; d.map_or(1, |d| 1usize << d)])
+        .collect();
+    for (k, parts) in (1..).zip(shards.shards) {
+        if parts.is_empty() {
+            return Err(format!("shard {k} is empty"));
+        }
+        if parts.windows(2).any(|w| w[0].key() >= w[1].key()) {
+            return Err(format!("shard {k} is not in increasing order"));
+        }
+        for &part in *parts {
+            let (t, p) = part.key();
+            if t == 0 || t > shards.terms {
+                return Err(format!(
+                    "shard {k} names term {t}, outside 1 to {}",
+                    shards.terms
+                ));
+            }
+            let at = match (depth[t as usize], part) {
+                (None, Part::Term(_)) => 0,
+                (Some(d), Part::Piece(..)) if p >= 1 && p <= 1 << d => p as usize - 1,
+                _ => return Err(format!("shard {k} names {part}, not a part of term {t}")),
+            };
+            seen[t as usize][at] += 1;
+        }
+    }
+    for t in 1..=shards.terms {
+        if let Some(at) = seen[t as usize].iter().position(|&s| s != 1) {
+            let s = seen[t as usize][at];
+            return Err(match depth[t as usize] {
+                None => format!("term {t} is in {s} shards"),
+                Some(_) => format!("piece {t}.{} is in {s} shards", at + 1),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Whether each shard of `shards` has whole terms only or pieces only. A shard with pieces
+/// restores the saved state that holds its cut term's Taylor theorems, in a job of its own kind
+/// (`kernel-certificates.yml`'s `fptaylor-pieces`), and a shard of whole terms the loaded state
+/// (`fptaylor-shards`): the workflow sends a shard to one job or the other by whether its line
+/// names a piece, so a shard with both would have its whole terms checked from the wrong state.
+fn one_state_a_shard(shards: &Shards) -> Result<(), String> {
+    for (k, parts) in (1..).zip(shards.shards) {
+        let pieces = parts
+            .iter()
+            .filter(|p| matches!(p, Part::Piece(..)))
+            .count();
+        if pieces != 0 && pieces != parts.len() {
+            return Err(format!("shard {k} has pieces and whole terms"));
+        }
+    }
+    Ok(())
+}
+
+/// A shard with both pieces and whole terms is refused, and one with either alone is not.
+#[test]
+fn a_shard_of_pieces_and_whole_terms_is_refused() {
+    use Part::{Piece as P, Term as T};
+    assert_eq!(
+        one_state_a_shard(&Shards {
+            terms: 4,
+            cuts: &[(2, 1)],
+            shards: &[&[T(1), T(3), T(4)], &[P(2, 1)], &[P(2, 2)]],
+        }),
+        Ok(())
+    );
+    assert_eq!(
+        one_state_a_shard(&Shards {
+            terms: 4,
+            cuts: &[(2, 1)],
+            shards: &[&[T(1), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+        }),
+        Err("shard 2 has pieces and whole terms".to_owned())
+    );
+}
+
+/// What a shard takes outside its parts, in tenths of a minute: the most any shard took in run
+/// 44161231205 (5.6 minutes: its container, and the saved state's download and restore).
+const SETUP_TENTHS: u32 = 56;
+/// What the first part of a shard takes over the same part later in one: 1.8 minutes at most.
+const FIRST_TENTHS: u32 = 18;
+/// What a job is planned under: 15 minutes.
+const LIMIT_TENTHS: u32 = 150;
+/// A piece of `line_cone`'s term 38 on most runners of run 44161231205 (3.7 to 9.1 by the runner).
+const PIECE_TENTHS: u32 = 55;
+/// Each term's tenths of a minute on a hosted runner, the slower of runs 44076902825 and
+/// 44161231205, by the term's place less one; 0 for a term proved within the second, and for a
+/// term that is cut.
+const LPI_SIDE_TENTHS: [u32; 68] = [
+    61, 56, 28, 47, 19, 25, 41, 27, 20, 20, 19, 28, 0, 0, 170, 113, 28, 41, 27, 31, 17, 20, 9, 11,
+    10, 10, 8, 7, 35, 32, 21, 35, 13, 19, 7, 6, 5, 8, 7, 8, 3, 4, 32, 35, 5, 27, 23, 20, 8, 7, 8,
+    10, 7, 6, 43, 5, 23, 30, 13, 16, 7, 5, 6, 8, 7, 6, 3, 3,
+];
+const LINE_CONE_TENTHS: [u32; 70] = [
+    107, 683, 52, 1054, 89, 651, 37, 582, 78, 779, 141, 133, 226, 95, 102, 70, 89, 70, 153, 149,
+    106, 68, 108, 112, 273, 86, 114, 115, 182, 70, 296, 215, 258, 330, 0, 0, 289, 0, 353, 100, 157,
+    88, 125, 59, 555, 57, 271, 12, 271, 15, 192, 11, 595, 103, 56, 59, 17, 20, 17, 14, 9, 11, 90,
+    529, 134, 864, 134, 807, 40, 1379,
+];
+/// `line_cylinder`'s terms on the slow runner of run 44676088332, by the term's place less one:
+/// the minutes between its `Proved` line and the one before; term 1 from its Taylor theorems
+/// (2.4); term 50 as term 2; 0 for a term proved within the second.
+const LINE_CYLINDER_TENTHS: [u32; 50] = [
+    24, 576, 12, 130, 20, 62, 11, 149, 11, 157, 35, 135, 37, 41, 35, 41, 30, 36, 19, 19, 20, 20,
+    30, 37, 20, 20, 20, 20, 36, 36, 0, 0, 54, 90, 73, 12, 64, 3, 62, 0, 7, 8, 2, 3, 1, 1, 2, 2, 22,
+    576,
+];
+/// The measured terms of each sharded problem.
+const MEASURED: [(&str, &[u32]); 3] = [
+    ("lpi_side", &LPI_SIDE_TENTHS),
+    ("line_cone", &LINE_CONE_TENTHS),
+    ("line_cylinder", &LINE_CYLINDER_TENTHS),
+];
+
+/// Whether no shard of `shards` that could be cut is planned over the limit, by its terms'
+/// measured `tenths`: a shard of several parts planned over 15 minutes can be made shards under
+/// it, so it is refused. A shard of one part cannot be cut here, whatever it takes.
+fn no_shard_to_cut(shards: &Shards, tenths: &[u32]) -> Result<(), String> {
+    for (k, parts) in (1..).zip(shards.shards) {
+        let mut own = 0;
+        for part in *parts {
+            own += match part {
+                Part::Term(t) => tenths[*t as usize - 1],
+                Part::Piece(..) => PIECE_TENTHS,
+            };
+        }
+        let planned = SETUP_TENTHS + FIRST_TENTHS + own;
+        if parts.len() > 1 && planned > LIMIT_TENTHS {
+            return Err(format!(
+                "shard {k} is planned at {planned} tenths of a minute and can be cut"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// No committed shard of several parts is planned over 15 minutes, from the minutes each term
+/// and piece took on the hosted runners; and the grouping before this one is refused: three
+/// pieces a shard, two, and one of the ten shards of whole terms (it took 190 minutes).
+#[test]
+fn no_shard_that_can_be_under_fifteen_minutes_is_planned_over_it() {
+    use Part::{Piece as P, Term as T};
+    const BEFORE: [(&[&[Part]], &str); 3] = [
+        (
+            &[&[T(1)], &[P(38, 1), P(38, 2), P(38, 3)]],
+            "shard 2 is planned at 239 tenths of a minute and can be cut",
+        ),
+        (
+            &[&[P(38, 63), P(38, 64)]],
+            "shard 1 is planned at 184 tenths of a minute and can be cut",
+        ),
+        (
+            &[&[T(20), T(29), T(40), T(69), T(70)]],
+            "shard 1 is planned at 1924 tenths of a minute and can be cut",
+        ),
+    ];
+    assert_eq!(MEASURED.map(|(n, _)| n), SHARDED.map(|(n, _)| n));
+    for ((name, shards), (_, tenths)) in SHARDED.into_iter().zip(MEASURED) {
+        assert_eq!(tenths.len(), shards.terms as usize, "{name}: every term");
+        assert_eq!(no_shard_to_cut(&shards, tenths), Ok(()), "{name}");
+    }
+    for (shards, why) in BEFORE {
+        let before = Shards {
+            terms: 70,
+            cuts: &[(38, 6)],
+            shards,
+        };
+        assert_eq!(
+            no_shard_to_cut(&before, &LINE_CONE_TENTHS),
+            Err(why.to_owned())
+        );
+    }
+}
+
+/// The committed shards with any one left out, or any one twice, are refused, naming the part
+/// no job or two jobs would prove; and each of term 38's 64 pieces is a shard of its own.
+#[test]
+fn a_shard_list_that_drops_or_doubles_a_part_is_refused() {
+    for (name, shards) in SHARDED {
+        for (k, parts) in shards.shards.iter().enumerate() {
+            let what = match parts[0] {
+                Part::Term(t) => format!("term {t}"),
+                piece @ Part::Piece(..) => format!("piece {piece}"),
+            };
+            let mut dropped = shards.shards.to_vec();
+            dropped.remove(k);
+            let mut doubled = shards.shards.to_vec();
+            doubled.insert(k, parts);
+            for (list, jobs) in [(dropped, 0), (doubled, 2)] {
+                let broken = Shards {
+                    shards: list.leak(),
+                    ..shards
+                };
+                assert_eq!(
+                    every_term_once(&broken),
+                    Err(format!("{what} is in {jobs} shards")),
+                    "{name}, shard {}",
+                    k + 1
+                );
+            }
+        }
+    }
+    let line_cone = SHARDED
+        .iter()
+        .find(|(name, _)| *name == "line_cone")
+        .map(|(_, shards)| *shards)
+        .unwrap();
+    let alone: Vec<Part> = line_cone
+        .shards
+        .iter()
+        .filter(|parts| matches!(parts[0], Part::Piece(..)))
+        .map(|parts| {
+            assert_eq!(parts.len(), 1, "a piece is a shard of its own");
+            parts[0]
+        })
+        .collect();
+    let every: Vec<Part> = (1..=64).map(|p| Part::Piece(38, p)).collect();
+    assert_eq!(alone, every);
+}
+
+/// The check of the shards' terms refuses a term left out, a term twice, a term past the count,
+/// an empty shard, a shard out of order, a piece left out or twice, a cut term named whole, a
+/// piece of a term not cut or past its count, and a cut out of order or of no depth.
+#[test]
+fn a_term_left_out_or_shared_is_refused() {
+    use Part::{Piece as P, Term as T};
+    type Broken = (
+        &'static [(u32, u32)],
+        &'static [&'static [Part]],
+        &'static str,
+    );
+    const BROKEN: [Broken; 13] = [
+        (&[], &[&[T(1), T(3)], &[T(2)]], "term 4 is in 0 shards"),
+        (
+            &[],
+            &[&[T(1), T(3)], &[T(2), T(3), T(4)]],
+            "term 3 is in 2 shards",
+        ),
+        (
+            &[],
+            &[&[T(1), T(3), T(5)], &[T(2), T(4)]],
+            "shard 1 names term 5, outside 1 to 4",
+        ),
+        (&[], &[&[T(1), T(2), T(3), T(4)], &[]], "shard 2 is empty"),
+        (
+            &[],
+            &[&[T(3), T(1)], &[T(2), T(4)]],
+            "shard 1 is not in increasing order",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[T(4)]],
+            "piece 2.2 is in 0 shards",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+            "piece 2.1 is in 2 shards",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), T(2), T(3)], &[P(2, 1), P(2, 2), T(4)]],
+            "shard 1 names 2, not a part of term 2",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), P(3, 1)], &[P(2, 2), T(4)]],
+            "shard 1 names 3.1, not a part of term 3",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 1), T(3)], &[P(2, 3), T(4)]],
+            "shard 2 names 2.3, not a part of term 2",
+        ),
+        (
+            &[(2, 1)],
+            &[&[T(1), P(2, 2), P(2, 1)], &[T(3), T(4)]],
+            "shard 1 is not in increasing order",
+        ),
+        (
+            &[(3, 1), (2, 1)],
+            &[&[T(1), P(2, 1), P(3, 1)], &[P(2, 2), P(3, 2), T(4)]],
+            "cut term 2 is out of order or outside 1 to 4",
+        ),
+        (
+            &[(2, 0)],
+            &[&[T(1), P(2, 1), T(3)], &[T(4)]],
+            "term 2 is cut 0 times, not 1 to 12",
+        ),
+    ];
+    assert_eq!(
+        every_term_once(&Shards {
+            terms: 4,
+            cuts: &[],
+            shards: &[&[T(1), T(3)], &[T(2), T(4)]],
+        }),
+        Ok(())
+    );
+    assert_eq!(
+        every_term_once(&Shards {
+            terms: 4,
+            cuts: &[(2, 2)],
+            shards: &[&[T(1), P(2, 1), P(2, 4), T(3)], &[P(2, 2), P(2, 3), T(4)]],
+        }),
+        Ok(())
+    );
+    for (cuts, shards, why) in BROKEN {
+        assert_eq!(
+            every_term_once(&Shards {
+                terms: 4,
+                cuts,
+                shards
+            }),
+            Err(why.to_owned()),
+            "{shards:?}"
+        );
     }
 }
 

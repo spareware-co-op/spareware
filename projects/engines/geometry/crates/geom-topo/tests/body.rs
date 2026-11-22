@@ -172,7 +172,12 @@ fn the_wall_publishes_with_every_row_as_built() {
     }
     assert!(a.surfaces.iter().eq(w.surfaces.iter()));
     assert!(a.curves.iter().eq(w.curves.iter()));
-    assert!(a.points.iter().eq(w.points.iter()));
+    assert!(
+        a.points
+            .iter()
+            .map(|p| p.grid().unwrap())
+            .eq(w.points.iter().copied())
+    );
     // One past the end of each arena is no row.
     assert_eq!(a.regions.get(ix(2)), None);
     assert_eq!(a.shells.get(ix(1)), None);

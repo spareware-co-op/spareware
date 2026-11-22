@@ -1080,7 +1080,14 @@ mod tree {
     fn ci_runs_the_ledger_and_the_scan_on_every_runner() {
         let workflow = read(".github/workflows/kernel-dev.yml");
         let native = workflow.find("\n  native:").expect("the native job");
+        let build = workflow
+            .find("\n  native-cross-build:")
+            .expect("the cross build job");
+        let cross = workflow
+            .find("\n  native-cross:")
+            .expect("the cross run job");
         let wasm = workflow.find("\n  wasm:").expect("the wasm job");
+        assert!(native < build && build < cross && cross < wasm);
         for step in [
             "run: cargo run --locked -p geom-test --bin provenance -- check",
             "run: cargo run --locked -p geom-test --bin source-scan -- check",
@@ -1089,20 +1096,34 @@ mod tree {
             let at = workflow
                 .find(step)
                 .unwrap_or_else(|| panic!("no step {step}"));
-            assert!(native < at && at < wasm, "{step} is not in the native job");
+            assert!(native < at && at < build, "{step} is not in the native job");
         }
-        let job = &workflow[native..wasm];
+        let job = &workflow[native..build];
         for os in [
             "ubuntu-latest",
             "ubuntu-24.04-arm",
             "windows-latest",
             "windows-11-arm",
             "macos-latest",
-            "macos-15-intel",
         ] {
             assert!(
                 job.contains(&format!("os: {os}")),
                 "the native job does not run on {os}"
+            );
+        }
+        // macOS x86-64's run is built on macOS arm64 and run on the Intel runner (decision 32.92;
+        // geom-test's tests/queue_wiring.rs holds it to every step of `native`).
+        let job = &workflow[cross..wasm];
+        assert!(
+            job.contains("    runs-on: macos-15-intel\n"),
+            "no job runs the ledger and the scan on macos-15-intel"
+        );
+        for tool in ["provenance", "source-scan", "map"] {
+            assert!(
+                job.contains(&format!(
+                    "run: '\"$RUNNER_TEMP/dev-macos-x86-64/{tool}\" check'"
+                )),
+                "the macOS x86-64 job does not run {tool}"
             );
         }
     }

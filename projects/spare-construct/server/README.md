@@ -101,6 +101,12 @@ This is the owner's test of the whole stack, and it stays the test as the stack 
 
 Shapes run through all of it. Every `verify` above also rebuilds each stored shape from its recipe and compares the bytes. In real browsers, every body built on the page matched the server's checkpoint, and a browser that can't load the geometry still draws the stored shapes and sends no edits.
 
+### In CI, with TiKV's data on a RAM disk
+
+CI's checklist job runs every step above, and the browser test, with TiKV's data on a RAM disk (`STACK_TIKV_RAMDISK=<folder>` does the same locally). Its limits of 200 ms an edit and 300 ms between two browsers then measure the server and the store, Raft writes included, without the time the runner's disk takes to sync TiKV's Raft log. That disk is shared with other jobs, and now and then one sync takes most of a second: every edit committing then waits for it, and no limit can be held to it (issue [#886](https://github.com/spareware-co-op/spareware/issues/886)). What CI no longer measures is a real disk's sync time; a run as above, on a disk, still includes it.
+
+Each run ends by printing, and each wipe of the stack starts by printing, from TiKV's own metrics, how many Raft log syncs and writes waiting on them took over 0.1, 0.25 and 0.5 s ([scripts/store-sync-times.sh](scripts/store-sync-times.sh)). A slow edit beside slow syncs waited for the disk, not the server.
+
 ### Moving to three machines, by settings alone
 
 The whole checklist passes on three copies of PD and TiKV, with three copies of every write, changing only `STACK_NODES`, `STACK_PD` and the replica count. Every Raft leader is first moved onto one TiKV, the worst one to lose, which is then killed with 175 of the 400 edits still to come. Nothing is lost, and the run takes 13 s instead of 1.6 s while the other two elect new leaders. A server restarted just as that TiKV dies was back in 8 to 14 s.
