@@ -515,6 +515,7 @@ dependencies = [
  "construct-elements",
  "construct-families",
  "construct-interop",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",
@@ -607,6 +608,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-levels"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-materials"
 version = "0.0.0"
 dependencies = [
@@ -665,6 +678,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",

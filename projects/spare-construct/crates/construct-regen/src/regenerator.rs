@@ -12,11 +12,15 @@
 //! Note A05's checkpoints start here: each pass returns the bodies it built, and the server appends
 //! them to the log in a checkpoint entry, which every browser compares with what it built itself.
 //!
-//! Types and a document's parameter table have no shape: they are listed by kind and never built.
-//! A recipe that names a parameter is filled first ([`crate::parameters::filled`]), and such an
-//! element is listed under `reads`, so a change to its type or to the parameter table builds it
-//! again in the same pass. A shape is then the same however the log was reached.
+//! Types, a document's parameter table and its levels have no shape: they are listed by kind and
+//! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
+//! and one that reads its top tie next ([`crate::levels::filled`]); an element's place is its
+//! base level's ([`crate::levels::placed`]). Each element is listed under `reads` with every
+//! record it reads (the parameter table, its type, its levels), so a change to any of them, or
+//! its deletion, builds it again in the same pass. A shape is then the same however the log was
+//! reached.
 
+use crate::levels;
 use crate::parameters::{self, Context};
 use construct_model::element::Element;
 use construct_model::geometry::Recipe;
@@ -28,7 +32,7 @@ use kit_ops::sha256_hex;
 use kit_store::key::list as kit_list;
 use kit_store::{FileStore, Kv, Reader, Scope, StoreError, Txn, from_row, read_row, to_row};
 use kit_sync::read_log;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// Entries taken in one transaction.
@@ -168,7 +172,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             if !parameters::has_shape(&element) {
                 continue;
             }
-            let recipe = recipe_of(&mut snapshot, project, &document, &element)
+            let (recipe, _) = input_of(&mut snapshot, project, &document, &element)
                 .await
                 .map_err(fault)?;
             let place = Place::Built {
@@ -338,8 +342,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
     }
 
-    /// Rebuilds the element a change names, and then, if it was a type or the parameter table,
-    /// every element whose shape reads it. Each body built goes on `built`.
+    /// Rebuilds the element a change names, and then, if it is a record with no shape (a type,
+    /// the parameter table, a level), every element listed as reading it. Each body built goes on
+    /// `built`.
     async fn regenerate_with_readers(
         &self,
         txn: &mut K::Txn,
@@ -366,10 +371,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             let Some(Place::Reads { element, .. }) = Place::parse(&key) else {
                 continue;
             };
-            let type_id: Option<String> = from_row(&row)?;
-            if let Fed::Type(changed) = &fed
-                && type_id.as_deref() != Some(changed.as_str())
-            {
+            if !read_list(&row)?.contains(fed.as_str()) {
                 continue;
             }
             // Built from the record it had at this point in the log, which its built row names.
@@ -389,8 +391,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         Ok(())
     }
 
-    /// Rebuilds one element, returning its body if it has one, and what it feeds if it is a type
-    /// or the parameter table.
+    /// Rebuilds one element, returning its body if it has one, and its ID if it is a record with
+    /// no shape, which others may read.
     async fn regenerate(
         &self,
         txn: &mut K::Txn,
@@ -399,7 +401,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         element_id: &Id,
         before: Option<&Id>,
         after: Option<&Id>,
-    ) -> Result<(Option<Id>, Option<Fed>), StoreError> {
+    ) -> Result<(Option<Id>, Option<Id>), StoreError> {
         let reads = Place::Reads {
             project: project.clone(),
             document: document.clone(),
@@ -412,21 +414,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             element: element_id.clone(),
         };
         let old: Option<BuiltElement> = read_row(txn, &place.key()).await?;
-        if let Some(old) = &old {
-            for (x, y) in &old.cells {
-                let cell = Place::Area {
-                    project: project.clone(),
-                    document: document.clone(),
-                    level: old.level,
-                    x: *x,
-                    y: *y,
-                    element: element_id.clone(),
-                };
+        if let Some(old) = &old
+            && let Some(level) = &old.level
+        {
+            for cell in area_of(project, document, level, &old.cells, element_id) {
                 txn.delete(cell.key()).await?;
             }
         }
         // Records are never deleted, so the old one still says what kind it was. A record with no
         // shape has no built row, so the change's own `before` names it.
+        let mut was_read = None;
         if let Some(old) = old.as_ref().map(|old| &old.input).or(before) {
             let record = kit_store::Place::Record {
                 project: project.clone(),
@@ -437,10 +434,14 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             if let Some(kind) = kind_row(project, document, &before) {
                 txn.delete(kind.key()).await?;
             }
+            if !parameters::has_shape(&before) {
+                was_read = Some(before.id);
+            }
         }
         let Some(after) = after else {
             txn.delete(place.key()).await?;
-            return Ok((None, None));
+            // Whatever read a record that is gone reads what stands in its place now.
+            return Ok((None, was_read));
         };
 
         let record = kit_store::Place::Record {
@@ -454,21 +455,22 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
         if !parameters::has_shape(&element) {
             txn.delete(place.key()).await?;
-            let fed = if element.kind == parameters::TABLE_KIND {
-                Fed::Table
-            } else {
-                Fed::Type(element.id.clone())
-            };
-            return Ok((None, Some(fed)));
+            return Ok((None, Some(element.id.clone())));
         }
-        if parameters::reads_parameters(&element.recipe) {
-            let type_id = parameters::type_of(&element).map(|t| t.to_string());
-            txn.put(reads.key(), to_row(&type_id)?).await?;
+        let read = reads_of(&element);
+        if !read.is_empty() {
+            txn.put(reads.key(), to_row(&read)?).await?;
         }
-        let recipe = recipe_of(txn, project, document, &element).await?;
+        let (recipe, placed) = input_of(txn, project, document, &element).await?;
         let edition = edition_of(txn, project, document).await?;
         let (result, cells, body) = match self.make(&edition, &element, recipe) {
+            // An element on no level has a shape and no place in any plan.
             Ok((built, cells)) => {
+                let cells = if placed.level.is_some() {
+                    cells
+                } else {
+                    Vec::new()
+                };
                 let body = id(&built.body_id())?;
                 let result = self.store_shape(txn, project, built).await?;
                 (result, cells, Some(body))
@@ -481,21 +483,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 (result, Vec::new(), None)
             }
         };
-        for (x, y) in &cells {
-            let cell = Place::Area {
-                project: project.clone(),
-                document: document.clone(),
-                level: element.level,
-                x: *x,
-                y: *y,
-                element: element_id.clone(),
-            };
-            txn.put(cell.key(), to_row(&after.as_str())?).await?;
+        if let Some(level) = &placed.level {
+            for cell in area_of(project, document, level, &cells, element_id) {
+                txn.put(cell.key(), to_row(&after.as_str())?).await?;
+            }
         }
         let row = BuiltElement {
             input: after.clone(),
             edition,
-            level: element.level,
+            level: placed.level.clone(),
+            elevation: placed.elevation,
             cells,
             result,
         };
@@ -583,11 +580,86 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 }
 
-/// What a record with no shape feeds: the elements of one type, or every element that reads the
-/// parameter table.
-enum Fed {
-    Type(Id),
-    Table,
+/// Every record an element's shape or place reads, by ID: the parameter table and its type when
+/// its recipe names a parameter, and its levels ([`levels::levels_read`]). Its `reads` row.
+fn reads_of(element: &Element) -> BTreeSet<String> {
+    let mut read: BTreeSet<String> = levels::levels_read(element)
+        .into_iter()
+        .map(|id| id.to_string())
+        .collect();
+    if parameters::reads_parameters(&element.recipe) {
+        read.insert(parameters::TABLE_ID.to_owned());
+        if let Some(type_id) = parameters::type_of(element) {
+            read.insert(type_id.to_string());
+        }
+    }
+    read
+}
+
+/// A `reads` row: the IDs of the records an element reads, ascending. A row written before
+/// levels were elements is `null` (the parameter table) or a type's ID (the table and that type).
+fn read_list(row: &[u8]) -> Result<BTreeSet<String>, StoreError> {
+    let table = || parameters::TABLE_ID.to_owned();
+    match from_row::<serde_json::Value>(row)? {
+        serde_json::Value::Null => Ok(BTreeSet::from([table()])),
+        serde_json::Value::String(type_id) => Ok(BTreeSet::from([table(), type_id])),
+        serde_json::Value::Array(ids) => ids
+            .into_iter()
+            .map(|id| match id {
+                serde_json::Value::String(id) => Ok(id),
+                _ => Err(damaged("a reads row lists something that is not an ID")),
+            })
+            .collect(),
+        _ => Err(damaged("a reads row is not a list of IDs")),
+    }
+}
+
+/// Where a built row says an element stands: the level its cells are under, and its base height
+/// in stored length text.
+struct Placed {
+    level: Option<Id>,
+    elevation: Option<String>,
+}
+
+/// What an element is built from and where it stands, as of how far regeneration has got: its
+/// recipe with every argument that names a parameter or a tie filled, and its level and base
+/// height. A failure to read its levels is its shape's failure; its level is then still the one
+/// its tie names, where that can be read.
+async fn input_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+) -> Result<(Result<Recipe, GeometryError>, Placed), StoreError> {
+    let at = parameters::At::Regenerated;
+    let placed = levels::placed(reader, project, document, element, at).await?;
+    let recipe = recipe_of(reader, project, document, element).await?;
+    Ok(match placed {
+        Ok(placed) => {
+            let recipe = recipe.and_then(|recipe| levels::filled(&recipe, &placed));
+            let elevation = placed.stored_elevation();
+            (
+                recipe,
+                Placed {
+                    level: placed.level,
+                    elevation,
+                },
+            )
+        }
+        Err(why) => {
+            let level = construct_levels::base_of(element)
+                .ok()
+                .flatten()
+                .map(|tie| tie.level);
+            (
+                Err(why),
+                Placed {
+                    level,
+                    elevation: None,
+                },
+            )
+        }
+    })
 }
 
 /// The recipe an element is built from: its own, with every argument that names a parameter
@@ -644,6 +716,24 @@ async fn edition_of<R: Reader>(
 
 /// Where an element is listed by its kind. Every element is, built or not; a kind that isn't a
 /// plain name (letters, digits, `.`, `_` and `-`) can't be part of a key, so it isn't listed.
+/// The plan index rows of an element in `cells` on `level`.
+fn area_of<'a>(
+    project: &'a Id,
+    document: &'a Id,
+    level: &'a Id,
+    cells: &'a [(i64, i64)],
+    element: &'a Id,
+) -> impl Iterator<Item = Place> + 'a {
+    cells.iter().map(move |&(x, y)| Place::Area {
+        project: project.clone(),
+        document: document.clone(),
+        level: level.clone(),
+        x,
+        y,
+        element: element.clone(),
+    })
+}
+
 fn kind_row(project: &Id, document: &Id, element: &Element) -> Option<Place> {
     Some(Place::Kind {
         project: project.clone(),
