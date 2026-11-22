@@ -1,0 +1,31 @@
+# CON-A4-F2-P1: The layered wall, its commands, and the old box
+
+**Status, 2026-11-23:** Decided for the build (piece A54, job 4.1, the shape half of CON-A4-F2-P1). The stored form is in construct-model's [FORMAT.md](../crates/construct-model/FORMAT.md) ("Walls"); the commands are construct-api's `cloud::walls`; the recipe is read by construct-regen's `walls` and `wall_plan` and built by its kernel builder and its stand-in. The wall type's own data is [note CON-A4-F2-P1-wall-layers](CON-A4-F2-P1-wall-layers.md).
+
+## The question
+
+Until now a wall was a box: `wall.straight`, a length, a thickness and a height in whole millimetres, placed by its corner. A real wall is drawn as a line between two points, takes its build-up from its wall type, stands between two levels, and is built one solid per layer. Job 4.1 had to settle how that wall is stored, which commands make it and its types, and what becomes of every box already stored.
+
+## The decisions
+
+- **A new record form, not a new box.** A layered wall is a record of kind `wall` in the walls category, with recipe `construct/wall.layered` version 1. It names its wall type (`@type`), is tied to levels at its base and, when it is, at its top (construct-levels' tie keys), sits at placement `{0,0,0}` on no level by number, and may hold its own location line and side (`wall.location-line`, `wall.flipped`).
+- **The line is in the model's plan, exactly.** `start` and `end` are `[x, y]` as construct-params' stored lengths, in the kernel's grid steps, so a wall can start at 12.5 mm or run at any angle with no rounding in the record. Walking from `start` to `end`, the exterior is on the right, as it was for the box along its length.
+- **The recipe says where each number comes from.** `layers` is `{"wall":"type"}`: before building, it is filled from the wall type's layers laid out round the instance's location line on its side, each face a stored length. `height` is `{"tie":"top"}` (the height between the two ties, filled the same way) or a stored length. Nothing derived is stored in the record, so a change to the type or a level moves every wall that reads it with no wall record written, and the regenerator's `reads` row lists the parameter table, the type and the levels.
+- **Commands.** `wall.draw` writes the record; `wall.type.create` and `wall.type.layers` write a wall type's layers and core; `wall.type.rename`, `wall.type.duplicate` and `wall.type.delete` are the type commands' own rules once the type is known to be a wall type (so deleting one in use is refused in construct-types' words). Each is one entry through the one log, takes the claims every edit takes, and is one undo step.
+- **A wall type brings its parameters.** A wall type only reads where the document defines `wall.location-line` and `wall.flipped` and binds them to walls. The first `wall.type.create` in a document writes them into its parameter table in the same entry, and every walls type already there lists them, as `parameter.bind` would; later ones leave the table alone. A table that holds either ID as another parameter refuses wall types, in words.
+- **A drawn wall is checked as it will be built.** `wall.draw` fills the new record's recipe with the reader the regenerator uses and asks the plan the builders use whether it makes a wall. So no command writes a wall the builders would refuse; its own refusals (a line with no length, a type the document lacks or of another category, a top at or below its base, both a top and a height or neither) come first, in plain words.
+- **The old box stays as it is.** `wall.straight` records are read and built exactly as before by both builders: the same bytes, the same face names, the same hosting of doors on its two sides. No command rewrites one into a layered wall, and none is migrated. New walls are written only as `wall.layered`: this piece's page half moves the page's wall tool and the seed to `wall.draw`, and from then nothing writes `wall.straight`; that is the box retired (job 4.1). Reading it is never retired.
+
+## Why
+
+- Records are the truth and are never rewritten (main's ruling 7; FORMAT.md, "We never stop reading it"). A box rewritten as a layered wall would be an edit no one made, would change bodies already published in packages, and would rename the faces every hosted door refers to by persistent name. Keeping the old form costs one branch in each builder, already written and pinned by tests.
+- Stored lengths in the record, not millimetres, keep the line exact on every machine and let a lining be 12.5 mm (note CON-A2-F3-P1); only meshes and placements round to the millimetre, and the display says so.
+- Reading the layers from the type at build time, not copying them, is what makes a type edit one entry: the same rule as parameters and level ties.
+- A wall type that defines its own instance parameters in the same entry means a person never meets a wall type that cannot be read, and an undo of that first type takes the table back with it, whole.
+- Checking a drawn wall with the builders' own reader and plan means the command and the builders cannot disagree about what a wall is.
+
+## Not decided here
+
+- Changing a drawn wall's ends, location line or side after it is drawn (the page's wall tool; `element.set` can rewrite the recipe meanwhile, and `element.param` sets the two values).
+- Joins between layered walls (jobs 5.1 and 6.1) and wrapping at ends and openings (job 6.1); doors on a wall at an angle (job 6.4, when doors are families).
+- Which wall types a new document starts with (job 9.6).

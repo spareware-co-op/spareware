@@ -52,7 +52,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{hosting, levels, params};
+use crate::cloud::{hosting, levels, params, walls};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -101,6 +101,7 @@ pub fn is_step(cmd: &str) -> bool {
         || params::is_command(cmd)
         || hosting::is_command(cmd)
         || levels::is_command(cmd)
+        || walls::is_command(cmd)
         || is_command(cmd)
 }
 

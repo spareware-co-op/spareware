@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, hosting, levels, params, undo};
+use crate::cloud::{elements, hosting, levels, params, undo, walls};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -135,7 +135,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             cmd if params::is_command(cmd)
                 || undo::is_command(cmd)
                 || hosting::is_command(cmd)
-                || levels::is_command(cmd) =>
+                || levels::is_command(cmd)
+                || walls::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -184,14 +185,15 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter, type and level edit of a model, and every undo and redo, has the same
-    /// answer, so a batch asks Cedar once.
+    /// Every element, parameter, type, level and wall edit of a model, and every undo and redo,
+    /// has the same answer, so a batch asks Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
         if edit.cmd.starts_with("element.")
             || params::is_command(&edit.cmd)
             || undo::is_command(&edit.cmd)
             || hosting::is_command(&edit.cmd)
             || levels::is_command(&edit.cmd)
+            || walls::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -217,6 +219,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if levels::is_command(&edit.cmd) {
             levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if walls::is_command(&edit.cmd) {
+            walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
             match hosting::element_rules(&mut staged, project, edit).await? {
                 Ok(()) => {

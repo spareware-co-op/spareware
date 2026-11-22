@@ -16,6 +16,8 @@ cloud = [
     "dep:construct-regen",
     "dep:construct-types",
     "dep:construct-levels",
+    "dep:construct-walls",
+    "dep:construct-materials",
 ]
 
 [dependencies]
@@ -34,6 +36,10 @@ construct-regen = { path = "../construct-regen", features = ["server"], optional
 construct-types = { path = "../construct-types", optional = true }
 # The level commands: construct-levels checks every change.
 construct-levels = { path = "../construct-levels", optional = true }
+# The wall type and wall commands: construct-walls checks every layer and core, and a layer's
+# material is construct-materials' ID.
+construct-walls = { path = "../construct-walls", optional = true }
+construct-materials = { path = "../construct-materials", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
