@@ -105,9 +105,11 @@
 //!   (piece G28; [`inputs::predicate`] says which benchmarks give which).
 //! - **Heap** (Linux x86-64 and Linux aarch64). The same benchmarks under Valgrind's DHAT
 //!   (<https://valgrind.org/docs/manual/dh-manual.html>), counting only allocations made inside the
-//!   measured function: bytes and blocks allocated, bytes live at the heap's peak, and the
-//!   largest bytes live at once ([`GATED_HEAP_METRICS`]); a rise over 5% fails. The numbers layer
-//!   allocates nothing, so every count is zero and any allocation at all fails the gate.
+//!   measured function: bytes and blocks allocated, and bytes live at the heap's peak
+//!   ([`GATED_HEAP_METRICS`]); a rise over 5% fails. Gungraun's "Maximum bytes" is not gated: it
+//!   adds up each allocation site's bytes at a different moment, so it is no moment's heap
+//!   (decision 32.110). The numbers layer allocates nothing, so every count is zero and any
+//!   allocation at all fails the gate.
 //! - **WebAssembly fuel** (wasm32). Every benchmark built for `wasm32-wasip1` and run in Wasmtime
 //!   with fuel metering, which counts the WebAssembly operators executed and is deterministic
 //!   ([`guest`] and the host in `fuel/`); a rise over 5% fails.
@@ -243,7 +245,7 @@
 //! git switch my-branch
 //! cargo bench --no-default-features -p geom-bench --bench instructions -- --baseline=main \
 //!     --save-summary=json --callgrind-limits='ir=5%,estimatedcycles=5%' \
-//!     --dhat-limits='totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%'
+//!     --dhat-limits='totalbytes=5%,totalblocks=5%,attgmaxbytes=5%'
 //! cargo bench --no-default-features -p geom-bench --bench instructions -- --list \
 //!     | sed -nE 's/^instructions::([a-z0-9_]+)::([a-z0-9_]+)::([a-z0-9_]+): benchmark$/\1\/\2\/\3/p' \
 //!     > names.txt
@@ -347,10 +349,13 @@ pub const GATED_METRICS: [&str; 8] = [
 ];
 
 /// The DHAT measures the gate applies [`GATE_PERCENT`] to, by their Gungraun names: bytes and
-/// blocks allocated, bytes live at the heap's peak, and the largest bytes live at once (chapter
-/// 23.13, "Memory").
-pub const GATED_HEAP_METRICS: [&str; 4] =
-    ["TotalBytes", "TotalBlocks", "AtTGmaxBytes", "MaximumBytes"];
+/// blocks allocated, and bytes live at the heap's peak (chapter 23.13, "Memory"). The peak is
+/// DHAT's "At t-gmax": the measured function's bytes live at the moment the whole process's heap
+/// is at its largest, one moment for every allocation site. `MaximumBytes` is not here: Gungraun
+/// adds up each site's DHAT `mb`, and Valgrind 3.22 writes a site's `mb` only when that site's
+/// own allocation brings the whole process to its running maximum, so the sum is each site's
+/// bytes at a different moment, and it rises when other heap is freed sooner (decision 32.110).
+pub const GATED_HEAP_METRICS: [&str; 3] = ["TotalBytes", "TotalBlocks", "AtTGmaxBytes"];
 
 /// The measures of [`GATED_METRICS`] that Gungraun gates itself, instructions and estimated cycles,
 /// at [`GATE_PERCENT`], as the workflow passes them to Gungraun (`--callgrind-limits`, which
@@ -361,7 +366,7 @@ pub const CALLGRIND_LIMITS: &str = "ir=5%,estimatedcycles=5%";
 
 /// [`GATED_HEAP_METRICS`] at [`GATE_PERCENT`], as the workflow passes them to Gungraun
 /// (`--dhat-limits`); a test checks the two agree.
-pub const DHAT_LIMITS: &str = "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%";
+pub const DHAT_LIMITS: &str = "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%";
 
 /// The version of the Gungraun library the gate is built with. The `gungraun-runner` binary must
 /// have exactly this version; CI reads the version from `Cargo.lock` instead, so this constant
