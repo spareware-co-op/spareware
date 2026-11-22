@@ -515,7 +515,7 @@ async fn target<T: Txn>(
     };
     if !records::has_shape(&record) {
         return Ok(Err(
-            "Types and the parameter table are changed by their own commands, not as elements."
+            "Types, levels and the parameter table are changed by their own commands, not as elements."
                 .to_owned(),
         ));
     }

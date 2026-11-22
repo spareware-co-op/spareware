@@ -70,10 +70,13 @@ pub fn category_of(recipe: &Recipe) -> Result<CategoryId, CategoryError> {
     category_of_kind(&kind_name(recipe))
 }
 
-/// Whether a record is an element with a shape: type records and parameter tables are not.
+/// Whether a record is an element with a shape: type records, parameter tables and levels are
+/// not.
 #[must_use]
 pub fn has_shape(element: &Element) -> bool {
-    element.kind != TYPE_KIND && element.kind != TABLE_KIND
+    element.kind != TYPE_KIND
+        && element.kind != TABLE_KIND
+        && element.kind != construct_levels::LEVEL_KIND
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).
@@ -382,13 +385,13 @@ pub struct ParameterView {
     pub from: &'static str,
 }
 
-/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`], which is the
-/// element record's own and not the type format's.
+/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`] and its level
+/// ties (construct-levels), which are the element record's own and not the type format's.
 #[must_use]
 pub fn instance_props(props: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     props
         .iter()
-        .filter(|(key, _)| key.as_str() != CATEGORY_KEY)
+        .filter(|(key, _)| key.as_str() != CATEGORY_KEY && !construct_levels::is_tie_key(key))
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
 }
@@ -534,7 +537,7 @@ pub enum At {
 }
 
 /// A record of a document, of the kind it is listed under, as seen `at` that state.
-async fn read_at<R: Reader>(
+pub(crate) async fn read_at<R: Reader>(
     reader: &mut R,
     project: &Id,
     document: &Id,

@@ -150,7 +150,7 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
 
     let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
     let view = View {
-        level: 1,
+        level: i("1"),
         x0: 0,
         y0: 0,
         x1: 9000,

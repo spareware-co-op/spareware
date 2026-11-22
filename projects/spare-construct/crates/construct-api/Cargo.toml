@@ -15,6 +15,7 @@ cloud = [
     "dep:construct-params",
     "dep:construct-regen",
     "dep:construct-types",
+    "dep:construct-levels",
 ]
 
 [dependencies]
@@ -31,6 +32,8 @@ construct-categories = { path = "../construct-categories", optional = true }
 construct-params = { path = "../construct-params", optional = true }
 construct-regen = { path = "../construct-regen", features = ["server"], optional = true }
 construct-types = { path = "../construct-types", optional = true }
+# The level commands: construct-levels checks every change.
+construct-levels = { path = "../construct-levels", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
