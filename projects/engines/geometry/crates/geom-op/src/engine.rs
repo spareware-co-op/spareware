@@ -3,11 +3,12 @@
 //!
 //! What it does: [`Engine`] is the interface a program codes against for the first building
 //! operations: the extrusion of a flat profile with holes along a straight vector
-//! ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]), a solid's volume
+//! ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]), a loft through flat
+//! polygon sections ([`Engine::loft`]), two solids united ([`Engine::unite`]), a solid's volume
 //! ([`Engine::volume`]), a display mesh of it ([`Engine::mesh`]) and the engine's own record of
 //! what answers each of them ([`Engine::edition`]). Every argument and result is a kernel value or
 //! a plain number: grid points and steps of the engine's [`GridStep`] (chapter 6), exactness
-//! classes, and this module's [`Profile`], [`Volume`], [`DisplayMesh`], [`Edition`] and
+//! classes, and this module's [`Profile`], [`Section`], [`Volume`], [`DisplayMesh`], [`Edition`] and
 //! [`EngineError`]. Each engine keeps its own solid type behind [`Engine::Solid`]. The first
 //! engine is geom-solidcore's (decision 32.70), outside the kernel's workspace; an exact engine of
 //! the kernel's own takes its place by implementing the same trait.
@@ -46,6 +47,14 @@ pub struct Profile {
     pub outer: Vec<P3>,
     /// The holes, each a polygon of corners.
     pub holes: Vec<Vec<P3>>,
+}
+
+/// One section of a loft ([`Engine::loft`]): a closed flat polygon placed in space, every corner a
+/// grid point on one plane, in order round it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Section {
+    /// The polygon's corners, in order round it.
+    pub corners: Vec<P3>,
 }
 
 /// A solid's volume, as the engine knows it.
@@ -171,6 +180,33 @@ pub trait Engine {
         target: &Self::Solid,
         tool: &Self::Solid,
     ) -> Result<Self::Solid, EngineError>;
+
+    /// The solid lofted through `sections` in their order: corner `i` of each section is joined to
+    /// corner `i` of the next by a straight wall, and the first and last sections cap its ends.
+    ///
+    /// What the sections must be: at least two; each a polygon of at least three corners on one
+    /// plane, with an area; every one with the same number of corners, listed so that corner `i`
+    /// of each lines up with corner `i` of the next (the caller pairs the corners; the engine adds
+    /// none and moves none); every section wholly ahead of the plane of the one before it, ahead
+    /// being the side the second section lies on, so that the loft runs one way and does not fold
+    /// back. The sections may all run either way round, all the same way. A loft that folds back
+    /// is an invalid input, and one whose walls cross is a fault the engine reports as a refusal:
+    /// neither is ever a solid.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Invalid`] for sections that are not as above, a folded loft among them,
+    /// [`EngineError::Unsupported`] for walls the engine does not make yet, and the engine's
+    /// refusals, a loft whose walls cross among them.
+    fn loft(&mut self, sections: &[Section]) -> Result<Self::Solid, EngineError>;
+
+    /// `a` united with `b`, one solid; neither is changed.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Unsupported`] for a result of more than one solid or operands the engine
+    /// does not take yet, and the engine's refusals.
+    fn unite(&mut self, a: &Self::Solid, b: &Self::Solid) -> Result<Self::Solid, EngineError>;
 
     /// The solid's volume.
     ///
