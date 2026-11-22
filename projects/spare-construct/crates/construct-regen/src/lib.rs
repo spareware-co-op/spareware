@@ -9,10 +9,14 @@
 //! - [`parameters`]: how categories, parameters and types sit in a document's records, and how a
 //!   recipe that names a parameter is filled before it is built; the server's commands read
 //!   through it too, so the two cannot differ.
+//! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
+//!   project's parameters with where they are bound, and the types with their values in units.
 //!
 //! [`geometry`] is the one line that picks what builds shapes. The server and the browser both
 //! call it, so they can't differ, and it is the line that changes when the kernel arrives.
 
+#[cfg(feature = "server")]
+pub mod catalog;
 #[cfg(feature = "server")]
 pub mod parameters;
 #[cfg(feature = "server")]

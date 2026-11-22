@@ -14,6 +14,7 @@ use construct_model::rows::{
     BuiltElement, BuiltResult, Hub, HubRole, Incoming, Item, Link, LinkKind, Model, Project,
     Stored, Team,
 };
+use construct_regen::catalog::{self, Catalog, TableView, TypesView};
 use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
 use kit_accounts::rows::Person;
@@ -489,6 +490,65 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             ),
         };
         context.view(&record, ty.as_ref()).map_err(Refusal::Bad)
+    }
+
+    /// The kinds of parameter and the categories of a model, for the page's lists: read from the
+    /// data crates, so the page holds no list of its own.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when its stored parameters cannot be read, saying why.
+    pub async fn catalog(&self, person: &Id, project: &Id, model: &Id) -> Result<Catalog, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_catalog(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's project parameters: each with its kind, who holds its value, its default and the
+    /// categories it is bound to, bound or not.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when its stored parameters cannot be read, saying why.
+    pub async fn project_parameters(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<TableView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_table_view(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's types, or those of one category: each with the parameters it lists, the values it
+    /// holds in units, and how many elements are of it.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when the category is unknown or stored values cannot be read, saying why.
+    pub async fn types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        category: Option<u32>,
+    ) -> Result<TypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        catalog::read_types_view(&mut snapshot, project, model, category)
+            .await?
+            .map_err(Refusal::Bad)
     }
 
     /// What this person can undo and redo in a model now: the step an undo would reverse and the

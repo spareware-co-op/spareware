@@ -273,6 +273,110 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
     ));
 }
 
+/// What the page needs to manage parameters and types is read from the server, so the page holds
+/// no list of its own: the kinds, the categories, the project's parameters with where each is
+/// bound, and the types with their values in units. Only someone who can read the model reads it.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_reads_kinds_categories_parameters_and_types_to_manage_them() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+
+    let catalog = serde_json::to_value(s.catalog(&anna, &project, &model).await.unwrap()).unwrap();
+    let kinds = catalog["kinds"].as_array().unwrap();
+    assert!(
+        kinds
+            .iter()
+            .any(|k| k["tag"] == "length" && k["label"] == "a length")
+    );
+    let doors = catalog["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == 300)
+        .unwrap();
+    assert_eq!(doors["name"], "Doors");
+
+    let width = json!({ "definition": { "id": "P-width", "name": "Leaf width", "kind": "length",
+                                       "holder": "type", "choices": [] } });
+    s.edit(&anna, &project, &model, "parameter.define", width)
+        .await
+        .unwrap();
+    let table =
+        serde_json::to_value(s.project_parameters(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(table["parameters"][0]["name"], "Leaf width");
+    assert_eq!(
+        table["parameters"][0]["categories"],
+        json!([]),
+        "defined, bound nowhere"
+    );
+    let bind = json!({ "parameter": "P-width", "categories": [300], "default": "900" });
+    s.edit(&anna, &project, &model, "parameter.bind", bind)
+        .await
+        .unwrap();
+    let table =
+        serde_json::to_value(s.project_parameters(&anna, &project, &model).await.unwrap()).unwrap();
+    let leaf = &table["parameters"][0];
+    assert_eq!(leaf["holder"], "type");
+    assert_eq!(leaf["default"], "900 mm");
+    assert_eq!(leaf["categories"], json!([{ "id": 300, "name": "Doors" }]));
+
+    let make = json!({ "type": "T-flush", "name": "Flush", "category": 300 });
+    s.edit(&anna, &project, &model, "type.create", make)
+        .await
+        .unwrap();
+    let set = json!({ "type": "T-flush", "parameter": "P-width", "value": "2.4 m" });
+    s.edit(&anna, &project, &model, "type.set", set)
+        .await
+        .unwrap();
+    let retype = json!({ "element": "D-101", "type": "T-flush" });
+    s.edit(&anna, &project, &model, "element.type", retype)
+        .await
+        .unwrap();
+    let view =
+        serde_json::to_value(s.types(&anna, &project, &model, Some(300)).await.unwrap()).unwrap();
+    let flush = &view["types"][0];
+    assert_eq!(flush["name"], "Flush");
+    assert_eq!(flush["elements"], 1);
+    assert_eq!(flush["parameters"][0]["shown"], "2400 mm");
+    assert_eq!(flush["parameters"][0]["from"], "type");
+    // Another category has no types; every type is listed when none is asked for.
+    let walls = s.types(&anna, &project, &model, Some(100)).await.unwrap();
+    assert_eq!(walls.types.len(), 0);
+    assert_eq!(
+        s.types(&anna, &project, &model, None)
+            .await
+            .unwrap()
+            .types
+            .len(),
+        1
+    );
+
+    // A delete that is refused says so in the server's words; the page shows them as they are.
+    let Err(Refusal::Refused(reason)) = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "type.delete",
+            json!({ "type": "T-flush" }),
+        )
+        .await
+    else {
+        panic!("a type in use is not deleted");
+    };
+    assert_ne!(reason, "");
+    // No category has this ID.
+    assert!(matches!(
+        s.types(&anna, &project, &model, Some(99_999)).await,
+        Err(Refusal::Bad(_))
+    ));
+    // Someone who can't read the model can't read any of it.
+    assert!(refused(s.catalog(&dan, &project, &model).await));
+    assert!(refused(s.project_parameters(&dan, &project, &model).await));
+    assert!(refused(s.types(&dan, &project, &model, None).await));
+}
+
 /// Where a wall of the model is now, as Anna reads it.
 async fn placed(
     s: &Service<Memory, MemoryFiles>,

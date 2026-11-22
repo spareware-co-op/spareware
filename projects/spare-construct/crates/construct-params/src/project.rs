@@ -329,6 +329,19 @@ impl ProjectParams {
         self.entries.is_empty()
     }
 
+    /// Every parameter of the project, bound or not, in one stable order: by name (case ignored),
+    /// then ID.
+    #[must_use]
+    pub fn definitions(&self) -> Vec<&Definition> {
+        let mut all: Vec<&Definition> = self
+            .entries
+            .values()
+            .map(|entry| &entry.definition)
+            .collect();
+        all.sort_by_cached_key(|def| (def.name().to_lowercase(), def.id().clone()));
+        all
+    }
+
     /// Where a parameter is bound: how it is held and its categories in ID order; `None` if it is
     /// not bound.
     #[must_use]
