@@ -108,13 +108,18 @@ fn soft<T>(read: Result<Option<T>, IntersectError>) -> Result<Option<T>, Interse
     }
 }
 
-/// What has been proven of one edge so far: whether the proof was tried, and the run it gave.
+/// What has been proven of one edge so far: whether the proof was tried, and the run it gave, over
+/// the edge and over the edge with the room past its ends.
 #[derive(Default)]
 pub(crate) struct Lying {
     /// Whether [`lies_in`] has been run for the edge.
     pub(crate) tried: bool,
     /// The run, if it proved the edge lies in the other surface.
     pub(crate) run: Option<Run>,
+    /// Whether the run over the room past the edge's ends has been tried.
+    pub(crate) widened: bool,
+    /// That run, if it proved the edge, continued past its ends, lies in the other surface.
+    pub(crate) wide: Option<Run>,
 }
 
 /// The middle of an interval.
