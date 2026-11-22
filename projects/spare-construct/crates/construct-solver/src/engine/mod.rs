@@ -11,18 +11,22 @@
 //!   radius, in authoring order (15.2). Fixed points are ground: constants, never moved (15.18).
 //!   An arc's two ends are kept on its circle by two equations the arc owns; they are not
 //!   constraints and are never named as one.
-//! - Scaling (15.4): the block is moved by a whole number of millimetres to sit at the origin and
+//! - Scaling (15.4): the block is moved by a whole number of grid steps to sit at the origin and
 //!   divided by a power of two at least its size, both exact in floating point.
 //! - Residuals (15.3, 15.4): `residual.rs`, derivatives by forward-mode dual numbers.
 //! - Steps (15.6): Gauss-Newton, damped as in Levenberg-Marquardt, each the least-change step:
 //!   among all least-squares solutions the shortest, so geometry nobody constrained stays where it
 //!   was drawn. The step comes from a singular value decomposition, never from normal equations.
-//! - Convergence in millimetres, not in absolute numbers: every residual within 2^-16 mm.
+//! - Convergence in lengths, not in absolute numbers: every residual within 2^-16 mm (6,400/65,536
+//!   grid steps, exact in a double).
 //! - Work in steps, never time (15.6): running out is [`SolveError::WorkLimit`].
 //! - Diagnosis (15.8): rank from the singular values with chapter 15.8's derived thresholds
 //!   (independent at 2^-12 and above, dependent at 1/(64 S) and below for a block S mm across,
-//!   between them "cannot tell", never rounded either way). The free motions are the right null
-//!   space, read per point and per radius, and the dependency groups the left null space: a group
+//!   between them "cannot tell", never rounded either way). S stays in millimetres, as this
+//!   engine had it before lengths moved to grid steps, so a threshold means what it meant;
+//!   chapter 15.8 counts S in grid steps, 6,400 times smaller, which the kernel's solver brings.
+//!   The free motions are the right null space, read per point and per radius, and the
+//!   dependency groups the left null space: a group
 //!   holds (redundant) or not (conflicting). Both are read through their projectors, which do not
 //!   depend on the basis the decomposition picked.
 //! - Dragging (15.9): the dragged point is held at the target as ground and the rest projected
@@ -52,7 +56,7 @@ mod residual;
 
 use crate::outcome::{Budget, Dragged, FreePoint, Reach, SolveError, Solved, Unmet, Verdict};
 use crate::sketch::{
-    COORD_LIMIT_MM, Constraint, ConstraintId, Curve, CurveId, LineId, Point, PointId, Side, Sketch,
+    COORD_LIMIT, Constraint, ConstraintId, Curve, CurveId, LineId, Point, PointId, Side, Sketch,
     Touch, diff, dot,
 };
 use nalgebra::DMatrix;
@@ -60,8 +64,10 @@ use nalgebra::linalg::SVD;
 use num_dual::Dual64;
 use residual::{Kind, Owner, Row};
 
-/// Converged when every residual is within this, in millimetres.
-const TAU_MM: f64 = 1.0 / 65_536.0;
+/// Grid steps in one millimetre, as a double (exact).
+const STEPS_PER_MM_REAL: f64 = 6_400.0;
+/// Converged when every residual is within this, in grid steps: 2^-16 mm.
+const TAU: f64 = STEPS_PER_MM_REAL / 65_536.0;
 /// A singular value at least this is independent (chapter 15.8's `sigma_ind`).
 const SIGMA_IND: f64 = 1.0 / 4_096.0;
 /// A projector diagonal above this means the point or constraint takes part (a component of
@@ -79,9 +85,9 @@ const DAMP_MAX: f64 = 1_048_576.0;
 
 /// A sketch prepared for solving.
 struct Block {
-    /// The origin, in whole millimetres, as doubles (exact).
+    /// The origin, in whole grid steps, as doubles (exact).
     origin: (f64, f64),
-    /// Millimetres per scaled unit: a power of two.
+    /// Grid steps per scaled unit: a power of two.
     scale: f64,
     /// For each point, the index of its x variable (y is the next), or `None` if fixed.
     var_of: Vec<Option<usize>>,
@@ -105,9 +111,17 @@ fn index(id: u32) -> Option<usize> {
     usize::try_from(id).ok()
 }
 
-/// A whole millimetre within the sketch's range, as a double (exact).
-fn real_mm(mm: i64) -> Option<f64> {
-    i32::try_from(mm).ok().map(f64::from)
+/// A whole number of grid steps within the sketch's range, as a double (exact); `None` beyond
+/// [`COORD_LIMIT`].
+fn real_steps(steps: i64) -> Option<f64> {
+    if !(-COORD_LIMIT..=COORD_LIMIT).contains(&steps) {
+        return None;
+    }
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "|steps| is at most COORD_LIMIT, below 2^53, checked above: the double is exact"
+    )]
+    Some(steps as f64)
 }
 
 /// The smallest power of two at least `value` (and at least 1).
@@ -148,34 +162,34 @@ impl Block {
     )]
     fn new(sketch: &Sketch) -> Result<Block, SolveError> {
         let points = sketch.points();
-        let ox = points.iter().map(|p| p.x_mm).min().unwrap_or(0);
-        let oy = points.iter().map(|p| p.y_mm).min().unwrap_or(0);
-        let (Some(left), Some(bottom)) = (real_mm(ox), real_mm(oy)) else {
+        let ox = points.iter().map(|p| p.x).min().unwrap_or(0);
+        let oy = points.iter().map(|p| p.y).min().unwrap_or(0);
+        let (Some(left), Some(bottom)) = (real_steps(ox), real_steps(oy)) else {
             return Err(SolveError::Decomposition);
         };
         let mut extent: f64 = 1.0;
         let mut drawn = Vec::with_capacity(points.len());
         for (i, p) in points.iter().enumerate() {
             let point = PointId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
-            let (Some(x), Some(y)) = (real_mm(p.x_mm), real_mm(p.y_mm)) else {
+            let (Some(x), Some(y)) = (real_steps(p.x), real_steps(p.y)) else {
                 return Err(SolveError::OutOfRange { point });
             };
             extent = extent.max(x - left).max(y - bottom);
             drawn.push((x - left, y - bottom));
         }
         for constraint in sketch.constraints() {
-            if let Constraint::Distance { mm, .. }
-            | Constraint::PointLineDistance { mm, .. }
-            | Constraint::Radius { mm, .. }
-            | Constraint::Diameter { mm, .. } = *constraint
+            if let Constraint::Distance { steps, .. }
+            | Constraint::PointLineDistance { steps, .. }
+            | Constraint::Radius { steps, .. }
+            | Constraint::Diameter { steps, .. } = *constraint
             {
-                extent = extent.max(real_mm(mm).unwrap_or(0.0));
+                extent = extent.max(real_steps(steps).unwrap_or(0.0));
             }
         }
         let mut drawn_radius = Vec::with_capacity(sketch.curves().len());
         for (i, curve) in sketch.curves().iter().enumerate() {
             let curve_id = CurveId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
-            let r = real_mm(curve.radius_mm())
+            let r = real_steps(curve.radius())
                 .ok_or(SolveError::DegenerateCurve { curve: curve_id })?;
             extent = extent.max(r);
             drawn_radius.push(r);
@@ -304,8 +318,8 @@ impl Block {
                 let longer = commit::real(a_squared.max(b_squared)).sqrt();
                 Ok((a, b, self.scale / power_of_two_above(longer)))
             };
-        let scaled = |mm: i64| {
-            real_mm(mm)
+        let scaled = |steps: i64| {
+            real_steps(steps)
                 .map(|v| v / self.scale)
                 .ok_or(degenerate.clone())
         };
@@ -356,7 +370,7 @@ impl Block {
                     inv_two_len: inv_len / 2.0,
                 }
             }
-            Constraint::Distance { a, b, mm } => {
+            Constraint::Distance { a, b, steps } => {
                 let (pa, pb) = (
                     sketch.point(a).ok_or(degenerate.clone())?,
                     sketch.point(b).ok_or(degenerate.clone())?,
@@ -364,7 +378,7 @@ impl Block {
                 if pa == pb {
                     return Err(degenerate);
                 }
-                let d = scaled(mm)?;
+                let d = scaled(steps)?;
                 Kind::Distance {
                     p: point(a)?,
                     q: point(b)?,
@@ -375,14 +389,14 @@ impl Block {
             Constraint::PointLineDistance {
                 point: p,
                 line: l,
-                mm,
+                steps,
                 side,
             } => {
                 let (line, squared) = line(l)?;
                 if squared == 0 {
                     return Err(degenerate);
                 }
-                let d = scaled(mm)?;
+                let d = scaled(steps)?;
                 Kind::PointLine {
                     p: point(p)?,
                     line,
@@ -423,13 +437,13 @@ impl Block {
                 a: curve(a)?.1,
                 b: curve(b)?.1,
             },
-            Constraint::Radius { curve: c, mm } => Kind::RadiusIs {
+            Constraint::Radius { curve: c, steps } => Kind::RadiusIs {
                 curve: curve(c)?.1,
-                value: scaled(mm)?,
+                value: scaled(steps)?,
             },
-            Constraint::Diameter { curve: c, mm } => Kind::RadiusIs {
+            Constraint::Diameter { curve: c, steps } => Kind::RadiusIs {
                 curve: curve(c)?.1,
-                value: scaled(mm)? / 2.0,
+                value: scaled(steps)? / 2.0,
             },
             Constraint::TangentLine {
                 line: l,
@@ -818,8 +832,8 @@ impl Block {
     /// within tolerance or no step lowers them any more (the least-squares best).
     fn iterate(&self, budget: Budget, steps: &mut u32) -> Result<Reached, SolveError> {
         let equations = self.owner.len();
-        let tau = TAU_MM / self.scale;
-        let sigma_dep = 1.0 / (64.0 * self.scale);
+        let tau = TAU / self.scale;
+        let sigma_dep = STEPS_PER_MM_REAL / (64.0 * self.scale);
         let mut vars = self.start();
         take(steps, budget)?;
         let (mut residuals, mut jacobian) = self.evaluate(&vars, true).map_err(degenerate)?;
@@ -880,8 +894,8 @@ impl Block {
     /// null space (no move can remove it), otherwise a rank too close to call, otherwise not
     /// converged.
     fn failure(&self, dec: &Decomposition, residuals: &[f64]) -> SolveError {
-        let tau = TAU_MM / self.scale;
-        let (null, unclear) = dec.split(1.0 / (64.0 * self.scale));
+        let tau = TAU / self.scale;
+        let (null, unclear) = dec.split(STEPS_PER_MM_REAL / (64.0 * self.scale));
         let shares: Vec<f64> = (0..self.owner.len())
             .map(|i| {
                 null.iter()
@@ -915,7 +929,7 @@ impl Block {
             .into_iter()
             .map(|(constraint, residual)| Unmet {
                 constraint,
-                residual_mm: residual * self.scale,
+                residual_mm: commit::in_mm(residual * self.scale),
             })
             .collect();
         SolveError::NotConverged { unmet }
@@ -923,7 +937,7 @@ impl Block {
 
     /// The verdict, the redundant constraints and the free radii of a converged solve.
     fn verdict(&self, dec: &Decomposition) -> Result<Diagnosis, SolveError> {
-        let sigma_dep = 1.0 / (64.0 * self.scale);
+        let sigma_dep = STEPS_PER_MM_REAL / (64.0 * self.scale);
         let (null, unclear) = dec.split(sigma_dep);
         if !unclear.is_empty() {
             return Err(SolveError::RankUnclear {
@@ -956,7 +970,7 @@ impl Block {
         })
     }
 
-    /// Every point in whole millimetres, by the rounding rule (`commit.rs`).
+    /// Every point in whole grid steps, by the rounding rule (`commit.rs`).
     fn rounded(&self, sketch: &Sketch, vars: &[f64]) -> Result<Vec<Point>, SolveError> {
         let mut points = Vec::with_capacity(sketch.points().len());
         for (i, (drawn, var)) in sketch.points().iter().zip(&self.var_of).enumerate() {
@@ -969,18 +983,18 @@ impl Block {
             let (Some(sx), Some(sy)) = (value(Some(v)), value(v.checked_add(1))) else {
                 return Err(SolveError::OutOfRange { point });
             };
-            let (Some(x_mm), Some(y_mm)) = (
-                commit::to_mm(self.origin.0, sx, self.scale),
-                commit::to_mm(self.origin.1, sy, self.scale),
+            let (Some(x), Some(y)) = (
+                commit::to_steps(self.origin.0, sx, self.scale),
+                commit::to_steps(self.origin.1, sy, self.scale),
             ) else {
                 return Err(SolveError::OutOfRange { point });
             };
-            points.push(Point { x_mm, y_mm });
+            points.push(Point { x, y });
         }
         Ok(points)
     }
 
-    /// Every curve's radius in whole millimetres, by the same rounding rule from an origin of
+    /// Every curve's radius in whole grid steps, by the same rounding rule from an origin of
     /// zero. A radius that rounds to zero or less, or beyond the sketch's range, is degenerate.
     fn rounded_radii(&self, vars: &[f64]) -> Result<Vec<i64>, SolveError> {
         let mut radii = Vec::with_capacity(self.radius_var.len());
@@ -988,7 +1002,7 @@ impl Block {
             let curve = CurveId(u32::try_from(i).map_err(|_| SolveError::Decomposition)?);
             let r = vars
                 .get(*var)
-                .and_then(|value| commit::to_mm(0.0, *value, self.scale))
+                .and_then(|value| commit::to_steps(0.0, *value, self.scale))
                 .filter(|r| *r > 0)
                 .ok_or(SolveError::DegenerateCurve { curve })?;
             radii.push(r);
@@ -1008,14 +1022,14 @@ fn solve_counted(sketch: &Sketch, budget: Budget, steps: &mut u32) -> Result<Sol
     }
     let diagnosis = block.verdict(&dec)?;
     let points = block.rounded(sketch, &reached.vars)?;
-    let radii_mm = block.rounded_radii(&reached.vars)?;
-    commit::check(sketch, &points, &radii_mm)?;
+    let radii = block.rounded_radii(&reached.vars)?;
+    commit::check(sketch, &points, &radii)?;
     Ok(Solved {
         points,
         verdict: diagnosis.verdict,
         redundant: diagnosis.redundant,
         steps: *steps,
-        radii_mm,
+        radii,
         free_radii: diagnosis.free_radii,
     })
 }
@@ -1036,8 +1050,8 @@ pub(crate) fn drag(
     let slot = index(point.0)
         .filter(|i| *i < sketch.points().len())
         .ok_or(SolveError::UnknownPoint { point })?;
-    let range = -COORD_LIMIT_MM..=COORD_LIMIT_MM;
-    if !range.contains(&target.x_mm) || !range.contains(&target.y_mm) {
+    let range = -COORD_LIMIT..=COORD_LIMIT;
+    if !range.contains(&target.x) || !range.contains(&target.y) {
         return Err(SolveError::OutOfRange { point });
     }
     let mut steps: u32 = 0;
@@ -1055,7 +1069,7 @@ pub(crate) fn drag(
             reach: Reach::Refused { blocking: fixings },
         });
     }
-    let radii: Vec<i64> = sketch.curves().iter().map(Curve::radius_mm).collect();
+    let radii: Vec<i64> = sketch.curves().iter().map(Curve::radius).collect();
     let mut points = sketch.points().to_vec();
     if let Some(at) = points.get_mut(slot) {
         *at = target;
@@ -1073,7 +1087,7 @@ pub(crate) fn drag(
         Ok(found) => {
             // The same sketch released at the place found, so the verdict is the sketch's own.
             let settled = moved
-                .with_positions(&found.points, &found.radii_mm)
+                .with_positions(&found.points, &found.radii)
                 .map_err(|_| SolveError::OutOfRange { point })?;
             let solved = solve_counted(&settled, budget, &mut steps)?;
             let reach = if solved.points.get(slot) == Some(&target) {
@@ -1094,7 +1108,7 @@ pub(crate) fn drag(
     // Released: the whole sketch projected from the target, so the point stops at the nearest
     // place the constraints allow.
     let solved = solve_counted(&moved, budget, &mut steps)?;
-    let reach = if solved.points == sketch.points() && solved.radii_mm == radii {
+    let reach = if solved.points == sketch.points() && solved.radii == radii {
         Reach::Refused { blocking }
     } else {
         Reach::Limit { blocking }
