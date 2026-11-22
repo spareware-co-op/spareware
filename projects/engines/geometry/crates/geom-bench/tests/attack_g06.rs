@@ -1392,6 +1392,16 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             fold(ip::side_of_lpi(class).iter().map(|(p, l)| p.side_of_lpi(l)))
         }
         ("plane", "lpi_to_grid") => fold(ip::lpi_to_grid(class).iter().map(Lpi::to_grid)),
+        ("plane", "through_edge") => fold(
+            ip::through_edge(class)
+                .iter()
+                .map(|h| geom_poly::commit::through_edge(h.a, h.b, h.tilt, &h.extent)),
+        ),
+        ("plane", "moved_along") => {
+            fold(ip::moved_along(class).iter().map(|m| {
+                geom_poly::commit::moved_along(m.direction, m.point, m.distance, &m.extent)
+            }))
+        }
         ("crossing", "ssi_new") => fold(
             inputs::crossing::ssi_new(class)
                 .into_iter()

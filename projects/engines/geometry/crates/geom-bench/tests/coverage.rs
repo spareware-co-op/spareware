@@ -700,6 +700,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_poly",
+        &[("commit", include_str!("../../geom-poly/src/commit.rs"))],
+    ),
+    (
         "geom_mesh",
         &[
             ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),

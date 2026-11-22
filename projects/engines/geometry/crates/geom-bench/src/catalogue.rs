@@ -218,6 +218,10 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
     Op { group: "plane", name: "side_of_lpi", measures: "Plane::side_of_lpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_lpi(c), kernels::plane::side_of_lpi) },
     Op { group: "plane", name: "lpi_to_grid", measures: "Lpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::lpi_to_grid(c), kernels::plane::lpi_to_grid) },
+    // Committing planes (piece G142, geom-poly): a sloping face through an exact edge, and a face
+    // moved whole steps along a sloping normal.
+    Op { group: "plane", name: "through_edge", measures: "geom_poly::commit::through_edge", classes: T, prepare: |c| bind(inputs::plane::through_edge(c), kernels::plane::through_edge) },
+    Op { group: "plane", name: "moved_along", measures: "geom_poly::commit::moved_along", classes: T, prepare: |c| bind(inputs::plane::moved_along(c), kernels::plane::moved_along) },
     Op { group: "crossing", name: "ssi_new", measures: "Ssi::new", classes: TDE, prepare: |c| bind(inputs::crossing::ssi_new(c), kernels::crossing::ssi_new) },
     Op { group: "crossing", name: "ssi_homogeneous", measures: "Ssi::homogeneous", classes: TE, prepare: |c| bind(inputs::crossing::ssi_homogeneous(c), kernels::crossing::ssi_homogeneous) },
     Op { group: "crossing", name: "ssi_orient2d", measures: "Ssi::orient2d", classes: TDNE, prepare: |c| bind(inputs::crossing::ssi_orient2d(c), kernels::crossing::ssi_orient2d) },

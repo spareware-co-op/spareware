@@ -308,9 +308,15 @@
               "kind": "corpus",
               "piece": "G150",
               "why": "1 new count benchmark in the group mesh: mesh/minkowski (G150, geom_mesh::minkowski::minkowski), a tetrahedron swept over a prism, the batch's first prism folded down so its sum is the union of every pair of triangles' hulls and the other 63 folded up so each sum is one hull; the boolean's prism builder now takes its four heights from a helper that draws them in the same order, and mesh/boolean's digests are unchanged. No existing digest moved"
+            },
+            {
+              "sha256": "af765bd4d4e9d56fe9073a5ba74b578afe981bb08ddefb3051374e6af9f22dbc",
+              "kind": "corpus",
+              "piece": "G142",
+              "why": "2 new count benchmarks in the group plane: plane/through_edge and plane/moved_along (G142, geom_poly::commit::through_edge and geom_poly::commit::moved_along), typical only: a sloping face through an exact edge whose tilt is an integer vector over its length in doubles, and a face moved whole steps along a sloping normal drawn the same way, each committed over its four corners. No existing digest moved"
             }
           ],
-          "sha256": "af765bd4d4e9d56fe9073a5ba74b578afe981bb08ddefb3051374e6af9f22dbc"
+          "sha256": "a1f0762b67f0dc9c4f221eac22b76f8f496d728b141e035d659ed359ffacc2a9"
         },
         {
           "id": "geom-nurbs/operations",

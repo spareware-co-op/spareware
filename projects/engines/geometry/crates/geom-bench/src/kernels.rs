@@ -255,6 +255,7 @@ pub mod plane {
     use geom_num::plane::{Lpi, Plane, Tpi};
     use geom_num::wide::{I256, I320};
     use geom_num::{NumError, Sign};
+    use geom_poly::commit::{self, CommitError, Committed};
 
     use super::run;
 
@@ -354,6 +355,30 @@ pub mod plane {
     #[inline(never)]
     pub fn lpi_to_grid(batch: &[Lpi], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
         run(batch, out, Lpi::to_grid);
+    }
+
+    /// `geom_poly::commit::through_edge` on each hinge: a plane that holds its edge, committed
+    /// over its face (piece G142).
+    #[inline(never)]
+    pub fn through_edge(
+        batch: &[crate::inputs::plane::Hinge],
+        out: &mut Vec<Result<Committed, CommitError>>,
+    ) {
+        run(batch, out, |h| {
+            commit::through_edge(h.a, h.b, h.tilt, &h.extent)
+        });
+    }
+
+    /// `geom_poly::commit::moved_along` on each move: a plane moved whole steps along its normal,
+    /// committed over its face (piece G142).
+    #[inline(never)]
+    pub fn moved_along(
+        batch: &[crate::inputs::plane::Move],
+        out: &mut Vec<Result<Committed, CommitError>>,
+    ) {
+        run(batch, out, |m| {
+            commit::moved_along(m.direction, m.point, m.distance, &m.extent)
+        });
     }
 }
 

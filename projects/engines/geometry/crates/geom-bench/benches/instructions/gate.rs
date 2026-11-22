@@ -916,11 +916,25 @@ pub mod plane {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/through_edge/typical"))]
+    fn through_edge(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/moved_along/typical"))]
+    fn moved_along(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = plane;
         benchmarks = through, side, tpi_new, tpi_meeting, normals_sign, normals_sign_faces,
             tpi_homogeneous, side_of_tpi, determinant_sign, determinant_sign_faces, to_grid,
-            lpi_new, lpi_homogeneous, side_of_lpi, lpi_to_grid
+            lpi_new, lpi_homogeneous, side_of_lpi, lpi_to_grid, through_edge, moved_along
     );
 }
 

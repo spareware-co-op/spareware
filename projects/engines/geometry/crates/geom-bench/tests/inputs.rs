@@ -2860,6 +2860,23 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("minkowski", k::minkowski, &m::minkowski(Typical));
 }
 
+/// Every typical batch of the plane commit's benchmarks (piece G142) commits every plane, and each
+/// plane through an edge holds both of its ends exactly.
+#[test]
+fn commit_typical_batches_all_succeed() {
+    use geom_bench::inputs::plane as m;
+    use geom_bench::kernels::plane as k;
+    let hinges = m::through_edge(Typical);
+    all_ok("through_edge", k::through_edge, &hinges);
+    let mut out = Vec::new();
+    k::through_edge(&hinges, &mut out);
+    for (h, c) in hinges.iter().zip(out.iter().flatten()) {
+        assert_eq!(c.plane.side(h.a), Ok(geom_num::Sign::Zero));
+        assert_eq!(c.plane.side(h.b), Ok(geom_num::Sign::Zero));
+    }
+    all_ok("moved_along", k::moved_along, &m::moved_along(Typical));
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {

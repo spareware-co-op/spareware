@@ -4,7 +4,10 @@
 //! [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`]
 //! (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets
 //! a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`),
-//! [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).
+//! [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`); and for committing
+//! planes (piece G142) [`through_edge`] (`geom_poly::commit::through_edge`) and [`moved_along`]
+//! (`geom_poly::commit::moved_along`), typical only: a sloping face through an exact edge, and a
+//! face moved whole steps along a sloping normal, each over its four corners.
 //!
 //! Classes:
 //!
@@ -63,6 +66,7 @@
 use geom_num::Sign;
 use geom_num::grid::P3;
 use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_poly::commit;
 
 use super::predicate::unimodular3;
 use super::{Class, M, TYPICAL_REACH, batch_of, extreme3, p3, rng, typical3, within};
@@ -625,4 +629,101 @@ fn far_lpi(g: &mut SplitMix64) -> Option<Lpi> {
     let (y0, z0) = (within(g, TYPICAL_REACH), within(g, TYPICAL_REACH));
     let s = g.sign() * g.range(4, 1 << 20);
     lpi(p3(-M + r, y0, z0), p3(-M + r + 1, y0 + s, z0), wall)
+}
+
+/// Largest component of an edge, a direction's integer form or a face's side in the commit inputs:
+/// 2^20 steps, about 16 cm at the building step.
+const SIDE: i64 = 1 << 20;
+
+/// What `geom_poly::commit::through_edge` takes: an exact edge from `a` to `b`, the direction
+/// `tilt` its plane holds, and the corners of the face it bounds.
+#[derive(Clone, Copy, Debug)]
+pub struct Hinge {
+    /// The edge's first end.
+    pub a: P3,
+    /// The edge's second end.
+    pub b: P3,
+    /// The direction up the face, of length one to rounding.
+    pub tilt: [f64; 3],
+    /// The face: the edge's ends, and each moved up the face.
+    pub extent: [P3; 4],
+}
+
+/// What `geom_poly::commit::moved_along` takes.
+#[derive(Clone, Copy, Debug)]
+pub struct Move {
+    /// The normal's direction, of length one to rounding.
+    pub direction: [f64; 3],
+    /// A point of the plane before the move.
+    pub point: P3,
+    /// How many whole steps the plane moves along its normal.
+    pub distance: i64,
+    /// The face: the point and three corners around it.
+    pub extent: [P3; 4],
+}
+
+/// A vector with components within ±[`SIDE`].
+fn side_vector(g: &mut SplitMix64) -> [i64; 3] {
+    [0; 3].map(|_| within(g, SIDE))
+}
+
+/// A vector of [`side_vector`], not zero, and its direction in doubles: each component over the
+/// vector's length, as a pitch or a slope gives, so the ideal plane's coefficients are irrational.
+fn direction(g: &mut SplitMix64) -> Option<([i64; 3], [f64; 3])> {
+    let v = side_vector(g);
+    let [x, y, z] = v.map(|c| i32::try_from(c).ok().map(f64::from));
+    let (x, y, z) = (x?, y?, z?);
+    let length = (x * x + y * y + z * z).sqrt();
+    (length > 0.0).then_some((v, [x / length, y / length, z / length]))
+}
+
+/// Sloping faces for `geom_poly::commit::through_edge`: an edge from a typical point, up to
+/// [`SIDE`] steps along each axis, and a direction up the face; the face is the edge and the edge
+/// moved by that direction's integer form. A tilt along the edge, which has no plane, is skipped.
+#[must_use]
+pub fn through_edge(class: Class) -> Vec<Hinge> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("plane::through_edge", class);
+    batch_of(|_| {
+        let a = typical3(&mut g);
+        let b = offset(a, side_vector(&mut g));
+        let (up, tilt) = direction(&mut g)?;
+        let extent = [a, b, offset(a, up), offset(b, up)];
+        commit::through_edge(a, b, tilt, &extent)
+            .is_ok()
+            .then_some(Hinge { a, b, tilt, extent })
+    })
+}
+
+/// Faces for `geom_poly::commit::moved_along`: a typical point, a sloping direction, a move of up
+/// to [`SIDE`] whole steps either way, and the face around the point, a parallelogram of two
+/// sides of up to [`SIDE`] steps along each axis.
+#[must_use]
+pub fn moved_along(class: Class) -> Vec<Move> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("plane::moved_along", class);
+    batch_of(|_| {
+        let point = typical3(&mut g);
+        let (_, direction) = direction(&mut g)?;
+        let distance = within(&mut g, SIDE);
+        let (u, v) = (side_vector(&mut g), side_vector(&mut g));
+        let extent = [
+            point,
+            offset(point, u),
+            offset(point, v),
+            offset(offset(point, u), v),
+        ];
+        commit::moved_along(direction, point, distance, &extent)
+            .is_ok()
+            .then_some(Move {
+                direction,
+                point,
+                distance,
+                extent,
+            })
+    })
 }

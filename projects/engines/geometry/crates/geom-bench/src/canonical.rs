@@ -825,6 +825,41 @@ impl Canonical for geom_mesh::minkowski::Sum {
     }
 }
 
+impl Canonical for crate::inputs::plane::Hinge {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::plane::Move {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_poly::commit::Committed {
+    // The plane, then the proven deviation's bits.
+    fn encode(&self, h: &mut Sha256) {
+        self.plane.encode(h);
+        self.deviation.encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_poly::commit::CommitError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 impl Canonical for crate::inputs::mesh::Layers {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
