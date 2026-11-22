@@ -1,9 +1,15 @@
 //! How measured values are shown and read: a unit and a number of decimal places for each
 //! measured kind, as a project setting. Metric first. A display unit never changes what is stored:
 //! every stored value is in its kind's whole unit (a length in the geometry kernel's grid steps,
-//! 1/6,400 mm), so feet and inches, when they come, are a [`Unit`] each with its exact factor (a
-//! foot is 1,950,720 steps, since 1/256 inch is a whole 635) and a row in the symbol table in
-//! `text.rs`, and nothing stored moves.
+//! 1/6,400 mm), so nothing stored moves when a unit is added.
+//!
+//! [`Unit`] is Spare Construct's one table of units: every unit any part of the program reads,
+//! with its exact factor in stored units. The formula language (`construct-formulas`) reads its
+//! literals from this table too. It holds centimetres, inches and feet (a foot is 1,950,720
+//! steps, since 1/256 inch is a whole 635) because formulas written before this table existed use
+//! them (`2 ft 8 in`); typed text and display stay metric ([`Unit::shown`] is false for the
+//! three, and `text.rs` reads metric symbols only). Imperial typing and display are a later job:
+//! they need fractions of an inch and a display rule (note CON-A2-F3-P1).
 //!
 //! A format shows at most 0.01 mm of a length (two places of a millimetre, five of a metre), the
 //! model tolerance, and the same for areas and volumes ([`Unit::max_places`]): every value shown
@@ -46,14 +52,70 @@ pub enum Unit {
     /// A slope as a ratio, `1:40` (or `2:1` when it rises more than it runs).
     #[serde(rename = "ratio")]
     Ratio,
+    /// Centimetres, `cm`: 64,000 grid steps. Read in formulas only, not yet typed or shown.
+    #[serde(rename = "cm")]
+    Centimetre,
+    /// Inches, `in`: exactly 25.4 mm (the international inch of 1959), 162,560 grid steps. Read in
+    /// formulas only, not yet typed or shown.
+    #[serde(rename = "in")]
+    Inch,
+    /// Feet, `ft`: exactly 304.8 mm, 1,950,720 grid steps. Read in formulas only, not yet typed
+    /// or shown.
+    #[serde(rename = "ft")]
+    Foot,
 }
 
 impl Unit {
+    /// Every unit, in a fixed order.
+    pub const ALL: [Self; 12] = [
+        Self::Millimetre,
+        Self::Metre,
+        Self::SquareMillimetre,
+        Self::SquareMetre,
+        Self::CubicMillimetre,
+        Self::CubicMetre,
+        Self::Degree,
+        Self::Percent,
+        Self::Ratio,
+        Self::Centimetre,
+        Self::Inch,
+        Self::Foot,
+    ];
+
+    /// The unit's symbol in plain ASCII, as a formula writes it after a number: `mm`, `m2`,
+    /// `deg`, `ft`; `%` for percent and nothing for a ratio, which has no symbol.
+    #[must_use]
+    pub const fn symbol(self) -> &'static str {
+        match self {
+            Self::Millimetre => "mm",
+            Self::Metre => "m",
+            Self::SquareMillimetre => "mm2",
+            Self::SquareMetre => "m2",
+            Self::CubicMillimetre => "mm3",
+            Self::CubicMetre => "m3",
+            Self::Degree => "deg",
+            Self::Percent => "%",
+            Self::Ratio => "",
+            Self::Centimetre => "cm",
+            Self::Inch => "in",
+            Self::Foot => "ft",
+        }
+    }
+
+    /// Whether values may be typed and shown in this unit today. Centimetres, inches and feet are
+    /// read only in formulas, so that formulas written with them keep their answers.
+    #[must_use]
+    pub const fn shown(self) -> bool {
+        !matches!(self, Self::Centimetre | Self::Inch | Self::Foot)
+    }
+
     /// The kind this unit measures.
     #[must_use]
     pub const fn kind(self) -> Kind {
         match self {
-            Self::Millimetre | Self::Metre => Kind::Length,
+            Self::Millimetre | Self::Metre | Self::Centimetre | Self::Inch | Self::Foot => {
+                Kind::Length
+            }
             Self::SquareMillimetre | Self::SquareMetre => Kind::Area,
             Self::CubicMillimetre | Self::CubicMetre => Kind::Volume,
             Self::Degree => Kind::Angle,
@@ -76,6 +138,9 @@ impl Unit {
             Self::Degree => "°",
             Self::Percent => " %",
             Self::Ratio => "",
+            Self::Centimetre => " cm",
+            Self::Inch => " in",
+            Self::Foot => " ft",
         }
     }
 
@@ -92,6 +157,9 @@ impl Unit {
             Self::Degree => "degrees",
             Self::Percent => "percent",
             Self::Ratio => "a ratio",
+            Self::Centimetre => "centimetres",
+            Self::Inch => "inches",
+            Self::Foot => "feet",
         }
     }
 
@@ -111,6 +179,9 @@ impl Unit {
             Self::CubicMetre => Some((262_144_000_000_000_000_000, 1)),
             Self::Degree => Some((9_000_000, 1)),
             Self::Percent | Self::Ratio => None,
+            Self::Centimetre => Some((64_000, 1)),
+            Self::Inch => Some((162_560, 1)),
+            Self::Foot => Some((1_950_720, 1)),
         }
     }
 
@@ -125,6 +196,9 @@ impl Unit {
             Self::Metre => 5,
             Self::SquareMillimetre => 4,
             Self::CubicMillimetre => 6,
+            // Not shown today ([`Unit::shown`]); these are the places that stay on the grid.
+            Self::Centimetre => 3,
+            Self::Inch | Self::Foot => 1,
             Self::SquareMetre | Self::CubicMetre | Self::Degree | Self::Percent | Self::Ratio => {
                 MAX_PLACES
             }
@@ -230,15 +304,19 @@ impl Units {
     /// Sets how `kind` is shown.
     ///
     /// # Errors
-    /// [`ParamError::BadFormat`], changing nothing, if the unit does not measure `kind` or the
-    /// places are more than the unit's [`Unit::max_places`].
+    /// [`ParamError::BadFormat`], changing nothing, if the unit does not measure `kind`, is not
+    /// shown today ([`Unit::shown`]), or the places are more than the unit's
+    /// [`Unit::max_places`].
     pub fn set(&mut self, kind: Kind, format: Format) -> Result<(), ParamError> {
         let bad = ParamError::BadFormat {
             kind,
             unit: format.unit,
             places: format.places,
         };
-        if format.unit.kind() != kind || format.places > format.unit.max_places() {
+        if format.unit.kind() != kind
+            || !format.unit.shown()
+            || format.places > format.unit.max_places()
+        {
             return Err(bad);
         }
         let slot = match kind {

@@ -177,6 +177,23 @@ impl Volume {
     }
 }
 
+/// Shows the area in square millimetres, exactly, as [`Length`] shows a length: `5760000 mm²`,
+/// `0.0000000244140625 mm²` for one square step.
+impl fmt::Display for Area {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mm2 = exact_decimal(self.0, Self::SQUARE_STEPS_PER_MM2).ok_or(fmt::Error)?;
+        write!(f, "{mm2} mm²")
+    }
+}
+
+/// Shows the volume in cubic millimetres, exactly, as [`Length`] shows a length: `1 mm³`.
+impl fmt::Display for Volume {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mm3 = exact_decimal(self.0, Self::CUBIC_STEPS_PER_MM3).ok_or(fmt::Error)?;
+        write!(f, "{mm3} mm³")
+    }
+}
+
 /// `n / d` written exactly as a decimal, every digit it has and no trailing zero, for `d` above
 /// zero made only of twos and fives (every grid factor is: 6,400 is 2^8 x 5^2), so the digits
 /// end. `None` if they do not end within forty places, or `d` is not above zero.

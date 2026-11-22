@@ -19,7 +19,8 @@
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
-use construct_formulas::{Entry, FormulaError, Kind, Quantity, evaluate, value_of};
+use construct_formulas::{Entry, FormulaError, evaluate, value_of};
+use construct_params::{Angle, Kind, Length, Value as ParamValue};
 use engine_geometry::operations::{
     Instance, Made, Moved, PrismInput, RoundInput, bounding_box, cylinder, faces, mirror, move_by,
     pattern, prism, six_volume,
@@ -250,15 +251,34 @@ fn q(v: f64) -> Res<f64> {
     Ok(mm(steps(v)?))
 }
 
-/// The parameters that have values, exactly.
-type Env = BTreeMap<String, Quantity>;
+/// The parameters that have values, exactly, as `construct-params` values.
+type Env = BTreeMap<String, ParamValue>;
 
 /// A parameter's value for a formula, or why it has none.
-fn lookup(env: &Env, name: &str) -> Result<Quantity, FormulaError> {
-    env.get(name).cloned().ok_or_else(|| FormulaError {
-        code: "UnknownName",
-        message: format!("there is no parameter called {name}, or it fails."),
+fn lookup(env: &Env, name: &str) -> Result<ParamValue, FormulaError> {
+    env.get(name).cloned().ok_or_else(|| {
+        FormulaError::new(
+            "UnknownName",
+            format!("there is no parameter called {name}, or it fails."),
+        )
     })
+}
+
+/// A formula's answer as the numbers this builder works in: millimetres for a length, degrees for
+/// an angle, a plain number for a count. The one place a value meets a double: a length is whole
+/// `Q0` steps (6,400 to the millimetre), 25 of this builder's `Q1` steps each, so [`steps`] puts
+/// it back on the part grid exactly.
+fn as_f64(value: &ParamValue) -> Option<f64> {
+    // A length and an angle are below 2^53 units for any part, so these convert exactly before
+    // the one division.
+    #[allow(clippy::cast_precision_loss)]
+    match value {
+        ParamValue::Length(l) => Some(l.steps() as f64 / Length::STEPS_PER_MM as f64),
+        ParamValue::Angle(a) => Some(a.units() as f64 / Angle::UNITS_PER_DEGREE as f64),
+        ParamValue::Whole(n) => Some(*n as f64),
+        ParamValue::Number(d) => d.to_string().parse().ok(),
+        _ => None,
+    }
 }
 
 /// A field's value of `kind`: a number in the kind's own unit, a parameter's name or a formula. A
@@ -270,7 +290,7 @@ fn value_as(env: &Env, v: Option<&Value>, what: &str, kind: Kind) -> Res<f64> {
             .map_or_else(|| fail(format!("{what} is not a number.")), Ok),
         Some(Value::String(s)) if !s.trim().is_empty() => {
             match value_of(s, kind, &mut |name| lookup(env, name)) {
-                Ok(x) => Ok(x.to_f64()),
+                Ok(x) => as_f64(&x).map_or_else(|| fail(format!("{what} is not a number.")), Ok),
                 Err(e) => fail(format!("{what}: {}", lower(&e.message))),
             }
         }
@@ -298,7 +318,7 @@ fn positive(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
     Ok(x)
 }
 fn whole(env: &Env, v: Option<&Value>, what: &str, lo: u32, hi: u32) -> Res<u32> {
-    let x = value_as(env, v, what, Kind::Count)?;
+    let x = value_as(env, v, what, Kind::Number)?;
     if x.fract() != 0.0 || x < f64::from(lo) || x > f64::from(hi) {
         return fail(format!("{what} must be a whole number from {lo} to {hi}."));
     }
@@ -890,7 +910,8 @@ fn read_params(part: &Value) -> (Env, Vec<ParamRow>) {
     let kind_of = |p: &Value| -> (Kind, &'static str) {
         match p.get("kind").and_then(Value::as_str) {
             Some("angle") => (Kind::Angle, "angle"),
-            Some("count") => (Kind::Count, "count"),
+            // A count is a plain number, `construct-params`' number kind.
+            Some("count") => (Kind::Number, "count"),
             _ => (Kind::Length, "length"),
         }
     };
@@ -922,7 +943,7 @@ fn read_params(part: &Value) -> (Env, Vec<ParamRow>) {
                     name: entry.name.clone(),
                     state: "built",
                     message: String::new(),
-                    value: Some(value.to_f64()),
+                    value: as_f64(&value),
                     kind,
                     formula,
                 });

@@ -85,6 +85,23 @@ impl Kind {
     pub fn from_tag(tag: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.tag() == tag)
     }
+
+    /// Whether a formula can give a value of this kind: a measured value, a number, or yes or no.
+    /// Text, a choice and links are never worked out.
+    #[must_use]
+    pub const fn takes_formula(self) -> bool {
+        matches!(
+            self,
+            Self::Length
+                | Self::Area
+                | Self::Volume
+                | Self::Angle
+                | Self::Slope
+                | Self::Number
+                | Self::Whole
+                | Self::YesNo
+        )
+    }
 }
 
 impl fmt::Display for Kind {
@@ -149,6 +166,11 @@ pub struct Definition {
     kind: Kind,
     holder: Holder,
     choices: Vec<Choice>,
+    /// The formula that gives this parameter's value from others, in `construct-formulas`'
+    /// language and its one spelling; written only when there is one, so a row without a formula
+    /// has the bytes it always had.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    formula: Option<String>,
 }
 
 /// A definition as read, before its checks.
@@ -160,6 +182,8 @@ struct Row {
     kind: Kind,
     holder: Holder,
     choices: Vec<Choice>,
+    #[serde(default)]
+    formula: Option<String>,
 }
 
 impl TryFrom<Row> for Definition {
@@ -172,6 +196,7 @@ impl TryFrom<Row> for Definition {
             kind: row.kind,
             holder: row.holder,
             choices: row.choices,
+            formula: row.formula,
         };
         definition.rules()?;
         Ok(definition)
@@ -190,6 +215,7 @@ impl Definition {
             kind,
             holder,
             choices: Vec::new(),
+            formula: None,
         };
         definition.rules()?;
         Ok(definition)
@@ -212,6 +238,24 @@ impl Definition {
             kind: Kind::Choice,
             holder,
             choices,
+            formula: None,
+        };
+        definition.rules()?;
+        Ok(definition)
+    }
+
+    /// The same parameter, its value given by `formula`, text in `construct-formulas`' language.
+    /// This crate keeps the text and does not read it: `construct-formulas` checks it, writes it
+    /// in its one spelling (`construct_formulas::define` makes a definition that way) and works it
+    /// out.
+    ///
+    /// # Errors
+    /// [`ParamError::BadDefinition`] if the kind is one no formula gives
+    /// ([`Kind::takes_formula`]) or the text is empty or starts or ends with a space.
+    pub fn with_formula(self, formula: &str) -> Result<Self, ParamError> {
+        let definition = Self {
+            formula: Some(formula.to_owned()),
+            ..self
         };
         definition.rules()?;
         Ok(definition)
@@ -226,6 +270,14 @@ impl Definition {
         };
         if self.name.is_empty() {
             return bad("a parameter needs a name");
+        }
+        if let Some(formula) = &self.formula {
+            if !self.kind.takes_formula() {
+                return bad("a formula gives a number or yes or no, and this kind is neither");
+            }
+            if formula.is_empty() || formula.trim() != formula {
+                return bad("a formula is not empty and has no space at either end");
+            }
         }
         if self.kind != Kind::Choice {
             if !self.choices.is_empty() {
@@ -279,6 +331,12 @@ impl Definition {
     #[must_use]
     pub fn choices(&self) -> &[Choice] {
         &self.choices
+    }
+
+    /// The formula that gives its value, if any, as stored.
+    #[must_use]
+    pub fn formula(&self) -> Option<&str> {
+        self.formula.as_deref()
     }
 
     /// The definition as a JSON row, its fields in one fixed order.

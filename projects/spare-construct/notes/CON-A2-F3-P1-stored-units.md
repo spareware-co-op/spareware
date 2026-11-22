@@ -1,6 +1,6 @@
 # CON-A2-F3-P1: Stored values are exact whole units, lengths in the kernel's grid steps
 
-**Status, 2026-11-23:** Decided for the build (piece A39). Stored values are exact whole units; floating-point numbers are only for display and sums. A length is a whole number of the geometry kernel's grid steps, `Q0`, 1/6,400 of a millimetre. This replaces the first form of this note (22 Nov 2026), which stored whole millimetres; that ruling is withdrawn, for the reasons below. `construct-params` and `construct-solver` follow it; [construct-params' FORMAT.md](../crates/construct-params/FORMAT.md) (version 2) is the stored form of a value.
+**Status, 2026-11-23:** Decided for the build (piece A39). Stored values are exact whole units; floating-point numbers are only for display and sums. A length is a whole number of the geometry kernel's grid steps, `Q0`, 1/6,400 of a millimetre. This replaces the first form of this note (22 Nov 2026), which stored whole millimetres; that ruling is withdrawn, for the reasons below. `construct-params`, `construct-solver` and `construct-formulas` (one units system, below) follow it; [construct-params' FORMAT.md](../crates/construct-params/FORMAT.md) (version 2) is the stored form of a value.
 
 ## The question
 
@@ -19,6 +19,15 @@ The map said "SI internally, metres in f64" ([ARCHITECTURE.md](../ARCHITECTURE.m
 - The sketch solver takes and gives points and radii in grid steps, rounds each solved value to the nearest step (ties to even, the kernel's rule), and checks every constraint against the model tolerance, 0.01 mm (64 steps), after rounding, as before.
 - The stored spelling names the step (`length:q0:15360000`), so a version 1 value in whole millimetres (`length:2400`) can never be misread as steps: it is still read, exactly, as millimetres, and written back in the new spelling.
 - A box in the spatial index stays in whole millimetres, construct-model's `Bounds`: it is a cache, never the truth, and a box made from grid geometry is rounded outward (the low corner down, the high corner up to the next whole millimetre), so it still holds its shape and a query never misses an element. construct-model's stand-in recipes and placements stay whole millimetres, every one an exact number of steps. Printed pen widths stay whole micrometres: they are sizes on paper, not model lengths.
+
+## One units system (piece A47, 23 Nov 2026)
+
+The program has one units system, so a length in one part of it can never be added to a length in another and be wrong.
+
+- `construct-params` owns quantities, kinds, units, typed text and display: one `Kind`, one `Length`, one `Angle`, one `Value`, and one unit table, `Unit`, each unit with its exact factor in stored units.
+- `construct-formulas` owns the formula language only: it reads a formula, type-checks it against `construct-params`' kinds, and works it out to a `construct-params` value. It depends on `construct-params`, never the reverse. (Pull request #1207 had planned the reverse, `construct-params` on `construct-formulas`; that plan is withdrawn.) Its exact rationals stay inside evaluation, held in the stored units themselves (grid steps, square and cubic steps, angle units), and its answer lands on its kind by the rule typed text has: a length, area or volume between grid steps is refused naming the nearest values either side, an angle rounds half to even to the angle unit, a number is an exact decimal.
+- The unit table holds centimetres, inches and feet (64,000, 162,560 and 1,950,720 steps, all whole) so that formulas written before it existed keep their answers (`2 ft 8 in` is still 812.8 mm). Typed text and display stay metric: typed text does not read them and they are not display units. Turning on imperial typing and display is its own later job: it needs fractions of an inch and a display rule.
+- Workshop's parts are built on the kernel's finer grid for parts, `Q1` (25 steps to one `Q0` step); a parameter's value is still `construct-params`' `Length`, which lands on `Q1` exactly.
 
 ## Why
 

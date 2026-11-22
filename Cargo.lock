@@ -534,8 +534,10 @@ dependencies = [
 name = "construct-formulas"
 version = "0.0.0"
 dependencies = [
+ "construct-params",
  "dashu-int 0.6.2",
  "dashu-ratio 0.6.1",
+ "kit-core",
  "winnow 0.7.15",
 ]
 
@@ -717,6 +719,7 @@ name = "construct-workshop"
 version = "0.0.0"
 dependencies = [
  "construct-formulas",
+ "construct-params",
  "engine-geometry",
  "serde",
  "serde_json",

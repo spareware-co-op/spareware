@@ -29,8 +29,13 @@
 //!
 //! Promises: the same values give the same bytes on every machine; every stored value has one
 //! spelling; nothing panics on any input. Depends on kit-core and kit-ops for permanent IDs, and on
-//! `rust_decimal`, `num-rational` and `url`. Nothing here is interim. Not here: formulas (a
-//! parameter worked out from others), and feet and inches, whose place is a [`Unit`] each.
+//! `rust_decimal`, `num-rational` and `url`. Nothing here is interim.
+//!
+//! One units system: this crate owns the program's quantities, kinds, units ([`Unit`] is the one
+//! table), typed text and display. The formula language is `construct-formulas`, which works in
+//! these kinds and values and depends on this crate, never the reverse: a [`Definition`] may carry
+//! a formula's text, and `construct-formulas` reads, checks and works it out. Centimetres, inches
+//! and feet are in the table for formulas only; typing and showing them is a later job.
 
 mod definition;
 mod error;

@@ -14,6 +14,15 @@
 //! cuts, revolve, sweep, fillet, chamfer, shell, holes) is kept in the history and answered as waiting,
 //! with the kernel pieces it waits for, so it lights up as they land.
 //!
+//! Two grids, one units system. A part's geometry is built on the kernel's grid for parts, `Q1`
+//! (6.25 nm, 160,000 steps to the millimetre, [`build::STEPS_PER_MM`]). A parameter's value is
+//! `construct-params`' own: its formulas are worked out by `construct-formulas` to a
+//! `construct_params::Value`, and a length there is the program's one stored `Length`, whole
+//! steps of the kernel's `Q0` grid (6,400 to the millimetre). One `Q0` step is exactly 25 `Q1`
+//! steps, so every parameter length lands on the part grid with nothing lost; a formula whose
+//! length falls between `Q0` steps is refused naming the nearest two, as typed text is. The
+//! part's own sizes on `Q1` are geometry, not stored parameter values, and stay this crate's.
+//!
 //! An assembly is posed by the kernel too ([`assembly`]): each part's bodies are moved and turned
 //! into place by `transform.move` and `transform.rotate`, through the joints and within their
 //! limits, and the drawings take their sizes from `query.bounding_box` of the posed bodies.
