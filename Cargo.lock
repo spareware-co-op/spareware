@@ -514,8 +514,10 @@ dependencies = [
  "construct-clash",
  "construct-elements",
  "construct-families",
+ "construct-formulas",
  "construct-grids",
  "construct-interop",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",
@@ -557,6 +559,23 @@ name = "construct-cli"
 version = "0.0.0"
 dependencies = [
  "construct-api",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-drawing"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-regen",
+ "construct-styles",
+ "engine-geometry",
+ "kit-core",
+ "kit-ops",
+ "serde",
  "serde_json",
 ]
 
@@ -620,6 +639,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-levels"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-materials"
 version = "0.0.0"
 dependencies = [
@@ -678,7 +709,9 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-formulas",
  "construct-grids",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",

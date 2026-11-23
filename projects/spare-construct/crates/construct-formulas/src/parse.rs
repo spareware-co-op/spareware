@@ -375,6 +375,73 @@ pub fn canonical(text: &str) -> Result<String, FormulaError> {
     }
 }
 
+/// `e` with every use of the parameter `from` named `to` instead; whether any was.
+fn swap_name(e: &mut Expr, from: &str, to: &str) -> bool {
+    match e {
+        Expr::Number(_) | Expr::Measure(_) => false,
+        Expr::Name(name) => {
+            let used = name == from;
+            if used {
+                to.clone_into(name);
+            }
+            used
+        }
+        Expr::Neg(inner) | Expr::Not(inner) => swap_name(inner, from, to),
+        Expr::Binary(_, left, right) => {
+            let left = swap_name(left, from, to);
+            swap_name(right, from, to) || left
+        }
+        Expr::If(test, yes, no) => {
+            let test = swap_name(test, from, to);
+            let yes = swap_name(yes, from, to);
+            swap_name(no, from, to) || test || yes
+        }
+        // A call's own name is a function's, never a parameter's.
+        // Every argument is renamed, so none is skipped once one is found.
+        Expr::Call(_, args) => {
+            let mut used = false;
+            for arg in args {
+                used |= swap_name(arg, from, to);
+            }
+            used
+        }
+    }
+}
+
+/// A formula with the parameter it names `from` renamed `to`, in its one spelling, for when a
+/// parameter is renamed: `None` when the formula does not use `from`. Only names are changed, never
+/// a function's or a unit's, so the formula means what it meant with the parameter renamed.
+///
+/// # Errors
+///
+/// As [`canonical`]; `Name` if `to` can't be used in a formula (letters, digits and `_`, starting
+/// with a letter or `_`) or the renamed formula doesn't read back as the same formula.
+pub fn rename(text: &str, from: &str, to: &str) -> Result<Option<String>, FormulaError> {
+    let mut e = parse(text)?;
+    if !swap_name(&mut e, from, to) {
+        return Ok(None);
+    }
+    let usable = to
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && to.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !usable {
+        return Err(FormulaError::new(
+            "Name",
+            format!("{to} can't be used in a formula: a name there is letters, digits and _."),
+        ));
+    }
+    let spelled = print(&e, 0);
+    if parse(&spelled)? != e {
+        return Err(FormulaError::new(
+            "Name",
+            format!("Renamed {to}, the formula would read differently: {spelled}"),
+        ));
+    }
+    canonical(&spelled).map(Some)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

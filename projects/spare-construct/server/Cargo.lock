@@ -654,8 +654,10 @@ dependencies = [
  "construct-clash",
  "construct-elements",
  "construct-families",
+ "construct-formulas",
  "construct-grids",
  "construct-interop",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-regen",
@@ -750,6 +752,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-levels"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+]
+
+[[package]]
 name = "construct-materials"
 version = "0.0.0"
 dependencies = [
@@ -792,7 +804,9 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-formulas",
  "construct-grids",
+ "construct-levels",
  "construct-model",
  "construct-params",
  "construct-types",

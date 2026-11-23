@@ -4,9 +4,13 @@
 //! of detail.
 //!
 //! The operations are Spare Construct's, named for what they make: `wall.straight`, not "box".
+//!
+//! Interim: it cuts no openings. A wall built with the doors hosted in it
+//! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
+//! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
 use construct_model::geometry::{
-    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Mesh, Recipe,
+    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Recipe,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -100,6 +104,28 @@ fn mesh(size: [i64; 3]) -> Mesh {
     }
 }
 
+/// The persistent names of a box's faces, one per role: the same six for every box.
+fn box_names() -> Vec<FaceName> {
+    ROLES
+        .iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role: (*role).to_owned(),
+        })
+        .collect()
+}
+
+/// The persistent names of the faces `recipe` builds, without building it: what a hosted element
+/// names its host's face by.
+///
+/// # Errors
+///
+/// As [`Geometry::build`]: a recipe it cannot build has no faces.
+pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    size_of(recipe)?;
+    Ok(box_names())
+}
+
 impl Geometry for Boxes {
     fn edition(&self) -> Edition {
         Edition {
@@ -117,13 +143,7 @@ impl Geometry for Boxes {
         let size = size_of(recipe)?;
         let [w, d, _] = size;
         let body = serde_json::to_vec(&BoxBody { kind: "box", size }).unwrap_or_default();
-        let names = ROLES
-            .iter()
-            .map(|role| FaceName {
-                name: format!("box.{role}"),
-                role: (*role).to_owned(),
-            })
-            .collect();
+        let names = box_names();
         let outline = vec![[0, 0], [w, 0], [w, d], [0, d]];
         // A box has no finer or coarser form, so both levels are the same shape. The kernel's
         // levels will differ: their bytes do here too, so the records already stand apart.
@@ -144,6 +164,13 @@ impl Geometry for Boxes {
             names,
             displays,
         })
+    }
+
+    /// Interim (the module header): the stand-in cuts no openings, so a host is built alone,
+    /// whatever is hosted in it, exactly as [`Geometry::build`] builds it.
+    fn build_hosting(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        let _ = hosted;
+        self.build(host)
     }
 }
 
@@ -195,6 +222,37 @@ mod tests {
         assert_eq!(
             Boxes.build(&recipe("block", args)).unwrap_err().code,
             "EmptyShape"
+        );
+    }
+
+    /// The stand-in cuts no openings: a wall with a door hosted in it is the wall alone, byte for
+    /// byte, and its faces are named without building it as building names them.
+    #[test]
+    fn a_wall_with_a_door_is_the_wall_alone() {
+        let wall = recipe(
+            "wall.straight",
+            json!({ "length": 3000, "thickness": 200, "height": 2700 }),
+        );
+        let door = recipe(
+            "door.single",
+            json!({ "width": 900, "thickness": 200, "height": 2100 }),
+        );
+        let at = construct_model::element::Placement {
+            x: 1000,
+            y: 0,
+            z: 0,
+        };
+        let hosted = [Hosted {
+            key: "D-1",
+            recipe: &door,
+            at,
+        }];
+        let alone = Boxes.build(&wall).unwrap();
+        assert_eq!(Boxes.build_hosting(&wall, &hosted).unwrap(), alone);
+        assert_eq!(names(&wall).unwrap(), alone.names);
+        assert_eq!(
+            names(&recipe("stair.spiral", json!({}))).unwrap_err().code,
+            "UnknownOperation"
         );
     }
 

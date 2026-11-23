@@ -14,28 +14,63 @@
 //! - [`parameters`]: how categories, parameters and types sit in a document's records, and how a
 //!   recipe that names a parameter is filled before it is built; the server's commands read
 //!   through it too, so the two cannot differ.
+//! - [`levels`]: how an element's place and shape read its levels (its base, and a wall's top
+//!   tied to the level above), and a document's levels as a page shows them.
 //! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
 //!   project's parameters with where they are bound, and the types with their values in units.
 //!
+//! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
+//!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
+//!   doors through it, and the server's commands check through it, so the two cannot differ.
+//!
 //! [`geometry`] is the default builder, the stand-in, which the browser and the server both run
 //! today. A program that links an engine builds a [`kernel::Kernel`] over it in its own one place
-//! instead: the server picks between the two by a setting.
+//! instead: the server picks between the two by a setting. [`face_names`] names a recipe's faces
+//! as the builder of an edition names them, without building it.
 
 #[cfg(feature = "server")]
 pub mod catalog;
 pub mod datum;
+#[cfg(feature = "server")]
+pub mod hosting;
 pub mod kernel;
+#[cfg(feature = "server")]
+pub mod levels;
 #[cfg(feature = "server")]
 pub mod parameters;
 #[cfg(feature = "server")]
 pub mod regenerator;
 pub mod stand_in;
 
-use construct_model::geometry::Geometry;
+use construct_model::geometry::{Edition, FaceName, Geometry, GeometryError, Recipe};
 use std::sync::Arc;
 
 /// What builds shapes by default.
 #[must_use]
 pub fn geometry() -> Arc<dyn Geometry> {
     Arc::new(stand_in::Boxes)
+}
+
+/// The persistent names of the faces `recipe` builds to under `edition`, without building it: the
+/// names the builder of that edition writes from the recipe ([`stand_in::names`],
+/// [`kernel::names`]). A hosted element names its host's face by one of these.
+///
+/// # Errors
+///
+/// `EditionUnavailable` for an edition neither builder here is; the builder's own error for a
+/// recipe it cannot build.
+pub fn face_names(edition: &Edition, recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if *edition == stand_in::Boxes.edition() {
+        stand_in::names(recipe)
+    } else if edition.engine == kernel::ENGINE && edition.name_scheme == kernel::NAME_SCHEME {
+        kernel::names(recipe)
+    } else {
+        Err(GeometryError {
+            code: "EditionUnavailable".to_owned(),
+            message: format!(
+                "faces built by {} {} are not named here",
+                edition.engine, edition.version
+            ),
+        })
+    }
 }

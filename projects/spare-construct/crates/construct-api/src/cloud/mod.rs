@@ -7,6 +7,9 @@
 //! - [`params`]: parameters, types, and an element's parameter values and type, through the same
 //!   log.
 //! - [`grids`]: grid lines and reference planes, through the same log.
+//! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
+//! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
+//!   same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -18,6 +21,8 @@ pub mod commands;
 pub mod directory;
 pub mod elements;
 pub mod grids;
+pub mod hosting;
+pub mod levels;
 pub mod params;
 pub mod spaces;
 pub mod transaction;

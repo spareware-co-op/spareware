@@ -256,6 +256,83 @@ jobs:
           BROWSER=bundled STACK_KILL='pkill -9 -x spare-server' \
             STACK_START='bash ../../scripts/start-server.sh' node two_browsers.mjs
 
+  checklist-kernel:
+    name: The checklist on ARM Linux, on the kernel engine in the server and the browser
+    # The job `checklist`'s run on one node and its real browsers, with the server built with its
+    # `kernel` feature and run with STACK_GEOMETRY=kernel: every document is seeded on the kernel's
+    # edition, and the page builds its shapes with the kernel's own package for the browser
+    # (server/shapes-kernel), which this job builds, since it isn't committed (note
+    # CON-A3-F1-P1-kernel-in-the-browser). First the package is held to the server's own build:
+    # every answer to shapes-kernel/tests/cases.json is the same bytes natively, on this ARM machine,
+    # and in the browser's build. The server's default stays the stand-in until this job is green on
+    # main. solidcore is compiled three times here (the package for the browser, the package
+    # natively, the server), so only a push to main saves the cache, as in kernel.yml.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
+    env:
+      STACK_GEOMETRY: kernel
+      # solidcore's README asks for an 8 MiB stack.
+      RUST_MIN_STACK: "8388608"
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        working-directory: projects/spare-construct/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # The pinned commit of solidcore (geom-solidcore's Cargo.toml).
+          key: checklist-kernel-1d8e14b46dedccbb03572956e7c708782fef1b8f
+          workspaces: |
+            projects/spare-construct/server
+            projects/spare-construct/server/shapes-kernel
+            projects/kit/services
+      # The version construct-shapes and shapes-kernel pin wasm-bindgen to, as the CLI must match.
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.118 --locked
+      - name: Build the kernel's package for the browser
+        run: bash scripts/build-shapes-kernel.sh
+      - name: The package natively, its clippy and its tests
+        working-directory: projects/spare-construct/server/shapes-kernel
+        run: |
+          cargo clippy --locked --release --all-targets -- -D warnings
+          cargo test --locked --release
+      - name: The browser's build gives the same bytes as the native build
+        run: |
+          (cd shapes-kernel && cargo run --locked --release --example answers -- tests/cases.json) \
+            >"$RUNNER_TEMP/native-answers.txt"
+          node tests/browser/same_bytes.mjs "$RUNNER_TEMP/native-answers.txt"
+      - name: Install TiKV, PD and RustFS
+        run: bash scripts/install-binaries.sh
+      # As in the job `checklist` (issue #886).
+      - name: TiKV's data on a RAM disk
+        run: |
+          sudo mkdir -p /mnt/tikv-ram
+          sudo mount -t tmpfs -o size=4G,mode=0700,uid="$(id -u)",gid="$(id -g)" tmpfs /mnt/tikv-ram
+          echo "STACK_TIKV_RAMDISK=/mnt/tikv-ram" >>"$GITHUB_ENV"
+      - name: On one node, on the kernel
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-checklist.sh
+      - name: In real browsers, on the kernel
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-browser-test.sh
+          trap "bash $PWD/scripts/store-sync-times.sh" EXIT
+          cd tests/browser
+          npm ci
+          npx playwright-core install --with-deps chromium
+          BROWSER=bundled STACK_KILL='pkill -9 -x spare-server' \
+            STACK_START='bash ../../scripts/start-server.sh' node two_browsers.mjs
+
   licences:
     name: Every dependency's licence
     runs-on: ubuntu-latest
@@ -272,6 +349,9 @@ jobs:
       - name: Check the server's licences
         working-directory: projects/spare-construct/server
         run: cargo deny --locked check licenses
+      - name: Check the licences of the kernel's package for the browser, by the server's rules
+        working-directory: projects/spare-construct/server/shapes-kernel
+        run: cargo deny --locked --config ../deny.toml check licenses
       - name: Check the kit services' licences
         working-directory: projects/kit/services
         run: cargo deny --locked check licenses
