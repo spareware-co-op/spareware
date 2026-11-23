@@ -254,6 +254,14 @@ fn every_kind_asks_its_category() {
         category_of_kind("viewport"),
         Ok(construct_categories::VIEWPORTS)
     );
+    assert_eq!(
+        category_of_kind("text-note"),
+        Ok(construct_categories::TEXT_NOTES)
+    );
+    assert_eq!(
+        category_of_kind("text-style"),
+        Ok(construct_categories::TEXT_NOTES)
+    );
     assert!(category_of_kind("part").is_err());
     assert_eq!(
         category_of_kind("teapot"),

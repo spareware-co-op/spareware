@@ -1032,6 +1032,12 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     {
         return Ok(Err(refusal));
     }
+    // Nor from under the text notes it holds.
+    if let Some(refusal) =
+        crate::cloud::text::notes_refusal(run.txn, run.project, run.document, &id).await?
+    {
+        return Ok(Err(refusal));
+    }
     if let Err(refusal) = run.claim(&id).await? {
         return Ok(Err(refusal));
     }

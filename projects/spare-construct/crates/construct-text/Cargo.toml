@@ -1,0 +1,47 @@
+[package]
+name = "construct-text"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# A text note and a text style are element records, unchanged.
+construct-model = { path = "../construct-model" }
+# Text notes are of the text notes category.
+construct-categories = { path = "../construct-categories" }
+# Positions, sizes and wrap widths are construct-params' Length and rotations its Angle, stored as
+# its values are.
+construct-params = { path = "../construct-params" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# Where a line of text may break: the Unicode line breaking algorithm (UAX #14), so that no break
+# rule is written here. Apache-2.0, version pinned.
+unicode-linebreak = "=0.1.5"
+
+[dev-dependencies]
+# Tests read and write records as JSON text. MIT OR Apache-2.0.
+serde_json = "1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+float_cmp = "deny"
