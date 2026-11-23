@@ -839,6 +839,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-families",
  "construct-formulas",
  "construct-grids",
  "construct-levels",
@@ -4297,6 +4298,7 @@ dependencies = [
  "chrono",
  "clap",
  "construct-api",
+ "construct-families",
  "construct-model",
  "construct-params",
  "construct-regen",

@@ -611,6 +611,24 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
+    /// The library's families with their types and the values each placed one holds, for the
+    /// page's family tool ([`cloud::families::read_library`]). Interim: the library is baked in
+    /// (job 7.6 stores families in the document).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn families(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::families::FamilyView>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        Ok(cloud::families::read_library())
+    }
+
     /// A model's floor types with their layers and the materials those are drawn in, for the
     /// page's floor tool ([`cloud::floors::read_floor_types`]); where it has none, the page sends
     /// `floor.defaults`.

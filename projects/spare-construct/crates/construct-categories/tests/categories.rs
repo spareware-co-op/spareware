@@ -242,6 +242,7 @@ fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("wall.straight"), Ok(WALLS));
     assert_eq!(category_of_kind("wall.layered"), Ok(WALLS));
     assert_eq!(category_of_kind("door.single"), Ok(DOORS));
+    assert_eq!(category_of_kind("family.instance"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("block"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("floor"), Ok(construct_categories::FLOORS));
     assert_eq!(category_of_kind("workshop.part"), Ok(GENERIC_MODELS));

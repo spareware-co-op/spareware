@@ -15,6 +15,12 @@
 //! opening and a shaft cut through every layer of a floor, each with its volume exact, and every
 //! refusal of either in its words; the cuts need an engine that subtracts and extrudes a profile
 //! with holes, the refusals do not.
+//!
+//! Placed families (job 6.4): the library's single-swing door (`d900x2100`) and fixed window
+//! (`w1200x1200`) in a three-layer wall of whole-millimetre faces, each layer losing exactly the
+//! openings' volume, each family's solids exactly theirs and inside their opening; the opening
+//! moving with its wall and resized with its type; and every refusal of a family that does not
+//! fit, in the builder's words, the same from `fits`.
 
 #![allow(
     dead_code,
@@ -1430,6 +1436,445 @@ pub fn a_layered_wall_at_an_angle_is_its_strips_extruded<E: Engine + Send + 'sta
         let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
         assert!(six > 0, "layer {at} holds a volume");
     }
+}
+
+// Placed families (job 6.4, CON-A7-F3-P2): a door and a window made from the library's recipes
+// in a three-layer wall.
+
+/// A three-layer wall's layers, from the exterior: 15 mm of plasterboard, 200 mm of timber, 15 mm
+/// of plasterboard, in grid steps; 230 mm in all, so every face is on a whole millimetre.
+pub const THREE: [(&str, &str, i64); 3] = [
+    ("finish", "plasterboard-gypsum", 15 * 6400),
+    ("structure", "timber-douglas-fir", 200 * 6400),
+    ("finish", "plasterboard-gypsum", 15 * 6400),
+];
+
+/// The library's single-swing door and fixed window, by their permanent ids.
+pub const DOOR_FAMILY: &str = "library.doors-windows.single-swing-door";
+pub const WINDOW_FAMILY: &str = "library.doors-windows.fixed-window";
+
+/// A placed family's recipe as a builder is handed it: the library family `family`, its type
+/// `ty`, turned by `turn`.
+pub fn placed(family: &str, ty: &str, turn: construct_families::Turn) -> Recipe {
+    let (id, _) = construct_regen::families::Library::baked()
+        .family(family)
+        .unwrap_or_else(|| panic!("{family} is in the library"));
+    let ty = construct_families::Key::parse(ty).unwrap();
+    construct_regen::families::turned(&construct_regen::families::recipe(&id, &ty), turn)
+}
+
+/// Each layer's six times its volume in a display, in cubic millimetres.
+fn layer_volumes(display: &construct_model::geometry::Display) -> Vec<i128> {
+    (0..display.parts.len())
+        .map(|at| signed_six_volume(&part_mesh(display, at)))
+        .collect()
+}
+
+/// Six times the volume of the three-layer wall `length` long and 2700 mm high, each layer less
+/// the openings `cut` (each a width and a height in millimetres, through the whole wall).
+fn three_less(length: i128, cut: &[(i128, i128)]) -> Vec<i128> {
+    let open: i128 = cut.iter().map(|(w, h)| w * h).sum();
+    [15, 200, 15]
+        .iter()
+        .map(|&t| 6 * t * (length * 2700 - open))
+        .collect()
+}
+
+/// The lowest and highest along, across and up the cutter of the opening `key` in a wall's body.
+fn cutter(body: &Value, key: &str) -> ([i64; 3], [i64; 3]) {
+    let cut = body["subtract"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["key"] == key)
+        .unwrap_or_else(|| panic!("{key} is cut"));
+    let corners: Vec<[i64; 3]> = serde_json::from_value(cut["extrude"].clone()).unwrap();
+    let by: [i64; 3] = serde_json::from_value(cut["by"].clone()).unwrap();
+    let mut lo = [i64::MAX; 3];
+    let mut hi = [i64::MIN; 3];
+    for c in &corners {
+        for p in [*c, [c[0] + by[0], c[1] + by[1], c[2] + by[2]]] {
+            for a in 0..3 {
+                lo[a] = lo[a].min(p[a] / 6400);
+                hi[a] = hi[a].max(p[a] / 6400);
+            }
+        }
+    }
+    (lo, hi)
+}
+
+/// A placed door (900 by 2100) and a window (1200 by 1200 at its 900 mm sill) on the exterior of
+/// a three-layer wall each cut their opening through every layer: each layer holds exactly its
+/// box less the two openings' width by height through its thickness; the cutters are the
+/// openings, reaching 100 mm past both sides (and below the base for the door); the openings'
+/// faces are named by the families that made them (no sill for the door). Each family's solids
+/// are its own: the door's frame and leaf and the window's frame and glass, each a part with its
+/// material and exactly its volume; they stand inside their openings, across the wall's
+/// thickness, the stand-in's bounds the same. Where the engine answers a subtraction, taking the
+/// cut wall from each solid leaves the whole solid: none of a family is in its wall.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one wall's layers, its two families' solids and the engine's own answer, in order"
+)]
+pub fn a_family_cuts_every_layer_and_stands_in_its_opening<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    use construct_families::Turn;
+    let k = kernel(make());
+    let wall = layered_wall([0, 0], [4000, 0], 2700, &THREE);
+    let door = placed(DOOR_FAMILY, "d900x2100", Turn::Half);
+    let window = placed(WINDOW_FAMILY, "w1200x1200", Turn::Half);
+    let plain = built(&k, &wall);
+    let cut = hosting(
+        &k,
+        &wall,
+        &[
+            hosted("F-2", &window, at(&k, [3000, 0, 0])),
+            hosted("F-1", &door, at(&k, [1500, 0, 0])),
+        ],
+    );
+    assert_eq!(cut.bounds, plain.bounds);
+    assert_eq!(layer_volumes(&plain.displays[0]), three_less(4000, &[]));
+    assert_eq!(
+        layer_volumes(&cut.displays[0]),
+        three_less(4000, &[(900, 2100), (1200, 1200)]),
+        "each layer loses exactly the two openings"
+    );
+    let body: Value = serde_json::from_slice(&cut.body).unwrap();
+    let keys: Vec<&str> = body["subtract"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["F-1", "F-2"], "cut in the order of their keys");
+    assert_eq!(
+        cutter(&body, "F-1"),
+        ([1050, -215, -100], [1950, 215, 2100])
+    );
+    assert_eq!(cutter(&body, "F-2"), ([2400, -215, 900], [3600, 215, 2100]));
+    let named = by_role(&cut);
+    for role in ["tool(F-1).jamb.start", "tool(F-1).head", "tool(F-2).sill"] {
+        assert!(named.contains_key(role), "{role}");
+    }
+    assert!(
+        !named.contains_key("tool(F-1).sill"),
+        "the door is to the floor"
+    );
+
+    let stand_in = construct_regen::geometry();
+    for (family, origin, opening, solids) in [
+        (
+            &door,
+            [1500, 0, 0],
+            ([1050, 0], [1950, 2100]),
+            vec![
+                (
+                    "frame",
+                    "timber-douglas-fir",
+                    6 * (900 * 2100 - 820 * 2060) * 100,
+                ),
+                ("leaf", "timber-white-oak", 6 * 820 * 2060 * 40),
+            ],
+        ),
+        (
+            &window,
+            [3000, 0, 0],
+            ([2400, 900], [3600, 2100]),
+            vec![
+                (
+                    "frame",
+                    "aluminium-6061",
+                    6 * (1200 * 1200 - 1100 * 1100) * 70,
+                ),
+                ("glass", "glass-plate", 6 * 1100 * 1100 * 24),
+            ],
+        ),
+    ] {
+        let b = built(&k, family);
+        let fine = &b.displays[0];
+        let held: Vec<(&str, &str, i128)> = fine
+            .parts
+            .iter()
+            .enumerate()
+            .map(|(at, p)| {
+                (
+                    p.function.as_str(),
+                    p.material.as_str(),
+                    signed_six_volume(&part_mesh(fine, at)),
+                )
+            })
+            .collect();
+        assert_eq!(
+            held, solids,
+            "each solid is a part with its material and volume"
+        );
+        // In the wall's frame: inside the opening along and up, within the wall across it.
+        let (lo, hi) = (b.bounds.min, b.bounds.max);
+        let placed_lo = [lo[0] + origin[0], lo[1] + origin[1], lo[2] + origin[2]];
+        let placed_hi = [hi[0] + origin[0], hi[1] + origin[1], hi[2] + origin[2]];
+        let ((x0, z0), (x1, z1)) = ((opening.0[0], opening.0[1]), (opening.1[0], opening.1[1]));
+        assert!(
+            placed_lo[0] >= x0 && placed_hi[0] <= x1,
+            "{placed_lo:?} {placed_hi:?}"
+        );
+        assert!(
+            placed_lo[2] >= z0 && placed_hi[2] <= z1,
+            "{placed_lo:?} {placed_hi:?}"
+        );
+        assert!(
+            placed_lo[1] > -115 && placed_hi[1] < 115,
+            "{placed_lo:?} {placed_hi:?}"
+        );
+        assert_eq!(
+            stand_in.build(family).unwrap().bounds,
+            b.bounds,
+            "the stand-in's box is the kernel's bounds"
+        );
+        assert_eq!(b.names.len(), 0, "a placed family names no face yet");
+    }
+
+    // Through the engine itself, where it answers: each of the door's solids, less the wall's
+    // layers with the door's opening cut, is the whole solid. Everything is in the door's own
+    // frame, its origin at 1500 mm along the wall.
+    let mut e = make();
+    let (_, recipe) = construct_regen::families::Library::baked()
+        .family(DOOR_FAMILY)
+        .unwrap();
+    let values = construct_families::TypeValues::of(
+        &recipe,
+        &construct_families::Key::parse("d900x2100").unwrap(),
+    )
+    .unwrap();
+    let solids = construct_families::evaluate_turned(
+        &mut e,
+        &recipe,
+        &values,
+        construct_families::Limits::DEFAULT,
+        Turn::Half,
+    )
+    .unwrap();
+    let mm = |v: i64| v * 6400;
+    let slab = |lo: [i64; 3], hi: [i64; 3]| {
+        let corner = |x: i64, y: i64| P3::new(mm(x), mm(y), mm(lo[2])).unwrap();
+        engine_geometry::value::engine::Profile {
+            outer: vec![
+                corner(lo[0], lo[1]),
+                corner(hi[0], lo[1]),
+                corner(hi[0], hi[1]),
+                corner(lo[0], hi[1]),
+            ],
+            holes: Vec::new(),
+        }
+    };
+    let opening = e
+        .extrude(&slab([-450, -215, -100], [450, 215, 0]), [0, 0, mm(2200)])
+        .unwrap();
+    let mut answered = 0;
+    for (y0, y1) in [(-115, -100), (-100, 100), (100, 115)] {
+        let layer = e
+            .extrude(&slab([-1500, y0, 0], [2500, y1, 0]), [0, 0, mm(2700)])
+            .unwrap();
+        let Ok(cut) = e.subtract(&layer, &opening) else {
+            continue;
+        };
+        for solid in &solids.solids {
+            let (Ok(rest), Ok(whole)) = (e.subtract(&solid.solid, &cut), e.volume(&solid.solid))
+            else {
+                continue;
+            };
+            if let Ok(left) = e.volume(&rest) {
+                assert_eq!(left, whole, "{} keeps its whole volume", solid.step);
+                answered += 1;
+            }
+        }
+    }
+    eprintln!("the engine answered {answered} of 6 subtractions of a wall layer from a solid");
+}
+
+/// Moving the wall moves its family's opening with it: the same family on a wall drawn 1000 mm
+/// further along x and 500 mm along y, at the same offset along it, is cut there, exactly as far
+/// away, every layer the same volume; the family itself builds to the same bytes, its place being
+/// its placement's. Changing the family's type resizes its opening: a 1000 by 2400 door cuts
+/// 1000 by 2400 from every layer.
+pub fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    use construct_families::Turn;
+    let k = kernel(make());
+    let door = placed(DOOR_FAMILY, "d900x2100", Turn::Half);
+    let here = layered_wall([0, 0], [4000, 0], 2700, &THREE);
+    let there = layered_wall([1000, 500], [5000, 500], 2700, &THREE);
+    let a = hosting(&k, &here, &[hosted("F-1", &door, at(&k, [1500, 0, 0]))]);
+    let b = hosting(&k, &there, &[hosted("F-1", &door, at(&k, [2500, 500, 0]))]);
+    let (ab, bb): (Value, Value) = (
+        serde_json::from_slice(&a.body).unwrap(),
+        serde_json::from_slice(&b.body).unwrap(),
+    );
+    let ((alo, ahi), (blo, bhi)) = (cutter(&ab, "F-1"), cutter(&bb, "F-1"));
+    assert_eq!(
+        [
+            blo[0] - alo[0],
+            blo[1] - alo[1],
+            bhi[0] - ahi[0],
+            bhi[1] - ahi[1]
+        ],
+        [1000, 500, 1000, 500]
+    );
+    assert_eq!(layer_volumes(&b.displays[0]), layer_volumes(&a.displays[0]));
+    assert_eq!(built(&k, &door), built(&k, &door));
+    let builds = k.family_builds().unwrap();
+    built(&k, &door);
+    assert_eq!(
+        k.family_builds().unwrap(),
+        builds,
+        "a type is built once and kept"
+    );
+
+    let wider = placed(DOOR_FAMILY, "d1000x2400", Turn::Half);
+    let c = hosting(&k, &here, &[hosted("F-1", &wider, at(&k, [1500, 0, 0]))]);
+    let cb: Value = serde_json::from_slice(&c.body).unwrap();
+    assert_eq!(cutter(&cb, "F-1"), ([1000, -215, -100], [2000, 215, 2400]));
+    assert_eq!(
+        layer_volumes(&c.displays[0]),
+        three_less(4000, &[(1000, 2400)])
+    );
+    let shape = built(&k, &wider);
+    assert_eq!(shape.bounds.min, [-500, -50, 0]);
+    assert_eq!(shape.bounds.max, [500, 50, 2400]);
+    assert_eq!(k.family_builds().unwrap(), builds + 1);
+}
+
+/// A family that does not fit is refused before the engine is asked, naming the family and why,
+/// and `fits` says the same word for word: one wider than its wall, one off its end, one touching
+/// it, one as tall as the wall, two whose openings overlap, one turned across its wall, one on
+/// the old box wall, one on a wall at an angle, one whose recipe is not loaded and one whose type
+/// its recipe does not name.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one case per refusal, each asked of the builder and of fits"
+)]
+pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    use construct_families::Turn;
+    type Case<'a> = (&'a str, &'a Recipe, Vec<Hosted<'a>>, &'a str);
+    let k = kernel(make());
+    let boxed = wall(4000, "x");
+    let wall = layered_wall([0, 0], [4000, 0], 2700, &THREE);
+    let short = layered_wall([0, 0], [900, 0], 2700, &THREE);
+    let low = layered_wall([0, 0], [4000, 0], 2400, &THREE);
+    let angled = layered_wall([0, 0], [2400, 3200], 2700, &THREE);
+    let door = placed(DOOR_FAMILY, "d900x2100", Turn::Half);
+    let wide = placed(DOOR_FAMILY, "d1000x2100", Turn::Half);
+    let tall = placed(DOOR_FAMILY, "d900x2400", Turn::Half);
+    let window = placed(WINDOW_FAMILY, "w1200x1200", Turn::Half);
+    let across = placed(DOOR_FAMILY, "d900x2100", Turn::Quarter);
+    let mut missing = door.clone();
+    missing.args.insert(
+        "family".to_owned(),
+        json!(format!("sha256:{}", "0".repeat(64))),
+    );
+    let unnamed = placed(DOOR_FAMILY, "d1x1", Turn::Half);
+    let mm = |x: i64, z: i64| at(&k, [x, 0, z]);
+    let one = |key, recipe, at| vec![hosted(key, recipe, at)];
+    let cases: Vec<Case<'_>> = vec![
+        (
+            "wider than its wall",
+            &short,
+            one("F-1", &wide, mm(450, 0)),
+            "OpeningPastEnd",
+        ),
+        (
+            "off its end",
+            &wall,
+            one("F-1", &door, mm(3800, 0)),
+            "OpeningPastEnd",
+        ),
+        (
+            "touching its end",
+            &wall,
+            one("F-1", &door, mm(450, 0)),
+            "OpeningAtEnd",
+        ),
+        (
+            "as tall as its wall",
+            &low,
+            one("F-1", &tall, mm(1500, 0)),
+            "OpeningTooTall",
+        ),
+        (
+            "overlapping",
+            &wall,
+            vec![
+                hosted("F-1", &door, mm(1500, 0)),
+                hosted("F-2", &window, mm(2000, 0)),
+            ],
+            "OpeningsOverlap",
+        ),
+        (
+            "turned across",
+            &wall,
+            one("F-1", &across, mm(1500, 0)),
+            "OpeningAcrossWall",
+        ),
+        (
+            "on the box wall",
+            &boxed,
+            one("F-1", &door, at(&k, [1500, 100, 0])),
+            "NotAHost",
+        ),
+        (
+            "on a wall at an angle",
+            &angled,
+            one("F-1", &door, mm(1500, 0)),
+            "NotAHost",
+        ),
+        (
+            "not loaded",
+            &wall,
+            one("F-1", &missing, mm(1500, 0)),
+            "FamilyMissing",
+        ),
+        (
+            "no such type",
+            &wall,
+            one("F-1", &unnamed, mm(1500, 0)),
+            "FamilyType",
+        ),
+    ];
+    let edition = k.edition();
+    for (case, host, families, code) in &cases {
+        let error = k.build_hosting(host, families).expect_err(case);
+        assert_eq!(&error.code, code, "{case}: {}", error.message);
+        assert!(
+            error.message.starts_with("family F-1"),
+            "{case}: {}",
+            error.message
+        );
+        let placed: Vec<construct_model::geometry::Hosted<'_>> = families
+            .iter()
+            .map(|h| construct_model::geometry::Hosted {
+                key: h.key,
+                recipe: h.recipe,
+                at: construct_model::element::Placement {
+                    x: k.units().millimetres(h.at.x.get()).unwrap(),
+                    y: k.units().millimetres(h.at.y.get()).unwrap(),
+                    z: k.units().millimetres(h.at.z.get()).unwrap(),
+                },
+            })
+            .collect();
+        let said = construct_regen::kernel::fits(&edition, host, &placed).expect_err(case);
+        assert_eq!(said, error, "{case}: fits says what building says");
+    }
+    let message = k.build_hosting(&short, &cases[0].2).unwrap_err().message;
+    assert_eq!(message, "family F-1: it crosses the wall's end");
+    // A placed family is no host, and one whose type is unknown does not build on its own.
+    let hosts = k
+        .build_hosting(&door, &one("D-1", &door, mm(0, 0)))
+        .unwrap_err();
+    assert_eq!(hosts.code, "NotAHost");
+    assert_eq!(k.build(&unnamed).unwrap_err().code, "FamilyType");
 }
 
 /// A plain opening through a wall (construct-openings' `opening.wall`): `width` by `height`

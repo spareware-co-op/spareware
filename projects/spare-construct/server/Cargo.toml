@@ -56,6 +56,9 @@ engine-geometry = { path = "../../engines/crates/engine-geometry" }
 # Stored lengths, for the suite's layered walls (a filled recipe holds its lengths in their stored
 # spelling). This repository's own, Apache-2.0.
 construct-params = { path = "../crates/construct-params" }
+# Family recipes, for the suite's placed families (their types, turns and the evaluator the suite
+# asks the engine through). This repository's own, Apache-2.0.
+construct-families = { path = "../crates/construct-families" }
 chrono = "=0.4.45"                 # MIT OR Apache-2.0
 openidconnect = { version = "=4.0.1", default-features = false }   # MIT
 reqwest = { version = "=0.13.1", default-features = false, features = ["rustls", "cookies", "json"] }  # MIT OR Apache-2.0

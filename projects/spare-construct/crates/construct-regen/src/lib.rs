@@ -35,6 +35,12 @@
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
 //!   doors through it, and the server's commands check through it, so the two cannot differ.
+//! - [`families`]: a placed family (`family.instance`, job 6.4): its record (the family recipe
+//!   version and the type), where its recipe comes from (the [`families::FamilySource`] trait;
+//!   interim, the library baked in at build time, until job 7.6 stores families in the document),
+//!   and the opening it cuts in its wall. Both builders build it, the kernel through the recipe
+//!   evaluator, the stand-in as a box per solid; a layered wall cuts its opening on the same path
+//!   as a door's.
 //!
 //! [`geometry`] is the default builder, the stand-in, which the browser and the server both run
 //! today. A program that links an engine builds a [`kernel::Kernel`] over it in its own one place
@@ -44,6 +50,7 @@
 #[cfg(feature = "server")]
 pub mod catalog;
 pub mod datum;
+pub mod families;
 pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;

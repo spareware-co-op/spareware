@@ -12,11 +12,15 @@
 //! named types with the same values share one evaluation, and a type table is evaluated row by
 //! row through the same cache. The limits are the evaluator's, and are not part of the key: an
 //! evaluator keeps only what it built within its own limits.
+//!
+//! A family built turned ([`Turn`], piece A64) is kept under its turn as well: the same type
+//! turned two ways is two sets of solids, and each is built once.
 
 use super::Evaluated;
 use super::build::run;
 use super::error::EvalError;
 use super::limits::Limits;
+use super::turn::Turn;
 use super::values::TypeValues;
 use crate::model::{Key, ParameterValue, Recipe};
 use crate::write::ContentId;
@@ -30,12 +34,19 @@ use std::sync::Arc;
 pub struct CacheKey {
     recipe: ContentId,
     values: Vec<(Key, String)>,
+    turn: Turn,
 }
 
 impl CacheKey {
-    /// The key of `recipe` evaluated with `values`.
+    /// The key of `recipe` evaluated with `values`, not turned.
     #[must_use]
     pub fn of(recipe: &Recipe, values: &TypeValues) -> Self {
+        Self::turned(recipe, values, Turn::None)
+    }
+
+    /// The key of `recipe` evaluated with `values` and turned by `turn`.
+    #[must_use]
+    pub fn turned(recipe: &Recipe, values: &TypeValues, turn: Turn) -> Self {
         let mut read: Vec<(Key, String)> = Vec::with_capacity(recipe.parameters.len());
         for p in &recipe.parameters {
             if let ParameterValue::Default(default) = &p.value {
@@ -55,6 +66,7 @@ impl CacheKey {
         Self {
             recipe: recipe.content_id(),
             values: read,
+            turn,
         }
     }
 
@@ -68,6 +80,12 @@ impl CacheKey {
     #[must_use]
     pub fn values(&self) -> &[(Key, String)] {
         &self.values
+    }
+
+    /// The turn it is built with.
+    #[must_use]
+    pub fn turn(&self) -> Turn {
+        self.turn
     }
 }
 
@@ -111,10 +129,25 @@ impl<E: Engine> Evaluator<E> {
         recipe: &Recipe,
         values: &TypeValues,
     ) -> Result<Arc<Evaluated<E::Solid>>, EvalError> {
-        match self.cache.entry(CacheKey::of(recipe, values)) {
+        self.evaluate_turned(recipe, values, Turn::None)
+    }
+
+    /// As [`Evaluator::evaluate`], the family turned by `turn` about its z axis: every corner and
+    /// every extrusion's vector turned before the engine is asked, kept under its turn.
+    ///
+    /// # Errors
+    ///
+    /// As [`Evaluator::evaluate`].
+    pub fn evaluate_turned(
+        &mut self,
+        recipe: &Recipe,
+        values: &TypeValues,
+        turn: Turn,
+    ) -> Result<Arc<Evaluated<E::Solid>>, EvalError> {
+        match self.cache.entry(CacheKey::turned(recipe, values, turn)) {
             Entry::Occupied(kept) => Ok(Arc::clone(kept.get())),
             Entry::Vacant(slot) => {
-                let built = run(&mut self.engine, recipe, values, self.limits)?;
+                let built = run(&mut self.engine, recipe, values, self.limits, turn)?;
                 self.builds = self.builds.saturating_add(1);
                 Ok(Arc::clone(slot.insert(Arc::new(built))))
             }

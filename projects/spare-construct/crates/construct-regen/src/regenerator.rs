@@ -29,6 +29,13 @@
 //! record is not rewritten. Each such rebuild is one step deep, from the record each built row
 //! names, as the elements of a changed type are.
 //!
+//! A placed family (`family.instance`, job 6.4) is hosted the same way and rides the same rows:
+//! it is seated in its wall ([`crate::hosting::seat`]: its place and its turn, read from the wall
+//! each time, never stored), both in its own build and in the wall's, so the solids it is built
+//! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
+//! it again with the wall; a change to its own record (its type, or the recipe version it names)
+//! builds its wall again; nothing else is.
+//!
 //! A floor is cut by its openings, which are hosted on it as a door is on a wall, and by every
 //! shaft of its document that passes wholly through its thickness (construct-openings' `reach`,
 //! from the heights their levels give them as regeneration has reached them). A shaft is hosted
@@ -823,13 +830,23 @@ async fn inputs<R: Reader>(
     element: &Element,
     hosted: &[String],
 ) -> Result<Inputs, StoreError> {
-    let (recipe, placed) = input_of(reader, project, document, element).await?;
+    let (mut recipe, placed) = input_of(reader, project, document, element).await?;
     let (placement, hosted) = match &recipe {
         Ok(own) => (
             placement_of(reader, project, document, edition, element, own).await?,
             hosted_in(reader, project, document, edition, element, own, hosted).await?,
         ),
-        Err(_) => (Ok(element.placement), Ok(Vec::new())),
+        Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
+    };
+    // A placed family is built as it is seated in its wall: turned as it stands there.
+    let placement = match placement {
+        Ok((at, seated)) => {
+            if let Some(seated) = seated {
+                recipe = Ok(seated);
+            }
+            Ok(at)
+        }
+        Err(e) => Err(e),
     };
     Ok(Inputs {
         recipe,
@@ -865,7 +882,8 @@ async fn built_record<R: Reader>(
 }
 
 /// Where `element`, of the filled recipe `own`, sits: its own placement, or, hosted on a face,
-/// its host's placement and its offsets ([`hosting::at`]).
+/// its host's placement and its offsets ([`hosting::seat`]), with its recipe as seated there
+/// when that differs (a placed family's turn).
 async fn placement_of<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -873,10 +891,11 @@ async fn placement_of<R: Reader>(
     edition: &Edition,
     element: &Element,
     own: &Recipe,
-) -> Result<Result<Placement, GeometryError>, StoreError> {
+) -> Result<Result<(Placement, Option<Recipe>), GeometryError>, StoreError> {
+    let what = hosting::noun(own);
     let hosting = match hosting::read(element) {
         Ok(Some(hosting @ (Hosting::OnFace { .. } | Hosting::InPlan { .. }))) => hosting,
-        Ok(_) => return Ok(Ok(element.placement)),
+        Ok(_) => return Ok(Ok((element.placement, None))),
         Err(why) => {
             return Ok(Err(GeometryError {
                 code: "BadHost".to_owned(),
@@ -888,7 +907,7 @@ async fn placement_of<R: Reader>(
         return Ok(Err(GeometryError {
             code: "HostMissing".to_owned(),
             message: format!(
-                "door {}: its host {} is not in the model",
+                "{what} {}: its host {} is not in the model",
                 element.id,
                 hosting.host()
             ),
@@ -899,13 +918,20 @@ async fn placement_of<R: Reader>(
         Err(e) => {
             return Ok(Err(GeometryError {
                 code: e.code,
-                message: format!("door {}: its host {}: {}", element.id, host.name, e.message),
+                message: format!(
+                    "{what} {}: its host {}: {}",
+                    element.id, host.name, e.message
+                ),
             }));
         }
     };
     Ok(
-        hosting::at(edition, &host, &host_recipe, element, own, &hosting)
-            .and_then(|at| hosting::in_model(host.placement, at)),
+        hosting::seat(edition, &host, &host_recipe, element, own, &hosting).and_then(
+            |(at, seated)| {
+                let seated = (seated != *own).then_some(seated);
+                Ok((hosting::in_model(host.placement, at)?, seated))
+            },
+        ),
     )
 }
 
@@ -935,12 +961,12 @@ async fn hosted_in<R: Reader>(
             Err(e) => {
                 return Ok(Err(GeometryError {
                     code: e.code,
-                    message: format!("door {key}: {}", e.message),
+                    message: format!("{} {key}: {}", hosting::noun(&record.recipe), e.message),
                 }));
             }
         };
-        match hosting::at(edition, host, own, &record, &recipe, &hosting) {
-            Ok(at) => found.push(HostedInput {
+        match hosting::seat(edition, host, own, &record, &recipe, &hosting) {
+            Ok((at, recipe)) => found.push(HostedInput {
                 key: key.clone(),
                 recipe,
                 at,

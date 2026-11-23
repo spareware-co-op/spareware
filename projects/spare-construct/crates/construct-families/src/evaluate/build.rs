@@ -12,26 +12,31 @@
 //!
 //! Each step is counted against the solid-step limit before it runs, and each extrusion's
 //! corners against the result-size limit before the engine is asked (`limits.rs`).
+//!
+//! A family built turned ([`Turn`], piece A64) has every extrusion's corners and its vector
+//! turned before the engine is asked; nothing else changes.
 
 use super::error::{EvalError, Place, Reason};
 use super::limits::{Limits, Meter};
 use super::sketch::{Drawn, resolve};
+use super::turn::Turn;
 use super::values::{TypeValues, Worked, work_out};
 use super::{Built, Evaluated};
 use crate::check::Sort;
 use crate::model::{Key, MaterialRef, Operation, Recipe, Step};
 use engine_geometry::value::engine::{Engine, Profile};
-use engine_geometry::value::grid::GridStep;
+use engine_geometry::value::grid::{GridStep, P3};
 use kit_core::Id;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Evaluates `recipe` for the type whose values are `values`, asking `engine` for every solid,
-/// within `limits`.
+/// within `limits`, the family turned by `turn`.
 pub(crate) fn run<E: Engine>(
     engine: &mut E,
     recipe: &Recipe,
     values: &TypeValues,
     limits: Limits,
+    turn: Turn,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
     let step = engine.edition().step;
     if step != GridStep::Q0 {
@@ -78,6 +83,7 @@ pub(crate) fn run<E: Engine>(
                     &mut meter,
                     (profile, holes),
                     heights,
+                    turn,
                 )
                 .map_err(at)?
             }
@@ -132,6 +138,7 @@ fn extrude<E: Engine>(
     meter: &mut Meter,
     (profile, holes): (&[Key], &[Vec<Key>]),
     (start, end): (&str, &str),
+    turn: Turn,
 ) -> Result<E::Solid, Reason> {
     let start = worked.length(start, meter)?;
     let end = worked.length(end, meter)?;
@@ -144,10 +151,16 @@ fn extrude<E: Engine>(
         return Err(Reason::NoThickness);
     }
     let depth = high.checked_sub(low).ok_or(Reason::OutOfRange)?;
-    let outer = drawn.corners(profile, low)?;
+    let turned = |corners: Vec<P3>| {
+        corners
+            .into_iter()
+            .map(|p| turn.point(p))
+            .collect::<Result<Vec<P3>, Reason>>()
+    };
+    let outer = turned(drawn.corners(profile, low)?)?;
     let holes = holes
         .iter()
-        .map(|hole| drawn.corners(hole, low))
+        .map(|hole| turned(drawn.corners(hole, low)?))
         .collect::<Result<Vec<_>, _>>()?;
     meter.corners(
         holes
@@ -155,7 +168,7 @@ fn extrude<E: Engine>(
             .fold(outer.len(), |n, h| n.saturating_add(h.len())),
     )?;
     engine
-        .extrude(&Profile { outer, holes }, drawn.along(depth))
+        .extrude(&Profile { outer, holes }, turn.vector(drawn.along(depth))?)
         .map_err(Reason::Engine)
 }
 
