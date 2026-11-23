@@ -56,6 +56,8 @@
     cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
+    applying: new Map(), // document -> the entries (by seq) this page is still applying: loads, hosts built again
+    waitingCheckpoints: [], // checkpoints that wait for those entries, in the order they came
     steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
     views: null, // the open model's views as the server lists them, by name; null until they come
     openView: null, // the ID of the model's view whose plan the server draws in the plan pane
@@ -355,8 +357,8 @@
       C.socket.close();
     }
     Object.assign(C, { socket: null, connected: false, project: null, data: null, model: null });
-    Object.assign(C, { pending: [], links: [], log: [], readOnly: false });
-    for (const map of [C.elements, C.claims, C.linked, C.fixed]) map.clear();
+    Object.assign(C, { pending: [], links: [], log: [], readOnly: false, waitingCheckpoints: [] });
+    for (const map of [C.elements, C.claims, C.linked, C.fixed, C.applying]) map.clear();
     C.watching.clear();
     S.sel = null;
     S.tool = 'select';
@@ -992,18 +994,51 @@
       .join('');
   }
 
+  // A checkpoint is compared only with what this page built from the same entries: while an entry it
+  // covers is still being applied here (a record on its way, a host being built again with what it
+  // hosts), the checkpoint waits for it. A body built before such an entry landed would otherwise be
+  // compared with the server's built after it: an undo that puts a window back did that to its wall.
+
+  /** Marks entry `seq` of `document` as being applied here; the function returned marks it done. */
+  function applying(document, seq) {
+    const seqs = C.applying.get(document) ?? new Map();
+    C.applying.set(document, seqs);
+    seqs.set(seq, (seqs.get(seq) ?? 0) + 1);
+    return () => {
+      const left = seqs.get(seq) - 1;
+      if (left > 0) seqs.set(seq, left);
+      else seqs.delete(seq);
+      compareWaiting();
+    };
+  }
+
+  /** Whether every entry of `document` through `through` has been applied here. */
+  const appliedThrough = (document, through) => ![...(C.applying.get(document)?.keys() ?? [])].some((seq) => seq <= through);
+
+  /** The checkpoints that waited, compared now if they need wait no longer, in the order they came. */
+  function compareWaiting() {
+    const waiting = C.waitingCheckpoints;
+    C.waitingCheckpoints = [];
+    for (const entry of waiting) compareCheckpoint(entry);
+  }
+
   /** Compares what the server built with what this page holds (note A05). */
   function compareCheckpoint(entry) {
     const { through, bodies } = entry.args;
+    // Behind a checkpoint that waits, so the two are compared in the order they came.
+    if (C.waitingCheckpoints.length || !appliedThrough(entry.target, through)) {
+      C.waitingCheckpoints.push(entry);
+      return;
+    }
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
       if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
-      // What is hosted in it changed at or after the last entry this checkpoint covers: it is built again with that
-      // change on its way, so the next checkpoint compares it.
-      if ((piece.touched ?? 0) >= through) continue;
+      // What is hosted in it changed after the last entry this checkpoint covers: it is built with that change, so
+      // the next checkpoint compares it. (Every entry through `through` has been applied here: see `applying`.)
+      if ((piece.touched ?? 0) > through) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -1056,6 +1091,10 @@
       return;
     }
     if (isDatum(record)) return keepDatum(model, id, record, hash, seq, mine); // grids and planes: their own block
+    // Its host is known only now when this page did not hold it (an undo or a redo puts it back): from
+    // here the host is built with it, so a checkpoint from before this entry is not compared with that.
+    const host = cutsIn(model, into) && into.get(hostIdOf(record));
+    if (host) Object.assign(host, { stale: true, touched: Math.max(host.touched ?? 0, seq) });
     const fill = await fillOf(model, record);
     const answer = await shapeFor(model, record, into, fill);
     // A placed family is built turned to stand in its wall once the wall is here (`seatFamilies`).
@@ -1240,7 +1279,7 @@
       const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
-        if (cuts) again().then(queueDraw);
+        if (cuts) again().then(queueDraw).finally(applying(entry.target, entry.seq));
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
@@ -1249,7 +1288,7 @@
         // moves it in that frame.
         if (cuts) {
           hosts.add(change.piece);
-          again().then(queueDraw);
+          again().then(queueDraw).finally(applying(entry.target, entry.seq));
         }
       } else {
         if (piece) piece.stale = true;
@@ -1258,7 +1297,8 @@
           .then(() => {
             queueDraw();
             if (change.piece === S.sel) refreshSide();
-          });
+          })
+          .finally(applying(entry.target, entry.seq));
       }
     }
     roomsAgain(entry.target, into, entry);
