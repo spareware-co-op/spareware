@@ -364,6 +364,11 @@ fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
     kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(|| Prisms);
 }
 
+#[test]
+fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
+    kernel_suite::walls_joined_at_an_l_and_a_t_fill_the_joined_shape(|| Prisms);
+}
+
 /// A test engine that answers only an extrusion straight up of a strictly convex polygon, which
 /// it keeps as the prism it is and meshes as its two caps (fans from the first corner) and a quad
 /// of two triangles per side. It is judged by the suite like any engine; it is not a geometry

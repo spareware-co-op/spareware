@@ -22,6 +22,9 @@
 //!   build it: the kernel one solid per layer, the stand-in one box of its whole thickness.
 //! - [`walls`]: how a layered wall's recipe reads its layers from its wall type, filled with the
 //!   parameters by [`parameters::recipe_at`].
+//! - [`joins`]: how a layered wall's recipe is filled with its joints with the walls it meets
+//!   (job 5.1): the walls are found from the stored walls of its level, the rule is
+//!   construct-walls', and the regenerator and the server's `/filled` both fill through it.
 //!
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
@@ -36,6 +39,8 @@
 pub mod catalog;
 #[cfg(feature = "server")]
 pub mod hosting;
+#[cfg(feature = "server")]
+pub mod joins;
 pub mod kernel;
 #[cfg(feature = "server")]
 pub mod levels;

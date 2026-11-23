@@ -127,6 +127,16 @@ fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
 }
 
 #[test]
+fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
+    kernel_suite::walls_joined_at_an_l_and_a_t_fill_the_joined_shape(engine);
+}
+
+#[test]
+fn joined_walls_meet_without_overlap_on_the_engine() {
+    kernel_suite::joined_walls_meet_without_overlap_on_the_engine(engine);
+}
+
+#[test]
 fn the_engine_keeps_a_sliver_within_its_tolerance() {
     kernel_suite::the_engine_keeps_a_sliver_within_its_tolerance(engine());
 }

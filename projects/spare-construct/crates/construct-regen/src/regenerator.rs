@@ -28,14 +28,24 @@
 //! doors again, because a door's place is read from its wall: a door moves with its wall and its
 //! record is not rewritten. Each such rebuild is one step deep, from the record each built row
 //! names, as the elements of a changed type are.
+//!
+//! A layered wall is built with its joints with the walls it meets ([`crate::joins`]): its recipe
+//! is filled with them as regeneration has reached, and its `reads` row lists every wall that
+//! filling read (the walls it meets, and the walls they meet). When a wall is built, the walls its
+//! row listed before and lists now are built again too, one step deep: so drawing, moving,
+//! retyping or deleting a wall builds every wall it meets or met again, and the joints are the
+//! same however the log was reached.
 
 use crate::hosting::{self, Hosting};
+use crate::joins;
 use crate::levels;
 use crate::parameters::{self, At};
+use crate::wall_plan;
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
 use construct_model::keys::{Place, list};
 use construct_model::rows::{BuiltElement, BuiltResult, DisplayRef, Model, Reads, Stored};
+use construct_params::{Length, Value};
 use kit_core::Id;
 use kit_ops::sha256_hex;
 use kit_store::key::list as kit_list;
@@ -405,10 +415,13 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         built.push((document.clone(), change.piece.clone(), body));
         let read = match fed {
             None => return Ok(()),
-            Some(Fed::Shape { hosts, hosted }) => {
-                return self
-                    .dependents(txn, project, document, hosts.iter().chain(&hosted), built)
-                    .await;
+            Some(Fed::Shape {
+                hosts,
+                hosted,
+                joined,
+            }) => {
+                let fed = hosts.iter().chain(&hosted).chain(&joined);
+                return self.dependents(txn, project, document, fed, built).await;
             }
             Some(Fed::Read(read)) => read,
         };
@@ -424,9 +437,14 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 continue;
             };
             built.push((document.clone(), element, body));
-            if let Some(Fed::Shape { hosts, hosted }) = fed {
-                self.dependents(txn, project, document, hosts.iter().chain(&hosted), built)
-                    .await?;
+            if let Some(Fed::Shape {
+                hosts,
+                hosted,
+                joined,
+            }) = fed
+            {
+                let fed = hosts.iter().chain(&hosted).chain(&joined);
+                self.dependents(txn, project, document, fed, built).await?;
             }
         }
         Ok(())
@@ -495,7 +513,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         };
         // What is hosted on it is listed by what is hosted, so it stays through its own rebuild.
         let kept: Option<Reads> = read_row(txn, &reads.key()).await?;
-        let hosted = kept.map(|kept| kept.hosted).unwrap_or_default();
+        let (hosted, joined_before) = kept
+            .map(|kept| (kept.hosted, kept.joins))
+            .unwrap_or_default();
         txn.delete(reads.key()).await?;
         let place = Place::Built {
             project: project.clone(),
@@ -552,6 +572,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 Some(Fed::Shape {
                     hosts,
                     hosted: ids(&hosted)?,
+                    joined: ids(&joined_before.into_iter().collect::<Vec<_>>())?,
                 }),
             ));
         };
@@ -578,16 +599,17 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         if let Some(host) = &new_host {
             list_hosted(txn, project, document, host, element_id, true).await?;
         }
+        let edition = edition_of(txn, project, document).await?;
+        let inputs = inputs(txn, project, document, &edition, &element, &hosted).await?;
         let row = Reads {
             records: reads_of(&element),
             host: new_host.as_ref().map(ToString::to_string),
             hosted: hosted.clone(),
+            joins: inputs.joins.clone(),
         };
         if !row.is_empty() {
             txn.put(reads.key(), to_row(&row)?).await?;
         }
-        let edition = edition_of(txn, project, document).await?;
-        let inputs = inputs(txn, project, document, &edition, &element, &hosted).await?;
         let made = self.make(&edition, &inputs);
         let placed = inputs.placed;
         let (result, cells, body) = match made {
@@ -626,11 +648,13 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         txn.put(place.key(), to_row(&row)?).await?;
         let mut hosts: Vec<Id> = old_host.into_iter().chain(new_host).collect();
         hosts.dedup();
+        let joined: Vec<String> = joined_before.union(&inputs.joins).cloned().collect();
         Ok((
             body,
             Some(Fed::Shape {
                 hosts,
                 hosted: ids(&hosted)?,
+                joined: ids(&joined)?,
             }),
         ))
     }
@@ -725,6 +749,9 @@ enum Fed {
         hosts: Vec<Id>,
         /// The elements hosted on it, in key order.
         hosted: Vec<Id>,
+        /// The walls its joints read, before and now, in key order: a wall it meets, or met, is
+        /// built again with it.
+        joined: Vec<Id>,
     },
 }
 
@@ -772,16 +799,26 @@ struct HostedInput {
     at: Placement,
 }
 
-/// What an element is built from: its recipe, the elements hosted on it, where it sits, and the
-/// level and base height its built row records.
+/// What an element is built from: its recipe, the elements hosted on it, where it sits, the
+/// level and base height its built row records, and the walls its joints read.
 struct Inputs {
     recipe: Result<Recipe, GeometryError>,
     placement: Result<Placement, GeometryError>,
     hosted: Result<Vec<HostedInput>, GeometryError>,
     placed: Placed,
+    joins: BTreeSet<String>,
 }
 
-/// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`]),
+/// A length in construct-params' stored spelling.
+fn stored_length(text: &str) -> Option<Length> {
+    match Value::from_stored(text)? {
+        Value::Length(length) => Some(length),
+        _ => None,
+    }
+}
+
+/// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`])
+/// with its joints with the walls it meets ([`joins::fill`]),
 /// where it sits (its own placement, or for an element hosted on a face, read from its host),
 /// each element `hosted` lists as hosted on it, and its level. A failure of any is the element's
 /// build failure.
@@ -794,6 +831,16 @@ async fn inputs<R: Reader>(
     hosted: &[String],
 ) -> Result<Inputs, StoreError> {
     let (recipe, placed) = input_of(reader, project, document, element).await?;
+    let (recipe, joins) = match recipe {
+        Ok(recipe) if wall_plan::is_layered(&recipe) => {
+            let elevation = placed.elevation.as_deref().and_then(stored_length);
+            let at = At::Regenerated;
+            let (recipe, read) =
+                joins::fill(reader, project, document, element, &recipe, elevation, at).await?;
+            (Ok(recipe), read)
+        }
+        other => (other, BTreeSet::new()),
+    };
     let (placement, hosted) = match &recipe {
         Ok(own) => (
             placement_of(reader, project, document, edition, element, own).await?,
@@ -806,6 +853,7 @@ async fn inputs<R: Reader>(
         placement,
         hosted,
         placed,
+        joins,
     })
 }
 
