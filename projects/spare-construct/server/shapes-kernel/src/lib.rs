@@ -4,8 +4,8 @@
 //! makes it), compiled to WebAssembly behind the same interface as the stand-in's package
 //! (`construct-shapes`): [`edition`] and [`build`], JSON in and JSON out, so the page loads one
 //! package or the other by a document's edition and reads what comes back the same way. And
-//! [`build_hosting`]: a wall with the doors hosted in it cut, for the page once the hosting job
-//! hands a wall its doors.
+//! [`build_hosting`]: a wall with the doors hosted in it cut, which the page calls for a wall that
+//! hosts elements, as the regenerator builds it.
 //!
 //! `app/pkg-kernel` holds the built output; `server/scripts/build-shapes-kernel.sh` makes it.
 //!
@@ -25,9 +25,9 @@
 //! Interim: solidcore answers behind the engine seam where the kernel's own exact operations do
 //! not yet (the interim register, `geom-solidcore/tests/interim.json`, says which part answers
 //! each operation and what replaces it); moving to an exact engine of the kernel's own changes
-//! [`builder`]'s one line. The page builds each element from its own recipe, so a wall it builds
-//! has no openings cut until the hosting job (CON-A4-F3-P1) hands it its doors (the register's
-//! row for this package).
+//! [`builder`]'s one line. The page hands a wall the elements hosted in it that it holds, as the
+//! regenerator does since the hosting job (CON-A4-F3-P1); the register's row for this package
+//! says what is left.
 
 use construct_model::element::Placement;
 use construct_model::geometry::{

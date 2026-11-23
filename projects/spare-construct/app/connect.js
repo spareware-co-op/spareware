@@ -53,6 +53,7 @@
     three: null,
     builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
     viewing: false, // this browser can't build the open model, so it draws what's stored
+    cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
     steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
@@ -561,6 +562,7 @@
     C.params = C.typeList = C.manage = null;
     C.problems.clear();
     C.asked.clear();
+    C.cuts = false;
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -573,6 +575,7 @@
     C.model = model;
     C.team = team;
     C.viewing = !builder;
+    C.cuts = Boolean(builder) && typeof builder.shapes.build_hosting === 'function';
     C.readOnly = C.viewing;
     C.watching.add(model.id);
     send({ t: 'watch', document: model.id, since: C.head });
@@ -627,8 +630,9 @@
     try {
       const shapes = await import(path);
       await shapes.default();
-      // built: recipe text -> what it builds to, which never changes
-      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map() };
+      // built: recipe text -> what it builds to, which never changes; hosting: the same for a host
+      // and what is hosted in it
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
       return null;
@@ -675,10 +679,26 @@
     }
   }
 
-  async function shapeFor(model, record) {
+  /**
+   * What `record` builds to here. A wall with elements hosted in it on this page is built with them,
+   * each opening cut, as the server's regenerator builds it, when the package can (the kernel's
+   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does.
+   */
+  function buildOn(builder, record, into) {
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into) : [];
+    if (!guests.length) return buildShape(builder, record.recipe);
+    // Each guest by its place in the host's frame, so a host that moves builds to the same text.
+    const host = JSON.stringify({ recipe: record.recipe, placement: { x: 0, y: 0, z: 0 } });
+    const hosted = JSON.stringify(guests);
+    const text = `${host}\n${hosted}`;
+    if (!builder.hosting.has(text)) builder.hosting.set(text, JSON.parse(builder.shapes.build_hosting(host, hosted)));
+    return builder.hosting.get(text);
+  }
+
+  async function shapeFor(model, record, into) {
     const row = C.models.get(model);
     const builder = row && (await builderFor(row));
-    return builder ? buildShape(builder, record.recipe) : storedShape(model, record.id);
+    return builder ? buildOn(builder, record, into) : storedShape(model, record.id);
   }
 
   /** A stored length, `length:q0:<steps>`, in millimetres. */
@@ -692,17 +712,54 @@
   }
 
   /**
+   * The ID of the element `el` is hosted on, as construct-regen's `hosting::read` reads its record:
+   * a face reference with both offsets, or an older door with a face reference and neither.
+   */
+  function hostIdOf(el) {
+    const faces = (el.references || []).filter((ref) => ref.kind === 'face' && !ref.doc);
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    if (along === undefined && up === undefined) {
+      const opening = el.recipe?.owner === 'construct' && el.recipe?.op === 'door.single';
+      return opening && faces.length ? faces[0].element : null;
+    }
+    return along !== undefined && up !== undefined && faces.length === 1 ? faces[0].element : null;
+  }
+
+  /**
+   * What is hosted in `host` among `into`'s elements, as the kernel's package takes them: each by
+   * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
+   * regenerator hands them to its builder.
+   */
+  function guestsOf(host, into) {
+    const drawn = { el: host, shape: into.get(host.id)?.shape };
+    const guests = [];
+    for (const [id, piece] of into) {
+      if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
+      const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+      const at = placedOn(piece.el, face, drawn);
+      const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
+      guests.push({ key: id, recipe: piece.el.recipe, placement });
+    }
+    return guests;
+  }
+
+  /**
    * Where an element sits. A door hosted on a face of its wall sits where its offsets put it on
    * the wall, as the server reads it (construct-regen's `hosting`): along the wall from its start,
    * up from its base, and flush with its side; so it moves with its wall, whose record alone
    * changes. Anything else, or a door whose wall is not here, sits at its own placement.
    */
   function placementOf(el) {
+    const hosted = hostOf(el);
+    return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
+  }
+
+  /** Where `el` sits hosted on `face` of `host` (`{el, shape}`): `placementOf`'s rule. */
+  function placedOn(el, face, host) {
     const along = el.props?.['@host.along'];
     const up = el.props?.['@host.up'];
-    const hosted = along !== undefined && up !== undefined && hostOf(el);
-    if (!hosted) return el.placement;
-    const { face, host } = hosted;
+    if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
     const thickness = host.el.recipe.args.thickness;
     const own = el.recipe.args.thickness;
@@ -789,8 +846,23 @@
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
     }
-    const answer = await shapeFor(model, record);
+    const answer = await shapeFor(model, record, into);
     if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    // What it is hosted in is built again with it, as the server builds a host with its guests.
+    if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
+  }
+
+  /** Whether this page builds `model`'s hosts with what is hosted in them, into `into`. */
+  const cutsIn = (model, into) => C.cuts && model === C.model?.id && into === C.elements;
+
+  /** Builds host `id` again with what is now hosted in it on this page, and lets it be compared. */
+  async function buildHostAgain(model, into, id) {
+    const host = id && into.get(id);
+    if (!host) return;
+    const answer = await shapeFor(model, host.el, into);
+    if (into.get(id) !== host) return;
+    Object.assign(host, { shape: undefined, failed: undefined }, answer);
+    host.stale = false;
   }
 
   async function loadClaims() {
@@ -928,18 +1000,33 @@
       const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
       const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
+      // A host is built with what is hosted in it: while what it hosts changes here, it is not
+      // compared with the server's, and once that is in hand it is built again.
+      const cuts = cutsIn(entry.target, into);
+      const hosts = new Set([piece && hostIdOf(piece.el), entry.cmd === 'hosted.place' && entry.args.host]);
+      if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
+      const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
+        if (cuts) again().then(queueDraw);
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
+        // A door hosted by its position sits apart from its host's frame, so a move of either
+        // moves it in that frame.
+        if (cuts) {
+          hosts.add(change.piece);
+          again().then(queueDraw);
+        }
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn).then(() => {
-          queueDraw();
-          if (change.piece === S.sel) refreshSide();
-        });
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn)
+          .then(() => (cuts ? again() : undefined))
+          .then(() => {
+            queueDraw();
+            if (change.piece === S.sel) refreshSide();
+          });
       }
     }
     // A type or a parameter changed, or may have: what the selected element reads may have too.

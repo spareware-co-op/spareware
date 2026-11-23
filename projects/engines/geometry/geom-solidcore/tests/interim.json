@@ -186,15 +186,15 @@
       "program": "spare-construct",
       "place": "the browser's kernel package (the server's shapes-kernel), a wall's hosted doors",
       "operation": "wall.straight with a door hosted on it, in the page",
-      "answered_by": "the page builds each element from its own recipe (build), so a wall it builds has no openings cut, where the regenerator now builds a host with its hosted elements (CON-A4-F3-P1); the package's build_hosting cuts them, the same bytes as the server's kernel builder, for a caller that hands it the doors",
+      "answered_by": "the page builds a wall with the elements hosted in it that it holds through the package's build_hosting, each placed in the wall's frame by construct-regen's hosting rule (app/connect.js, guestsOf), as the regenerator builds a host with its hosted elements (CON-A4-F3-P1); the package cuts them with the same bytes as the server's kernel builder. While what a wall hosts is loading, the page does not compare that wall with the server's checkpoint",
       "pinned_by": {
         "file": "projects/spare-construct/server/shapes-kernel/tests/package.rs",
         "test": "a_wall_with_two_doors_builds_as_the_kernel_builder_does"
       },
       "known_faults": [
-        "on the kernel's edition the page draws a wall with doors uncut, where the server's is cut"
+        "a door an undo brings back is known to the page's wall only once its record has loaded, so a checkpoint that comes first finds the wall built without it and says so"
       ],
-      "replaced_by": "the page hands a wall its doors as the regenerator does (connect.js calling the package's build_hosting)"
+      "replaced_by": "the server's checkpoint naming what each host was built with, so the page builds a host from the same list (note A05)"
     },
     {
       "program": "spare-construct",
