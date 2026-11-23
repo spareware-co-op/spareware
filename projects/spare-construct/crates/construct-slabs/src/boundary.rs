@@ -1,27 +1,40 @@
 //! A floor's boundary: one closed outer loop and any number of closed holes, each a chain of
 //! edges in plan, held as the sketch solver's geometry (construct-solver's [`Sketch`]: points,
-//! lines and arcs in grid steps) so it can be constrained later (job 5.2), with the loops naming
-//! the sketch's lines and arcs in order. Every edge has a permanent ID of its own, which names
-//! the floor's side faces, so a boundary replaced with the same IDs keeps its faces' names.
+//! lines, arcs and constraints in grid steps), with the loops naming the sketch's lines and arcs
+//! in order. Every edge has a permanent ID of its own, which names the floor's side faces, so a
+//! boundary replaced with the same IDs keeps its faces' names.
+//!
+//! A sketched floor (job 5.2): the sketch may hold constraints (dimensions, right angles,
+//! parallels, fixed points: construct-solver's [`Constraint`]), and then the floor's corners are
+//! the sketch as the solver solves it ([`construct_solver::solve`], the one solver family recipes
+//! use, from the points as drawn, within [`Budget::DEFAULT`]), never the points as drawn; the
+//! sketch is stored as drawn, so the same stored boundary always solves to the same corners. A
+//! sketch the solver cannot solve (over-constrained, not converged, out of work, refused at
+//! rounding) is refused by name ([`SlabError::NotSolved`]), and a solved outline that crosses
+//! itself or folds away is refused by the checks below as a drawn one is. A dimension changed
+//! ([`Boundary::with_dimension`]) solves the sketch again from the corners it has, so the outline
+//! moves. A sketch with no constraints is its own solution, so a drawn floor is as it was.
 //!
 //! Checks ([`Boundary::new`]), each refusal an [`SlabError`] naming the loop ([`Ring`]) and the
 //! edge or edges, in this order:
-//! 1. the sketch holds no constraints yet;
-//! 2. walking the loops, outer first: no edge is an arc (for now: the engine's extrusion takes a
+//! 1. walking the loops, outer first: no edge is an arc (for now: the engine's extrusion takes a
 //!    polygon, so an arc edge cannot be built exactly; the data model and the stored form hold
 //!    one already), every edge names a line the sketch has, no two edges share an ID, and no two
 //!    are one line;
-//! 3. every line, curve and point of the sketch is on an edge;
-//! 4. loop by loop: at least three edges, each ending where the next starts and the last where
-//!    the first starts, none of no length, and no two crossing, touching or running over each
-//!    other (exact orientation tests on the grid);
+//! 2. every line, curve and point of the sketch is on an edge;
+//! 3. the sketch solves, when it holds constraints;
+//! 4. loop by loop, on the solved corners: at least three edges, each ending where the next
+//!    starts and the last where the first starts, none of no length, and no two crossing,
+//!    touching or running over each other (exact orientation tests on the grid);
 //! 5. each hole wholly inside the outer loop, touching nothing of it;
 //! 6. no two holes overlapping or touching, and neither inside the other.
 //!
 //! A simple loop always encloses an area, so no loop that passes 4 encloses none.
 
 use crate::error::SlabError;
-use construct_solver::{CurveId, LineId, Point, PointId, Sketch, SketchError};
+use construct_solver::{
+    Budget, Constraint, ConstraintId, CurveId, LineId, Point, PointId, Side, Sketch, SketchError,
+};
 use kit_core::Id;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -86,12 +99,142 @@ pub struct Corner {
     pub at: Point,
 }
 
+/// A constraint as a command gives it: its `kind` and the numbers of the points and lines it
+/// relates (corner `k` of the loops in order, outer loop first and then each hole, is point `k`,
+/// and the edge from it is line `k`), with lengths in grid steps. Only what a straight-edged
+/// outline can use; anything else is refused as malformed, never repaired.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum PlainConstraint {
+    Coincident {
+        a: u32,
+        b: u32,
+    },
+    Horizontal {
+        line: u32,
+    },
+    Vertical {
+        line: u32,
+    },
+    Parallel {
+        a: u32,
+        b: u32,
+    },
+    Perpendicular {
+        a: u32,
+        b: u32,
+    },
+    EqualLength {
+        a: u32,
+        b: u32,
+    },
+    Distance {
+        a: u32,
+        b: u32,
+        steps: i64,
+    },
+    PointLineDistance {
+        point: u32,
+        line: u32,
+        steps: i64,
+        #[serde(default)]
+        side: Option<PlainSide>,
+    },
+    Fixed {
+        point: u32,
+    },
+    PointOnLine {
+        point: u32,
+        line: u32,
+    },
+}
+
+/// Which side of a line, as a command spells it.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum PlainSide {
+    Left,
+    Right,
+}
+
+impl PlainConstraint {
+    /// The solver's constraint; a point's side of a line is read from the sketch as drawn when the
+    /// command gave none.
+    fn made(&self, sketch: &Sketch) -> Result<Constraint, SlabError> {
+        let (p, l) = (PointId, LineId);
+        Ok(match *self {
+            Self::Coincident { a, b } => Constraint::Coincident(p(a), p(b)),
+            Self::Horizontal { line } => Constraint::Horizontal(l(line)),
+            Self::Vertical { line } => Constraint::Vertical(l(line)),
+            Self::Parallel { a, b } => Constraint::Parallel(l(a), l(b)),
+            Self::Perpendicular { a, b } => Constraint::Perpendicular(l(a), l(b)),
+            Self::EqualLength { a, b } => Constraint::EqualLength(l(a), l(b)),
+            Self::Distance { a, b, steps } => Constraint::Distance {
+                a: p(a),
+                b: p(b),
+                steps,
+            },
+            Self::PointLineDistance {
+                point,
+                line,
+                steps,
+                side,
+            } => {
+                let side = match side {
+                    Some(PlainSide::Left) => Side::Left,
+                    Some(PlainSide::Right) => Side::Right,
+                    None => sketch.side_of(p(point), l(line)).ok_or_else(|| {
+                        malformed("a point on its line needs the side it stays on")
+                    })?,
+                };
+                Constraint::PointLineDistance {
+                    point: p(point),
+                    line: l(line),
+                    steps,
+                    side,
+                }
+            }
+            Self::Fixed { point } => Constraint::Fixed(p(point)),
+            Self::PointOnLine { point, line } => Constraint::PointOnLine(p(point), l(line)),
+        })
+    }
+}
+
 /// A floor's boundary. Every value of this type has passed every check.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Boundary {
+    /// The sketch as drawn and stored.
     sketch: Sketch,
+    /// The sketch as solved: the same as drawn when it holds no constraints.
+    solved: Sketch,
     outer: Vec<Segment>,
     holes: Vec<Vec<Segment>>,
+}
+
+/// The sketch as the solver solves it, or as drawn when it holds no constraints.
+fn solve_sketch(sketch: &Sketch) -> Result<Sketch, SlabError> {
+    if sketch.constraints().is_empty() {
+        return Ok(sketch.clone());
+    }
+    let answer = construct_solver::solve(sketch, Budget::DEFAULT).map_err(|error| {
+        let named = match &error {
+            construct_solver::SolveError::OverConstrained { conflicting } => format!(
+                " (constraints {})",
+                conflicting
+                    .iter()
+                    .map(|c| c.0.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            _ => String::new(),
+        };
+        SlabError::NotSolved {
+            why: format!("{error}{named}"),
+        }
+    })?;
+    sketch
+        .with_positions(&answer.points, &answer.radii)
+        .map_err(from_sketch)
 }
 
 fn malformed(why: impl Into<String>) -> SlabError {
@@ -209,16 +352,15 @@ impl Boundary {
         outer: Vec<Segment>,
         holes: Vec<Vec<Segment>>,
     ) -> Result<Self, SlabError> {
-        if !sketch.constraints().is_empty() {
-            return Err(SlabError::Constrained);
-        }
-        let boundary = Self {
+        let mut boundary = Self {
+            solved: sketch.clone(),
             sketch,
             outer,
             holes,
         };
         boundary.check_edges()?;
         boundary.check_unused()?;
+        boundary.solved = solve_sketch(&boundary.sketch)?;
         let rings = boundary.rings()?;
         for (ring, corners) in &rings {
             check_ring(*ring, corners)?;
@@ -298,6 +440,8 @@ impl Boundary {
             outer: Vec<PlainCorner>,
             #[serde(default)]
             holes: Vec<Vec<PlainCorner>>,
+            #[serde(default)]
+            constraints: Vec<PlainConstraint>,
         }
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -332,13 +476,72 @@ impl Boundary {
             .into_iter()
             .map(corners)
             .collect::<Result<Vec<_>, _>>()?;
-        Self::from_corners(&outer, &holes)
+        let drawn = Self::from_corners(&outer, &holes)?;
+        if plain.constraints.is_empty() {
+            return Ok(drawn);
+        }
+        let mut sketch = drawn.sketch.clone();
+        for constraint in &plain.constraints {
+            let made = constraint.made(&sketch)?;
+            sketch.add_constraint(made).map_err(from_sketch)?;
+        }
+        Self::new(sketch, drawn.outer, drawn.holes)
     }
 
-    /// The sketch its loops are drawn in.
+    /// The sketch its loops are drawn in, as drawn and stored.
     #[must_use]
     pub fn sketch(&self) -> &Sketch {
         &self.sketch
+    }
+
+    /// The sketch as solved: its points are the floor's corners. The sketch as drawn when it
+    /// holds no constraints.
+    #[must_use]
+    pub fn solved(&self) -> &Sketch {
+        &self.solved
+    }
+
+    /// The same boundary with one dimension of its sketch changed to `steps` and solved again
+    /// from the corners it has now, so the outline moves and every edge keeps its ID. A
+    /// dimension is a distance between two points, a point's distance from a line, a radius or
+    /// a diameter.
+    ///
+    /// # Errors
+    /// [`SlabError::NotADimension`] for a constraint the sketch lacks or one with no length;
+    /// [`SlabError::OutOfRange`] or [`SlabError::Malformed`] for a length the sketch refuses
+    /// (beyond the grid, or not above zero); any refusal of [`Boundary::new`], such as a solved
+    /// outline that crosses itself.
+    pub fn with_dimension(&self, constraint: ConstraintId, steps: i64) -> Result<Self, SlabError> {
+        let at = usize::try_from(constraint.0).map_err(|_| SlabError::OutOfRange)?;
+        let not = || SlabError::NotADimension {
+            constraint: constraint.0,
+        };
+        let changed = match self.sketch.constraints().get(at).copied().ok_or_else(not)? {
+            Constraint::Distance { a, b, .. } => Constraint::Distance { a, b, steps },
+            Constraint::PointLineDistance {
+                point, line, side, ..
+            } => Constraint::PointLineDistance {
+                point,
+                line,
+                steps,
+                side,
+            },
+            Constraint::Radius { curve, .. } => Constraint::Radius { curve, steps },
+            Constraint::Diameter { curve, .. } => Constraint::Diameter { curve, steps },
+            _ => return Err(not()),
+        };
+        let mut sketch = Sketch::new();
+        for point in self.solved.points() {
+            sketch.add_point(point.x, point.y).map_err(from_sketch)?;
+        }
+        for line in self.solved.lines() {
+            sketch.add_line(line.start, line.end).map_err(from_sketch)?;
+        }
+        for (k, kept) in self.sketch.constraints().iter().enumerate() {
+            let next = if k == at { changed } else { *kept };
+            sketch.add_constraint(next).map_err(from_sketch)?;
+        }
+        Self::new(sketch, self.outer.clone(), self.holes.clone())
     }
 
     /// The outer loop's edges, in order.
@@ -467,14 +670,14 @@ impl Boundary {
         Ok(read)
     }
 
-    /// Where an edge starts and ends. `None` for an arc or a line the sketch lacks, which
+    /// Where an edge starts and ends, solved. `None` for an arc or a line the sketch lacks, which
     /// [`Boundary::new`] refuses.
     fn ends(&self, segment: &Segment) -> Option<(Point, Point)> {
         let Edge::Line(line) = segment.edge else {
             return None;
         };
-        let line = self.sketch.line(line)?;
-        Some((self.sketch.point(line.start)?, self.sketch.point(line.end)?))
+        let line = self.solved.line(line)?;
+        Some((self.solved.point(line.start)?, self.solved.point(line.end)?))
     }
 
     /// Every edge as a line of the sketch, its ID used once and its line once; arcs refused.
@@ -599,7 +802,7 @@ impl Boundary {
             let mut corners = Vec::with_capacity(segments.len());
             for (segment, line) in segments.iter().zip(&lines) {
                 let start = self
-                    .sketch
+                    .solved
                     .point(line.start)
                     .ok_or_else(|| malformed("a line without its point"))?;
                 corners.push((segment.id.clone(), start));
@@ -723,14 +926,11 @@ fn read_segment(value: &Value) -> Result<Segment, SlabError> {
 }
 
 /// A stored sketch, made again through the solver's own calls so that every point is in range,
-/// every line joins two points it has and every arc's radius is the one it gives; one that is
-/// not made again exactly is refused.
+/// every line joins two points it has, every arc's radius is the one it gives and every
+/// constraint names what the sketch has; one that is not made again exactly is refused.
 fn remade(value: &Value) -> Result<Sketch, SlabError> {
     let stored: Sketch = serde_json::from_value(value.clone())
         .map_err(|e| malformed(format!("the sketch is not a sketch: {e}")))?;
-    if !stored.constraints().is_empty() {
-        return Err(SlabError::Constrained);
-    }
     let mut made = Sketch::new();
     for point in stored.points() {
         made.add_point(point.x, point.y).map_err(from_sketch)?;
@@ -746,6 +946,9 @@ fn remade(value: &Value) -> Result<Sketch, SlabError> {
             construct_solver::Curve::Circle { centre, radius } => made.add_circle(centre, radius),
         };
         added.map_err(from_sketch)?;
+    }
+    for constraint in stored.constraints() {
+        made.add_constraint(*constraint).map_err(from_sketch)?;
     }
     if made != stored {
         return Err(malformed("the sketch is not one the solver makes"));

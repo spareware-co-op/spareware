@@ -1483,6 +1483,111 @@ async fn an_opening_and_a_shaft_cut_a_floors_quantities_and_the_page_is_told() {
     }
 }
 
+/// Through the server's commands on the stand-in: a floor sloped by `floor.slope` shows its
+/// lowest and highest points and its sloped top area (exact where its arrow is whole, as 3 in 4),
+/// built as the box between them; its slope cleared, the rows are gone; a floor given slab edges
+/// shows each edge's length and volume; both on one floor is refused in words, and the page's
+/// filled recipe of a shaped floor holds its tops and its slab edges.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sloped_floor_and_a_floor_with_slab_edges_show_their_quantities() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    s.edit(&anna, &project, &model, "floor.defaults", json!({}))
+        .await
+        .unwrap();
+    let rectangle = |x0: i64| {
+        json!({ "outer": [corner("r0", x0, 0), corner("r1", x0 + 4000, 0),
+                          corner("r2", x0 + 4000, 3000), corner("r3", x0, 3000)] })
+    };
+    for (id, x0) in [("F-901", 60_000), ("F-902", 70_000)] {
+        let floor = json!({ "element": id, "type": "floor-concrete-200", "level": "1",
+                            "boundary": rectangle(x0) });
+        s.edit(&anna, &project, &model, "floor.create", floor)
+            .await
+            .unwrap();
+    }
+    // A plain floor has none of the rows.
+    let plain = quantities(s, &project, &model, "F-901").await;
+    assert!(!plain.contains_key("floor.lowest") && !plain.contains_key("floor.top-area"));
+
+    // A 3 in 4 fall along x: 4 m along, 3 m down; the top face's true area is 5/4 of the plan's.
+    let slope = json!({ "element": "F-901", "slope": { "tail": ["60000", "0"],
+                        "head": ["64000", "0"], "at_tail": "0", "gradient": { "rise": -3, "run": 4 } } });
+    s.edit(&anna, &project, &model, "floor.slope", slope)
+        .await
+        .unwrap();
+    let read = quantities(s, &project, &model, "F-901").await;
+    assert_eq!(read["floor.top-area"].1.as_deref(), Some("15.00 m²"));
+    assert_eq!(read["floor.highest"].1.as_deref(), Some("0 mm"));
+    assert_eq!(read["floor.lowest"].1.as_deref(), Some("-3200 mm"));
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("2.40 m³"));
+    assert_eq!(
+        wall_bounds(s, &project, &model, "F-901").await,
+        ([60_000, 0, -3200], [64_000, 3000, 0])
+    );
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-901"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert!(args.contains_key("tops") && !args.contains_key("edges"));
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.edge",
+            json!({ "element": "F-901", "edge": "r0",
+                    "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.slope.clear",
+        json!({ "element": "F-901" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(quantities(s, &project, &model, "F-901").await, plain);
+
+    // A downturn 4 m long, 300 mm wide and 400 mm deep: 0.48 m3.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.edge",
+        json!({ "element": "F-902", "edge": "r0",
+                "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+    )
+    .await
+    .unwrap();
+    let read = quantities(s, &project, &model, "F-902").await;
+    assert_eq!(read["floor.edge-r0.length"].1.as_deref(), Some("4000 mm"));
+    assert_eq!(read["floor.edge-r0.volume"].1.as_deref(), Some("0.48 m³"));
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-902"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert_eq!(args["edges"].as_array().map(Vec::len), Some(1));
+    assert_eq!(args["edges"][0]["id"], "r0");
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.slope",
+            json!({ "element": "F-902", "slope": { "tail": ["70000", "0"], "head": ["74000", "0"],
+                    "at_tail": "0", "at_head": "-40 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+}
+
 /// The seed draws its walls as a person does, layered walls of construct-walls' default types made
 /// through the log, and writes no old box wall. The page reads a model's wall types with their
 /// layers, the materials and the defaults, and an element's recipe filled as it is built, with how

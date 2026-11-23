@@ -209,6 +209,24 @@ fn a_rectangle_floor_is_its_layers() {
     kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
 }
 
+/// A sloped floor, or one with slab edges, on an engine that takes only level boxes is the
+/// engine's refusal, never a flat floor or one without its edges: the server's engine builds
+/// both (its tests/kernel.rs runs the suite's `a_sloped_floor_is_its_layers` and
+/// `a_floor_with_slab_edges_is_one_solid`).
+#[test]
+fn a_shaped_floor_the_engine_cannot_build_is_refused() {
+    use construct_model::geometry::Geometry;
+    let k = construct_regen::kernel::Kernel::new(Cuboids).unwrap();
+    let flat = kernel_suite::floor_of(&[&kernel_suite::RECTANGLE], &[("structure", 200)]);
+    let tops = serde_json::json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let sloped = kernel_suite::shaped_floor(flat.clone(), &[("tops", tops)]);
+    assert!(k.build(&sloped).is_err());
+    let square = [[0, 0], [4000, 0], [4000, 300], [0, 300]];
+    let down = kernel_suite::slab_edge("e0", "downturn", (square, -200), (square, -600));
+    let edged = kernel_suite::shaped_floor(flat, &[("edges", serde_json::json!([down]))]);
+    assert!(k.build(&edged).is_err());
+}
+
 #[test]
 fn an_opening_in_a_wall_is_refused_by_name() {
     kernel_suite::an_opening_in_a_wall_is_refused_by_name(|| Cuboids);
@@ -217,6 +235,11 @@ fn an_opening_in_a_wall_is_refused_by_name() {
 #[test]
 fn an_opening_in_a_floor_is_refused_by_name() {
     kernel_suite::an_opening_in_a_floor_is_refused_by_name(|| Cuboids);
+}
+
+#[test]
+fn a_shaped_floor_that_is_cut_is_refused_by_name() {
+    kernel_suite::a_shaped_floor_that_is_cut_is_refused_by_name(|| Cuboids);
 }
 
 #[test]

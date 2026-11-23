@@ -46,6 +46,12 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .roof-ridge { stroke-dasharray: 8 4; }
 .dw .roof-valley { stroke-dasharray: 2 3; }
 .dw .roof-verge { stroke-width: 1px; }
+.dw .floor-slope line { stroke: var(--app-strong); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-slope path { fill: var(--app-strong); pointer-events: none; }
+.dw .floor-slope text { pointer-events: none; }
+.dw .floor-slab-edge { fill: var(--ink-3); fill-opacity: .35; stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-edge-hit { stroke: var(--app-strong); stroke-opacity: .3; stroke-width: 9px; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.dw .floor-edge-hit:hover { stroke-opacity: .6; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */

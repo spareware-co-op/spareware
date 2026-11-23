@@ -4,7 +4,8 @@
 //! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
-//! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
+//! through the commands and its quantities read back, a sloped floor and one with slab edges built
+//! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
 //! cutting a three-layer wall (job 6.4), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
@@ -124,6 +125,16 @@ fn an_l_shaped_floor_with_a_hole_is_its_layers() {
 }
 
 #[test]
+fn a_sloped_floor_is_its_layers() {
+    kernel_suite::a_sloped_floor_is_its_layers(engine);
+}
+
+#[test]
+fn a_floor_with_slab_edges_is_one_solid() {
+    kernel_suite::a_floor_with_slab_edges_is_one_solid(engine);
+}
+
+#[test]
 fn a_gable_roof_is_its_layers() {
     kernel_suite::a_gable_roof_is_its_layers(engine);
 }
@@ -192,6 +203,11 @@ fn openings_and_a_shaft_cut_every_layer_of_a_floor() {
 #[test]
 fn an_opening_in_a_floor_is_refused_by_name() {
     kernel_suite::an_opening_in_a_floor_is_refused_by_name(engine);
+}
+
+#[test]
+fn a_shaped_floor_that_is_cut_is_refused_by_name() {
+    kernel_suite::a_shaped_floor_that_is_cut_is_refused_by_name(engine);
 }
 
 #[test]

@@ -854,6 +854,7 @@ dependencies = [
  "construct-types",
  "construct-walls",
  "kit-core",
+ "num-bigint",
  "serde",
  "serde_json",
 ]

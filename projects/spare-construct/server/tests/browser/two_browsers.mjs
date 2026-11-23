@@ -2196,6 +2196,177 @@ if (withKernel) {
   }
 }
 pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
+console.log('\n   Floors, sloped and with slab edges');
+// Anna draws two floors south of the building, of the 200 mm concrete type. She picks the first,
+// types its two heights, draws its slope arrow in the plan with two clicks, and both browsers draw
+// the arrow with its heights and hold the floor's body as the server built it (40 mm lower at one
+// end); the server's read-only rows give its lowest and highest points and its top area. Ben picks
+// the second, chooses a downturn and clicks one of its sides: both browsers draw the slab edge, and
+// the rows give its length and volume. Ben then tries a slope on that floor, and the server's words
+// say why not. Her undo and redo of the slope, and his remove and undo of the edge, are seen in
+// both browsers. Each lets go of the other's floor, and each deletes their own, so the plan ends as
+// it began.
+await floorHome(anna);
+await floorHome(ben);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
+await anna.locator(floorTypeField).selectOption({ label: 'Concrete 200' });
+await anna.waitForSelector('#pv-side [data-floor-layers="floor-concrete-200"]');
+const slFloorA = [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500]];
+const slFloorB = [[11000, -2300], [13000, -2300], [13000, -500], [11000, -500]];
+const slFloorWith = (page, x) =>
+  page.evaluate(
+    (steps) =>
+      [...window.spare.elements.values()].find(
+        (p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === steps,
+      )?.el.id,
+    x * 6400,
+  );
+for (const corners of [slFloorA, slFloorB]) {
+  await floorClicks(anna, [...corners, corners[0]]);
+  await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+  await anna.keyboard.press('Enter');
+  await anna.waitForSelector('#pv-side [data-floor-sketch="empty"]');
+}
+await ben.waitForFunction((x) => [...window.spare.elements.values()].some((p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === x), 11000 * 6400);
+const slIdA = await slFloorWith(ben, 7000);
+const slIdB = await slFloorWith(ben, 11000);
+check(slIdA && slIdB && slIdA !== slIdB, 'Anna draws two plain floors, and Ben has both');
+await anna.keyboard.press('Escape');
+
+// The first floor: heights typed, the arrow drawn with two clicks.
+const slPick = async (page, id, x, y) => {
+  const at = await onPlan(page, x, y);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector(`#pv-side [data-floor-slope-part]`);
+  await page.waitForFunction((who) => window.spare.claims.get(who)?.person === window.spare.me.person.id, id);
+};
+await slPick(anna, slIdA, 8500, -1400);
+await anna.locator('#pv-side input[data-key="floor-slope-atTail"]').fill('0 mm');
+await anna.locator('#pv-side input[data-key="floor-slope-atHead"]').fill('-40 mm');
+await anna.locator('#pv-side input[data-key="floor-slope-atHead"]').press('Enter');
+await anna.click('#pv-side [data-key="floor-slope-pick"]');
+await anna.waitForSelector('#pv-side [data-floor-pick="tail"]');
+const slTail = await onPlan(anna, 7000, -1400);
+await anna.mouse.click(slTail.x, slTail.y);
+await anna.waitForSelector('#pv-side [data-floor-pick="head"]');
+const slHead = await onPlan(anna, 10000, -1400);
+await anna.mouse.click(slHead.x, slHead.y);
+const slArrow = (id) => `g.element[data-id="${id}"] [data-floor-slope="${id}"]`;
+const slBodyLow = (id) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === -240 && window.spare.elements.get(id).shape.bounds.max[2] === 0;
+for (const [who, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForSelector(slArrow(slIdA));
+  await page.waitForFunction(slBodyLow, slIdA);
+  const heights = await page.locator(`${slArrow(slIdA)} text`).allTextContents();
+  check(heights.join('|') === '0 mm|-40 mm', `${who}'s plan draws the slope arrow with its two heights, ${heights.join(' and ')}`);
+}
+pass("Anna's slope arrow is drawn in both plans, and both browsers hold the body 240 mm deep at its low end");
+const slAsBen = (path) => ben.evaluate((url) => fetch(url).then((r) => r.json()), `${model}/${path}`);
+const slRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+const slRowsA = await until(
+  () => slAsBen(`parameters/${slIdA}`),
+  (view) => slRead(view, 'floor.lowest') !== undefined,
+  'the server works out the slope',
+);
+check(
+  slRead(slRowsA, 'floor.lowest') === '-240 mm' && slRead(slRowsA, 'floor.highest') === '0 mm' && /^5\.40 m²$/.test(slRead(slRowsA, 'floor.top-area')),
+  `the server gives the floor's lowest and highest points and its sloped top area, ${slRead(slRowsA, 'floor.lowest')}, ${slRead(slRowsA, 'floor.highest')} and ${slRead(slRowsA, 'floor.top-area')}`,
+);
+await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="floor.lowest"]')?.textContent === '-240 mm');
+check(
+  (await anna.locator('#pv-side [data-floor-slope-now]').textContent()) === '0 mm to -40 mm',
+  "Anna's palette says what the slope is, read from the record",
+);
+await shot(anna, 'anna-floor-slope');
+
+// The second floor: a downturn on one side, picked in the plan.
+const slAtBen = async (x, y) => onPlan(ben, x, y);
+const slPickBen = await slAtBen(12000, -1400);
+await ben.mouse.click(slPickBen.x, slPickBen.y);
+await ben.waitForSelector('#pv-side [data-floor-slope-part]');
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', slIdB);
+await ben.locator('#pv-side select[data-key="floor-edge-kind"]').selectOption('downturn');
+await ben.locator('#pv-side input[data-key="floor-edge-width"]').fill('300 mm');
+await ben.locator('#pv-side input[data-key="floor-edge-depth"]').fill('400 mm');
+await ben.locator('#pv-side input[data-key="floor-edge-depth"]').press('Enter');
+await ben.click('#pv-side [data-key="floor-edge-pick"]');
+await ben.waitForSelector('#pv-side [data-floor-pick="edge"]');
+// A side is a line with no height, which the page never counts as visible: wait for it to be drawn,
+// then click where the plan puts its middle.
+await ben.waitForSelector('#pv-canvas line[data-floor-edge="o0"]', { state: 'attached' });
+const slSide = await onPlan(ben, 12000, -2300);
+await ben.mouse.click(slSide.x, slSide.y);
+const slEdgeDrawn = (id) => `g.element[data-id="${id}"] path[data-slab-edge="o0"][data-kind="downturn"]`;
+await ben.waitForSelector('#pv-side [data-slab-edge-row="o0"]');
+await anna.waitForSelector(slEdgeDrawn(slIdB));
+await ben.waitForSelector(slEdgeDrawn(slIdB));
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === -600, slIdB);
+pass("Ben's downturn on the floor's first side is drawn in both plans, and the body goes 400 mm deeper");
+const slRowsB = await until(
+  () => slAsBen(`parameters/${slIdB}`),
+  (view) => slRead(view, 'floor.edge-o0.length') !== undefined,
+  'the server works out the slab edge',
+);
+check(
+  slRead(slRowsB, 'floor.edge-o0.length') === '2000 mm' && slRead(slRowsB, 'floor.edge-o0.volume') === '0.24 m³',
+  `the server gives the slab edge's length and volume, ${slRead(slRowsB, 'floor.edge-o0.length')} and ${slRead(slRowsB, 'floor.edge-o0.volume')}`,
+);
+await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="floor.edge-o0.length"]')?.textContent === '2000 mm');
+pass("and Ben's palette shows them beside the floor's");
+await shot(ben, 'ben-floor-edge');
+
+// A slope on a floor with slab edges: refused in the server's words, and nothing changes.
+await ben.click('#pv-side [data-key="floor-slope-pick"]');
+await ben.waitForSelector('#pv-side [data-floor-pick="tail"]');
+const slBadTail = await slAtBen(11500, -1400);
+await ben.mouse.click(slBadTail.x, slBadTail.y);
+await ben.waitForSelector('#pv-side [data-floor-pick="head"]');
+const slBadHead = await slAtBen(12500, -1400);
+await ben.mouse.click(slBadHead.x, slBadHead.y);
+await ben.waitForSelector('#pv-side [data-problem="floor-slope"]');
+const slRefusal = await ben.locator('#pv-side [data-problem="floor-slope"]').textContent();
+check(
+  slRefusal === `${slIdB}'s slope: a floor cannot have both a slope and slab edges yet: slab edges under a sloped floor are not built`,
+  `a slope on the floor with a slab edge is turned back in the server's words: ${slRefusal}`,
+);
+check(
+  (await ben.evaluate((id) => window.spare.elements.get(id).el.recipe.args.slope, slIdB)) === undefined,
+  'and the floor has no slope',
+);
+await ben.keyboard.press('Escape');
+
+// Her undo and redo of the slope.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.slope');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) {
+  await page.waitForFunction((id) => !window.spare.elements.get(id)?.el.recipe.args.slope && !document.querySelector(`g.element[data-id="${id}"] [data-floor-slope]`), slIdA);
+}
+pass("Anna's undo takes the slope off, in both browsers");
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) await page.waitForSelector(slArrow(slIdA));
+pass('and her redo puts the arrow back, in both browsers');
+
+// His remove of the slab edge, and his undo of it.
+await ben.click('#pv-side [data-key="floor-edge-remove-o0"]');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] path[data-slab-edge]`), slIdB);
+await ben.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.edge.remove');
+await ben.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.waitForSelector(slEdgeDrawn(slIdB));
+pass("Ben removes the slab edge and undoes that, and Anna's plan follows both");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(JSON.stringify(mismatched).slice(0, 3000));
+  check(mismatched.length === 0, `every body ${name}'s page built, the shaped floors included, matches the server's`);
+}
+
+// Each deletes their own floor; the plan ends as it began.
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), slIdA);
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), slIdB);
+pass('each deletes their own floor, and both are gone from both plans');
 
 await browser.close();
 console.log('\nThe browser checks passed.');
