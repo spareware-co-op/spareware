@@ -9,6 +9,7 @@
 //! - [`grids`]: grid lines and reference planes, through the same log.
 //! - [`families`]: placing a family of the library on a wall, a door or a window, through the same
 //!   log.
+//! - [`openings`]: openings in walls and floors, and shafts through floors, through the same log.
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
 //!   same log.
@@ -32,6 +33,7 @@ pub mod floors;
 pub mod grids;
 pub mod hosting;
 pub mod levels;
+pub mod openings;
 pub mod params;
 pub mod spaces;
 pub mod transaction;

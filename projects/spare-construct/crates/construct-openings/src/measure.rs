@@ -12,8 +12,9 @@
 //!   its volume is that area by its thickness. The outlines lie inside the floor and apart, as
 //!   [`crate::fit::fit_in_floor`] has passed.
 
-use crate::outline::twice_signed_area;
+use crate::outline::{as_corners, twice_signed_area};
 use construct_params::{Area, Length, Volume};
+use construct_slabs::{Boundary, Corner, SlabError};
 
 /// A layer after its openings are cut: one of its two large faces, and its volume.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,4 +66,31 @@ pub fn floor_layer(
         face,
         volume: face.checked_mul(thickness)?,
     })
+}
+
+/// A floor's `boundary` with `cuts` (openings and shafts that cut it, grid steps, its own frame)
+/// as more holes: the boundary every layer of the cut floor has, so what a floor reads back
+/// (construct-slabs' area, perimeter, volume and mass) is worked out of it by the same code,
+/// exactly.
+///
+/// # Errors
+/// [`SlabError`] when the loops with the cuts do not pass the floor's own checks: the cuts are
+/// fitted first ([`crate::fit_in_floor`]), so this does not happen for a floor that builds.
+pub fn with_cuts(boundary: &Boundary, cuts: &[Vec<[i64; 2]>]) -> Result<Boundary, SlabError> {
+    let mut loops: Vec<Vec<Corner>> = boundary
+        .profile()
+        .into_iter()
+        .map(|ring| {
+            ring.into_iter()
+                .map(|(id, at)| Corner { id: Some(id), at })
+                .collect()
+        })
+        .collect();
+    let outer = if loops.is_empty() {
+        Vec::new()
+    } else {
+        loops.remove(0)
+    };
+    loops.extend(cuts.iter().map(|cut| as_corners(cut)));
+    Boundary::from_corners(&outer, &loops)
 }

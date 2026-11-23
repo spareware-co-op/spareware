@@ -666,6 +666,7 @@ dependencies = [
  "construct-levels",
  "construct-materials",
  "construct-model",
+ "construct-openings",
  "construct-params",
  "construct-phases",
  "construct-regen",

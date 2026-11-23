@@ -44,6 +44,10 @@ It is hosted on nothing. It cuts every floor of its document that it passes whol
 
 At least three corners, no two one after the other in one place, and no two edges crossing, touching or running over each other: a floor's loop checks (construct-slabs' boundary) asked of the outline alone. In its floor, with the floor's own holes, every outline must pass the floor's hole checks: wholly inside the outer loop touching nothing of it, and apart from every other hole and outline. A corner written as an object (`{"arc":...}`) is a curved edge, refused (`CurvedOutline`) until the engine seam's extrusion takes curves. A corner that is not two whole numbers is refused (`BadOpening`).
 
+## Commands
+
+The commands that make, change and delete them are construct-api's `cloud/openings.rs` (`opening.place`, `opening.draw`, `opening.size`, `opening.move`, `opening.outline`, `opening.delete`, `shaft.create`, `shaft.outline`, `shaft.reach`, `shaft.delete`), listed with their arguments in the [cloud format](../construct-model/FORMAT.md), "Commands". Every refusal they pass on is [`OpeningError`](src/error.rs)'s words or the kernel builder's; a floor's area, volume and mass after the cut are construct-slabs' own, worked out of the boundary with the cutting outlines as more holes ([`with_cuts`](src/measure.rs)).
+
 ## What a host holds after the cut
 
 Worked out exactly in construct-params' units and never stored ([`src/measure.rs`](src/measure.rs)): a wall layer's side is its length by its height less every opening's width by height, its volume that by its thickness; a floor layer's top is its outer loop's area less its holes' and its cut outlines', its volume that by its thickness.

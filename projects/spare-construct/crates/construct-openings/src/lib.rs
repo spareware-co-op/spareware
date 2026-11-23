@@ -39,7 +39,7 @@ pub mod record;
 
 pub use error::{End, Named, OpeningError, What};
 pub use fit::{Cutter, Reach, fit_in_floor, reach};
-pub use measure::{LayerAfter, floor_layer, wall_layer};
+pub use measure::{LayerAfter, floor_layer, wall_layer, with_cuts};
 pub use outline::Outline;
 pub use record::{
     AXIS_ARG, FLOOR_OP, HEIGHT_ARG, OP_VERSION, OPENING_KIND, OUTLINE_ARG, SHAFT_KIND, SHAFT_OP,
