@@ -4,6 +4,7 @@
 
 use crate::cut::{CutLine, Point, Side};
 use crate::error::ViewError;
+use crate::graphics::{GRAPHICS_KEY, Graphics};
 use crate::kind::{DetailLevel, PlanSetup, ViewKind};
 use crate::listing::Model;
 use crate::range::ViewRange;
@@ -80,6 +81,7 @@ pub struct View {
     kind: ViewKind,
     staging: ElementStaging,
     phasing: Option<ViewSettings>,
+    graphics: Graphics,
 }
 
 impl View {
@@ -103,6 +105,7 @@ impl View {
             kind,
             staging,
             phasing: None,
+            graphics: Graphics::new(),
         })
     }
 
@@ -146,6 +149,20 @@ impl View {
     #[must_use]
     pub fn phasing(&self) -> Option<&ViewSettings> {
         self.phasing.as_ref()
+    }
+
+    /// How categories and subcategories look in this view, over the project's object styles.
+    #[must_use]
+    pub fn graphics(&self) -> &Graphics {
+        &self.graphics
+    }
+
+    /// The view with other graphics rules. Whether the view can hold them is asked of
+    /// [`Graphics::check`]; reading a record refuses rules a view of its kind cannot hold.
+    #[must_use]
+    pub fn with_graphics(mut self, graphics: Graphics) -> Self {
+        self.graphics = graphics;
+        self
     }
 
     /// The view with another name.
@@ -268,6 +285,9 @@ impl View {
                 serde_json::to_string(settings).unwrap_or_default(),
             );
         }
+        if let Some(text) = self.graphics.to_text() {
+            props.insert(GRAPHICS_KEY.to_owned(), text);
+        }
         if let Some(plan) = self.kind.plan() {
             write_plan(&mut props, plan);
         }
@@ -336,6 +356,13 @@ impl View {
             },
         };
         let kind = read_kind(record, &kind_key).map_err(|why| malformed(&why))?;
+        let graphics = match record.props.get(GRAPHICS_KEY) {
+            None => Graphics::new(),
+            Some(text) => Graphics::from_text(text).map_err(|why| malformed(&why))?,
+        };
+        graphics
+            .check_kind(&kind)
+            .map_err(|why| malformed(&format!("holds graphics rules it cannot hold: {why}")))?;
         let view = Self::new(
             record.id.clone(),
             &record.name,
@@ -345,7 +372,8 @@ impl View {
             staging,
         )
         .map_err(|_| malformed("has no name"))?
-        .with_phasing(phasing);
+        .with_phasing(phasing)
+        .with_graphics(graphics);
         if view.to_record(&record.document) != *record {
             return Err(malformed("is not as a view record is written"));
         }

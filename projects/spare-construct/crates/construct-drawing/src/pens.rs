@@ -17,6 +17,7 @@ use construct_styles::{Edge, EdgeStyle, LineStyles, Micrometres, ObjectStyles, S
 use crate::DrawingError;
 use crate::drawing::{Drawing, Line, LineKind};
 use crate::hatch::FillPatterns;
+use crate::look::{Look, Looks};
 
 /// The styles a drawing is printed with: the category tree, the pens and patterns, the object
 /// styles, the materials (for a cut region's fill and its colour) and the fill patterns.
@@ -32,6 +33,9 @@ pub struct Styles<'a> {
     pub materials: &'a Materials,
     /// The fill patterns, by name.
     pub fills: &'a FillPatterns,
+    /// What the view says about how a category looks, or `None` for the project's object styles
+    /// alone.
+    pub looks: Option<&'a dyn Looks>,
 }
 
 /// The pen, colour and pattern `line` prints with at `scale`.
@@ -41,6 +45,12 @@ pub struct Styles<'a> {
 /// [`DrawingError::Style`] for what the object styles refuse: an unknown category, or a cut line
 /// of a category that cannot be cut.
 pub fn style(styles: Styles<'_>, line: &Line, scale: Scale) -> Result<EdgeStyle, DrawingError> {
+    if let Some(looks) = styles.looks {
+        return looks
+            .look(line.category, line.kind)
+            .map(|look| look.edge)
+            .map_err(DrawingError::Style);
+    }
     let edge = match line.kind {
         LineKind::Cut => Edge::Cut,
         LineKind::Projected => Edge::Projected,
@@ -49,6 +59,20 @@ pub fn style(styles: Styles<'_>, line: &Line, scale: Scale) -> Result<EdgeStyle,
         .objects
         .lookup(styles.categories, styles.lines, line.category, edge, scale)
         .map_err(|why| DrawingError::Style(format!("{why:?}")))
+}
+
+/// The whole look of `line` in the view `styles` says: what its view's rules (if `styles` has
+/// them) make of it. `None` when `styles` has no view rules.
+///
+/// # Errors
+///
+/// [`DrawingError::Style`] as [`style`].
+pub fn look_of(styles: Styles<'_>, line: &Line) -> Result<Option<Look>, DrawingError> {
+    styles
+        .looks
+        .map(|looks| looks.look(line.category, line.kind))
+        .transpose()
+        .map_err(DrawingError::Style)
 }
 
 /// The printed width of each line of `drawing` at `scale`, in the drawing's order.
