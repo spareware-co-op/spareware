@@ -113,7 +113,7 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
 }
 
 impl<K: Kv, D: Decider> ProjectCommands<K, D> {
-    /// An `element.*` command, after the hosting and floor rules of the generic commands.
+    /// An `element.*` command, after the hosting, floor and wall rules of the generic commands.
     async fn element<T: kit_store::Txn>(
         &self,
         staged: &mut T,
@@ -125,6 +125,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
             return Ok(Err(refused));
         }
         if let Err(refused) = floors::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = walls::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
         elements::apply(staged, project, context, edit, self.claim_ms).await
@@ -234,7 +237,12 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         let mut staged = Staged::new(txn);
         let outcome = if params::is_command(&edit.cmd) {
             match floors::generic_rules(&mut staged, project, edit).await? {
-                Ok(()) => params::apply(&mut staged, project, context, edit, self.claim_ms).await?,
+                Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
+                    Ok(()) => {
+                        params::apply(&mut staged, project, context, edit, self.claim_ms).await?
+                    }
+                    Err(refused) => Err(refused),
+                },
                 Err(refused) => Err(refused),
             }
         } else if hosting::is_command(&edit.cmd) {

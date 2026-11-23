@@ -28,9 +28,9 @@ use construct_regen::stand_in::Boxes;
 use construct_types::ElementType;
 use construct_walls::{Assembly, FLIPPED, LOCATION_LINE, assembly_of, default_walls};
 use kit_core::Id;
-use kit_ops::{Decider, Edit, Question};
+use kit_ops::{Decider, Edit, Question, sha256_hex};
 use kit_store::memory::{Memory, MemoryFiles};
-use kit_store::{Kv, Reader, Scope, Txn, read_row, to_row};
+use kit_store::{Kv, Place as StorePlace, Reader, Scope, Txn, read_row, to_row};
 use kit_sync::{Clock, Orderers, Reply, read_log};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -316,6 +316,32 @@ fn wall_type(default: &str) -> Value {
     json!({ "type": default, "name": wall.name, "assembly": layers_of(default) })
 }
 
+/// A walls type without layers under `id`, as a document made before `type.create` of a walls type
+/// was refused holds one: its record and pointer as `type.create` wrote them then.
+async fn an_older_plain_type(stack: &Stack, id: &str) {
+    let context = stack.context().await;
+    let record = ElementType::new(i(id), "Plain", WALLS, &context.categories)
+        .unwrap()
+        .to_record(&i(DOCUMENT));
+    let bytes = to_row(&record).unwrap();
+    let hash = Id::parse(&sha256_hex(&bytes)).unwrap();
+    let mut txn = stack.store.begin().await.unwrap();
+    let at = StorePlace::Record {
+        project: i("p"),
+        hash: hash.clone(),
+    };
+    txn.put(at.key(), bytes).await.unwrap();
+    let pointer = StorePlace::Piece {
+        project: i("p"),
+        document: i(DOCUMENT),
+        piece: i(id),
+    };
+    txn.put(pointer.key(), to_row(&hash.as_str()).unwrap())
+        .await
+        .unwrap();
+    txn.commit().await.unwrap();
+}
+
 /// Ground at 0 and First at 3 m.
 async fn two_levels(stack: &Stack) {
     for (id, name, elevation) in [("L-g", "Ground", "0"), ("L-1", "First", "3 m")] {
@@ -354,13 +380,7 @@ async fn a_partition(stack: &Stack) {
 #[tokio::test]
 async fn a_wall_type_is_made_with_the_wall_parameters_once() {
     let stack = Stack::new().await;
-    stack
-        .edit(
-            "type.create",
-            json!({ "type": "T-plain", "name": "Plain", "category": 100 }),
-        )
-        .await
-        .unwrap();
+    an_older_plain_type(&stack, "T-plain").await;
     assert!(stack.record("parameters").await.is_none());
     stack
         .edit("wall.type.create", wall_type(PARTITION))
@@ -506,13 +526,7 @@ async fn a_wall_is_drawn_between_two_points_of_a_chosen_type() {
         )
         .await
         .unwrap();
-    stack
-        .edit(
-            "type.create",
-            json!({ "type": "T-plain", "name": "Plain", "category": 100 }),
-        )
-        .await
-        .unwrap();
+    an_older_plain_type(&stack, "T-plain").await;
     let base = draw("W-9", PARTITION, ["0", "0"], ["1 m", "0"]);
     let with = |key: &str, value: Value| {
         let mut args = base.clone();
@@ -570,6 +584,58 @@ async fn a_wall_is_drawn_between_two_points_of_a_chosen_type() {
     let refused = stack.edit("wall.draw", no_top).await.unwrap_err();
     assert_eq!(refused, "W-9 would be 0 mm high: a top is above its base.");
     assert!(stack.record("W-9").await.is_none());
+
+    // The generic element commands do not go behind the wall's own; a straight wall is still
+    // theirs.
+    let layered = stack.record("W-1").await.unwrap();
+    let recipe = layered.recipe.clone();
+    let straight = json!({ "owner": "construct", "schema": 1, "op": "wall.straight",
+                           "op_version": 1,
+                           "args": { "length": 3000, "thickness": 200, "height": 3000 } });
+    let set_words = format!(
+        "{} is a layered wall, drawn with wall.draw, which checks it as a wall.",
+        layered.name
+    );
+    for (cmd, args, words) in [
+        (
+            "element.create",
+            json!({ "element": "W-x", "kind": "wall", "placement": { "x": 0, "y": 0, "z": 0 },
+                    "recipe": recipe }),
+            "A layered wall is drawn with wall.draw, which checks it as a wall.",
+        ),
+        (
+            "element.set",
+            json!({ "element": "W-1", "recipe": straight }),
+            set_words.as_str(),
+        ),
+    ] {
+        let refused = stack.edit(cmd, args).await.unwrap_err();
+        assert_eq!(refused, words, "{cmd}");
+    }
+    stack
+        .edit(
+            "element.create",
+            json!({ "element": "W-s", "kind": "wall", "level": null,
+                    "placement": { "x": 0, "y": 5000, "z": 0 }, "recipe": straight }),
+        )
+        .await
+        .unwrap();
+    let refused = stack
+        .edit("element.set", json!({ "element": "W-s", "recipe": recipe }))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        refused,
+        "A layered wall is drawn with wall.draw, which checks it as a wall."
+    );
+    stack
+        .edit(
+            "element.set",
+            json!({ "element": "W-1", "name": "North wall" }),
+        )
+        .await
+        .unwrap();
+    assert!(stack.record("W-x").await.is_none());
 }
 
 /// A change to a wall type's layers builds every wall of it again with the new layers, its record
@@ -676,6 +742,52 @@ async fn a_change_to_a_wall_type_builds_its_walls_again() {
         .await
         .unwrap_err();
     assert_eq!(refused, "no type has id T-none");
+
+    // The generic type commands do not go behind them; a walls type without layers, which only
+    // an older document holds, is still the type commands' own.
+    for (cmd, args, words) in [
+        (
+            "type.create",
+            json!({ "type": "T-w", "name": "Plain wall", "category": WALLS.0 }),
+            "A wall type is made with wall.type.create, which checks it as a wall.",
+        ),
+        (
+            "type.rename",
+            json!({ "type": PARTITION, "name": "P" }),
+            "A wall type is renamed with wall.type.rename, which checks it as a wall.",
+        ),
+        (
+            "type.duplicate",
+            json!({ "type": PARTITION, "new": "T-p2", "name": "P2" }),
+            "A wall type is copied with wall.type.duplicate, which checks it as a wall.",
+        ),
+        (
+            "type.delete",
+            json!({ "type": PARTITION }),
+            "A wall type is deleted with wall.type.delete, which checks it as a wall.",
+        ),
+    ] {
+        let refused = stack.edit(cmd, args).await.unwrap_err();
+        assert_eq!(refused, words, "{cmd}");
+    }
+    assert!(stack.record("T-w").await.is_none());
+    stack
+        .edit("type.rename", json!({ "type": "T-door", "name": "Doors" }))
+        .await
+        .unwrap();
+    an_older_plain_type(&stack, "T-plain").await;
+    stack
+        .edit(
+            "type.rename",
+            json!({ "type": "T-plain", "name": "Old plain" }),
+        )
+        .await
+        .unwrap();
+    stack
+        .edit("type.delete", json!({ "type": "T-plain" }))
+        .await
+        .unwrap();
+    assert!(stack.record("T-plain").await.is_none());
 
     // Ben may not change the type while Anna is working on it.
     let refused = stack
@@ -843,8 +955,7 @@ async fn the_default_wall_types_are_made_through_the_log_and_listed_with_their_l
     assert_eq!(defaults[0], wall_type(PARTITION));
     assert_eq!(defaults[1], wall_type(CONCRETE));
 
-    let plain = json!({ "type": "T-plain", "name": "Plain", "category": 100 });
-    stack.edit("type.create", plain).await.unwrap();
+    an_older_plain_type(&stack, "T-plain").await;
     for args in &defaults {
         stack.edit("wall.type.create", args.clone()).await.unwrap();
     }

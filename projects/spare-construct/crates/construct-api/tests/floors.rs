@@ -549,7 +549,7 @@ async fn a_floor_is_drawn_from_a_closed_boundary_with_holes() {
     stack
         .edit(
             "type.create",
-            json!({ "type": "T-wall", "name": "Wall", "category": 100 }),
+            json!({ "type": "T-door", "name": "Door", "category": 300 }),
         )
         .await
         .unwrap();
@@ -572,8 +572,8 @@ async fn a_floor_is_drawn_from_a_closed_boundary_with_holes() {
     for (args, words) in [
         (with("type", json!("T-none")), "no type has id T-none"),
         (
-            with("type", json!("T-wall")),
-            "an instance of category 500 cannot take a type of category 100",
+            with("type", json!("T-door")),
+            "an instance of category 500 cannot take a type of category 300",
         ),
         (
             with("level", Value::Null),

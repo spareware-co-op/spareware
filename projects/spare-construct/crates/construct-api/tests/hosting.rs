@@ -20,7 +20,7 @@
     reason = "test code; the rules are for the crate's own code"
 )]
 
-use construct_api::cloud::{Access, ProjectCommands};
+use construct_api::cloud::{Access, ProjectCommands, walls};
 use construct_model::element::Element;
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
 use construct_model::keys::Place;
@@ -687,24 +687,16 @@ async fn on_the_stand_in_a_wall_with_doors_is_the_wall_alone() {
 /// A layered wall along x from 0 to 4000 mm in its own frame, at x 1000 and y 2000 of level 1,
 /// 2700 mm high, its layers (12.5, 90 and 12.5 mm) listed as a filled recipe lists them, its
 /// exterior face 57.5 mm to the right of its line.
-fn layered_wall(id: &str) -> Value {
-    let q0 = |steps: i64| {
-        construct_params::Value::Length(construct_params::Length::from_steps(steps)).stored()
-    };
-    let layer = |f: &str, a: i64, b: i64| json!({ "function": f, "material": "m", "exterior": q0(a), "interior": q0(b) });
-    let args = json!({
-        "start": [q0(0), q0(0)],
-        "end": [q0(25_600_000), q0(0)],
-        "height": q0(17_280_000),
-        "layers": [
-            layer("finish", 368_000, 288_000),
-            layer("structure", 288_000, -288_000),
-            layer("finish", -288_000, -368_000),
-        ],
-    });
-    json!({ "element": id, "kind": "wall", "level": 1,
-            "placement": { "x": 1000, "y": 2000, "z": 0 },
-            "recipe": recipe("wall.layered", args) })
+/// A layered wall `id` of the default partition, 4 m along x from (1000, 2000), 2.7 m high on
+/// level 1, drawn as a person draws one (`wall.draw`, after the partition's `wall.type.create`):
+/// the generic `element.create` does not make a layered wall.
+async fn a_layered_wall(stack: &Stack, id: &str) {
+    let partition = walls::default_type_args().unwrap().remove(0);
+    let ty = partition["type"].clone();
+    stack.edit("wall.type.create", partition).await.unwrap();
+    let draw = json!({ "element": id, "type": ty, "start": ["1000 mm", "2000 mm"],
+                       "end": ["5000 mm", "2000 mm"], "level": 1, "height": "2700 mm" });
+    stack.edit("wall.draw", draw).await.unwrap();
 }
 
 /// A layered wall hosts as the box does: a door placed on its exterior sits flush with that side,
@@ -714,10 +706,7 @@ fn layered_wall(id: &str) -> Value {
 #[tokio::test]
 async fn a_door_is_placed_on_a_layered_wall() {
     let stack = Stack::new(Arc::new(Cutter)).await;
-    stack
-        .edit("element.create", layered_wall("W-1"))
-        .await
-        .unwrap();
+    a_layered_wall(&stack, "W-1").await;
     stack
         .edit("hosted.place", place("D-1", "W-1", "exterior", "1200 mm"))
         .await
@@ -725,11 +714,11 @@ async fn a_door_is_placed_on_a_layered_wall() {
     let (_, door) = stack.record("D-1").await.unwrap();
     assert_eq!(
         [door.placement.x, door.placement.y, door.placement.z],
-        [2200, 1942, 0]
+        [2200, 1943, 0]
     );
     assert_eq!(
         stack.cuts("W-1").await,
-        [("D-1".to_owned(), [1200, -58, 0], 900)]
+        [("D-1".to_owned(), [2200, 1943, 0], 900)]
     );
     let refused = stack
         .edit("hosted.place", place("D-2", "W-1", "interior", "3500 mm"))
@@ -745,6 +734,6 @@ async fn a_door_is_placed_on_a_layered_wall() {
         .unwrap();
     assert_eq!(
         stack.cuts("W-1").await,
-        [("D-1".to_owned(), [2000, -58, 0], 900)]
+        [("D-1".to_owned(), [3000, 1943, 0], 900)]
     );
 }
