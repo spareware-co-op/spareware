@@ -2549,5 +2549,259 @@ await warnFresh.waitForFunction(() => document.querySelector('#st-warnings')?.da
 await warnFresh.context().close();
 pass('a fresh load reads the same list, none');
 
+console.log('\n   Schedules, in the project browser');
+// Ben makes a schedule of rooms from the browser's Schedules group and Anna's list shows it. Its
+// table is the server's: a heading for each field, a row for each room, each value as the server
+// shows it, and it is asked for again after every entry of the log, so a room Anna places, renames
+// or deletes changes the rows in both browsers. Ben sorts it, refuses himself a sort key twice,
+// filters it, undoes and redoes the filter; choosing a row selects that room in Anna's plan. A
+// fresh load agrees. Ben touches only the schedule and Anna only the rooms, so neither takes
+// what the other touched within 30 s.
+const scheduleLeaf = (name) => `#browser [data-act="stackschedule"]:has(span:text-is("${name}"))`;
+const table = '#stack-sched table[data-schedule-table]';
+const roomIdsOf = (page) =>
+  page.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'room').map((p) => p.el.id).sort());
+const rowIdsOf = (page) => page.locator(`${table} tr[data-row]`).evaluateAll((rows) => rows.map((r) => r.dataset.row));
+const closeScheduleOf = async (page) => {
+  await page.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await page.waitForSelector('#dlg', { state: 'hidden' });
+};
+// The rows of the open table, in the order shown, as [element, ...cells], once they are `want`.
+const schedRows = async (page, want, label) => {
+  const same = (found) => JSON.stringify(found) === JSON.stringify(want);
+  const read = () =>
+    page
+      .locator(`${table} tbody tr`)
+      .evaluateAll((rows) => rows.map((r) => [r.dataset.row, ...[...r.querySelectorAll('td')].map((td) => td.textContent)]))
+      .catch(() => null);
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = await read();
+    if (found && same(found)) return found;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the rows were ${JSON.stringify(await read())}, wanted ${JSON.stringify(want)}`);
+};
+const schedIds = async (page, ids, label) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = [...(await rowIdsOf(page).catch(() => []))].sort();
+    if (JSON.stringify(found) === JSON.stringify([...ids].sort())) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the rows were ${JSON.stringify(await rowIdsOf(page).catch(() => null))}, wanted ${JSON.stringify(ids)}`);
+};
+const areaOf = async (id) =>
+  (await asAnna(`parameters/${id}`)).parameters?.find((p) => p.id === 'room.area')?.shown ?? '';
+const stateOf = async (id) =>
+  (await asAnna(`parameters/${id}`)).parameters?.find((p) => p.id === 'room.state')?.shown ?? '';
+
+await toArchitecture(anna);
+await toArchitecture(ben);
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+check((await asAnna('schedules')).length === 0, 'the model has no schedules yet');
+
+// Ben makes a schedule of rooms: a name and a category.
+await ben.locator('#browser [data-key="new-schedule-name"]').fill('Room list');
+await ben.locator('#browser [data-key="new-schedule-category"]').selectOption({ label: 'Rooms' });
+await ben.locator('#browser [data-act="stacknewschedule"]').click();
+await anna.waitForSelector(scheduleLeaf('Room list'));
+await ben.waitForSelector(table);
+const made = (await asAnna('schedules'))[0];
+check(
+  made.name === 'Room list' && made.category === 3300 && made.fields.join() === 'name',
+  "Ben makes a schedule of rooms from the browser and the server holds it as a schedule record, listing the rooms' names",
+);
+pass("Anna's list shows the schedule Ben made, and Ben's browser opens its table");
+const scheduleId = made.id;
+
+// Its rows are the model's rooms: one row for each, the same IDs, the same names.
+const firstRooms = await roomIdsOf(ben);
+check(firstRooms.length === 1 && firstRooms[0] === roomId, "the model has the room Anna placed earlier, and only it");
+await schedRows(ben, [[roomId, 'Studio A']], "Ben's table has a row for the room, with its name");
+check(
+  (await ben.locator(`${table} thead th`).allTextContents()).join('|') === 'Name',
+  'a heading for the one field, from the server',
+);
+
+// Ben adds the room's area and state from the fields the server offers for rooms.
+const offeredByServer = (await asAnna(`schedules/${scheduleId}`)).offered.map((f) => f.name);
+check(
+  ['Name', 'Type', 'State', 'Area', 'Perimeter', 'Volume'].every((name) => offeredByServer.includes(name)),
+  `the fields the server offers for rooms include its name, type, state, area, perimeter and volume`,
+);
+const addField = async (name) => {
+  await ben.locator('#stack-sched [data-key="sched-add-field"]').selectOption({ label: name });
+  await ben.locator('#stack-sched [data-act="stackschedfieldadd"]').click();
+};
+// Each add sends the whole list of fields the table showed, so the next waits for the new heading.
+const headings = (page, want) =>
+  page.waitForFunction(
+    (list) => [...document.querySelectorAll('#stack-sched table thead th')].map((th) => th.textContent).join('|') === list,
+    want,
+  );
+await addField('Area');
+await headings(ben, 'Name|Area');
+await addField('State');
+await headings(ben, 'Name|Area|State');
+const studioArea = await areaOf(roomId);
+check(/^[0-9.]+ m²$/.test(studioArea), `the server gives the room's area in the document's units, ${studioArea}`);
+await schedRows(ben, [[roomId, 'Studio A', studioArea, await stateOf(roomId)]], "the row's values are the server's, with their units");
+check((await stateOf(roomId)) === 'enclosed', 'the room is enclosed');
+
+// Anna opens it from her list and sees the same table.
+await anna.click(scheduleLeaf('Room list'));
+await anna.waitForSelector(table);
+await schedRows(anna, [[roomId, 'Studio A', studioArea, 'enclosed']], "Anna's table is the same");
+await shot(anna, 'anna-schedule');
+await closeScheduleOf(anna);
+await closeScheduleOf(ben);
+
+// Ben renames it in the browser: type the new name and press Enter.
+await ben.click(scheduleLeaf('Room list'));
+await ben.waitForSelector(table);
+await closeScheduleOf(ben);
+const scheduleName = `#browser input[data-key="schedule-name:${scheduleId}"]`;
+await ben.waitForSelector(scheduleName);
+await ben.locator(scheduleName).fill('Rooms by name');
+await ben.locator(scheduleName).press('Enter');
+await anna.waitForSelector(scheduleLeaf('Rooms by name'));
+await ben.waitForSelector(scheduleLeaf('Rooms by name'));
+check((await anna.locator(scheduleLeaf('Room list')).count()) === 0, "Ben renames the schedule and Anna's list shows the new name, not the old");
+await ben.click(scheduleLeaf('Rooms by name'));
+await ben.waitForSelector(table);
+
+// Anna places a room in the other half of the building with the Room tool; Ben's table gains a row.
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room"]');
+await anna.locator('#pv-side input[data-key="room-tool-name"]').fill('Store');
+await anna.locator('#pv-side input[data-key="room-tool-name"]').press('Enter');
+const storeClick = await onPlan(anna, 7000, 4000);
+await anna.mouse.click(storeClick.x, storeClick.y);
+await anna.keyboard.press('Escape');
+await ben.waitForFunction((before) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'room').length === before + 1, firstRooms.length);
+const storeId = (await roomIdsOf(ben)).find((id) => id !== roomId);
+await schedIds(ben, [roomId, storeId], "Anna places a room: Ben's table has a row for it");
+check(
+  (await ben.locator(`${table} tr[data-row="${storeId}"] td`).first().textContent()) === 'Store',
+  "the new row is the room's name, as the server gives it",
+);
+const storeState = await stateOf(storeId);
+const storeArea = await areaOf(storeId);
+await schedRows(
+  ben,
+  [[roomId, 'Studio A', studioArea, 'enclosed'], [storeId, 'Store', storeArea, storeState]].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+  'the rows are in the order of the elements when nothing is sorted, with the server\'s values',
+);
+check(JSON.stringify(await roomIdsOf(ben)) === JSON.stringify([roomId, storeId].sort()), 'the rows are the rooms of the model, none more');
+await anna.click(scheduleLeaf('Rooms by name'));
+await anna.waitForSelector(table);
+await schedIds(anna, [roomId, storeId], "Anna's own table has both rooms");
+await shot(ben, 'ben-schedule-two-rooms');
+
+// Ben sorts by name, up: Store comes before Studio A; then down: the other way round.
+const sortBy = async (name, order) => {
+  await ben.locator('#stack-sched [data-key="sched-sort-field"]').selectOption({ label: name });
+  await ben.locator('#stack-sched [data-key="sched-sort-order"]').selectOption({ value: order });
+  await ben.locator('#stack-sched [data-act="stackschedsortadd"]').click();
+};
+const namesInOrder = (page, want, label) =>
+  page.waitForFunction(
+    (list) => [...document.querySelectorAll('#stack-sched table tbody tr')].map((r) => r.querySelector('td').textContent).join('|') === list,
+    want.join('|'),
+    { timeout: 15000 },
+  ).then(() => pass(label));
+await sortBy('Name', 'ascending');
+await namesInOrder(ben, ['Store', 'Studio A'], "Ben sorts by name, up: Store, then Studio A");
+await namesInOrder(anna, ['Store', 'Studio A'], "Anna's table follows the sorting");
+await ben.locator('#stack-sched [data-act="stackschedsortflip"]').click();
+await namesInOrder(ben, ['Studio A', 'Store'], 'Ben turns the sorting down: Studio A, then Store');
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows");
+
+// A sort key given twice is refused, in the server's words, in the Sorting part.
+await sortBy('Name', 'ascending');
+const sortWhere = `#stack-sched [data-problem="sched-sorting:${scheduleId}"]`;
+await ben.waitForSelector(sortWhere);
+const sortWords = await ben.locator(sortWhere).textContent();
+check(/twice/.test(sortWords), `a sort key given twice is refused where it was made: "${sortWords}"`);
+check((await ben.locator('#toast-m').textContent()) === sortWords, 'and the toast says the same');
+check((await asAnna(`schedules/${scheduleId}`)).schedule.sorting.length === 1, 'the refused sorting changed nothing');
+await namesInOrder(ben, ['Studio A', 'Store'], 'the rows stay as they were');
+
+// Ben filters by name: only Studio A passes. The filter is the server's, so Anna's table follows.
+await ben.locator('#stack-sched [data-key="sched-filter-field"]').selectOption({ label: 'Name' });
+await ben.locator('#stack-sched [data-key="sched-filter-is"]').selectOption({ value: 'contains' });
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').fill('stud');
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').press('Enter');
+await namesInOrder(ben, ['Studio A'], 'Ben filters the names to those containing "stud": one row');
+await namesInOrder(anna, ['Studio A'], "Anna's table has the one row");
+const heldFilters = (await asAnna(`schedules/${scheduleId}`)).schedule.filters;
+check(
+  heldFilters.length === 1 && heldFilters[0].field === 'name' && heldFilters[0].is === 'contains' && heldFilters[0].to.includes('stud'),
+  `the server holds the filter as a field, a comparison and a value: ${JSON.stringify(heldFilters)}`,
+);
+
+// His undo takes the filter back and his redo puts it back; both browsers follow. The undo and redo
+// buttons are behind the dialog's scrim, so he closes the table, presses one and opens it again.
+const stepAs = async (page, act) => {
+  await closeScheduleOf(page);
+  await page.locator(`#qat [data-act="${act}"]:not([aria-disabled="true"])`).click();
+  await page.click(scheduleLeaf('Rooms by name'));
+  await page.waitForSelector(table);
+};
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'schedule.filters');
+await stepAs(ben, 'stackundo');
+await namesInOrder(ben, ['Studio A', 'Store'], "Ben's undo takes the filter back: both rooms");
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows the undo");
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.redo);
+await stepAs(ben, 'stackredo');
+await namesInOrder(ben, ['Studio A'], "Ben's redo puts the filter back: one row");
+await namesInOrder(anna, ['Studio A'], "Anna's table follows the redo");
+
+// Ben takes the filter off with its Remove button.
+await ben.locator('#stack-sched [data-filter-row] [data-act="stackschedfilteroff"]').click();
+await namesInOrder(ben, ['Studio A', 'Store'], 'Ben removes the filter: both rooms again');
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows");
+
+// Anna chooses the Store row: the room is selected in her plan, and the palette shows it.
+await anna.locator(`${table} tr[data-row="${storeId}"]`).click();
+await anna.waitForSelector('#pv-side input[data-key="room-name"][value="Store"]', { state: 'attached' });
+await anna.waitForSelector(`${table} tr[data-row="${storeId}"][aria-selected="true"]`);
+pass('Anna chooses the Store row and the room is selected: her properties palette shows it');
+await closeScheduleOf(anna);
+
+// Anna renames the selected room in the palette; the name changes in Ben's table, and the
+// order with it (Ben's sorting is down).
+await anna.locator('#pv-side input[data-key="room-name"]').fill('Pantry');
+await anna.locator('#pv-side input[data-key="room-name"]').press('Enter');
+await namesInOrder(ben, ['Studio A', 'Pantry'], "Anna renames the room: Ben's table has the new name");
+
+// Anna deletes the room; the row goes from Ben's table.
+await anna.locator('#pv-side [data-key="room-delete"]').click();
+await schedIds(ben, [roomId], "Anna deletes the room: Ben's table has one row again");
+await schedRows(ben, [[roomId, 'Studio A', studioArea, 'enclosed']], 'and it is the first room, unchanged');
+check((await roomIdsOf(ben)).join() === roomId, "the rows are the model's rooms");
+
+// A fresh load agrees: the same schedule in the list, the same rows.
+const scheduleFresh = await signIn('anna');
+await scheduleFresh.waitForSelector(scheduleLeaf('Rooms by name'));
+await scheduleFresh.click(scheduleLeaf('Rooms by name'));
+await scheduleFresh.waitForSelector(table);
+await schedRows(scheduleFresh, [[roomId, 'Studio A', studioArea, 'enclosed']], 'a fresh load lists the schedule and gives the same row');
+await scheduleFresh.context().close();
+
+// Anna has the table open; Ben deletes the schedule from the browser, and Anna's list and her open
+// table follow.
+await anna.click(scheduleLeaf('Rooms by name'));
+await anna.waitForSelector(table);
+await closeScheduleOf(ben);
+await ben.locator(`#browser [data-act="stackscheddelete"][data-a="${scheduleId}"]`).click();
+await anna.waitForFunction(() => /deleted/.test(document.querySelector('#stack-sched')?.textContent ?? ''));
+await closeScheduleOf(anna);
+await anna.waitForFunction((name) => ![...document.querySelectorAll('#browser [data-act="stackschedule"] span')].some((s) => s.textContent === name), 'Rooms by name');
+check((await asAnna('schedules')).length === 0, 'Ben deletes the schedule: Anna\'s list is empty again and the server holds none');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

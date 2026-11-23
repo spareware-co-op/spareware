@@ -24,6 +24,8 @@
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
 //!   and worked out each time from the document.
+//! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
+//!   read of their rows, through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
@@ -44,6 +46,7 @@ pub mod openings;
 pub mod params;
 pub mod roofs;
 pub mod rooms;
+pub mod schedules;
 pub mod sheets;
 pub mod spaces;
 pub mod transaction;

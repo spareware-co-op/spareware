@@ -2352,6 +2352,125 @@ async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
     assert_eq!(warning_identities(s, &project, &model).await, base);
 }
 
+/// The page's schedules: made and changed through the log by whoever may edit the model, read by
+/// whoever may read it. A schedule lists the seeded building's doors by name, and its rows are
+/// worked out from the elements on every read, so a door deleted through the log leaves them.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_schedules_and_their_live_rows() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.len(), 0);
+    assert!(refused(s.schedules(&dan, &project, &model).await));
+
+    let make = json!({ "schedule": "SC-1", "name": "Doors", "category": 300,
+                       "fields": ["name", "type"],
+                       "sorting": [{ "field": "name", "order": "descending" }] });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "schedule.create", make.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "schedule.create", make)
+        .await
+        .unwrap();
+    let listed = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&listed).unwrap(),
+        json!([{ "id": "SC-1", "name": "Doors", "category": 300, "category_name": "Doors",
+                 "fields": ["name", "type"], "filters": [],
+                 "sorting": [{ "field": "name", "order": "descending" }], "problem": null }])
+    );
+
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 7, "the seeded building's doors");
+    // The fields the category offers come with their kinds and the comparisons that fit them.
+    let offered = |key: &str| table.offered.iter().find(|field| field.field == key);
+    let name = offered("name").expect("a door's name is offered");
+    assert_eq!((name.name.as_str(), name.kind), ("Name", "text"));
+    assert!(name.comparisons.contains(&"contains"));
+    assert!(offered("type").is_some());
+    // The categories a schedule may list include the doors, and leave out the views.
+    let listable = s
+        .schedule_categories(&anna, &project, &model)
+        .await
+        .unwrap();
+    assert!(
+        listable
+            .iter()
+            .any(|c| (c.id, c.name.as_str()) == (300, "Doors"))
+    );
+    assert!(listable.iter().all(|c| c.name != "Views"));
+    assert!(refused(s.schedule_categories(&dan, &project, &model).await));
+    let names: Vec<String> = table
+        .rows
+        .iter()
+        .map(|row| row.cells[0].shown.clone().unwrap().to_lowercase())
+        .collect();
+    let mut descending = names.clone();
+    descending.sort_by(|a, b| b.cmp(a));
+    assert_eq!(names, descending);
+    assert!(table.rows.iter().any(|row| row.element == "D-101"));
+
+    // The same read after an edit through the log gives the new rows: nothing was stored.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "element.delete",
+        json!({ "element": "D-101" }),
+    )
+    .await
+    .unwrap();
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 6);
+    assert!(table.rows.iter().all(|row| row.element != "D-101"));
+
+    // A filter through the command, in typed text; the generic command is no way round it.
+    let filter = json!({ "schedule": "SC-1",
+        "filters": [{ "field": "name", "is": "begins_with", "to": "zzz" }] });
+    s.edit(&anna, &project, &model, "schedule.filters", filter)
+        .await
+        .unwrap();
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 0);
+    let hacked = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "element.set",
+            json!({ "element": "SC-1", "name": "Hacked" }),
+        )
+        .await;
+    assert!(refused(hacked));
+
+    // A schedule that is not there, an element that is not a schedule, a person who may not read.
+    let none = s.schedule(&anna, &project, &model, &i("SC-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    let wall = s.schedule(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(
+        s.schedule(&dan, &project, &model, &i("SC-1")).await
+    ));
+
+    // A schedule has no shape: the model still publishes, and replays from the log.
+    let item = s
+        .publish(&anna, &project, &i("arch"), &model)
+        .await
+        .unwrap();
+    assert_eq!(item.name, "Arch package v12");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
     let stack = seeded().await;

@@ -7,8 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms, sheets,
-    undo, views, walls,
+    elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms, schedules,
+    sheets, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -128,6 +128,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = views::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = schedules::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = sheets::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -188,6 +191,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || roofs::is_command(cmd)
                 || rooms::is_command(cmd)
                 || views::is_command(cmd)
+                || schedules::is_command(cmd)
                 || sheets::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
@@ -253,6 +257,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || roofs::is_command(&edit.cmd)
             || rooms::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
+            || schedules::is_command(&edit.cmd)
             || sheets::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
@@ -315,6 +320,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             roofs::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if views::is_command(&edit.cmd) {
             views::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if schedules::is_command(&edit.cmd) {
+            schedules::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if sheets::is_command(&edit.cmd) {
             sheets::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {

@@ -1035,6 +1035,73 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .ok_or(Refusal::NotFound)
     }
 
+    /// A model's schedules: each with its category, fields, filters and sorting, by name. Read
+    /// only; schedules are made and changed by the schedule commands.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a schedule record cannot be read, saying why.
+    pub async fn schedules(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::schedules::ScheduleSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::schedules::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::schedules::summaries(&world))
+    }
+
+    /// The categories a schedule may list (what a person chooses from when making one).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a schedule record cannot be read, saying why.
+    pub async fn schedule_categories(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::schedules::ListableView>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::schedules::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::schedules::listable(&world))
+    }
+
+    /// One schedule with its rows: a live query over the elements as they are now (a row for
+    /// each element of its category that passes its filters, in its sorting), worked out on each
+    /// read and stored nowhere.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// schedule; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn schedule(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        schedule: &Id,
+    ) -> Result<cloud::schedules::ScheduleTable, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::schedules::read_table(&mut snapshot, project, model, schedule)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// A view's graphics rules: how each category or subcategory it says anything about looks in
     /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
     /// project's object styles say. Read as of the log's head.
