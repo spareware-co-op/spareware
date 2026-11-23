@@ -27,8 +27,9 @@ Where a document's families live, so that a document opens and builds the same o
 - **Every command goes through the one log**, one entry each, so one undo takes back all it wrote. The generic `element.*` commands refuse a family's record, naming the command to use. An undo that would leave a copy without the version of its family it names is refused (`"That can't be undone: F-1 would be left without its family, ..."`). A family still placed is not removed; its copies are named.
 - **The server lists** the document's families first (in the order of their ids), with their source and how many copies are placed, then the library's families it does not hold, on the families route the page's family tool reads.
 
+- **The page** (app/connect.js) offers all of it from a Families dialog in the Manage tab and from a selected door or window (Swap to). It lists what the server’s families route says and works out nothing; a copy of a family is built from the recipe the server fills in for it (`/filled/<element>`), which carries the family’s own text, so a generated family draws and cuts its wall in the browser as it does on the server. A family record has no shape and is left out of the plan.
+
 ## Owed
 
-- The page: listing the document's families apart from the library's, loading and reloading from it, swapping, and the generator's form; the two-browser test of those; the browser package rebuilt with them.
 - Reading a spreadsheet row or a supplier catalogue into generator specs.
-- A project's own library (CON-A7-F9) in place of the templates baked in at build time, which then stop being the fallback for old copies only when every document has been reloaded.
+- A project’s own library (CON-A7-F9) in place of the templates baked in at build time, which then stop being the fallback for old copies only when every document has been reloaded.

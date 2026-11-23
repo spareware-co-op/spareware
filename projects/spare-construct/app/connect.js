@@ -242,6 +242,7 @@
       items: [
         { label: 'Types', icon: 'family', act: 'stacktypes', tip: 'The types of a category: make, rename, copy and delete them, and edit their values.', disabled: !C.model },
         { label: 'Project parameters', icon: 'props', act: 'stackparams', tip: 'The parameters of this project: define one and choose the categories that have it.', disabled: !C.model },
+        { label: 'Families', icon: 'family', act: 'stackfamilies', tip: 'The families of this model: load one from the library, make a door or window type from a spec, reload a family, or remove one that is not placed.', disabled: !C.model },
         { label: 'Levels', icon: 'elev', act: 'stacklevels', tip: 'The levels of this model: make, rename, move and delete them, and choose the one the plan shows.', disabled: !C.model },
       ],
     });
@@ -725,7 +726,10 @@
   // may change what such a recipe reads has it filled and built again (`fillAgain`).
 
   /** Whether a recipe reads records: an argument that is an object, such as `{"wall":"type"}`. */
+  // A placed family reads the document's record of its family: the server hands back the recipe with
+  // the family's text in it, which is how a family no library holds is built here.
   const readsRecords = (recipe) =>
+    (recipe?.op === 'family.instance' && recipe?.owner === 'construct') ||
     Object.values(recipe?.args || {}).some((arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg));
 
   /** The server's filling of `record`'s recipe in `model`: `{head, recipe}` or `{head, failed}`; null when it reads nothing. */
@@ -754,6 +758,10 @@
     const answer = await shapeFor(model, piece.el, into, fill);
     if (into.get(id) !== piece || piece.asked !== asked) return;
     Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    if (isFamily(piece.el)) {
+      piece.seatedTurn = undefined; // built unturned: seated again as its wall puts it
+      seatFamilies();
+    }
     queueDraw();
     if (id === S.sel) refreshSide();
   }
@@ -798,7 +806,8 @@
       const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
       // A placed family is handed to the builder turned to stand in its wall, as the server hands it.
       const seat = isFamily(piece.el) ? seatOfPiece(piece, drawn) : null;
-      guests.push({ key: id, recipe: seat ? turnedRecipe(piece.el.recipe, seat.turn) : piece.el.recipe, placement });
+      const own = piece.fill?.recipe ?? piece.el.recipe; // a family copy's filled recipe holds its family's text
+      guests.push({ key: id, recipe: seat ? turnedRecipe(own, seat.turn) : own, placement });
     }
     return guests;
   }
@@ -1187,9 +1196,12 @@
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (reads || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$/.test(entry.cmd)) {
+    const families = /^family\./.test(entry.cmd) || UNDOING.has(entry.cmd);
+    if (reads || families || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
+    // The document's families, as the server lists them, may have changed: what is held, placed or made.
+    if (families && entry.target === C.model?.id) reloadLibrary();
     if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
         if (change.claim) C.claims.set(change.piece, change.claim);
@@ -1228,6 +1240,11 @@
     'family.flip': 'flipped to the other side of its wall:',
     'family.set': 'set a value of',
     'family.delete': 'deleted',
+    'family.load': 'loaded a family',
+    'family.reload': 'reloaded a family',
+    'family.swap': 'swapped a family for another type',
+    'family.generate': 'made a door or window type',
+    'family.remove': 'removed a family',
     'level.create': 'made a level',
     'level.rename': 'renamed a level',
     'level.elevation': 'moved a level',
@@ -1305,6 +1322,11 @@
     'family.flip': 'flipping a family',
     'family.set': 'a value of a family',
     'family.delete': 'deleting a family',
+    'family.load': 'loading a family',
+    'family.reload': 'reloading a family',
+    'family.swap': 'swapping a family',
+    'family.generate': 'making a door or window type',
+    'family.remove': 'removing a family',
     'level.create': 'making a level',
     'level.rename': 'renaming a level',
     'level.elevation': 'moving a level',
@@ -1376,7 +1398,7 @@
     return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
   }
   function hasShape(record) {
-    return record.kind !== 'type' && record.kind !== 'parameters' && record.kind !== 'level' && record.kind !== 'view';
+    return !['type', 'parameters', 'level', 'view', 'family.recipe'].includes(record.kind);
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1548,13 +1570,14 @@
     }
     const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
     C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
-    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels' }[which];
+    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels', families: 'Families' }[which];
     openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
     loadManage();
   }
   ACT.stacktypes = () => openManage('types');
   ACT.stackparams = () => openManage('parameters');
   ACT.stacklevels = () => openManage('levels');
+  ACT.stackfamilies = () => openManage('families');
 
   /** Reads what the open dialog shows from the server, then draws it. Does nothing when no dialog is open. */
   async function loadManage() {
@@ -1564,8 +1587,10 @@
     m.seq += 1;
     const seq = m.seq;
     try {
-      if (C.catalog?.model !== model) C.catalog = { model, ...(await api(`${modelUrl(model)}/catalog`)) };
-      if (m.which === 'types') {
+      if (m.which !== 'families' && C.catalog?.model !== model) C.catalog = { model, ...(await api(`${modelUrl(model)}/catalog`)) };
+      if (m.which === 'families') {
+        m.data = { families: await api(`${modelUrl(model)}/families`) };
+      } else if (m.which === 'types') {
         if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
         m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
       } else if (m.which === 'levels') {
@@ -1587,6 +1612,7 @@
     if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
+    else if (m.which === 'families') html = familiesHtml(m);
     else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : parametersHtml(m);
     redraw(root, html);
     if (!m.shown) {
@@ -3864,9 +3890,39 @@
     C.familyTool.type = select.value;
   };
 
-  /** The library's family a placed one's record names, by its recipe's content id. */
+  /** Reads the families again: what the document holds, placed or made has changed, or may have. */
+  function reloadLibrary() {
+    const model = C.model?.id;
+    if (!model) return;
+    C.libraryAsked = (C.libraryAsked ?? 0) + 1;
+    const asked = C.libraryAsked;
+    api(`${modelUrl(model)}/families`)
+      .then((list) => {
+        if (C.libraryAsked !== asked || C.model?.id !== model) return;
+        C.library = { model, list };
+        refreshSide();
+      })
+      .catch(() => {});
+  }
+
+  /** The family a placed one's record names: by the permanent id it carries, else by its recipe's content id. */
   function familyOf(record) {
-    return library()?.find((family) => family.content === record.recipe.args.family) ?? null;
+    const id = record.recipe.args.family_id;
+    const list = library();
+    return (id && list?.find((family) => family.id === id)) || list?.find((family) => family.content === record.recipe.args.family) || null;
+  }
+
+  /** Every other type a placed door or window of `family` may be swapped to: the same kind, any family of the list. */
+  function swapOptions(family, current) {
+    const options = [];
+    for (const other of library() ?? []) {
+      if (other.kind !== family.kind) continue;
+      for (const type of other.types) {
+        if (other.id === family.id && type.key === current) continue;
+        options.push(`<option value="${esc(other.id)}|${esc(type.key)}">${esc(other.name)}: ${esc(type.name)}</option>`);
+      }
+    }
+    return options;
   }
 
   /** What the properties palette shows of a selected family: its type, its values, its place, its side. */
@@ -3879,6 +3935,10 @@
     let html = '<table class="props" data-family-properties="' + esc(el.id) + '">';
     html += prow('Family', esc(family.name));
     html += prow('Family type', mine ? `<select class="inp" data-chg="stackfamilyretype" data-key="family-retype" aria-label="Type of the family">${types.join('')}</select>` : esc(family.types.find((t) => t.key === el.recipe.args.type)?.name ?? el.recipe.args.type));
+    if (mine) {
+      const swaps = swapOptions(family, el.recipe.args.type);
+      html += prow('Swap to', `<select class="inp" data-chg="stackfamilyswap" data-key="family-swap" aria-label="Swap to another type or family">${['<option value="" selected>Choose a type</option>', ...swaps].join('')}</select>`);
+    }
     for (const value of family.values) {
       const shown = shownValue(value, el.recipe.args[`value.${value.key}`]);
       html += prow(esc(value.name), mine ? valueInput(value, shown, `family-value:${value.key}`) : esc(shown));
@@ -3895,6 +3955,10 @@
 
   CHG.stackfamilyretype = (select) => {
     if (S.sel && canEdit()) manage('family.retype', { element: S.sel, type: select.value }, `family:${S.sel}`);
+  };
+  CHG.stackfamilyswap = (select) => {
+    const [to_family, to_type] = select.value.split('|');
+    if (S.sel && canEdit() && to_family) manage('family.swap', { element: S.sel, to_family, to_type }, `family:${S.sel}`);
   };
   CHG.stackfamilyvalue = (input) => {
     if (!S.sel || !canEdit()) return;
@@ -4008,13 +4072,107 @@
       const row = C.models.get(C.model.id);
       const builder = row && (await builderFor(row));
       if (!builder) return;
-      const answer = buildOn(builder, { ...piece.el, recipe: turnedRecipe(piece.el.recipe, turn) }, null, null);
+      const answer = buildOn(builder, { ...piece.el, recipe: turnedRecipe(piece.fill?.recipe ?? piece.el.recipe, turn) }, null, null);
       Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedTurn: turn, stale: false });
       queueDraw();
     } finally {
       piece.turning = false;
     }
   }
+
+  // --- The families of the document, in a dialog (Manage, Families) ---
+  // The server lists them (`/families`): the document's own first, each with where it came from, its
+  // types and how many copies are placed, then the library's it does not hold yet. Load, reload,
+  // generate and remove are the commands `family.load`, `family.reload`, `family.generate` and
+  // `family.remove` through the log (undo and redo take them back), and a refusal is the server's
+  // words under what was asked. The page works out nothing: a spec is sent as typed.
+
+  const TEMPLATES = [
+    ['single-swing-door', 'Single swing door'],
+    ['fixed-window', 'Fixed window'],
+    ['sliding-window', 'Sliding window'],
+  ];
+  const SPEC_MORE = [
+    ['frame', 'Frame width'],
+    ['frame_depth', 'Frame depth'],
+    ['leaf', 'Leaf thickness'],
+    ['sash', 'Sash width'],
+    ['sash_depth', 'Sash depth'],
+    ['track_gap', 'Track gap'],
+    ['glass', 'Glass thickness'],
+    ['sill_height', 'Sill height'],
+    ['wall', 'Wall thickness'],
+  ];
+
+  function familiesHtml(m) {
+    const off = canEdit() ? '' : ' disabled';
+    const list = m.data.families;
+    const held = list.filter((family) => family.in_document);
+    let html = '<p class="small muted">A family is a door or a window with its types. The ones this model holds are listed first; a family of the library comes into the model when you load it or first place it.</p>';
+    html += '<h3>In this model</h3>';
+    if (!held.length) html += '<p class="small faint" data-families-none>This model holds no families yet.</p>';
+    for (const family of held) {
+      const label = esc(family.name);
+      html += `<section data-family="${esc(family.id)}"><div class="stack-line"><b>${label}</b><span class="badge n">${esc(capital(family.kind))}</span>`;
+      html += `<span class="small faint">${esc(family.source)}; ${family.placed === 1 ? '1 copy' : `${family.placed} copies`} placed</span>`;
+      if (family.source.startsWith('library:')) {
+        html += `<button class="btn sm" data-act="stackfamilyreload" data-a="${esc(family.id)}" data-key="family-reload:${esc(family.id)}" aria-label="Reload the family ${label}"${off}>Reload</button>`;
+      }
+      html += `<button class="btn sm" data-act="stackfamilyremove" data-a="${esc(family.id)}" data-key="family-remove:${esc(family.id)}" aria-label="Remove the family ${label}"${off}>Remove</button></div>`;
+      html += `<ul class="small" data-family-types="${esc(family.id)}">${family.types.map((type) => `<li data-family-type="${esc(type.key)}">${esc(type.name)}</li>`).join('')}</ul>`;
+      html += `${problem(`famdoc:${family.id}`)}</section>`;
+    }
+    const library = list.filter((family) => !family.in_document);
+    if (library.length) {
+      html += '<h3 class="mt2">In the library</h3>';
+      for (const family of library) {
+        const label = esc(family.name);
+        html += `<section data-library-family="${esc(family.id)}"><div class="stack-line"><b>${label}</b><span class="badge n">${esc(capital(family.kind))}</span>`;
+        html += `<span class="small faint">${plural(family.types.length, 'type')}</span>`;
+        html += `<button class="btn sm" data-act="stackfamilyload" data-a="${esc(family.id)}" data-key="family-load:${esc(family.id)}" aria-label="Load the family ${label}"${off}>Load</button></div>`;
+        html += `${problem(`famdoc:${family.id}`)}</section>`;
+      }
+    }
+    // A type made from a spec: a new family, or one more type of a family made so before.
+    const made = held.filter((family) => family.source.startsWith('generated:'));
+    const templates = TEMPLATES.map(([stem, name]) => `<option value="${stem}">${esc(name)}</option>`);
+    const into = ['<option value="">A new family</option>', ...made.map((family) => `<option value="${esc(family.id)}">${esc(family.name)}</option>`)];
+    html += '<h3 class="mt2">Make a door or window type</h3><div class="grid2">';
+    html += `<label class="fld"><span>Kind</span><select class="inp" data-draft data-key="gen-template"${off}>${templates.join('')}</select></label>`;
+    html += `<label class="fld"><span>Into</span><select class="inp" data-draft data-key="gen-family"${off}>${into.join('')}</select></label>`;
+    html += `<label class="fld"><span>Name of a new family</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-name"${off}></label>`;
+    html += `<label class="fld"><span>Mark of the type</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-mark"${off}></label>`;
+    html += `<label class="fld"><span>Width</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-width"${off}></label>`;
+    html += `<label class="fld"><span>Height</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-height"${off}></label>`;
+    html += '</div>';
+    html += `<label class="chk"><input type="checkbox" data-draft data-key="gen-clear"${off}>The width and height are the clear opening, not the overall size</label>`;
+    html += `<details data-open="gen-more"${m.open.has('gen-more') ? ' open' : ''}><summary>More of the spec</summary><div class="grid2">`;
+    for (const [key, name] of SPEC_MORE) {
+      html += `<label class="fld"><span>${esc(name)}</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-${key}"${off}></label>`;
+    }
+    html += `<label class="fld"><span>Hand of a door</span><select class="inp" data-draft data-key="gen-hand"${off}><option value="">As the template has it</option><option value="left">Left</option><option value="right">Right</option></select></label>`;
+    html += '</div></details>';
+    html += `<div class="stack-line mt"><button class="btn pri sm" data-act="stackfamilygenerate" data-key="gen-go"${off}>Make type</button></div>${problem('famgen')}`;
+    return html;
+  }
+
+  ACT.stackfamilyload = (button) => manage('family.load', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilyreload = (button) => manage('family.reload', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilyremove = (button) => manage('family.remove', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilygenerate = () => {
+    const field = (key) => manageField(`gen-${key}`)?.value.trim() ?? '';
+    const spec = { template: field('template'), mark: field('mark'), width: field('width'), height: field('height') };
+    if (manageField('gen-clear')?.checked) spec.clear = true;
+    for (const [key] of SPEC_MORE) if (field(key) !== '') spec[key] = field(key);
+    if (field('hand') !== '') spec.hand = field('hand');
+    const into = field('family');
+    const args = { family: into || newId('FAM'), spec };
+    if (!into) args.name = field('name');
+    manage('family.generate', args, 'famgen', () => {
+      const mark = manageField('gen-mark');
+      if (mark) mark.value = '';
+    });
+  };
 
   const deleteOther = ACT.stackdelete;
   ACT.stackdelete = () => {
