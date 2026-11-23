@@ -2303,7 +2303,11 @@ check(slIdA && slIdB && slIdA !== slIdB, 'Anna draws two plain floors, and Ben h
 await anna.keyboard.press('Escape');
 
 // The first floor: heights typed, the arrow drawn with two clicks.
+// A page draws a floor once it has fetched and built it, which can be after the other person's page
+// has it: wait until this page's plan shows the floor, as a person would, then click on it.
+const slDrawn = (page, id) => page.waitForSelector(`g.element[data-id="${id}"] path.body.floor`, { state: 'attached' });
 const slPick = async (page, id, x, y) => {
+  await slDrawn(page, id);
   const at = await onPlan(page, x, y);
   await page.mouse.click(at.x, at.y);
   await page.waitForSelector(`#pv-side [data-floor-slope-part]`);
@@ -2349,10 +2353,7 @@ await shot(anna, 'anna-floor-slope');
 
 // The second floor: a downturn on one side, picked in the plan.
 const slAtBen = async (x, y) => onPlan(ben, x, y);
-const slPickBen = await slAtBen(12000, -1400);
-await ben.mouse.click(slPickBen.x, slPickBen.y);
-await ben.waitForSelector('#pv-side [data-floor-slope-part]');
-await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', slIdB);
+await slPick(ben, slIdB, 12000, -1400);
 await ben.locator('#pv-side select[data-key="floor-edge-kind"]').selectOption('downturn');
 await ben.locator('#pv-side input[data-key="floor-edge-width"]').fill('300 mm');
 await ben.locator('#pv-side input[data-key="floor-edge-depth"]').fill('400 mm');
