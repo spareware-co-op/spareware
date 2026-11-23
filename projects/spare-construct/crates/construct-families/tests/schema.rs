@@ -348,6 +348,25 @@ fn schema_and_reader_agree_on_cases_written_out() {
         true,
     );
     case(&|v| v["steps"][1]["op"] = json!("unite"), false);
+    // The type table is optional; its rows' value counts are the checker's, not the shape's.
+    case(
+        &|v| {
+            v.as_object_mut().unwrap().remove("type_table");
+        },
+        true,
+    );
+    case(&|v| v["type_table"]["rows"][0]["values"] = json!([]), true);
+    case(&|v| v["type_table"]["columns"] = json!([]), true);
+    case(&|v| v["type_table"] = json!({}), false);
+    case(
+        &|v| v["type_table"] = json!({"columns": [], "rows": [], "x": 1}),
+        false,
+    );
+    case(&|v| v["type_table"] = Value::Null, false);
+    case(
+        &|v| v["type_table"]["rows"][0]["values"][0] = json!(""),
+        false,
+    );
     for (value, ok) in cases {
         assert_eq!(validator.is_valid(&value), ok, "schema on {value}");
         assert_eq!(Recipe::from_value(&value).is_ok(), ok, "reader on {value}");

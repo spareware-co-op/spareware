@@ -14,7 +14,8 @@
 use crate::model::{
     Base, BuiltInType, Condition, Constraint, DefinitionRow, FORMAT_VERSION, Hosting, Key,
     MaterialRef, Opening, Operation, Parameter, ParameterValue, Plane, Recipe, Sketch, SketchArc,
-    SketchCircle, SketchLine, SketchPoint, Step, Symbol, TypeValue, View, Visibility,
+    SketchCircle, SketchLine, SketchPoint, Step, Symbol, TableRow, TypeTable, TypeValue, View,
+    Visibility,
 };
 use construct_categories::CategoryId;
 use construct_params::{Choice, Holder, Kind};
@@ -261,6 +262,7 @@ pub(crate) fn from_value(value: &Value) -> Read<Recipe> {
         "symbols",
         "hosting",
         "types",
+        "type_table",
     ])?;
     o.req("format")?.whole(FORMAT_VERSION, FORMAT_VERSION)?;
     Ok(Recipe {
@@ -274,6 +276,7 @@ pub(crate) fn from_value(value: &Value) -> Read<Recipe> {
         symbols: o.req("symbols")?.list(symbol)?,
         hosting: hosting(&o.req("hosting")?)?,
         types: o.req("types")?.list(built_in_type)?,
+        type_table: o.get("type_table").map(|t| type_table(&t)).transpose()?,
     })
 }
 
@@ -678,6 +681,21 @@ fn built_in_type(node: &Node<'_>) -> Read<BuiltInType> {
             Ok(TypeValue {
                 parameter: v.req("parameter")?.key()?,
                 value: v.req("value")?.text()?,
+            })
+        })?,
+    })
+}
+
+fn type_table(node: &Node<'_>) -> Read<TypeTable> {
+    let o = node.object(&["columns", "rows"])?;
+    Ok(TypeTable {
+        columns: o.req("columns")?.keys()?,
+        rows: o.req("rows")?.list(|item| {
+            let r = item.object(&["key", "name", "values"])?;
+            Ok(TableRow {
+                key: r.req("key")?.key()?,
+                name: r.req("name")?.text()?,
+                values: r.req("values")?.list(Node::text)?,
             })
         })?,
     })

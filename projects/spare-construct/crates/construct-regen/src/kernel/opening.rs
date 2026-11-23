@@ -7,7 +7,9 @@
 //! through the wall's whole thickness whatever the door's own thickness, its cutter reaching
 //! [`PAST_MM`] past both sides and, for a door to the floor, below the base, as the engine seam's
 //! own suite cuts a door (geom-solidcore's `tests/suite`): no face of the cutter lies on a face of
-//! the wall it passes through.
+//! the wall it passes through. [`plan_in`] asks the same rules of a wall given by its [`Frame`]
+//! alone, each door's place already in that frame: a layered wall's openings are asked so (the
+//! parent's `layered` module), through every layer at once.
 //!
 //! What it builds, in the wall's frame (along its axis from `end0` to `end1`, up from its base):
 //!
@@ -144,9 +146,60 @@ pub(super) fn plan(
         return Err(refuse(
             first.key,
             "NotAHost",
-            format!("a {} has no openings cut; only wall.straight does", host.op),
+            format!(
+                "a {} has no openings cut; only wall.straight and wall.layered do",
+                host.op
+            ),
         ));
     }
+    let (long, across) = wall.long_and_across();
+    let frame = Frame {
+        along: wall.along,
+        size: [
+            units.steps(long)?,
+            units.steps(across)?,
+            units.steps(wall.height)?,
+        ],
+    };
+    let cuts = plan_in(frame, hosted, units, band)?;
+    // Last, so a face near another is refused as that, not as a fraction of a millimetre.
+    for c in &cuts {
+        for corner in [c.start, c.end, c.foot, c.head] {
+            units
+                .millimetres(corner)
+                .map_err(|e| refuse(&c.key, &e.code, e.message))?;
+        }
+    }
+    Ok(cuts)
+}
+
+/// A wall's frame, as its openings are asked in it: the plan axis the frame's along runs on (0 for
+/// x, 1 for y; across is the other), and the wall's length along it from `end0`, its thickness
+/// across it from its exterior, and its height up from its base, in grid steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Frame {
+    /// The plan axis along: 0 for x, 1 for y.
+    pub(super) along: usize,
+    /// `[length, thickness, height]`, in steps.
+    pub(super) size: [i64; 3],
+}
+
+/// The cutters of the openings `hosted` cuts from a wall in `frame`, each door's place given in
+/// that frame (along the frame's along axis from `end0`, across from the exterior, up from the
+/// base), sorted by key; none when nothing is hosted. The host is a wall: the caller has said so.
+///
+/// # Errors
+///
+/// The refusals of this module's header but `NotAHost` and `NotWholeMillimetres`, each naming the
+/// door and why.
+pub(super) fn plan_in(
+    frame: Frame,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+) -> Result<Vec<Cut>, GeometryError> {
+    let mut order: Vec<&Hosted<'_>> = hosted.iter().collect();
+    order.sort_by(|a, b| a.key.cmp(b.key));
     if let Some(pair) = order
         .windows(2)
         .find(|w| matches!(w, [a, b] if a.key == b.key))
@@ -154,27 +207,13 @@ pub(super) fn plan(
         let key = pair.first().map_or("", |h| h.key);
         return Err(refuse(key, "DuplicateOpening", "hosted twice in one wall"));
     }
-    let (long, across) = wall.long_and_across();
-    let size = [
-        units.steps(long)?,
-        units.steps(across)?,
-        units.steps(wall.height)?,
-    ];
     let mut cuts = Vec::with_capacity(order.len());
     for h in order {
-        cuts.push(cut(h, wall.along, size, units, band)?);
+        cuts.push(cut(h, frame.along, frame.size, units, band)?);
     }
     for (i, a) in cuts.iter().enumerate() {
         for b in cuts.iter().skip(i.saturating_add(1)) {
             apart(a, b, band)?;
-        }
-    }
-    // Last, so a face near another is refused as that, not as a fraction of a millimetre.
-    for c in &cuts {
-        for corner in [c.start, c.end, c.foot, c.head] {
-            units
-                .millimetres(corner)
-                .map_err(|e| refuse(&c.key, &e.code, e.message))?;
         }
     }
     Ok(cuts)
@@ -335,6 +374,12 @@ impl Cut {
             },
             [0, 0, less(z1, z0)?],
         ))
+    }
+
+    /// The cutter's lowest and highest corners in its wall's frame, in steps: along the frame's
+    /// along axis and across it in their plan axes' places, and up.
+    pub(super) fn frame_box(&self) -> ([i64; 3], [i64; 3]) {
+        (self.lo, self.hi)
     }
 
     /// The engine's error on this door's opening, with the door's key in front.

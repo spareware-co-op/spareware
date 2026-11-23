@@ -1,0 +1,1368 @@
+{
+  "format": 1,
+  "id": "library.doors-windows.sliding-window",
+  "name": "Sliding window",
+  "category": 400,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:11520000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:7680000"
+    },
+    {
+      "key": "frame",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.frame",
+        "name": "Frame width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:320000"
+    },
+    {
+      "key": "frame_depth",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.frame_depth",
+        "name": "Frame depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:640000"
+    },
+    {
+      "key": "sash",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.sash",
+        "name": "Sash width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:320000"
+    },
+    {
+      "key": "sash_depth",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.sash_depth",
+        "name": "Sash thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:256000"
+    },
+    {
+      "key": "track_gap",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.track_gap",
+        "name": "Track gap",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:64000"
+    },
+    {
+      "key": "glass",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.glass",
+        "name": "Glass thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:128000"
+    },
+    {
+      "key": "frame_material",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.frame_material",
+        "name": "Frame material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:aluminium-6061"
+    },
+    {
+      "key": "sash_material",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.sash_material",
+        "name": "Sash material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:aluminium-6061"
+    },
+    {
+      "key": "sill_height",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.sill_height",
+        "name": "Sill height",
+        "kind": "length",
+        "holder": "instance",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "sash_span",
+      "definition": {
+        "id": "library.doors-windows.sliding-window.sash_span",
+        "name": "Sash span",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "(width - 2 * frame + sash) / 2"
+    }
+  ],
+  "planes": [
+    {
+      "key": "centre",
+      "base": "xz",
+      "offset": "0 mm"
+    },
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "elevation",
+      "plane": "centre",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "a1",
+          "x": "length:q0:-5760000",
+          "y": "length:q0:5760000"
+        },
+        {
+          "key": "a2",
+          "x": "length:q0:5760000",
+          "y": "length:q0:5760000"
+        },
+        {
+          "key": "a3",
+          "x": "length:q0:5760000",
+          "y": "length:q0:13440000"
+        },
+        {
+          "key": "a4",
+          "x": "length:q0:-5760000",
+          "y": "length:q0:13440000"
+        },
+        {
+          "key": "b1",
+          "x": "length:q0:-5440000",
+          "y": "length:q0:6080000"
+        },
+        {
+          "key": "b2",
+          "x": "length:q0:5440000",
+          "y": "length:q0:6080000"
+        },
+        {
+          "key": "b3",
+          "x": "length:q0:5440000",
+          "y": "length:q0:13120000"
+        },
+        {
+          "key": "b4",
+          "x": "length:q0:-5440000",
+          "y": "length:q0:13120000"
+        },
+        {
+          "key": "p2",
+          "x": "length:q0:160000",
+          "y": "length:q0:6080000"
+        },
+        {
+          "key": "p3",
+          "x": "length:q0:160000",
+          "y": "length:q0:13120000"
+        },
+        {
+          "key": "q1",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "q2",
+          "x": "length:q0:-160000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "q3",
+          "x": "length:q0:-160000",
+          "y": "length:q0:12800000"
+        },
+        {
+          "key": "q4",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:12800000"
+        },
+        {
+          "key": "r1",
+          "x": "length:q0:-160000",
+          "y": "length:q0:6080000"
+        },
+        {
+          "key": "r4",
+          "x": "length:q0:-160000",
+          "y": "length:q0:13120000"
+        },
+        {
+          "key": "u1",
+          "x": "length:q0:160000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "u2",
+          "x": "length:q0:5120000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "u3",
+          "x": "length:q0:5120000",
+          "y": "length:q0:12800000"
+        },
+        {
+          "key": "u4",
+          "x": "length:q0:160000",
+          "y": "length:q0:12800000"
+        },
+        {
+          "key": "v1",
+          "x": "length:q0:4480000",
+          "y": "length:q0:9600000"
+        },
+        {
+          "key": "v2",
+          "x": "length:q0:800000",
+          "y": "length:q0:9600000"
+        },
+        {
+          "key": "v3",
+          "x": "length:q0:1440000",
+          "y": "length:q0:10240000"
+        },
+        {
+          "key": "v4",
+          "x": "length:q0:1440000",
+          "y": "length:q0:8960000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "outer_bottom",
+          "start": "a1",
+          "end": "a2"
+        },
+        {
+          "key": "outer_right",
+          "start": "a2",
+          "end": "a3"
+        },
+        {
+          "key": "outer_top",
+          "start": "a3",
+          "end": "a4"
+        },
+        {
+          "key": "outer_left",
+          "start": "a4",
+          "end": "a1"
+        },
+        {
+          "key": "inner_bottom",
+          "start": "b1",
+          "end": "b2"
+        },
+        {
+          "key": "inner_right",
+          "start": "b2",
+          "end": "b3"
+        },
+        {
+          "key": "inner_top",
+          "start": "b3",
+          "end": "b4"
+        },
+        {
+          "key": "inner_left",
+          "start": "b4",
+          "end": "b1"
+        },
+        {
+          "key": "ls_bottom",
+          "start": "b1",
+          "end": "p2"
+        },
+        {
+          "key": "ls_right",
+          "start": "p2",
+          "end": "p3"
+        },
+        {
+          "key": "ls_top",
+          "start": "p3",
+          "end": "b4"
+        },
+        {
+          "key": "rs_bottom",
+          "start": "r1",
+          "end": "b2"
+        },
+        {
+          "key": "rs_top",
+          "start": "b3",
+          "end": "r4"
+        },
+        {
+          "key": "rs_left",
+          "start": "r4",
+          "end": "r1"
+        },
+        {
+          "key": "lh_bottom",
+          "start": "q1",
+          "end": "q2"
+        },
+        {
+          "key": "lh_right",
+          "start": "q2",
+          "end": "q3"
+        },
+        {
+          "key": "lh_top",
+          "start": "q3",
+          "end": "q4"
+        },
+        {
+          "key": "lh_left",
+          "start": "q4",
+          "end": "q1"
+        },
+        {
+          "key": "rh_bottom",
+          "start": "u1",
+          "end": "u2"
+        },
+        {
+          "key": "rh_right",
+          "start": "u2",
+          "end": "u3"
+        },
+        {
+          "key": "rh_top",
+          "start": "u3",
+          "end": "u4"
+        },
+        {
+          "key": "rh_left",
+          "start": "u4",
+          "end": "u1"
+        },
+        {
+          "key": "arrow_shaft",
+          "start": "v1",
+          "end": "v2"
+        },
+        {
+          "key": "arrow_up",
+          "start": "v2",
+          "end": "v3"
+        },
+        {
+          "key": "arrow_down",
+          "start": "v2",
+          "end": "v4"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a1",
+          "line": "base",
+          "length": "sill_height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a2",
+          "line": "base",
+          "length": "sill_height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a3",
+          "line": "base",
+          "length": "sill_height + height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a4",
+          "line": "base",
+          "length": "sill_height + height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b1",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b1",
+          "line": "base",
+          "length": "sill_height + frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b2",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b2",
+          "line": "base",
+          "length": "sill_height + frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b3",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b3",
+          "line": "base",
+          "length": "sill_height + height - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b4",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b4",
+          "line": "base",
+          "length": "sill_height + height - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "p2",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "p2",
+          "line": "base",
+          "length": "sill_height + frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "p3",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "p3",
+          "line": "base",
+          "length": "sill_height + height - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q1",
+          "line": "axis",
+          "length": "width / 2 - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q1",
+          "line": "base",
+          "length": "sill_height + frame + sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q2",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q2",
+          "line": "base",
+          "length": "sill_height + frame + sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q3",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q3",
+          "line": "base",
+          "length": "sill_height + height - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q4",
+          "line": "axis",
+          "length": "width / 2 - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "q4",
+          "line": "base",
+          "length": "sill_height + height - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "r1",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "r1",
+          "line": "base",
+          "length": "sill_height + frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "r4",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "r4",
+          "line": "base",
+          "length": "sill_height + height - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u1",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u1",
+          "line": "base",
+          "length": "sill_height + frame + sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u2",
+          "line": "axis",
+          "length": "width / 2 - frame - sash",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u2",
+          "line": "base",
+          "length": "sill_height + frame + sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u3",
+          "line": "axis",
+          "length": "width / 2 - frame - sash",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u3",
+          "line": "base",
+          "length": "sill_height + height - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u4",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "u4",
+          "line": "base",
+          "length": "sill_height + height - frame - sash",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v1",
+          "line": "axis",
+          "length": "width / 2 - frame - sash - 100 mm",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v1",
+          "line": "base",
+          "length": "sill_height + height / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v2",
+          "line": "axis",
+          "length": "sash / 2 + 100 mm",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v2",
+          "line": "base",
+          "length": "sill_height + height / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v3",
+          "line": "axis",
+          "length": "sash / 2 + 200 mm",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v3",
+          "line": "base",
+          "length": "sill_height + height / 2 + 100 mm",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v4",
+          "line": "axis",
+          "length": "sash / 2 + 200 mm",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "v4",
+          "line": "base",
+          "length": "sill_height + height / 2 - 100 mm",
+          "side": "left"
+        }
+      ]
+    },
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "c1",
+          "x": "length:q0:-5760000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "c2",
+          "x": "length:q0:5760000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "c3",
+          "x": "length:q0:5760000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "c4",
+          "x": "length:q0:-5760000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "i1",
+          "x": "length:q0:-5440000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "i2",
+          "x": "length:q0:5440000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "i3",
+          "x": "length:q0:5440000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "i4",
+          "x": "length:q0:-5440000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "s1",
+          "x": "length:q0:-5440000",
+          "y": "length:q0:-160000"
+        },
+        {
+          "key": "s2",
+          "x": "length:q0:160000",
+          "y": "length:q0:-160000"
+        },
+        {
+          "key": "s3",
+          "x": "length:q0:-160000",
+          "y": "length:q0:160000"
+        },
+        {
+          "key": "s4",
+          "x": "length:q0:5440000",
+          "y": "length:q0:160000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "face_out",
+          "start": "c1",
+          "end": "c2"
+        },
+        {
+          "key": "end_right",
+          "start": "c2",
+          "end": "c3"
+        },
+        {
+          "key": "face_in",
+          "start": "c3",
+          "end": "c4"
+        },
+        {
+          "key": "end_left",
+          "start": "c4",
+          "end": "c1"
+        },
+        {
+          "key": "jamb_left",
+          "start": "i1",
+          "end": "i4"
+        },
+        {
+          "key": "jamb_right",
+          "start": "i2",
+          "end": "i3"
+        },
+        {
+          "key": "sash_line_fixed",
+          "start": "s1",
+          "end": "s2"
+        },
+        {
+          "key": "sash_line_sliding",
+          "start": "s3",
+          "end": "s4"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c1",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c2",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c3",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "c4",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i1",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i1",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i2",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i2",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i3",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i3",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i4",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "i4",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s1",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s1",
+          "line": "base",
+          "length": "track_gap / 2 + sash_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s2",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s2",
+          "line": "base",
+          "length": "track_gap / 2 + sash_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s3",
+          "line": "axis",
+          "length": "sash / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s3",
+          "line": "base",
+          "length": "track_gap / 2 + sash_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s4",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "s4",
+          "line": "base",
+          "length": "track_gap / 2 + sash_depth / 2",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "frame",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "outer_bottom",
+        "outer_right",
+        "outer_top",
+        "outer_left"
+      ],
+      "holes": [
+        [
+          "inner_bottom",
+          "inner_right",
+          "inner_top",
+          "inner_left"
+        ]
+      ],
+      "start": "-frame_depth / 2",
+      "end": "frame_depth / 2",
+      "subcategory": 401,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "sash_fixed",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "ls_bottom",
+        "ls_right",
+        "ls_top",
+        "inner_left"
+      ],
+      "holes": [
+        [
+          "lh_bottom",
+          "lh_right",
+          "lh_top",
+          "lh_left"
+        ]
+      ],
+      "start": "-track_gap / 2 - sash_depth",
+      "end": "-track_gap / 2",
+      "subcategory": 402,
+      "material": {
+        "parameter": "sash_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "glass_fixed",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "lh_bottom",
+        "lh_right",
+        "lh_top",
+        "lh_left"
+      ],
+      "holes": [],
+      "start": "-track_gap / 2 - sash_depth / 2 - glass / 2",
+      "end": "-track_gap / 2 - sash_depth / 2 + glass / 2",
+      "subcategory": 403,
+      "material": {
+        "fixed": "glass-plate"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "sash_sliding",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "rs_bottom",
+        "inner_right",
+        "rs_top",
+        "rs_left"
+      ],
+      "holes": [
+        [
+          "rh_bottom",
+          "rh_right",
+          "rh_top",
+          "rh_left"
+        ]
+      ],
+      "start": "track_gap / 2",
+      "end": "track_gap / 2 + sash_depth",
+      "subcategory": 402,
+      "material": {
+        "parameter": "sash_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "glass_sliding",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "rh_bottom",
+        "rh_right",
+        "rh_top",
+        "rh_left"
+      ],
+      "holes": [],
+      "start": "track_gap / 2 + sash_depth / 2 - glass / 2",
+      "end": "track_gap / 2 + sash_depth / 2 + glass / 2",
+      "subcategory": 403,
+      "material": {
+        "fixed": "glass-plate"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_lines",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "face_out",
+        "end_right",
+        "face_in",
+        "end_left",
+        "jamb_left",
+        "jamb_right",
+        "sash_line_fixed",
+        "sash_line_sliding"
+      ],
+      "subcategory": 401,
+      "visibility": {
+        "coarse": true,
+        "medium": false,
+        "fine": false
+      }
+    },
+    {
+      "key": "outline",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "outer_bottom",
+        "outer_right",
+        "outer_top",
+        "outer_left",
+        "inner_bottom",
+        "inner_right",
+        "inner_top",
+        "inner_left"
+      ],
+      "subcategory": 401,
+      "visibility": {
+        "coarse": true,
+        "medium": false,
+        "fine": false
+      }
+    },
+    {
+      "key": "slide_mark",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "arrow_shaft",
+        "arrow_up",
+        "arrow_down"
+      ],
+      "subcategory": 405,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "wall",
+    "opening": {
+      "sketch": "elevation",
+      "profile": [
+        "outer_bottom",
+        "outer_right",
+        "outer_top",
+        "outer_left"
+      ]
+    }
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "height"
+    ],
+    "rows": [
+      {
+        "key": "s1200x900",
+        "name": "1200 x 900",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:5760000"
+        ]
+      },
+      {
+        "key": "s1200x1200",
+        "name": "1200 x 1200",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:7680000"
+        ]
+      },
+      {
+        "key": "s1500x1200",
+        "name": "1500 x 1200",
+        "values": [
+          "length:q0:9600000",
+          "length:q0:7680000"
+        ]
+      },
+      {
+        "key": "s1800x1200",
+        "name": "1800 x 1200",
+        "values": [
+          "length:q0:11520000",
+          "length:q0:7680000"
+        ]
+      },
+      {
+        "key": "s1800x1500",
+        "name": "1800 x 1500",
+        "values": [
+          "length:q0:11520000",
+          "length:q0:9600000"
+        ]
+      },
+      {
+        "key": "s2400x1200",
+        "name": "2400 x 1200",
+        "values": [
+          "length:q0:15360000",
+          "length:q0:7680000"
+        ]
+      }
+    ]
+  }
+}

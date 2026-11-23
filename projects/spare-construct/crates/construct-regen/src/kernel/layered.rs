@@ -1,0 +1,523 @@
+//! A layered wall on the engine (job 4.1, CON-A4-F2-P1): one solid per layer of a filled
+//! `wall.layered` recipe, each the extrusion of its strip in plan ([`crate::wall_plan`]) from the
+//! wall's base straight up to its top, less the opening of every door hosted in it.
+//!
+//! What it builds:
+//!
+//! - A solid for each layer with a thickness: the parallelogram between the layer's two faces,
+//!   corners on the grid by the plan's one rounding rule, extruded by the wall's height through
+//!   [`Engine::extrude`]. A layer of no thickness (a membrane) is a face between its neighbours and
+//!   has no solid. Each solid knows its layer's material and function: the body's bytes list them,
+//!   and each display lists the triangles of each layer as a part ([`Part`]), so a page colours
+//!   them by material.
+//! - Openings: a door's opening is cut through every layer, by the same rules as the old box's
+//!   ([`super::opening`]): the same refusals, in the same words, asked in the wall's own frame
+//!   (along its line from its start, across it from its exterior face, up from its base). A door
+//!   is hosted only on a layered wall that runs along an axis, because a door is still a box along
+//!   an axis (`door.single`); a wall at any other angle refuses it (`NotAHost`), until doors are
+//!   families that declare their host and their void (job 6.4, CON-A7-F3-P2). Each cutter is
+//!   extruded once and subtracted from each layer, one door after another in the order of their
+//!   keys.
+//! - Wrapping: not built. A layer that wraps at an opening (construct-walls' `Layer::wraps`) is
+//!   cut flush with the opening as every other layer is; turning it round the opening's sides is
+//!   job 6.1 (CON-A4-F2-P4), and its place is [`build`]'s loop over the cutters.
+//! - Joins and clean-ups where walls meet (jobs 5.1 and 6.1): not here; a wall's ends are square.
+//! - Names (chapter 20.2): the wall's six roles, `base`, `top`, `exterior`, `interior`, `end0` and
+//!   `end1`, are named as the old box's are, under this recipe's operation, so a door hosted on
+//!   the exterior keeps its face through every rebuild. `exterior` is the first layer's outer
+//!   face, `interior` the last layer's; each layer's piece of the base, the top and the ends
+//!   carries the wall's name for it, as the pieces of a face an opening splits do. The face
+//!   between layer `k - 1` and layer `k` is `face.<k>`, for `k` from 1. An opening's faces are
+//!   named as in the old box, once for all the layers' pieces.
+//! - Displays: level 0 the solids with their openings, level 1 before the openings, both in whole
+//!   millimetres, each coordinate the nearest millimetre to the engine's grid point (a layer face
+//!   at 12.5 mm, or the corner of a wall at an angle, is not on one); a level that rounded anything
+//!   strays by 1 mm more than it would. The bounds are rounded outward.
+//!
+//! Depends on the parent module's units, naming and errors, [`super::opening`] and
+//! [`crate::wall_plan`]. Interim: as the parent module's (the engine behind the seam, the body's
+//! bytes being the engine's request, names written from the recipe); and the layers' pieces of a
+//! face share its one name where chapter 20.2 names each piece `Split` (CON-A3-F1-P2, with the
+//! body record).
+
+use super::opening::{self, Cut, Frame, Hosted};
+use super::{AskedCut, Extrusion, Units, WALL_ROLES, as_steps, fault, from_engine, name, op_id};
+use crate::wall_plan::{Axis, Layered};
+use construct_model::geometry::{
+    Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
+};
+use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, Profile};
+use engine_geometry::value::grid::P3;
+use engine_geometry::value::op::OpId;
+use serde::Serialize;
+
+/// The operation of the only element that cuts an opening.
+const OPENING_OP: &str = "door.single";
+
+/// A layered wall's body bytes: what the engine was asked for each layer, and the cutter of each
+/// opening, once for all the layers. A wall with no openings writes no `subtract`.
+#[derive(Serialize)]
+struct Asked {
+    layers: Vec<AskedLayer>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    subtract: Vec<AskedCut>,
+}
+
+/// One layer as the engine was asked for it.
+#[derive(Serialize)]
+struct AskedLayer {
+    function: String,
+    material: String,
+    extrude: Vec<[i64; 3]>,
+    by: [i64; 3],
+}
+
+/// The low and high grid points a mesh reaches, in steps.
+type Extent = Option<([i64; 3], [i64; 3])>;
+
+/// The persistent names of a layered wall's faces without building it, sorted by name: its six
+/// roles and the faces between its layers. An opening's faces are not among them.
+///
+/// # Errors
+///
+/// `Naming` when a name cannot be made.
+pub(super) fn names(recipe: &Recipe, wall: &Layered) -> Result<Vec<FaceName>, GeometryError> {
+    let mut names = own_names(op_id(recipe)?, wall)?;
+    names.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(names)
+}
+
+/// The names of the wall's own faces, in role order.
+fn own_names(op: OpId, wall: &Layered) -> Result<Vec<FaceName>, GeometryError> {
+    let mut roles: Vec<String> = WALL_ROLES.iter().map(|r| (*r).to_owned()).collect();
+    for k in 1..wall.layers.len() {
+        roles.push(format!("face.{k}"));
+    }
+    roles.iter().map(|role| name(op, role)).collect()
+}
+
+/// `a + b`, or `TooBig`.
+fn add(a: i64, b: i64) -> Result<i64, GeometryError> {
+    a.checked_add(b).ok_or_else(super::too_big)
+}
+
+/// `a * b`, or `TooBig`.
+fn times(a: i64, b: i64) -> Result<i64, GeometryError> {
+    a.checked_mul(b).ok_or_else(super::too_big)
+}
+
+/// The grid point of a plan point `[x, y]` in the engine's steps at height `z`.
+fn point([x, y]: [i64; 2], z: i64) -> Result<P3, GeometryError> {
+    P3::new(x, y, z).map_err(|_| super::too_big())
+}
+
+/// A wall along an axis, as its openings are asked in it: its frame (along its line from its
+/// start, across it from its exterior face toward its interior, up from its base) and how a plan
+/// point, in the engine's steps relative to the wall's placement, goes into that frame and back.
+struct WallFrame {
+    /// Its line's direction, a unit vector along x or y.
+    unit: [i64; 2],
+    /// Its line's start, in the engine's steps.
+    start: [i64; 2],
+    /// Its exterior face's offset to the right of its line, in the engine's steps.
+    exterior: i64,
+    /// 1 when the interior is to the left of the exterior (the exterior on the line's right, as
+    /// drawn), -1 when the wall is flipped.
+    inward: i64,
+    /// The frame the openings are asked in.
+    frame: Frame,
+}
+
+impl WallFrame {
+    /// The frame of `wall`, which must run along an axis to host the door `first`.
+    fn of(wall: &Layered, units: Units, first: &str) -> Result<WallFrame, GeometryError> {
+        let axis: Axis = wall.plan.axis().ok_or_else(|| {
+            fault(
+                "NotAHost",
+                format!(
+                    "door {first}: a door is hosted only on a wall along x or y until doors are \
+                     families; this wall runs at an angle"
+                ),
+            )
+        })?;
+        let length = units.from_q0(wall.plan.axis_length().unwrap_or(0))?;
+        let (exterior, interior) = wall.outer();
+        let thickness = i64::try_from(wall.thickness()).map_err(|_| super::too_big())?;
+        let [sx, sy] = wall.plan.start();
+        Ok(WallFrame {
+            unit: axis.unit(),
+            start: [units.from_q0(sx)?, units.from_q0(sy)?],
+            exterior: units.from_q0(exterior)?,
+            inward: if exterior > interior { 1 } else { -1 },
+            frame: Frame {
+                along: axis.index(),
+                size: [
+                    length,
+                    units.from_q0(thickness)?,
+                    units.from_q0(wall.height)?,
+                ],
+            },
+        })
+    }
+
+    /// The unit vector to the right of the line.
+    fn right(&self) -> [i64; 2] {
+        let [ux, uy] = self.unit;
+        [uy, ux.checked_neg().unwrap_or(0)]
+    }
+
+    /// A plan point, relative to the wall's placement, in the frame: along and across.
+    fn to_frame(&self, [x, y]: [i64; 2]) -> Result<[i64; 2], GeometryError> {
+        let [sx, sy] = self.start;
+        let (px, py) = (
+            x.checked_sub(sx).ok_or_else(super::too_big)?,
+            y.checked_sub(sy).ok_or_else(super::too_big)?,
+        );
+        let [ux, uy] = self.unit;
+        let [rx, ry] = self.right();
+        let along = add(times(px, ux)?, times(py, uy)?)?;
+        let right = add(times(px, rx)?, times(py, ry)?)?;
+        let across = times(
+            self.exterior
+                .checked_sub(right)
+                .ok_or_else(super::too_big)?,
+            self.inward,
+        )?;
+        Ok([along, across])
+    }
+
+    /// A frame point, along and across, in plan relative to the wall's placement.
+    fn to_plan(&self, [along, across]: [i64; 2]) -> Result<[i64; 2], GeometryError> {
+        let right = self
+            .exterior
+            .checked_sub(times(across, self.inward)?)
+            .ok_or_else(super::too_big)?;
+        let [sx, sy] = self.start;
+        let [ux, uy] = self.unit;
+        let [rx, ry] = self.right();
+        Ok([
+            add(sx, add(times(along, ux)?, times(right, rx)?)?)?,
+            add(sy, add(times(along, uy)?, times(right, ry)?)?)?,
+        ])
+    }
+
+    /// The plan axis across the wall: the one its line does not run along.
+    fn across_axis(&self) -> usize {
+        usize::from(self.frame.along == 0)
+    }
+
+    /// A door hosted in the wall, moved into the frame: its box's two plan corners, read from its
+    /// placement and its size, taken along and across, and its lowest corner put where the
+    /// openings read it (along in the frame's along axis's place, across in the other's). What is
+    /// not a door, or a door that does not read, is left as it is, for the openings to refuse in
+    /// their own words.
+    fn door<'a>(&self, hosted: &Hosted<'a>, units: Units) -> Result<Hosted<'a>, GeometryError> {
+        if hosted.recipe.op != OPENING_OP {
+            return Ok(*hosted);
+        }
+        let Ok(door) = Extrusion::door(&hosted.recipe.args) else {
+            return Ok(*hosted);
+        };
+        let named =
+            |e: GeometryError| fault(&e.code, format!("door {}: {}", hosted.key, e.message));
+        let [wide, deep] = door.size;
+        let (wide, deep) = (
+            units.steps(wide).map_err(named)?,
+            units.steps(deep).map_err(named)?,
+        );
+        let (x, y) = (hosted.at.x.get(), hosted.at.y.get());
+        let (low, high) = ([x, y], [add(x, wide)?, add(y, deep)?]);
+        let ([low_along, low_across], [high_along, high_across]) =
+            (self.to_frame(low)?, self.to_frame(high)?);
+        let mut frame = [0_i64; 2];
+        if let Some(slot) = frame.get_mut(self.frame.along) {
+            *slot = low_along.min(high_along);
+        }
+        if let Some(slot) = frame.get_mut(self.across_axis()) {
+            *slot = low_across.min(high_across);
+        }
+        let [first, second] = frame;
+        Ok(Hosted {
+            key: hosted.key,
+            recipe: hosted.recipe,
+            at: P3::new(first, second, hosted.at.z.get()).map_err(|_| super::too_big())?,
+        })
+    }
+
+    /// A cut's cutter in plan, as the engine is asked for it: its corners at its foot, and the
+    /// vector up to its head.
+    fn cutter(&self, cut: &Cut) -> Result<(Profile, [i64; 3]), GeometryError> {
+        let (lo, hi) = cut.frame_box();
+        let pick = |v: [i64; 3], i: usize| v.get(i).copied().unwrap_or_default();
+        let (along, across) = (self.frame.along, self.across_axis());
+        let (a0, a1) = (pick(lo, along), pick(hi, along));
+        let (c0, c1) = (pick(lo, across), pick(hi, across));
+        let (z0, z1) = (pick(lo, 2), pick(hi, 2));
+        let mut outer = Vec::with_capacity(4);
+        for corner in [[a0, c0], [a1, c0], [a1, c1], [a0, c1]] {
+            outer.push(point(self.to_plan(corner)?, z0)?);
+        }
+        let up = z1.checked_sub(z0).ok_or_else(super::too_big)?;
+        Ok((
+            Profile {
+                outer,
+                holes: Vec::new(),
+            },
+            [0, 0, up],
+        ))
+    }
+}
+
+/// The cuts the doors `hosted` make in `wall`, with the frame they were asked in; none when
+/// nothing is hosted.
+fn cuts(
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+) -> Result<Option<(WallFrame, Vec<Cut>)>, GeometryError> {
+    let Some(first) = hosted.iter().map(|h| h.key).min() else {
+        return Ok(None);
+    };
+    let frame = WallFrame::of(wall, units, first)?;
+    let framed = hosted
+        .iter()
+        .map(|h| frame.door(h, units))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cuts = opening::plan_in(frame.frame, &framed, units, band)?;
+    Ok(Some((frame, cuts)))
+}
+
+/// Whether the doors `hosted` fit in `wall` by the openings' rules, asked without the engine.
+///
+/// # Errors
+///
+/// The openings' refusals, each naming the door and why; `NotAHost` for a wall at an angle.
+pub(super) fn fits(
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+) -> Result<(), GeometryError> {
+    cuts(wall, hosted, units, band).map(|_| ())
+}
+
+/// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, and whether
+/// any was rounded; the lowest and highest grid steps it reaches widen `extent`.
+fn millimetres(
+    mesh: &DisplayMesh,
+    units: Units,
+    extent: &mut Extent,
+) -> Result<(Mesh, bool), GeometryError> {
+    let mut positions = Vec::with_capacity(mesh.positions.len().saturating_mul(3));
+    let mut rounded = false;
+    for point in &mesh.positions {
+        let mut steps = [0_i64; 3];
+        for (slot, &c) in steps.iter_mut().zip(point) {
+            *slot = Units::whole_steps(c)?;
+        }
+        for &s in &steps {
+            let (mm, exact) = units.nearest_mm(s);
+            rounded |= !exact;
+            positions.push(mm);
+        }
+        *extent = Some(match *extent {
+            None => (steps, steps),
+            Some((mut lo, mut hi)) => {
+                for ((l, h), &s) in lo.iter_mut().zip(hi.iter_mut()).zip(&steps) {
+                    *l = (*l).min(s);
+                    *h = (*h).max(s);
+                }
+                (lo, hi)
+            }
+        });
+    }
+    let count = mesh.positions.len();
+    let mut indices = Vec::with_capacity(mesh.triangles.len().saturating_mul(3));
+    for &index in mesh.triangles.iter().flatten() {
+        if !usize::try_from(index).is_ok_and(|i| i < count) {
+            return Err(fault("EngineRefused", "mesh: a triangle past its points"));
+        }
+        indices.push(index);
+    }
+    Ok((Mesh { positions, indices }, rounded))
+}
+
+/// A count of a mesh's items, of three numbers each, as a display's triangle numbers are.
+fn thirds(len: usize) -> Result<u32, GeometryError> {
+    u32::try_from(len.checked_div(3).unwrap_or(0))
+        .map_err(|_| fault("TooBig", "a mesh with too many points or triangles"))
+}
+
+/// Puts `part` after what `into` holds, its points after `into`'s and its triangles numbered so,
+/// and gives its first triangle and how many it has.
+fn append(into: &mut Mesh, part: &Mesh) -> Result<[u32; 2], GeometryError> {
+    let base = thirds(into.positions.len())?;
+    let first = thirds(into.indices.len())?;
+    into.positions.extend_from_slice(&part.positions);
+    for &i in &part.indices {
+        into.indices.push(
+            i.checked_add(base)
+                .ok_or_else(|| fault("TooBig", "a mesh with too many points"))?,
+        );
+    }
+    Ok([first, thirds(part.indices.len())?])
+}
+
+/// The plan outline of a strip whose corners are in the building grid's steps, in whole
+/// millimetres, each corner the nearest millimetre.
+fn outline(corners: &[[i64; 2]; 4], units: Units) -> Result<Vec<[i64; 2]>, GeometryError> {
+    let mut out = Vec::with_capacity(4);
+    for &[x, y] in corners {
+        let (x, _) = units.nearest_mm(units.from_q0(x)?);
+        let (y, _) = units.nearest_mm(units.from_q0(y)?);
+        out.push([x, y]);
+    }
+    Ok(out)
+}
+
+/// An empty mesh.
+fn empty() -> Mesh {
+    Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    }
+}
+
+/// Builds a layered wall with the doors `hosted` in it, on `engine`.
+///
+/// # Errors
+///
+/// The plan's and the openings' refusals, and the engine's own (a door's with its key in front).
+#[allow(
+    clippy::too_many_lines,
+    reason = "one wall's layers, cuts, meshes and names, in the order the record lists them"
+)]
+pub(super) fn build<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+) -> Result<Built, GeometryError> {
+    let op = op_id(recipe)?;
+    let (cut_list, tools) = match cuts(wall, hosted, units, band)? {
+        None => (Vec::new(), Vec::new()),
+        Some((frame, cuts)) => {
+            let tools = cuts
+                .iter()
+                .map(|cut| frame.cutter(cut))
+                .collect::<Result<Vec<_>, _>>()?;
+            (cuts, tools)
+        }
+    };
+    let mut asked = Asked {
+        layers: Vec::new(),
+        subtract: cut_list
+            .iter()
+            .zip(&tools)
+            .map(|(cut, (tool, by))| AskedCut {
+                key: cut.key().to_owned(),
+                extrude: as_steps(&tool.outer),
+                by: *by,
+            })
+            .collect(),
+    };
+    let by = [0, 0, units.from_q0(wall.height)?];
+    let mut cutters = Vec::with_capacity(tools.len());
+    for (cut, (tool, up)) in cut_list.iter().zip(&tools) {
+        let named = |e: EngineError| cut.engine_error(from_engine(e));
+        cutters.push((cut, engine.extrude(tool, *up).map_err(named)?));
+    }
+    let (mut fine, mut coarse) = (empty(), empty());
+    let (mut fine_parts, mut coarse_parts) = (Vec::new(), Vec::new());
+    let (mut rounded_fine, mut rounded_coarse) = (false, false);
+    // Only the finest level's reach makes the bounds; the coarse level's is not kept.
+    let (mut extent, mut coarse_extent): (Extent, Extent) = (None, None);
+    for layer in &wall.layers {
+        if layer.thickness() == 0 {
+            continue;
+        }
+        let (corners, _) = wall.plan.strip(layer.exterior, layer.interior)?;
+        let outer = corners
+            .iter()
+            .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
+            .collect::<Result<Vec<P3>, _>>()?;
+        asked.layers.push(AskedLayer {
+            function: layer.function.clone(),
+            material: layer.material.clone(),
+            extrude: as_steps(&outer),
+            by,
+        });
+        let profile = Profile {
+            outer,
+            holes: Vec::new(),
+        };
+        let mut solid = engine.extrude(&profile, by).map_err(from_engine)?;
+        let plain = engine.mesh(&solid).map_err(from_engine)?;
+        for (cut, cutter) in &cutters {
+            let named = |e: EngineError| cut.engine_error(from_engine(e));
+            solid = engine.subtract(&solid, cutter).map_err(named)?;
+        }
+        // A layer with no openings has the same mesh at both levels.
+        let (cut_mesh, r0) = if cutters.is_empty() {
+            millimetres(&plain, units, &mut extent)?
+        } else {
+            millimetres(
+                &engine.mesh(&solid).map_err(from_engine)?,
+                units,
+                &mut extent,
+            )?
+        };
+        let (plain, r1) = millimetres(&plain, units, &mut coarse_extent)?;
+        rounded_coarse |= r1;
+        rounded_fine |= r0;
+        let shape = outline(&corners, units)?;
+        let part = |triangles: [u32; 2]| Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles,
+            outline: shape.clone(),
+        };
+        fine_parts.push(part(append(&mut fine, &cut_mesh)?));
+        coarse_parts.push(part(append(&mut coarse, &plain)?));
+    }
+    let (lo, hi) =
+        extent.ok_or_else(|| fault("EmptyShape", "a wall with no layer of any thickness"))?;
+    let bounds = Bounds {
+        min: lo.map(|s| units.floor_mm(s)),
+        max: hi.map(|s| units.ceil_mm(s)),
+    };
+    let mut names = own_names(op, wall)?;
+    for cut in &cut_list {
+        names.extend(cut.names(op)?);
+    }
+    names.sort_by(|a, b| a.name.cmp(&b.name));
+    let (exterior, interior) = wall.outer();
+    let (whole, _) = wall.plan.strip(exterior, interior)?;
+    let whole = outline(&whole, units)?;
+    let displays = vec![
+        Display {
+            lod: 0,
+            deviation: i64::from(rounded_fine),
+            mesh: fine,
+            outline: whole.clone(),
+            parts: fine_parts,
+        },
+        Display {
+            lod: 1,
+            deviation: opening::deviation(&cut_list, units)
+                .saturating_add(i64::from(rounded_coarse)),
+            mesh: coarse,
+            outline: whole,
+            parts: coarse_parts,
+        },
+    ];
+    Ok(Built {
+        body: serde_json::to_vec(&asked).unwrap_or_default(),
+        bounds,
+        names,
+        displays,
+    })
+}

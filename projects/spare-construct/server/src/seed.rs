@@ -11,21 +11,38 @@ use kit_accounts::sign_in::email_hash;
 use kit_core::Id;
 use kit_store::{FileStore, Kv, Reader, StoreError};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn id(text: &str) -> Id {
     // Every ID in this file is a constant, and valid.
     Id::parse(text).unwrap_or_else(|_| Id::from_time_and_random(0, [0; 10]))
 }
 
-/// Walls run along their long side, and turn by swapping the two sides of the plan.
-fn wall(id: &str, level: i32, x: i64, y: i64, w: i64, d: i64) -> Value {
-    let (length, thickness, axis) = if w >= d { (w, d, "x") } else { (d, w, "y") };
-    let recipe = recipe(
-        "wall.straight",
-        json!({ "length": length, "thickness": thickness, "height": 3000, "axis": axis }),
-    );
-    json!({ "element": id, "kind": "wall", "level": level, "placement": { "x": x, "y": y, "z": 0 },
-            "recipe": recipe, "props": { "category": "Walls", "type": "Basic wall" } })
+/// One edit of the seed: a command and its arguments.
+type Step = (&'static str, Value);
+
+/// The outside walls' type and the inside wall's: two of construct-walls' default wall types,
+/// which the seed makes in each model that has walls, through `wall.type.create`.
+const OUTSIDE: &str = "wall-brick-veneer-90";
+const INSIDE: &str = "wall-partition-stud-90";
+
+/// A layered wall of the wall type `ty`, drawn as a person draws one (`wall.draw`): its reference
+/// line from `start` to `end` in millimetres, its exterior on the right walking that way, its
+/// layers about the line, its base on its level, and its top on Level 2 for a wall on Level 1,
+/// else 3 m up.
+fn wall(id: &str, level: i32, ty: &str, start: (i64, i64), end: (i64, i64)) -> Step {
+    let at = |(x, y): (i64, i64)| json!([format!("{x} mm"), format!("{y} mm")]);
+    let (key, top) = if level == 1 {
+        ("top", "2")
+    } else {
+        ("height", "3000 mm")
+    };
+    let mut args = json!({ "element": id, "type": ty, "start": at(start), "end": at(end),
+                           "level": level.to_string() });
+    if let Some(args) = args.as_object_mut() {
+        args.insert(key.to_owned(), json!(top));
+    }
+    ("wall.draw", args)
 }
 
 fn door(id: &str, level: i32, x: i64, y: i64, w: i64, d: i64, fire: &str) -> Value {
@@ -55,16 +72,23 @@ fn recipe(op: &str, args: Value) -> Value {
     .unwrap_or_default()
 }
 
-/// A plain two-room floor.
-fn arch_floor(level: i32) -> Vec<Value> {
+/// A plain two-room floor, 12 m by 8 m: four brick veneer walls round it, their lines 100 mm in
+/// from its edges, the long two running past the short two to close the corners, and a stud
+/// partition across the middle between the long walls' inside faces.
+fn arch_floor(level: i32) -> Vec<Step> {
     let tag = |n: i32| format!("W-{level}0{n}");
     vec![
-        wall(&tag(1), level, 0, 0, 12_000, 200),
-        wall(&tag(2), level, 0, 7800, 12_000, 200),
-        wall(&tag(3), level, 0, 200, 200, 7600),
-        wall(&tag(4), level, 11_800, 200, 200, 7600),
-        wall(&tag(5), level, 6000, 200, 200, 7600),
+        wall(&tag(1), level, OUTSIDE, (-25, 100), (12_025, 100)),
+        wall(&tag(2), level, OUTSIDE, (12_025, 7900), (-25, 7900)),
+        wall(&tag(3), level, OUTSIDE, (100, 7775), (100, 225)),
+        wall(&tag(4), level, OUTSIDE, (11_900, 225), (11_900, 7775)),
+        wall(&tag(5), level, INSIDE, (6100, 225), (6100, 7775)),
     ]
+}
+
+/// An element made as it is: `element.create`.
+fn create(args: Value) -> Step {
+    ("element.create", args)
 }
 
 /// Whether this store has the example data.
@@ -262,11 +286,10 @@ async fn models<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refu
 }
 
 /// Each floor of Example model 1, split between the models that draw it: the architecture with
-/// its doors, the joinery, the grid lines and the columns.
-fn example_floors() -> [Vec<Value>; 4] {
+/// its doors, the joinery and the columns. The grid lines stand on no floor ([`setout_grids`]).
+fn example_floors() -> [Vec<Step>; 3] {
     let mut arch = Vec::new();
     let mut interiors = Vec::new();
-    let mut setout = Vec::new();
     let mut structure = Vec::new();
     for level in [1, 2] {
         arch.extend(arch_floor(level));
@@ -275,60 +298,122 @@ fn example_floors() -> [Vec<Value>; 4] {
             (2, 5950, 3000, 300, 900, "none"),
             (3, 9000, 7750, 900, 300, "FD30"),
         ] {
-            arch.push(door(&format!("D-{level}0{n}"), level, x, y, w, d, fire));
+            arch.push(create(door(
+                &format!("D-{level}0{n}"),
+                level,
+                x,
+                y,
+                w,
+                d,
+                fire,
+            )));
         }
         for (n, x, y, width) in [(1, 700, 700, 3000), (2, 7000, 6500, 2400)] {
             let name = format!("B-{level}0{n}");
-            interiors.push(thing(&name, "joinery", level, x, y, (width, 600, 900)));
-        }
-        for (name, x) in [("A", 100), ("B", 6100), ("C", 11_900)] {
-            let name = format!("GL-{name}{level}");
-            setout.push(thing(&name, "grid", level, x, -1500, (40, 11_000, 10)));
-        }
-        for (name, y) in [("1", 100), ("2", 7900)] {
-            let name = format!("GL-{name}{level}");
-            setout.push(thing(&name, "grid", level, -1500, y, (15_000, 40, 10)));
+            interiors.push(create(thing(
+                &name,
+                "joinery",
+                level,
+                x,
+                y,
+                (width, 600, 900),
+            )));
         }
         for (index, (x, y)) in [(0, 0), (11_600, 0), (0, 7600), (11_600, 7600), (5900, 3900)]
             .iter()
             .enumerate()
         {
             let name = format!("C-{level}0{index}");
-            structure.push(thing(&name, "column", level, *x, *y, (400, 400, 3000)));
+            structure.push(create(thing(
+                &name,
+                "column",
+                level,
+                *x,
+                *y,
+                (400, 400, 3000),
+            )));
         }
     }
-    arch.push(door("D-104", 2, 8800, -50, 900, 300, "FD30"));
-    [arch, interiors, setout, structure]
+    arch.push(create(door("D-104", 2, 8800, -50, 900, 300, "FD30")));
+    [arch, interiors, structure]
 }
 
-/// Every element of every model.
+/// The site setout's grid lines, on the walls' centre lines and past them on every side, made
+/// with `grid.create` like any grid: lettered across, numbered up.
+fn setout_grids() -> Vec<Value> {
+    let mut grids = Vec::new();
+    for (name, x) in [("A", 100), ("B", 6100), ("C", 11_900)] {
+        let x = x.to_string();
+        grids.push(json!({ "grid": format!("GL-{name}"), "name": name,
+                           "x0": x, "y0": "-1500", "x1": x, "y1": "9500" }));
+    }
+    for (name, y) in [("1", 100), ("2", 7900)] {
+        let y = y.to_string();
+        grids.push(json!({ "grid": format!("GL-{name}"), "name": name,
+                           "x0": "-1500", "y0": y, "x1": "13500", "y1": y }));
+    }
+    grids
+}
+
+/// Every element of every model. A model that has walls first gets construct-walls' default wall
+/// types, through `wall.type.create`, as the page makes them in a model that has none.
 async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refusal> {
-    let [arch, interiors, setout, structure] = example_floors();
+    let [arch, interiors, structure] = example_floors();
     let mut riverside = arch_floor(1);
-    riverside.push(door("D-101", 1, 2500, -50, 900, 300, "FD30"));
-    let planter = vec![thing("P-1", "planter", 1, 0, 0, (2000, 800, 600))];
+    riverside.push(create(door("D-101", 1, 2500, -50, 900, 300, "FD30")));
+    let planter = vec![create(thing("P-1", "planter", 1, 0, 0, (2000, 800, 600)))];
+    let wall_types = construct_api::cloud::walls::default_type_args().map_err(Refusal::Bad)?;
 
     for (person, project, model, elements) in [
         ("anna", "example-1", "arch-model", arch),
         ("anna", "example-1", "interiors-model", interiors),
-        ("ben", "example-1", "site-setout", setout),
         ("dan", "example-1-bridged", "structure-model", structure),
         ("cara", "riverside", "riverside-model", riverside),
         ("eve", "riverside-bridged", "landscape-model", planter),
     ] {
-        for args in elements {
+        let (person, project, model) = (id(person), id(project), id(model));
+        let levels = levels_of(&elements);
+        if elements.iter().any(|(cmd, _)| *cmd == "wall.draw") {
+            for args in &wall_types {
+                service
+                    .edit(&person, &project, &model, "wall.type.create", args.clone())
+                    .await?;
+            }
+        }
+        for (cmd, args) in elements {
+            service.edit(&person, &project, &model, cmd, args).await?;
+        }
+        // One floor plan for each level the model's elements stand on, with the commands' defaults.
+        for level in levels {
+            let args = json!({ "view": format!("VP-{level}"), "kind": "floor_plan",
+                               "name": format!("Level {level} plan"), "level": level.to_string() });
             service
-                .edit(
-                    &id(person),
-                    &id(project),
-                    &id(model),
-                    "element.create",
-                    args,
-                )
+                .edit(&person, &project, &model, "view.create", args)
                 .await?;
         }
     }
+    // The setout's grids stand on no level, so it has no floor plan.
+    let (ben, example, setout) = (id("ben"), id("example-1"), id("site-setout"));
+    for args in setout_grids() {
+        service
+            .edit(&ben, &example, &setout, "grid.create", args)
+            .await?;
+    }
     Ok(())
+}
+
+/// The levels a model's elements stand on, lowest first, each once: `element.create` names its
+/// level as a number, `wall.draw` as a level's ID.
+fn levels_of(elements: &[Step]) -> BTreeSet<i64> {
+    elements
+        .iter()
+        .filter_map(|(_, args)| {
+            let level = args.get("level")?;
+            level
+                .as_i64()
+                .or_else(|| level.as_str().and_then(|text| text.parse().ok()))
+        })
+        .collect()
 }
 
 /// The packages published, bridged and taken in, the links between models, and every project's

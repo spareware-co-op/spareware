@@ -209,6 +209,7 @@
     set('arch', 'Views', [
       { stack: [planButton('l1'), planButton('l2'), { label: 'Default 3D', icon: 'cube', act: 'go', a: '3d', pressed: S.screen === '3d' }] },
     ]);
+    floorRibbon(config); // the floor tool beside the wall tool
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -252,6 +253,7 @@
         ],
       });
     }
+    datumRibbon(config); // the grid tool, and Delete for a selected grid or plane
     return config;
   }
 
@@ -559,10 +561,11 @@
     C.claims.clear();
     C.links = [];
     C.steps = { undo: null, redo: null };
-    C.params = C.typeList = C.manage = null;
+    C.params = C.typeList = C.manage = C.wallTypes = null;
     C.problems.clear();
     C.asked.clear();
     C.cuts = false;
+    forgetDatums();
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -582,6 +585,7 @@
     await loadPieces();
     await loadClaims();
     await loadLinks();
+    await loadDatums();
     await loadWorkshop();
     await loadSteps();
   }
@@ -682,23 +686,67 @@
   /**
    * What `record` builds to here. A wall with elements hosted in it on this page is built with them,
    * each opening cut, as the server's regenerator builds it, when the package can (the kernel's
-   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does.
+   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does. A recipe
+   * that reads records is built from `fill`, the recipe the server filled for it (`fillOf`).
    */
-  function buildOn(builder, record, into) {
-    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into) : [];
-    if (!guests.length) return buildShape(builder, record.recipe);
+  function buildOn(builder, record, into, fill) {
+    const recipe = fill?.recipe ?? record.recipe;
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill) : [];
+    if (!guests.length) return buildShape(builder, recipe);
     // Each guest by its place in the host's frame, so a host that moves builds to the same text.
-    const host = JSON.stringify({ recipe: record.recipe, placement: { x: 0, y: 0, z: 0 } });
+    const host = JSON.stringify({ recipe, placement: { x: 0, y: 0, z: 0 } });
     const hosted = JSON.stringify(guests);
     const text = `${host}\n${hosted}`;
     if (!builder.hosting.has(text)) builder.hosting.set(text, JSON.parse(builder.shapes.build_hosting(host, hosted)));
     return builder.hosting.get(text);
   }
 
-  async function shapeFor(model, record, into) {
+  async function shapeFor(model, record, into, fill) {
     const row = C.models.get(model);
     const builder = row && (await builderFor(row));
-    return builder ? buildOn(builder, record, into) : storedShape(model, record.id);
+    if (!builder) return storedShape(model, record.id);
+    if (fill?.failed) return { failed: fill.failed };
+    return buildOn(builder, record, into, fill);
+  }
+
+  // A recipe that reads records (a layered wall's layers from its wall type, a top tied to a level, a
+  // parameter's value) is filled by the server, the way its regenerator fills it, and this page builds
+  // what comes back: it never works out a type's layers or a level's height itself. The answer says
+  // how far the log had got, so a checkpoint from before then is not compared with it; an entry that
+  // may change what such a recipe reads has it filled and built again (`fillAgain`).
+
+  /** Whether a recipe reads records: an argument that is an object, such as `{"wall":"type"}`. */
+  const readsRecords = (recipe) =>
+    Object.values(recipe?.args || {}).some((arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg));
+
+  /** The server's filling of `record`'s recipe in `model`: `{head, recipe}` or `{head, failed}`; null when it reads nothing. */
+  async function fillOf(model, record) {
+    if (!readsRecords(record.recipe)) return null;
+    try {
+      return await api(`${modelUrl(model)}/filled/${record.id}`);
+    } catch (error) {
+      return { head: 0, failed: { code: 'NotFilled', message: error.message } };
+    }
+  }
+
+  /** Every element of `into` whose recipe reads records, filled and built again. */
+  function fillAgain(model, into) {
+    for (const [id, piece] of into) {
+      if (readsRecords(piece.el.recipe)) refill(model, into, id, piece);
+    }
+  }
+
+  async function refill(model, into, id, piece) {
+    piece.stale = true;
+    piece.asked = (piece.asked || 0) + 1;
+    const asked = piece.asked;
+    const fill = await fillOf(model, piece.el);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    const answer = await shapeFor(model, piece.el, into, fill);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    queueDraw();
+    if (id === S.sel) refreshSide();
   }
 
   /** A stored length, `length:q0:<steps>`, in millimetres. */
@@ -731,8 +779,8 @@
    * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
    * regenerator hands them to its builder.
    */
-  function guestsOf(host, into) {
-    const drawn = { el: host, shape: into.get(host.id)?.shape };
+  function guestsOf(host, into, fill) {
+    const drawn = { el: host, shape: into.get(host.id)?.shape, fill: fill ?? into.get(host.id)?.fill };
     const guests = [];
     for (const [id, piece] of into) {
       if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
@@ -755,12 +803,13 @@
     return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
   }
 
-  /** Where `el` sits hosted on `face` of `host` (`{el, shape}`): `placementOf`'s rule. */
+  /** Where `el` sits hosted on `face` of `host` (`{el, shape, fill}`): `placementOf`'s rule. */
   function placedOn(el, face, host) {
     const along = el.props?.['@host.along'];
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
     const own = el.recipe.args.thickness;
     if (!Number.isFinite(thickness) || !Number.isFinite(own)) return el.placement;
@@ -772,6 +821,75 @@
     return alongY
       ? { x: at.x + across, y: at.y + a, z: at.z + u }
       : { x: at.x + a, y: at.y + across, z: at.z + u };
+  }
+
+  // A layered wall (`wall.layered`): drawn as a line between two points, its layers read from its
+  // wall type (construct-model's FORMAT.md, "Walls"). Lengths in its recipe are grid steps.
+  const LAYERED = 'wall.layered';
+  const STEPS_PER_MM = 6400;
+  const steps = (text) => Number(String(text).split(':').pop());
+
+  /** A number of steps to the nearest whole millimetre, a half away from zero, as construct-regen's `nearest_mm`. */
+  function nearestMm(value) {
+    const floor = Math.floor(value / STEPS_PER_MM);
+    const twice = (value - floor * STEPS_PER_MM) * 2;
+    return twice > STEPS_PER_MM || (twice === STEPS_PER_MM && floor >= 0) ? floor + 1 : floor;
+  }
+
+  /**
+   * A layered wall's line and outer faces, from the recipe the server filled for it: its start in
+   * steps, the axis it runs along (0 for x, 1 for y, null at an angle), which way, and its two
+   * finish faces' offsets to the right of the line, in steps. Null until it is filled.
+   */
+  function lineOf(host) {
+    const args = host.fill?.recipe?.args;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    const start = args.start.map(steps);
+    const end = args.end.map(steps);
+    const d = [end[0] - start[0], end[1] - start[1]];
+    const axis = d[1] === 0 ? 0 : d[0] === 0 ? 1 : null;
+    const unit = [Math.sign(d[0]), Math.sign(d[1])];
+    const exterior = steps(args.layers[0].exterior);
+    const interior = steps(args.layers.at(-1).interior);
+    return { start, end, d, axis, unit, exterior, interior };
+  }
+
+  /**
+   * Where `el` sits on side `role` of a layered wall, as construct-regen's `hosting` puts it: along
+   * the wall's line from its start the way the wall runs, flush with that side and reaching toward
+   * the other, each to the nearest millimetre, and up from its base. Only a wall along an axis hosts.
+   */
+  function onLayered(el, role, host, along, up) {
+    const line = lineOf(host);
+    const { width, thickness } = el.recipe.args;
+    if (!line || line.axis === null || !Number.isFinite(width) || !Number.isFinite(thickness)) return el.placement;
+    const a = line.axis;
+    const c = 1 - a;
+    const right = [line.unit[1], -line.unit[0]][c];
+    const [on, other] = role === 'interior' ? [line.interior, line.exterior] : [line.exterior, line.interior];
+    const lowAlong = line.unit[a] > 0
+      ? line.start[a] + steps(along)
+      : line.start[a] - (steps(along) + width * STEPS_PER_MM);
+    const face = line.start[c] + on * right;
+    const back = line.start[c] + other * right;
+    const lowAcross = back > face ? face : face - thickness * STEPS_PER_MM;
+    const at = [0, 0];
+    at[a] = nearestMm(lowAlong);
+    at[c] = nearestMm(lowAcross);
+    const base = host.el.placement;
+    return { x: base.x + at[0], y: base.y + at[1], z: base.z + storedMm(up) };
+  }
+
+  /** How far along its wall a hosted door at `x`, `y` (its low corner, in the model) is from the wall's start. */
+  function alongOn(host, el, x, y) {
+    const wall = host.el;
+    if (wall.recipe.op !== LAYERED) return wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
+    const line = lineOf(host);
+    if (!line || line.axis === null) return null;
+    const a = line.axis;
+    const at = [x - wall.placement.x, y - wall.placement.y][a];
+    const start = Math.round(line.start[a] / STEPS_PER_MM);
+    return line.unit[a] > 0 ? at - start : start - at - el.recipe.args.width;
   }
 
   /** The box around a piece in the model. */
@@ -787,6 +905,19 @@
     return `<polygon class="${paint}" points="${points.join(' ')}"/>`;
   }
 
+  /** Each part of a shape, filled with its material's colour where the plan cuts it. */
+  function partsOf(piece, parts) {
+    const { x, y } = placementOf(piece.el);
+    return parts
+      .map((part) => {
+        const points = part.outline.map(([px, py]) => `${x + px},${y + py}`).join(' ');
+        const colour = colourOf(part.material, 'cut');
+        const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+        return `<polygon class="part" data-material="${esc(part.material)}" data-function="${esc(part.function)}"${fill} points="${points}"/>`;
+      })
+      .join('');
+  }
+
   /** Compares what the server built with what this page holds (note A05). */
   function compareCheckpoint(entry) {
     const { through, bodies } = entry.args;
@@ -794,7 +925,8 @@
     if (!into) return;
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
-      if (!piece || piece.seq > through || piece.stale) continue;
+      // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -846,8 +978,10 @@
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
     }
-    const answer = await shapeFor(model, record, into);
-    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    if (isDatum(record)) return keepDatum(model, id, record, hash, seq, mine); // grids and planes: their own block
+    const fill = await fillOf(model, record);
+    const answer = await shapeFor(model, record, into, fill);
+    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill });
     // What it is hosted in is built again with it, as the server builds a host with its guests.
     if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
   }
@@ -859,7 +993,7 @@
   async function buildHostAgain(model, into, id) {
     const host = id && into.get(id);
     if (!host) return;
-    const answer = await shapeFor(model, host.el, into);
+    const answer = await shapeFor(model, host.el, into, host.fill);
     if (into.get(id) !== host) return;
     Object.assign(host, { shape: undefined, failed: undefined }, answer);
     host.stale = false;
@@ -997,6 +1131,7 @@
         workshopEntry(entry, change, drawn);
         continue;
       }
+      if (datumChange(entry, change)) continue; // a grid or a plane this page holds
       const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
       const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
@@ -1029,12 +1164,15 @@
           });
       }
     }
-    // A type or a parameter changed, or may have: what the selected element reads may have too.
-    if ((/^(type|parameter|level)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
+    // A type, a parameter or a level changed, or may have: what the selected element reads may have
+    // too, and so may what a recipe that reads records is filled with.
+    const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
+    if (reads) fillAgain(entry.target, into);
+    if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (/^(type|parameter|level)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
+    if (reads || /^element\.(type|create|delete)$|^wall\.draw$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -1045,6 +1183,9 @@
     }
     queueDraw();
   }
+
+  /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type)\.|^floor\.defaults$/;
 
   const WORDS = {
     'element.create': 'added',
@@ -1072,6 +1213,12 @@
     'level.delete': 'deleted a level',
     'level.tie': 'tied to a level',
     'level.top': 'tied the top of',
+    'wall.draw': 'drew',
+    'wall.type.create': 'made a wall type',
+    'wall.type.layers': 'changed the layers of a wall type',
+    'wall.type.rename': 'renamed a wall type',
+    'wall.type.duplicate': 'copied a wall type',
+    'wall.type.delete': 'deleted a wall type',
     'edit.undo': 'undid a change to',
     'edit.redo': 'redid a change to',
   };
@@ -1137,6 +1284,12 @@
     'level.delete': 'deleting a level',
     'level.tie': 'a tie to a level',
     'level.top': 'a tie of a top',
+    'wall.draw': 'drawing a wall',
+    'wall.type.create': 'making a wall type',
+    'wall.type.layers': 'the layers of a wall type',
+    'wall.type.rename': 'renaming a wall type',
+    'wall.type.duplicate': 'copying a wall type',
+    'wall.type.delete': 'deleting a wall type',
     'edit.redo': 'a redo',
   };
   const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
@@ -1219,7 +1372,7 @@
   function parametersTable(view) {
     const editable = !C.readOnly && !C.viewing;
     let html = '<span class="lbl">Parameters</span><table class="props">';
-    for (const p of view.parameters) {
+    for (const p of view.parameters.filter((row) => row.from !== READ_ONLY)) {
       const value = p.shown ?? '';
       const field = p.formula
         ? worked(p)
@@ -1630,23 +1783,27 @@
     }
   }
 
+  /** The open model's levels, lowest first, as the server lists them; null until they have come. */
+  function modelLevels() {
+    if (!C.model) return null;
+    const key = `${C.model.id}/${C.paramsEpoch}`;
+    if (C.levelList?.key !== key && C.levelListLoading !== key) {
+      C.levelListLoading = key;
+      api(`${modelUrl(C.model.id)}/levels`)
+        .then((levels) => {
+          knowLevels(key, levels);
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.levelList?.key.startsWith(`${C.model.id}/`) ? C.levelList.levels : null;
+  }
+
   /** The name of the level a record stands on, from the server's list once it has come. */
   function levelName(record) {
     const id = levelIdOf(record);
     if (!id) return 'None';
-    if (C.model) {
-      const key = `${C.model.id}/${C.paramsEpoch}`;
-      if (C.levelList?.key !== key && C.levelListLoading !== key) {
-        C.levelListLoading = key;
-        api(`${modelUrl(C.model.id)}/levels`)
-          .then((levels) => {
-            knowLevels(key, levels);
-            refreshSide();
-          })
-          .catch(() => {});
-      }
-    }
-    return C.levelList?.levels.find((level) => level.id === id)?.name ?? id;
+    return modelLevels()?.find((level) => level.id === id)?.name ?? id;
   }
 
   function levelsHtml(m) {
@@ -1701,6 +1858,449 @@
     }
     renderManage();
   };
+
+  // --- The wall tool ---
+  // A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
+  // palette, its base on the plan's level and its top on the level chosen there or a height typed
+  // there: one `wall.draw` edit (construct-model's FORMAT.md, "Walls"). The wall types, their layers
+  // and the colours their materials are drawn in come from the server; where a model has no wall
+  // types, the page sends the server's default ones through the log (`wall.type.create`). A refusal
+  // is the server's reason, under the tool's options.
+
+  C.wallTypes = null; // { key, view } of the open model
+  C.wallTool = { type: null, top: undefined, height: '3000 mm' }; // top: a level's ID, '' for a height, undefined for the level above
+  C.madeDefaults = null; // the model the default wall types were sent for
+
+  /** The open model's wall types, materials and defaults; null until they have come. */
+  function wallTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.wallTypes?.key !== key && C.wallTypesLoading !== key) {
+      C.wallTypesLoading = key;
+      api(`${modelUrl(model)}/wall-types`)
+        .then((view) => {
+          C.wallTypes = { key, view };
+          refreshSide();
+          queueDraw();
+        })
+        .catch(() => {});
+    }
+    return C.wallTypes?.key.startsWith(`${model}/`) ? C.wallTypes.view : null;
+  }
+
+  /** A material's colour where a view cuts it (`cut`) or seen beyond (`surface`); null for a material not listed. */
+  function colourOf(material, which) {
+    const found = wallTypes()?.materials.find((m) => m.id === material);
+    return found ? found[which] : null;
+  }
+
+  const materialName = (view, id) => view.materials.find((m) => m.id === id)?.name ?? id;
+
+  function chosenWallType(view) {
+    return view.types.find((t) => t.id === C.wallTool.type) ?? view.types[0] ?? null;
+  }
+
+  /** The top the tool draws to: a level's ID, or '' for a height. By default the level above the plan's. */
+  function wallTop(levels) {
+    const here = levelOf();
+    const others = (levels || []).filter((level) => level.id !== here);
+    const chosen = C.wallTool.top;
+    if (chosen === '' || others.some((level) => level.id === chosen)) return chosen;
+    const at = (levels || []).findIndex((level) => level.id === here);
+    return (at >= 0 && levels[at + 1]?.id) || '';
+  }
+
+  /** Sends the server's default wall types, once for a model, where it has none. */
+  function makeDefaultWalls(view) {
+    if (!canEdit() || C.madeDefaults === C.model.id) return;
+    C.madeDefaults = C.model.id;
+    for (const args of view.defaults) manage('wall.type.create', args, 'wall-draw');
+  }
+
+  function wallToolHtml() {
+    let html = typeSel('wall', 'Wall', '<b>New wall</b>');
+    const view = wallTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the wall types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(() => makeDefaultWalls(view));
+      return `${html}<p class="pad small faint" data-wall-tool="making">This model has no wall types yet, so the default ones are being made.</p>${problem('wall-draw')}`;
+    }
+    const chosen = chosenWallType(view);
+    const levels = modelLevels() || [];
+    const here = levelOf();
+    const top = wallTop(levels);
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const tops = levels
+      .filter((level) => level.id !== here)
+      .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+    tops.push(`<option value=""${top === '' ? ' selected' : ''}>A height</option>`);
+    const base = levels.find((level) => level.id === here)?.name ?? here;
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackwalltype" data-key="wall-type" aria-label="Wall type">${types.join('')}</select>`);
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Base', esc(base));
+    html += prow('Top', `<select class="inp" data-chg="stackwalltop" data-key="wall-top" aria-label="Top of the wall">${tops.join('')}</select>`);
+    if (top === '') {
+      html += prow('Height', `<input class="inp" data-chg="stackwallheight" data-key="wall-height" value="${esc(C.wallTool.height)}" aria-label="Height of the wall">`);
+    }
+    html += '</table>';
+    html += `<span class="lbl">Layers, exterior first</span><table class="props" data-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.assembly.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    return html + problem('wall-draw');
+  }
+
+  CHG.stackwalltype = (select) => {
+    C.wallTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackwalltop = (select) => {
+    C.wallTool.top = select.value;
+    refreshSide();
+  };
+  CHG.stackwallheight = (input) => {
+    C.wallTool.height = input.value;
+  };
+
+  // --- The floor tool, and a floor in the plan and the properties palette ---
+  // A floor is drawn from a boundary sketched by clicks in the plan: its edge, a closed loop of
+  // corners, then any holes, each closed on its first corner or with Enter; Enter on no open loop,
+  // or Make floor, sends one `floor.create` edit of the floor type chosen in the properties palette,
+  // its top on the plan's level the offset typed there above it (construct-model's FORMAT.md,
+  // "Floors"). The page checks nothing and works out no geometry: the floor types, their layers and
+  // the materials' colours come from the server (`/floor-types`); where a model has none the page
+  // has the server make its default ones through the log (`floor.defaults`); a refusal is the
+  // server's reason, under the tool's options, with the boundary it turned back drawn in the plan.
+  // In the plan a floor is its edge and holes, from its recipe as the server filled it
+  // (`/filled/<element>`), in its top layer's colour seen from above; a selected floor shows its
+  // type, its level and offset, its parameters, and apart from them what the server works out of
+  // its boundary and its type (`from: "read-only"` in `/parameters/<element>`), which nobody sets.
+
+  const FLOOR_OP = 'floor';
+  const READ_ONLY = 'read-only';
+  const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
+  const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
+  /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
+  const drawOrder = (el) => (isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
+
+  DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
+  TOOLNAME.floor = 'floor';
+  Object.assign(WORDS, {
+    'floor.create': 'drew a floor',
+    'floor.boundary': 'changed the boundary of',
+    'floor.defaults': 'made the default floor types',
+    'floor.type.create': 'made a floor type',
+    'floor.type.layers': 'changed the layers of a floor type',
+    'floor.type.rename': 'renamed a floor type',
+    'floor.type.duplicate': 'copied a floor type',
+    'floor.type.delete': 'deleted a floor type',
+  });
+  Object.assign(STEP_WORDS, {
+    'floor.create': 'drawing a floor',
+    'floor.boundary': 'a floor’s boundary',
+    'floor.defaults': 'making the default floor types',
+    'floor.type.create': 'making a floor type',
+    'floor.type.layers': 'the layers of a floor type',
+    'floor.type.rename': 'renaming a floor type',
+    'floor.type.duplicate': 'copying a floor type',
+    'floor.type.delete': 'deleting a floor type',
+  });
+
+  C.floorTypes = null; // { key, view } of the open model
+  C.floorTool = { type: null, offset: '0 mm' };
+  C.madeFloorDefaults = null; // the model the default floor types were asked for
+  // The sketch, in the model's millimetres: closed loops (the edge first, then holes), the loop
+  // being drawn, the point under the pointer, and the boundary last sent while it may be turned back.
+  const FLOOR = { loops: [], current: [], at: null, sent: null };
+
+  /** The open model's floor types and materials; null until they have come. */
+  function floorTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.floorTypes?.key !== key && C.floorTypesLoading !== key) {
+      C.floorTypesLoading = key;
+      api(`${modelUrl(model)}/floor-types`)
+        .then((view) => {
+          C.floorTypes = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.floorTypes?.key.startsWith(`${model}/`) ? C.floorTypes.view : null;
+  }
+
+  /** The open model's floor types, read now if they have not come yet. */
+  async function floorTypesNow() {
+    const view = floorTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/floor-types`);
+    C.floorTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  const chosenFloorType = (view) => view.types.find((t) => t.id === C.floorTool.type) ?? view.types[0] ?? null;
+
+  /** Has the server make its default floor types, once for a model, where it has none. */
+  function makeDefaultFloors() {
+    if (!canEdit() || C.madeFloorDefaults === C.model.id) return;
+    C.madeFloorDefaults = C.model.id;
+    manage('floor.defaults', {}, 'floor-draw');
+  }
+
+  /** What the sketch holds, and the button that sends it. */
+  function sketchHtml() {
+    const [outer, ...holes] = FLOOR.loops;
+    let state = 'empty';
+    let text = 'Click the corners of the floor’s edge in the plan. Close it on its first corner or with Enter.';
+    if (FLOOR.current.length) {
+      state = 'open';
+      const which = outer ? `Hole ${holes.length + 1}` : 'Edge';
+      text = `${which}: ${plural(FLOOR.current.length, 'corner')}. Close it on its first corner or with Enter.`;
+    } else if (outer) {
+      state = 'closed';
+      const holeText = holes.length ? `, ${plural(holes.length, 'hole')}` : '';
+      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the floor.`;
+    }
+    const ready = state === 'closed' ? '' : ' disabled';
+    return `<p class="pad small muted" data-floor-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stackfloormake" data-key="floor-make"${ready}>Make floor</button></div>`;
+  }
+
+  function floorToolHtml() {
+    let html = typeSel('layers', 'Floor', '<b>New floor</b>');
+    const view = floorTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the floor types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(makeDefaultFloors);
+      return `${html}<p class="pad small faint" data-floor-tool="making">This model has no floor types yet, so the default ones are being made.</p>${problem('floor-draw')}`;
+    }
+    const chosen = chosenFloorType(view);
+    const here = levelOf();
+    const level = (modelLevels() || []).find((l) => l.id === here)?.name ?? here;
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackfloortype" data-key="floor-type" aria-label="Floor type">${types.join('')}</select>`);
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Level', esc(level));
+    html += prow('Offset', `<input class="inp" data-chg="stackflooroffset" data-key="floor-offset" value="${esc(C.floorTool.offset)}" aria-label="Offset of the floor’s top above its level">`);
+    html += '</table>';
+    html += `<span class="lbl">Layers, top first</span><table class="props" data-floor-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    return html + sketchHtml() + problem('floor-draw');
+  }
+
+  CHG.stackfloortype = (select) => {
+    C.floorTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackflooroffset = (input) => {
+    C.floorTool.offset = input.value;
+  };
+  ACT.stackfloormake = () => makeFloor();
+
+  function floorHint() {
+    if (FLOOR.current.length) return '<b>Floor:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
+    if (FLOOR.loops.length) return '<b>Floor:</b> click to start a hole, or press Enter to make the floor. Esc to stop.';
+    return '<b>Floor:</b> click the corners of its edge. Choose its type in the properties palette.';
+  }
+
+  function sketchChanged() {
+    $('#hint').innerHTML = hint();
+    refreshSide();
+    queueDraw();
+  }
+
+  function clearSketch() {
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent: null });
+  }
+
+  /** Whether a click at `at` (the model's millimetres) is within reach of `point` on screen. */
+  function nearOnScreen(point, at) {
+    const scale = $('#pv-canvas svg')?.getScreenCTM()?.a || 1;
+    return Math.hypot(point[0] - at.x, point[1] - at.y) * scale <= CLOSE_PX;
+  }
+
+  function closeLoop() {
+    if (!FLOOR.current.length) return;
+    FLOOR.loops.push(FLOOR.current);
+    FLOOR.current = [];
+    FLOOR.at = null;
+    sketchChanged();
+  }
+
+  function floorClick(event) {
+    const at = toModel(event);
+    const point = [snap(at.x), snap(at.y)];
+    FLOOR.sent = null;
+    if (FLOOR.current.length > 1 && nearOnScreen(FLOOR.current[0], at)) {
+      closeLoop();
+      return;
+    }
+    const last = FLOOR.current.at(-1);
+    if (!last || last[0] !== point[0] || last[1] !== point[1]) FLOOR.current.push(point);
+    sketchChanged();
+  }
+
+  /** Sends the sketch as it is: what the server makes of it, or why it refuses, comes back through the log. */
+  async function makeFloor() {
+    if (!FLOOR.loops.length || FLOOR.current.length || !canEdit()) return;
+    let view;
+    try {
+      view = await floorTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const corners = (loop) => loop.map(([x, y]) => ({ at: [`${x} mm`, `${y} mm`] }));
+    const [outer, ...holes] = FLOOR.loops;
+    const args = { element: newId('F'), level: levelOf(), boundary: { outer: corners(outer), holes: holes.map(corners) } };
+    const type = chosenFloorType(view);
+    if (type) args.type = type.id;
+    if (C.floorTool.offset.trim() !== '') args.offset = C.floorTool.offset;
+    const sent = { loops: FLOOR.loops };
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent });
+    manage('floor.create', args, 'floor-draw', () => {
+      if (FLOOR.sent === sent) FLOOR.sent = null;
+      queueDraw();
+    });
+    sketchChanged();
+  }
+
+  // In the plan, before the elements' own handlers: the floor tool's corners.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (S.tool !== 'floor' || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      event.stopPropagation();
+      if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
+      else floorClick(event);
+    },
+    true,
+  );
+  window.addEventListener('pointermove', (event) => {
+    if (S.tool !== 'floor' || !FLOOR.current.length || !$('#pv-canvas svg')) return;
+    const at = toModel(event);
+    FLOOR.at = [snap(at.x), snap(at.y)];
+    queueDraw();
+  });
+  // Escape leaves the tool (the demo's own key) and drops the sketch; Enter closes the loop being
+  // drawn, or makes the floor when none is open.
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      clearSketch();
+      return;
+    }
+    if (S.tool !== 'floor' || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
+    event.preventDefault();
+    if (FLOOR.current.length) closeLoop();
+    else makeFloor();
+  });
+  const toolBeforeFloors = ACT.tool;
+  ACT.tool = (button) => {
+    clearSketch();
+    toolBeforeFloors(button);
+  };
+
+  /** The ribbon: the floor tool beside the wall tool, in the Build panel. */
+  function floorRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:floor')) return;
+    const wall = build.items.findIndex((item) => item.a === 'architecture:wall');
+    build.items.splice(wall + 1, 0, DT_('architecture', 'floor'));
+  }
+
+  const ringPath = (points) => `M${points.map(([x, y]) => `${x},${y}`).join('L')}Z`;
+
+  /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
+  function floorSketch() {
+    if (S.tool !== 'floor') return '';
+    let svg = '';
+    if (FLOOR.sent && C.problems.has('floor-draw')) {
+      svg += `<path class="floor-refused" data-floor-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
+    }
+    for (const loop of FLOOR.loops) svg += `<path class="ln ap floor-sketch" d="${ringPath(loop)}"/>`;
+    const open = FLOOR.at && FLOOR.current.length ? [...FLOOR.current, FLOOR.at] : FLOOR.current;
+    if (open.length > 1) svg += `<polyline class="ln ap dd floor-sketch" points="${open.map((p) => p.join(',')).join(' ')}"/>`;
+    for (const [x, y] of FLOOR.current) svg += `<circle class="apf floor-sketch" cx="${x}" cy="${y}" r="60"/>`;
+    return svg;
+  }
+
+  /**
+   * A floor in the plan: its edge and holes, from its recipe as the server filled it (the outline of
+   * its display, which has no holes, until that has come), in its top layer's colour seen from above.
+   */
+  function floorInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const { x, y } = placementOf(e);
+    const loops = piece.fill?.recipe?.args?.loops;
+    const rings = Array.isArray(loops) && loops.length
+      ? loops.map((loop) => loop.map((corner) => [nearestMm(corner.at[0]), nearestMm(corner.at[1])]))
+      : [piece.shape.displays[0].outline];
+    const placed = rings.map((ring) => ring.map(([px, py]) => [x + px, y + py]));
+    const top = piece.shape.displays[0]?.parts?.[0];
+    const colour = top && colourOf(top.material, 'surface');
+    const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+    const box = around(piece);
+    const chosen = S.sel === e.id;
+    let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
+    group += `<path class="body floor${chosen ? ' sel' : ''}" data-material="${esc(top?.material ?? '')}" data-holes="${placed.length - 1}"${fill} d="${placed.map(ringPath).join('')}"/>`;
+    const claim = heldClaim(e.id);
+    if (claim) {
+      const theirs = claim.person !== C.me.person.id;
+      group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
+      if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
+    }
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** What the server works out of a floor, apart from what a person sets, and set by nobody. */
+  function readOnlyTable(view) {
+    const rows = view.parameters.filter((p) => p.from === READ_ONLY);
+    if (!rows.length) return '';
+    let html = '<span class="lbl">Worked out, read-only</span><table class="props" data-read-only-rows>';
+    for (const p of rows) html += prow(esc(p.name), `<span class="mono" data-read-only="${esc(p.id)}">${esc(p.shown ?? '')}</span>`);
+    return `${html}</table>`;
+  }
+
+  /** A floor's offset above its level, as stored. */
+  function floorOffset(e) {
+    const stored = e.props?.['@level.offset'];
+    return `${stored === undefined ? 0 : storedMm(stored)} mm`;
+  }
+
+  /** What the properties palette shows of a selected floor. */
+  function floorProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const claim = heldClaim(e.id);
+    let html = typeSel('layers', 'Floor', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-floor-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
+    html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-floor-offset>${esc(floorOffset(e))}</span>`);
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
+    if (view) {
+      html += readOnlyTable(view);
+      html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    }
+    return html;
+  }
+
+  /** The properties palette's floor part: the floor tool's options, or a selected floor; '' for anything else. */
+  function floorPalette(piece) {
+    if (S.tool === 'floor' && canEdit()) return floorToolHtml();
+    if (piece && isFloor(piece.el) && !(S.tool === 'wall' && canEdit())) return floorProperties(piece);
+    return '';
+  }
 
   // --- Workshop's elements ---
   // Workshop, a page of its own in a frame, keeps its parts and its assembly as elements of the open
@@ -1801,6 +2401,359 @@
     },
   };
 
+  // --- Grids and reference planes ---
+  // A grid line or a reference plane is a record of the model (construct-grids' FORMAT.md), made and
+  // changed only by its own commands through the same log: `grid.create`, `grid.rename`,
+  // `grid.reshape`, `grid.delete`, `plane.rename`, `plane.delete`. They stand on no level, so the plan's
+  // area never lists them: this finds the open model's by kind, keeps them apart from the elements
+  // (so nothing that counts or picks elements sees them), and draws them under everything, a linked
+  // model's as they came, seen and never picked. A grid is a thin chain line with its name in a bubble
+  // at its start, a plane a dashed line, in the demo's own datum classes (the lightest pen in a muted
+  // colour with a chain or a dashed pattern, as construct-styles' defaults give grids and planes); an
+  // arc grid is the chain of chords the geometry builds of it. The grid tool sends two picked points
+  // and no name: the server gives it the next one. Nothing is checked here: a refusal is the
+  // server's reason, beside what caused it.
+
+  const DATUM_KINDS = ['grid', 'refplane'];
+  const isDatum = (record) => DATUM_KINDS.includes(record?.kind);
+  C.datums = new Map(); // model id -> Map of id -> { el, shape, failed, hash, seq }: grids and planes
+  // drag: an end being dragged; held: a reshape sent, drawn until the server answers; preview: the
+  // pointer while a grid's first point is picked; after: the last grid this person made or renamed
+  const G = { drag: null, held: null, preview: null, after: null };
+
+  DTOOLS.architecture.push(['grid', 'Grid', 'grid', 'Pick both ends of a grid line. The server gives it the next name.']);
+  TOOLNAME.grid = 'grid';
+  Object.assign(WORDS, {
+    'grid.create': 'made a grid',
+    'grid.rename': 'renamed a grid',
+    'grid.move': 'moved a grid',
+    'grid.reshape': 'moved an end of a grid',
+    'grid.delete': 'deleted a grid',
+    'plane.create': 'made a reference plane',
+    'plane.rename': 'renamed a reference plane',
+    'plane.move': 'moved a reference plane',
+    'plane.delete': 'deleted a reference plane',
+  });
+  Object.assign(STEP_WORDS, {
+    'grid.create': 'making a grid',
+    'grid.rename': 'renaming a grid',
+    'grid.move': 'moving a grid',
+    'grid.reshape': 'moving an end of a grid',
+    'grid.delete': 'deleting a grid',
+    'plane.create': 'making a reference plane',
+    'plane.rename': 'renaming a reference plane',
+    'plane.move': 'moving a reference plane',
+    'plane.delete': 'deleting a reference plane',
+  });
+
+  /** A grid or a plane of the open model, by its ID. */
+  const ownDatum = (id) => (id && C.model ? C.datums.get(C.model.id)?.get(id) : undefined);
+
+  function forgetDatums() {
+    C.datums.clear();
+    Object.assign(G, { drag: null, held: null, preview: null, after: null });
+  }
+
+  /** Reads the grids and planes of the open model and of each live-linked one. */
+  async function loadDatums() {
+    const models = [C.model?.id, ...C.links.filter((link) => link.kind === 'live').map((link) => link.model)];
+    try {
+      for (const model of models.filter(Boolean)) {
+        for (const kind of DATUM_KINDS) {
+          const seen = await api(`${modelUrl(model)}/kind/${kind}`);
+          if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+          await Promise.all(
+            Object.entries(seen.pieces).map(async ([id, hash]) =>
+              keepDatum(model, id, await api(`${modelUrl(model)}/record/${hash}`), hash, seen.through),
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      console.warn(`The grids and planes couldn’t be read: ${error.message}`);
+    }
+  }
+
+  /** A grid's or a plane's record arrived: it is built as any record is here, and kept. */
+  async function keepDatum(model, id, record, hash, seq, mine = false) {
+    const answer = await shapeFor(model, record, null);
+    if (model !== C.model?.id && !C.watching.has(model)) return;
+    const pieces = C.datums.get(model) ?? new Map();
+    C.datums.set(model, pieces);
+    const known = pieces.get(id);
+    if (known && known.seq > seq) return;
+    pieces.set(id, { el: record, ...answer, hash, seq });
+    if (mine && record.kind === 'grid') G.after = { model, name: record.name };
+    if (G.held?.id === id && G.held.applied) G.held = null;
+    queueDraw();
+    if (S.sel === id) {
+      refreshSide();
+      renderRibbon();
+    }
+  }
+
+  /** An entry changed a grid or a plane this page holds: true when it was one, which this takes care of. */
+  function datumChange(entry, change) {
+    const pieces = C.datums.get(entry.target);
+    const known = pieces?.get(change.piece);
+    if (!known) return false;
+    if (known.seq >= entry.seq) return true;
+    if (!change.after) {
+      pieces.delete(change.piece);
+      if (S.sel === change.piece) {
+        S.sel = null;
+        refreshSide();
+        renderRibbon();
+      }
+      return true;
+    }
+    const mine = entry.client === C.client && !UNDOING.has(entry.cmd);
+    api(`${modelUrl(entry.target)}/record/${change.after}`)
+      .then((record) => keepDatum(entry.target, change.piece, record, change.after, entry.seq, mine))
+      .catch((error) => console.warn(`A grid or a plane couldn’t be read: ${error.message}`));
+    return true;
+  }
+
+  /** The points a datum is drawn through: an end being dragged, a reshape awaiting its answer, or what was built. */
+  function datumOutline(piece) {
+    const id = piece.el.id;
+    if (G.drag?.id === id && G.drag.to) {
+      const outline = G.drag.outline.slice();
+      outline[G.drag.end] = G.drag.to;
+      return outline;
+    }
+    if (G.held?.id === id && (G.held.applied || C.asked.has(G.held.counter))) return G.held.outline;
+    return piece.shape?.displays?.[0]?.outline ?? null;
+  }
+
+  /** One grid or plane in the plan. `how` is `own`, the open model's, or `linked`. */
+  function datumSvg(piece, s, how) {
+    const { el } = piece;
+    const outline = datumOutline(piece);
+    // A horizontal plane has no place in plan; a record that didn't build has nothing to draw.
+    if (!outline || outline.length < 2) return '';
+    const grid = el.kind === 'grid';
+    const own = how === 'own';
+    const picked = own && S.sel === el.id;
+    let g = PL(outline, `ln fn ${grid ? 'dd' : 'dsh'}${picked ? ' ap' : ''}`);
+    if (own) g += PL(outline, 'datum-hit');
+    const [[ax, ay], [bx, by]] = outline;
+    const run = Math.hypot(ax - bx, ay - by) || 1;
+    const r = 420 * s;
+    // The bubble sits beyond the start, on the line carried on.
+    const [cx, cy] = [ax + ((ax - bx) / run) * r, ay + ((ay - by) / run) * r];
+    if (grid) g += `<circle class="bub" cx="${n0(cx)}" cy="${n0(cy)}" r="${n0(r)}"/>${TX(cx, cy + 130 * s, s, esc(el.name), 'tn', 360)}`;
+    else if (el.name) g += TX(ax, ay - 200 * s, s, esc(el.name), 'ta', 260, 'start');
+    const claim = own && claimedByOther(el.id);
+    if (claim) g += TX(cx, cy - r - 160 * s, s, `${esc(claim.name)} editing`, 'claimt', 260);
+    if (picked && canEdit() && el.recipe.op === 'grid.line') {
+      const h = 150 * s;
+      for (const [end, [x, y]] of [outline[0], outline.at(-1)].entries()) {
+        g += `<rect class="ln ap pf datum-end" data-grid-end="${end}" x="${n0(x - h)}" y="${n0(y - h)}" width="${n0(2 * h)}" height="${n0(2 * h)}"/>`;
+      }
+    }
+    const [x0, y0] = outline[0];
+    const [x1, y1] = outline.at(-1);
+    const marks = `data-datum="${esc(el.id)}" data-kind="${esc(el.kind)}" data-name="${esc(el.name)}" data-x0="${x0}" data-y0="${y0}" data-x1="${x1}" data-y1="${y1}"${picked ? ' data-picked="yes"' : ''}`;
+    return `<g class="datum ${how}" ${marks}>${g}</g>`;
+  }
+
+  /** Every grid and plane in view, drawn first so that the elements stay on top and are picked. */
+  function datumsSvg(s) {
+    if (S.cats?.grids === false) return '';
+    let svg = '';
+    const linked = (elements) => {
+      for (const piece of elements) if (isDatum(piece.element)) svg += datumSvg(packaged(piece), s, 'linked');
+    };
+    for (const elements of C.fixed.values()) linked(elements);
+    if (!C.model && C.file) linked(C.file.elements);
+    for (const [model, pieces] of C.datums) {
+      for (const piece of pieces.values()) svg += datumSvg(piece, s, model === C.model?.id ? 'own' : 'linked');
+    }
+    if (S.tool === 'grid' && S.pend && G.preview) svg += L(S.pend, G.preview, 'ln ap dd');
+    return svg;
+  }
+
+  function gridHint() {
+    return S.pend ? '<b>Grid:</b> pick its other end. Esc to stop.' : '<b>Grid:</b> pick where it starts: its name goes in a bubble there.';
+  }
+
+  /** The name of the grid this person last made or renamed in the open model, for the server's next name. */
+  const lastGridName = () => (G.after?.model === C.model?.id ? G.after.name : null);
+
+  function placeGrid(at) {
+    const point = [snap(at.x), snap(at.y)];
+    if (!S.pend) {
+      S.pend = point;
+      G.preview = point;
+      $('#hint').innerHTML = hint();
+      return;
+    }
+    const [[x0, y0], [x1, y1]] = [S.pend, point];
+    S.pend = null;
+    G.preview = null;
+    const args = { grid: newId('G'), name: null, x0: `${x0}`, y0: `${y0}`, x1: `${x1}`, y1: `${y1}` };
+    const after = lastGridName();
+    if (after !== null) args.after = after;
+    manage('grid.create', args, 'new-grid');
+    $('#hint').innerHTML = hint();
+    queueDraw();
+  }
+
+  /** A stored length (`length:q0:<steps>`, or an older whole `length:<mm>`) as typed text, exactly. */
+  function typedLength(text) {
+    const [, unit, steps] = String(text).split(':');
+    if (unit !== 'q0') return `${unit} mm`;
+    const n = Number(steps);
+    const [whole, rest] = [Math.floor(Math.abs(n) / 6400), Math.abs(n) % 6400];
+    // A step is 1/6400 mm, which is 15625 hundred-millionths: so the fraction is exact in 8 places.
+    const fraction = rest ? `.${String(rest * 15625).padStart(8, '0').replace(/0+$/, '')}` : '';
+    return `${n < 0 ? '-' : ''}${whole}${fraction} mm`;
+  }
+
+  /** A grid or a plane was picked in the plan: selected, claimed as an element is, and maybe an end taken. */
+  function pickDatum(id, end) {
+    if (S.sel !== id) select(id);
+    if (!canEdit()) return;
+    edit('element.claim', { element: id });
+    const piece = ownDatum(id);
+    const outline = piece && datumOutline(piece);
+    if (end && piece?.el.recipe.op === 'grid.line' && outline?.length === 2) {
+      G.held = null;
+      G.drag = { id, end: Number(end.dataset.gridEnd), outline: outline.map((point) => [...point]), to: null };
+    }
+  }
+
+  /** An end let go: the grid's two ends go to the server, the one not dragged as it is stored. */
+  function letGoOfAnEnd() {
+    const drag = G.drag;
+    if (!drag) return;
+    G.drag = null;
+    const piece = ownDatum(drag.id);
+    if (!piece || !drag.to || drag.to.join() === drag.outline[drag.end].join()) {
+      queueDraw();
+      return;
+    }
+    const { args } = piece.el.recipe;
+    const ends = [
+      [typedLength(args.x0), typedLength(args.y0)],
+      [typedLength(args.x1), typedLength(args.y1)],
+    ];
+    ends[drag.end] = drag.to.map((value) => `${value} mm`);
+    const outline = drag.outline.slice();
+    outline[drag.end] = drag.to;
+    const reshape = { grid: drag.id, x0: ends[0][0], y0: ends[0][1], x1: ends[1][0], y1: ends[1][1] };
+    // The counter the edit is about to take: the dragged end is drawn until the server answers it.
+    const counter = C.counter + 1;
+    G.held = { id: drag.id, counter, outline };
+    manage('grid.reshape', reshape, `datum:${drag.id}`, () => {
+      if (G.held?.counter === counter) G.held.applied = true;
+    });
+    queueDraw();
+  }
+
+  // In the plan, before the elements' own handlers: the grid tool's points, and a pick of a grid or a plane.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (S.tool === 'grid') {
+        event.stopPropagation();
+        if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
+        else placeGrid(toModel(event));
+        return;
+      }
+      const hit = S.tool === 'select' && event.target.closest('g.datum.own');
+      if (!hit) return;
+      event.stopPropagation();
+      pickDatum(hit.dataset.datum, event.target.closest('[data-grid-end]'));
+    },
+    true,
+  );
+  window.addEventListener('pointermove', (event) => {
+    if (!(G.drag || (S.tool === 'grid' && S.pend)) || !$('#pv-canvas svg')) return;
+    const at = toModel(event);
+    const point = [snap(at.x), snap(at.y)];
+    if (G.drag) G.drag.to = point;
+    else G.preview = point;
+    queueDraw();
+  });
+  window.addEventListener('pointerup', letGoOfAnEnd);
+  window.addEventListener('pointercancel', letGoOfAnEnd);
+
+  /** What the properties palette shows of a selected grid or plane. */
+  function datumProperties(piece) {
+    const { el } = piece;
+    const grid = el.kind === 'grid';
+    const what = grid ? 'grid' : 'reference plane';
+    const outline = datumOutline(piece) || [];
+    const view = paramsFor(piece);
+    const claim = heldClaim(el.id);
+    const name = canEdit()
+      ? `<input class="inp" data-chg="stackdatumname" data-key="datum-name" value="${esc(el.name)}" aria-label="Name of the ${what}">`
+      : esc(el.name || 'None');
+    const at = (point) => `<span class="mono">${point[0]}, ${point[1]}</span>`;
+    let html = typeSel('grid', grid ? 'Grid' : 'Reference plane', `<b>${esc(el.name || `Unnamed ${what}`)}</b>`);
+    html += `<table class="props">${prow('Name', name + problem(`datum:${el.id}`))}`;
+    if (view?.category) html += prow('Category', esc(view.category.name));
+    html += prow('Shape', el.recipe.op === 'grid.arc' ? 'Arc' : outline.length ? 'Straight' : 'Level');
+    if (outline.length) html += prow('Start', at(outline[0])) + prow('End', at(outline.at(-1)));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    if (canEdit()) {
+      const drag = el.recipe.op === 'grid.line' ? 'Drag an end to move it. ' : '';
+      html += `<p class="pad small faint">${drag}Delete removes it.</p>`;
+    }
+    return html;
+  }
+
+  CHG.stackdatumname = (input) => {
+    const piece = ownDatum(S.sel);
+    if (!piece) return;
+    const id = piece.el.id;
+    const name = input.value;
+    if (piece.el.kind === 'refplane') manage('plane.rename', { plane: id, name: name === '' ? null : name }, `datum:${id}`);
+    else manage('grid.rename', { grid: id, name }, `datum:${id}`);
+    input.blur();
+  };
+
+  const deleteElement = ACT.stackdelete;
+  ACT.stackdelete = () => {
+    const piece = ownDatum(S.sel);
+    if (!piece) {
+      deleteElement();
+      return;
+    }
+    if (!canEdit()) return;
+    const id = piece.el.id;
+    if (piece.el.kind === 'refplane') manage('plane.delete', { plane: id }, `datum:${id}`);
+    else manage('grid.delete', { grid: id }, `datum:${id}`);
+    S.sel = null;
+    refresh();
+  };
+
+  /** The ribbon: the grid tool beside the Build panel, and Delete for a selected grid or plane. */
+  function datumRibbon(config) {
+    const arch = config.tabs?.find((tab) => tab.id === 'arch');
+    if (arch) {
+      const build = arch.panels.findIndex((panel) => panel.label === 'Build');
+      arch.panels.splice(build + 1, 0, { label: 'Datum', items: [DT_('architecture', 'grid')] });
+    }
+    const piece = ownDatum(S.sel);
+    if (piece && canEdit() && S.screen === 'plan') {
+      const label = piece.el.kind === 'grid' ? 'Grids' : 'Reference planes';
+      config.contextual?.push({
+        id: 'sel',
+        key: `sel:${S.sel}`,
+        group: 'Modify',
+        label,
+        panels: [
+          { label, items: [{ label: 'Delete', icon: 'del', act: 'stackdelete', kbd: 'Delete' }] },
+          { label: 'Selection', items: [{ label: 'Deselect', icon: 'x', act: 'deselect' }] },
+        ],
+      });
+    }
+  }
+
   // --- The plan viewport ---
 
   function plan() {
@@ -1823,21 +2776,38 @@
     if (C.viewing) return 'This browser can’t build this model, so it shows the server’s stored shapes. You can look, not edit.';
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
-    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point.';
+    if (S.tool === 'grid') return gridHint();
+    if (S.tool === 'floor') return floorHint();
+    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
+  }
+
+  /** Where an element is, for the palette: a layered wall's line from end to end, anything else its position. */
+  function whereRow(e) {
+    const { start, end } = e.recipe.args;
+    if (e.recipe.op === LAYERED && Array.isArray(start) && Array.isArray(end)) {
+      const point = ([x, y]) => `${e.placement.x + storedMm(x)}, ${e.placement.y + storedMm(y)}`;
+      return prow('Line', `<span class="mono">${point(start)} to ${point(end)}</span>`);
+    }
+    return prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`);
   }
 
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    if (piece) {
+    const floor = floorPalette(piece);
+    if (floor) {
+      html += floor;
+    } else if (S.tool === 'wall' && canEdit()) {
+      html += wallToolHtml();
+    } else if (piece) {
       const { el: e, shape, failed } = piece;
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${whereRow(e)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1855,6 +2825,8 @@
       html += '</table>';
       if (view?.parameters.length) html += parametersTable(view);
       if (view) html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    } else if (ownDatum(S.sel)) {
+      html += datumProperties(ownDatum(S.sel));
     } else {
       const view = VIEWS[S.view];
       html += typeSel('plan', esc(view?.kind || ''), `<b>${esc(C.model?.name || view?.name || '')}</b>`);
@@ -1895,16 +2867,15 @@
     const view = VIEWS[S.view];
     const scale = AS[S.scale] || 1;
     let shapes = '';
+    shapes += datumsSvg(scale); // grids and planes, under everything
     const ghost = (piece) => {
       if (piece.shape && levelIdOf(piece.el) === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
     };
     for (const pieces of C.linked.values()) for (const piece of pieces.values()) ghost(piece);
     for (const pieces of C.fixed.values()) for (const piece of pieces) ghost(packaged(piece));
 
-    // Walls first, so a door in a wall stays on top and can be picked.
-    const inOrder = [...C.elements.values()].sort(
-      (a, b) => Number(b.el.kind === 'wall') - Number(a.el.kind === 'wall'),
-    );
+    // Floors first, then walls, so a door in a wall stays on top and can be picked.
+    const inOrder = [...C.elements.values()].sort((a, b) => drawOrder(a.el) - drawOrder(b.el));
     for (const piece of inOrder) {
       const { el: e } = piece;
       const { x, y } = placementOf(e);
@@ -1914,10 +2885,18 @@
         shapes += `<g ${data}>${RC(x - 200, y - 200, 400, 400, 'ln fn dsh')}</g>`;
         continue;
       }
+      if (isFloor(e)) {
+        shapes += floorInPlan(piece, data, scale);
+        continue;
+      }
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';
       const box = around(piece);
       let group = S.sel === e.id ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
-      group += outlineOf(piece, `body ${paint}${S.sel === e.id ? ' sel' : ''}`);
+      // A shape of several parts (a layered wall's layers) draws each in its material's cut colour,
+      // under its outline.
+      const parts = piece.shape.displays[0]?.parts;
+      if (parts?.length) group += partsOf(piece, parts);
+      group += outlineOf(piece, `body ${parts?.length ? 'layered' : paint}${S.sel === e.id ? ' sel' : ''}`);
       const claim = heldClaim(e.id);
       if (claim) {
         const theirs = claim.person !== C.me.person.id;
@@ -1928,6 +2907,7 @@
       }
       shapes += `<g ${data}>${group}</g>`;
     }
+    shapes += floorSketch();
     canvas.innerHTML = `<svg class="dw pan${S.tool !== 'select' ? ' press' : ''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(view?.name || '')}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${shapes}</svg>`;
     for (const entry of C.arriving.splice(0)) {
       const now = Date.now();
@@ -1952,28 +2932,84 @@
 
   const snap = (value) => Math.round(value / SNAP_MM) * SNAP_MM;
 
-  function placeWall(at) {
+  /** The open model's wall types, read now if they have not come yet. */
+  async function wallTypesNow() {
+    const view = wallTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/wall-types`);
+    C.wallTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  /**
+   * The wall tool's second point draws the wall: straight along x or y, whichever the second point
+   * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
+   * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
+   */
+  async function placeWall(at) {
+    const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
-      S.pend = [snap(at.x), snap(at.y)];
+      S.pend = point;
       $('#hint').innerHTML = hint();
       return;
     }
     const [ax, ay] = S.pend;
     S.pend = null;
-    const dx = snap(at.x) - ax;
-    const dy = snap(at.y) - ay;
-    const along = Math.abs(dx) >= Math.abs(dy);
-    const length = Math.abs(along ? dx : dy);
-    if (length < 300) {
-      say('That wall is too short. Pick two points at least 300 mm apart.');
+    $('#hint').innerHTML = hint();
+    const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
+    const end = along ? [point[0], ay] : [ax, point[1]];
+    const level = levelOf();
+    let view;
+    try {
+      view = await wallTypesNow();
+    } catch (error) {
+      say(error.message);
       return;
     }
-    const placement = along
-      ? { x: Math.min(ax, ax + dx), y: ay - 55, z: 0 }
-      : { x: ax - 55, y: Math.min(ay, ay + dy), z: 0 };
-    const args = { length, thickness: 110, height: 3000, axis: along ? 'x' : 'y' };
-    add('wall', 'W', placement, recipe('wall.straight', args), 'Walls');
-    $('#hint').innerHTML = hint();
+    const args = { element: newId('W'), start: [`${ax} mm`, `${ay} mm`], end: [`${end[0]} mm`, `${end[1]} mm`], level };
+    const type = chosenWallType(view);
+    if (type) args.type = type.id;
+    const top = wallTop(modelLevels());
+    if (top === '') args.height = C.wallTool.height;
+    else args.top = top;
+    manage('wall.draw', args, 'wall-draw');
+  }
+
+  /**
+   * Where a click lands on a wall, for a door: the wall's side clicked (`exterior` or `interior`),
+   * how far along the wall from its start the door's near end is when the click is its middle, how
+   * thick the wall is, and the axis the wall runs along. A layered wall reads its line and faces from
+   * its filled recipe; the old box runs along x, its exterior at its low y side, or along y, its
+   * exterior at its high x side.
+   */
+  function onWall(wall, at, width) {
+    if (wall.el.recipe.op === LAYERED) {
+      const line = lineOf(wall);
+      if (!line) return null;
+      const { x, y } = wall.el.placement;
+      const p = [snap(at.x) - x - line.start[0] / STEPS_PER_MM, snap(at.y) - y - line.start[1] / STEPS_PER_MM];
+      const length = Math.hypot(line.d[0], line.d[1]);
+      const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+      const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+      const middle = (line.exterior + line.interior) / 2 / STEPS_PER_MM;
+      const exterior = right > middle === line.exterior > line.interior;
+      return {
+        exterior,
+        offset: Math.round(alongIt - width / 2),
+        thickness: Math.ceil(Math.abs(line.exterior - line.interior) / STEPS_PER_MM),
+        axis: line.axis === 1 ? 'y' : 'x',
+      };
+    }
+    const box = around(wall);
+    const along = box.w >= box.d;
+    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+    return {
+      exterior: along ? at.y < middle : at.x > middle,
+      offset: (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2,
+      thickness: along ? box.d : box.w,
+      axis: along ? 'x' : 'y',
+    };
   }
 
   function placeDoor(at) {
@@ -1989,22 +3025,18 @@
       say('Click on a wall to place a door.');
       return;
     }
-    const box = around(wall);
-    const along = box.w >= box.d;
     const width = 900;
     // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall:
-    // the side clicked (along x the exterior is the wall's low y side, along y its high x side),
-    // as far along the wall from its start as the click, less half the door, as thick as the wall.
-    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
-    const exterior = along ? at.y < middle : at.x > middle;
-    const face = wall.shape.names.find((name) => name.role === (exterior ? 'exterior' : 'interior'));
+    // the side clicked, as far along the wall from its start as the click, less half the door, as
+    // thick as the wall.
+    const spot = onWall(wall, at, width);
+    const face = spot && wall.shape.names.find((name) => name.role === (spot.exterior ? 'exterior' : 'interior'));
     if (!face) {
       say('That wall has no side to place a door on.');
       return;
     }
-    const offset = (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2;
-    const thickness = along ? box.d : box.w;
-    const args = { width, thickness, height: 2100, axis: along ? 'x' : 'y' };
+    const { offset, thickness } = spot;
+    const args = { width, thickness, height: 2100, axis: spot.axis };
     edit('hosted.place', {
       element: `D-${crypto.randomUUID().slice(0, 8)}`,
       kind: 'door',
@@ -2018,12 +3050,6 @@
 
   /** Spare Construct's own operations, by what they make. */
   const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
-
-  function add(kind, tag, placement, how, category, references = []) {
-    const element = `${tag}-${crypto.randomUUID().slice(0, 8)}`;
-    const level = levelOf();
-    edit('element.create', { element, kind, level, placement, recipe: how, references, props: { category } });
-  }
 
   function watchThePlan() {
     const canvas = $('#pv-canvas');
@@ -2071,9 +3097,8 @@
       if (drag.hosted) {
         const hosted = hostOf(piece.el);
         if (!hosted) return;
-        const wall = hosted.host.el;
-        const offset = wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
-        if (storedMm(piece.el.props['@host.along']) === offset) return;
+        const offset = alongOn(hosted.host, piece.el, x, y);
+        if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
         const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
         piece.el = { ...piece.el, props };
         drag.along = offset;
@@ -2143,7 +3168,18 @@
     const paint = (name) =>
       new THREE.MeshLambertMaterial({ color: colour(name), side: THREE.DoubleSide });
     const paints = { wall: paint('--ink-3'), door: paint('--app'), other: paint('--sink') };
-    const meshes = elementMeshes(THREE, paints);
+    // A part of a shape (a layer of a wall) in its material's colour seen in projection, one paint
+    // per colour; a material the server doesn't list takes its element's paint.
+    const byColour = new Map();
+    const partPaint = (material) => {
+      const colour = colourOf(material, 'surface');
+      if (!colour) return null;
+      if (!byColour.has(colour)) {
+        byColour.set(colour, new THREE.MeshLambertMaterial({ color: new THREE.Color(colour), side: THREE.DoubleSide }));
+      }
+      return byColour.get(colour);
+    };
+    const meshes = elementMeshes(THREE, paints, partPaint);
     scene.add(meshes.group);
     C.three = {
       update() {
