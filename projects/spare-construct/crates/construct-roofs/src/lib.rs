@@ -65,8 +65,8 @@ pub use measure::{
 };
 pub use pitch::{ANGLE_RUN, MOST_SLOPE, Pitch};
 pub use record::{
-    EDGES_ARG, FOOTPRINT_ARG, FORM_ARG, LAYERS_ARG, OP_VERSION, OUTLINE_ARG, ROOF_KIND, ROOF_OP,
-    SLOPES_ARG, filled, is_roof, roof_of, roof_recipe, roof_record, with_roof,
+    EDGES_ARG, FOOTPRINT_ARG, FORM_ARG, LAYERS_ARG, LINES_ARG, OP_VERSION, OUTLINE_ARG, ROOF_KIND,
+    ROOF_OP, SLOPES_ARG, filled, is_roof, roof_of, roof_recipe, roof_record, with_roof,
 };
 pub use roof::{EdgeSpec, Form, Roof};
 pub use roof_type::{OWNER, layers_of, new_roof_type, with_layers};

@@ -1330,26 +1330,104 @@ check(
 );
 await shot(ben, 'ben-roof');
 
-// Hips: the roof tool's edge numbers name two edges that meet at a corner; the server's reason, beside
-// the tool, and the footprint it turned back, with no second roof.
-await anna.locator('#pv-side input[data-key="roof-eaves"]').fill('1, 2');
-await anna.locator('#pv-side input[data-key="roof-eaves"]').press('Tab');
+const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+// A hip roof: Anna chooses the form Hip, leaves the edges it rises from blank (every edge), and
+// sketches a second footprint clear of the gable. Both browsers draw its ridge and its four hips from
+// the lines the server gave; the server's quantities read it; her undo takes it away from both and her
+// redo brings it back; a pitch of its own on one edge, which would meet its neighbours at a hip at two
+// pitches, is turned back by name; and a last undo leaves the plan as the gable alone.
+await anna.locator('#pv-side select[data-key="roof-form"]').selectOption('hip');
+await anna.waitForFunction(() => document.querySelector('#pv-side input[data-key="roof-eaves"]') !== null);
 await roofClicks(anna, [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500], [7000, -2300]]);
 await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
 await anna.keyboard.press('Enter');
-await anna.waitForSelector('#pv-side [data-problem="roof-draw"]');
-const roofRefusal = await anna.locator('#pv-side [data-problem="roof-draw"]').textContent();
-check(
-  /slope and meet at a corner: hips come with job 6\.2/.test(roofRefusal) &&
-    roofRefusal === (await anna.locator('#toast-m').textContent()),
-  "edges that meet at a corner are turned back in the server's words, beside the roof tool",
+const roofsOf = () => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').map((p) => p.el.id);
+await ben.waitForFunction((n) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length === n, 2);
+const hipId = (await ben.evaluate(roofsOf)).find((id) => id !== roofId);
+const hipDrawn = (id) => {
+  const group = document.querySelector(`g.element[data-id="${id}"]`);
+  const count = (kind) => group?.querySelectorAll(`[data-roof-line="${kind}"]`).length;
+  return group?.querySelector('path.roof[data-form="solved"]') && count('hip') === 4 && count('ridge') === 1;
+};
+await ben.waitForFunction(hipDrawn, hipId);
+await anna.waitForFunction(hipDrawn, hipId);
+pass("Anna's hip roof appears in both browsers, its ridge and four hips drawn from the lines the server gave");
+const hipBuilt = (id) => (window.spare.elements.get(id)?.shape?.displays?.[0]?.parts?.length ?? 0) >= 1;
+await ben.waitForFunction(hipBuilt, hipId);
+await anna.waitForFunction(hipBuilt, hipId);
+pass('both browsers built the hip roof for the 3D view, each layer a part of its shape');
+await shot(ben, 'ben-roof-hip');
+
+const hipShown = await until(
+  () => asAnna(`parameters/${hipId}`),
+  (view) => ['roof.area', 'roof.slope-area', 'roof.ridge-height'].every((id) => view.parameters?.some((p) => p.id === id && p.from === 'read-only')),
+  'the server works out the plan area, the slope area and the ridge height of the hip roof',
 );
-await anna.waitForSelector('#pv-canvas [data-roof-refused]');
+const hipPlanArea = roofRead(hipShown, 'roof.area');
+const hipSlopeArea = roofRead(hipShown, 'roof.slope-area');
+const hipRidge = roofRead(hipShown, 'roof.ridge-height');
 check(
-  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length)) === 1,
-  'drawn where it was turned back, and no second roof made',
+  /^[0-9.]+ m²$/.test(hipPlanArea) && /^[0-9.]+ m²$/.test(hipSlopeArea) && Number.parseFloat(hipSlopeArea) > Number.parseFloat(hipPlanArea) && !!hipRidge,
+  `the server gives the hip roof's plan area ${hipPlanArea}, slope area ${hipSlopeArea} and ridge height ${hipRidge}`,
+);
+await anna.keyboard.press('Escape');
+const hipAt = await onPlan(anna, 8500, -1400);
+await anna.mouse.click(hipAt.x, hipAt.y);
+await anna.waitForFunction(
+  ([area, slope, ridge]) =>
+    document.querySelector('#pv-side [data-read-only="roof.area"]')?.textContent === area &&
+    document.querySelector('#pv-side [data-read-only="roof.slope-area"]')?.textContent === slope &&
+    document.querySelector('#pv-side [data-read-only="roof.ridge-height"]')?.textContent === ridge,
+  [hipPlanArea, hipSlopeArea, hipRidge],
+);
+check(
+  (await anna.locator('#pv-side select[data-key="roof-own-form"]').inputValue()) === 'hip' &&
+    (await anna.locator('#pv-side input[data-key^="roof-edge-pitch:"]').count()) === 4,
+  "Anna's palette reads the roof as a hip roof with a pitch for each of its four edges, and the server's quantities read-only",
+);
+await shot(anna, 'anna-roof-hip');
+
+// Refused by name: one edge at another pitch would meet its neighbours at a hip at two pitches.
+const hipEdge = anna.locator('#pv-side input[data-key="roof-edge-pitch:1"]');
+await hipEdge.fill('1:2');
+await hipEdge.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="roof-edit"]');
+const roofRefusal = await anna.locator('#pv-side [data-problem="roof-edit"]').textContent();
+check(
+  /slope at different pitches where their planes meet/.test(roofRefusal) &&
+    (await anna.evaluate((id) => window.spare.elements.get(id).el.recipe.args.edges.every((e) => e.pitch === 'slope:1/4' || !e.pitch), hipId)),
+  "a pitch of its own on one edge of a hip roof is turned back in the server's words, and the roof is as it was",
 );
 await shot(anna, 'anna-roof-refused');
+
+// Anna's undo takes the hip roof away from both browsers and her redo brings it back, drawn as before.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'roof.create');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+pass("Anna's undo takes the hip roof away from both browsers");
+await anna.waitForSelector('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(hipDrawn, hipId);
+await anna.waitForFunction(hipDrawn, hipId);
+pass("Anna's redo brings the hip roof back, drawn as before in both browsers");
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`) !== null, hipId);
+const hipAgain = await asAnna(`parameters/${hipId}`);
+check(
+  roofRead(hipAgain, 'roof.area') === hipPlanArea && roofRead(hipAgain, 'roof.slope-area') === hipSlopeArea,
+  'the quantities of the redone hip roof are the same',
+);
+
+// A last undo leaves the plan as it was before the hip roof, the gable alone.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForSelector('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+check(
+  (await ben.evaluate(roofsOf)).length === 1 && (await anna.evaluate(roofsOf)).length === 1,
+  'a last undo leaves the gable roof alone in both browsers',
+);
 await anna.keyboard.press('Escape');
 
 // Its area and what else the server works out of it, in units, apart from what a person sets.
@@ -1358,7 +1436,6 @@ const roofShown = await until(
   (view) => view.parameters?.some((p) => p.id === 'roof.area' && p.from === 'read-only'),
   'the server works out the area of the roof',
 );
-const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
 const roofArea = roofRead(roofShown, 'roof.area');
 const roofSlopeArea = roofRead(roofShown, 'roof.slope-area');
 check(/^[0-9.]+ m²$/.test(roofArea) && roofRead(roofShown, 'roof.pitch') !== undefined, `the server gives its area in the document's units, ${roofArea}`);
@@ -1372,6 +1449,28 @@ check(
     (await anna.locator('#pv-side input[data-key="roof-own-overhang"]').inputValue()) === '300 mm',
   "Anna's palette shows its pitch and overhang as typed, and its area read-only",
 );
+// An uneven gable: edge 1 at 1:3 against edge 3 at 1:4; Ben sees both pitches and the same gable drawn.
+const gableEdge = anna.locator('#pv-side input[data-key="roof-edge-pitch:1"]');
+await gableEdge.fill('1:3');
+await gableEdge.press('Enter');
+await ben.waitForFunction(
+  (id) => {
+    const edges = window.spare.elements.get(id)?.el.recipe.args.edges;
+    return edges?.[0].pitch === 'slope:1/3' && edges[2].pitch === 'slope:1/4';
+  },
+  roofId,
+);
+const roofUneven = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  "the server works out the uneven gable's slope area",
+);
+await ben.waitForFunction(roofDrawn, roofId);
+check(
+  roofRead(roofUneven, 'roof.area') === roofArea,
+  "Anna's pitch of its own on one face makes an uneven gable in Ben's browser, with the same area in plan",
+);
+const roofUnevenArea = roofRead(roofUneven, 'roof.slope-area');
 await shot(anna, 'anna-roof-area');
 await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', roofId);
 await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
@@ -1391,7 +1490,7 @@ await anna.waitForFunction(
 );
 const roofSteeper = await until(
   () => asAnna(`parameters/${roofId}`),
-  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  (view) => roofRead(view, 'roof.slope-area') !== roofUnevenArea,
   'the server works out the new slope area',
 );
 check(

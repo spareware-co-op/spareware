@@ -2541,14 +2541,16 @@
   // palette, its base on the plan's level the offset typed there above it (construct-model's
   // FORMAT.md, "Roofs"). The page checks nothing and works out no geometry: the roof types, their
   // layers and the materials come from the server (`/roof-types`); where a model has none the page
-  // has the server make its default ones through the log (`roof.defaults`); a refusal (hips, an
-  // uneven gable, a pitch on a footprint off the axes, a hole) is the server's reason in the
+  // has the server make its default ones through the log (`roof.defaults`); a refusal (two
+  // pitches meeting at a hip, a pitch on a footprint that is not right-angled, a hole) is the server's reason in the
   // server's words, under the tool's options, with the footprint it turned back drawn in the plan.
   // In the plan a roof is its eaves outline from its recipe as the server filled it
-  // (`/filled/<element>`) and, where it slopes, the line its top face rises to; a selected roof
-  // shows its type, level, form, pitch and overhang, which are changed there (`roof.retype`,
-  // `roof.form`, `roof.pitch`, `roof.overhang`), what the server works out of it, and Delete
-  // removes it (`roof.delete`).
+  // (`/filled/<element>`) and, where it slopes, the lines of its top face (ridge, hips, valleys,
+  // verges) as the server listed them there; a selected roof shows its type, level, form (flat,
+  // mono-pitch, gable or hip), pitch, a pitch for each edge it rises from where there are two or
+  // more (an uneven gable), and overhang, which are changed there (`roof.retype`, `roof.form`,
+  // `roof.pitch` with or without `edge`, `roof.overhang`), what the server works out of it, and
+  // Delete removes it (`roof.delete`).
 
   const ROOF_OP = 'roof';
   const isRoof = (record) => record?.kind === 'roof' && record?.recipe?.op === ROOF_OP;
@@ -2628,7 +2630,7 @@
     manage('roof.defaults', {}, 'roof-draw');
   }
 
-  const ROOF_FORMS = [['flat', 'Flat'], ['mono', 'Mono-pitch'], ['gable', 'Gable']];
+  const ROOF_FORMS = [['flat', 'Flat'], ['mono', 'Mono-pitch'], ['gable', 'Gable'], ['hip', 'Hip']];
 
   function roofToolHtml() {
     let html = typeSel('family', 'Roof', '<b>New roof</b>');
@@ -2728,8 +2730,7 @@
   /**
    * A roof in the plan: its eaves outline from its recipe as the server filled it (the outline of
    * its display until that has come), in its outer layer's colour seen from above, and, where it
-   * slopes, the line its outer face rises to: the highest points of its outer layer's two end
-   * sections, as the server worked them out.
+   * slopes, the lines of its top face (ridge, hips, valleys, verges) as the server worked them out.
    */
   function roofInPlan(piece, data, scale) {
     const { el: e } = piece;
@@ -2746,11 +2747,13 @@
     const chosen = S.sel === e.id;
     let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
     group += `<path class="body roof${chosen ? ' sel' : ''}" data-form="${esc(args?.form ?? '')}" data-material="${esc(outer?.material ?? '')}"${fill} d="${ringPath(ring)}"/>`;
-    const sections = outer?.solid?.loft;
-    if (Array.isArray(sections) && sections.length === 2) {
-      const high = (section) => section.reduce((best, p) => (p[2] > best[2] ? p : best), section[0]);
-      const [a, b] = sections.map((section) => planPoint(high(section)));
-      group += `<line class="roof-ridge" data-roof-ridge x1="${x + a[0]}" y1="${y + a[1]}" x2="${x + b[0]}" y2="${y + b[1]}"/>`;
+    // The ridges, hips, valleys and verges as the server gave them in the filled recipe (`lines`,
+    // in grid steps); an eave is the outline itself. Nothing is worked out here.
+    for (const line of Array.isArray(args?.lines) ? args.lines : []) {
+      if (line.kind === 'eave') continue;
+      const [a, b] = [line.from, line.to].map(planPoint);
+      const ridge = line.kind === 'ridge' ? ' data-roof-ridge' : '';
+      group += `<line class="roof-line roof-${esc(line.kind)}" data-roof-line="${esc(line.kind)}"${ridge} x1="${x + a[0]}" y1="${y + a[1]}" x2="${x + b[0]}" y2="${y + b[1]}"/>`;
     }
     const claim = heldClaim(e.id);
     if (claim) {
@@ -2768,16 +2771,23 @@
     return stored;
   }
 
-  /** What the properties palette reads of a selected roof's record: its form, pitch and overhangs. */
-  function roofSpecs(e) {
+  /**
+   * What the properties palette reads of a selected roof's record: its form, pitch and overhangs,
+   * and the pitch of each edge it rises from (numbered from 1, as the roof tool numbers them). Its
+   * form is the one the server's filled recipe names (`solved` is a hip roof) once that has come.
+   */
+  function roofSpecs(piece) {
+    const e = piece.el;
     const edges = Array.isArray(e.recipe.args.edges) ? e.recipe.args.edges : [];
     const sloping = edges.filter((edge) => edge.pitch);
     const form = ['flat', 'mono', 'gable'][Math.min(sloping.length, 2)] ?? 'flat';
+    const filled = piece.fill?.recipe?.args?.form;
     const overhangs = [...new Set(edges.map((edge) => `${storedMm(edge.overhang)} mm`))];
     return {
-      form: sloping.length > 2 ? 'hip' : form,
+      form: filled === 'solved' ? 'hip' : filled ?? (sloping.length > 2 ? 'hip' : form),
       pitch: sloping[0] ? typedPitch(sloping[0].pitch) : '',
       overhang: overhangs.length === 1 ? overhangs[0] : '',
+      edges: edges.flatMap((edge, at) => (edge.pitch ? [{ id: edge.id, number: at + 1, pitch: typedPitch(edge.pitch) }] : [])),
     };
   }
 
@@ -2793,7 +2803,7 @@
     const view = paramsFor(piece);
     const types = roofTypes();
     const claim = heldClaim(e.id);
-    const specs = roofSpecs(e);
+    const specs = roofSpecs(piece);
     const editable = canEdit();
     let html = typeSel('family', 'Roof', `<b>${esc(e.name)}</b>`);
     html += '<table class="props" data-roof-element>';
@@ -2810,6 +2820,12 @@
       html += prow('Form', `<select class="inp" data-chg="stackroofshape" data-key="roof-own-form" aria-label="Roof form">${forms.join('')}</select>`);
       if (specs.form !== 'flat') html += prow('Pitch', `<input class="inp" data-chg="stackroofown" data-a="pitch" data-key="roof-own-pitch" value="${esc(specs.pitch)}" aria-label="Pitch, as 1:4, 25% or 30°">`);
       html += prow('Overhang', `<input class="inp" data-chg="stackroofown" data-a="overhang" data-key="roof-own-overhang" value="${esc(specs.overhang)}" placeholder="varies" aria-label="Overhang past its edges">`);
+      // One pitch for every edge it rises from, or a pitch of its own for each (an uneven gable).
+      if (specs.edges.length > 1) {
+        for (const edge of specs.edges) {
+          html += prow(`Edge ${edge.number} pitch`, `<input class="inp" data-chg="stackroofedge" data-edge="${esc(edge.id)}" data-key="roof-edge-pitch:${edge.number}" value="${esc(edge.pitch)}" aria-label="Pitch of edge ${edge.number}, as 1:4, 25% or 30°">`);
+        }
+      }
     } else {
       html += prow('Form', esc(specs.form));
       if (specs.pitch) html += prow('Pitch', esc(specs.pitch));
@@ -2834,13 +2850,19 @@
     if (!piece) return;
     const args = { element: S.sel, form: select.value };
     // Going from flat to a form that slopes needs a pitch: the tool's.
-    if (select.value !== 'flat' && !roofSpecs(piece.el).pitch) args.pitch = C.roofTool.pitch;
+    if (select.value !== 'flat' && !roofSpecs(piece).pitch) args.pitch = C.roofTool.pitch;
     manage('roof.form', args, 'roof-edit');
   };
   CHG.stackroofown = (input) => {
     if (!S.sel) return;
     const cmd = input.dataset.a === 'pitch' ? 'roof.pitch' : 'roof.overhang';
     manage(cmd, { element: S.sel, [input.dataset.a]: input.value }, 'roof-edit');
+    input.blur();
+  };
+
+  CHG.stackroofedge = (input) => {
+    if (!S.sel) return;
+    manage('roof.pitch', { element: S.sel, pitch: input.value, edge: input.dataset.edge }, 'roof-edit');
     input.blur();
   };
 

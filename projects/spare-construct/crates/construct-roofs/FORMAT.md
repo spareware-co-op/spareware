@@ -59,13 +59,14 @@ A command gives a roof in a plain form, `{"footprint":<boundary>,"edges":{"<edge
 
 ## What a builder takes
 
-Before it is built, a roof's recipe is filled from its type (construct-regen's `roofs`): its `args` become exactly `form`, `slopes`, `outline` and `layers`:
+Before it is built, a roof's recipe is filled from its type (construct-regen's `roofs`): its `args` become exactly `form`, `slopes`, `outline`, `lines` and `layers`:
 
 | Argument | Value |
 | --- | --- |
 | `form` | `flat`, `mono`, `gable` or `solved` |
 | `slopes` | The edges the roof rises from, in the footprint's order: none, one, two, or for a solved roof one or more |
 | `outline` | The eaves outline anticlockwise from above, each corner `{"id":"<edge ID>","at":[x,y]}` in grid steps: the footprint edge whose eaves, high side or verge runs from it to the next |
+| `lines` | The lines of the top face, for the page's plan and the drawings to come, each `{"kind":"ridge"\|"hip"\|"valley"\|"eave"\|"verge","from":[x,y,z],"to":[x,y,z]}` in grid steps, as the planes and lines below have them (the builders read none of it) |
 | `layers` | Each layer from the top down, `{"function","material","thickness"}` (its thickness in grid steps, square to its faces) and, for a layer with a thickness, `solid` |
 
 A `solid` is `{"extrude":[[x,y,z], ...],"by":[x,y,z]}` for a flat roof's layer (its outline at its lower face, extruded straight up to its upper face), `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` for a mono-pitch roof's or a gable's (its section across the roof at one verge and the same section at the other, corner `i` joined to corner `i`: the lower face's corners from the eaves across, then the upper face's back), or `{"unite":[[[x,y,z], ...], ...],"by":[x,y,z]}` for a solved roof's (each flat piece of its lower face, anticlockwise from above, extruded straight up to its upper face, and the pieces united in their order, each sharing a side with one before it). Every point is in grid steps of the roof's frame.
@@ -80,7 +81,7 @@ A roof's plan area (its eaves outline's, overhangs included), its slope area (it
 
 ## Planes and lines
 
-Each plane of a roof's top face (the edge it rises from, its flat pieces, its exact plan area and its slope area, the nearest square step) and each line of it (`ridge`, `hip`, `valley`, `eave` or `verge`, with its two ends in grid steps) are construct-roofs' `Shape`, worked from the record each time and never stored; a solved roof's slope area is its planes' sum, as is an uneven gable's. The planes and lines are for the page and the drawings to come.
+Each plane of a roof's top face (the edge it rises from, its flat pieces, its exact plan area and its slope area, the nearest square step) and each line of it (`ridge`, `hip`, `valley`, `eave` or `verge`, with its two ends in grid steps) are construct-roofs' `Shape`, worked from the record each time and never stored; a solved roof's slope area is its planes' sum, as is an uneven gable's. The planes and lines are for the page and the drawings to come; the filled recipe carries the lines (`lines`, above), which the page's plan draws as the server gave them.
 
 ## Later versions
 
