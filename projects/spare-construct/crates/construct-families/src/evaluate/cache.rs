@@ -7,6 +7,11 @@
 //! the same values share one solid; a changed value is a new key, so only that type is built
 //! again, and every other type is found as it was. The key holds no clock, no address and no
 //! hash-map order: the same inputs give the same key on every machine.
+//!
+//! A named type (a built-in type or a type table row) is keyed by its values, not its name: two
+//! named types with the same values share one evaluation, and a type table is evaluated row by
+//! row through the same cache. The limits are the evaluator's, and are not part of the key: an
+//! evaluator keeps only what it built within its own limits.
 
 use super::Evaluated;
 use super::build::run;
@@ -66,6 +71,9 @@ impl CacheKey {
     }
 }
 
+/// One type's evaluation as an [`Evaluator`] hands it out (shared), or why there is none.
+pub type TypeResult<S> = Result<Arc<Evaluated<S>>, EvalError>;
+
 /// Recipe evaluation through one engine, with every evaluated type kept by its [`CacheKey`].
 pub struct Evaluator<E: Engine> {
     engine: E,
@@ -75,12 +83,12 @@ pub struct Evaluator<E: Engine> {
 }
 
 impl<E: Engine> Evaluator<E> {
-    /// An evaluator asking `engine` for its solids, with an empty cache and no limits.
+    /// An evaluator asking `engine` for its solids, with an empty cache and the default limits.
     pub fn new(engine: E) -> Self {
-        Self::with_limits(engine, Limits::none())
+        Self::with_limits(engine, Limits::DEFAULT)
     }
 
-    /// An evaluator with these limits.
+    /// An evaluator with these limits, for every evaluation it builds.
     pub fn with_limits(engine: E, limits: Limits) -> Self {
         Self {
             engine,
@@ -96,7 +104,8 @@ impl<E: Engine> Evaluator<E> {
     ///
     /// # Errors
     ///
-    /// As [`crate::evaluate()`]. A refusal is not kept: the same inputs are tried again next time.
+    /// As [`crate::evaluate()`], within this evaluator's limits. A refusal is not kept: the same
+    /// inputs are tried again next time.
     pub fn evaluate(
         &mut self,
         recipe: &Recipe,
@@ -105,11 +114,42 @@ impl<E: Engine> Evaluator<E> {
         match self.cache.entry(CacheKey::of(recipe, values)) {
             Entry::Occupied(kept) => Ok(Arc::clone(kept.get())),
             Entry::Vacant(slot) => {
-                let built = run(&mut self.engine, recipe, values)?;
+                let built = run(&mut self.engine, recipe, values, self.limits)?;
                 self.builds = self.builds.saturating_add(1);
                 Ok(Arc::clone(slot.insert(Arc::new(built))))
             }
         }
+    }
+
+    /// `recipe` evaluated for the type it names `ty` (a built-in type or a type table row), as
+    /// [`Evaluator::evaluate`] with that type's values ([`TypeValues::of`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`TypeValues::of`], then as [`Evaluator::evaluate`].
+    pub fn evaluate_type(
+        &mut self,
+        recipe: &Recipe,
+        ty: &Key,
+    ) -> Result<Arc<Evaluated<E::Solid>>, EvalError> {
+        let values = TypeValues::of(recipe, ty)?;
+        self.evaluate(recipe, &values)
+    }
+
+    /// Every type `recipe` names evaluated, one by one through the cache, in the order
+    /// [`Recipe::named_types`] gives (the built-in types, then the type table's rows): each
+    /// type's key with its evaluation or its refusal. One type's refusal does not stop the rest;
+    /// types with the same values share one evaluation.
+    pub fn evaluate_types(&mut self, recipe: &Recipe) -> Vec<(Key, TypeResult<E::Solid>)> {
+        recipe
+            .named_types()
+            .into_iter()
+            .map(|ty| {
+                let key = ty.key().clone();
+                let result = self.evaluate_type(recipe, &key);
+                (key, result)
+            })
+            .collect()
     }
 
     /// How many evaluations this evaluator has built (not found kept).

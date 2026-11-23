@@ -8,8 +8,10 @@
 //! Every size is read from the engine's display mesh (its corners' bounds, and six times the
 //! volume it encloses, from exact integer products of its grid positions), and checked against
 //! the engine's own volume where it gives one. The cases: the single-swing door example at its
-//! 820 by 2040 mm type, at a deeper type of this file's own, and with a changed formula; a block
-//! cut by a void; a block with a hole; two blocks united.
+//! 820 by 2040 mm type, at a deeper type of this file's own, and with a changed formula; each of
+//! its three built-in types, its elevation sketch solved at that type's width; a taller type; a
+//! sketch held only in part, solved where held and as drawn where free; a block cut by a void; a
+//! block with a hole; two blocks united.
 
 #![allow(
     dead_code,
@@ -51,7 +53,7 @@ pub fn d820() -> TypeValues {
 }
 
 /// A type of this suite's own: the 820 mm door with a 120 mm deep frame and a 40 mm panel. Its
-/// values do not move the sketch (only the extrusions' heights read them).
+/// values do not move the elevation sketch (only the extrusions' heights read them).
 pub fn deep() -> TypeValues {
     d820()
         .with(key("frame_depth"), length(120))
@@ -137,24 +139,35 @@ pub fn size_of<E: Engine>(engine: &mut E, evaluated: &Evaluated<E::Solid>, step:
     measure(engine, &built.solid)
 }
 
-/// The door's frame: 900 by 2080 mm outside, 820 by 2040 mm inside, open at the floor,
-/// `depth` mm deep about the wall's centre.
-pub fn frame(depth: i64) -> Size {
+/// The frame of a door `width` by `height` mm inside: 40 mm wider each side and 40 mm higher
+/// outside, open at the floor, `depth` mm deep about the wall's centre.
+pub fn frame_of(width: i64, height: i64, depth: i64) -> Size {
     let half = depth / 2;
+    let (outer_w, outer_h) = (width + 80, height + 40);
     size_mm(
-        [-450, -half, 0],
-        [450, half, 2080],
-        i128::from(900 * 2080 - 820 * 2040) * i128::from(depth),
+        [-outer_w / 2, -half, 0],
+        [outer_w / 2, half, outer_h],
+        i128::from(outer_w * outer_h - width * height) * i128::from(depth),
     )
 }
 
-/// The door's panel: 820 by 2040 mm, from `back` to `front` mm across the wall.
-pub fn panel(back: i64, front: i64) -> Size {
+/// The panel of a door `width` by `height` mm, from `back` to `front` mm across the wall.
+pub fn panel_of(width: i64, height: i64, back: i64, front: i64) -> Size {
     size_mm(
-        [-410, back, 0],
-        [410, front, 2040],
-        i128::from(820 * 2040) * i128::from(front - back),
+        [-width / 2, back, 0],
+        [width / 2, front, height],
+        i128::from(width * height) * i128::from(front - back),
     )
+}
+
+/// The door's 820 by 2040 mm frame: 900 by 2080 mm outside, `depth` mm deep.
+pub fn frame(depth: i64) -> Size {
+    frame_of(820, 2040, depth)
+}
+
+/// The door's 820 by 2040 mm panel, from `back` to `front` mm across the wall.
+pub fn panel(back: i64, front: i64) -> Size {
+    panel_of(820, 2040, back, front)
 }
 
 /// The door at the type it is drawn for: its frame and its panel, each of its own size,
@@ -200,6 +213,67 @@ pub fn two_types_give_two_solids_of_their_sizes<E: Engine>(make: impl Fn() -> E)
     assert_eq!(fb, frame(120));
     assert_ne!(fa, fb);
     assert_eq!(size_of(&mut engine, &b, "panel"), panel(20, 60));
+}
+
+/// Each of the door's built-in types solves its elevation sketch at its own width and builds a
+/// frame and a panel of its own size: three types, three different solids.
+pub fn every_door_type_is_solved_to_its_size<E: Engine>(make: impl Fn() -> E) {
+    let mut engine = make();
+    let recipe = door();
+    let mut frames = Vec::new();
+    for (ty, width) in [("d720", 720), ("d820", 820), ("d920", 920)] {
+        let values = TypeValues::of(&recipe, &key(ty)).unwrap();
+        let built = evaluate(&mut engine, &recipe, &values).unwrap();
+        assert_eq!(steps(&built), ["frame", "panel"], "{ty}");
+        let frame = size_of(&mut engine, &built, "frame");
+        assert_eq!(frame, frame_of(width, 2040, 110), "{ty}");
+        assert_eq!(
+            size_of(&mut engine, &built, "panel"),
+            panel_of(width, 2040, 20, 55),
+            "{ty}"
+        );
+        frames.push(frame);
+    }
+    assert!(frames[0] != frames[1] && frames[1] != frames[2] && frames[0] != frames[2]);
+}
+
+/// A type that changes the height as well moves the head of the frame and the top of the panel.
+pub fn a_taller_type_moves_the_head<E: Engine>(make: impl Fn() -> E) {
+    let mut engine = make();
+    let values = d820()
+        .with(key("width"), length(920))
+        .with(key("height"), length(2100));
+    let built = evaluate(&mut engine, &door(), &values).unwrap();
+    assert_eq!(
+        size_of(&mut engine, &built, "frame"),
+        frame_of(920, 2100, 110)
+    );
+    assert_eq!(
+        size_of(&mut engine, &built, "panel"),
+        panel_of(920, 2100, 20, 55)
+    );
+}
+
+/// A sketch held only in part is solved where it is held and stays as drawn where it is free:
+/// the block's corner `b` is held 1200 mm from `a` along the bottom, and moves there; its other
+/// corners have no constraint and stay where they are drawn, so the plan is a trapezium.
+pub fn a_free_part_of_a_sketch_stays_as_drawn<E: Engine>(make: impl Fn() -> E) {
+    let mut engine = make();
+    let mut recipe = block(&json!([extrude("block", &BLOCK, &[])]));
+    let Some(sketch) = recipe.sketches.first_mut() else {
+        panic!("the block has its plan");
+    };
+    let Some(construct_families::Constraint::Distance { length, .. }) =
+        sketch.constraints.get_mut(2)
+    else {
+        panic!("the block's third constraint is its bottom's length");
+    };
+    "1200 mm".clone_into(length);
+    let built = evaluate(&mut engine, &recipe, &TypeValues::new()).unwrap();
+    assert_eq!(
+        size_of(&mut engine, &built, "block"),
+        size_mm([0, 0, 0], [1200, 600, 900], (1200 + 1000) * 600 / 2 * 900)
+    );
 }
 
 /// A changed formula moves the face it places: the panel twice as thick, towards the back.

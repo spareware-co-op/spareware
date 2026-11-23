@@ -1,6 +1,6 @@
-//! A family's types as construct-types types: a built-in type of a checked recipe becomes an
-//! `ElementType` in the family's category, with every parameter the family has, the values the
-//! type sets, and a system block under the owner tag [`OWNER`] naming the family, the recipe
+//! A family's types as construct-types types: a built-in type or a type table row of a checked
+//! recipe becomes an `ElementType` in the family's category, with every parameter the family
+//! has, the values the type sets, and a system block under the owner tag [`OWNER`] naming the family, the recipe
 //! version (its content id) and the type. This follows the way wall types carry their layers in
 //! construct-types' system slot (`@system.wall`); construct-types stores the block and never
 //! reads inside it.
@@ -82,7 +82,7 @@ impl FamilyRef {
 pub enum FamilyError {
     /// The recipe does not pass its checks.
     Refused(Vec<Problem>),
-    /// The recipe has no built-in type with this key.
+    /// The recipe names no type with this key (built-in or a type table row).
     UnknownType(Key),
     /// construct-params refuses a definition or value (only for a recipe that was not checked).
     Param(ParamError),
@@ -137,8 +137,9 @@ pub fn parameters(recipe: &Recipe) -> Result<Parameters, FamilyError> {
     Ok(params)
 }
 
-/// The construct-types type a built-in type of the recipe makes, with permanent id `id`: in the
-/// family's category, with every parameter of the family, the values the built-in type sets, and
+/// The construct-types type a type the recipe names makes (a built-in type or a type table row),
+/// with permanent id `id`: in the family's category, with every parameter of the family, the
+/// values the type sets, and
 /// the `family` system block.
 ///
 /// # Errors
@@ -153,21 +154,19 @@ pub fn family_type(
     params: &Parameters,
 ) -> Result<ElementType, FamilyError> {
     recipe.check(library).map_err(FamilyError::Refused)?;
-    let built_in = recipe
-        .types
-        .iter()
-        .find(|t| t.key == *type_key)
+    let named = recipe
+        .named_type(type_key)
         .ok_or_else(|| FamilyError::UnknownType(type_key.clone()))?;
-    let mut ty = ElementType::new(id, &built_in.name, recipe.category, library.categories)?;
+    let mut ty = ElementType::new(id, named.name(), recipe.category, library.categories)?;
     for row in &recipe.parameters {
         ty.add_parameter(params, &row.definition.id)?;
     }
-    for set in &built_in.values {
-        let Some(row) = recipe.parameters.iter().find(|p| p.key == set.parameter) else {
+    for (parameter, value) in named.written() {
+        let Some(row) = recipe.parameters.iter().find(|p| p.key == *parameter) else {
             continue;
         };
         let def = definition(row)?;
-        ty.set(params, &row.definition.id, stored_value(&def, &set.value)?)?;
+        ty.set(params, &row.definition.id, stored_value(&def, value)?)?;
     }
     let block = FamilyRef {
         family: recipe.id.clone(),

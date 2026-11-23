@@ -9,8 +9,12 @@
 //!
 //! A step a later step uses is that step's input and is not drawn; every other step is one of
 //! the family's solids, in recipe order, with its subcategory, material and visibility.
+//!
+//! Each step is counted against the solid-step limit before it runs, and each extrusion's
+//! corners against the result-size limit before the engine is asked (`limits.rs`).
 
 use super::error::{EvalError, Place, Reason};
+use super::limits::{Limits, Meter};
 use super::sketch::{Drawn, resolve};
 use super::values::{TypeValues, Worked, work_out};
 use super::{Built, Evaluated};
@@ -21,17 +25,20 @@ use engine_geometry::value::grid::GridStep;
 use kit_core::Id;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Evaluates `recipe` for the type whose values are `values`, asking `engine` for every solid.
+/// Evaluates `recipe` for the type whose values are `values`, asking `engine` for every solid,
+/// within `limits`.
 pub(crate) fn run<E: Engine>(
     engine: &mut E,
     recipe: &Recipe,
     values: &TypeValues,
+    limits: Limits,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
     let step = engine.edition().step;
     if step != GridStep::Q0 {
         return Err(EvalError::new(Place::Engine, Reason::WrongGrid { step }));
     }
-    let worked = work_out(recipe, values)?;
+    let mut meter = Meter::new(limits);
+    let worked = work_out(recipe, values, &mut meter)?;
     let mut sketches: BTreeMap<Key, Drawn> = BTreeMap::new();
     let mut built: Vec<(Key, E::Solid)> = Vec::with_capacity(recipe.steps.len());
     let mut used: BTreeSet<Key> = BTreeSet::new();
@@ -43,6 +50,7 @@ pub(crate) fn run<E: Engine>(
                 key: step.key.as_str().to_owned(),
             }));
         }
+        meter.solid_step().map_err(at)?;
         let solid = match &step.operation {
             Operation::Extrude {
                 sketch,
@@ -52,8 +60,8 @@ pub(crate) fn run<E: Engine>(
                 end,
             } => {
                 if !sketches.contains_key(sketch) {
-                    let drawn =
-                        resolve(recipe, sketch, &worked).map_err(|e| e.in_step(&step.key))?;
+                    let drawn = resolve(recipe, sketch, &worked, &mut meter)
+                        .map_err(|e| e.in_step(&step.key))?;
                     sketches.insert(sketch.clone(), drawn);
                 }
                 let drawn = sketches.get(sketch).ok_or_else(|| {
@@ -62,7 +70,16 @@ pub(crate) fn run<E: Engine>(
                         key: sketch.as_str().to_owned(),
                     })
                 })?;
-                extrude(engine, drawn, &worked, profile, holes, (start, end)).map_err(at)?
+                let heights = (start.as_str(), end.as_str());
+                extrude(
+                    engine,
+                    drawn,
+                    &worked,
+                    &mut meter,
+                    (profile, holes),
+                    heights,
+                )
+                .map_err(at)?
             }
             Operation::Subtract { target, tool } => {
                 let target_solid = input(recipe, &built, step, target).map_err(at)?;
@@ -103,6 +120,7 @@ pub(crate) fn run<E: Engine>(
     Ok(Evaluated {
         solids,
         values: worked.all,
+        used: meter.used(),
     })
 }
 
@@ -111,12 +129,12 @@ fn extrude<E: Engine>(
     engine: &mut E,
     drawn: &Drawn,
     worked: &Worked,
-    profile: &[Key],
-    holes: &[Vec<Key>],
+    meter: &mut Meter,
+    (profile, holes): (&[Key], &[Vec<Key>]),
     (start, end): (&str, &str),
 ) -> Result<E::Solid, Reason> {
-    let start = worked.length(start)?;
-    let end = worked.length(end)?;
+    let start = worked.length(start, meter)?;
+    let end = worked.length(end, meter)?;
     let (low, high) = if start <= end {
         (start, end)
     } else {
@@ -131,6 +149,11 @@ fn extrude<E: Engine>(
         .iter()
         .map(|hole| drawn.corners(hole, low))
         .collect::<Result<Vec<_>, _>>()?;
+    meter.corners(
+        holes
+            .iter()
+            .fold(outer.len(), |n, h| n.saturating_add(h.len())),
+    )?;
     engine
         .extrude(&Profile { outer, holes }, drawn.along(depth))
         .map_err(Reason::Engine)
