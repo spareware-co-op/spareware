@@ -8,15 +8,15 @@ license.workspace = true
 [features]
 # The regenerator that keeps a server's derived shapes up to date. The browser needs only the
 # geometry, so its build leaves this out.
-# It reads parameters, types and levels to fill the recipes that name them, so those crates come
-# with it.
+# It reads parameters, types, levels and floor types to fill the recipes that name them, so those
+# crates come with it.
 server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
-    "dep:construct-params",
     "dep:construct-types",
     "dep:construct-levels",
+    "dep:construct-slabs",
 ]
 
 [dependencies]
@@ -26,10 +26,15 @@ kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
-construct-params = { path = "../construct-params", optional = true }
+# Stored lengths: a floor's filled recipe is in the steps of construct-params' length grid
+# (src/floor_plan.rs), which both builders read. Same workspace.
+construct-params = { path = "../construct-params" }
 construct-types = { path = "../construct-types", optional = true }
 # An element's place and a top-tied wall's height read its levels.
 construct-levels = { path = "../construct-levels", optional = true }
+# A floor's layers are read from its floor type and its boundary checked (src/slabs.rs). Same
+# workspace.
+construct-slabs = { path = "../construct-slabs", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

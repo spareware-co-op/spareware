@@ -8,6 +8,9 @@
 //!   its axis (x, or y when `axis` is `y`), extruded straight up by its height through
 //!   [`Engine::extrude`]. Its bounds are the stand-in's box, so placement means the same.
 //! - `block`: its plan rectangle, width by depth, extruded the same way.
+//! - `floor`: one solid per layer of its floor type, each its boundary with its holes extruded
+//!   from the layer's bottom face up to its top, the floor's top face at `z = 0`, in the child
+//!   module `floor` (job 4.3); its lengths are construct-params' steps ([`crate::floor_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
 //!   a door's shape is decided.
@@ -66,6 +69,7 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod floor;
 pub mod opening;
 
 pub use opening::Hosted;
@@ -573,6 +577,9 @@ impl<E: Engine> Kernel<E> {
         host: &Recipe,
         hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
+        if crate::floor_plan::is_floor(host) {
+            return self.build_floor(host, hosted.len());
+        }
         let shape = Extrusion::of(host)?;
         let units = self.units;
         let op = op_id(host)?;

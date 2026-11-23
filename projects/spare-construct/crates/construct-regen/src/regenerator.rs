@@ -22,6 +22,7 @@
 
 use crate::levels;
 use crate::parameters::{self, Context};
+use crate::slabs;
 use construct_model::element::Element;
 use construct_model::geometry::Recipe;
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError};
@@ -593,6 +594,11 @@ fn reads_of(element: &Element) -> BTreeSet<String> {
             read.insert(type_id.to_string());
         }
     }
+    // A floor reads its floor type's layers ([`slabs::reads_type`]), read against the table.
+    if slabs::reads_type(&element.recipe) {
+        read.insert(parameters::TABLE_ID.to_owned());
+        read.extend(parameters::type_of(element).map(|type_id| type_id.to_string()));
+    }
     read
 }
 
@@ -663,14 +669,15 @@ async fn input_of<R: Reader>(
 }
 
 /// The recipe an element is built from: its own, with every argument that names a parameter
-/// filled ([`parameters::filled`]). A recipe that names none needs no read.
+/// filled ([`parameters::filled`]), and a floor's layers and loops filled from its floor type
+/// ([`slabs::filled`]). A recipe that reads neither needs no read.
 async fn recipe_of<R: Reader>(
     reader: &mut R,
     project: &Id,
     document: &Id,
     element: &Element,
 ) -> Result<Result<Recipe, GeometryError>, StoreError> {
-    if !parameters::reads_parameters(&element.recipe) {
+    if !parameters::reads_parameters(&element.recipe) && !slabs::reads_type(&element.recipe) {
         return Ok(Ok(element.recipe.clone()));
     }
     let bad = |why: String| GeometryError {
@@ -695,7 +702,8 @@ async fn recipe_of<R: Reader>(
     };
     Ok(parameters::filled(&element.recipe, |id| {
         context.value_of(element, ty.as_ref(), id)
-    }))
+    })
+    .and_then(|recipe| slabs::filled(&recipe, ty.as_ref())))
 }
 
 /// The edition a document records.

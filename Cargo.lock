@@ -682,6 +682,7 @@ dependencies = [
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-slabs",
  "construct-types",
  "engine-geometry",
  "hex",

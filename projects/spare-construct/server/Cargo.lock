@@ -793,6 +793,7 @@ dependencies = [
  "construct-levels",
  "construct-model",
  "construct-params",
+ "construct-slabs",
  "construct-types",
  "engine-geometry",
  "hex",
@@ -800,6 +801,22 @@ dependencies = [
  "kit-ops",
  "kit-store",
  "kit-sync",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
  "serde",
  "serde_json",
 ]

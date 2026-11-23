@@ -104,6 +104,16 @@ fn an_opening_at_the_edge_is_refused_with_its_door_and_reason() {
 }
 
 #[test]
+fn a_rectangle_floor_is_its_layers() {
+    kernel_suite::a_rectangle_floor_is_its_layers(engine);
+}
+
+#[test]
+fn an_l_shaped_floor_with_a_hole_is_its_layers() {
+    kernel_suite::an_l_shaped_floor_with_a_hole_is_its_layers(engine);
+}
+
+#[test]
 fn the_engine_keeps_a_sliver_within_its_tolerance() {
     kernel_suite::the_engine_keeps_a_sliver_within_its_tolerance(engine());
 }

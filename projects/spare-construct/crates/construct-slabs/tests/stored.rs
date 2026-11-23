@@ -145,6 +145,42 @@ fn a_floors_recipe() {
     assert!(matches!(boundary_of(&wall), Err(SlabError::NotAFloor(_))));
 }
 
+/// FORMAT.md's example floor record, byte for byte: a 4 m by 3 m right triangle tied 20 mm below
+/// level `L-1`, its edges `a`, `b` and `c`.
+const TRIANGLE_RECORD: &str = r#"{"id":"F-1","document":"DOC-1","kind":"floor","name":"Ground floor","level":0,"placement":{"x":0,"y":0,"z":0},"recipe":{"owner":"construct","schema":1,"op":"floor","op_version":1,"args":{"boundary":{"holes":[],"outer":[{"id":"a","line":0},{"id":"b","line":1},{"id":"c","line":2}],"sketch":{"constraints":[],"lines":[{"end":1,"start":0},{"end":2,"start":1},{"end":0,"start":2}],"points":[{"x":0,"y":0},{"x":25600000,"y":0},{"x":0,"y":19200000}]},"version":1},"layers":{"type":"layers"}}},"props":{"@category":"500","@level":"L-1","@level.offset":"length:q0:-128000","@type":"floor-slab"},"references":[]}"#;
+
+/// The example in FORMAT.md is what this crate writes, and it reads back as the same floor.
+#[test]
+fn the_format_example_is_what_the_crate_writes() {
+    let tie = Tie {
+        level: id("L-1"),
+        offset: mm(-20),
+    };
+    let triangle = Boundary::from_corners(
+        &[
+            common::at("a", 0, 0),
+            common::at("b", 4000, 0),
+            common::at("c", 0, 3000),
+        ],
+        &[],
+    )
+    .unwrap();
+    let record = floor_record(
+        &id("F-1"),
+        &id("DOC-1"),
+        "Ground floor",
+        &id("floor-slab"),
+        &tie,
+        &triangle,
+    );
+    let bytes = serde_json::to_string(&record).unwrap();
+    assert_eq!(bytes, TRIANGLE_RECORD);
+    assert!(include_str!("../FORMAT.md").contains(TRIANGLE_RECORD));
+    assert!(include_str!("../FORMAT.md").contains(SLAB_TEXT));
+    let read: construct_model::element::Element = serde_json::from_str(&bytes).unwrap();
+    assert_eq!(boundary_of(&read.recipe).unwrap(), triangle);
+}
+
 /// A floor's element record: kind `floor`, the floors category, its type, its tie to a level,
 /// placement at the origin and its recipe; replacing its boundary changes only the recipe.
 #[test]

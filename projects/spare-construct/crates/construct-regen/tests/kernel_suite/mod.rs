@@ -848,3 +848,211 @@ pub fn the_engine_keeps_a_sliver_within_its_tolerance<E: Engine>(mut e: E) {
         "the sliver is kept exactly"
     );
 }
+
+/// A filled floor recipe (construct-slabs' `filled` form): `loops` of corners `(edge ID, x, y)` in
+/// whole millimetres, the outer loop anticlockwise and each hole clockwise, written in grid steps;
+/// and `layers` from the top down, `(function, thickness in mm)`, each of one material.
+pub fn floor_of(loops: &[&[(&str, i64, i64)]], layers: &[(&str, i64)]) -> Recipe {
+    let steps = |mm: i64| mm * 6400;
+    let loops: Vec<Value> = loops
+        .iter()
+        .map(|ring| {
+            Value::Array(
+                ring.iter()
+                    .map(|&(id, x, y)| json!({ "id": id, "at": [steps(x), steps(y)] }))
+                    .collect(),
+            )
+        })
+        .collect();
+    let layers: Vec<Value> = layers
+        .iter()
+        .map(|&(function, mm)| {
+            json!({ "function": function, "material": "concrete-regular", "thickness": steps(mm) })
+        })
+        .collect();
+    recipe("floor", json!({ "loops": loops, "layers": layers }))
+}
+
+/// A 4 m by 3 m rectangle, its edges `e0` to `e3` anticlockwise from the origin.
+pub const RECTANGLE: [(&str, i64, i64); 4] = [
+    ("e0", 0, 0),
+    ("e1", 4000, 0),
+    ("e2", 4000, 3000),
+    ("e3", 0, 3000),
+];
+
+/// The L-shaped floor of construct-slabs' tests: 8 m along x by 4 m, and 4 m by 4 m more above
+/// its left half, 48 m2, its edges `e0` to `e5`.
+pub const L_OUTER: [(&str, i64, i64); 6] = [
+    ("e0", 0, 0),
+    ("e1", 8000, 0),
+    ("e2", 8000, 4000),
+    ("e3", 4000, 4000),
+    ("e4", 4000, 8000),
+    ("e5", 0, 8000),
+];
+
+/// Its 2 m square hole at (1 m, 1 m), clockwise as the builder takes it (construct-slabs'
+/// `Boundary::profile`), its edges `h0` to `h3` as drawn, so 44 m2 of floor in all.
+pub const L_HOLE: [(&str, i64, i64); 4] = [
+    ("h3", 1000, 1000),
+    ("h2", 1000, 3000),
+    ("h1", 3000, 3000),
+    ("h0", 3000, 1000),
+];
+
+/// Six times the signed volume a mesh holds, in cubic millimetres, closed or not: the sum over
+/// its triangles, which adds up shell by shell.
+pub fn signed_six_volume(mesh: &Mesh) -> i128 {
+    let point = |i: u32| -> [i128; 3] {
+        let i = usize::try_from(i).unwrap() * 3;
+        [
+            i128::from(mesh.positions[i]),
+            i128::from(mesh.positions[i + 1]),
+            i128::from(mesh.positions[i + 2]),
+        ]
+    };
+    let mut six = 0_i128;
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let [p, q, r] = [point(t[0]), point(t[1]), point(t[2])];
+        let cross = [
+            q[1] * r[2] - q[2] * r[1],
+            q[2] * r[0] - q[0] * r[2],
+            q[0] * r[1] - q[1] * r[0],
+        ];
+        six += p[0] * cross[0] + p[1] * cross[1] + p[2] * cross[2];
+    }
+    six
+}
+
+/// The heights a mesh's points stand at, lowest first.
+fn heights(mesh: &Mesh) -> BTreeSet<i64> {
+    mesh.positions
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|p| p[2])
+        .collect()
+}
+
+/// A rectangle floor is its plan extruded from its bottom face up to its top at 0: one layer is
+/// one closed solid of its volume, its bounds the stand-in's box; its faces are named `top`,
+/// `bottom` and a side per edge, the same names however long its edges; two layers are two
+/// solids one under the other, `face.1` between them, the body listing each.
+pub fn a_rectangle_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let one = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let b = built(&k, &one);
+    assert_eq!(b.bounds.min, [0, 0, -200]);
+    assert_eq!(b.bounds.max, [4000, 3000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&one).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+    );
+    let (six, surface) = box_of([4000, 3000, 200]);
+    holds(&k, &b.displays[0].mesh, six, surface);
+    assert_eq!(b.displays[0].mesh, b.displays[1].mesh);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from(["top", "bottom", "side.e0", "side.e1", "side.e2", "side.e3"])
+    );
+    let wider = [
+        ("e0", 0, 0),
+        ("e1", 5000, 0),
+        ("e2", 5000, 3000),
+        ("e3", 0, 3000),
+    ];
+    assert_eq!(
+        by_role(&built(&k, &floor_of(&[&wider], &[("structure", 150)]))),
+        names,
+        "a floor keeps its faces' names when its edges and its thickness change"
+    );
+    let wall = by_role(&built(&k, &wall(4000, "x")));
+    assert!(names.values().all(|n| !wall.values().any(|w| w == n)));
+
+    let two = built(
+        &k,
+        &floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(two.bounds.min, [0, 0, -200]);
+    assert_eq!(
+        heights(&two.displays[0].mesh),
+        BTreeSet::from([-200, -50, 0])
+    );
+    assert_eq!(
+        signed_six_volume(&two.displays[0].mesh),
+        6 * 4000 * 3000 * 200
+    );
+    let names = by_role(&two);
+    assert!(
+        names.contains_key("face.1") && names.len() == 7,
+        "{names:?}"
+    );
+    let body: Value = serde_json::from_slice(&two.body).unwrap();
+    let layers = body["layers"].as_array().unwrap();
+    assert_eq!(layers.len(), 2);
+    assert_eq!(layers[0]["function"], "finish");
+    assert_eq!(layers[0]["by"], json!([0, 0, 50 * 6400]));
+    assert_eq!(layers[1]["extrude"][0], json!([0, 0, -200 * 6400]));
+    assert!(layers[0].get("holes").is_none());
+    let again = built(
+        &kernel(make()),
+        &floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(again.body_id(), two.body_id());
+    assert_eq!(again.displays[0].bytes(), two.displays[0].bytes());
+}
+
+/// The L-shaped floor with a hole, on an engine that extrudes a profile with holes: one layer is
+/// one closed solid of 44 m2 by its thickness, within the engine's tolerance, its outline the
+/// outer loop and its bounds the box around it; its sides are named by the edges of both loops;
+/// two layers hold the volume of both, `face.1` between them.
+pub fn an_l_shaped_floor_with_a_hole_is_its_layers<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let one = floor_of(&[&L_OUTER, &L_HOLE], &[("structure", 200)]);
+    let b = built(&k, &one);
+    assert_eq!(b.bounds.min, [0, 0, -200]);
+    assert_eq!(b.bounds.max, [8000, 8000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&one).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        L_OUTER.iter().map(|&(_, x, y)| [x, y]).collect::<Vec<_>>()
+    );
+    let area = 44_000_000_i128;
+    let perimeter = 40_000_i128;
+    holds(
+        &k,
+        &b.displays[0].mesh,
+        6 * area * 200,
+        2 * area + perimeter * 200,
+    );
+    let names = by_role(&b);
+    assert_eq!(names.len(), 2 + 6 + 4, "{names:?}");
+    for edge in ["e0", "e5", "h0", "h3"] {
+        assert!(names.contains_key(&format!("side.{edge}")), "{edge}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["holes"][0].as_array().unwrap().len(), 4);
+
+    let two = built(
+        &k,
+        &floor_of(&[&L_OUTER, &L_HOLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(
+        heights(&two.displays[0].mesh),
+        BTreeSet::from([-200, -50, 0])
+    );
+    assert_eq!(signed_six_volume(&two.displays[0].mesh), 6 * area * 200);
+    assert!(by_role(&two).contains_key("face.1"));
+}

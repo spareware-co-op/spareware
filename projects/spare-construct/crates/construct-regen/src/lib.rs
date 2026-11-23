@@ -16,6 +16,10 @@
 //!   tied to the level above), and a document's levels as a page shows them.
 //! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
 //!   project's parameters with where they are bound, and the types with their values in units.
+//! - [`floor_plan`]: a floor (`floor`) as both builders read it: its filled recipe's loops and
+//!   layers in grid steps (job 4.3). The kernel builds one solid per layer, the stand-in one box.
+//! - [`slabs`]: how a floor's recipe reads its layers from its floor type and has its boundary
+//!   checked (construct-slabs), before it is built.
 //!
 //! [`geometry`] is the default builder, the stand-in, which the browser and the server both run
 //! today. A program that links an engine builds a [`kernel::Kernel`] over it in its own one place
@@ -23,6 +27,7 @@
 
 #[cfg(feature = "server")]
 pub mod catalog;
+pub mod floor_plan;
 pub mod kernel;
 #[cfg(feature = "server")]
 pub mod levels;
@@ -30,6 +35,8 @@ pub mod levels;
 pub mod parameters;
 #[cfg(feature = "server")]
 pub mod regenerator;
+#[cfg(feature = "server")]
+pub mod slabs;
 pub mod stand_in;
 
 use construct_model::geometry::Geometry;

@@ -11,8 +11,10 @@
 //!
 //! Filled ([`filled`]), the recipe the builder takes holds only [`LOOPS_ARG`] (the profile of
 //! [`Boundary::profile`]: the outer loop anticlockwise, then each hole clockwise, each corner as
-//! `{"id":<edge ID>,"at":[x,y]}` in grid steps) and [`LAYERS_ARG`] (each layer's thickness in grid
-//! steps, top first). Nothing else of a floor reaches the builder.
+//! `{"id":<edge ID>,"at":[x,y]}` in grid steps) and [`LAYERS_ARG`] (each layer from the top down
+//! as `{"function":<stored name>,"material":<material ID>,"thickness":<grid steps>}`, as a layered
+//! wall's filled layers name their function and material). Nothing else of a floor reaches the
+//! builder.
 
 use crate::boundary::Boundary;
 use crate::error::SlabError;
@@ -85,7 +87,8 @@ pub fn boundary_of(recipe: &Recipe) -> Result<Boundary, SlabError> {
 /// module header says.
 ///
 /// # Errors
-/// Any refusal of [`boundary_of`].
+/// Any refusal of [`boundary_of`]; [`SlabError::Malformed`] only if the JSON writer fails, which
+/// it does not for this data.
 pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, SlabError> {
     let boundary = boundary_of(recipe)?;
     let loops: Vec<Value> = boundary
@@ -99,16 +102,20 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, SlabError> {
             )
         })
         .collect();
-    let thicknesses: Vec<Value> = layers
-        .layers()
-        .iter()
-        .map(|layer| Value::from(layer.thickness.steps()))
-        .collect();
+    let mut listed = Vec::with_capacity(layers.layers().len());
+    for layer in layers.layers() {
+        let function = serde_json::to_value(layer.function)
+            .map_err(|e| SlabError::Malformed(format!("a layer's function: {e}")))?;
+        listed.push(json!({
+            "function": function,
+            "material": layer.material.as_str(),
+            "thickness": layer.thickness.steps(),
+        }));
+    }
     let mut out = recipe.clone();
     out.args = BTreeMap::new();
     out.args.insert(LOOPS_ARG.to_owned(), Value::Array(loops));
-    out.args
-        .insert(LAYERS_ARG.to_owned(), Value::Array(thicknesses));
+    out.args.insert(LAYERS_ARG.to_owned(), Value::Array(listed));
     Ok(out)
 }
 

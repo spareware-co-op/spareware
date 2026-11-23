@@ -74,14 +74,21 @@ fn missing_materials_pinned() {
 
 /// Filled for the builder, a floor's recipe holds its loops (the outer one anticlockwise, then
 /// each hole clockwise, each corner with the ID of the edge that starts there, in grid steps)
-/// and its layers' thicknesses in grid steps, top first; nothing else.
+/// and its layers top first, each its function, its material and its thickness in grid steps;
+/// nothing else.
 #[test]
 fn the_recipe_the_builder_takes() {
     let recipe = filled(&floor_recipe(&l_with_hole()), &slab()).unwrap();
     assert_eq!(recipe.op, "floor");
     let keys: Vec<&String> = recipe.args.keys().collect();
     assert_eq!(keys, [LAYERS_ARG, LOOPS_ARG]);
-    assert_eq!(recipe.args[LAYERS_ARG], json!([320_000, 960_000]));
+    assert_eq!(
+        recipe.args[LAYERS_ARG],
+        json!([
+            { "function": "finish", "material": "screed-cement", "thickness": 320_000 },
+            { "function": "structure", "material": "concrete-regular", "thickness": 960_000 },
+        ])
+    );
     let loops = &recipe.args[LOOPS_ARG];
     assert_eq!(loops.as_array().unwrap().len(), 2);
     assert_eq!(loops[0][1], json!({ "id": "e1", "at": [51_200_000, 0] }));
