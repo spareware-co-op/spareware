@@ -11,13 +11,15 @@
 //! CON-A8-F3-P2); a line's pattern and colour are in the same lookup and are read by [`style`].
 
 use construct_categories::CategoryTable;
+use construct_materials::Materials;
 use construct_styles::{Edge, EdgeStyle, LineStyles, Micrometres, ObjectStyles, Scale};
 
 use crate::DrawingError;
 use crate::drawing::{Drawing, Line, LineKind};
+use crate::hatch::FillPatterns;
 
-/// The styles a drawing is printed with: the category tree, the pens and patterns, and the object
-/// styles.
+/// The styles a drawing is printed with: the category tree, the pens and patterns, the object
+/// styles, the materials (for a cut region's fill and its colour) and the fill patterns.
 #[derive(Clone, Copy, Debug)]
 pub struct Styles<'a> {
     /// The categories, built-in and the project's own.
@@ -26,6 +28,10 @@ pub struct Styles<'a> {
     pub lines: &'a LineStyles,
     /// The object styles.
     pub objects: &'a ObjectStyles,
+    /// The materials: a cut region's material gives its fill pattern, by name, and its colour.
+    pub materials: &'a Materials,
+    /// The fill patterns, by name.
+    pub fills: &'a FillPatterns,
 }
 
 /// The pen, colour and pattern `line` prints with at `scale`.

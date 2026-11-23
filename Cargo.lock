@@ -574,6 +574,10 @@ dependencies = [
  "engine-geometry",
  "kit-core",
  "kit-ops",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
  "serde",
  "serde_json",
 ]
