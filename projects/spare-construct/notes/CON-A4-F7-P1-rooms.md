@@ -1,0 +1,38 @@
+# CON-A4-F7-P1: Rooms found from a closed loop of walls
+
+**Status, 2026-11-23:** Decided for the build (piece A67, job 5.4, the shape half). The crate `construct-rooms` follows it and its [FORMAT.md](../crates/construct-rooms/FORMAT.md) is the stored form; construct-regen's `rooms` finds a room's loop from the walls of its level and says which rooms a change builds again, its `room_plan` reads the filled recipe for both builders, and its `kernel` module's child `room` builds the room's volume through the engine seam. The commands, the page and room tags are the next jobs'.
+
+## The question
+
+A room is the space a person names and numbers (Kitchen, 101): it is not drawn, it is found from the walls round it, and it must follow them. Before rooms could be placed from the page, job 5.4 had to settle what a room record holds, which face of a wall bounds it, how its loop is found and kept exact, what becomes of a room whose walls do not close, and how it is kept up to date.
+
+## How rooms are found and measured
+
+A room is placed by a point inside it on a level. Its boundary is where the walls round that point stand; a wall that stops short leaves the space open, and the room is reported as not enclosed until it is closed. A floor area is measured in plan inside the bounding walls; a volume up to the room's ceiling or the level above.
+
+## The decisions
+
+- **The record:** kind `room`, the rooms category (3300), its name in the record's `name` and its number as text under `@room.number`, its point in its recipe (`at`, two stored lengths), its base tied to its level, and its upper limit either the level above (its top tie, `height` written `{"tie":"top"}` and filled exactly by the regenerator) or a given height (a stored length). The recipe's `walls` argument, `{"room":"walls"}`, is filled with the room's loop before it is built, as a wall's layers are filled from its type.
+- **Which face bounds a room:** the plan does not say, so the wall's **finish face toward the room** (whichever of its two faces that is). A room measured to the finished face is what a person paces out and what a room schedule lists first; measuring to the centre line or the core is an area scheme's rule (job A4-F7-P2, area plans), which reads the same loop and the walls' layers.
+- **The search is our own exact plane geometry** (the crate's `plane` module, the header says why): the walls' outlines in plan, exactly as the builders lay them out on the grid, are taken together as solid; every edge is cut where another meets it, the pieces that are an edge of the walls together are kept, joined into loops turning to the first piece anticlockwise at each corner, and the smallest clockwise loop round the point is the room. Anticlockwise loops directly inside it are holes. Crossing points are exact rationals (dashu, as the formulas and the kernel's exact oracles use).
+- **Walls that only touch at a corner close the loop** there: their faces meet and leave no gap a person could pass; a gap of one grid step opens it. A T-meeting makes two rooms whether the partition runs into the wall or stops at its face. A wall ending inside a room is walked round; an island wall or a column is a hole.
+- **A door or a window does not break the loop:** a wall's outline is read whole, openings and all. When openings land (piece A66), they cut the wall's solid, not the outline the search reads.
+- **Exact, or refused by name:** every corner of a room must be a grid point and its area a whole number of square steps. A corner where two slanted faces cross off the grid is refused (`OffGrid`, naming the walls), and an odd twice-area too (`AreaNotExact`); nothing is rounded. The perimeter is the one rounding, each edge to the nearest step, as a floor's; exact along an axis. A person reads every measure in their units, rounded only there.
+- **Not enclosed and redundant are outcomes, not refusals:** the record stays and its built row says `NotEnclosed`, or `Redundant` naming the room whose ID comes first in the same loop. When that room goes, the other takes the loop over. The first by ID, not by time: the same on every machine, with no clock.
+- **Kept up to date by the regenerator:** a room's `reads` row lists its levels and the walls its loop runs along. A wall that changes, is made or is deleted builds again every room on the levels it was and is on, and every room whose row lists it; a room that changes builds again the other rooms of its levels. One step deep, in key order, as hosting is. The walls are read as regeneration has reached them, so a room is the same however the log was reached.
+- **Which walls are read:** every wall whose base is on the room's level; a layered wall by the four corners of its outer faces, the old box wall by its box. A wall that does not build (its type missing) is not there to bound a room, as it is in no view. Walls from another level that rise through this one are not read yet.
+- **Its volume as a shape:** on the kernel's edition one solid, its loop with its holes extruded from its base to its upper limit through the engine seam, passed by the kernel's checker; faces `bottom`, `top` and `side.<k>`. The stand-in builds the box round its outer loop (its interim row). No engine method was added.
+- **Interim, refused by name:** a curved wall on the room's level (`CurvedWall`; none can be drawn yet) until the kernel's exact arcs reach the walls, and a sloped upper limit (`SlopedLimit`) until rooms are bounded by floors, ceilings and roofs (job 6.3). Both are rows of the interim register.
+
+## Why
+
+- A room found from its walls, kept by the same `reads` rows as every derived shape, cannot fall out of step with them, and an AI or a script reads why a room has no area from its built row.
+- Exact corners and areas keep every machine and every replay giving the same numbers, as the stored-units note requires ([CON-A2-F3-P1](CON-A2-F3-P1-stored-units.md)).
+- The finish face is what a room is measured to before any scheme says otherwise.
+
+## Not decided here
+
+- The commands (place, rename, number, move, delete through the log), room tags and the page's room tool.
+- Room separation lines, and rooms bounded by floors, ceilings and roofs (job 6.3).
+- How wall joins (piece A60) change a room's faces: they change the outlines the regenerator hands the search, not the search.
+- Area schemes and national measurement rules (A4-F7-P2, P3).

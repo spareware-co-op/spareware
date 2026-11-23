@@ -209,6 +209,11 @@ fn a_rectangle_floor_is_its_layers() {
     kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
 }
 
+#[test]
+fn a_room_is_its_loop_extruded() {
+    kernel_suite::a_room_is_its_loop_extruded(|| Cuboids, false);
+}
+
 /// A test engine that answers as [`Cuboids`] does, and records every subtraction it is asked for
 /// by the tool's lowest corner, answering it with the target unchanged: it judges what the builder
 /// asks and names, not the shape a cut gives.

@@ -122,6 +122,12 @@ fn an_l_shaped_floor_with_a_hole_is_its_layers() {
 }
 
 #[test]
+fn a_room_with_an_island_wall_is_its_loop_extruded() {
+    kernel_suite::a_room_is_its_loop_extruded(engine, false);
+    kernel_suite::a_room_is_its_loop_extruded(engine, true);
+}
+
+#[test]
 fn a_layered_wall_is_one_solid_per_layer() {
     kernel_suite::a_layered_wall_is_one_solid_per_layer(engine);
 }

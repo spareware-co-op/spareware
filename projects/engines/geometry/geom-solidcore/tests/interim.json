@@ -273,6 +273,62 @@
         "a floor with a curved edge cannot be made"
       ],
       "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a room",
+      "operation": "room (a filled room recipe: its loops and height)",
+      "answered_by": "one box around the room's outer loop, its sides rounded outward to whole millimetres, from its base at 0 up to its height, by Spare Construct's own code with no engine; its outline is the outer loop and its deviation the box's plan diagonal, 0 when the room is an upright rectangle",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/rooms.rs",
+        "test": "a_room_follows_the_walls_round_it"
+      },
+      "known_faults": [
+        "a room's holes and notches are not in its shape on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's room builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::room, a room's volume",
+      "operation": "room (Kernel: one Engine::extrude of its loop with its holes, from its base up to its height)",
+      "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), one solid; its mesh in whole millimetres, each point the nearest millimetre, the room's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_room_with_an_island_wall_is_its_loop_extruded"
+      },
+      "known_faults": [
+        "a corner or a height not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-rooms' find, a curved wall",
+      "operation": "room on a level with a curved wall",
+      "answered_by": "refused before any loop is sought (RoomError::CurvedWall, naming the wall): a room is never found from a chord standing in for an arc",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-rooms/tests/find.rs",
+        "test": "a_curved_wall_a_point_in_a_wall_and_no_height_are_refused"
+      },
+      "known_faults": [
+        "a room bounded by a curved wall cannot be found (no curved wall can be drawn yet)"
+      ],
+      "replaced_by": "found once the kernel's exact arcs reach the walls (geom-curve, chapter 13): the search's edges take arcs, its corners the exact meeting points"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-rooms' Limit, a sloped upper limit",
+      "operation": "room under a sloped limit (a roof, a sloped ceiling)",
+      "answered_by": "refused when the record is written and when it is read (RoomError::SlopedLimit): a room reaches a level or a given height only",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-rooms/tests/record.rs",
+        "test": "a_sloped_limit_is_refused_by_name"
+      },
+      "known_faults": [
+        "the volume of a room under a roof is not its true volume until it is bounded by the roof (job 6.3)"
+      ],
+      "replaced_by": "the room's volume as its prism less what lies above a sloped plane, through the engine seam's boolean, once rooms are bounded by floors, ceilings and roofs (job 6.3)"
     }
   ]
 }
