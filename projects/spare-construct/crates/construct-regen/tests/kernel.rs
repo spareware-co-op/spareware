@@ -758,3 +758,80 @@ fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
 fn a_family_that_does_not_fit_is_refused_with_a_reason() {
     kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
 }
+
+/// A drawing cuts a layered wall one layer at a time: a solid for each layer with a thickness,
+/// its material, and a plane for each of its six named faces, named as the wall names them (the
+/// two layers that meet call their shared face alike). Every side's plane holds the two corners
+/// of the edge that sweeps it and has the other two inside it, so a cut edge is found by its
+/// plane; the old box and the wall at an angle are both answered.
+#[test]
+fn a_layered_walls_layers_are_solids_with_their_faces_named() {
+    use construct_regen::kernel::Kernel;
+    use std::collections::BTreeSet;
+    let k = Kernel::new(Prisms).unwrap();
+    let flat = kernel_suite::partition("x");
+    let angled = kernel_suite::layered_wall([0, 0], [2400, 3200], 2700, &kernel_suite::PARTITION);
+    for wall in [flat, angled] {
+        let layers = k.layers(&wall).unwrap();
+        assert_eq!(layers.len(), 3);
+        let materials: Vec<&str> = layers
+            .iter()
+            .map(|l| l.material.as_deref().unwrap())
+            .collect();
+        assert_eq!(
+            materials,
+            [
+                "plasterboard-gypsum",
+                "timber-douglas-fir",
+                "plasterboard-gypsum"
+            ]
+        );
+        for (at, layer) in layers.iter().enumerate() {
+            let outside = if at == 0 {
+                "exterior".to_owned()
+            } else {
+                format!("face.{at}")
+            };
+            let inside = if at == 2 {
+                "interior".to_owned()
+            } else {
+                format!("face.{}", at + 1)
+            };
+            let faces = &layer.solid.faces;
+            let roles: BTreeSet<&str> = faces.iter().map(|f| f.name.role.as_str()).collect();
+            let expected: BTreeSet<&str> = [
+                "base",
+                "top",
+                "end0",
+                "end1",
+                outside.as_str(),
+                inside.as_str(),
+            ]
+            .into();
+            assert_eq!(roles, expected, "layer {at}");
+            let top = faces.iter().find(|f| f.name.role == "top").unwrap();
+            assert_eq!(
+                (top.plane.normal, top.plane.offset),
+                ([0, 0, 1], 2700 * 6400)
+            );
+            for face in faces.iter().filter(|f| f.plane.normal[2] == 0) {
+                let [nx, ny, _] = face.plane.normal;
+                let held = |c: &[i64; 2]| i128::from(c[0]) * nx + i128::from(c[1]) * ny;
+                let corners = &layer.solid.solid.corners;
+                let on = corners
+                    .iter()
+                    .filter(|c| held(c) == face.plane.offset)
+                    .count();
+                let outside_it = corners
+                    .iter()
+                    .filter(|c| held(c) > face.plane.offset)
+                    .count();
+                assert_eq!((on, outside_it), (2, 0), "layer {at}, {}", face.name.role);
+            }
+        }
+    }
+    // Any other recipe is its one solid, with no material.
+    let boxed = k.layers(&kernel_suite::wall(3000, "x")).unwrap();
+    assert_eq!(boxed.len(), 1);
+    assert!(boxed[0].material.is_none());
+}

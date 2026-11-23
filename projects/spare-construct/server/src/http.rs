@@ -141,11 +141,7 @@ pub fn routes(app: Shared) -> Router {
         )
         .route("/api/projects/{project}/models/{model}/types", get(types))
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
-        .route("/api/projects/{project}/models/{model}/views", get(views))
-        .route(
-            "/api/projects/{project}/models/{model}/views/{view}",
-            get(view),
-        )
+        .merge(view_routes())
         .route(
             "/api/projects/{project}/models/{model}/wall-types",
             get(wall_types),
@@ -192,6 +188,20 @@ pub fn routes(app: Shared) -> Router {
         )
         .route("/ws/{project}", get(ws::upgrade))
         .with_state(app)
+}
+
+/// A model's views: the list, what one shows, and its plan as the server draws it.
+fn view_routes() -> Router<Shared> {
+    Router::new()
+        .route("/api/projects/{project}/models/{model}/views", get(views))
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}",
+            get(view),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/plan",
+            get(plan),
+        )
 }
 
 /// The Spare Construct demo's own page, unchanged, with the connector added. The page is the
@@ -582,6 +592,18 @@ async fn views(
     Ok(Json(
         app.service
             .views(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn plan(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .plan(&person, &id(&project)?, &id(&model)?, &id(&view)?)
             .await?,
     ))
 }

@@ -62,3 +62,12 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .void.shaft { stroke: var(--ink); }
 .dw .void.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
 .dw .void.sketch { fill-opacity: .15; pointer-events: none; }
+/* The server's drawing of the open view sits under the live elements. While it is there a wall
+   draws no fill or outline of its own (it stays in the plan, transparent, so a click still picks
+   it; a selected wall keeps its highlight). */
+.dw.drawn .part,
+.dw.drawn .layered:not(.sel) { fill: transparent !important; stroke: transparent !important; }
+.dw .drawn { pointer-events: none; }
+#pv-canvas { position: relative; }
+.stack-plan-note { position: absolute; left: 8px; top: 8px; z-index: 1; padding: 2px 8px; font-size: 12px; color: var(--ink-2); background: var(--page); border: 1px solid var(--hairline); pointer-events: none; }
+.stack-plan-note.bad { color: var(--danger); border-color: var(--danger); }

@@ -411,6 +411,42 @@ pub fn listing_of(
     }))
 }
 
+/// How a floor plan is cut and printed: the height of its cut plane above the project's zero,
+/// resolved through its range's level, and its scale.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlanCut {
+    /// The cut plane's height.
+    pub cut: Length,
+    /// The scale it is printed at.
+    pub scale: Scale,
+}
+
+/// The cut of the floor plan `id`: `None` when the document has no such view.
+///
+/// # Errors
+/// In words, when the view is not a floor plan (only floor plans are drawn yet) or its range does
+/// not resolve against the document's levels.
+pub fn plan_cut(world: &World, id: &Id) -> Result<Option<PlanCut>, String> {
+    let Some(view) = world.views.get(id) else {
+        return Ok(None);
+    };
+    let ViewKind::FloorPlan(setup) = view.kind() else {
+        return Err(format!(
+            "{} is a {} view; only floor plans are drawn yet.",
+            view.name(),
+            view.kind().key()
+        ));
+    };
+    let heights = setup
+        .range
+        .resolve(&world.levels)
+        .map_err(|e| e.to_string())?;
+    Ok(Some(PlanCut {
+        cut: heights.cut,
+        scale: view.scale(),
+    }))
+}
+
 /// The staging of what is made today: created in the new phase, in no design option.
 fn new_staging(world: &World) -> Result<ElementStaging, String> {
     let created = Id::parse(NEW_PHASE).map_err(|e| e.to_string())?;

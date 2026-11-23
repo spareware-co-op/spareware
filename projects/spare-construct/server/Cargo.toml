@@ -20,6 +20,14 @@ kernel = ["dep:geom-solidcore"]
 # Every version is pinned here and by Cargo.lock; deny.toml checks every licence.
 [dependencies]
 construct-api = { path = "../crates/construct-api", features = ["cloud"] }
+# A view's plan: construct-drawing prints it with these styles (src/plan.rs); the kernel's facade
+# is the engine seam it cuts through. This repository's own, Apache-2.0.
+construct-categories = { path = "../crates/construct-categories" }
+construct-drawing = { path = "../crates/construct-drawing" }
+construct-materials = { path = "../crates/construct-materials" }
+construct-params = { path = "../crates/construct-params" }
+construct-styles = { path = "../crates/construct-styles" }
+engine-geometry = { path = "../../engines/crates/engine-geometry" }
 construct-model = { path = "../crates/construct-model" }
 construct-regen = { path = "../crates/construct-regen", features = ["server"] }
 kit-accounts = { path = "../../kit/services/accounts" }

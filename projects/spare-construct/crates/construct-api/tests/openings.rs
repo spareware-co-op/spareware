@@ -660,7 +660,7 @@ async fn a_floor_made_after_a_shaft_is_cut_by_it() {
                        "top": "L-2" });
     stack.edit("shaft.create", make).await.unwrap();
     assert_eq!(stack.quantities("F-1").await.0, "48.00 m²");
-    assert!(stack.cut_by("F-1").await.cuts.is_empty());
+    assert_eq!(stack.cut_by("F-1").await.cuts.len(), 0);
     let boundary = json!({ "outer": [at("r0", 9000, 0), at("r1", 12000, 0), at("r2", 12000, 6000),
                                      at("r3", 9000, 6000)] });
     let floor = json!({ "element": "F-2", "type": CONCRETE, "level": "L-1",

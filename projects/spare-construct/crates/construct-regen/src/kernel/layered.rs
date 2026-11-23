@@ -46,13 +46,16 @@
 //! body record).
 
 use super::opening::{self, Cut, Frame, Hosted, OPENING_OP, PLAIN_OP, Placed, Span};
-use super::{AskedCut, Extrusion, Units, WALL_ROLES, as_steps, fault, from_engine, name, op_id};
+use super::{
+    AskedCut, Extrusion, KernelSolid, LayerSolid, NamedFace, Units, WALL_ROLES, as_steps, carrier,
+    fault, from_engine, name, op_id,
+};
 use crate::families::{self, FamilySource};
 use crate::wall_plan::{Axis, Layered};
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
-use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, Profile};
+use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, GridPlane, Profile};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
@@ -614,4 +617,118 @@ pub(super) fn build<E: Engine>(
         names,
         displays,
     })
+}
+
+/// The plane the side of a strip stands on, from the plan edge `from` to `to` (engine steps) that
+/// sweeps it: the outside is on the right of an edge of a counter-clockwise outline, so the
+/// normal is the edge turned a quarter right (`Kernel::solid` does the same for the old box).
+fn side(from: [i64; 2], to: [i64; 2]) -> Result<GridPlane, GeometryError> {
+    let less = |a: i64, b: i64| {
+        i128::from(a)
+            .checked_sub(i128::from(b))
+            .ok_or_else(super::too_big)
+    };
+    let normal = [less(to[1], from[1])?, less(from[0], to[0])?, 0];
+    let offset = normal[0]
+        .checked_mul(i128::from(from[0]))
+        .and_then(|a| {
+            normal[1]
+                .checked_mul(i128::from(from[1]))
+                .and_then(|b| a.checked_add(b))
+        })
+        .ok_or_else(super::too_big)?;
+    carrier(normal, offset)
+}
+
+/// One solid for each layer with a thickness, with the plane of each named face, for a drawing to
+/// cut: the strip of the layer extruded from the wall's base to its top, with no opening cut in
+/// it (a door's opening is [`build`]'s; a drawing of the wall's cut shows the wall whole until
+/// doors are families, job 6.4). A face is named as [`build`] names it: the wall's `base` and
+/// `top`, its `end0` and `end1`, and the layer's two sides, `exterior` or `face.<k>` and
+/// `interior` or `face.<k + 1>`, so two layers that meet name their shared face alike.
+///
+/// # Errors
+///
+/// The plan's refusals (`Degenerate`, `TooBig`), `Naming`, and the engine's own.
+pub(super) fn solids<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    wall: &Layered,
+    units: Units,
+) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+    let op = op_id(recipe)?;
+    let height = units.from_q0(wall.height)?;
+    let last = wall.layers.len().saturating_sub(1);
+    let mut found = Vec::new();
+    for (k, layer) in wall.layers.iter().enumerate() {
+        if layer.thickness() == 0 {
+            continue;
+        }
+        let (corners, _) = wall.plan.strip(layer.exterior, layer.interior)?;
+        let mut steps = Vec::with_capacity(4);
+        for [x, y] in corners {
+            steps.push([units.from_q0(x)?, units.from_q0(y)?]);
+        }
+        let outer = steps
+            .iter()
+            .map(|&xy| point(xy, 0))
+            .collect::<Result<Vec<P3>, _>>()?;
+        let solid = engine
+            .extrude(
+                &Profile {
+                    outer,
+                    holes: Vec::new(),
+                },
+                [0, 0, height],
+            )
+            .map_err(from_engine)?;
+        let outside = if k == 0 {
+            "exterior".to_owned()
+        } else {
+            format!("face.{k}")
+        };
+        let inside = if k == last {
+            "interior".to_owned()
+        } else {
+            format!("face.{}", k.saturating_add(1))
+        };
+        // The strip's corners run counter-clockwise; whether its first edge is the layer's
+        // exterior face or its start end depends on which way the layer's faces turn.
+        let exterior_face = wall.plan.face(layer.exterior)?;
+        let first_is_exterior =
+            corners.first() == exterior_face.first() && corners.get(1) == exterior_face.get(1);
+        let roles = if first_is_exterior {
+            [outside, "end1".to_owned(), inside, "end0".to_owned()]
+        } else {
+            ["end0".to_owned(), inside, "end1".to_owned(), outside]
+        };
+        let mut faces = vec![
+            NamedFace {
+                plane: carrier([0, 0, -1], 0)?,
+                name: name(op, "base")?,
+            },
+            NamedFace {
+                plane: carrier([0, 0, 1], i128::from(height))?,
+                name: name(op, "top")?,
+            },
+        ];
+        for (i, role) in roles.iter().enumerate() {
+            let from = steps.get(i).copied().ok_or_else(super::too_big)?;
+            let next = i.checked_add(1).and_then(|n| n.checked_rem(4)).unwrap_or(0);
+            let to = steps.get(next).copied().ok_or_else(super::too_big)?;
+            faces.push(NamedFace {
+                plane: side(from, to)?,
+                name: name(op, role)?,
+            });
+        }
+        found.push(LayerSolid {
+            function: layer.function.clone(),
+            material: Some(layer.material.clone()),
+            solid: KernelSolid { solid, faces },
+        });
+    }
+    if found.is_empty() {
+        return Err(fault("EmptyShape", "a wall with no layer of any thickness"));
+    }
+    Ok(found)
 }
