@@ -1370,6 +1370,115 @@ async fn a_floor_drawn_by_command_shows_its_quantities_in_units() {
     assert_eq!(quantities(s, &project, &model, "F-900").await, read);
 }
 
+/// An outline as `opening.draw` and `shaft.create` take it: the rectangle from `(x0, y0)` to
+/// `(x1, y1)` millimetres, as typed text.
+fn rectangle_text(x0: i64, y0: i64, x1: i64, y1: i64) -> Value {
+    json!([
+        [x0.to_string(), y0.to_string()],
+        [x1.to_string(), y0.to_string()],
+        [x1.to_string(), y1.to_string()],
+        [x0.to_string(), y1.to_string()]
+    ])
+}
+
+/// An opening drawn in a floor and a shaft through it, by the server's commands: the floor's area,
+/// volume and mass as the page reads them are those after the cut (44 m2 less 1 m2 and 1 m2, by
+/// 200 mm), each cut taken back by undo, and the floor's filled recipe says what cuts it, which is
+/// what the page draws and builds the floor with. A person off the team can neither draw nor read.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_opening_and_a_shaft_cut_a_floors_quantities_and_the_page_is_told() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    s.edit(&anna, &project, &model, "floor.defaults", json!({}))
+        .await
+        .unwrap();
+    let floor = json!({ "element": "F-900", "type": "floor-concrete-200", "level": "1",
+                        "boundary": l_floor(60_000) });
+    s.edit(&anna, &project, &model, "floor.create", floor)
+        .await
+        .unwrap();
+    let whole = quantities(s, &project, &model, "F-900").await;
+    assert_eq!(whole["floor.area"].1.as_deref(), Some("44.00 m²"));
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-900"))
+        .await
+        .unwrap();
+    assert_eq!(filled.cut_by.unwrap().cuts.len(), 0);
+
+    let draw = json!({ "element": "O-900", "host": "F-900",
+                       "outline": rectangle_text(65_000, 1000, 66_000, 2000) });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "opening.draw", draw.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "opening.draw", draw)
+        .await
+        .unwrap();
+    let cut = quantities(s, &project, &model, "F-900").await;
+    assert_eq!(cut["floor.area"].1.as_deref(), Some("43.00 m²"));
+    assert_eq!(cut["floor.volume"].1.as_deref(), Some("8.60 m³"));
+    assert_ne!(cut["floor.mass"], whole["floor.mass"]);
+
+    let shaft = json!({ "element": "S-900", "outline": rectangle_text(61_000, 5000, 62_000, 6000),
+                        "level": "1", "offset": "-500 mm", "top": "2" });
+    s.edit(&anna, &project, &model, "shaft.create", shaft)
+        .await
+        .unwrap();
+    let both = quantities(s, &project, &model, "F-900").await;
+    assert_eq!(both["floor.area"].1.as_deref(), Some("42.00 m²"));
+    assert_eq!(both["floor.volume"].1.as_deref(), Some("8.40 m³"));
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-900"))
+        .await
+        .unwrap();
+    let cut_by = serde_json::to_value(filled.cut_by.unwrap()).unwrap();
+    let keys: Vec<&str> = cut_by["cuts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, ["O-900", "S-900"]);
+    assert_eq!(cut_by["shafts"].as_array().unwrap().len(), 1);
+    assert_eq!(cut_by["shafts"][0]["key"], "S-900");
+    assert_eq!(
+        cut_by["shafts"][0]["placement"],
+        json!({ "x": 0, "y": 0, "z": 0 })
+    );
+    assert!(
+        cut_by["shafts"][0]["recipe"]["args"]["height"]
+            .as_str()
+            .unwrap()
+            .starts_with("length:q0:")
+    );
+    // The generic commands name the right one, through the service as the page sends them.
+    let refusal = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "element.delete",
+            json!({ "element": "S-900" }),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refusal:?}").contains("delete it with shaft.delete"),
+        "{refusal:?}"
+    );
+
+    // Each cut is one step: the shaft, then the opening, taken back in turn.
+    for back_to in [&cut, &whole] {
+        s.edit(&anna, &project, &model, "edit.undo", json!({}))
+            .await
+            .unwrap();
+        let now = quantities(s, &project, &model, "F-900").await;
+        assert_eq!(now["floor.area"], back_to["floor.area"]);
+        assert_eq!(now["floor.volume"], back_to["floor.volume"]);
+    }
+}
+
 /// The seed draws its walls as a person does, layered walls of construct-walls' default types made
 /// through the log, and writes no old box wall. The page reads a model's wall types with their
 /// layers, the materials and the defaults, and an element's recipe filled as it is built, with how
