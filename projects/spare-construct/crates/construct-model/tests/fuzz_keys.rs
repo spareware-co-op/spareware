@@ -23,8 +23,8 @@ fn construct_keys_have_one_spelling() {
 #[test]
 fn construct_keys_read_back() {
     check!()
-        .with_type::<(String, String, i32, i64, i64)>()
-        .for_each(|(a, b, level, x, y)| {
+        .with_type::<(String, String, i64, i64)>()
+        .for_each(|(a, b, x, y)| {
             let (Ok(a), Ok(b)) = (Id::parse(a), Id::parse(b)) else {
                 return;
             };
@@ -42,7 +42,7 @@ fn construct_keys_read_back() {
                 Place::Area {
                     project: a.clone(),
                     document: b.clone(),
-                    level: *level,
+                    level: b.clone(),
                     x: *x,
                     y: *y,
                     element: b.clone(),

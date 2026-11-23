@@ -95,6 +95,7 @@ pub fn routes(app: Shared) -> Router {
         .route("/connect.css", get(connect_style))
         .route("/shapes/construct_shapes.js", get(shapes_script))
         .route("/shapes/construct_shapes_bg.wasm", get(shapes_wasm))
+        .merge(kernel_shapes())
         .route("/workshop/", get(workshop_page))
         .route("/workshop/js/{file}", get(workshop_script))
         .route(
@@ -138,6 +139,7 @@ pub fn routes(app: Shared) -> Router {
             get(project_parameters),
         )
         .route("/api/projects/{project}/models/{model}/types", get(types))
+        .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
@@ -224,6 +226,34 @@ async fn shapes_wasm() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "application/wasm")],
         &include_bytes!("../../app/pkg/construct_shapes_bg.wasm")[..],
     )
+}
+
+/// The geometry kernel's builder for the browser, which the page loads for a document on the
+/// kernel's edition: only a server built with the `kernel` feature builds such a document, so only
+/// it serves the package. It is read from where `scripts/build-shapes-kernel.sh` put it (the
+/// `shapes_kernel` setting), since it isn't committed; when it isn't there, the page can't build
+/// such a document and shows the stored shapes, as for any edition it can't run.
+#[cfg(feature = "kernel")]
+fn kernel_shapes() -> Router<Shared> {
+    Router::new().route("/shapes/kernel/{file}", get(kernel_shapes_file))
+}
+
+#[cfg(not(feature = "kernel"))]
+fn kernel_shapes() -> Router<Shared> {
+    Router::new()
+}
+
+#[cfg(feature = "kernel")]
+async fn kernel_shapes_file(State(app): State<Shared>, Path(file): Path<String>) -> Response {
+    let kind = match file.as_str() {
+        "construct_shapes_kernel.js" => "text/javascript",
+        "construct_shapes_kernel_bg.wasm" => "application/wasm",
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    match tokio::fs::read(app.settings.shapes_kernel.join(&file)).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, kind)], bytes).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// Workshop, the discipline for parts, assemblies and drawings: the demo's own page, which the
@@ -393,7 +423,7 @@ async fn bridge_targets(
 
 #[derive(Deserialize)]
 struct ViewQuery {
-    level: i32,
+    level: String,
     x0: i64,
     y0: i64,
     x1: i64,
@@ -407,7 +437,7 @@ async fn area(
     Query(q): Query<ViewQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let view = View {
-        level: q.level,
+        level: id(&q.level)?,
         x0: q.x0,
         y0: q.y0,
         x1: q.x1,
@@ -482,6 +512,18 @@ async fn types(
     Ok(Json(
         app.service
             .types(&person, &id(&project)?, &id(&model)?, q.category)
+            .await?,
+    ))
+}
+
+async fn levels(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .levels(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

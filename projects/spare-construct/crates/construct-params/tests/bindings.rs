@@ -545,3 +545,64 @@ fn every_parameter_is_listed_bound_or_not_by_name() {
     assert_eq!(names, ["cost code", "Fire rating", "Mark"]);
     assert_eq!(ProjectParams::new().definitions().len(), 0);
 }
+
+#[test]
+fn a_parameter_is_renamed_or_given_a_formula_and_keeps_everything_else() {
+    let table = with_params()
+        .bind(&table(), &id("mark"), &[WALLS], Holder::Instance, None)
+        .unwrap();
+    let renamed = Definition::new(id("mark"), "Tag", Kind::Text, Holder::Instance).unwrap();
+    let next = table.redefine(renamed.clone()).unwrap();
+    assert_eq!(next.definition(&id("mark")), Some(&renamed));
+    assert_eq!(next.binding(&id("mark")), table.binding(&id("mark")));
+    assert_eq!(next.len(), table.len());
+
+    // A formula is the only other change a definition may take.
+    let length = Definition::new(id("len"), "Len", Kind::Length, Holder::Instance).unwrap();
+    let table = table.add_project_parameter(length.clone()).unwrap();
+    let worked = length.clone().with_formula("2 * Len2").unwrap();
+    let next = table.redefine(worked.clone()).unwrap();
+    assert_eq!(
+        next.definition(&id("len")).unwrap().formula(),
+        Some("2 * Len2")
+    );
+    assert_eq!(
+        next.redefine(length).unwrap(),
+        table,
+        "and taken away again"
+    );
+
+    // What values are kept under and checked against may not change, and a name stays unique.
+    for (changed, want) in [
+        (
+            Definition::new(id("mark"), "Mark", Kind::Whole, Holder::Instance).unwrap(),
+            "kind",
+        ),
+        (
+            Definition::new(id("mark"), "Mark", Kind::Text, Holder::Type).unwrap(),
+            "holder",
+        ),
+    ] {
+        let refused = table.redefine(changed).unwrap_err();
+        match (refused, want) {
+            (ProjectError::KindConflict { .. }, "kind")
+            | (
+                ProjectError::Conflict {
+                    field: "holder", ..
+                },
+                "holder",
+            ) => {}
+            (other, _) => panic!("{want}: {other:?}"),
+        }
+    }
+    assert_eq!(
+        table.redefine(
+            Definition::new(id("mark"), "COST CODE", Kind::Text, Holder::Instance).unwrap()
+        ),
+        Err(ProjectError::DuplicateName("COST CODE".to_owned()))
+    );
+    assert_eq!(
+        table.redefine(Definition::new(id("none"), "None", Kind::Text, Holder::Instance).unwrap()),
+        Err(ProjectError::UnknownParameter(id("none")))
+    );
+}
