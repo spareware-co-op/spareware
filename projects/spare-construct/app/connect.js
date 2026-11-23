@@ -51,9 +51,9 @@
     journeys: [], // the same, split: to the server, on to this page, then onto the screen
     log: [],
     three: null,
-    geometry: null, // the shape builder, or null if this browser couldn't load it
-    edition: null, // what it is
+    builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
     viewing: false, // this browser can't build the open model, so it draws what's stored
+    cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
     steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
@@ -61,7 +61,12 @@
   window.spare = C; // the browser test reads this
 
   const named = (person) => person[0].toUpperCase() + person.slice(1);
-  const levelOf = () => (S.view === 'l2' ? 2 : 1);
+  // The level the plan shows and a new element is tied to: one chosen in Levels, or the floor plan's own.
+  const levelOf = () => C.planLevel?.id ?? (S.view === 'l2' ? '2' : '1');
+  const planName = () => (C.planLevel ? `${C.planLevel.name} plan` : VIEWS[S.view]?.name);
+  /** The ID of the level a record stands on: its tie, or the level its old integer names (construct-levels' FORMAT.md). */
+  const levelIdOf = (record) =>
+    record.props?.['@level'] ?? (record.level > 0 ? String(record.level) : record.level < 0 ? `m${-record.level}` : null);
   const say = (text) => toast(esc(text));
   const initials = (name) => name.slice(0, 2).toUpperCase();
 
@@ -123,7 +128,7 @@
     );
     openPalette = () => say(NOT_YET);
     headerView = () => {
-      const name = S.screen === 'plan' ? VIEWS[S.view]?.name : viewName(S.screen);
+      const name = S.screen === 'plan' ? planName() : viewName(S.screen);
       $('#h-view').textContent = name || '';
       document.title = `Spare Construct: ${name || ''}`;
     };
@@ -148,8 +153,10 @@
 
     const demoView = ACT.view;
     ACT.view = (button) => {
-      if (FLOORV.includes(button.dataset.a)) demoView(button);
-      else say(NOT_YET);
+      if (FLOORV.includes(button.dataset.a)) {
+        C.planLevel = null;
+        demoView(button);
+      } else say(NOT_YET);
     };
     ACT.account = account;
     // The demo's Ctrl+Z and Ctrl+Y, and its command palette, call these.
@@ -227,6 +234,7 @@
       items: [
         { label: 'Types', icon: 'family', act: 'stacktypes', tip: 'The types of a category: make, rename, copy and delete them, and edit their values.', disabled: !C.model },
         { label: 'Project parameters', icon: 'props', act: 'stackparams', tip: 'The parameters of this project: define one and choose the categories that have it.', disabled: !C.model },
+        { label: 'Levels', icon: 'elev', act: 'stacklevels', tip: 'The levels of this model: make, rename, move and delete them, and choose the one the plan shows.', disabled: !C.model },
       ],
     });
 
@@ -551,9 +559,10 @@
     C.claims.clear();
     C.links = [];
     C.steps = { undo: null, redo: null };
-    C.params = C.typeList = C.manage = null;
+    C.params = C.typeList = C.manage = C.wallTypes = null;
     C.problems.clear();
     C.asked.clear();
+    C.cuts = false;
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -561,10 +570,12 @@
   }
 
   async function openModel(team, model) {
+    const builder = await builderFor(model);
     forgetTheOpenModel();
     C.model = model;
     C.team = team;
-    C.viewing = !canBuild(model);
+    C.viewing = !builder;
+    C.cuts = Boolean(builder) && typeof builder.shapes.build_hosting === 'function';
     C.readOnly = C.viewing;
     C.watching.add(model.id);
     send({ t: 'watch', document: model.id, since: C.head });
@@ -596,40 +607,60 @@
 
   function showPackage(file) {
     for (const piece of file.elements) {
-      if (piece.element.level === levelOf()) C.elements.set(piece.element.id, packaged(piece));
+      if (levelIdOf(piece.element) === levelOf()) C.elements.set(piece.element.id, packaged(piece));
     }
   }
 
   // --- Shapes ---
 
-  async function loadGeometry() {
+  // Two packages build shapes, chosen by the engine a document's edition names: the geometry
+  // kernel's for a document built on it, the stand-in's otherwise. The stand-in's loads with the
+  // page; the kernel's, far larger, the first time a document names it. Each loads once.
+  const KERNEL = 'construct.kernel';
+  const STAND_IN_PACKAGE = '/shapes/construct_shapes.js';
+  const KERNEL_PACKAGE = '/shapes/kernel/construct_shapes_kernel.js';
+
+  function loadGeometry(edition) {
+    const path = edition?.engine === KERNEL ? KERNEL_PACKAGE : STAND_IN_PACKAGE;
+    if (!C.builders.has(path)) C.builders.set(path, loadPackage(path));
+    return C.builders.get(path);
+  }
+
+  async function loadPackage(path) {
     try {
-      const shapes = await import('/shapes/construct_shapes.js');
+      const shapes = await import(path);
       await shapes.default();
-      C.edition = JSON.parse(shapes.edition());
-      C.geometry = shapes;
+      // built: recipe text -> what it builds to, which never changes; hosting: the same for a host
+      // and what is hosted in it
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
+      return null;
     }
   }
 
-  function canBuild(model) {
-    const wanted = model.edition;
-    const have = C.edition;
-    return (
-      C.geometry !== null &&
-      wanted.engine === have.engine &&
-      wanted.version === have.version &&
-      wanted.name_scheme === have.name_scheme
+  /** A value as text with every object's keys in order, so two editions compare field by field. */
+  const canonical = (value) =>
+    JSON.stringify(value, (_, v) =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : v,
     );
+
+  /**
+   * The package that builds `model`'s edition, or null: then this browser shows what's stored. Two
+   * editions are the same only when every field is, the engine's report included (FORMAT.md, "A
+   * document").
+   */
+  async function builderFor(model) {
+    const builder = await loadGeometry(model.edition);
+    return builder && canonical(builder.edition) === canonical(model.edition) ? builder : null;
   }
 
-  const built = new Map(); // recipe text -> what it builds to, which never changes
-
-  function buildShape(recipe) {
+  function buildShape(builder, recipe) {
     const text = JSON.stringify(recipe);
-    if (!built.has(text)) built.set(text, JSON.parse(C.geometry.build(text)));
-    return built.get(text);
+    if (!builder.built.has(text)) builder.built.set(text, JSON.parse(builder.shapes.build(text)));
+    return builder.built.get(text);
   }
 
   /** What the server stored, as `buildShape` gives it. */
@@ -648,22 +679,239 @@
     }
   }
 
-  function shapeFor(model, record) {
+  /**
+   * What `record` builds to here. A wall with elements hosted in it on this page is built with them,
+   * each opening cut, as the server's regenerator builds it, when the package can (the kernel's
+   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does. A recipe
+   * that reads records is built from `fill`, the recipe the server filled for it (`fillOf`).
+   */
+  function buildOn(builder, record, into, fill) {
+    const recipe = fill?.recipe ?? record.recipe;
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill) : [];
+    if (!guests.length) return buildShape(builder, recipe);
+    // Each guest by its place in the host's frame, so a host that moves builds to the same text.
+    const host = JSON.stringify({ recipe, placement: { x: 0, y: 0, z: 0 } });
+    const hosted = JSON.stringify(guests);
+    const text = `${host}\n${hosted}`;
+    if (!builder.hosting.has(text)) builder.hosting.set(text, JSON.parse(builder.shapes.build_hosting(host, hosted)));
+    return builder.hosting.get(text);
+  }
+
+  async function shapeFor(model, record, into, fill) {
     const row = C.models.get(model);
-    return row && canBuild(row) ? buildShape(record.recipe) : storedShape(model, record.id);
+    const builder = row && (await builderFor(row));
+    if (!builder) return storedShape(model, record.id);
+    if (fill?.failed) return { failed: fill.failed };
+    return buildOn(builder, record, into, fill);
+  }
+
+  // A recipe that reads records (a layered wall's layers from its wall type, a top tied to a level, a
+  // parameter's value) is filled by the server, the way its regenerator fills it, and this page builds
+  // what comes back: it never works out a type's layers or a level's height itself. The answer says
+  // how far the log had got, so a checkpoint from before then is not compared with it; an entry that
+  // may change what such a recipe reads has it filled and built again (`fillAgain`).
+
+  /** Whether a recipe reads records: an argument that is an object, such as `{"wall":"type"}`. */
+  const readsRecords = (recipe) =>
+    Object.values(recipe?.args || {}).some((arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg));
+
+  /** The server's filling of `record`'s recipe in `model`: `{head, recipe}` or `{head, failed}`; null when it reads nothing. */
+  async function fillOf(model, record) {
+    if (!readsRecords(record.recipe)) return null;
+    try {
+      return await api(`${modelUrl(model)}/filled/${record.id}`);
+    } catch (error) {
+      return { head: 0, failed: { code: 'NotFilled', message: error.message } };
+    }
+  }
+
+  /** Every element of `into` whose recipe reads records, filled and built again. */
+  function fillAgain(model, into) {
+    for (const [id, piece] of into) {
+      if (readsRecords(piece.el.recipe)) refill(model, into, id, piece);
+    }
+  }
+
+  async function refill(model, into, id, piece) {
+    piece.stale = true;
+    piece.asked = (piece.asked || 0) + 1;
+    const asked = piece.asked;
+    const fill = await fillOf(model, piece.el);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    const answer = await shapeFor(model, piece.el, into, fill);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    queueDraw();
+    if (id === S.sel) refreshSide();
+  }
+
+  /** A stored length, `length:q0:<steps>`, in millimetres. */
+  const storedMm = (text) => Number(String(text).split(':').pop()) / 6400;
+
+  /** The face reference a hosted door names its wall by, and that wall, if it is on this page. */
+  function hostOf(el) {
+    const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+    const host = face && C.elements.get(face.element);
+    return host ? { face, host } : null;
+  }
+
+  /**
+   * The ID of the element `el` is hosted on, as construct-regen's `hosting::read` reads its record:
+   * a face reference with both offsets, or an older door with a face reference and neither.
+   */
+  function hostIdOf(el) {
+    const faces = (el.references || []).filter((ref) => ref.kind === 'face' && !ref.doc);
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    if (along === undefined && up === undefined) {
+      const opening = el.recipe?.owner === 'construct' && el.recipe?.op === 'door.single';
+      return opening && faces.length ? faces[0].element : null;
+    }
+    return along !== undefined && up !== undefined && faces.length === 1 ? faces[0].element : null;
+  }
+
+  /**
+   * What is hosted in `host` among `into`'s elements, as the kernel's package takes them: each by
+   * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
+   * regenerator hands them to its builder.
+   */
+  function guestsOf(host, into, fill) {
+    const drawn = { el: host, shape: into.get(host.id)?.shape, fill: fill ?? into.get(host.id)?.fill };
+    const guests = [];
+    for (const [id, piece] of into) {
+      if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
+      const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+      const at = placedOn(piece.el, face, drawn);
+      const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
+      guests.push({ key: id, recipe: piece.el.recipe, placement });
+    }
+    return guests;
+  }
+
+  /**
+   * Where an element sits. A door hosted on a face of its wall sits where its offsets put it on
+   * the wall, as the server reads it (construct-regen's `hosting`): along the wall from its start,
+   * up from its base, and flush with its side; so it moves with its wall, whose record alone
+   * changes. Anything else, or a door whose wall is not here, sits at its own placement.
+   */
+  function placementOf(el) {
+    const hosted = hostOf(el);
+    return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
+  }
+
+  /** Where `el` sits hosted on `face` of `host` (`{el, shape, fill}`): `placementOf`'s rule. */
+  function placedOn(el, face, host) {
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    if (along === undefined || up === undefined) return el.placement;
+    const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
+    const thickness = host.el.recipe.args.thickness;
+    const own = el.recipe.args.thickness;
+    if (!Number.isFinite(thickness) || !Number.isFinite(own)) return el.placement;
+    const alongY = host.el.recipe.args.axis === 'y';
+    // Along x the exterior is the wall's side at y = 0; along y, its side at x = its thickness.
+    const across = (role === 'exterior') !== alongY ? 0 : thickness - own;
+    const [a, u] = [storedMm(along), storedMm(up)];
+    const at = host.el.placement;
+    return alongY
+      ? { x: at.x + across, y: at.y + a, z: at.z + u }
+      : { x: at.x + a, y: at.y + across, z: at.z + u };
+  }
+
+  // A layered wall (`wall.layered`): drawn as a line between two points, its layers read from its
+  // wall type (construct-model's FORMAT.md, "Walls"). Lengths in its recipe are grid steps.
+  const LAYERED = 'wall.layered';
+  const STEPS_PER_MM = 6400;
+  const steps = (text) => Number(String(text).split(':').pop());
+
+  /** A number of steps to the nearest whole millimetre, a half away from zero, as construct-regen's `nearest_mm`. */
+  function nearestMm(value) {
+    const floor = Math.floor(value / STEPS_PER_MM);
+    const twice = (value - floor * STEPS_PER_MM) * 2;
+    return twice > STEPS_PER_MM || (twice === STEPS_PER_MM && floor >= 0) ? floor + 1 : floor;
+  }
+
+  /**
+   * A layered wall's line and outer faces, from the recipe the server filled for it: its start in
+   * steps, the axis it runs along (0 for x, 1 for y, null at an angle), which way, and its two
+   * finish faces' offsets to the right of the line, in steps. Null until it is filled.
+   */
+  function lineOf(host) {
+    const args = host.fill?.recipe?.args;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    const start = args.start.map(steps);
+    const end = args.end.map(steps);
+    const d = [end[0] - start[0], end[1] - start[1]];
+    const axis = d[1] === 0 ? 0 : d[0] === 0 ? 1 : null;
+    const unit = [Math.sign(d[0]), Math.sign(d[1])];
+    const exterior = steps(args.layers[0].exterior);
+    const interior = steps(args.layers.at(-1).interior);
+    return { start, end, d, axis, unit, exterior, interior };
+  }
+
+  /**
+   * Where `el` sits on side `role` of a layered wall, as construct-regen's `hosting` puts it: along
+   * the wall's line from its start the way the wall runs, flush with that side and reaching toward
+   * the other, each to the nearest millimetre, and up from its base. Only a wall along an axis hosts.
+   */
+  function onLayered(el, role, host, along, up) {
+    const line = lineOf(host);
+    const { width, thickness } = el.recipe.args;
+    if (!line || line.axis === null || !Number.isFinite(width) || !Number.isFinite(thickness)) return el.placement;
+    const a = line.axis;
+    const c = 1 - a;
+    const right = [line.unit[1], -line.unit[0]][c];
+    const [on, other] = role === 'interior' ? [line.interior, line.exterior] : [line.exterior, line.interior];
+    const lowAlong = line.unit[a] > 0
+      ? line.start[a] + steps(along)
+      : line.start[a] - (steps(along) + width * STEPS_PER_MM);
+    const face = line.start[c] + on * right;
+    const back = line.start[c] + other * right;
+    const lowAcross = back > face ? face : face - thickness * STEPS_PER_MM;
+    const at = [0, 0];
+    at[a] = nearestMm(lowAlong);
+    at[c] = nearestMm(lowAcross);
+    const base = host.el.placement;
+    return { x: base.x + at[0], y: base.y + at[1], z: base.z + storedMm(up) };
+  }
+
+  /** How far along its wall a hosted door at `x`, `y` (its low corner, in the model) is from the wall's start. */
+  function alongOn(host, el, x, y) {
+    const wall = host.el;
+    if (wall.recipe.op !== LAYERED) return wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
+    const line = lineOf(host);
+    if (!line || line.axis === null) return null;
+    const a = line.axis;
+    const at = [x - wall.placement.x, y - wall.placement.y][a];
+    const start = Math.round(line.start[a] / STEPS_PER_MM);
+    return line.unit[a] > 0 ? at - start : start - at - el.recipe.args.width;
   }
 
   /** The box around a piece in the model. */
   function around(piece) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const { min, max } = piece.shape.bounds;
     return { x: x + min[0], y: y + min[1], w: max[0] - min[0], d: max[1] - min[1] };
   }
 
   function outlineOf(piece, paint) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const points = piece.shape.displays[0].outline.map(([px, py]) => `${x + px},${y + py}`);
     return `<polygon class="${paint}" points="${points.join(' ')}"/>`;
+  }
+
+  /** Each part of a shape, filled with its material's colour where the plan cuts it. */
+  function partsOf(piece, parts) {
+    const { x, y } = placementOf(piece.el);
+    return parts
+      .map((part) => {
+        const points = part.outline.map(([px, py]) => `${x + px},${y + py}`).join(' ');
+        const colour = colourOf(part.material, 'cut');
+        const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+        return `<polygon class="part" data-material="${esc(part.material)}" data-function="${esc(part.function)}"${fill} points="${points}"/>`;
+      })
+      .join('');
   }
 
   /** Compares what the server built with what this page holds (note A05). */
@@ -673,7 +921,8 @@
     if (!into) return;
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
-      if (!piece || piece.seq > through || piece.stale) continue;
+      // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -700,7 +949,7 @@
     if (!model) return;
     C.level = levelOf();
     const [x, y, w, h] = VB[S.view];
-    const area = `level=${C.level}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
+    const area = `level=${encodeURIComponent(C.level)}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
     const seen = await api(`${modelUrl(model)}/area?${area}`);
     // Regeneration can be behind the log, so ask for what came after what this shows.
     if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
@@ -725,8 +974,24 @@
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
     }
-    const answer = await shapeFor(model, record);
-    if (record.level === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    const fill = await fillOf(model, record);
+    const answer = await shapeFor(model, record, into, fill);
+    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill });
+    // What it is hosted in is built again with it, as the server builds a host with its guests.
+    if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
+  }
+
+  /** Whether this page builds `model`'s hosts with what is hosted in them, into `into`. */
+  const cutsIn = (model, into) => C.cuts && model === C.model?.id && into === C.elements;
+
+  /** Builds host `id` again with what is now hosted in it on this page, and lets it be compared. */
+  async function buildHostAgain(model, into, id) {
+    const host = id && into.get(id);
+    if (!host) return;
+    const answer = await shapeFor(model, host.el, into, host.fill);
+    if (into.get(id) !== host) return;
+    Object.assign(host, { shape: undefined, failed: undefined }, answer);
+    host.stale = false;
   }
 
   async function loadClaims() {
@@ -864,26 +1129,44 @@
       const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
       const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
+      // A host is built with what is hosted in it: while what it hosts changes here, it is not
+      // compared with the server's, and once that is in hand it is built again.
+      const cuts = cutsIn(entry.target, into);
+      const hosts = new Set([piece && hostIdOf(piece.el), entry.cmd === 'hosted.place' && entry.args.host]);
+      if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
+      const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
+        if (cuts) again().then(queueDraw);
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
+        // A door hosted by its position sits apart from its host's frame, so a move of either
+        // moves it in that frame.
+        if (cuts) {
+          hosts.add(change.piece);
+          again().then(queueDraw);
+        }
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn).then(() => {
-          queueDraw();
-          if (change.piece === S.sel) refreshSide();
-        });
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn)
+          .then(() => (cuts ? again() : undefined))
+          .then(() => {
+            queueDraw();
+            if (change.piece === S.sel) refreshSide();
+          });
       }
     }
-    // A type or a parameter changed, or may have: what the selected element reads may have too.
-    if ((/^(type|parameter)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
+    // A type, a parameter or a level changed, or may have: what the selected element reads may have
+    // too, and so may what a recipe that reads records is filled with.
+    const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
+    if (reads) fillAgain(entry.target, into);
+    if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (/^(type|parameter)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
+    if (reads || /^element\.(type|create|delete)$|^wall\.draw$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -895,6 +1178,9 @@
     queueDraw();
   }
 
+  /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type)\./;
+
   const WORDS = {
     'element.create': 'added',
     'element.move': 'moved',
@@ -905,12 +1191,28 @@
     'element.param': 'set a value of',
     'element.type': 'changed the type of',
     'parameter.define': 'defined a parameter',
+    'parameter.change': 'changed a parameter',
     'parameter.bind': 'bound a parameter to categories',
     'type.create': 'made a type',
     'type.rename': 'renamed a type',
     'type.duplicate': 'copied a type',
     'type.delete': 'deleted a type',
     'type.set': 'set a value of a type',
+    'hosted.place': 'placed on a wall',
+    'hosted.move': 'moved along its wall',
+    'level.create': 'made a level',
+    'level.rename': 'renamed a level',
+    'level.elevation': 'moved a level',
+    'level.storey': 'changed a level',
+    'level.delete': 'deleted a level',
+    'level.tie': 'tied to a level',
+    'level.top': 'tied the top of',
+    'wall.draw': 'drew',
+    'wall.type.create': 'made a wall type',
+    'wall.type.layers': 'changed the layers of a wall type',
+    'wall.type.rename': 'renamed a wall type',
+    'wall.type.duplicate': 'copied a wall type',
+    'wall.type.delete': 'deleted a wall type',
     'edit.undo': 'undid a change to',
     'edit.redo': 'redid a change to',
   };
@@ -962,12 +1264,26 @@
     'element.param': 'a value',
     'element.type': 'a change of type',
     'parameter.define': 'defining a parameter',
+    'parameter.change': 'changing a parameter',
     'parameter.bind': 'binding a parameter',
     'type.create': 'making a type',
     'type.rename': 'renaming a type',
     'type.duplicate': 'copying a type',
     'type.delete': 'deleting a type',
     'type.set': 'a value of a type',
+    'level.create': 'making a level',
+    'level.rename': 'renaming a level',
+    'level.elevation': 'moving a level',
+    'level.storey': 'a change to a level',
+    'level.delete': 'deleting a level',
+    'level.tie': 'a tie to a level',
+    'level.top': 'a tie of a top',
+    'wall.draw': 'drawing a wall',
+    'wall.type.create': 'making a wall type',
+    'wall.type.layers': 'the layers of a wall type',
+    'wall.type.rename': 'renaming a wall type',
+    'wall.type.duplicate': 'copying a wall type',
+    'wall.type.delete': 'deleting a wall type',
     'edit.redo': 'a redo',
   };
   const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
@@ -1018,9 +1334,15 @@
   // and parameter values"). A change is the `element.param` edit, through the same log as a move:
   // the server parses the typed text with its units, and a refusal comes back as its reason.
 
-  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set', formula: 'From its formula' };
+
+  /** A value its formula gives: shown, never typed, with the formula and, when it gives none, the server's reason. */
+  function worked(p) {
+    const reason = p.reason ? `<div class="note bad small" data-reason="${esc(p.id)}">${esc(p.reason)}</div>` : '';
+    return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
+  }
   function hasShape(record) {
-    return record.kind !== 'type' && record.kind !== 'parameters';
+    return record.kind !== 'type' && record.kind !== 'parameters' && record.kind !== 'level';
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1046,8 +1368,9 @@
     let html = '<span class="lbl">Parameters</span><table class="props">';
     for (const p of view.parameters) {
       const value = p.shown ?? '';
-      const field =
-        p.holder === 'instance' && editable
+      const field = p.formula
+        ? worked(p)
+        : p.holder === 'instance' && editable
           ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" data-key="param:${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
           : esc(value);
       html += prow(esc(p.name), field + problem(`param:${p.id}`), FROM[p.from] || '');
@@ -1081,7 +1404,7 @@
 
   // --- Types and parameters ---
   // A person manages the project's parameters and the types of a category in two dialogs, and changes
-  // an element's type in the properties palette. Everything is one of the nine commands through the
+  // an element's type in the properties palette. Everything is one of the ten commands through the
   // same log (construct-model's FORMAT.md, "Categories, types and parameter values"): the page sends
   // what was typed and shows what the server answers. The lists (kinds, categories, parameters, types)
   // are read from the server, values are shown as the server formats them, and a refusal is shown in
@@ -1111,7 +1434,7 @@
     }
   }
 
-  /** Sends one of the nine commands, and remembers where to show the reason if it is turned back. */
+  /** Sends one of the ten commands, and remembers where to show the reason if it is turned back. */
   function manage(cmd, args, where, after) {
     if (!C.model || C.readOnly) {
       say('Open a model in your team’s WIP to change it.');
@@ -1190,12 +1513,13 @@
     }
     const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
     C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
-    const title = which === 'types' ? 'Types' : 'Project parameters';
+    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels' }[which];
     openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
     loadManage();
   }
   ACT.stacktypes = () => openManage('types');
   ACT.stackparams = () => openManage('parameters');
+  ACT.stacklevels = () => openManage('levels');
 
   /** Reads what the open dialog shows from the server, then draws it. Does nothing when no dialog is open. */
   async function loadManage() {
@@ -1209,6 +1533,9 @@
       if (m.which === 'types') {
         if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
         m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
+      } else if (m.which === 'levels') {
+        m.data = { levels: await api(`${modelUrl(model)}/levels`) };
+        knowLevels(`${model}/${C.paramsEpoch}`, m.data.levels);
       } else {
         m.data = await api(`${modelUrl(model)}/project-parameters`);
       }
@@ -1225,7 +1552,7 @@
     if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
-    else html = m.which === 'types' ? typesHtml(m) : parametersHtml(m);
+    else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : parametersHtml(m);
     redraw(root, html);
     if (!m.shown) {
       m.shown = true;
@@ -1278,7 +1605,9 @@
           const settable = p.holder === 'type' && editable;
           const control = p.holder !== 'type'
             ? 'Each element has its own'
-            : settable
+            : p.formula
+              ? worked(p)
+              : settable
               ? `<input class="inp" data-chg="stacktypeset" data-type="${esc(type.id)}" data-a="${esc(p.id)}" data-key="type-value:${esc(type.id)}:${esc(p.id)}" value="${esc(p.shown ?? '')}" aria-label="${label}: ${esc(p.name)}">`
               : esc(p.shown ?? '');
           html += prow(esc(p.name), control, FROM[p.from] || '');
@@ -1329,6 +1658,11 @@
       const standard = p.default === null ? '' : ` Default: ${esc(p.default)}.`;
       const choices = p.choices.length ? ` Choices: ${esc(p.choices.map((c) => c.label).join(', '))}.` : '';
       html += `<p class="small">${where}${standard}${choices}</p>`;
+      if (p.formula) html += `<p class="small" data-formula="${esc(p.id)}">Formula: ${esc(p.formula)}</p>`;
+      if (C.catalog.kinds.find((k) => k.tag === p.kind)?.takes_formula) {
+        html += `<label class="fld"><span>Formula of other parameters, such as Width - 2 * Frame (empty: a person sets the value)</span><input class="inp" data-enter="stackformula" data-a="${esc(p.id)}" data-key="formula:${esc(p.id)}" value="${esc(p.formula ?? '')}" aria-label="Formula for ${esc(p.name)}"${off}></label>`;
+        html += problem(`formula:${p.id}`);
+      }
       html += `<details data-open="${esc(p.id)}"${m.open.has(p.id) ? ' open' : ''}><summary>Bind to categories</summary><div class="stack-checks">`;
       for (const c of categories) {
         const on = bound.has(c.id);
@@ -1347,6 +1681,7 @@
     html += `<label class="fld"><span>Who holds the value</span><select class="inp" data-draft data-key="def-holder"${off}>${holders.join('')}</select></label>`;
     html += `<label class="fld"><span>Choices, for a choice only, separated by commas</span><input class="inp" data-draft data-key="def-choices"${off}></label>`;
     html += `<label class="fld"><span>Default (optional)</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-default"${off}></label>`;
+    html += `<label class="fld"><span>Formula of other parameters (optional), such as Width - 2 * Frame</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-formula"${off}></label>`;
     html += '</div>';
     html += '<div class="lbl">Bind it to (optional)</div><div class="stack-checks">';
     for (const c of categories) {
@@ -1387,6 +1722,12 @@
     manage('parameter.bind', { parameter: id, categories: chosen(section), default: text === '' ? null : text }, `bind:${id}`);
   };
 
+  // A formula goes to the server as typed: the server checks it and stores it in its one spelling.
+  ACT.stackformula = (input) => {
+    const text = input.value.trim();
+    manage('parameter.change', { parameter: input.dataset.a, formula: text === '' ? null : text }, `formula:${input.dataset.a}`);
+  };
+
   ACT.stackdefine = () => {
     const id = newId('P');
     const labels = manageField('def-choices').value.split(',').map((text) => text.trim()).filter(Boolean);
@@ -1397,6 +1738,8 @@
       holder: manageField('def-holder').value,
       choices: labels.map((label) => ({ key: label, label })),
     };
+    const formula = manageField('def-formula').value.trim();
+    if (formula !== '') definition.formula = formula;
     const categories = $$('#stack-manage [data-key^="def-cat:"]:checked').map((box) => Number(box.value));
     const text = manageField('def-default').value;
     const clear = () => {
@@ -1412,6 +1755,209 @@
       }
       manage('parameter.bind', { parameter: id, categories, default: text === '' ? null : text }, 'define', clear);
     });
+  };
+
+  // --- Levels ---
+  // A level is a record of the model with a name and an elevation, and an element is tied to one by
+  // its ID (construct-levels' FORMAT.md). The dialog lists them as the server reads them, lowest
+  // first, with each elevation as the server formats it; a change is one of the level commands
+  // through the same log, and a refusal is the server's reason beside the level. Show picks the level
+  // the plan shows and a newly drawn element is tied to.
+
+  C.planLevel = null; // { id, name } of a level chosen in the dialog; null is the floor plan's own
+  C.levelList = null; // { key, levels }: the open model's levels, for the properties palette
+
+  /** Keeps the levels the server listed, and the shown level's name with them. */
+  function knowLevels(key, levels) {
+    C.levelList = { key, levels };
+    const shown = C.planLevel && levels.find((level) => level.id === C.planLevel.id);
+    if (shown && shown.name !== C.planLevel.name) {
+      C.planLevel.name = shown.name;
+      headerView();
+    }
+  }
+
+  /** The open model's levels, lowest first, as the server lists them; null until they have come. */
+  function modelLevels() {
+    if (!C.model) return null;
+    const key = `${C.model.id}/${C.paramsEpoch}`;
+    if (C.levelList?.key !== key && C.levelListLoading !== key) {
+      C.levelListLoading = key;
+      api(`${modelUrl(C.model.id)}/levels`)
+        .then((levels) => {
+          knowLevels(key, levels);
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.levelList?.key.startsWith(`${C.model.id}/`) ? C.levelList.levels : null;
+  }
+
+  /** The name of the level a record stands on, from the server's list once it has come. */
+  function levelName(record) {
+    const id = levelIdOf(record);
+    if (!id) return 'None';
+    return modelLevels()?.find((level) => level.id === id)?.name ?? id;
+  }
+
+  function levelsHtml(m) {
+    const editable = canEdit();
+    const off = editable ? '' : ' disabled';
+    let html = '<p class="small muted">A level is a height in the building that elements stand on. Move a level and everything tied to it moves with it. Show a level to see its plan and draw on it.</p>';
+    if (!m.data.levels.length) html += '<p class="small faint">No levels yet.</p>';
+    for (const level of m.data.levels) {
+      const id = esc(level.id);
+      const label = esc(level.name);
+      const shown = S.screen === 'plan' && levelOf() === level.id;
+      html += `<section data-level="${id}"><div class="stack-line">`;
+      html += `<input class="inp" data-chg="stacklevelrename" data-level="${id}" data-key="level-name:${id}" value="${label}" aria-label="Name of ${label}"${off}>`;
+      html += `<input class="inp" data-chg="stacklevelelevation" data-level="${id}" data-key="level-elevation:${id}" value="${esc(level.shown)}" aria-label="Elevation of ${label}"${off}>`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stacklevelstorey" data-level="${id}" data-key="level-storey:${id}"${level.storey ? ' checked' : ''}${off}>Storey</label>`;
+      html += `<span class="small faint">${plural(level.tied, 'element')}</span>`;
+      html += `<button class="btn sm" data-act="stacklevelshow" data-a="${id}" data-key="level-show:${id}" aria-pressed="${shown}">${shown ? 'Shown' : 'Show'}</button>`;
+      html += `<button class="btn sm" data-act="stackleveldelete" data-a="${id}" data-key="level-delete:${id}" aria-label="Delete ${label}"${off}>Delete</button></div>`;
+      html += `${problem(`level:${level.id}`)}</section>`;
+    }
+    html += '<h3 class="mt2">New level</h3>';
+    html += `<div class="stack-line"><input class="inp" data-draft data-enter="stacknewlevel" data-key="new-level-name" placeholder="Name" aria-label="Name for a new level"${off}>`;
+    html += `<input class="inp" data-draft data-enter="stacknewlevel" data-key="new-level-elevation" placeholder="Elevation" aria-label="Elevation for a new level"${off}>`;
+    html += `<button class="btn pri sm" data-act="stacknewlevel" data-key="new-level-make"${off}>Make level</button></div>`;
+    html += problem('new-level');
+    return html;
+  }
+
+  const levelWhere = (control) => `level:${control.dataset.level ?? control.dataset.a}`;
+  CHG.stacklevelrename = (input) => manage('level.rename', { level: input.dataset.level, name: input.value }, levelWhere(input));
+  CHG.stacklevelelevation = (input) => manage('level.elevation', { level: input.dataset.level, elevation: input.value }, levelWhere(input));
+  CHG.stacklevelstorey = (box) => manage('level.storey', { level: box.dataset.level, storey: box.checked }, levelWhere(box));
+  ACT.stackleveldelete = (button) => manage('level.delete', { level: button.dataset.a }, levelWhere(button));
+  ACT.stacknewlevel = () => {
+    const args = { level: newId('L'), name: manageField('new-level-name').value, elevation: manageField('new-level-elevation').value };
+    manage('level.create', args, 'new-level', () => {
+      for (const key of ['new-level-name', 'new-level-elevation']) {
+        const again = manageField(key);
+        if (again) again.value = '';
+      }
+    });
+  };
+  ACT.stacklevelshow = (button) => {
+    const level = C.manage?.data?.levels.find((l) => l.id === button.dataset.a);
+    if (!level) return;
+    C.planLevel = { id: level.id, name: level.name };
+    if (S.screen === 'plan' && FLOORV.includes(S.view)) {
+      headerView();
+      followTheLevel();
+    } else {
+      go('plan:l1');
+    }
+    renderManage();
+  };
+
+  // --- The wall tool ---
+  // A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
+  // palette, its base on the plan's level and its top on the level chosen there or a height typed
+  // there: one `wall.draw` edit (construct-model's FORMAT.md, "Walls"). The wall types, their layers
+  // and the colours their materials are drawn in come from the server; where a model has no wall
+  // types, the page sends the server's default ones through the log (`wall.type.create`). A refusal
+  // is the server's reason, under the tool's options.
+
+  C.wallTypes = null; // { key, view } of the open model
+  C.wallTool = { type: null, top: undefined, height: '3000 mm' }; // top: a level's ID, '' for a height, undefined for the level above
+  C.madeDefaults = null; // the model the default wall types were sent for
+
+  /** The open model's wall types, materials and defaults; null until they have come. */
+  function wallTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.wallTypes?.key !== key && C.wallTypesLoading !== key) {
+      C.wallTypesLoading = key;
+      api(`${modelUrl(model)}/wall-types`)
+        .then((view) => {
+          C.wallTypes = { key, view };
+          refreshSide();
+          queueDraw();
+        })
+        .catch(() => {});
+    }
+    return C.wallTypes?.key.startsWith(`${model}/`) ? C.wallTypes.view : null;
+  }
+
+  /** A material's colour where a view cuts it (`cut`) or seen beyond (`surface`); null for a material not listed. */
+  function colourOf(material, which) {
+    const found = wallTypes()?.materials.find((m) => m.id === material);
+    return found ? found[which] : null;
+  }
+
+  const materialName = (view, id) => view.materials.find((m) => m.id === id)?.name ?? id;
+
+  function chosenWallType(view) {
+    return view.types.find((t) => t.id === C.wallTool.type) ?? view.types[0] ?? null;
+  }
+
+  /** The top the tool draws to: a level's ID, or '' for a height. By default the level above the plan's. */
+  function wallTop(levels) {
+    const here = levelOf();
+    const others = (levels || []).filter((level) => level.id !== here);
+    const chosen = C.wallTool.top;
+    if (chosen === '' || others.some((level) => level.id === chosen)) return chosen;
+    const at = (levels || []).findIndex((level) => level.id === here);
+    return (at >= 0 && levels[at + 1]?.id) || '';
+  }
+
+  /** Sends the server's default wall types, once for a model, where it has none. */
+  function makeDefaultWalls(view) {
+    if (!canEdit() || C.madeDefaults === C.model.id) return;
+    C.madeDefaults = C.model.id;
+    for (const args of view.defaults) manage('wall.type.create', args, 'wall-draw');
+  }
+
+  function wallToolHtml() {
+    let html = typeSel('wall', 'Wall', '<b>New wall</b>');
+    const view = wallTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the wall types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(() => makeDefaultWalls(view));
+      return `${html}<p class="pad small faint" data-wall-tool="making">This model has no wall types yet, so the default ones are being made.</p>${problem('wall-draw')}`;
+    }
+    const chosen = chosenWallType(view);
+    const levels = modelLevels() || [];
+    const here = levelOf();
+    const top = wallTop(levels);
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const tops = levels
+      .filter((level) => level.id !== here)
+      .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+    tops.push(`<option value=""${top === '' ? ' selected' : ''}>A height</option>`);
+    const base = levels.find((level) => level.id === here)?.name ?? here;
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackwalltype" data-key="wall-type" aria-label="Wall type">${types.join('')}</select>`);
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Base', esc(base));
+    html += prow('Top', `<select class="inp" data-chg="stackwalltop" data-key="wall-top" aria-label="Top of the wall">${tops.join('')}</select>`);
+    if (top === '') {
+      html += prow('Height', `<input class="inp" data-chg="stackwallheight" data-key="wall-height" value="${esc(C.wallTool.height)}" aria-label="Height of the wall">`);
+    }
+    html += '</table>';
+    html += `<span class="lbl">Layers, exterior first</span><table class="props" data-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.assembly.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    return html + problem('wall-draw');
+  }
+
+  CHG.stackwalltype = (select) => {
+    C.wallTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackwalltop = (select) => {
+    C.wallTool.top = select.value;
+    refreshSide();
+  };
+  CHG.stackwallheight = (input) => {
+    C.wallTool.height = input.value;
   };
 
   // --- Workshop's elements ---
@@ -1535,21 +2081,33 @@
     if (C.viewing) return 'This browser can’t build this model, so it shows the server’s stored shapes. You can look, not edit.';
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
-    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point.';
+    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
+  }
+
+  /** Where an element is, for the palette: a layered wall's line from end to end, anything else its position. */
+  function whereRow(e) {
+    const { start, end } = e.recipe.args;
+    if (e.recipe.op === LAYERED && Array.isArray(start) && Array.isArray(end)) {
+      const point = ([x, y]) => `${e.placement.x + storedMm(x)}, ${e.placement.y + storedMm(y)}`;
+      return prow('Line', `<span class="mono">${point(start)} to ${point(end)}</span>`);
+    }
+    return prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`);
   }
 
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    if (piece) {
+    if (S.tool === 'wall' && canEdit()) {
+      html += wallToolHtml();
+    } else if (piece) {
       const { el: e, shape, failed } = piece;
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', e.level)}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${whereRow(e)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1608,7 +2166,7 @@
     const scale = AS[S.scale] || 1;
     let shapes = '';
     const ghost = (piece) => {
-      if (piece.shape && piece.el.level === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
+      if (piece.shape && levelIdOf(piece.el) === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
     };
     for (const pieces of C.linked.values()) for (const piece of pieces.values()) ghost(piece);
     for (const pieces of C.fixed.values()) for (const piece of pieces) ghost(packaged(piece));
@@ -1619,7 +2177,7 @@
     );
     for (const piece of inOrder) {
       const { el: e } = piece;
-      const { x, y } = e.placement;
+      const { x, y } = placementOf(e);
       const data = `class="element" data-id="${esc(e.id)}" data-x="${x}" data-y="${y}"`;
       if (!piece.shape) {
         // Nothing to draw yet, or a recipe that can't build: a mark, so it can still be found.
@@ -1629,7 +2187,11 @@
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';
       const box = around(piece);
       let group = S.sel === e.id ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
-      group += outlineOf(piece, `body ${paint}${S.sel === e.id ? ' sel' : ''}`);
+      // A shape of several parts (a layered wall's layers) draws each in its material's cut colour,
+      // under its outline.
+      const parts = piece.shape.displays[0]?.parts;
+      if (parts?.length) group += partsOf(piece, parts);
+      group += outlineOf(piece, `body ${parts?.length ? 'layered' : paint}${S.sel === e.id ? ' sel' : ''}`);
       const claim = heldClaim(e.id);
       if (claim) {
         const theirs = claim.person !== C.me.person.id;
@@ -1664,28 +2226,84 @@
 
   const snap = (value) => Math.round(value / SNAP_MM) * SNAP_MM;
 
-  function placeWall(at) {
+  /** The open model's wall types, read now if they have not come yet. */
+  async function wallTypesNow() {
+    const view = wallTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/wall-types`);
+    C.wallTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  /**
+   * The wall tool's second point draws the wall: straight along x or y, whichever the second point
+   * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
+   * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
+   */
+  async function placeWall(at) {
+    const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
-      S.pend = [snap(at.x), snap(at.y)];
+      S.pend = point;
       $('#hint').innerHTML = hint();
       return;
     }
     const [ax, ay] = S.pend;
     S.pend = null;
-    const dx = snap(at.x) - ax;
-    const dy = snap(at.y) - ay;
-    const along = Math.abs(dx) >= Math.abs(dy);
-    const length = Math.abs(along ? dx : dy);
-    if (length < 300) {
-      say('That wall is too short. Pick two points at least 300 mm apart.');
+    $('#hint').innerHTML = hint();
+    const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
+    const end = along ? [point[0], ay] : [ax, point[1]];
+    const level = levelOf();
+    let view;
+    try {
+      view = await wallTypesNow();
+    } catch (error) {
+      say(error.message);
       return;
     }
-    const placement = along
-      ? { x: Math.min(ax, ax + dx), y: ay - 55, z: 0 }
-      : { x: ax - 55, y: Math.min(ay, ay + dy), z: 0 };
-    const args = { length, thickness: 110, height: 3000, axis: along ? 'x' : 'y' };
-    add('wall', 'W', placement, recipe('wall.straight', args), 'Walls');
-    $('#hint').innerHTML = hint();
+    const args = { element: newId('W'), start: [`${ax} mm`, `${ay} mm`], end: [`${end[0]} mm`, `${end[1]} mm`], level };
+    const type = chosenWallType(view);
+    if (type) args.type = type.id;
+    const top = wallTop(modelLevels());
+    if (top === '') args.height = C.wallTool.height;
+    else args.top = top;
+    manage('wall.draw', args, 'wall-draw');
+  }
+
+  /**
+   * Where a click lands on a wall, for a door: the wall's side clicked (`exterior` or `interior`),
+   * how far along the wall from its start the door's near end is when the click is its middle, how
+   * thick the wall is, and the axis the wall runs along. A layered wall reads its line and faces from
+   * its filled recipe; the old box runs along x, its exterior at its low y side, or along y, its
+   * exterior at its high x side.
+   */
+  function onWall(wall, at, width) {
+    if (wall.el.recipe.op === LAYERED) {
+      const line = lineOf(wall);
+      if (!line) return null;
+      const { x, y } = wall.el.placement;
+      const p = [snap(at.x) - x - line.start[0] / STEPS_PER_MM, snap(at.y) - y - line.start[1] / STEPS_PER_MM];
+      const length = Math.hypot(line.d[0], line.d[1]);
+      const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+      const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+      const middle = (line.exterior + line.interior) / 2 / STEPS_PER_MM;
+      const exterior = right > middle === line.exterior > line.interior;
+      return {
+        exterior,
+        offset: Math.round(alongIt - width / 2),
+        thickness: Math.ceil(Math.abs(line.exterior - line.interior) / STEPS_PER_MM),
+        axis: line.axis === 1 ? 'y' : 'x',
+      };
+    }
+    const box = around(wall);
+    const along = box.w >= box.d;
+    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+    return {
+      exterior: along ? at.y < middle : at.x > middle,
+      offset: (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2,
+      thickness: along ? box.d : box.w,
+      axis: along ? 'x' : 'y',
+    };
   }
 
   function placeDoor(at) {
@@ -1701,33 +2319,31 @@
       say('Click on a wall to place a door.');
       return;
     }
-    const box = around(wall);
-    const along = box.w >= box.d;
-    const placement = along
-      ? { x: snap(at.x) - 450, y: box.y + box.d / 2 - 150, z: 0 }
-      : { x: box.x + box.w / 2 - 150, y: snap(at.y) - 450, z: 0 };
-    const args = { width: 900, thickness: 300, height: 2100, axis: along ? 'x' : 'y' };
-    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall.
-    const face = wall.shape.names.find((name) => name.role === 'exterior');
-    const host = {
-      doc: null,
-      element: wall.el.id,
-      name: face.name,
-      kind: 'face',
-      want: 'carrier',
-      signature: null,
-    };
-    add('door', 'D', placement, recipe('door.single', args), 'Doors', [host]);
+    const width = 900;
+    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall:
+    // the side clicked, as far along the wall from its start as the click, less half the door, as
+    // thick as the wall.
+    const spot = onWall(wall, at, width);
+    const face = spot && wall.shape.names.find((name) => name.role === (spot.exterior ? 'exterior' : 'interior'));
+    if (!face) {
+      say('That wall has no side to place a door on.');
+      return;
+    }
+    const { offset, thickness } = spot;
+    const args = { width, thickness, height: 2100, axis: spot.axis };
+    edit('hosted.place', {
+      element: `D-${crypto.randomUUID().slice(0, 8)}`,
+      kind: 'door',
+      host: wall.el.id,
+      face: face.name,
+      along: `${offset} mm`,
+      up: '0 mm',
+      recipe: recipe('door.single', args),
+    });
   }
 
   /** Spare Construct's own operations, by what they make. */
   const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
-
-  function add(kind, tag, placement, how, category, references = []) {
-    const element = `${tag}-${crypto.randomUUID().slice(0, 8)}`;
-    const level = levelOf();
-    edit('element.create', { element, kind, level, placement, recipe: how, references, props: { category } });
-  }
 
   function watchThePlan() {
     const canvas = $('#pv-canvas');
@@ -1757,9 +2373,12 @@
         say(`${claim.name} is working on this.`);
         return;
       }
-      const { placement } = C.elements.get(id).el;
+      const { el } = C.elements.get(id);
+      const placement = placementOf(el);
       edit('element.claim', { element: id });
-      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y };
+      // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
+      const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
+      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
     });
 
     window.addEventListener('pointermove', (event) => {
@@ -1769,6 +2388,17 @@
       const at = toModel(event);
       const x = snap(at.x - drag.dx);
       const y = snap(at.y - drag.dy);
+      if (drag.hosted) {
+        const hosted = hostOf(piece.el);
+        if (!hosted) return;
+        const offset = alongOn(hosted.host, piece.el, x, y);
+        if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
+        const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        piece.el = { ...piece.el, props };
+        drag.along = offset;
+        queueDraw();
+        return;
+      }
       const { placement } = piece.el;
       if (x === placement.x && y === placement.y) return;
       piece.el = { ...piece.el, placement: { ...placement, x, y } };
@@ -1783,7 +2413,11 @@
     const finish = () => {
       if (!drag) return;
       const piece = C.elements.get(drag.id);
-      if (piece) edit('element.move', { element: drag.id, placement: piece.el.placement });
+      if (piece && drag.hosted) {
+        if (drag.along !== undefined) edit('hosted.move', { element: drag.id, along: `${drag.along} mm` });
+      } else if (piece) {
+        edit('element.move', { element: drag.id, placement: piece.el.placement });
+      }
       drag = null;
     };
     window.addEventListener('pointerup', finish);
@@ -1828,11 +2462,27 @@
     const paint = (name) =>
       new THREE.MeshLambertMaterial({ color: colour(name), side: THREE.DoubleSide });
     const paints = { wall: paint('--ink-3'), door: paint('--app'), other: paint('--sink') };
-    const meshes = elementMeshes(THREE, paints);
+    // A part of a shape (a layer of a wall) in its material's colour seen in projection, one paint
+    // per colour; a material the server doesn't list takes its element's paint.
+    const byColour = new Map();
+    const partPaint = (material) => {
+      const colour = colourOf(material, 'surface');
+      if (!colour) return null;
+      if (!byColour.has(colour)) {
+        byColour.set(colour, new THREE.MeshLambertMaterial({ color: new THREE.Color(colour), side: THREE.DoubleSide }));
+      }
+      return byColour.get(colour);
+    };
+    const meshes = elementMeshes(THREE, paints, partPaint);
     scene.add(meshes.group);
     C.three = {
       update() {
-        meshes.update(C.elements.values());
+        // Each where it sits: a hosted door on its wall (placementOf).
+        const placed = [...C.elements.values()].map((piece) => ({
+          ...piece,
+          el: { ...piece.el, placement: placementOf(piece.el) },
+        }));
+        meshes.update(placed);
       },
     };
     C.three.update();

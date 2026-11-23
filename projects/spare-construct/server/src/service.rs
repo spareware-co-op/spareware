@@ -15,6 +15,7 @@ use construct_model::rows::{
     Stored, Team,
 };
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
+use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
 use kit_accounts::rows::Person;
@@ -91,10 +92,24 @@ pub struct ShapeView {
     pub display: Option<Display>,
 }
 
+/// An element's recipe as it is built now, every argument that reads a record filled.
+#[derive(Serialize, Debug)]
+pub struct FilledView {
+    /// How far the project's log had got when it was read.
+    pub head: u64,
+    /// The filled recipe, when it fills.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipe: Option<construct_model::geometry::Recipe>,
+    /// Why it doesn't, as a build failure: `code` and `message`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed: Option<Value>,
+}
+
 /// An area of a level.
 pub struct View {
-    /// The level.
-    pub level: i32,
+    /// The level, by its permanent ID. A level an old record's integer implies has that integer
+    /// as its ID (`1`), so a page that asks by the integer still finds what it found.
+    pub level: Id,
     /// One corner's x, in millimetres.
     pub x0: i64,
     /// One corner's y, in millimetres.
@@ -410,7 +425,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let mut snapshot = self.kv.snapshot().await?;
         let mut pieces = BTreeMap::new();
         for (x, y) in cells_between(view.x0, view.y0, view.x1, view.y1) {
-            let prefix = list::cell(project, model, view.level, x, y);
+            let prefix = list::cell(project, model, &view.level, x, y);
             for (key, hash) in snapshot.scan(&prefix).await? {
                 let Some(Place::Area { element, .. }) = Place::parse(&key) else {
                     continue;
@@ -549,6 +564,98 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         catalog::read_types_view(&mut snapshot, project, model, category)
             .await?
             .map_err(Refusal::Bad)
+    }
+
+    /// A model's levels, lowest first: each with its name, its elevation stored and shown in units,
+    /// whether it is a storey, whether an old record's integer implies it, and how many elements
+    /// are tied to it. The same reader the level commands check against
+    /// (`construct_regen::levels`).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a level record or a tie cannot be read, saying why.
+    pub async fn levels(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<LevelView>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        levels::read_views(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's wall types with their layers, the materials those are drawn in, and the default
+    /// wall types' `wall.type.create` arguments, for the page's wall tool
+    /// ([`cloud::walls::read_wall_types`]).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn wall_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::walls::WallTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::walls::read_wall_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// The recipe an element is built from now, each argument that reads a record filled (its
+    /// parameters, its wall type's layers, its top tie), as the regenerator fills it
+    /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an
+    /// element whose recipe reads records from this, and compares what it built with the server's
+    /// bodies from that point of the log on. A recipe that cannot be filled is the build failure,
+    /// in its words.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails, or there is no
+    /// such element.
+    pub async fn filled(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        element: &Id,
+    ) -> Result<FilledView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let scope = Scope::Project(project.clone());
+        let head = read_row::<u64, _>(&mut snapshot, &scope.head())
+            .await?
+            .unwrap_or(0);
+        let Some((_, record)) =
+            records::read_element(&mut snapshot, project, model, element).await?
+        else {
+            return Err(Refusal::NotFound);
+        };
+        let at = records::At::Now;
+        Ok(
+            match levels::recipe_at(&mut snapshot, project, model, &record, at).await? {
+                Ok(recipe) => FilledView {
+                    head,
+                    recipe: Some(recipe),
+                    failed: None,
+                },
+                Err(failed) => FilledView {
+                    head,
+                    recipe: None,
+                    failed: Some(json!({ "code": failed.code, "message": failed.message })),
+                },
+            },
+        )
     }
 
     /// What this person can undo and redo in a model now: the step an undo would reverse and the
@@ -744,6 +851,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             };
             let element: Option<Element> = read_row(&mut snapshot, &place.key()).await?;
             let element = element.ok_or_else(|| StoreError::Damaged("record missing".into()))?;
+            // A type, the parameter table and a level have no shape: a package carries what is
+            // drawn, and an element reads them when it is built, not when it is drawn.
+            if !records::has_shape(&element) {
+                continue;
+            }
             let shape = self
                 .stored_shape(&mut snapshot, project, model, &element.id, None)
                 .await?;

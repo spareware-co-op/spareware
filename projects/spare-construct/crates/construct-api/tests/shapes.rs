@@ -81,6 +81,7 @@ impl Geometry for Wedges {
             deviation: i64::from(lod) * 10,
             mesh: mesh.clone(),
             outline: vec![[0, 0], [long, 0], [0, long]],
+            parts: Vec::new(),
         };
         let filler = arg("filler").unwrap_or(0) as usize;
         let mut body = format!("wedge {long}").into_bytes();
@@ -203,7 +204,7 @@ impl Stack {
 
     async fn in_cell(&self, x: i64) -> Vec<String> {
         let mut snapshot = self.store.snapshot().await.unwrap();
-        let prefix = list::cell(&i("p"), &i(DOCUMENT), 1, x, 0);
+        let prefix = list::cell(&i("p"), &i(DOCUMENT), &i("1"), x, 0);
         let rows = snapshot.scan(&prefix).await.unwrap();
         rows.into_iter()
             .map(|(key, _)| key.as_str().to_owned())

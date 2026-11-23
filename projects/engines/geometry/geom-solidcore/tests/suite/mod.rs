@@ -7,14 +7,15 @@
 //! The cases: a wall of 4000 by 2700 by 200 mm with a door opening of 900 by 2100 mm, and the
 //! envelope cases, strips of a sloped profile (a rise of 3 m, then 45 degrees to 6 m in) lofted
 //! along a site's boundaries, united, cut, and set against each other at slivers of 0.5, 1 and
-//! 3 mm, on the building grid `Q0`, where one millimetre is 6,400 steps. An exact engine of the kernel's own
+//! 3 mm, and the closed loops of plane cuts through a box and the wall with its door, on the
+//! building grid `Q0`, where one millimetre is 6,400 steps. An exact engine of the kernel's own
 //! runs the same file (`#[path]` from its own tests) on the day it takes an operation over.
 
 use std::collections::BTreeMap;
 
 use geom_check::{Level, check};
 use geom_num::{GridStep, I256, P3};
-use geom_op::engine::{Engine, EngineError, Profile, Section, Volume};
+use geom_op::engine::{Cut, CutPoint, Engine, EngineError, GridPlane, Profile, Section, Volume};
 use geom_run::{Budget, WorkMeter};
 use geom_topo::{Body, BodyKind};
 
@@ -794,5 +795,222 @@ pub fn united_touching<E: Checked>(e: &mut E, touch: Touch) -> EngineError {
     match e.unite(&first, &second) {
         Ok(u) => panic!("{touch:?}: a solid of {:?}", E::body(&u).0.kind()),
         Err(err) => err,
+    }
+}
+
+/// The grid point `(x, y, z)` millimetres as a point of a cut.
+pub fn cut_at(x: i64, y: i64, z: i64) -> CutPoint {
+    CutPoint {
+        num: [mm(x), mm(y), mm(z)].map(i128::from),
+        den: 1,
+    }
+}
+
+/// The plane square to `axis` (0, 1 or 2 for x, y or z) at `at_mm` millimetres along it, its
+/// normal along the axis (`up`) or against it.
+pub fn axis_plane(axis: usize, at_mm: i64, up: bool) -> GridPlane {
+    let sign = if up { 1 } else { -1 };
+    let mut normal = [0; 3];
+    normal[axis] = sign;
+    GridPlane {
+        normal,
+        offset: sign * i128::from(mm(at_mm)),
+    }
+}
+
+/// One edge of an expected loop: from `(x0, y0)` to `(x1, y1)` millimetres, on the face whose plane
+/// is `axis_plane(axis, at, up)`.
+pub type Expected = ((i64, i64), (i64, i64), (usize, i64, bool));
+
+/// An edge of a cut: its ends and its face's plane.
+pub type Edge = (CutPoint, CutPoint, GridPlane);
+
+/// Each loop of `cut` as its edges' ends and faces, after checking that every loop closes: each
+/// edge ends where the next starts and the last where the first starts.
+pub fn loops_of(cut: &Cut) -> Vec<Vec<Edge>> {
+    let mut out = Vec::new();
+    for l in &cut.loops {
+        let n = l.edges.len();
+        assert!(n >= 3, "a loop of {n} edges");
+        for i in 0..n {
+            assert_eq!(
+                l.edges[i].end,
+                l.edges[(i + 1) % n].start,
+                "loop {l:?} is open"
+            );
+        }
+        out.push(l.edges.iter().map(|e| (e.start, e.end, e.face)).collect());
+    }
+    out
+}
+
+/// The loops `expected`, each an edge list at height `z`.
+fn level(z: i64, expected: &[&[Expected]]) -> Vec<Vec<Edge>> {
+    expected
+        .iter()
+        .map(|l| {
+            l.iter()
+                .map(|&((x0, y0), (x1, y1), (axis, at_mm, up))| {
+                    (
+                        cut_at(x0, y0, z),
+                        cut_at(x1, y1, z),
+                        axis_plane(axis, at_mm, up),
+                    )
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// The box of 400 by 200 by 300 mm from the origin.
+pub fn a_box<E: Checked>(e: &mut E) -> E::Solid {
+    let profile = Profile {
+        outer: rectangle(0, 0, 400, 200, 0),
+        holes: vec![],
+    };
+    checked::<E>(e.extrude(&profile, [0, 0, mm(300)]).expect("the box"))
+}
+
+/// A box cut at mid-height is one rectangle, its four edges on its four sides, each side named by
+/// its plane with the normal pointing out of the box: seen from above it runs counter-clockwise
+/// round the material from its least corner, and seen from below (the plane's normal down) the
+/// other way round. Its exactness is the box's.
+pub fn a_box_cut_at_mid_height_is_one_rectangle_on_its_four_sides<E: Checked>(mut e: E) {
+    let b = a_box(&mut e);
+    let (_, exactness) = E::body(&b);
+    let up = e.section(&b, &axis_plane(2, 150, true)).expect("the cut");
+    assert_eq!(up.exactness, exactness);
+    assert_eq!(
+        loops_of(&up),
+        level(
+            150,
+            &[&[
+                ((0, 0), (400, 0), (1, 0, false)),
+                ((400, 0), (400, 200), (0, 400, true)),
+                ((400, 200), (0, 200), (1, 200, true)),
+                ((0, 200), (0, 0), (0, 0, false)),
+            ]]
+        )
+    );
+    let down = e.section(&b, &axis_plane(2, 150, false)).expect("the cut");
+    assert_eq!(
+        loops_of(&down),
+        level(
+            150,
+            &[&[
+                ((0, 0), (0, 200), (0, 0, false)),
+                ((0, 200), (400, 200), (1, 200, true)),
+                ((400, 200), (400, 0), (0, 400, true)),
+                ((400, 0), (0, 0), (1, 0, false)),
+            ]]
+        )
+    );
+}
+
+/// The wall with its door, cut 1000 mm up, is the wall's outline with the gap: two rectangles, each
+/// from its least corner, the exterior (y = 0) and interior (y = 200 mm) faces' planes shared by
+/// both, and the opening's two jambs facing into the gap; 2400 mm up, above the door, it is the
+/// whole wall's rectangle. Whichever way the wall is drawn.
+pub fn the_wall_with_its_door_cut_in_plan_has_the_gap<E: Checked>(mut e: E) {
+    for drawn in BOTH {
+        let w = wall_with_door(&mut e, drawn);
+        let low = e.section(&w, &axis_plane(2, 1000, true)).expect("the cut");
+        assert_eq!(
+            loops_of(&low),
+            level(
+                1000,
+                &[
+                    &[
+                        ((0, 0), (1550, 0), (1, 0, false)),
+                        ((1550, 0), (1550, 200), (0, 1550, true)),
+                        ((1550, 200), (0, 200), (1, 200, true)),
+                        ((0, 200), (0, 0), (0, 0, false)),
+                    ],
+                    &[
+                        ((2450, 0), (4000, 0), (1, 0, false)),
+                        ((4000, 0), (4000, 200), (0, 4000, true)),
+                        ((4000, 200), (2450, 200), (1, 200, true)),
+                        ((2450, 200), (2450, 0), (0, 2450, false)),
+                    ],
+                ]
+            ),
+            "{drawn:?}"
+        );
+        let high = e.section(&w, &axis_plane(2, 2400, true)).expect("the cut");
+        assert_eq!(
+            loops_of(&high),
+            level(
+                2400,
+                &[&[
+                    ((0, 0), (4000, 0), (1, 0, false)),
+                    ((4000, 0), (4000, 200), (0, 4000, true)),
+                    ((4000, 200), (0, 200), (1, 200, true)),
+                    ((0, 200), (0, 0), (0, 0, false)),
+                ]]
+            ),
+            "{drawn:?}"
+        );
+    }
+}
+
+/// A plane that only touches the wall (its base, its top, an end) or misses it cuts nothing: a cut
+/// with no loops, not an error.
+pub fn a_plane_that_touches_or_misses_cuts_nothing<E: Checked>(mut e: E) {
+    let w = wall_with_door(&mut e, Drawn::InPlan);
+    for plane in [
+        axis_plane(2, 0, true),
+        axis_plane(2, 2700, true),
+        axis_plane(2, 2700, false),
+        axis_plane(0, 0, true),
+        axis_plane(0, 4000, false),
+        axis_plane(2, 3000, true),
+        axis_plane(2, -50, true),
+        axis_plane(1, 500, true),
+    ] {
+        let cut = e.section(&w, &plane).expect("an answer");
+        assert!(cut.loops.is_empty(), "{plane:?}: {:?}", cut.loops);
+    }
+}
+
+/// A plane with no normal is not an input; a plane not square to a grid axis, and one through the
+/// door's head (corners of the solid on the plane, with material on both sides), are answered as
+/// unsupported, never with a guess.
+pub fn a_plane_the_engine_does_not_cut_yet_is_a_value<E: Checked>(mut e: E) {
+    let w = wall_with_door(&mut e, Drawn::InPlan);
+    let none = e.section(
+        &w,
+        &GridPlane {
+            normal: [0; 3],
+            offset: 0,
+        },
+    );
+    assert!(
+        matches!(
+            none,
+            Err(EngineError::Invalid {
+                operation: "section",
+                ..
+            })
+        ),
+        "{none:?}"
+    );
+    for plane in [
+        GridPlane {
+            normal: [1, 1, 0],
+            offset: i128::from(mm(2000)),
+        },
+        axis_plane(2, 2100, true),
+    ] {
+        let found = e.section(&w, &plane);
+        assert!(
+            matches!(
+                found,
+                Err(EngineError::Unsupported {
+                    operation: "section",
+                    ..
+                })
+            ),
+            "{plane:?}: {found:?}"
+        );
     }
 }

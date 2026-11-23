@@ -97,6 +97,7 @@ impl Geometry for Wedges {
                 deviation: 0,
                 mesh,
                 outline: vec![[0, 0], [long, 0], [0, long]],
+                parts: Vec::new(),
             }],
         })
     }
@@ -681,6 +682,9 @@ async fn a_set_replaces_that_parameters_entry_and_leaves_every_other_key() {
     let mut want = BTreeMap::new();
     for (key, value) in [
         ("@category", "300"),
+        // Made on level 1: tied to the level that integer names (construct-levels).
+        ("@level", "1"),
+        ("@level.offset", "length:q0:0"),
         ("@type", "T-820"),
         ("P-mark", "text:D02"),
         ("fire rating", "FD30"),

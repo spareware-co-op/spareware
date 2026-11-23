@@ -28,6 +28,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .stack-ghost { pointer-events: none; }
 .dw .element { cursor: move; }
 .dw .claim.mine { fill: none; stroke: var(--success); }
+/* A layered wall: each layer in its material's cut colour (set on the part, from the server's
+   materials), a neutral fill for a material not listed, and the wall's outline over them. */
+.dw .part { fill: var(--rule); stroke: var(--ink-2); stroke-width: .6px; vector-effect: non-scaling-stroke; }
+.dw .layered { fill: none; stroke: var(--ink); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .layered.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
 
 /* The Types and Project parameters dialogs. */
 .stack-manage section { padding: 8px 0; border-bottom: 1px solid var(--hairline); }

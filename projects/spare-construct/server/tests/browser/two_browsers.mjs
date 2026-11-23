@@ -5,6 +5,7 @@
 //   STACK_KILL   a command that kills the server the hard way
 //   STACK_START  a command that starts it again
 //   SHOTS        a folder for screenshots
+//   STACK_GEOMETRY  kernel when the server runs on the geometry kernel, as the page must then too
 import { execSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
@@ -237,22 +238,38 @@ await ben.waitForFunction(() =>
 pass('and so does a door placed on it');
 const hosted = await ben.evaluate(() => {
   const door = [...window.spare.elements.values()].find((p) => /^D-[0-9a-f]{8}$/.test(p.el.id));
-  return door.el.references[0];
+  return { id: door.el.id, face: door.el.references[0], along: door.el.props['@host.along'] };
 });
 check(
-  hosted.element === wallId && hosted.kind === 'face',
-  'hosted on a named face of that wall, not on the wall',
+  hosted.face.element === wallId && hosted.face.kind === 'face' && /^length:q0:/.test(hosted.along),
+  'hosted on a named face of that wall at an offset along it, not on the wall',
 );
 await anna.keyboard.press('Escape');
 const wallBoxAgain = await box(anna, wallId);
 await anna.mouse.click(wallBoxAgain.x + 20, wallBoxAgain.y + wallBoxAgain.height / 2);
 await anna.waitForSelector('#ribbon >> text=Delete');
 await anna.keyboard.press('Delete');
+await anna.waitForFunction(() =>
+  document.getElementById('toast-m').textContent.includes('still hosts 1 element'),
+);
+pass('a wall with a door on it is not deleted, and the server says why');
+const doorBox = await box(anna, hosted.id);
+await anna.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction(
+  (id) => !document.querySelector(`g.element[data-id="${id}"]`),
+  hosted.id,
+);
+const wallBoxLast = await box(anna, wallId);
+await anna.mouse.click(wallBoxLast.x + 20, wallBoxLast.y + wallBoxLast.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
 await ben.waitForFunction(
   (id) => !document.querySelector(`g.element[data-id="${id}"]`),
   wallId,
 );
-pass("deleting it takes it off Ben's screen");
+pass("deleting the door and then the wall takes them off Ben's screen");
 
 console.log('\n   The 3D view');
 await anna.click('#browser [data-act="go"][data-a="3d"]');
@@ -269,6 +286,14 @@ const compared = await ben.evaluate(() => ({
 }));
 console.log(`      Ben's page compared ${compared.checked} bodies with the server's`);
 check(compared.mismatches.length === 0, "every body built in the browser matches the server's");
+const building = await ben.evaluate(() => ({
+  viewing: window.spare.viewing,
+  engine: window.spare.model.edition.engine,
+}));
+check(!building.viewing, `Ben's page builds the model's shapes itself, on the edition ${building.engine}`);
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  check(building.engine === 'construct.kernel', "on the geometry kernel's edition, with the kernel's own package");
+}
 
 console.log('\n   Parameters, through the edit log');
 // No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
@@ -340,12 +365,18 @@ pass("his Undo button takes back a second change, and Anna's browser follows");
 await anna.click('#qat [data-act="stackundo"]');
 await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), wallId);
 pass("Anna's undo is her own: the wall she deleted is back on Ben's screen");
-// Her next is the door she placed on it. Ben takes the door first, so that undo is turned back.
+// Her next is deleting the door she had placed on it: undone, it is back on its wall.
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction(() =>
+  [...window.spare.elements.keys()].some((id) => /^D-[0-9a-f]{8}$/.test(id)),
+);
+pass('her next undo puts the door back on its wall');
+// Her next is placing the door. Ben takes the door first, so that undo is turned back.
 const newDoor = await ben.evaluate(() =>
   [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
 );
-const doorBox = await box(ben, newDoor);
-await ben.mouse.click(doorBox.x + doorBox.width / 2, doorBox.y + doorBox.height / 2);
+const claimedBox = await box(ben, newDoor);
+await ben.mouse.click(claimedBox.x + claimedBox.width / 2, claimedBox.y + claimedBox.height / 2);
 await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
 await anna.click('#qat [data-act="stackundo"]');
 await anna.waitForFunction(() =>
@@ -529,6 +560,265 @@ await closeDialog();
 await ben.waitForFunction(() => /Leaf width\s*2100 mm/.test(document.querySelector('#pv-side').textContent));
 pass("and Ben's properties palette shows it without being asked");
 await shot(ben, 'ben-types');
+
+console.log('\n   Levels, on the page');
+// Ben makes and changes levels in the Manage tab's dialog and draws on one; Anna reads what the server says.
+const levels = async () => asAnna('levels');
+const levelSection = (name) =>
+  ben.locator(`${manager} section[data-level]`).filter({ has: ben.locator(`input[value="${name}"]`) });
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+await ben.locator('#ribbon [data-act="stacklevels"]').click();
+await ben.waitForSelector(`${manager} [data-key="new-level-name"]`);
+const listed = await levels();
+check(
+  (await ben.locator(`${manager} section[data-level]`).count()) === listed.length &&
+    (await ben.locator(`${manager} [data-key="level-elevation:1"]`).inputValue()) === listed.find((l) => l.id === '1').shown,
+  "the levels the old drawings stand on are listed, each elevation as the server formats it",
+);
+const makeLevel = async (name, elevation) => {
+  await ben.locator(`${manager} [data-key="new-level-name"]`).fill(name);
+  await ben.locator(`${manager} [data-key="new-level-elevation"]`).fill(elevation);
+  await ben.locator(`${manager} [data-key="new-level-make"]`).click();
+};
+await makeLevel('Roof', '6.2 m');
+await levelSection('Roof').waitFor();
+check(
+  (await levelSection('Roof').locator('[data-key^="level-elevation:"]').inputValue()) === '6200 mm',
+  'a level is made from a name and an elevation typed in metres, shown in millimetres',
+);
+await makeLevel('roof', '7 m');
+await ben.waitForSelector(`${manager} [data-problem="new-level"]`);
+await problemIs('new-level', "a second level of that name, whatever its case, is refused in the server's words");
+const roof = (await levels()).find((l) => l.name === 'Roof');
+const roofIs = (ok) => async () => ok((await levels()).find((l) => l.id === roof.id));
+const roofElevation = ben.locator(`${manager} [data-key="level-elevation:${roof.id}"]`);
+await roofElevation.fill('7 m');
+await roofElevation.press('Tab');
+await until(roofIs((found) => found.shown === '7000 mm'), (moved) => moved, 'the roof moves up');
+pass('a level moves by typing its elevation beside it');
+await ben.locator(`${manager} [data-key="level-delete:1"]`).click();
+await ben.waitForSelector(`${manager} [data-problem="level:1"]`);
+await problemIs('level:1', "deleting a level that elements are tied to is refused with the server's count");
+await levelSection('Roof').locator('[data-key^="level-show:"]').click();
+await closeDialog();
+await ben.waitForFunction(() => document.getElementById('h-view').textContent === 'Roof plan');
+await ben.waitForFunction(() => !document.querySelector('g.element[data-id="D-101"]'));
+pass("showing the roof shows its plan, without Level 1's doors");
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+const roofPlan = await ben.locator('#pv-canvas').boundingBox();
+await ben.mouse.click(roofPlan.x + roofPlan.width * 0.3, roofPlan.y + roofPlan.height * 0.4);
+await ben.mouse.click(roofPlan.x + roofPlan.width * 0.6, roofPlan.y + roofPlan.height * 0.4);
+await ben.keyboard.press('Escape');
+await until(roofIs((found) => found.tied === 1), (tied) => tied, 'the wall is on the roof');
+pass("a wall drawn on the roof's plan is tied to the roof, as Anna reads it");
+await undoRedo('Drawing on the roof', roofIs((found) => found.tied === 1), (tied) => !tied, (tied) => tied);
+await ben.click('#browser [data-act="view"][data-a="l1"]');
+await ben.waitForSelector('g.element[data-id="D-101"]');
+check((await ben.locator('#h-view').textContent()) === 'Level 1 plan', 'and Level 1 plan shows Level 1 again');
+await shot(ben, 'ben-levels');
+
+console.log('\n   Formulas, on the page');
+// A parameter given by a formula of others: defined in the Project parameters dialog, worked out by
+// the server wherever it is read, shown read-only with its formula, and following its inputs.
+const openParams = async () => {
+  await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+  await ben.locator('#ribbon [data-act="stackparams"]').click();
+  await ben.waitForSelector(`${manager} [data-key="def-name"]`);
+};
+const define = async (name, holder, { standard = '', formula = '' } = {}) => {
+  await ben.locator(`${manager} [data-key="def-name"]`).fill(name);
+  await ben.locator(`${manager} [data-key="def-kind"]`).selectOption('length');
+  await ben.locator(`${manager} [data-key="def-holder"]`).selectOption(holder);
+  await ben.locator(`${manager} [data-key="def-default"]`).fill(standard);
+  await ben.locator(`${manager} [data-key="def-formula"]`).fill(formula);
+  await ben.locator(`${manager} [data-key="def-cat:300"]`).check();
+  await ben.locator(`${manager} [data-key="def-go"]`).click();
+};
+const parameterNamed = async (name) => (await asAnna('project-parameters')).parameters.find((p) => p.name === name);
+// Once it is defined and bound, the page empties the form for the next one.
+const formEmpty = () => ben.waitForFunction((root) => document.querySelector(`${root} [data-key="def-name"]`)?.value === '', manager);
+await openParams();
+await define('Jamb', 'type', { standard: '40' });
+await until(() => parameterNamed('Jamb'), (found) => found && found.categories.length === 1, 'Jamb is bound');
+await formEmpty();
+await define('Clear', 'instance', { formula: '2*Jamb+820mm' });
+const clearDef = await until(() => parameterNamed('Clear'), (found) => found && found.categories.length === 1, 'Clear is bound');
+await formEmpty();
+check(clearDef.formula === '2 * Jamb + 820 mm', 'a formula typed in the dialog is stored in its one spelling, by the server');
+await ben.waitForFunction(
+  ([root, id]) => document.querySelector(`${root} [data-formula="${id}"]`)?.textContent === 'Formula: 2 * Jamb + 820 mm',
+  [manager, clearDef.id],
+);
+pass('and the dialog shows it');
+await define('Bad', 'instance', { formula: 'Nope + 1 mm' });
+await ben.waitForSelector(`${manager} [data-problem="define"]`);
+check((await ben.locator(`${manager} [data-problem="define"]`).textContent()) === 'There is no parameter called Nope.', "a formula naming no parameter is refused in the server's words");
+await problemIs('define', 'beside the form');
+await closeDialog();
+
+const clear = (view) => view.parameters.find((p) => p.name === 'Clear');
+await until(() => door('D-103'), (view) => clear(view)?.shown === '900 mm' && clear(view).from === 'formula', 'D-103 reads its clear width');
+pass("the server works the formula out for a door, as Anna reads it: 2 * 40 mm + 820 mm");
+await pick('D-103');
+await ben.waitForFunction((id) => document.querySelector(`#pv-side [data-formula="${id}"]`)?.textContent === '= 2 * Jamb + 820 mm', clearDef.id);
+check((await ben.locator(`#pv-side input[data-a="${clearDef.id}"]`).count()) === 0, "Ben's palette shows the formula's value read-only, with its formula");
+
+// An input the formula reads changes on the type: the value follows, for both of them.
+const jambDef = await parameterNamed('Jamb');
+await openTypes();
+const jamb = typeSection('Flush door').locator(`input[data-key$=":${jambDef.id}"]`);
+await jamb.fill('50');
+await jamb.press('Enter');
+await until(() => door('D-103'), (view) => clear(view).shown === '920 mm', 'the clear width follows the jamb');
+pass('a value the formula reads, set on the type, reaches the formula of each door of it');
+await closeDialog();
+await ben.waitForFunction(() => /Clear\s*920 mm/.test(document.querySelector('#pv-side').textContent));
+pass("and Ben's palette shows the new value without being asked");
+await undoRedo('Setting a value a formula reads', () => door('D-103'), (view) => clear(view).shown === '900 mm', (view) => clear(view).shown === '920 mm');
+
+// The formula itself changes in the dialog; one the server can't work out is refused beside it.
+await openParams();
+const formulaField = ben.locator(`${manager} [data-key="formula:${clearDef.id}"]`);
+await formulaField.fill('2 * Jamb + 1 m');
+await formulaField.press('Enter');
+await until(() => door('D-103'), (view) => clear(view).shown === '1100 mm', 'the new formula reaches the door');
+pass('a changed formula reaches every door that reads it');
+await formulaField.fill('Jamb / 0');
+await formulaField.press('Enter');
+await ben.waitForSelector(`${manager} [data-problem="formula:${clearDef.id}"]`);
+await problemIs(`formula:${clearDef.id}`, "a formula that can't be worked out is refused in the server's words, beside the formula");
+check((await door('D-103').then(clear)).shown === '1100 mm', 'and changes nothing');
+await closeDialog();
+await undoRedo('Changing a formula', () => door('D-103'), (view) => clear(view).shown === '920 mm', (view) => clear(view).shown === '1100 mm');
+await shot(ben, 'ben-formulas');
+
+console.log('\n   Layered walls, of a chosen type');
+// Anna draws a wall of a type she chooses in the wall tool's options, below the seed's floor where
+// nothing else is; Ben sees it built of its type's layers, each in its material's colour. Her undo
+// and redo of the draw take it away and back. Then Ben places a door on it, which cuts it on the
+// kernel's edition, and changes its type's layers: both browsers build it again. Anna touches
+// nothing of Ben's after that, and Ben nothing of hers before.
+const onPlan = (page, x, y) =>
+  page.evaluate(([mx, my]) => {
+    const svg = document.querySelector('#pv-canvas svg');
+    const at = svg.createSVGPoint();
+    at.x = mx;
+    at.y = my;
+    const screen = at.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, [x, y]);
+const layeredTypes = await asAnna('wall-types');
+check(
+  ['wall-brick-veneer-90', 'wall-concrete-200', 'wall-partition-stud-90'].every((id) => layeredTypes.types.some((t) => t.id === id)),
+  "the seed's model has the default wall types, made through the log",
+);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+const wallTypeField = '#pv-side select[data-key="wall-type"]';
+const wallTopField = '#pv-side select[data-key="wall-top"]';
+await anna.waitForSelector(wallTypeField);
+await anna.waitForSelector(`${wallTopField} option[value="2"]`);
+check(
+  (await anna.locator(`${wallTypeField} option`).count()) === layeredTypes.types.length,
+  "the wall tool offers the model's wall types, as the server lists them",
+);
+check((await anna.locator(wallTopField).inputValue()) === '2', 'and its top is the level above the plan, Level 2');
+await anna.locator(wallTypeField).selectOption({ label: 'Concrete 200' });
+await anna.waitForSelector('#pv-side [data-layers="wall-concrete-200"]');
+check(
+  (await anna.locator('#pv-side [data-layers="wall-concrete-200"] tr').count()) === 1,
+  "Anna chooses Concrete 200, and the palette lists its one layer",
+);
+const layeredStart = await onPlan(anna, 2000, 9500);
+const layeredEnd = await onPlan(anna, 5000, 9500);
+await anna.mouse.click(layeredStart.x, layeredStart.y);
+await anna.mouse.click(layeredEnd.x, layeredEnd.y);
+const concreteWall = () =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && p.el.props['@type'] === 'wall-concrete-200')
+    ?.el.id;
+await ben.waitForFunction(concreteWall);
+const layeredId = await ben.evaluate(concreteWall);
+// How many parts a wall is drawn in: handed to the page as it is, so it takes its values as arguments.
+const layeredParts = ([id, count]) =>
+  document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length === count;
+await ben.waitForFunction(layeredParts, [layeredId, 1]);
+pass("Anna's wall appears in Ben's browser, built of its type's one layer");
+const layeredRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, layeredId);
+check(
+  layeredRecord.recipe.args.layers.wall === 'type' &&
+    layeredRecord.props['@level'] === '1' &&
+    layeredRecord.props['@top.level'] === '2',
+  'its record reads its layers from its type, its base tied to Level 1 and its top to Level 2',
+);
+const concreteMaterial = layeredTypes.materials.find((m) => m.id === 'concrete-regular');
+check(
+  (await ben.locator(`g.element[data-id="${layeredId}"] polygon.part`).getAttribute('style')) === `fill:${concreteMaterial.cut}`,
+  "in its material's colour where the plan cuts it, as the server lists the material",
+);
+await shot(ben, 'ben-layered-wall');
+await anna.keyboard.press('Escape');
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'wall.draw');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), layeredId);
+pass("Anna's undo takes the wall she drew away, in Ben's browser too");
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(layeredParts, [layeredId, 1]);
+await anna.waitForFunction(layeredParts, [layeredId, 1]);
+pass('and her redo puts it back, built again of its type, in both browsers');
+
+// Ben places a door on it from his own plan.
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:door"]');
+const layeredBox = await box(ben, layeredId);
+await ben.mouse.click(layeredBox.x + layeredBox.width / 2, layeredBox.y + layeredBox.height / 2);
+const doorOnIt = (id) =>
+  [...window.spare.elements.values()].find((p) => p.el.references?.[0]?.element === id)?.el.id;
+await ben.waitForFunction(doorOnIt, layeredId);
+const hostedDoor = await ben.evaluate(doorOnIt, layeredId);
+await ben.keyboard.press('Escape');
+await anna.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body`), hostedDoor);
+pass('a door Ben places on the layered wall is hosted on it, in both browsers');
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  const cutBy = (names) => names.some((n) => n.role === `tool(${hostedDoor}).head`);
+  await until(
+    async () => (await asAnna(`shape/${layeredId}`)).built.result.shape?.names ?? [],
+    cutBy,
+    'the server cuts the wall for the door',
+  );
+  await anna.waitForFunction(
+    ([wall, cut]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${cut}).head`),
+    [layeredId, hostedDoor],
+  );
+  pass("the door cuts the wall's layers, on the server and as Anna's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the door's cut)");
+}
+
+// No page edits a wall type's layers yet, so Ben's page sends the edit a layers editor will: a
+// 12.5 mm lining either side of the concrete.
+const layeredHash = await anna.evaluate((id) => window.spare.elements.get(id).hash, layeredId);
+const lining = { function: 'finish', thickness: '12.5 mm', material: 'plasterboard-gypsum', wraps: true };
+const concreteLayers = layeredTypes.types.find((t) => t.id === 'wall-concrete-200').assembly.layers;
+const linedConcrete = { core: { exterior: 1, interior: 2 }, layers: [lining, ...concreteLayers, lining] };
+await ben.evaluate((assembly) => window.spare.edit('wall.type.layers', { type: 'wall-concrete-200', assembly }), linedConcrete);
+await ben.waitForFunction(layeredParts, [layeredId, 3]);
+await anna.waitForFunction(layeredParts, [layeredId, 3]);
+pass("Ben changes the type's layers, and both browsers build the wall again of its three");
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).hash, layeredId)) === layeredHash,
+  'and no wall was written: it reads its type',
+);
+await until(
+  async () => (await asAnna('wall-types')).types.find((t) => t.id === 'wall-concrete-200').thickness,
+  (thickness) => thickness === '225 mm',
+  'the type is 225 mm thick',
+);
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the layered wall's included, matches the server's`);
+}
+await shot(anna, 'anna-layered-wall');
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
