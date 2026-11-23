@@ -395,6 +395,10 @@ async fn move_along<T: Txn>(
     let up = match (&args.up, &hosting) {
         (Some(typed), _) => length("The offset up its host", typed),
         (None, Hosting::OnFace { up, .. }) => Ok(*up),
+        (None, Hosting::InPlan { .. }) => Err(format!(
+            "{} is drawn in its floor's plan: change its outline to move it.",
+            before.name
+        )),
         (None, Hosting::ByPosition { .. }) => {
             match frame_at(txn, project, document, &host, &before, &hosting).await? {
                 Ok((_, at)) => Length::checked_from_mm(at.z)

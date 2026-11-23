@@ -40,7 +40,7 @@
 //! face share its one name where chapter 20.2 names each piece `Split` (CON-A3-F1-P2, with the
 //! body record).
 
-use super::opening::{self, Cut, Frame, Hosted};
+use super::opening::{self, Cut, Frame, Hosted, OPENING_OP, PLAIN_OP};
 use super::{AskedCut, Extrusion, Units, WALL_ROLES, as_steps, fault, from_engine, name, op_id};
 use crate::wall_plan::{Axis, Layered};
 use construct_model::geometry::{
@@ -50,9 +50,6 @@ use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, Profile};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
-
-/// The operation of the only element that cuts an opening.
-const OPENING_OP: &str = "door.single";
 
 /// A layered wall's body bytes: what the engine was asked for each layer, and the cutter of each
 /// opening, once for all the layers. A wall with no openings writes no `subtract`.
@@ -135,8 +132,8 @@ impl WallFrame {
             fault(
                 "NotAHost",
                 format!(
-                    "door {first}: a door is hosted only on a wall along x or y until doors are \
-                     families; this wall runs at an angle"
+                    "{first}: a door or an opening is hosted only on a wall along x or y until \
+                     doors are families; this wall runs at an angle"
                 ),
             )
         })?;
@@ -212,19 +209,37 @@ impl WallFrame {
     /// not a door, or a door that does not read, is left as it is, for the openings to refuse in
     /// their own words.
     fn door<'a>(&self, hosted: &Hosted<'a>, units: Units) -> Result<Hosted<'a>, GeometryError> {
-        if hosted.recipe.op != OPENING_OP {
-            return Ok(*hosted);
-        }
-        let Ok(door) = Extrusion::door(&hosted.recipe.args) else {
-            return Ok(*hosted);
-        };
         let named =
             |e: GeometryError| fault(&e.code, format!("door {}: {}", hosted.key, e.message));
-        let [wide, deep] = door.size;
-        let (wide, deep) = (
-            units.steps(wide).map_err(named)?,
-            units.steps(deep).map_err(named)?,
-        );
+        // Its plan's size along x and along y, in steps; a plain opening reaches through the
+        // wall's whole thickness, so only its place along the wall is read.
+        let ([wide, deep], plain) = if hosted.recipe.op == PLAIN_OP {
+            let Ok(open) = construct_openings::WallOpening::of(hosted.key, hosted.recipe) else {
+                return Ok(*hosted);
+            };
+            let width = units.from_q0(open.width.steps())?;
+            let [_, thickness, _] = self.frame.size;
+            let size = if open.along_y {
+                [thickness, width]
+            } else {
+                [width, thickness]
+            };
+            (size, true)
+        } else if hosted.recipe.op == OPENING_OP {
+            let Ok(door) = Extrusion::door(&hosted.recipe.args) else {
+                return Ok(*hosted);
+            };
+            let [wide, deep] = door.size;
+            (
+                [
+                    units.steps(wide).map_err(named)?,
+                    units.steps(deep).map_err(named)?,
+                ],
+                false,
+            )
+        } else {
+            return Ok(*hosted);
+        };
         let (x, y) = (hosted.at.x.get(), hosted.at.y.get());
         let (low, high) = ([x, y], [add(x, wide)?, add(y, deep)?]);
         let ([low_along, low_across], [high_along, high_across]) =
@@ -234,7 +249,11 @@ impl WallFrame {
             *slot = low_along.min(high_along);
         }
         if let Some(slot) = frame.get_mut(self.across_axis()) {
-            *slot = low_across.min(high_across);
+            *slot = if plain {
+                0
+            } else {
+                low_across.min(high_across)
+            };
         }
         let [first, second] = frame;
         Ok(Hosted {
@@ -276,10 +295,10 @@ fn cuts(
     units: Units,
     band: i64,
 ) -> Result<Option<(WallFrame, Vec<Cut>)>, GeometryError> {
-    let Some(first) = hosted.iter().map(|h| h.key).min() else {
+    let Some(first) = hosted.iter().min_by_key(|h| h.key) else {
         return Ok(None);
     };
-    let frame = WallFrame::of(wall, units, first)?;
+    let frame = WallFrame::of(wall, units, &opening::who(first.recipe, first.key))?;
     let framed = hosted
         .iter()
         .map(|h| frame.door(h, units))

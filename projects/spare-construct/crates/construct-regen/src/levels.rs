@@ -232,9 +232,9 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
         };
         let height =
             span((base, *from), (top, *to)).map_err(|e| failure("BadLevel", e.to_string()))?;
-        // A layered wall holds its lengths as stored lengths, exactly; the stand-in's old box
-        // takes whole millimetres.
-        *arg = if wall_plan::is_layered(recipe) {
+        // A layered wall and a shaft hold their lengths as stored lengths, exactly; the
+        // stand-in's old box takes whole millimetres.
+        *arg = if wall_plan::is_layered(recipe) || construct_openings::is_shaft(recipe) {
             serde_json::Value::from(Value::Length(height).stored())
         } else {
             serde_json::Value::from(whole_mm(height, name)?)

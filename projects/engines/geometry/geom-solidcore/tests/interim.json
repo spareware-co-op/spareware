@@ -273,6 +273,48 @@
         "a floor with a curved edge cannot be made"
       ],
       "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-openings' Outline, a curved edge of a floor opening's or a shaft's outline",
+      "operation": "opening.floor or shaft with a curved outline",
+      "answered_by": "refused before any engine is asked (CurvedOutline, naming the opening or shaft): the engine seam's extrusion takes polygons only",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "an_opening_in_a_floor_is_refused_by_name"
+      },
+      "known_faults": [
+        "a round opening or shaft cannot be made"
+      ],
+      "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's regenerator, a shaft that ends inside a floor's thickness",
+      "operation": "shaft whose base or top lies between a floor's bottom and top faces",
+      "answered_by": "refused (ShaftEndsInFloor, the floor's build failure naming the shaft and which end) rather than cut part way: a part-depth cut would be a recess, which no builder makes yet",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/openings.rs",
+        "test": "a_shaft_cuts_every_floor_it_passes_through"
+      },
+      "known_faults": [
+        "a shaft cannot stop part way through a floor"
+      ],
+      "replaced_by": "a part-depth cut through Engine::subtract of the shaft's prism from the layers it reaches, with the recess's faces named, in a later piece"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, openings and shafts (construct-regen's voids)",
+      "operation": "opening.wall, opening.floor and shaft, and a floor built with its openings and shafts (Geometry::build_hosting)",
+      "answered_by": "each void is drawn as its outline (a wall opening's rectangle standing on its wall's line, a shaft's ribbon), with no solid; the stand-in builds a floor alone and cuts no opening; on the kernel's edition the floor's builder cuts them through every layer (the server's tests/kernel.rs, openings_and_a_shaft_cut_every_layer_of_a_floor)",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/src/voids.rs",
+        "test": "a_void_is_drawn_as_its_outline"
+      },
+      "known_faults": [
+        "on the stand-in, a floor or wall shows no hole where an opening or shaft is"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel over the engine seam, which the browser runs too for a document on the kernel's edition"
     }
   ]
 }

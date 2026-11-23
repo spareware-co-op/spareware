@@ -29,6 +29,9 @@
 //! - [`walls`]: how a layered wall's recipe reads its layers from its wall type, filled with the
 //!   parameters by [`parameters::recipe_at`].
 //!
+//! - [`voids`]: the display shape of an opening and a shaft (job 4.2), which have no solid; both
+//!   builders hand a void's recipe to it first, as a datum's. What one cuts is its host's builder's.
+//!
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
 //!   doors through it, and the server's commands check through it, so the two cannot differ.
@@ -54,6 +57,7 @@ pub mod regenerator;
 #[cfg(feature = "server")]
 pub mod slabs;
 pub mod stand_in;
+pub mod voids;
 pub mod wall_plan;
 #[cfg(feature = "server")]
 pub mod walls;

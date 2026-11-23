@@ -16,6 +16,10 @@
 //! - `floor`: one solid per layer of its floor type, each its boundary with its holes extruded
 //!   from the layer's bottom face up to its top, the floor's top face at `z = 0`, in the child
 //!   module `floor` (job 4.3); its lengths are construct-params' steps ([`crate::floor_plan`]).
+//! - Openings and shafts (job 4.2): a plain opening (`opening.wall`) is cut through every layer of
+//!   its wall on the door's path below ([`opening`]); a floor's openings and the shafts passing
+//!   through it are more holes in each layer's profile (the child module `floor`). The void itself
+//!   is drawn by [`crate::voids`], as the stand-in draws it.
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
 //!   a door's shape is decided.
@@ -636,6 +640,9 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if construct_openings::is_void(recipe) {
+        return Ok(Vec::new());
+    }
     if crate::floor_plan::is_floor(recipe) {
         let plan = crate::floor_plan::FloorPlan::of(recipe)?;
         return floor::names(op_id(recipe)?, &plan);
@@ -697,6 +704,9 @@ pub fn fits(
         let units = Units::on(STEP)?;
         (units, units.band_over(std::iter::empty()))
     };
+    if crate::floor_plan::is_floor(host) {
+        return floor::fits(host, &on_grid(units, hosted)?, units);
+    }
     if wall_plan::is_layered(host) {
         return layered::fits(&Layered::of(host)?, &on_grid(units, hosted)?, units, band);
     }
@@ -758,7 +768,7 @@ impl<E: Engine> Kernel<E> {
         hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
         if crate::floor_plan::is_floor(host) {
-            return self.build_floor(host, hosted.len());
+            return self.build_floor(host, hosted);
         }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;
@@ -991,6 +1001,9 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         if let Some(datum) = crate::datum::build(recipe) {
             return datum;
+        }
+        if let Some(void) = crate::voids::build(recipe) {
+            return void;
         }
         self.build_hosting(recipe, &[])
     }

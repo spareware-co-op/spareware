@@ -17,6 +17,9 @@
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
 //! view shows the layers and their materials on either edition.
 //!
+//! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
+//! the kernel's edition, with no solid and no face.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
@@ -293,6 +296,9 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if construct_openings::is_void(recipe) {
+        return Ok(Vec::new());
+    }
     if floor_plan::is_floor(recipe) {
         return Ok(floor_names(&FloorPlan::of(recipe)?));
     }
@@ -424,6 +430,9 @@ impl Geometry for Boxes {
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         if let Some(datum) = crate::datum::build(recipe) {
             return datum;
+        }
+        if let Some(void) = crate::voids::build(recipe) {
+            return void;
         }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);

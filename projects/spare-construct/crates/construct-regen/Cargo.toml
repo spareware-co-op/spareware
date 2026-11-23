@@ -52,6 +52,10 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 construct-materials = { path = "../construct-materials", optional = true }
 # A view is a record with no shape, so the regenerator passes it over.
 construct-views = { path = "../construct-views", optional = true }
+# Openings and shafts (job 4.2): their recipes, outlines and fit, which both builders read
+# (src/voids.rs, src/kernel/floor.rs, src/kernel/opening.rs), so it is not optional. Same
+# workspace.
+construct-openings = { path = "../construct-openings" }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }
