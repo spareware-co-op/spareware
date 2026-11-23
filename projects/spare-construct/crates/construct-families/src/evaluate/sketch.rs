@@ -396,6 +396,29 @@ fn build<'r>(
 }
 
 impl Drawn {
+    /// The family plane the sketch's plane is parallel to.
+    pub(crate) fn base(&self) -> Base {
+        self.base
+    }
+
+    /// The corners of a loop of the sketch's lines, in loop order, in the sketch's own two
+    /// coordinates (an opening's outline: along x and up z on an `xz` plane).
+    pub(crate) fn outline(&self, lines: &[Key]) -> Result<Vec<Point2>, Reason> {
+        let at = |p: P3| {
+            let [first, second] = match self.base {
+                Base::Xy => [p.x.get(), p.y.get()],
+                Base::Xz => [p.x.get(), p.z.get()],
+                Base::Yz => [p.y.get(), p.z.get()],
+            };
+            [Length::from_steps(first), Length::from_steps(second)]
+        };
+        Ok(self
+            .corners(lines, Length::from_steps(0))?
+            .into_iter()
+            .map(at)
+            .collect())
+    }
+
     /// The corners of a loop of the sketch's lines, in loop order, `height` along the plane's
     /// normal from the plane.
     pub(crate) fn corners(&self, lines: &[Key], height: Length) -> Result<Vec<P3>, Reason> {

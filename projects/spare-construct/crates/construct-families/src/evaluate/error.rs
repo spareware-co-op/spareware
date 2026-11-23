@@ -47,6 +47,8 @@ pub enum Place {
     Step(Key),
     /// The engine itself, before any step.
     Engine,
+    /// What the recipe is hosted on, and the opening it cuts there.
+    Hosting,
 }
 
 impl fmt::Display for Place {
@@ -63,6 +65,7 @@ impl fmt::Display for Place {
             }
             Self::Step(key) => write!(f, "step {key}"),
             Self::Engine => f.write_str("the geometry engine"),
+            Self::Hosting => f.write_str("hosting"),
         }
     }
 }
@@ -162,6 +165,15 @@ pub enum Reason {
         /// What it allows.
         allowed: u64,
     },
+    /// The recipe declares no host, so it cuts nothing.
+    NotHosted,
+    /// The recipe is hosted on a host it cuts no opening in.
+    NoOpening {
+        /// The host, as the format spells it.
+        host: &'static str,
+    },
+    /// An opening's sketch is not on an `xz` plane, parallel to the wall.
+    NotOnWallPlane,
 }
 
 impl fmt::Display for Reason {
@@ -214,6 +226,14 @@ impl fmt::Display for Reason {
             Self::LimitReached { limit, allowed } => write!(
                 f,
                 "evaluating it would pass the limit of {allowed} {limit} for one type"
+            ),
+            Self::NotHosted => f.write_str("the family is not hosted, so it cuts no opening"),
+            Self::NoOpening { host } => write!(
+                f,
+                "the family is hosted on a {host}, and declares no opening to cut there"
+            ),
+            Self::NotOnWallPlane => f.write_str(
+                "the opening's sketch is not on an xz plane, parallel to the wall it is cut in",
             ),
         }
     }

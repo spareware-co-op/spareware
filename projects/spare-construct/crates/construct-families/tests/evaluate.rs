@@ -24,7 +24,8 @@ use construct_families::{
 };
 use construct_solver::{ConstraintId, SolveError};
 use engine_geometry::value::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
+    Answer, Cut, DisplayMesh, Edition, Engine, EngineError, GridPlane, Profile, Section, Tolerance,
+    Volume,
 };
 use engine_geometry::value::grid::GridStep;
 use evaluate_suite::{
@@ -247,6 +248,10 @@ impl Engine for Prisms {
             }
         }
         Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Shape, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section", "anything: the suite reads the mesh"))
     }
 }
 
