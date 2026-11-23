@@ -1688,13 +1688,24 @@ jobs:
           // seed and a block number, block after block. A failing run prints the seed, and the same binary
           // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
           import { createHash, randomBytes } from 'node:crypto';
+          import { openSync } from 'node:fs';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
           import { argv, env, exit, stderr } from 'node:process';
 
+          // Node's WASI gives the binary the standard output and error this process inherits. When cargo, nextest
+          // or a shell handed us a pipe, that pipe can be non-blocking, and a write to a full one returns EAGAIN
+          // (WASI errno 6, `WouldBlock` in Rust) instead of waiting: a test list of more than 64 KiB then fails
+          // with "io error when listing tests" before any test runs. Node documents the `stdout` and `stderr`
+          // options of `WASI` (host file descriptors), so the binary gets descriptors of its own on the same
+          // pipe or file, opened here and so blocking. Append mode leaves a file's content alone; where the path
+          // cannot be opened the inherited descriptor stays.
+          const blocking = (path, inherited) => { try { return openSync(path, 'a'); } catch { return inherited; } };
+
           const [file, ...args] = argv.slice(2);
           const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
-          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true,
+            stdin: 0, stdout: blocking('/dev/stdout', 1), stderr: blocking('/dev/stderr', 2) });
           const imports = wasi.getImportObject();
           let instance;
           let block = 0;
@@ -1868,13 +1879,24 @@ jobs:
           // seed and a block number, block after block. A failing run prints the seed, and the same binary
           // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
           import { createHash, randomBytes } from 'node:crypto';
+          import { openSync } from 'node:fs';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
           import { argv, env, exit, stderr } from 'node:process';
 
+          // Node's WASI gives the binary the standard output and error this process inherits. When cargo, nextest
+          // or a shell handed us a pipe, that pipe can be non-blocking, and a write to a full one returns EAGAIN
+          // (WASI errno 6, `WouldBlock` in Rust) instead of waiting: a test list of more than 64 KiB then fails
+          // with "io error when listing tests" before any test runs. Node documents the `stdout` and `stderr`
+          // options of `WASI` (host file descriptors), so the binary gets descriptors of its own on the same
+          // pipe or file, opened here and so blocking. Append mode leaves a file's content alone; where the path
+          // cannot be opened the inherited descriptor stays.
+          const blocking = (path, inherited) => { try { return openSync(path, 'a'); } catch { return inherited; } };
+
           const [file, ...args] = argv.slice(2);
           const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
-          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true,
+            stdin: 0, stdout: blocking('/dev/stdout', 1), stderr: blocking('/dev/stderr', 2) });
           const imports = wasi.getImportObject();
           let instance;
           let block = 0;
@@ -2013,13 +2035,24 @@ jobs:
           // seed and a block number, block after block. A failing run prints the seed, and the same binary
           // run with the same arguments and WASI_RUN_SEED set to it draws the same bytes again.
           import { createHash, randomBytes } from 'node:crypto';
+          import { openSync } from 'node:fs';
           import { readFile } from 'node:fs/promises';
           import { WASI } from 'node:wasi';
           import { argv, env, exit, stderr } from 'node:process';
 
+          // Node's WASI gives the binary the standard output and error this process inherits. When cargo, nextest
+          // or a shell handed us a pipe, that pipe can be non-blocking, and a write to a full one returns EAGAIN
+          // (WASI errno 6, `WouldBlock` in Rust) instead of waiting: a test list of more than 64 KiB then fails
+          // with "io error when listing tests" before any test runs. Node documents the `stdout` and `stderr`
+          // options of `WASI` (host file descriptors), so the binary gets descriptors of its own on the same
+          // pipe or file, opened here and so blocking. Append mode leaves a file's content alone; where the path
+          // cannot be opened the inherited descriptor stays.
+          const blocking = (path, inherited) => { try { return openSync(path, 'a'); } catch { return inherited; } };
+
           const [file, ...args] = argv.slice(2);
           const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
-          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true,
+            stdin: 0, stdout: blocking('/dev/stdout', 1), stderr: blocking('/dev/stderr', 2) });
           const imports = wasi.getImportObject();
           let instance;
           let block = 0;
@@ -2046,6 +2079,47 @@ jobs:
           exit(code);
           EOF
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=node --no-warnings $RUNNER_TEMP/wasi-run.mjs" >> "$GITHUB_ENV"
+      # The fault of issue 1315 kept from coming back: the runner above lists geom-num's longest test list
+      # (over 64 KiB, so more than a pipe holds) to a reader that waits before it reads, through an ordinary
+      # pipe and through one made non-blocking, and the listing must arrive whole. Before the runner opened
+      # its own output, either failed with "WouldBlock" after 1,261 of 1,977 lines. A few seconds.
+      - name: The runner's listing reaches a slow reader whole
+        if: matrix.runtime == 'node' && contains(env.KERNEL_CRATES, '-p geom-num')
+        env:
+          BUILD: ${{ matrix.part.build }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          member="$(zstd -dc "wasm-$BUILD.tar.zst" | tar -t | awk '/attack_wide_tests-.*\.wasm$/ && !found { print; found = 1 }')"
+          test -n "$member" || { echo "attack_wide_tests is not in the archive"; exit 1; }
+          zstd -dc "wasm-$BUILD.tar.zst" | tar -x "$member"
+          module="$PWD/$member"
+          cat > slow-reader.py <<'PY'
+          # slow-reader.py MODE WAIT CMD...: runs CMD with its standard output on a pipe, waits WAIT seconds,
+          # then reads the pipe to its end. MODE "pipe" is an ordinary pipe; "nonblocking" is one whose write
+          # end has O_NONBLOCK, as a parent that serves its pipes from an event loop hands to its child.
+          # Prints the exit code and the output's line and byte counts; the output is kept in slow-out.txt.
+          import os, subprocess, sys, time
+          mode, wait, cmd = sys.argv[1], float(sys.argv[2]), sys.argv[3:]
+          r, w = os.pipe2(os.O_NONBLOCK) if mode == "nonblocking" else os.pipe()
+          os.set_blocking(r, True)
+          p = subprocess.Popen(cmd, stdout=w)
+          os.close(w)
+          time.sleep(wait)
+          data = b""
+          while chunk := os.read(r, 65536):
+              data += chunk
+          open("slow-out.txt", "wb").write(data)
+          print(f"exit={p.wait()} lines={data.count(10)} bytes={len(data)}")
+          PY
+          node --no-warnings wasi-run.mjs "$module" --list --format terse > listing.txt
+          echo "listing written to a file: $(wc -l < listing.txt) lines"
+          test "$(wc -c < listing.txt)" -gt 65536
+          for mode in pipe nonblocking; do
+            python3 slow-reader.py "$mode" 3 node --no-warnings wasi-run.mjs "$module" --list --format terse | tee result.txt
+            grep -q '^exit=0 ' result.txt
+            cmp slow-out.txt listing.txt
+          done
       # The build's tests in this part's share, from the archive: the same binaries, flags and
       # runtime `cargo test` ran them with, each test in a process of its own.
       - name: Test suite on wasm32 in release (${{ matrix.part.build }}, part ${{ matrix.part.k }} of ${{ matrix.part.n }})
