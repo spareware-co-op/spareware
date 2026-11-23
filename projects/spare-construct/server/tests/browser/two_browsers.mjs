@@ -1576,6 +1576,7 @@ pass('at the type Ben gave it');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
 }
 
@@ -1645,13 +1646,13 @@ await anna.waitForFunction(() =>
   [...document.querySelectorAll('#pv-side select[data-key="family-choice"] option')].some((o) => o.textContent === 'Test doors'),
 );
 pass("the new door type is listed in Ben's dialog and in Anna's family tool");
-await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
-await until(dfamNames, (names) => !names.includes('Test doors'), 'the undo takes the generated family out');
-await dfamSection('Test doors').waitFor({ state: 'detached' });
-await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
-await until(dfamNames, (names) => names.includes('Test doors'), 'the redo puts the generated family back');
+// The dialog's scrim covers the undo button: close it, undo and redo, and open it again.
+await closeDialog();
+await undoRedo('A generated door type', dfamNames, (names) => !names.includes('Test doors'), (names) => names.includes('Test doors'));
+await ben.locator('#ribbon [data-act="stackfamilies"]').click();
+await ben.waitForSelector(`${manager} [data-key="gen-mark"]`);
 await dfamSection('Test doors').waitFor();
-pass('undo takes the generated family out of the dialog and redo puts it back');
+pass('the generated family is listed again once redone, in the dialog');
 
 // A second type of the same family.
 await dfamMake({ into: dfam.id, mark: 'T2', width: '1200 mm', height: '2100 mm' });
@@ -1767,11 +1768,12 @@ await anna.waitForFunction(
   () => ![...document.querySelectorAll('#pv-side select[data-key="family-choice"] option')].some((o) => o.textContent === 'Test doors'),
 );
 pass("the family is removed once nothing places it, and it is gone from the dialog and from Anna's family tool");
-await undoRedo('A remove', dfamNames, (names) => names.includes('Test doors'), (names) => !names.includes('Test doors'));
 await closeDialog();
+await undoRedo('A remove', dfamNames, (names) => names.includes('Test doors'), (names) => !names.includes('Test doors'));
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the generated door's included, matches the server's`);
 }
 

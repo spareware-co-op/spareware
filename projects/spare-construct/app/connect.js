@@ -758,8 +758,9 @@
     const answer = await shapeFor(model, piece.el, into, fill);
     if (into.get(id) !== piece || piece.asked !== asked) return;
     Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
-    if (isFamily(piece.el)) {
-      piece.seatedTurn = undefined; // built unturned: seated again as its wall puts it
+    if (isFamily(piece.el) && seatOfPiece(piece)) {
+      // Built unturned: it is not compared until it is built again as its wall seats it.
+      Object.assign(piece, { stale: true, seatedTurn: undefined });
       seatFamilies();
     }
     queueDraw();
@@ -948,6 +949,7 @@
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
       if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
+      if ((piece.touched ?? 0) > through) continue; // what is hosted in it changed after this checkpoint
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -1163,7 +1165,10 @@
       const cuts = cutsIn(entry.target, into);
       const placing = ['hosted.place', 'family.place', 'family.move'].includes(entry.cmd);
       const hosts = new Set([piece && hostIdOf(piece.el), placing && entry.args.host]);
-      if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
+      if (cuts) {
+        // A host is built with what is hosted in it: until a checkpoint covers this entry, it is not compared.
+        for (const id of hosts) if (id && into.get(id)) Object.assign(into.get(id), { stale: true, touched: entry.seq });
+      }
       const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
