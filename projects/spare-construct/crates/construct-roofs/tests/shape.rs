@@ -220,7 +220,7 @@ fn layers_share_their_faces_bit_for_bit() {
     assert_eq!(layers, [0, 2], "the membrane has no solid");
     let section = |at: usize| match &built.solids[at].solid {
         Solid::Loft { sections } => sections[0].clone(),
-        Solid::Extrude { .. } => panic!("a sloped layer is lofted"),
+        _ => panic!("a sloped layer is lofted"),
     };
     let (sheet, rafters) = (section(0), section(1));
     let mut rafters_top: Vec<[i64; 3]> = rafters[3..].to_vec();

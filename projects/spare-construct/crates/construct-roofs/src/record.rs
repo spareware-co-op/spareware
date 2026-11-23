@@ -10,15 +10,15 @@
 //! from the type).
 //!
 //! Filled ([`filled`]), the recipe the builder takes holds only:
-//! - [`FORM_ARG`]: `flat`, `mono` or `gable`;
+//! - [`FORM_ARG`]: `flat`, `mono`, `gable` or `solved`;
 //! - [`SLOPES_ARG`]: the edges the roof rises from, in the footprint's order (none when flat);
 //! - [`OUTLINE_ARG`]: the eaves outline anticlockwise from above, each corner
 //!   `{"id":<edge ID>,"at":[x,y]}` in grid steps, the footprint edge whose eaves or verge runs
 //!   from it to the next;
 //! - [`LAYERS_ARG`]: each layer from the top down as `{"function","material","thickness"}` (its
 //!   thickness in grid steps, square to its faces) and, for a layer with a thickness, `solid`:
-//!   `{"extrude":[[x,y,z], ...],"by":[x,y,z]}` or `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` in grid
-//!   steps ([`crate::Solid`]).
+//!   `{"extrude":[[x,y,z], ...],"by":[x,y,z]}`, `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` or
+//!   `{"unite":[[[x,y,z], ...], ...],"by":[x,y,z]}` in grid steps ([`crate::Solid`]).
 //!
 //! Nothing else of a roof reaches the builder.
 
@@ -128,6 +128,10 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, RoofError> {
                     sections: [first, second],
                 } => {
                     json!({ "loft": [points(first), points(second)] })
+                }
+                Solid::Unite { profiles, by } => {
+                    let each: Vec<Value> = profiles.iter().map(|p| points(p)).collect();
+                    json!({ "unite": each, "by": by })
                 }
             };
             entry.insert("solid".to_owned(), solid);

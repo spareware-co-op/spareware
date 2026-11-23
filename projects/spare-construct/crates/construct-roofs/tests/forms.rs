@@ -1,5 +1,5 @@
-//! Which form a roof is, from which of its footprint's edges slope, and every roof that is not
-//! one of the three refused in words naming its edges and the job that lifts it.
+//! Which form a roof is, from which of its footprint's edges slope, and every roof the crate
+//! cannot make refused in words naming its edges.
 
 #![allow(
     clippy::unwrap_used,
@@ -61,68 +61,142 @@ fn the_form_is_worked_out_from_which_edges_slope() {
     assert_eq!(same.form().name(), "gable");
 }
 
-/// Edges that meet at a corner, three edges, or all four are hips; two opposite edges at two
-/// slopes are an uneven gable; a slope on a footprint other than a rectangle along the axes is not
-/// taken. Each refusal names its edges and job 6.2.
+/// Edges that meet at a corner, three edges or all four are solved (hips); two opposite edges at
+/// two slopes are an uneven gable; a turned rectangle and an L are solved. Slopes of two pitches
+/// that meet at a hip, a footprint that is not right-angled, a verge on an L and two overhangs on
+/// an L are refused, each naming its edges.
 #[test]
-fn hips_uneven_gables_and_other_footprints_wait_for_job_6_2() {
+fn hips_uneven_gables_and_other_footprints_are_solved_or_refused_by_name() {
     let quarter = Some(slope(1, 4));
-    let refused =
-        |list: &[(&str, i64, Option<Pitch>)]| Roof::new(rectangle(), &edges(list)).unwrap_err();
-    let every = refused(&[
+    let made = |list: &[(&str, i64, Option<Pitch>)]| Roof::new(rectangle(), &edges(list));
+    let every = made(&[
         ("o0", 0, quarter),
         ("o1", 0, quarter),
         ("o2", 0, quarter),
         ("o3", 0, quarter),
-    ]);
+    ])
+    .unwrap();
     assert_eq!(
-        every,
-        RoofError::Hips {
-            edges: vec![id("o0"), id("o1"), id("o2"), id("o3")],
-            every: true
+        *every.form(),
+        Form::Solved {
+            eaves: vec![id("o0"), id("o1"), id("o2"), id("o3")]
         }
     );
+    assert_eq!(every.form().name(), "solved");
+    let corner = made(&[("o1", 0, quarter), ("o2", 0, quarter)]).unwrap();
+    assert_eq!(corner.form().eaves(), [id("o1"), id("o2")]);
+    let three = made(&[("o0", 0, quarter), ("o1", 0, quarter), ("o2", 0, quarter)]).unwrap();
+    assert_eq!(three.form().name(), "solved");
+    let uneven = made(&[("o0", 0, quarter), ("o2", 0, Some(slope(1, 3)))]).unwrap();
     assert_eq!(
-        every.to_string(),
-        "every edge slopes: hips come with job 6.2 (edges o0, o1, o2 and o3)"
-    );
-    let corner = refused(&[("o1", 0, quarter), ("o2", 0, quarter)]);
-    assert_eq!(
-        corner.to_string(),
-        "edges o1 and o2 slope and meet at a corner: hips come with job 6.2"
-    );
-    let corner = refused(&[("o0", 0, quarter), ("o3", 0, quarter)]);
-    assert!(matches!(corner, RoofError::Hips { every: false, .. }));
-    let three = refused(&[("o0", 0, quarter), ("o1", 0, quarter), ("o2", 0, quarter)]);
-    assert!(three.to_string().contains("o0, o1 and o2"), "{three}");
-    assert!(three.to_string().contains("job 6.2"), "{three}");
-    let uneven = refused(&[("o0", 0, quarter), ("o2", 0, Some(slope(1, 3)))]);
-    assert_eq!(
-        uneven,
-        RoofError::UnevenGable {
-            first: id("o0"),
-            second: id("o2")
+        *uneven.form(),
+        Form::Gable {
+            eaves: [id("o0"), id("o2")]
         }
     );
-    assert!(uneven.to_string().contains("job 6.2"));
-    let l = Roof::new(l_shape(), &edges(&[("o0", 0, quarter)])).unwrap_err();
-    assert_eq!(
-        l,
-        RoofError::NotARectangle {
-            edges: vec![id("o0")]
-        }
-    );
-    assert!(
-        l.to_string()
-            .starts_with("edge o0 slopes, and a sloped roof's footprint")
-    );
+    let l = Roof::new(
+        l_shape(),
+        &edges(&[
+            ("o0", 0, quarter),
+            ("o1", 0, quarter),
+            ("o2", 0, quarter),
+            ("o3", 0, quarter),
+            ("o4", 0, quarter),
+            ("o5", 0, quarter),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(l.form().eaves().len(), 6);
     let turned = Boundary::from_corners(
         &[at(0, 0), at(4000, 3000), at(1000, 7000), at(-3000, 4000)],
         &[],
     )
     .unwrap();
-    let turned = Roof::new(turned, &edges(&[("o0", 0, quarter), ("o2", 0, quarter)])).unwrap_err();
-    assert!(matches!(turned, RoofError::NotARectangle { .. }));
+    let gable = Roof::new(
+        turned.clone(),
+        &edges(&[("o0", 0, quarter), ("o2", 0, quarter)]),
+    )
+    .unwrap();
+    assert_eq!(gable.form().name(), "solved");
+}
+
+/// Slopes of two pitches that meet at a hip (or across a turned gable), a verge on an L, two
+/// overhangs on an L, an overhang on a turned footprint and a footprint that is not right-angled
+/// are refused, each naming its edges.
+#[test]
+fn what_the_solver_cannot_hold_is_refused_by_name() {
+    let quarter = Some(slope(1, 4));
+    let made = |list: &[(&str, i64, Option<Pitch>)]| Roof::new(rectangle(), &edges(list));
+    let turned = Boundary::from_corners(
+        &[at(0, 0), at(4000, 3000), at(1000, 7000), at(-3000, 4000)],
+        &[],
+    )
+    .unwrap();
+    let two = made(&[("o0", 0, quarter), ("o1", 0, Some(slope(1, 3)))]).unwrap_err();
+    assert_eq!(
+        two,
+        RoofError::UnevenPitches {
+            first: id("o0"),
+            second: id("o1")
+        }
+    );
+    assert!(two.to_string().contains("different pitches"), "{two}");
+    let turned_uneven = Roof::new(
+        turned.clone(),
+        &edges(&[("o0", 0, quarter), ("o2", 0, Some(slope(1, 3)))]),
+    )
+    .unwrap_err();
+    assert!(matches!(turned_uneven, RoofError::UnevenPitches { .. }));
+    let verge = Roof::new(l_shape(), &edges(&[("o0", 0, quarter)])).unwrap_err();
+    assert_eq!(verge, RoofError::VergeOnReflex { edge: id("o1") });
+    assert!(verge.to_string().contains("inside corner"), "{verge}");
+    let all = |o5: i64| {
+        edges(&[
+            ("o0", 300, quarter),
+            ("o1", 300, quarter),
+            ("o2", 300, quarter),
+            ("o3", 300, quarter),
+            ("o4", 300, quarter),
+            ("o5", o5, quarter),
+        ])
+    };
+    assert!(Roof::new(l_shape(), &all(300)).is_ok());
+    assert_eq!(
+        Roof::new(l_shape(), &all(200)).unwrap_err(),
+        RoofError::OverhangsDiffer {
+            first: id("o0"),
+            second: id("o5")
+        }
+    );
+    let over = Roof::new(turned, &edges(&[("o0", 100, quarter), ("o2", 0, quarter)])).unwrap_err();
+    assert_eq!(over, RoofError::OverhangOffAxis { edge: id("o0") });
+    let triangle = Boundary::from_corners(&[at(0, 0), at(4000, 0), at(0, 3000)], &[]).unwrap();
+    let slanted = Roof::new(triangle, &edges(&[("o0", 0, quarter)])).unwrap_err();
+    assert_eq!(
+        slanted,
+        RoofError::NotRightAngled {
+            edges: vec![id("o0")]
+        }
+    );
+    assert!(
+        slanted
+            .to_string()
+            .starts_with("edge o0 slopes, and a sloped roof's footprint has right angles")
+    );
+}
+
+/// An arc edge is refused by construct-slabs' own reading of the footprint, before any roof is
+/// worked out.
+#[test]
+fn an_arc_edge_is_refused() {
+    let roof = Roof::new(rectangle(), &edges(&[("o0", 0, Some(slope(1, 4)))])).unwrap();
+    let mut footprint = roof.footprint().to_value();
+    footprint["outer"][0] = serde_json::json!({ "id": "o0", "arc": 0, "reversed": false });
+    let refused = Roof::from_values(&footprint, &roof.edges_value()).unwrap_err();
+    assert!(
+        matches!(refused, RoofError::Slab(_) | RoofError::Malformed(_)),
+        "{refused:?}"
+    );
 }
 
 /// Overhangs and pitches are checked edge by edge: no overhang below nothing, a pitch that rises
@@ -191,7 +265,7 @@ fn a_flat_roofs_overhangs_need_a_footprint_along_the_axes() {
     assert!(Roof::new(triangle.clone(), &BTreeMap::new()).is_ok());
     let off = Roof::new(triangle, &edges(&[("o0", 100, None)])).unwrap_err();
     assert_eq!(off, RoofError::OverhangOffAxis { edge: id("o1") });
-    assert!(off.to_string().contains("job 6.2"));
+    assert!(off.to_string().contains("along the axes"));
     let straight = Boundary::from_corners(
         &[
             at(0, 0),
