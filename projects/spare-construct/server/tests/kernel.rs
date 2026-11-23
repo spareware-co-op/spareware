@@ -918,3 +918,61 @@ async fn a_floor_drawn_through_commands_is_built_one_solid_per_layer() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
+
+/// Through the server's commands on the kernel: the default roof types made and a gable roof over
+/// a rectangle drawn of the insulated concrete type, built one solid per layer; its parameters
+/// view lists its area, ridge height and each layer's volume in units, read-only, the same as on
+/// the stand-in; its pitch changed builds it again, writing no roof; and the whole model rebuilt
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roof_drawn_through_commands_is_built_one_solid_per_layer() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit("roof.defaults", json!({})).await;
+    let x0 = 60_000;
+    edit(
+        "roof.create",
+        json!({ "element": "R-900", "type": "roof-concrete-200-insulated", "level": "1",
+                "form": "gable", "pitch": "1:4",
+                "footprint": { "outer": [corner("r0", x0, 0), corner("r1", x0 + 8000, 0),
+                                         corner("r2", x0 + 8000, 6000), corner("r3", x0, 6000)] } }),
+    )
+    .await;
+    let (shown, names, bounds) = layered(&s, &project, &model, "R-900").await;
+    assert_eq!(
+        ([bounds.0[0], bounds.0[1]], [bounds.1[0], bounds.1[1]]),
+        ([x0, 0], [x0 + 8000, 6000])
+    );
+    assert_eq!(bounds.0[2], 0);
+    assert!(bounds.1[2] > 1000, "the ridge rises: {bounds:?}");
+    assert!(
+        names.iter().any(|n| n.role.starts_with("top.")),
+        "{names:?}"
+    );
+    let wrote = shown.built.input;
+    let read = quantities(&s, &project, &model, "R-900").await;
+    assert_eq!(read["roof.area"].1.as_deref(), Some("48.00 m²"));
+    assert_eq!(read["roof.ridge-height"].1.as_deref(), Some("1059 mm"));
+    assert!(read["roof.layer-1.volume"].0.is_some() && read["roof.layer-2.volume"].0.is_some());
+
+    edit("roof.pitch", json!({ "element": "R-900", "pitch": "1:2" })).await;
+    let (steeper, _, bounds) = layered(&s, &project, &model, "R-900").await;
+    assert!(bounds.1[2] > 1500, "{bounds:?}");
+    assert_ne!(steeper.built.input, wrote, "the roof's record was written");
+    assert_ne!(
+        quantities(&s, &project, &model, "R-900").await["roof.ridge-height"],
+        read["roof.ridge-height"]
+    );
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+}

@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, floors, grids, hosting, levels, params, undo, views, walls};
+use crate::cloud::{elements, floors, grids, hosting, levels, params, roofs, undo, views, walls};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -134,6 +134,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = walls::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = roofs::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         elements::apply(staged, project, context, edit, self.claim_ms).await
     }
 }
@@ -165,6 +168,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || levels::is_command(cmd)
                 || walls::is_command(cmd)
                 || floors::is_command(cmd)
+                || roofs::is_command(cmd)
                 || views::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
@@ -225,6 +229,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
+            || roofs::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
@@ -246,9 +251,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         let outcome = if params::is_command(&edit.cmd) {
             match floors::generic_rules(&mut staged, project, edit).await? {
                 Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => {
-                        params::apply(&mut staged, project, context, edit, self.claim_ms).await?
-                    }
+                    Ok(()) => match roofs::generic_rules(&mut staged, project, edit).await? {
+                        Ok(()) => {
+                            params::apply(&mut staged, project, context, edit, self.claim_ms)
+                                .await?
+                        }
+                        Err(refused) => Err(refused),
+                    },
                     Err(refused) => Err(refused),
                 },
                 Err(refused) => Err(refused),
@@ -265,6 +274,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if floors::is_command(&edit.cmd) {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if roofs::is_command(&edit.cmd) {
+            roofs::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if views::is_command(&edit.cmd) {
             views::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
