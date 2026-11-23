@@ -52,6 +52,7 @@ pub mod shape;
 pub mod stored;
 
 pub use boundary::{BOUNDARY_VERSION, Boundary, Corner, Edge, Ring, Segment};
+pub use construct_solver::{ConstraintId, Point};
 pub use defaults::{DefaultFloor, default_floor_types, default_floors};
 pub use error::SlabError;
 pub use floor::{

@@ -359,6 +359,11 @@ fn roof_from(footprint: Boundary, edges: &Edges, name: &str) -> Result<Roof, Str
 /// A footprint from what a person sent: each corner's typed text read as a length, then checked
 /// by construct-slabs. A refusal names the loop and the edge, after `name`.
 fn footprint(sent: BoundaryArgs, name: &str) -> Result<Boundary, String> {
+    if !sent.constraints.is_empty() {
+        return Err(format!(
+            "{name}'s footprint: a roof's footprint is drawn by its corners; only a floor's outline is sketched with constraints."
+        ));
+    }
     let plain = plain_boundary(sent)?;
     Boundary::from_plain(&plain).map_err(|e| format!("{name}'s footprint: {e}"))
 }

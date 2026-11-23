@@ -33,7 +33,7 @@
 
 use crate::error::SlabError;
 use construct_solver::{
-    Budget, Constraint, ConstraintId, CurveId, LineId, Point, PointId, Sketch, SketchError,
+    Budget, Constraint, ConstraintId, CurveId, LineId, Point, PointId, Side, Sketch, SketchError,
 };
 use kit_core::Id;
 use serde::Deserialize;
@@ -97,6 +97,107 @@ pub struct Corner {
     pub id: Option<Id>,
     /// Where it is, in grid steps.
     pub at: Point,
+}
+
+/// A constraint as a command gives it: its `kind` and the numbers of the points and lines it
+/// relates (corner `k` of the loops in order, outer loop first and then each hole, is point `k`,
+/// and the edge from it is line `k`), with lengths in grid steps. Only what a straight-edged
+/// outline can use; anything else is refused as malformed, never repaired.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum PlainConstraint {
+    Coincident {
+        a: u32,
+        b: u32,
+    },
+    Horizontal {
+        line: u32,
+    },
+    Vertical {
+        line: u32,
+    },
+    Parallel {
+        a: u32,
+        b: u32,
+    },
+    Perpendicular {
+        a: u32,
+        b: u32,
+    },
+    EqualLength {
+        a: u32,
+        b: u32,
+    },
+    Distance {
+        a: u32,
+        b: u32,
+        steps: i64,
+    },
+    PointLineDistance {
+        point: u32,
+        line: u32,
+        steps: i64,
+        #[serde(default)]
+        side: Option<PlainSide>,
+    },
+    Fixed {
+        point: u32,
+    },
+    PointOnLine {
+        point: u32,
+        line: u32,
+    },
+}
+
+/// Which side of a line, as a command spells it.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum PlainSide {
+    Left,
+    Right,
+}
+
+impl PlainConstraint {
+    /// The solver's constraint; a point's side of a line is read from the sketch as drawn when the
+    /// command gave none.
+    fn made(&self, sketch: &Sketch) -> Result<Constraint, SlabError> {
+        let (p, l) = (PointId, LineId);
+        Ok(match *self {
+            Self::Coincident { a, b } => Constraint::Coincident(p(a), p(b)),
+            Self::Horizontal { line } => Constraint::Horizontal(l(line)),
+            Self::Vertical { line } => Constraint::Vertical(l(line)),
+            Self::Parallel { a, b } => Constraint::Parallel(l(a), l(b)),
+            Self::Perpendicular { a, b } => Constraint::Perpendicular(l(a), l(b)),
+            Self::EqualLength { a, b } => Constraint::EqualLength(l(a), l(b)),
+            Self::Distance { a, b, steps } => Constraint::Distance {
+                a: p(a),
+                b: p(b),
+                steps,
+            },
+            Self::PointLineDistance {
+                point,
+                line,
+                steps,
+                side,
+            } => {
+                let side = match side {
+                    Some(PlainSide::Left) => Side::Left,
+                    Some(PlainSide::Right) => Side::Right,
+                    None => sketch.side_of(p(point), l(line)).ok_or_else(|| {
+                        malformed("a point on its line needs the side it stays on")
+                    })?,
+                };
+                Constraint::PointLineDistance {
+                    point: p(point),
+                    line: l(line),
+                    steps,
+                    side,
+                }
+            }
+            Self::Fixed { point } => Constraint::Fixed(p(point)),
+            Self::PointOnLine { point, line } => Constraint::PointOnLine(p(point), l(line)),
+        })
+    }
 }
 
 /// A floor's boundary. Every value of this type has passed every check.
@@ -339,6 +440,8 @@ impl Boundary {
             outer: Vec<PlainCorner>,
             #[serde(default)]
             holes: Vec<Vec<PlainCorner>>,
+            #[serde(default)]
+            constraints: Vec<PlainConstraint>,
         }
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -373,7 +476,16 @@ impl Boundary {
             .into_iter()
             .map(corners)
             .collect::<Result<Vec<_>, _>>()?;
-        Self::from_corners(&outer, &holes)
+        let drawn = Self::from_corners(&outer, &holes)?;
+        if plain.constraints.is_empty() {
+            return Ok(drawn);
+        }
+        let mut sketch = drawn.sketch.clone();
+        for constraint in &plain.constraints {
+            let made = constraint.made(&sketch)?;
+            sketch.add_constraint(made).map_err(from_sketch)?;
+        }
+        Self::new(sketch, drawn.outer, drawn.holes)
     }
 
     /// The sketch its loops are drawn in, as drawn and stored.

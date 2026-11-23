@@ -205,3 +205,82 @@ fn a_dimension_that_makes_the_outline_cross_itself_is_refused() {
         })
     );
 }
+
+/// A command's plain form may carry constraints: the same sketch as one made by hand, the same
+/// corners, and the same refusals; a point's side of a line, left out, is read from the drawing.
+#[test]
+fn a_plain_boundary_may_carry_constraints() {
+    let steps = |millimetres: i32| mm(millimetres);
+    let corner =
+        |name: &str, x: i32, y: i32| serde_json::json!({ "id": name, "at": [steps(x), steps(y)] });
+    let plain = serde_json::json!({
+        "outer": [corner("e0", 0, 0), corner("e1", 4100, 100), corner("e2", 3900, 3100),
+                  corner("e3", -50, 2900)],
+        "constraints": [
+            { "kind": "fixed", "point": 0 },
+            { "kind": "horizontal", "line": 0 },
+            { "kind": "vertical", "line": 1 },
+            { "kind": "horizontal", "line": 2 },
+            { "kind": "vertical", "line": 3 },
+            { "kind": "distance", "a": 0, "b": 1, "steps": steps(4000) },
+            { "kind": "point_line_distance", "point": 2, "line": 0, "steps": steps(3000) },
+        ],
+    });
+    let made = Boundary::from_plain(&plain).unwrap();
+    assert_eq!(area(&made).unwrap(), Area::from_mm2(12_000_000));
+    // The same, by hand.
+    let by_hand = sketched(
+        &[
+            Corner {
+                id: Some(id("e0")),
+                at: Point::mm(0, 0),
+            },
+            Corner {
+                id: Some(id("e1")),
+                at: Point::mm(4100, 100),
+            },
+            Corner {
+                id: Some(id("e2")),
+                at: Point::mm(3900, 3100),
+            },
+            Corner {
+                id: Some(id("e3")),
+                at: Point::mm(-50, 2900),
+            },
+        ],
+        &[
+            Constraint::Fixed(p(0)),
+            Constraint::Horizontal(l(0)),
+            Constraint::Vertical(l(1)),
+            Constraint::Horizontal(l(2)),
+            Constraint::Vertical(l(3)),
+            Constraint::Distance {
+                a: p(0),
+                b: p(1),
+                steps: mm(4000),
+            },
+            Constraint::PointLineDistance {
+                point: p(2),
+                line: l(0),
+                steps: mm(3000),
+                side: construct_solver::Side::Left,
+            },
+        ],
+    )
+    .unwrap();
+    assert_eq!(made, by_hand);
+    // Refused: a constraint of no kind, one that names a point the sketch lacks, and one more
+    // distance than the shape can hold.
+    for bad in [
+        serde_json::json!([{ "kind": "wobbly" }]),
+        serde_json::json!([{ "kind": "fixed", "point": 9 }]),
+        serde_json::json!([{ "kind": "fixed", "point": 0, "extra": 1 }]),
+    ] {
+        let mut value = plain.clone();
+        value["constraints"] = bad;
+        assert!(matches!(
+            Boundary::from_plain(&value),
+            Err(SlabError::Malformed(_))
+        ));
+    }
+}

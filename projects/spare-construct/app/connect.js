@@ -2452,8 +2452,8 @@
 
   /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
   function floorSketch() {
-    if (!sketching()) return '';
-    let svg = '';
+    let svg = pickInPlan();
+    if (!sketching()) return svg;
     const where = S.tool === 'roof' ? 'roof-draw' : 'floor-draw';
     if (FLOOR.sent && C.problems.has(where)) {
       svg += `<path class="floor-refused" data-${S.tool}-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
@@ -2484,6 +2484,7 @@
     const chosen = S.sel === e.id;
     let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
     group += `<path class="body floor${chosen ? ' sel' : ''}" data-material="${esc(top?.material ?? '')}" data-holes="${placed.length - 1}"${fill} d="${placed.map(ringPath).join('')}"/>`;
+    group += floorShapeInPlan(piece, x, y, scale);
     const claim = heldClaim(e.id);
     if (claim) {
       const theirs = claim.person !== C.me.person.id;
@@ -2519,12 +2520,250 @@
     html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-floor-offset>${esc(floorOffset(e))}</span>`);
     if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
     html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    html += floorShapeHtml(piece);
     if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
     if (view) {
       html += readOnlyTable(view);
       html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
     }
     return html;
+  }
+
+  // --- A floor's slope and slab edges, and its sketched outline ---
+  // A selected floor's palette sets its slope (an arrow drawn in the plan by two clicks, with the top
+  // face's two heights typed beside it: `floor.slope`; `floor.slope.clear`) and its slab edges (a
+  // profile typed, then the floor's edges picked in the plan: `floor.edge`; `floor.edge.remove`).
+  // The page checks nothing and works out no geometry: the plan draws the arrow from the floor's
+  // record and its slab edges from its recipe as the server filled it, 3D draws what the server
+  // built, the quantities are the server's read-only rows, and a refusal (a slope and slab edges on
+  // one floor, a corner off the grid) is the server's reason under the part it came from.
+  // A sketched outline's dimensions are changed by `floor.dimension`, which the page does not offer
+  // yet: it has no way to show a sketch's dimensions (construct-model's FORMAT.md, "Floors").
+
+  Object.assign(WORDS, {
+    'floor.slope': 'sloped',
+    'floor.slope.clear': 'took the slope off',
+    'floor.edge': 'put a slab edge on',
+    'floor.edge.remove': 'took a slab edge off',
+    'floor.dimension': 'changed a dimension of',
+  });
+  Object.assign(STEP_WORDS, {
+    'floor.slope': 'a floor’s slope',
+    'floor.slope.clear': 'taking a floor’s slope off',
+    'floor.edge': 'a floor’s slab edge',
+    'floor.edge.remove': 'taking a slab edge off',
+    'floor.dimension': 'a floor’s dimension',
+  });
+
+  C.slopeTool = { atTail: '0 mm', atHead: '-40 mm' };
+  C.edgeTool = { kind: 'downturn', width: '300 mm', foot: '150 mm', depth: '400 mm' };
+  // What the plan is waiting for: { floor, what: 'slope', tail: [x, y] | null } for the arrow's two
+  // clicks, or { floor, what: 'edge' } for slab edges picked on the floor's sides.
+  const PICK = { now: null };
+
+  const mmPoint = (stored) => [nearestMm(stored[0]), nearestMm(stored[1])];
+
+  /** A floor's slope as its record holds it, or null. */
+  function slopeOf(e) {
+    const slope = e.recipe?.args?.slope;
+    if (!slope) return null;
+    const at = (key) => (slope[key] === undefined ? null : `${storedMm(slope[key])} mm`);
+    return {
+      tail: mmPoint(slope.tail),
+      head: mmPoint(slope.head),
+      atTail: at('at_tail'),
+      atHead: at('at_head'),
+      gradient: slope.slope ? typedPitch(slope.slope) : null,
+    };
+  }
+
+  /** A floor's slab edges as its record holds them: `[{ edge, kind, width, foot, depth }]`. */
+  function slabEdgesOf(e) {
+    const list = e.recipe?.args?.edges;
+    if (!Array.isArray(list)) return [];
+    const mm = (text) => (text === undefined ? '' : `${storedMm(text)} mm`);
+    return list.map((s) => ({ edge: s.edge, kind: s.kind, width: mm(s.width), foot: mm(s.foot), depth: mm(s.depth) }));
+  }
+
+  /** The slope and slab edges part of a selected floor's palette. */
+  function floorShapeHtml(piece) {
+    const { el: e } = piece;
+    const editable = canEdit();
+    const slope = slopeOf(e);
+    const edges = slabEdgesOf(e);
+    const field = (tool, key, label) => `<input class="inp" data-chg="stackfloorfield" data-tool="${tool}" data-a="${key}" data-key="floor-${tool}-${key}" value="${esc(C[`${tool}Tool`][key])}" aria-label="${esc(label)}">`;
+    let html = '<span class="lbl">Slope</span><table class="props" data-floor-slope-part>';
+    if (slope) {
+      const run = slope.gradient ? `rises ${esc(slope.gradient)}` : `${esc(slope.atTail)} to ${esc(slope.atHead)}`;
+      html += prow('Now', `<span class="mono" data-floor-slope-now>${run}</span>`);
+    } else {
+      html += prow('Now', '<span class="faint" data-floor-slope-now>Flat</span>');
+    }
+    if (editable) {
+      html += prow('Height at tail', field('slope', 'atTail', 'The top face’s height at the arrow’s tail, from the floor’s own height'));
+      html += prow('Height at head', field('slope', 'atHead', 'The top face’s height at the arrow’s head'));
+    }
+    html += '</table>';
+    if (editable) {
+      const waiting = PICK.now?.floor === e.id && PICK.now.what === 'slope';
+      const hint = waiting ? `<p class="pad small muted" data-floor-pick="${PICK.now.tail ? 'head' : 'tail'}">${PICK.now.tail ? 'Click where the arrow ends.' : 'Click where the arrow starts.'}</p>` : '';
+      html += `${hint}<div class="pad"><button class="btn sm" data-act="stackslopepick" data-key="floor-slope-pick">${waiting ? 'Stop drawing' : slope ? 'Draw it again' : 'Draw slope arrow'}</button>`;
+      if (slope) html += ' <button class="btn sm" data-act="stackslopeclear" data-key="floor-slope-clear">Clear slope</button>';
+      html += '</div>';
+    }
+    html += problem('floor-slope');
+    html += '<span class="lbl">Slab edges</span>';
+    if (edges.length) {
+      html += '<table class="props" data-floor-slab-edges>';
+      for (const s of edges) {
+        const sizes = s.kind === 'thickened' ? `${s.width} wide, ${s.foot} foot, ${s.depth} deep` : `${s.width} wide, ${s.depth} deep`;
+        const remove = editable ? ` <button class="btn sm" data-act="stackedgeremove" data-edge="${esc(s.edge)}" data-key="floor-edge-remove-${esc(s.edge)}">Remove</button>` : '';
+        html += prow(esc(s.edge), `<span data-slab-edge-row="${esc(s.edge)}">${esc(capital(s.kind))}: ${esc(sizes)}</span>${remove}`);
+      }
+      html += '</table>';
+    } else {
+      html += '<p class="pad small faint" data-floor-slab-edges="none">None.</p>';
+    }
+    if (editable) {
+      const kinds = [['downturn', 'Downturn'], ['thickened', 'Thickened']].map(([id, name]) => `<option value="${id}"${id === C.edgeTool.kind ? ' selected' : ''}>${name}</option>`);
+      html += '<table class="props">';
+      html += prow('Edge', `<select class="inp" data-chg="stackedgekind" data-key="floor-edge-kind" aria-label="Slab edge profile">${kinds.join('')}</select>`);
+      html += prow('Width', field('edge', 'width', 'Width in from the edge'));
+      if (C.edgeTool.kind === 'thickened') html += prow('Foot', field('edge', 'foot', 'Width at the bottom'));
+      html += prow('Depth', field('edge', 'depth', 'Depth below the floor'));
+      html += '</table>';
+      const waiting = PICK.now?.floor === e.id && PICK.now.what === 'edge';
+      const hint = waiting ? '<p class="pad small muted" data-floor-pick="edge">Click the floor’s edges in the plan.</p>' : '';
+      html += `${hint}<div class="pad"><button class="btn sm" data-act="stackedgepick" data-key="floor-edge-pick">${waiting ? 'Stop picking' : 'Pick edges'}</button></div>`;
+    }
+    return html + problem('floor-edge');
+  }
+
+  CHG.stackfloorfield = (input) => {
+    C[`${input.dataset.tool}Tool`][input.dataset.a] = input.value;
+  };
+  CHG.stackedgekind = (select) => {
+    C.edgeTool.kind = select.value;
+    refreshSide();
+  };
+
+  /** Starts or stops waiting for clicks in the plan for the selected floor. */
+  function pick(what) {
+    const stopping = PICK.now?.floor === S.sel && PICK.now.what === what;
+    PICK.now = stopping || !S.sel ? null : { floor: S.sel, what, tail: null };
+    clearProblems(/^floor-(slope|edge)$/);
+    refreshSide();
+    queueDraw();
+  }
+  ACT.stackslopepick = () => pick('slope');
+  ACT.stackedgepick = () => pick('edge');
+  ACT.stackslopeclear = () => {
+    if (S.sel) manage('floor.slope.clear', { element: S.sel }, 'floor-slope');
+  };
+  ACT.stackedgeremove = (button) => {
+    if (S.sel) manage('floor.edge.remove', { element: S.sel, edge: button.dataset.edge }, 'floor-edge');
+  };
+
+  /** The arrow's two clicks: its tail, then its head, which sends the slope with the heights typed. */
+  function slopeClick(at) {
+    const point = [snap(at.x), snap(at.y)];
+    if (!PICK.now.tail) {
+      PICK.now.tail = point;
+      refreshSide();
+      queueDraw();
+      return;
+    }
+    const [tail, floor] = [PICK.now.tail, PICK.now.floor];
+    PICK.now = null;
+    if (tail[0] === point[0] && tail[1] === point[1]) {
+      refreshSide();
+      queueDraw();
+      return;
+    }
+    const slope = {
+      tail: tail.map((v) => `${v} mm`),
+      head: point.map((v) => `${v} mm`),
+      at_tail: C.slopeTool.atTail,
+      at_head: C.slopeTool.atHead,
+    };
+    manage('floor.slope', { element: floor, slope }, 'floor-slope');
+    queueDraw();
+  }
+
+  /** A click on one of the selected floor's sides while edges are being picked. */
+  function edgeClick(side) {
+    const tool = C.edgeTool;
+    const profile = { kind: tool.kind, width: tool.width, depth: tool.depth };
+    if (tool.kind === 'thickened') profile.foot = tool.foot;
+    manage('floor.edge', { element: PICK.now.floor, edge: side.dataset.floorEdge, profile }, 'floor-edge');
+  }
+
+  // Before the plan's own handlers, as the floor tool's clicks are.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!PICK.now || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (S.sel !== PICK.now.floor || !canEdit()) return;
+      if (PICK.now.what === 'slope') {
+        event.stopPropagation();
+        slopeClick(toModel(event));
+        return;
+      }
+      // A click that is not on one of the floor's sides is the plan's own (it picks something else).
+      const side = event.target.closest('[data-floor-edge]');
+      if (!side) return;
+      event.stopPropagation();
+      edgeClick(side);
+    },
+    true,
+  );
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && PICK.now) {
+      PICK.now = null;
+      refreshSide();
+      queueDraw();
+    }
+  });
+
+  /**
+   * A floor's slope arrow and slab edges in the plan, from its record and its recipe as the server
+   * filled it: the arrow with its two heights, each slab edge's plan at the floor's underside, and,
+   * while edges are picked, a stripe along each side of the chosen floor to click.
+   */
+  function floorShapeInPlan(piece, x, y, scale) {
+    const { el: e } = piece;
+    let svg = '';
+    for (const s of piece.fill?.recipe?.args?.edges ?? []) {
+      const ring = s.top.map((p) => [x + nearestMm(p[0]), y + nearestMm(p[1])]);
+      svg += `<path class="floor-slab-edge" data-slab-edge="${esc(s.id)}" data-kind="${esc(s.kind)}" d="${ringPath(ring)}"/>`;
+    }
+    const slope = slopeOf(e);
+    if (slope) {
+      const [[ax, ay], [bx, by]] = [slope.tail, slope.head].map(([px, py]) => [x + px, y + py]);
+      const length = Math.hypot(bx - ax, by - ay) || 1;
+      const [ux, uy] = [(bx - ax) / length, (by - ay) / length];
+      const back = (n) => [bx - ux * n - uy * n * 0.4, by - uy * n + ux * n * 0.4];
+      const other = (n) => [bx - ux * n + uy * n * 0.4, by - uy * n - ux * n * 0.4];
+      const head = [[bx, by], back(250), other(250)];
+      svg += `<g class="floor-slope" data-floor-slope="${esc(e.id)}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/><path d="${ringPath(head)}"/>`;
+      svg += `${TX(ax, ay - 120, scale, slope.atTail ?? '', 'tf', 220)}${TX(bx, by - 120, scale, slope.atHead ?? slope.gradient ?? '', 'tf', 220)}</g>`;
+    }
+    if (PICK.now?.what === 'edge' && PICK.now.floor === e.id) {
+      for (const ring of piece.fill?.recipe?.args?.loops ?? []) {
+        ring.forEach((corner, k) => {
+          const next = ring[(k + 1) % ring.length];
+          const [p, q] = [corner, next].map((c) => [x + nearestMm(c.at[0]), y + nearestMm(c.at[1])]);
+          svg += `<line class="floor-edge-hit" data-floor-edge="${esc(corner.id)}" x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}"/>`;
+        });
+      }
+    }
+    return svg;
+  }
+
+  /** The arrow's tail once it is clicked, drawn while the head is awaited. */
+  function pickInPlan() {
+    const tail = PICK.now?.what === 'slope' ? PICK.now.tail : null;
+    return tail ? `<circle class="apf floor-sketch" data-floor-slope-tail cx="${tail[0]}" cy="${tail[1]}" r="60"/>` : '';
   }
 
   /** The properties palette's floor part: the floor tool's options, or a selected floor; '' for anything else. */
