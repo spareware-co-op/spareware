@@ -2090,7 +2090,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          member="$(zstd -dc "wasm-$BUILD.tar.zst" | tar -t | sed -n '/attack_wide_tests-.*\.wasm$/{p;q}')"
+          member="$(zstd -dc "wasm-$BUILD.tar.zst" | tar -t | awk '/attack_wide_tests-.*\.wasm$/ && !found { print; found = 1 }')"
           test -n "$member" || { echo "attack_wide_tests is not in the archive"; exit 1; }
           zstd -dc "wasm-$BUILD.tar.zst" | tar -x "$member"
           module="$PWD/$member"
