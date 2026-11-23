@@ -205,7 +205,7 @@ pub fn routes(app: Shared) -> Router {
         .with_state(app)
 }
 
-/// A model's views: the list, what one shows, and its plan as the server draws it.
+/// A model's views: the list, what one shows, and its plan as the server draws it; and its sheets.
 fn view_routes() -> Router<Shared> {
     Router::new()
         .route("/api/projects/{project}/models/{model}/views", get(views))
@@ -216,6 +216,15 @@ fn view_routes() -> Router<Shared> {
         .route(
             "/api/projects/{project}/models/{model}/views/{view}/plan",
             get(plan),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/graphics",
+            get(graphics),
+        )
+        .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
+        .route(
+            "/api/projects/{project}/models/{model}/sheets/{sheet}",
+            get(sheet),
         )
 }
 
@@ -607,6 +616,42 @@ async fn views(
     Ok(Json(
         app.service
             .views(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn graphics(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .graphics(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
+async fn sheets(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .sheets(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn sheet(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, sheet)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .sheet(&person, &id(&project)?, &id(&model)?, &id(&sheet)?)
             .await?,
     ))
 }

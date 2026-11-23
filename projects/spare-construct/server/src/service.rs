@@ -4,7 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, Skipped, ToDraw};
+use crate::plan::{Drawer, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -957,6 +957,58 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(cloud::views::summaries(&world))
     }
 
+    /// A model's sheets: each with its number, name, paper and how many viewports it holds, by
+    /// number.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn sheets(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::sheets::SheetSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::sheets::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::sheets::summaries(&world))
+    }
+
+    /// One sheet with its viewports as they lie on the paper: each view's scale from the view, each
+    /// outline from the view's extent (a plan's is the box of what it shows, as of the log's head)
+    /// and every alignment worked out.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// sheet; [`Refusal::Bad`] when a record cannot be read or placed, saying why.
+    pub async fn sheet(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        sheet: &Id,
+    ) -> Result<cloud::sheets::SheetListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::sheets::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let views = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
+        cloud::sheets::listing_of_sheet(&world, &views, sheet, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// What one view shows: the elements it cuts and the ones it sees, from construct-views' own
     /// rule over the model's stored shapes, as of the log's head.
     ///
@@ -981,6 +1033,30 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         cloud::views::listing_of(&world, view, &shaped)
             .map_err(Refusal::Bad)?
             .ok_or(Refusal::NotFound)
+    }
+
+    /// A view's graphics rules: how each category or subcategory it says anything about looks in
+    /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
+    /// project's object styles say. Read as of the log's head.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a view record cannot be read, saying why.
+    pub async fn graphics(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::views::GraphicsListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        cloud::views::graphics_of(&world, view).ok_or(Refusal::NotFound)
     }
 
     /// A floor plan drawn from the stored model as of the log's head: the cut edges of what its
@@ -1030,8 +1106,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 }),
             }
         }
+        let looks = ViewLooks::new(&world, view);
         let drawn = drawer
-            .draw(cut.cut, cut.scale, &elements)
+            .draw(cut.cut, cut.scale, &elements, Some(&looks))
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {

@@ -16,6 +16,7 @@
 use construct_api::cloud::undo::{self, CANNOT, State};
 use construct_api::cloud::views::options;
 use construct_api::cloud::{Access, ProjectCommands};
+use construct_categories::{CategoryId, CategoryTable};
 use construct_model::element::Element;
 use construct_model::geometry::{Geometry, Recipe};
 use construct_model::keys::Place;
@@ -24,7 +25,8 @@ use construct_params::Length;
 use construct_phases::{OptionRef, PhaseError};
 use construct_regen::regenerator::Regenerator;
 use construct_regen::stand_in::Boxes;
-use construct_views::{DetailLevel, Scale, Side, View, ViewError, ViewKind};
+use construct_styles::{Colour, Edge, LineStyles, ObjectStyles};
+use construct_views::{DetailLevel, Origin, Scale, Side, View, ViewError, ViewKind};
 use kit_core::Id;
 use kit_ops::{Decider, Edit, Question};
 use kit_store::memory::{Memory, MemoryFiles};
@@ -1082,4 +1084,476 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
         .await
         .unwrap();
     assert_eq!(after, entries);
+}
+
+// ---- Graphics rules (CON-A8-F3-P2) ----
+
+const WALLS: u32 = 100;
+const CORE_CUT_LINE: u32 = 101;
+const DOORS: u32 = 300;
+const DOOR_SWING: u32 = 304;
+const VIEWS_CATEGORY: u32 = 7000;
+
+/// A plan, a section, a three-dimensional view and a drafting view, ready for rules.
+async fn rule_views() -> Stack {
+    let stack = Stack::new().await;
+    two_levels(&stack).await;
+    stack
+        .edit("view.create", plan("V-g", "Ground floor", "L-g"))
+        .await
+        .unwrap();
+    stack
+        .edit("view.create", section("V-s", "Section A"))
+        .await
+        .unwrap();
+    for (id, kind, name) in [("V-3", "three_d", "Model"), ("V-d", "drafting", "Detail")] {
+        let args = json!({ "view": id, "kind": kind, "name": name });
+        stack.edit("view.create", args).await.unwrap();
+    }
+    stack
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a test helper called with json! literals"
+)]
+fn rule(view: &str, category: u32, edge: &str, style: Value) -> Value {
+    json!({ "view": view, "category": category, "edge": edge, "style": style })
+}
+
+fn first_pen() -> u16 {
+    LineStyles::default_metric()
+        .model_pens
+        .pens()
+        .first()
+        .unwrap()
+        .number
+}
+
+#[tokio::test]
+async fn a_rule_is_set_over_what_the_element_looks_like_now() {
+    let stack = rule_views().await;
+    assert!(view(&stack, "V-g").await.graphics().is_empty());
+    let no_key = |record: &Element| !record.props.contains_key(construct_views::GRAPHICS_KEY);
+    assert!(no_key(&stack.record("V-g").await));
+
+    // Naming only what changes: the rest is the project's style for walls, cut.
+    let hide = json!({ "shown": false, "transparency": 30, "halftone": true });
+    stack
+        .edit("view.graphics.set", rule("V-g", WALLS, "cut", hide))
+        .await
+        .unwrap();
+    let ground = view(&stack, "V-g").await;
+    let style = ground
+        .graphics()
+        .style(CategoryId(WALLS), Edge::Cut)
+        .unwrap()
+        .clone();
+    assert!(!style.shown && style.halftone && style.transparency == 30);
+    let project = construct_views::resolve(
+        &view(&stack, "V-s").await,
+        &CategoryTable::new(),
+        &ObjectStyles::default_metric(),
+        &LineStyles::default_metric(),
+        CategoryId(WALLS),
+        None,
+        Edge::Cut,
+    )
+    .unwrap();
+    assert_eq!(project.origin, Origin::Project);
+    assert_eq!(style.pen, project.style.pen);
+    assert_eq!(style.colour, project.style.colour);
+    assert_eq!(style.fill, None);
+    // Only the cut was written, and only on this view.
+    let seen = ground.graphics().style(CategoryId(WALLS), Edge::Projected);
+    assert!(seen.is_none());
+    assert!(view(&stack, "V-s").await.graphics().is_empty());
+    assert!(!no_key(&stack.record("V-g").await));
+
+    // A second command changes some parts and keeps the rest.
+    let more = json!({ "fill": { "pattern": "concrete", "colour": [10, 20, 30] },
+                       "colour": [1, 2, 3], "pen": first_pen() });
+    stack.later();
+    stack
+        .edit("view.graphics.set", rule("V-g", WALLS, "cut", more))
+        .await
+        .unwrap();
+    let changed = view(&stack, "V-g").await;
+    let style = changed
+        .graphics()
+        .style(CategoryId(WALLS), Edge::Cut)
+        .unwrap();
+    assert!(!style.shown && style.halftone && style.transparency == 30);
+    assert_eq!(style.colour, Colour(1, 2, 3));
+    assert_eq!(style.pen, first_pen());
+    let fill = style.fill.as_ref().unwrap();
+    assert_eq!(
+        (fill.pattern.as_str(), fill.colour),
+        ("concrete", Colour(10, 20, 30))
+    );
+
+    // `fill: null` takes the fill away; a subcategory's projection is a rule of its own.
+    stack
+        .edit(
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "fill": null })),
+        )
+        .await
+        .unwrap();
+    stack
+        .edit(
+            "view.graphics.set",
+            rule("V-g", CORE_CUT_LINE, "projection", json!({ "pattern": 2 })),
+        )
+        .await
+        .unwrap();
+    let last = view(&stack, "V-g").await;
+    let walls_cut = last.graphics().style(CategoryId(WALLS), Edge::Cut);
+    assert_eq!(walls_cut.unwrap().fill, None);
+    let sub = last
+        .graphics()
+        .style(CategoryId(CORE_CUT_LINE), Edge::Projected)
+        .unwrap();
+    assert_eq!(sub.pattern, construct_views::PatternId(2));
+    assert_eq!(last.graphics().rules().count(), 2);
+    // The stored record reads back as the same view.
+    assert_eq!(view(&stack, "V-g").await, last);
+}
+
+#[tokio::test]
+async fn a_rule_that_is_not_allowed_is_refused_in_words_and_changes_nothing() {
+    let stack = rule_views().await;
+    stack.later();
+    let before = stack.rows("piece").await;
+    let colour_words = "A colour is [red, green, blue], each a whole number from 0 to 255.";
+    let concrete = json!({ "fill": { "pattern": "concrete", "colour": [0, 0, 0] } });
+    let tartan = json!({ "fill": { "pattern": "tartan", "colour": [0, 0, 0] } });
+    let by_set = |what: &str| {
+        format!(
+            "{what} has no category, edge or style: graphics rules are set with view.graphics.set."
+        )
+    };
+    let cases = [
+        (
+            "view.graphics.set",
+            rule("V-g", 31, "cut", json!({})),
+            "There is no category 31.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", 0, "cut", json!({})),
+            "There is no category 0.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "pen": 65_000 })),
+            "There is no pen 65000 for this category.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "pen": 70_000 })),
+            "There is no pen 70000 for this category.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "pattern": 9999 })),
+            "There is no line pattern 9999.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "transparency": 101 })),
+            "Transparency is a percentage from 0 to 100, not 101.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "transparency": -1 })),
+            "Transparency is a percentage from 0 to 100, not -1.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "colour": [1, 2, 256] })),
+            colour_words.to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "colour": [1, 2] })),
+            colour_words.to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", tartan),
+            ViewError::NoSuchFill("tartan".to_owned()).to_string(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "projection", concrete),
+            "Only a cut has a fill: a projection rule has none.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", DOOR_SWING, "cut", json!({})),
+            ViewError::CutOnUncuttable(CategoryId(DOOR_SWING)).to_string(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", VIEWS_CATEGORY, "projection", json!({})),
+            ViewError::NotStyled(CategoryId(VIEWS_CATEGORY)).to_string(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "both", json!({})),
+            "\"both\" is not an edge: cut or projection.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            json!({ "view": "V-g", "category": WALLS, "style": {} }),
+            "This command needs an edge (cut or projection).".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            json!({ "view": "V-g", "category": WALLS, "edge": "cut" }),
+            "This command needs a style.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            json!({ "view": "V-g", "edge": "cut", "style": {} }),
+            "This command needs a category (its number).".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-x", WALLS, "cut", json!({})),
+            ViewError::UnknownView(i("V-x")).to_string(),
+        ),
+        // A kind of view that cannot hold a rule.
+        (
+            "view.graphics.set",
+            rule("V-d", WALLS, "projection", json!({ "halftone": true })),
+            "A drafting view shows no model, so it has no graphics rules.".to_owned(),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-3", WALLS, "cut", json!({})),
+            "A three d view cuts nothing, so it has no cut rules.".to_owned(),
+        ),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": 31 }),
+            "There is no category 31.".to_owned(),
+        ),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS, "edge": "x" }),
+            "\"x\" is not an edge: cut or projection.".to_owned(),
+        ),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS, "style": {} }),
+            "view.graphics.clear takes no style.".to_owned(),
+        ),
+        (
+            "view.set",
+            json!({ "view": "V-g", "category": WALLS }),
+            by_set("view.set"),
+        ),
+        (
+            "view.rename",
+            json!({ "view": "V-g", "name": "x", "style": {} }),
+            by_set("view.rename"),
+        ),
+    ];
+    for (cmd, args, why) in cases {
+        assert_eq!(
+            stack.edit(cmd, args.clone()).await.unwrap_err(),
+            why,
+            "{args}"
+        );
+    }
+    // A part of a style that is not one is not read either.
+    let unknown = rule("V-g", WALLS, "cut", json!({ "weight": 3 }));
+    let refusal = stack.edit("view.graphics.set", unknown).await.unwrap_err();
+    assert!(refusal.starts_with("That edit isn't valid"), "{refusal}");
+    assert_eq!(stack.rows("piece").await, before);
+
+    // The generic commands are no way round: a view's record is not set or deleted with them.
+    for (cmd, args) in [
+        ("element.set", json!({ "element": "V-g", "name": "x" })),
+        ("element.delete", json!({ "element": "V-g" })),
+    ] {
+        let refusal = stack.edit(cmd, args).await.unwrap_err();
+        assert!(refusal.contains("use view."), "{refusal}");
+    }
+    assert_eq!(stack.rows("piece").await, before);
+}
+
+#[tokio::test]
+async fn clearing_takes_a_rule_or_both_away_and_nothing_to_clear_is_no_step() {
+    let stack = rule_views().await;
+    let cut = rule("V-g", WALLS, "cut", json!({ "shown": false }));
+    let seen = rule("V-g", WALLS, "projection", json!({ "halftone": true }));
+    stack.edit("view.graphics.set", cut.clone()).await.unwrap();
+    stack.edit("view.graphics.set", seen).await.unwrap();
+    // The same rule again writes nothing: it is no step.
+    let rows = stack.rows("piece").await;
+    stack.later();
+    stack.edit("view.graphics.set", cut).await.unwrap();
+    assert_eq!(stack.rows("piece").await, rows);
+
+    stack
+        .edit(
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS, "edge": "projection" }),
+        )
+        .await
+        .unwrap();
+    let ground = view(&stack, "V-g").await;
+    let walls = CategoryId(WALLS);
+    assert!(ground.graphics().style(walls, Edge::Cut).is_some());
+    assert!(ground.graphics().style(walls, Edge::Projected).is_none());
+    stack
+        .edit(
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS }),
+        )
+        .await
+        .unwrap();
+    assert!(view(&stack, "V-g").await.graphics().is_empty());
+    let record = stack.record("V-g").await;
+    assert!(!record.props.contains_key(construct_views::GRAPHICS_KEY));
+    // Nothing left to clear: no step, no refusal.
+    let rows = stack.rows("piece").await;
+    stack
+        .edit(
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stack.rows("piece").await, rows);
+}
+
+#[tokio::test]
+async fn a_duplicate_keeps_the_rules_and_other_view_commands_leave_them() {
+    let stack = rule_views().await;
+    stack
+        .edit(
+            "view.graphics.set",
+            rule("V-g", DOORS, "projection", json!({ "transparency": 50 })),
+        )
+        .await
+        .unwrap();
+    stack
+        .edit("view.duplicate", json!({ "view": "V-g", "new": "V-2" }))
+        .await
+        .unwrap();
+    let copy = view(&stack, "V-2").await;
+    assert_eq!(copy.graphics(), view(&stack, "V-g").await.graphics());
+    assert!(!copy.graphics().is_empty());
+    stack
+        .edit("view.set", json!({ "view": "V-g", "scale": 50 }))
+        .await
+        .unwrap();
+    stack
+        .edit("view.rename", json!({ "view": "V-g", "name": "Level 0" }))
+        .await
+        .unwrap();
+    assert_eq!(view(&stack, "V-g").await.graphics(), copy.graphics());
+}
+
+#[tokio::test]
+async fn every_graphics_command_is_undone_and_redone() {
+    let stack = rule_views().await;
+    let hidden = json!({ "shown": false });
+    for (cmd, args) in [
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", hidden.clone()),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", WALLS, "cut", json!({ "transparency": 20 })),
+        ),
+        (
+            "view.graphics.set",
+            rule(
+                "V-s",
+                CORE_CUT_LINE,
+                "projection",
+                json!({ "halftone": true }),
+            ),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-3", WALLS, "projection", hidden),
+        ),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": WALLS, "edge": "cut" }),
+        ),
+        ("view.duplicate", json!({ "view": "V-s", "new": "V-s2" })),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-s2", "category": CORE_CUT_LINE }),
+        ),
+    ] {
+        undone_and_redone(&stack, cmd, args).await;
+    }
+}
+
+#[tokio::test]
+async fn rules_replay_from_the_log_to_the_same_bytes() {
+    let stack = rule_views().await;
+    for (cmd, args) in [
+        (
+            "view.graphics.set",
+            rule(
+                "V-g",
+                WALLS,
+                "cut",
+                json!({ "shown": false, "colour": [9, 9, 9] }),
+            ),
+        ),
+        (
+            "view.graphics.set",
+            rule("V-g", DOORS, "projection", json!({ "transparency": 80 })),
+        ),
+        ("view.graphics.set", rule("V-g", 31, "cut", json!({}))),
+        ("view.duplicate", json!({ "view": "V-g", "new": "V-d2" })),
+        (
+            "view.graphics.clear",
+            json!({ "view": "V-g", "category": DOORS }),
+        ),
+        ("edit.undo", json!({})),
+        ("edit.undo", json!({})),
+        ("edit.redo", json!({})),
+    ] {
+        let _ = stack.edit(cmd, args).await;
+    }
+    stack.regen.catch_up(&i("p")).await.unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let head: u64 = read_row(&mut snapshot, &Scope::Project(i("p")).head())
+        .await
+        .unwrap()
+        .unwrap();
+    let entries = read_log(&mut snapshot, &Scope::Project(i("p")), 0, head)
+        .await
+        .unwrap();
+    assert!(entries.iter().any(|entry| entry.cmd == "view.graphics.set"));
+    let again = Stack::bare().await;
+    for entry in &entries {
+        again.clock.0.store(entry.orderer_ms, Ordering::SeqCst);
+        let edit = Edit {
+            person: entry.author.clone(),
+            client: entry.client.clone(),
+            counter: entry.counter,
+            base: entry.base,
+            target: entry.target.clone(),
+            cmd: entry.cmd.clone(),
+            args: entry.args.clone(),
+            author_ms: entry.author_ms,
+        };
+        let _ = again.run(edit).await;
+    }
+    for table in ["record", "piece"] {
+        assert_eq!(again.rows(table).await, stack.rows(table).await, "{table}");
+    }
 }
