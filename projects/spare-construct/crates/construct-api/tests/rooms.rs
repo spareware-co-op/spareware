@@ -423,7 +423,7 @@ async fn a_room_is_placed_changed_and_deleted_by_its_own_commands() {
         json!({ "element": "R-6", "level": "L-g", "at": ["one", "1 m"], "top": "L-1" }),
     ] {
         let refused = stack.edit("room.place", args).await.unwrap_err();
-        assert!(!refused.is_empty());
+        assert_ne!(refused, "", "a refusal has words");
     }
     assert_eq!(stack.rows("piece").await, rows, "a refusal changes nothing");
 
