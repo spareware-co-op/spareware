@@ -10,15 +10,18 @@
 //! from the type).
 //!
 //! Filled ([`filled`]), the recipe the builder takes holds only:
-//! - [`FORM_ARG`]: `flat`, `mono` or `gable`;
+//! - [`FORM_ARG`]: `flat`, `mono`, `gable` or `solved`;
 //! - [`SLOPES_ARG`]: the edges the roof rises from, in the footprint's order (none when flat);
 //! - [`OUTLINE_ARG`]: the eaves outline anticlockwise from above, each corner
 //!   `{"id":<edge ID>,"at":[x,y]}` in grid steps, the footprint edge whose eaves or verge runs
 //!   from it to the next;
+//! - [`LINES_ARG`]: the lines of the top face for the page to draw, each
+//!   `{"kind":"ridge"|"hip"|"valley"|"eave"|"verge","from":[x,y,z],"to":[x,y,z]}` in grid steps,
+//!   as [`crate::Shape::lines`] has them (the builders read none of it);
 //! - [`LAYERS_ARG`]: each layer from the top down as `{"function","material","thickness"}` (its
 //!   thickness in grid steps, square to its faces) and, for a layer with a thickness, `solid`:
-//!   `{"extrude":[[x,y,z], ...],"by":[x,y,z]}` or `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` in grid
-//!   steps ([`crate::Solid`]).
+//!   `{"extrude":[[x,y,z], ...],"by":[x,y,z]}`, `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` or
+//!   `{"unite":[[[x,y,z], ...], ...],"by":[x,y,z]}` in grid steps ([`crate::Solid`]).
 //!
 //! Nothing else of a roof reaches the builder.
 
@@ -53,6 +56,8 @@ pub const FORM_ARG: &str = "form";
 pub const SLOPES_ARG: &str = "slopes";
 /// The filled recipe's argument holding the eaves outline.
 pub const OUTLINE_ARG: &str = "outline";
+/// The filled recipe's argument listing the lines of the top face, for the page's plan.
+pub const LINES_ARG: &str = "lines";
 
 /// A roof's recipe.
 #[must_use]
@@ -111,6 +116,11 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, RoofError> {
         .iter()
         .map(|id| json!(id.as_str()))
         .collect();
+    let lines: Vec<Value> = built
+        .lines
+        .iter()
+        .map(|line| json!({ "kind": line.kind.name(), "from": line.from, "to": line.to }))
+        .collect();
     let mut listed = Vec::with_capacity(layers.layers().len());
     for (at, layer) in layers.layers().iter().enumerate() {
         let function = serde_json::to_value(layer.function)
@@ -129,6 +139,10 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, RoofError> {
                 } => {
                     json!({ "loft": [points(first), points(second)] })
                 }
+                Solid::Unite { profiles, by } => {
+                    let each: Vec<Value> = profiles.iter().map(|p| points(p)).collect();
+                    json!({ "unite": each, "by": by })
+                }
             };
             entry.insert("solid".to_owned(), solid);
         }
@@ -141,6 +155,7 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, RoofError> {
     out.args.insert(SLOPES_ARG.to_owned(), Value::Array(slopes));
     out.args
         .insert(OUTLINE_ARG.to_owned(), Value::Array(outline));
+    out.args.insert(LINES_ARG.to_owned(), Value::Array(lines));
     out.args.insert(LAYERS_ARG.to_owned(), Value::Array(listed));
     Ok(out)
 }

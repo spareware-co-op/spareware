@@ -150,6 +150,22 @@ fn a_flat_roof_is_its_layers() {
 }
 
 #[test]
+fn a_room_with_an_island_wall_is_its_loop_extruded() {
+    kernel_suite::a_room_is_its_loop_extruded(engine, false);
+    kernel_suite::a_room_is_its_loop_extruded(engine, true);
+}
+
+#[test]
+fn a_hip_roof_is_its_pieces_united() {
+    kernel_suite::a_hip_roof_is_its_pieces_united(engine);
+}
+
+#[test]
+fn an_l_roof_with_its_valley_is_its_pieces_united() {
+    kernel_suite::an_l_roof_with_its_valley_is_its_pieces_united(engine);
+}
+
+#[test]
 fn a_layered_wall_is_one_solid_per_layer() {
     kernel_suite::a_layered_wall_is_one_solid_per_layer(engine);
 }
@@ -167,6 +183,31 @@ fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
 #[test]
 fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
     kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(engine);
+}
+
+#[test]
+fn an_opening_cuts_every_layer_of_a_layered_wall() {
+    kernel_suite::an_opening_cuts_every_layer_of_a_layered_wall(engine);
+}
+
+#[test]
+fn an_opening_in_a_wall_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_wall_is_refused_by_name(engine);
+}
+
+#[test]
+fn openings_and_a_shaft_cut_every_layer_of_a_floor() {
+    kernel_suite::openings_and_a_shaft_cut_every_layer_of_a_floor(engine);
+}
+
+#[test]
+fn an_opening_in_a_floor_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_floor_is_refused_by_name(engine);
+}
+
+#[test]
+fn a_shaped_floor_that_is_cut_is_refused_by_name() {
+    kernel_suite::a_shaped_floor_that_is_cut_is_refused_by_name(engine);
 }
 
 #[test]

@@ -135,6 +135,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-levels"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+]
+
+[[package]]
 name = "construct-materials"
 version = "0.0.0"
 dependencies = [
@@ -153,6 +163,21 @@ dependencies = [
  "kit-ops",
  "kit-store",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-openings"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-slabs",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
  "serde_json",
 ]
 
@@ -179,6 +204,7 @@ dependencies = [
  "construct-families",
  "construct-grids",
  "construct-model",
+ "construct-openings",
  "construct-params",
  "engine-geometry",
  "hex",
@@ -210,6 +236,22 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

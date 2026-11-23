@@ -30,10 +30,21 @@
 //!   permanent ID (construct-slabs' `Segment`), so a boundary drawn again with the same edges keeps
 //!   its sides' names; and `edge.<edge ID>` for each slab edge. Each layer's piece of a side
 //!   carries the floor's name for it, as a layered wall's pieces of its ends do.
+//! - Openings and shafts (job 4.2, CON-A4-F3-P2): each floor opening hosted in it and each shaft
+//!   the regenerator hands it (one passing wholly through its thickness) is one more hole in every
+//!   layer's profile, so it is cut through every layer by the floor's own extrusion, with no
+//!   second cutter. Their outlines are fitted first by construct-openings' `fit_in_floor`, which is
+//!   the floor's own boundary checks with them as more holes: each refusal names the opening or the
+//!   shaft and says why, before the engine is asked, and [`fits`] asks the same without building.
+//!   A shaft beside the floor in plan is passed over. Their sides are named as a tool's faces,
+//!   `tool(<key>).side.<i>`, under the floor's operation. A sloped floor or one with slab edges
+//!   that an opening or a shaft would cut is refused by name instead (job 5.2: the cutters are
+//!   level outlines and the slope's layers and the edges' pieces are not, so a cut through them is
+//!   not built until it is built exactly; [`SHAPED_FLOOR_CUT`], the interim register's row).
 //! - The body's bytes: what the engine was asked for each layer (its function, its material, its
 //!   outer loop and holes and the vector, in the engine's steps, and the lowest layer's slab
-//!   edges, each its extrusion or its loft).
-//! - Displays: levels 0 and 1 the same mesh (a floor has no openings yet), the layers' meshes one
+//!   edges, each its extrusion or its loft), and the keys of what was cut.
+//! - Displays: levels 0 and 1 the same mesh, its openings cut, the layers' meshes one
 //!   after another, in whole millimetres, each coordinate the nearest millimetre to the engine's
 //!   grid point (a corner at 12.5 mm is not on one); a level that rounded anything strays by 1 mm.
 //!   Each layer with a thickness is a part ([`Part`]): its material, its function, its triangles
@@ -47,20 +58,186 @@
 //! names written from the recipe, not read from the body); an arc edge is refused before it gets
 //! here (construct-slabs, the interim register's row) until the kernel's exact sweep takes arcs.
 
+use super::opening::{Hosted, tool_names};
 use super::{Kernel, Units, as_steps, fault, from_engine, name, op_id, too_big};
 use crate::floor_plan::{self, FloorPlan, PlanCorner};
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
+use construct_openings::{Cutter, OpeningError, fit_in_floor, is_floor_opening, is_shaft};
 use engine_geometry::value::engine::{DisplayMesh, Engine, Profile, Section};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
 
-/// A floor's body bytes: what the engine was asked for each layer.
+/// A floor's body bytes: what the engine was asked for each layer, and the keys of the openings and
+/// shafts cut through it, in order. A floor with none writes no `cut`, so its bytes are as they
+/// were before floors had openings.
 #[derive(Serialize)]
 struct Asked {
     layers: Vec<AskedLayer>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cut: Vec<String>,
+}
+
+/// An outline cut through every layer of a floor: the opening's or shaft's key, what a refusal
+/// calls it, its operation, and its corners in the engine's steps in the floor's frame, clockwise
+/// seen from above as a hole's are.
+struct FloorCut {
+    key: String,
+    who: String,
+    op: OpId,
+    ring: Vec<[i64; 2]>,
+}
+
+/// The code of the refusal of an opening or a shaft that would cut a sloped floor or one with slab
+/// edges (the interim register's row).
+pub const SHAPED_FLOOR_CUT: &str = "ShapedFloorCut";
+
+/// What the floor's refusals call it: the builder is handed its recipe, not its record.
+const THIS_FLOOR: &str = "its floor";
+
+fn refusal(error: &OpeningError) -> GeometryError {
+    fault(error.code(), error.to_string())
+}
+
+/// A loop's corners in the engine's steps.
+fn engine_ring(corners: &[PlanCorner], units: Units) -> Result<Vec<[i64; 2]>, GeometryError> {
+    corners
+        .iter()
+        .map(|c| {
+            let [x, y] = c.at;
+            Ok([units.from_q0(x)?, units.from_q0(y)?])
+        })
+        .collect()
+}
+
+/// Twice the signed area of a ring of engine steps: above 0 anticlockwise.
+fn twice_area(ring: &[[i64; 2]]) -> i128 {
+    let mut twice = 0_i128;
+    for (at, &[x0, y0]) in ring.iter().enumerate() {
+        let [x1, y1] = ring
+            .get(at.saturating_add(1))
+            .or_else(|| ring.first())
+            .copied()
+            .unwrap_or([x0, y0]);
+        twice = twice.saturating_add(
+            i128::from(x0)
+                .saturating_mul(i128::from(y1))
+                .saturating_sub(i128::from(x1).saturating_mul(i128::from(y0))),
+        );
+    }
+    twice
+}
+
+/// The outlines of `hosted` that cut a floor of `plan`, in the order of their keys, each where its
+/// place in the floor's frame puts it (a floor opening's is drawn in that frame, at no offset; a
+/// shaft's is moved by its place), checked by construct-openings' [`fit_in_floor`], which also
+/// passes over a shaft beside the floor in plan.
+///
+/// # Errors
+/// `NotAnOpening` for anything hosted on a floor that is neither; construct-openings' refusals of
+/// an outline and of its fit, each naming the element and why.
+fn floor_cuts(
+    plan: &FloorPlan,
+    hosted: &[Hosted<'_>],
+    units: Units,
+) -> Result<Vec<FloorCut>, GeometryError> {
+    let mut cutters = Vec::with_capacity(hosted.len());
+    for h in hosted {
+        if !is_floor_opening(h.recipe) && !is_shaft(h.recipe) {
+            return Err(fault(
+                "NotAnOpening",
+                format!(
+                    "{}: a {} is not cut through a floor; only an opening.floor or a shaft is",
+                    super::opening::who(h.recipe, h.key),
+                    h.recipe.op
+                ),
+            ));
+        }
+        let element = construct_openings::named(h.key, h.recipe);
+        let outline = construct_openings::outline_of(h.key, h.recipe).map_err(|e| refusal(&e))?;
+        let mut corners = Vec::with_capacity(outline.corners().len());
+        for [x, y] in outline.corners() {
+            corners.push([
+                units
+                    .from_q0(x.steps())?
+                    .checked_add(h.at.x.get())
+                    .ok_or_else(too_big)?,
+                units
+                    .from_q0(y.steps())?
+                    .checked_add(h.at.y.get())
+                    .ok_or_else(too_big)?,
+            ]);
+        }
+        cutters.push(Cutter { element, corners });
+    }
+    if cutters.is_empty() {
+        return Ok(Vec::new());
+    }
+    let outer = engine_ring(plan.outer(), units)?;
+    let holes = plan
+        .holes()
+        .iter()
+        .map(|hole| engine_ring(hole, units))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cutting = fit_in_floor(THIS_FLOOR, &outer, &holes, &cutters).map_err(|e| refusal(&e))?;
+    // Job 5.2: a cutter is a level outline cut straight through every layer, and a sloped floor's
+    // layers and a slab edge's piece are not level: a cut through either is refused by name, never
+    // built wrongly, until it is built exactly.
+    if let Some(at) = cutting.first() {
+        let shaped = if !plan.tops.is_empty() {
+            Some("a slope")
+        } else if !plan.edges.is_empty() {
+            Some("slab edges")
+        } else {
+            None
+        };
+        if let (Some(shaped), Some(cutter)) = (shaped, cutters.get(*at)) {
+            return Err(fault(
+                SHAPED_FLOOR_CUT,
+                format!(
+                    "{}: it would be cut through a floor with {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: take {} away, or put the opening or shaft elsewhere",
+                    cutter.element,
+                    if shaped == "a slope" {
+                        "the slope"
+                    } else {
+                        "the slab edges"
+                    }
+                ),
+            ));
+        }
+    }
+    let mut cuts = Vec::with_capacity(cutting.len());
+    for at in cutting {
+        let (Some(h), Some(cutter)) = (hosted.get(at), cutters.get(at)) else {
+            continue;
+        };
+        let mut ring = cutter.corners.clone();
+        if twice_area(&ring) > 0 {
+            ring.reverse();
+        }
+        cuts.push(FloorCut {
+            key: h.key.to_owned(),
+            who: cutter.element.to_string(),
+            op: op_id(h.recipe)?,
+            ring,
+        });
+    }
+    Ok(cuts)
+}
+
+/// Whether the openings and shafts `hosted` cut a floor of `recipe` by this builder's rules,
+/// asked without the engine: what [`Kernel::build_hosting`] would refuse, in its words.
+///
+/// # Errors
+/// [`FloorPlan::of`]'s refusals and those of [`floor_cuts`].
+pub(super) fn fits(
+    recipe: &Recipe,
+    hosted: &[Hosted<'_>],
+    units: Units,
+) -> Result<(), GeometryError> {
+    floor_cuts(&FloorPlan::of(recipe)?, hosted, units).map(|_| ())
 }
 
 /// One layer as the engine was asked for it. A floor without holes writes no `holes`.
@@ -172,10 +349,21 @@ pub(super) fn append(
     })
 }
 
+/// One loop's corners as grid points of the engine at height `z` (engine steps).
+pub(super) fn ring(corners: &[PlanCorner], units: Units, z: i64) -> Result<Vec<P3>, GeometryError> {
+    corners
+        .iter()
+        .map(|corner| {
+            let [x, y] = corner.at;
+            P3::new(units.from_q0(x)?, units.from_q0(y)?, z).map_err(|_| too_big())
+        })
+        .collect()
+}
+
 /// Loop `at` of the plan as grid points of the engine, each corner `depth` (grid steps, at or
 /// below zero) under the top face there: on a flat floor all at `depth`, on a sloped one on the
 /// plane through the corners' tops let down by `depth`, a plane still.
-fn ring(
+fn lifted_ring(
     plan: &FloorPlan,
     at: usize,
     corners: &[PlanCorner],
@@ -299,24 +487,45 @@ fn with_edges<E: Engine>(
 }
 
 impl<E: Engine> Kernel<E> {
-    /// Builds a filled floor recipe, as the module header says.
+    /// Builds a filled floor recipe with the openings and shafts `hosted` cut through every layer,
+    /// as the module header says.
     ///
     /// # Errors
     ///
-    /// [`FloorPlan::of`]'s refusals; `NotAHost` when anything is hosted on it (nothing is, yet);
-    /// `NotOnTheGrid` for a length that is not whole steps of the engine; and the engine's own.
+    /// [`FloorPlan::of`]'s refusals; those of [`floor_cuts`] for what is hosted, each naming it;
+    /// `NotOnTheGrid` for a length that is not whole steps of the engine; and the engine's own,
+    /// naming what was cut through the floor.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one floor's cuts, layers, meshes and names, in the order the record lists them"
+    )]
     pub(super) fn build_floor(
         &self,
         recipe: &Recipe,
-        hosted: usize,
+        hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
         let plan = FloorPlan::of(recipe)?;
-        if hosted > 0 {
-            return Err(fault("NotAHost", "nothing is hosted on a floor yet"));
-        }
         let units = self.units;
+        let cuts = floor_cuts(&plan, hosted, units)?;
         let op = op_id(recipe)?;
-        let mut asked = Asked { layers: Vec::new() };
+        let mut asked = Asked {
+            layers: Vec::new(),
+            cut: cuts.iter().map(|c| c.key.clone()).collect(),
+        };
+        let named = |error: GeometryError| {
+            if cuts.is_empty() {
+                return error;
+            }
+            let through: Vec<&str> = cuts.iter().map(|c| c.who.as_str()).collect();
+            fault(
+                &error.code,
+                format!(
+                    "with {} cut through it: {}",
+                    through.join(", "),
+                    error.message
+                ),
+            )
+        };
         let mut mesh = Mesh {
             positions: Vec::new(),
             indices: Vec::new(),
@@ -342,13 +551,21 @@ impl<E: Engine> Kernel<E> {
             let sloped = plan.tops.iter().flatten().any(|&z| z != 0);
             for (n, (_, layer, bottom, top)) in slabs.into_iter().enumerate() {
                 let up = units.from_q0(top.saturating_sub(bottom))?;
-                let outer = ring(&plan, 0, plan.outer(), units, bottom)?;
-                let holes = plan
+                let z = units.from_q0(bottom)?;
+                let outer = lifted_ring(&plan, 0, plan.outer(), units, bottom)?;
+                let mut holes = plan
                     .holes()
                     .iter()
                     .enumerate()
-                    .map(|(k, hole)| ring(&plan, k.saturating_add(1), hole, units, bottom))
+                    .map(|(k, hole)| lifted_ring(&plan, k.saturating_add(1), hole, units, bottom))
                     .collect::<Result<Vec<_>, _>>()?;
+                for cut in &cuts {
+                    let mut hole = Vec::with_capacity(cut.ring.len());
+                    for &[x, y] in &cut.ring {
+                        hole.push(P3::new(x, y, z).map_err(|_| too_big())?);
+                    }
+                    holes.push(hole);
+                }
                 let by = [0, 0, up];
                 let mut entry = AskedLayer {
                     function: layer.function.clone(),
@@ -363,13 +580,15 @@ impl<E: Engine> Kernel<E> {
                     sloped_layer(&mut *engine, &outer, &holes, by)?
                 } else {
                     let profile = Profile { outer, holes };
-                    engine.extrude(&profile, by).map_err(from_engine)?
+                    engine
+                        .extrude(&profile, by)
+                        .map_err(|e| named(from_engine(e)))?
                 };
                 if n == last {
                     solid = with_edges(&mut *engine, &plan, units, solid, &mut entry.edges)?;
                 }
                 asked.layers.push(entry);
-                let shown = engine.mesh(&solid).map_err(from_engine)?;
+                let shown = engine.mesh(&solid).map_err(|e| named(from_engine(e)))?;
                 let appended = append(&mut mesh, &shown, units, &mut extent)?;
                 rounded |= appended.rounded;
                 parts.push(Part {
@@ -396,10 +615,16 @@ impl<E: Engine> Kernel<E> {
                 parts: parts.clone(),
             })
             .collect();
+        let mut faces = names(op, &plan)?;
+        for cut in &cuts {
+            let roles = (0..cut.ring.len()).map(|i| format!("side.{i}"));
+            faces.extend(tool_names(&cut.who, &cut.key, cut.op, op, roles)?);
+        }
+        faces.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(Built {
             body: serde_json::to_vec(&asked).unwrap_or_default(),
             bounds,
-            names: names(op, &plan)?,
+            names: faces,
             displays,
         })
     }

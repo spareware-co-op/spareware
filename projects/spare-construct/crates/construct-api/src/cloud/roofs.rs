@@ -1,11 +1,12 @@
-//! The commands that make and change roof types and roofs on a rectangle (job 5.3, CON-A4-F4-P3).
+//! The commands that make and change roof types and roofs (job 5.3, CON-A4-F4-P3; hips, valleys
+//! and uneven gables, job 6.2, CON-A4-F4-P4).
 //! They go through the same edit log as `element.*`, with the same access check (`model.edit`) and
 //! the same claims: a piece another person is working on is refused, and one person's edits land
 //! in log order. Each is one entry, so one undo takes back all it wrote ([`crate::cloud::undo`]).
 //! They read as the floor commands do ([`crate::cloud::floors`]).
 //!
 //! Each command checks the change with construct-roofs' own rules (a footprint, its form, its
-//! pitch and overhangs, every refusal in its words naming the edges and the job that lifts it),
+//! pitch and overhangs, every refusal in its words naming the edges),
 //! construct-slabs' (a roof type's layers, a footprint's loop), construct-types' (types) and
 //! construct-levels' (ties), and a roof with the very reader and plan the builders use
 //! ([`construct_regen::levels::recipe_at`] and [`construct_regen::roof_plan::RoofPlan::of`]), so a
@@ -39,15 +40,20 @@
 //! roof's eaves or verge there. A footprint with a hole is refused, in construct-roofs' words: an
 //! opening through a roof is job 4.2's.
 //!
-//! `form` is `flat`, `mono` or `gable`. `pitch` is typed text, a slope (`1:4`, `25%`) or an angle
-//! (`30°`), held as typed. `overhang` is typed text: how far the roof runs on past an edge in
-//! plan, at 0 or more; `roof.create` and `roof.form` give every edge the same. `eaves` names the
-//! edges (IDs) the roof rises from: a mono-pitch roof rises from one and a gable from two opposite
-//! ones; left out, a mono-pitch roof rises from the footprint's first edge and a gable from the
-//! longer of the two pairs of opposite edges of a rectangle, its ridge along its length. What
-//! construct-roofs refuses, it refuses in its words: hips, an uneven gable (`roof.pitch` with
-//! `edge`), a pitch on a footprint that is not a rectangle along the plan's axes, an overhang the
-//! roof cannot take.
+//! `form` is `flat`, `mono`, `gable` or `hip`. `pitch` is typed text, a slope (`1:4`, `25%`) or
+//! an angle (`30°`), held as typed. `overhang` is typed text: how far the roof runs on past an
+//! edge in plan, at 0 or more; `roof.create` and `roof.form` give every edge the same. `eaves`
+//! names the edges (IDs) the roof rises from: a mono-pitch roof rises from one, a gable from two
+//! opposite ones, and a hip roof from any (every edge sloping is a hip roof all round, two that
+//! meet at a corner a hip there, three a hip at one end and a verge at the other); left out, a
+//! mono-pitch roof rises from the footprint's first edge, a gable from the longer of the two pairs
+//! of opposite edges of a rectangle, its ridge along its length, and a hip roof from every edge.
+//! The form a roof is stored as is construct-roofs' own: a hip roof on a rectangle along the axes
+//! rising from one edge is mono-pitch, from two opposite ones a gable, and any other is solved
+//! (its ridges, hips and valleys worked out from a slope per edge). An uneven gable is made with
+//! `roof.pitch` and `edge`. What construct-roofs refuses, it refuses in its words: slopes of two
+//! pitches meeting at a hip or a valley, a pitch on a footprint that is not right-angled, a verge
+//! or two overhangs on a footprint with an inside corner, an overhang the roof cannot take.
 //!
 //! `roof.create`: `level` is the level the roof's base stands on (its ID), `offset` above it
 //! (typed text). The record: kind `roof`, `level` 0, placement 0, its type and category, its tie,
@@ -252,7 +258,22 @@ fn eaves_of(footprint: &Boundary, form: &str, named: Option<&[String]>) -> Resul
                 .ok_or_else(|| "A roof's footprint has no edge.".to_owned()),
         },
         "gable" => match named {
-            Some(list) if list.len() == 2 => Ok(list),
+            Some(list) if list.len() == 2 => {
+                let at = |id: &Id| ids.iter().position(|own| own == id);
+                let apart = list
+                    .get(1)
+                    .and_then(at)
+                    .zip(list.first().and_then(at))
+                    .map(|(b, a)| b.abs_diff(a));
+                if ids.len() == 4 && matches!(apart, Some(1 | 3)) {
+                    return Err(
+                        "A gable rises from two opposite edges: two that meet at a corner make a \
+                         hip roof (form hip)."
+                            .to_owned(),
+                    );
+                }
+                Ok(list)
+            }
             Some(_) => Err("A gable rises from two opposite edges.".to_owned()),
             None => {
                 let corners = footprint.corners(Ring::Outer).unwrap_or_default();
@@ -279,6 +300,11 @@ fn eaves_of(footprint: &Boundary, form: &str, named: Option<&[String]>) -> Resul
                 }
             }
         },
+        "hip" => match named {
+            Some(list) if !list.is_empty() => Ok(list),
+            Some(_) => Err("A hip roof rises from one edge or more.".to_owned()),
+            None => Ok(ids),
+        },
         _ => Ok(Vec::new()),
     }
 }
@@ -297,19 +323,19 @@ fn edges_for(
         "flat" => {
             if pitch.is_some() {
                 return Err(
-                    "A flat roof does not slope: leave the pitch out, or choose mono or gable."
+                    "A flat roof does not slope: leave the pitch out, or choose mono, gable or hip."
                         .to_owned(),
                 );
             }
             if named.is_some_and(|list| !list.is_empty()) {
                 return Err(
-                    "A flat roof rises from no edge: leave eaves out, or choose mono or gable."
+                    "A flat roof rises from no edge: leave eaves out, or choose mono, gable or hip."
                         .to_owned(),
                 );
             }
         }
-        "mono" | "gable" => {}
-        _ => return Err("A roof's form is flat, mono or gable.".to_owned()),
+        "mono" | "gable" | "hip" => {}
+        _ => return Err("A roof's form is flat, mono, gable or hip.".to_owned()),
     }
     let eaves = eaves_of(footprint, form, named)?;
     let pitch = if form == "flat" {

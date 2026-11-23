@@ -77,6 +77,7 @@
 //! kernel's sweep takes them (the interim register).
 
 use crate::cloud::elements::write_record;
+use crate::cloud::openings::floor_view;
 use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{levels, params};
 use construct_categories::{CategoryId, FLOORS};
@@ -798,6 +799,25 @@ async fn put_floor<T: Txn>(
     };
     if let Err(refusal) = run.buildable(&record).await? {
         return Ok(Err(refusal));
+    }
+    if let Ok(shape) = shape_of(&record.recipe)
+        && !shape.is_plain()
+    {
+        let view = floor_view(run.txn, run.project, run.document, &record).await?;
+        if !view.cuts.is_empty() {
+            let keys: Vec<&str> = view.cuts.iter().map(|cut| cut.key.as_str()).collect();
+            let shaped = if shape.slope().is_some() {
+                "a slope"
+            } else {
+                "slab edges"
+            };
+            return Ok(Err(format!(
+                "{name}'s {what}: {} cut{} through this floor, and a floor with {shaped} is not cut by openings and shafts yet: take {} away first",
+                keys.join(", "),
+                if keys.len() == 1 { "s" } else { "" },
+                if keys.len() == 1 { "it" } else { "them" },
+            )));
+        }
     }
     run.put_claimed(&record).await
 }

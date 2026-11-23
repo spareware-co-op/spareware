@@ -207,7 +207,7 @@ fn values_in(
 }
 
 /// The claim this person takes on an element, or who else holds it.
-async fn claim_on<T: Txn>(
+pub(crate) async fn claim_on<T: Txn>(
     txn: &mut T,
     project: &Id,
     context: &Context<'_>,
@@ -234,7 +234,7 @@ async fn claim_on<T: Txn>(
 
 /// Writes `after` over `before` (its hash) and takes the claim: the whole result of a command that
 /// changes a placed family.
-async fn rewrite<T: Txn>(
+pub(crate) async fn rewrite<T: Txn>(
     txn: &mut T,
     project: &Id,
     document: &Id,

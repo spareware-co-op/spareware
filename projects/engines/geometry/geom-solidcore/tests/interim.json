@@ -272,7 +272,8 @@
       },
       "known_faults": [
         "a corner not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
-        "slab edges under a sloped floor are refused, not built"
+        "slab edges under a sloped floor are refused, not built",
+        "an opening or a shaft that would cut a sloped floor or one with slab edges is refused by name (ShapedFloorCut), not cut"
       ],
       "replaced_by": "the kernel's own exact extrusion, loft and union behind the same trait"
     },
@@ -292,9 +293,51 @@
     },
     {
       "program": "spare-construct",
+      "place": "construct-openings' Outline, a curved edge of a floor opening's or a shaft's outline",
+      "operation": "opening.floor or shaft with a curved outline",
+      "answered_by": "refused before any engine is asked (CurvedOutline, naming the opening or shaft): the engine seam's extrusion takes polygons only",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/kernel_suite/mod.rs",
+        "test": "an_opening_in_a_floor_is_refused_by_name"
+      },
+      "known_faults": [
+        "a round opening or shaft cannot be made"
+      ],
+      "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's regenerator, a shaft that ends inside a floor's thickness",
+      "operation": "shaft whose base or top lies between a floor's bottom and top faces",
+      "answered_by": "refused (ShaftEndsInFloor, the floor's build failure naming the shaft and which end) rather than cut part way: a part-depth cut would be a recess, which no builder makes yet",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/openings.rs",
+        "test": "a_shaft_cuts_every_floor_it_passes_through"
+      },
+      "known_faults": [
+        "a shaft cannot stop part way through a floor"
+      ],
+      "replaced_by": "a part-depth cut through Engine::subtract of the shaft's prism from the layers it reaches, with the recess's faces named, in a later piece"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, openings and shafts (construct-regen's voids)",
+      "operation": "opening.wall, opening.floor and shaft, and a floor built with its openings and shafts (Geometry::build_hosting)",
+      "answered_by": "each void is drawn as its outline (a wall opening's rectangle standing on its wall's line, a shaft's ribbon), with no solid; the stand-in builds a floor alone and cuts no opening; on the kernel's edition the floor's builder cuts them through every layer (the server's tests/kernel.rs, openings_and_a_shaft_cut_every_layer_of_a_floor)",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/src/voids.rs",
+        "test": "a_void_is_drawn_as_its_outline"
+      },
+      "known_faults": [
+        "on the stand-in, a floor or wall shows no hole where an opening or shaft is"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel over the engine seam, which the browser runs too for a document on the kernel's edition"
+    },
+    {
+      "program": "spare-construct",
       "place": "construct-regen's stand_in::Boxes, a roof",
       "operation": "roof (a filled roof recipe: its eaves outline and each layer's solid)",
-      "answered_by": "one box around every layer's solid, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw a flat roof's layers as the box's slices between their faces and a sloped roof's layers as their lofts, each section cut into quadrilaterals, every point the nearest millimetre",
+      "answered_by": "one box around every layer's solid, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw a flat roof's layers as the box's slices between their faces, a sloped roof's layers as their lofts, each section cut into quadrilaterals, and a solved roof's layers as each of their pieces' prisms, every point the nearest millimetre",
       "pinned_by": {
         "file": "projects/spare-construct/crates/construct-regen/src/stand_in.rs",
         "test": "a_roof_is_its_layers_drawn_on_the_stand_in"
@@ -317,6 +360,20 @@
         "a corner or a layer face not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
       ],
       "replaced_by": "the kernel's own exact extrusion and ruled loft (geom-sweep, chapters 13.4 and 13.6) behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::roof, a solved roof's layers",
+      "operation": "roof (Kernel, a solved roof: for each layer, one Engine::loft of each flat piece of its lower face straight up to the same piece on its upper face, and Engine::unite of the pieces in the recipe's order, each sharing a side with one before it)",
+      "answered_by": "the engine behind the Engine trait: on the server's kernel setting solidcore's engine, each piece a loft by the engine's own exact rows (each wall a flat face through the pieces' grid corners; solidcore's sweep of a sloped profile gives a spline surface, which the kernel refuses), and the union solidcore's boolean union of flat-faced solids (decision 32.70); the layers' meshes put one after another in whole millimetres, each point the nearest millimetre, the roof's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_hip_roof_is_its_pieces_united"
+      },
+      "known_faults": [
+        "a corner or a layer face not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion and flat-faced union (geom-sweep and geom-bool) behind the same trait, and display meshes on the kernel's grid"
     },
     {
       "program": "spare-construct",
@@ -361,6 +418,62 @@
         "a family's frame, leaf or sash is drawn as its box, and its wall has no opening, on the stand-in's edition"
       ],
       "replaced_by": "construct_regen::kernel::Kernel's family builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a room",
+      "operation": "room (a filled room recipe: its loops and height)",
+      "answered_by": "one box around the room's outer loop, its sides rounded outward to whole millimetres, from its base at 0 up to its height, by Spare Construct's own code with no engine; its outline is the outer loop and its deviation the box's plan diagonal, 0 when the room is an upright rectangle",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/rooms.rs",
+        "test": "a_room_follows_the_walls_round_it"
+      },
+      "known_faults": [
+        "a room's holes and notches are not in its shape on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's room builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::room, a room's volume",
+      "operation": "room (Kernel: one Engine::extrude of its loop with its holes, from its base up to its height)",
+      "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), one solid; its mesh in whole millimetres, each point the nearest millimetre, the room's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_room_with_an_island_wall_is_its_loop_extruded"
+      },
+      "known_faults": [
+        "a corner or a height not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-rooms' find, a curved wall",
+      "operation": "room on a level with a curved wall",
+      "answered_by": "refused before any loop is sought (RoomError::CurvedWall, naming the wall): a room is never found from a chord standing in for an arc",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-rooms/tests/find.rs",
+        "test": "a_curved_wall_a_point_in_a_wall_and_no_height_are_refused"
+      },
+      "known_faults": [
+        "a room bounded by a curved wall cannot be found (no curved wall can be drawn yet)"
+      ],
+      "replaced_by": "found once the kernel's exact arcs reach the walls (geom-curve, chapter 13): the search's edges take arcs, its corners the exact meeting points"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-rooms' Limit, a sloped upper limit",
+      "operation": "room under a sloped limit (a roof, a sloped ceiling)",
+      "answered_by": "refused when the record is written and when it is read (RoomError::SlopedLimit): a room reaches a level or a given height only",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-rooms/tests/record.rs",
+        "test": "a_sloped_limit_is_refused_by_name"
+      },
+      "known_faults": [
+        "the volume of a room under a roof is not its true volume until it is bounded by the roof (job 6.3)"
+      ],
+      "replaced_by": "the room's volume as its prism less what lies above a sloped plane, through the engine seam's boolean, once rooms are bounded by floors, ceilings and roofs (job 6.3)"
     }
   ]
 }

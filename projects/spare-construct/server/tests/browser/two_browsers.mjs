@@ -426,7 +426,22 @@ async function until(read, ok, label) {
   }
   throw new Error(`FAILED: ${label}`);
 }
-const doorTypes = async () => (await asAnna('types?category=300')).types;
+const doorTypes = async () => {
+  const got = await anna.evaluate(
+    (url) => fetch(url).then(async (r) => ({ status: r.status, text: await r.text() })),
+    `${model}/types?category=300`,
+  );
+  let body = null;
+  try {
+    body = JSON.parse(got.text);
+  } catch {
+    // Not JSON: the message below shows what came back.
+  }
+  if (!body || !Array.isArray(body.types)) {
+    throw new Error(`types?category=300 answered HTTP ${got.status}: ${got.text.slice(0, 500)}`);
+  }
+  return body.types;
+};
 const leafWidth = (view) => view.parameters.find((p) => p.name === 'Leaf width');
 const manager = '#stack-manage';
 const closeDialog = async () => {
@@ -1175,6 +1190,7 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the floor's included, matches the server's`);
 }
+
 console.log('\n   Views, in the project browser');
 // Anna opens Level 1's plan from the browser's list of the model's views and the server draws it;
 // Ben draws a wall, and the open plan shows it; Anna makes a plan view and renames it, and Ben's
@@ -1330,26 +1346,104 @@ check(
 );
 await shot(ben, 'ben-roof');
 
-// Hips: the roof tool's edge numbers name two edges that meet at a corner; the server's reason, beside
-// the tool, and the footprint it turned back, with no second roof.
-await anna.locator('#pv-side input[data-key="roof-eaves"]').fill('1, 2');
-await anna.locator('#pv-side input[data-key="roof-eaves"]').press('Tab');
+const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+// A hip roof: Anna chooses the form Hip, leaves the edges it rises from blank (every edge), and
+// sketches a second footprint clear of the gable. Both browsers draw its ridge and its four hips from
+// the lines the server gave; the server's quantities read it; her undo takes it away from both and her
+// redo brings it back; a pitch of its own on one edge, which would meet its neighbours at a hip at two
+// pitches, is turned back by name; and a last undo leaves the plan as the gable alone.
+await anna.locator('#pv-side select[data-key="roof-form"]').selectOption('hip');
+await anna.waitForFunction(() => document.querySelector('#pv-side input[data-key="roof-eaves"]') !== null);
 await roofClicks(anna, [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500], [7000, -2300]]);
 await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
 await anna.keyboard.press('Enter');
-await anna.waitForSelector('#pv-side [data-problem="roof-draw"]');
-const roofRefusal = await anna.locator('#pv-side [data-problem="roof-draw"]').textContent();
-check(
-  /slope and meet at a corner: hips come with job 6\.2/.test(roofRefusal) &&
-    roofRefusal === (await anna.locator('#toast-m').textContent()),
-  "edges that meet at a corner are turned back in the server's words, beside the roof tool",
+const roofsOf = () => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').map((p) => p.el.id);
+await ben.waitForFunction((n) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length === n, 2);
+const hipId = (await ben.evaluate(roofsOf)).find((id) => id !== roofId);
+const hipDrawn = (id) => {
+  const group = document.querySelector(`g.element[data-id="${id}"]`);
+  const count = (kind) => group?.querySelectorAll(`[data-roof-line="${kind}"]`).length;
+  return group?.querySelector('path.roof[data-form="solved"]') && count('hip') === 4 && count('ridge') === 1;
+};
+await ben.waitForFunction(hipDrawn, hipId);
+await anna.waitForFunction(hipDrawn, hipId);
+pass("Anna's hip roof appears in both browsers, its ridge and four hips drawn from the lines the server gave");
+const hipBuilt = (id) => (window.spare.elements.get(id)?.shape?.displays?.[0]?.parts?.length ?? 0) >= 1;
+await ben.waitForFunction(hipBuilt, hipId);
+await anna.waitForFunction(hipBuilt, hipId);
+pass('both browsers built the hip roof for the 3D view, each layer a part of its shape');
+await shot(ben, 'ben-roof-hip');
+
+const hipShown = await until(
+  () => asAnna(`parameters/${hipId}`),
+  (view) => ['roof.area', 'roof.slope-area', 'roof.ridge-height'].every((id) => view.parameters?.some((p) => p.id === id && p.from === 'read-only')),
+  'the server works out the plan area, the slope area and the ridge height of the hip roof',
 );
-await anna.waitForSelector('#pv-canvas [data-roof-refused]');
+const hipPlanArea = roofRead(hipShown, 'roof.area');
+const hipSlopeArea = roofRead(hipShown, 'roof.slope-area');
+const hipRidge = roofRead(hipShown, 'roof.ridge-height');
 check(
-  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length)) === 1,
-  'drawn where it was turned back, and no second roof made',
+  /^[0-9.]+ m²$/.test(hipPlanArea) && /^[0-9.]+ m²$/.test(hipSlopeArea) && Number.parseFloat(hipSlopeArea) > Number.parseFloat(hipPlanArea) && !!hipRidge,
+  `the server gives the hip roof's plan area ${hipPlanArea}, slope area ${hipSlopeArea} and ridge height ${hipRidge}`,
+);
+await anna.keyboard.press('Escape');
+const hipAt = await onPlan(anna, 8500, -1400);
+await anna.mouse.click(hipAt.x, hipAt.y);
+await anna.waitForFunction(
+  ([area, slope, ridge]) =>
+    document.querySelector('#pv-side [data-read-only="roof.area"]')?.textContent === area &&
+    document.querySelector('#pv-side [data-read-only="roof.slope-area"]')?.textContent === slope &&
+    document.querySelector('#pv-side [data-read-only="roof.ridge-height"]')?.textContent === ridge,
+  [hipPlanArea, hipSlopeArea, hipRidge],
+);
+check(
+  (await anna.locator('#pv-side select[data-key="roof-own-form"]').inputValue()) === 'hip' &&
+    (await anna.locator('#pv-side input[data-key^="roof-edge-pitch:"]').count()) === 4,
+  "Anna's palette reads the roof as a hip roof with a pitch for each of its four edges, and the server's quantities read-only",
+);
+await shot(anna, 'anna-roof-hip');
+
+// Refused by name: one edge at another pitch would meet its neighbours at a hip at two pitches.
+const hipEdge = anna.locator('#pv-side input[data-key="roof-edge-pitch:1"]');
+await hipEdge.fill('1:2');
+await hipEdge.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="roof-edit"]');
+const roofRefusal = await anna.locator('#pv-side [data-problem="roof-edit"]').textContent();
+check(
+  /slope at different pitches where their planes meet/.test(roofRefusal) &&
+    (await anna.evaluate((id) => window.spare.elements.get(id).el.recipe.args.edges.every((e) => e.pitch === 'slope:1/4' || !e.pitch), hipId)),
+  "a pitch of its own on one edge of a hip roof is turned back in the server's words, and the roof is as it was",
 );
 await shot(anna, 'anna-roof-refused');
+
+// Anna's undo takes the hip roof away from both browsers and her redo brings it back, drawn as before.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'roof.create');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+pass("Anna's undo takes the hip roof away from both browsers");
+await anna.waitForSelector('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(hipDrawn, hipId);
+await anna.waitForFunction(hipDrawn, hipId);
+pass("Anna's redo brings the hip roof back, drawn as before in both browsers");
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`) !== null, hipId);
+const hipAgain = await asAnna(`parameters/${hipId}`);
+check(
+  roofRead(hipAgain, 'roof.area') === hipPlanArea && roofRead(hipAgain, 'roof.slope-area') === hipSlopeArea,
+  'the quantities of the redone hip roof are the same',
+);
+
+// A last undo leaves the plan as it was before the hip roof, the gable alone.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForSelector('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), hipId);
+check(
+  (await ben.evaluate(roofsOf)).length === 1 && (await anna.evaluate(roofsOf)).length === 1,
+  'a last undo leaves the gable roof alone in both browsers',
+);
 await anna.keyboard.press('Escape');
 
 // Its area and what else the server works out of it, in units, apart from what a person sets.
@@ -1358,7 +1452,6 @@ const roofShown = await until(
   (view) => view.parameters?.some((p) => p.id === 'roof.area' && p.from === 'read-only'),
   'the server works out the area of the roof',
 );
-const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
 const roofArea = roofRead(roofShown, 'roof.area');
 const roofSlopeArea = roofRead(roofShown, 'roof.slope-area');
 check(/^[0-9.]+ m²$/.test(roofArea) && roofRead(roofShown, 'roof.pitch') !== undefined, `the server gives its area in the document's units, ${roofArea}`);
@@ -1372,6 +1465,28 @@ check(
     (await anna.locator('#pv-side input[data-key="roof-own-overhang"]').inputValue()) === '300 mm',
   "Anna's palette shows its pitch and overhang as typed, and its area read-only",
 );
+// An uneven gable: edge 1 at 1:3 against edge 3 at 1:4; Ben sees both pitches and the same gable drawn.
+const gableEdge = anna.locator('#pv-side input[data-key="roof-edge-pitch:1"]');
+await gableEdge.fill('1:3');
+await gableEdge.press('Enter');
+await ben.waitForFunction(
+  (id) => {
+    const edges = window.spare.elements.get(id)?.el.recipe.args.edges;
+    return edges?.[0].pitch === 'slope:1/3' && edges[2].pitch === 'slope:1/4';
+  },
+  roofId,
+);
+const roofUneven = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  "the server works out the uneven gable's slope area",
+);
+await ben.waitForFunction(roofDrawn, roofId);
+check(
+  roofRead(roofUneven, 'roof.area') === roofArea,
+  "Anna's pitch of its own on one face makes an uneven gable in Ben's browser, with the same area in plan",
+);
+const roofUnevenArea = roofRead(roofUneven, 'roof.slope-area');
 await shot(anna, 'anna-roof-area');
 await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', roofId);
 await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
@@ -1391,7 +1506,7 @@ await anna.waitForFunction(
 );
 const roofSteeper = await until(
   () => asAnna(`parameters/${roofId}`),
-  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  (view) => roofRead(view, 'roof.slope-area') !== roofUnevenArea,
   'the server works out the new slope area',
 );
 check(
@@ -1577,6 +1692,361 @@ await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
+}
+
+console.log('\n   Openings and shafts');
+// Anna draws a wall of her own below the building and cuts an opening in it from the opening tool;
+// Ben sees the opening, and the wall cut for it where this run's geometry cuts. She draws a floor
+// above the building, with an opening in it; Ben, after clicking off whatever he had, makes a shaft
+// through it from the shaft tool, and Anna's browser draws the floor with the shaft's hole and
+// reads its area, which has dropped by exactly the shaft's. She deletes the shaft and undoes the
+// delete; a position past the wall's end is refused in words under the field; Ben resizes the
+// opening once she has let go of it; a fresh load agrees. Nobody changes what the other touched in
+// the last 30 s without the other letting go first, and an undo claims the element it writes too.
+const opKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const opWallFrom = await onPlan(anna, 7000, 9000);
+const opWallTo = await onPlan(anna, 11000, 9000);
+await anna.mouse.click(opWallFrom.x, opWallFrom.y);
+await anna.mouse.click(opWallTo.x, opWallTo.y);
+const opWallOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(opWallOf, opKnown);
+const opWall = await ben.evaluate(opWallOf, opKnown);
+await anna.keyboard.press('Escape');
+pass("Anna's wall for the opening appears in Ben's browser");
+
+// The opening tool: its size is typed in the palette, and the click is the middle of the opening.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:opening"]');
+const opWidthField = '#pv-side input[data-key="opening-tool-width"]';
+await anna.waitForSelector(opWidthField);
+check(
+  (await anna.locator(opWidthField).inputValue()) === '1000 mm' &&
+    (await anna.locator('#pv-side input[data-key="opening-tool-sill"]').inputValue()) === '900 mm',
+  "the opening tool's palette offers a width, a height and a sill height",
+);
+await anna.locator(opWidthField).fill('1200 mm');
+await anna.locator(opWidthField).press('Enter');
+const opWallBox = await box(anna, opWall);
+await anna.mouse.click(opWallBox.x + opWallBox.width * 0.3, opWallBox.y + opWallBox.height / 2 - 1);
+const opOn = (wall) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'opening.wall' && p.el.references?.[0]?.element === wall)?.el.id;
+await ben.waitForFunction(opOn, opWall);
+const opId = await ben.evaluate(opOn, opWall);
+await anna.keyboard.press('Escape');
+const opRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, opId);
+check(
+  opRecord.kind === 'opening' &&
+    opRecord.props['@category'] === '1600' &&
+    opRecord.references[0].kind === 'face' &&
+    /^length:q0:/.test(opRecord.props['@host.along']) &&
+    opRecord.props['@host.up'] === `length:q0:${900 * 6400}` &&
+    opRecord.recipe.args.width === `length:q0:${1200 * 6400}`,
+  "the opening Anna cuts is in Ben's browser: in the openings category, hosted on a named face of her wall, 1200 wide with its sill at 900",
+);
+const opDrawn = (id) => document.querySelector(`g.element[data-id="${id}"] .body.opening`);
+await ben.waitForFunction(opDrawn, opId);
+await anna.waitForFunction(opDrawn, opId);
+pass("and both browsers draw it where it opens through the wall");
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  const opCut = (names) => names.some((n) => n.role === `tool(${opId}).head`);
+  await until(async () => (await asAnna(`shape/${opWall}`)).built.result.shape?.names ?? [], opCut, 'the server cuts the wall for the opening');
+  await ben.waitForFunction(
+    ([wall, cut]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${cut}).head`),
+    [opWall, opId],
+  );
+  pass("the opening cuts the wall, on the server and as Ben's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the wall's cut)");
+}
+await shot(ben, 'ben-opening');
+
+// A floor of Anna's, above the building, drawn from the floor tool as in the floors section, with an
+// opening in it from the floor opening tool: two corners inside the floor.
+const opFloorTypeField = '#pv-side select[data-key="floor-type"]';
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
+await anna.waitForSelector(`${opFloorTypeField} option[value="floor-concrete-150-screed-50"]`, { state: 'attached' });
+await anna.locator(opFloorTypeField).selectOption({ label: 'Concrete 150, 50 screed' });
+const opClicks = async (page, corners) => {
+  for (const [x, y] of corners) {
+    const at = await onPlan(page, x, y);
+    await page.mouse.click(at.x, at.y);
+  }
+};
+const opFloorEdge = [[500, -2200], [5500, -2200], [5500, -400], [500, -400]];
+await opClicks(anna, [...opFloorEdge, opFloorEdge[0]]);
+await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+await anna.keyboard.press('Enter');
+const opFloorOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'floor')?.el.id;
+await ben.waitForFunction(opFloorOf);
+const opFloor = await ben.evaluate(opFloorOf);
+const opFloorDrawn = ([id, count]) => document.querySelector(`g.element[data-id="${id}"] path.floor[data-holes="${count}"]`);
+const opFloorHoles = (page, count) => page.waitForFunction(opFloorDrawn, [opFloor, count]);
+await anna.keyboard.press('Escape');
+const opAreaShown = async () => (await asAnna(`parameters/${opFloor}`)).parameters.find((p) => p.id === 'floor.area')?.shown;
+await until(opAreaShown, (shown) => shown === '9.00 m²', 'the server works out the area of the floor, 9 m2');
+pass("Anna's floor, 5 m by 1.8 m, is in the plan with its area, 9.00 m²");
+
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor-opening"]');
+await anna.waitForSelector('#pv-side [data-opening-sketch="empty"]');
+await opClicks(anna, [[1000, -2000], [2000, -1500]]);
+const opFloorOpening = () => [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'opening.floor')?.el.id;
+await ben.waitForFunction(opFloorOpening);
+await anna.keyboard.press('Escape');
+await opFloorHoles(ben, 1);
+await opFloorHoles(anna, 1);
+await until(opAreaShown, (shown) => shown === '8.50 m²', 'the floor reads its area after the opening');
+pass("Anna's opening in the floor is a hole in it in both browsers, and the floor's area is 8.50 m²");
+await shot(anna, 'anna-floor-opening');
+
+// Ben clicks off whatever he had and makes a shaft through the floor from the shaft tool; Anna has
+// the floor picked, and her palette's area drops by exactly the shaft's 0.64 m².
+const opFloorAt = await onPlan(anna, 4800, -1000);
+await anna.mouse.click(opFloorAt.x, opFloorAt.y);
+const opAreaIs = (shown) => document.querySelector('#pv-side [data-read-only="floor.area"]')?.textContent === shown;
+await anna.waitForFunction(opAreaIs, '8.50 m²');
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:shaft"]');
+const opStartField = '#pv-side select[data-key="shaft-tool-level"]';
+await ben.waitForSelector(`${opStartField} option[value="2"]`, { state: 'attached' });
+check(
+  (await ben.locator(opStartField).inputValue()) === '1' &&
+    (await ben.locator('#pv-side select[data-key="shaft-tool-top"]').inputValue()) === '2',
+  "the shaft tool offers the plan's level to start on and the level above to end on",
+);
+await ben.locator('#pv-side input[data-key="shaft-tool-offset"]').fill('-500 mm');
+await ben.locator('#pv-side input[data-key="shaft-tool-offset"]').press('Enter');
+await opClicks(ben, [[3500, -1900], [4300, -1100]]);
+const opShaftOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'shaft')?.el.id;
+await anna.waitForFunction(opShaftOf);
+const opShaft = await anna.evaluate(opShaftOf);
+await ben.keyboard.press('Escape');
+const opShaftRecord = await anna.evaluate((id) => window.spare.elements.get(id).el, opShaft);
+check(
+  opShaftRecord.recipe.op === 'shaft' &&
+    opShaftRecord.props['@category'] === '1600' &&
+    opShaftRecord.props['@level'] === '1' &&
+    opShaftRecord.props['@top.level'] === '2' &&
+    opShaftRecord.props['@level.offset'] === `length:q0:${-500 * 6400}` &&
+    opShaftRecord.references.length === 0,
+  "the shaft Ben draws is in Anna's browser: tied to Level 1, 500 below it, and to Level 2, hosted on nothing",
+);
+await opFloorHoles(anna, 2);
+await opFloorHoles(ben, 2);
+pass("and both browsers draw the floor with the shaft's hole as well as the opening's");
+await anna.waitForFunction(opAreaIs, '7.86 m²');
+await until(opAreaShown, (shown) => shown === '7.86 m²', 'the server works out the floor after the shaft');
+pass("the floor's area has dropped by exactly the shaft's 0.64 m², to 7.86 m², on the server and in Anna's palette");
+await shot(anna, 'anna-shaft');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.fill?.cut_by?.shafts?.length === 1, opFloor);
+pass("Ben's page builds the floor with the shaft the server says passes through it");
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), opFloor);
+
+// Anna picks the shaft and deletes it, and her undo puts it back.
+const opPick = async (page, id, field) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-opening-properties="${id}"] ${field}`);
+};
+await opPick(anna, opShaft, 'select[data-key="shaft-level"]');
+check(
+  (await anna.locator('#pv-side input[data-key="shaft-w"]').inputValue()) === '800 mm' &&
+    (await anna.locator('#pv-side input[data-key="shaft-top-offset"]').inputValue()) === '0 mm',
+  "Anna's palette shows the shaft's size and where it starts and ends",
+);
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), opShaft);
+await opFloorHoles(ben, 1);
+await until(opAreaShown, (shown) => shown === '8.50 m²', 'the floor is whole again without the shaft');
+pass("Anna deletes the shaft, and Ben's browser draws the floor without its hole");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'shaft.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body.shaft`), opShaft);
+await opFloorHoles(ben, 2);
+await opFloorHoles(anna, 2);
+await until(opAreaShown, (shown) => shown === '7.86 m²', 'her undo cuts the floor again');
+pass("and her undo puts the shaft back, the floor cut again, in both browsers");
+// The undo wrote the shaft, so it is Anna's for 30 s: Ben leaves it.
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', opShaft);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A position past the wall's end is refused in words, under the field, and nothing changes.
+await opPick(anna, opId, 'input[data-key="opening-along"]');
+const opAlong = '#pv-side input[data-key="opening-along"]';
+await anna.locator(opAlong).fill('3900 mm');
+await anna.locator(opAlong).press('Enter');
+await anna.waitForSelector(`#pv-side [data-problem="opening:${opId}"]`);
+const opWords = await anna.locator(`#pv-side [data-problem="opening:${opId}"]`).textContent();
+check(opWords === `opening ${opId}: it crosses the wall's end`, `the refusal reads: ${opWords}`);
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).el.props['@host.along'], opId)) === opRecord.props['@host.along'],
+  'and the opening is where it was',
+);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), opId);
+
+// Ben widens it from his palette once Anna has let go; Anna's browser draws the new width.
+await opPick(ben, opId, 'input[data-key="opening-width"]');
+const opWide = ben.locator('#pv-side input[data-key="opening-width"]');
+check((await opWide.inputValue()) === '1200 mm', "Ben's palette shows the opening's width");
+await opWide.fill('1500 mm');
+await opWide.press('Enter');
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.width === `length:q0:${1500 * 6400}`, opId);
+pass("Ben changes its width to 1500 mm, and Anna's browser holds the new record");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), opId);
+
+// A fresh load agrees: the same records, the floor cut as before, nothing built differently.
+const opFresh = await signIn('anna');
+await opFresh.waitForFunction(opDrawn, opId);
+await opFresh.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body.shaft`), opShaft);
+await opFresh.waitForFunction(opFloorDrawn, [opFloor, 2]);
+for (const id of [opId, opShaft]) {
+  const here = await anna.evaluate((one) => window.spare.elements.get(one).hash, id);
+  check(
+    (await opFresh.evaluate((one) => window.spare.elements.get(one).hash, id)) === here,
+    `a fresh load holds the record of ${id} as Anna's page does`,
+  );
+}
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', opFresh]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the opening's and the shaft's included, matches the server's`);
+}
+
+console.log('\n   Rooms, found from the walls round a point');
+// Anna places a room by a click inside the seed building's west half; Ben sees its tag and its area.
+// After Anna lets go, Ben moves the wall on its west side and both see the area the server gives
+// for the new loop; Ben deletes that wall and both see the room not enclosed, with no area; his undo
+// puts the wall back and the room is enclosed again. Anna renames the room, picked in the plan, and
+// a fresh load agrees. Anna touches only the room and Ben only the wall.
+await toArchitecture(anna);
+await toArchitecture(ben);
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room"]');
+const roomNameField = '#pv-side input[data-key="room-tool-name"]';
+const roomNumberField = '#pv-side input[data-key="room-tool-number"]';
+await anna.waitForSelector(`${roomNumberField}[value="1"]`);
+pass('the Room tool offers the next free number, 1, from the server');
+await anna.locator(roomNameField).fill('Studio');
+await anna.locator(roomNameField).press('Enter');
+const roomClick = await onPlan(anna, 3000, 4000);
+await anna.mouse.click(roomClick.x, roomClick.y);
+const roomOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'room')?.el.id;
+await ben.waitForFunction(roomOf);
+const roomId = await ben.evaluate(roomOf);
+const roomTag = (id, part) => `#pv-canvas g.room-tag[data-room-tag="${id}"] text.${part}`;
+const roomTagIs = (page, part, text) =>
+  page.waitForFunction(([selector, want]) => document.querySelector(selector)?.textContent === want, [roomTag(roomId, part), text]);
+const roomArea = async (before) =>
+  (
+    await until(
+      () => asAnna(`parameters/${roomId}`),
+      (view) => {
+        const shown = view.parameters?.find((p) => p.id === 'room.area')?.shown;
+        return shown !== undefined && shown !== before;
+      },
+      'the server works out the room area',
+    )
+  ).parameters.find((p) => p.id === 'room.area').shown;
+const roomFirst = await roomArea(null);
+check(/^[0-9.]+ m²$/.test(roomFirst), `the server gives the room's area in the document's units, ${roomFirst}`);
+await roomTagIs(ben, 'room-area', roomFirst);
+await roomTagIs(ben, 'room-name', 'Studio');
+await roomTagIs(ben, 'room-number', '1');
+pass("Anna places a room with a click inside a loop of walls, and Ben's browser tags it with its name, number and area");
+await roomTagIs(anna, 'room-area', roomFirst);
+await ben.waitForSelector(`#pv-canvas g.element[data-id="${roomId}"] path.room-fill`);
+await shot(ben, 'ben-room');
+
+// Anna leaves the tool, picks the room she placed and lets go of it by clicking off.
+await anna.keyboard.press('Escape');
+const roomFirstPick = await onPlan(anna, 2000, 6000);
+await anna.mouse.click(roomFirstPick.x, roomFirstPick.y);
+await anna.waitForSelector('#pv-side input[data-key="room-name"]');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), roomId);
+pass('Anna lets go of the room, and Ben sees it free');
+
+// Ben drags the wall on the room's west side east; the loop is smaller.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await drag(ben, 'W-103', 25, 0);
+await ben.mouse.up();
+const roomMoved = await roomArea(roomFirst);
+check(roomMoved !== roomFirst, `a wall of the room moved: the server gives a new area, ${roomMoved}`);
+await roomTagIs(ben, 'room-area', roomMoved);
+await roomTagIs(anna, 'room-area', roomMoved);
+pass("Ben moves a wall of the room, and both browsers tag it with the server's new area");
+
+// Ben deletes that wall: the loop is open, the room stays, with its state in words and no area.
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await roomTagIs(page, 'room-state', 'Not enclosed');
+  check((await page.locator(`#pv-canvas g.room-tag[data-room-tag="${roomId}"] text.room-area`).count()) === 0, 'and shows no area');
+}
+const roomOpen = await until(
+  () => asAnna(`filled/${roomId}`),
+  (view) => view.room?.state === 'not enclosed',
+  'the server says the room is not enclosed',
+);
+check(
+  roomOpen.room.area === null || roomOpen.room.area === undefined,
+  `Ben deletes the wall: the server says "${roomOpen.room.words}", and gives no area`,
+);
+await shot(anna, 'anna-room-not-enclosed');
+
+// His undo puts the wall back, and the loop closes on the same area.
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'element.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await roomTagIs(ben, 'room-area', roomMoved);
+await roomTagIs(anna, 'room-area', roomMoved);
+pass("Ben's undo puts the wall back, and both browsers show the room enclosed again, as it was");
+
+// Anna picks the room in the plan and renames it in the properties palette.
+const roomPick = await onPlan(anna, 2000, 6000);
+await anna.mouse.click(roomPick.x, roomPick.y);
+const roomRename = '#pv-side input[data-key="room-name"]';
+await anna.waitForSelector(roomRename);
+await anna.waitForFunction(
+  (want) => document.querySelector('#pv-side [data-read-only="room.area"]')?.textContent === want,
+  roomMoved,
+);
+pass("Anna's palette shows its area read-only, the same as the server's");
+await anna.locator(roomRename).fill('Studio A');
+await anna.locator(roomRename).press('Enter');
+await roomTagIs(ben, 'room-name', 'Studio A');
+await roomTagIs(anna, 'room-name', 'Studio A');
+pass("Anna renames the room, and Ben's browser tags it with the new name");
+
+// A fresh load agrees.
+const roomsFresh = await signIn('anna');
+await roomsFresh.waitForFunction(
+  ([selector, want]) => document.querySelector(selector)?.textContent === want,
+  [roomTag(roomId, 'room-name'), 'Studio A'],
+);
+await roomsFresh.waitForFunction(
+  ([selector, want]) => document.querySelector(selector)?.textContent === want,
+  [roomTag(roomId, 'room-area'), roomMoved],
+);
+check(
+  (await roomsFresh.locator(roomTag(roomId, 'room-number')).textContent()) === '1',
+  'a fresh load tags the room with the same name, number and area',
+);
+await roomsFresh.context().close();
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the room's included, matches the server's`);
 }
 
 
