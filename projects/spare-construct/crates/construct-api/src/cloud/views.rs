@@ -348,7 +348,10 @@ fn lifted(shaped: &Shaped) -> Result<Bounds, String> {
         return Ok(bounds);
     };
     let Some(Value::Length(elevation)) = Value::from_stored(text) else {
-        return Err(format!("{}'s elevation {text:?} is not a length.", shaped.record.name));
+        return Err(format!(
+            "{}'s elevation {text:?} is not a length.",
+            shaped.record.name
+        ));
     };
     let too_high = || format!("{} stands too high to be tested.", shaped.record.name);
     let per = Length::STEPS_PER_MM;
@@ -358,7 +361,8 @@ fn lifted(shaped: &Shaped) -> Result<Bounds, String> {
     } else {
         down.checked_add(1).ok_or_else(too_high)?
     };
-    let [low, high] = [(bounds.min[2], down), (bounds.max[2], up)].map(|(at, by)| at.checked_add(by));
+    let [low, high] =
+        [(bounds.min[2], down), (bounds.max[2], up)].map(|(at, by)| at.checked_add(by));
     bounds.min[2] = low.ok_or_else(too_high)?;
     bounds.max[2] = high.ok_or_else(too_high)?;
     Ok(bounds)
@@ -386,8 +390,8 @@ pub fn listing_of(
     let mut elements = Vec::new();
     for one in shaped {
         let record = &one.record;
-        let category = records::stored_category(record)
-            .or_else(|| records::category_of(&record.recipe).ok());
+        let category =
+            records::stored_category(record).or_else(|| records::category_of(&record.recipe).ok());
         if let Some(category) = category {
             elements.push(ViewElement {
                 id: record.id.clone(),
