@@ -607,3 +607,426 @@ fn a_layered_walls_layers_are_solids_with_their_faces_named() {
     assert_eq!(boxed.len(), 1);
     assert!(boxed[0].material.is_none());
 }
+
+/// A test engine that answers an extrusion as [`Cuboids`] does, and a loft of two sections the
+/// second of which is the first moved by one vector, which it keeps as the prism it is and meshes
+/// as its two ends (each cut into triangles by clipping ears, so a section need not be convex) and
+/// a quad of two triangles per side, every triangle facing out. It is judged by the suite like any
+/// engine; it is not a geometry engine.
+struct Lofts;
+
+/// A solid of [`Lofts`]: a cuboid, or a loft's first section and the vector to its second.
+#[derive(Clone, Debug)]
+enum Lofted {
+    Cuboid(Cuboid),
+    Prism {
+        section: Vec<[i64; 3]>,
+        by: [i64; 3],
+    },
+}
+
+fn less(a: [i64; 3], b: [i64; 3]) -> [i128; 3] {
+    [0, 1, 2].map(|i| i128::from(a[i]) - i128::from(b[i]))
+}
+
+fn cross(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn dot3(a: [i128; 3], b: [i128; 3]) -> i128 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/// The polygon's corners, by number, turned anticlockwise seen from the side `up` points to, and
+/// the polygon cut into triangles by clipping ears, each triangle facing `up`.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a polygon's corners and an ear's three, as the method names them"
+)]
+fn ears(polygon: &[[i64; 3]], up: [i128; 3]) -> (Vec<usize>, Vec<[usize; 3]>) {
+    let n = polygon.len();
+    let mut newell = [0_i128; 3];
+    for i in 0..n {
+        let (p, q) = (polygon[i], polygon[(i + 1) % n]);
+        newell = [0, 1, 2].map(|k| {
+            let (a, b) = ((k + 1) % 3, (k + 2) % 3);
+            newell[k]
+                + (i128::from(p[a]) - i128::from(q[a])) * (i128::from(p[b]) + i128::from(q[b]))
+        });
+    }
+    let mut left: Vec<usize> = (0..n).collect();
+    if dot3(newell, up) < 0 {
+        left.reverse();
+    }
+    let ring = left.clone();
+    let turn = |a: usize, b: usize, c: usize| {
+        dot3(
+            cross(less(polygon[b], polygon[a]), less(polygon[c], polygon[b])),
+            up,
+        )
+    };
+    let mut out = Vec::new();
+    while left.len() > 3 {
+        let m = left.len();
+        let ear = (0..m).find(|&i| {
+            let (a, b, c) = (left[(i + m - 1) % m], left[i], left[(i + 1) % m]);
+            turn(a, b, c) > 0
+                && left.iter().all(|&p| {
+                    [a, b, c].contains(&p)
+                        || !(turn(a, b, p) >= 0 && turn(b, c, p) >= 0 && turn(c, a, p) >= 0)
+                })
+        });
+        let Some(i) = ear else {
+            return (ring, Vec::new());
+        };
+        out.push([left[(i + m - 1) % m], left[i], left[(i + 1) % m]]);
+        left.remove(i);
+    }
+    out.push([left[0], left[1], left[2]]);
+    (ring, out)
+}
+
+impl Engine for Lofts {
+    type Solid = Lofted;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.lofts".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Lofted, EngineError> {
+        Cuboids.extrude(profile, by).map(Lofted::Cuboid)
+    }
+
+    fn subtract(&mut self, _: &Lofted, _: &Lofted) -> Result<Lofted, EngineError> {
+        Err(unsupported("subtract"))
+    }
+
+    fn subtract_pieces(&mut self, _: &Lofted, _: &Lofted) -> Result<Vec<Lofted>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, sections: &[Section]) -> Result<Lofted, EngineError> {
+        let point = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+        let [first, second] = sections else {
+            return Err(unsupported("loft"));
+        };
+        let a: Vec<[i64; 3]> = first.corners.iter().map(point).collect();
+        let b: Vec<[i64; 3]> = second.corners.iter().map(point).collect();
+        if a.len() < 3 || a.len() != b.len() {
+            return Err(unsupported("loft"));
+        }
+        let by = [0, 1, 2].map(|k| b[0][k] - a[0][k]);
+        let moved = a
+            .iter()
+            .zip(&b)
+            .all(|(p, q)| [0, 1, 2].map(|k| q[k] - p[k]) == by);
+        if !moved || by == [0, 0, 0] {
+            return Err(unsupported("loft"));
+        }
+        Ok(Lofted::Prism { section: a, by })
+    }
+
+    fn unite(&mut self, _: &Lofted, _: &Lofted) -> Result<Lofted, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Lofted) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a prism's corners and a triangle's three"
+    )]
+    fn mesh(&mut self, s: &Lofted) -> Result<DisplayMesh, EngineError> {
+        let (section, by) = match s {
+            Lofted::Cuboid(c) => return Cuboids.mesh(c),
+            Lofted::Prism { section, by } => (section, *by),
+        };
+        let n = section.len();
+        let up = by.map(i128::from);
+        let (ring, caps) = ears(section, up);
+        if caps.len() + 2 != n {
+            return Err(unsupported("mesh"));
+        }
+        let mut mesh = DisplayMesh::default();
+        for shift in [[0, 0, 0], by] {
+            for p in section {
+                mesh.positions
+                    .push([0, 1, 2].map(|k| (p[k] + shift[k]) as f64));
+                mesh.normals.push([0.0, 0.0, 0.0]);
+            }
+        }
+        let far = n as u32;
+        for [i, j, k] in &caps {
+            let (i, j, k) = (*i as u32, *j as u32, *k as u32);
+            // The first end faces back along the loft, the second along it.
+            mesh.triangles.push([i, k, j]);
+            mesh.triangles.push([far + i, far + j, far + k]);
+        }
+        // The sides, round the section the way the ends' triangles turn.
+        for at in 0..n {
+            let (i, j) = (ring[at] as u32, ring[(at + 1) % n] as u32);
+            mesh.triangles.push([i, j, far + j]);
+            mesh.triangles.push([i, far + j, far + i]);
+        }
+        Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Lofted, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn a_gable_roof_is_its_layers() {
+    kernel_suite::a_gable_roof_is_its_layers(|| Lofts);
+}
+
+#[test]
+fn a_mono_roof_is_its_layers() {
+    kernel_suite::a_mono_roof_is_its_layers(|| Lofts);
+}
+
+#[test]
+fn a_flat_roof_is_its_layers() {
+    kernel_suite::a_flat_roof_is_its_layers(|| Lofts);
+}
+
+/// A roof on an engine that does not loft says so, in the engine's words, and builds nothing.
+#[test]
+fn a_sloped_roof_on_an_engine_that_cannot_loft_is_refused() {
+    use construct_model::geometry::Geometry;
+    let k = construct_regen::kernel::Kernel::new(Cuboids).unwrap();
+    let refused = k
+        .build(&kernel_suite::roof_of("gable", &[206, 0]))
+        .unwrap_err();
+    assert_eq!(refused.code, "EngineUnsupported");
+    assert!(refused.message.starts_with("loft"), "{}", refused.message);
+    assert!(k.build(&kernel_suite::roof_of("flat", &[200, 0])).is_ok());
+}
+
+/// A test engine for placed families: it extrudes any flat polygon with holes along any vector,
+/// keeping it as a piece, and takes an upright box from a solid whose every piece is an upright
+/// box, keeping the box each piece shares with it as a piece taken away (so a wall's layers less
+/// their openings are signed boxes). Its mesh draws every piece, a piece taken away turned inside
+/// out, so the signed volume of a mesh is exactly the solid's. It is judged by the suite like any
+/// engine; it is not a geometry engine.
+struct Pieces;
+
+/// One piece: a profile's outer loop and holes, the vector it is extruded along, and whether it
+/// is added (`1`) or taken away (`-1`).
+#[derive(Clone, Debug)]
+struct Piece {
+    outer: Vec<[i64; 3]>,
+    holes: Vec<Vec<[i64; 3]>>,
+    by: [i64; 3],
+    sign: i8,
+}
+
+#[derive(Clone, Debug)]
+struct Signed {
+    pieces: Vec<Piece>,
+}
+
+fn plus(a: [i64; 3], b: [i64; 3]) -> [i64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+/// A loop's normal by Newell's method, unscaled.
+fn newell(points: &[[i64; 3]]) -> [i128; 3] {
+    let mut n = [0i128; 3];
+    for (i, p) in points.iter().enumerate() {
+        let q = points[(i + 1) % points.len()];
+        let (p, q) = (p.map(i128::from), q.map(i128::from));
+        n[0] += (p[1] - q[1]) * (p[2] + q[2]);
+        n[1] += (p[2] - q[2]) * (p[0] + q[0]);
+        n[2] += (p[0] - q[0]) * (p[1] + q[1]);
+    }
+    n
+}
+
+fn dot_steps(a: [i128; 3], b: [i64; 3]) -> i128 {
+    a[0] * i128::from(b[0]) + a[1] * i128::from(b[1]) + a[2] * i128::from(b[2])
+}
+
+/// The loop turned so that its normal runs along `by` (`along`) or against it.
+fn facing(points: &[[i64; 3]], by: [i64; 3], along: bool) -> Vec<[i64; 3]> {
+    let mut points = points.to_vec();
+    if (dot_steps(newell(&points), by) > 0) != along {
+        points.reverse();
+    }
+    points
+}
+
+/// The upright box a piece is, if it is one: four corners whose box, swept along `by` (which runs
+/// along an axis), holds exactly the piece's volume.
+fn upright(piece: &Piece) -> Option<([i64; 3], [i64; 3])> {
+    if piece.outer.len() != 4 || !piece.holes.is_empty() {
+        return None;
+    }
+    if piece.by.iter().filter(|&&c| c != 0).count() != 1 {
+        return None;
+    }
+    let mut lo = [i64::MAX; 3];
+    let mut hi = [i64::MIN; 3];
+    for p in &piece.outer {
+        for q in [*p, plus(*p, piece.by)] {
+            for a in 0..3 {
+                lo[a] = lo[a].min(q[a]);
+                hi[a] = hi[a].max(q[a]);
+            }
+        }
+    }
+    // Twice the profile's area times the sweep, against twice the box's volume.
+    let twice = dot_steps(newell(&piece.outer), piece.by).abs();
+    let size = [0, 1, 2].map(|a| i128::from(hi[a] - lo[a]));
+    (twice == 2 * size[0] * size[1] * size[2]).then_some((lo, hi))
+}
+
+/// The upright box from `lo` to `hi` as a piece of `sign`.
+fn box_piece(lo: [i64; 3], hi: [i64; 3], sign: i8) -> Piece {
+    Piece {
+        outer: vec![
+            [lo[0], lo[1], lo[2]],
+            [hi[0], lo[1], lo[2]],
+            [hi[0], hi[1], lo[2]],
+            [lo[0], hi[1], lo[2]],
+        ],
+        holes: Vec::new(),
+        by: [0, 0, hi[2] - lo[2]],
+        sign,
+    }
+}
+
+/// Adds one triangle, turned over for a piece taken away.
+fn face(mesh: &mut DisplayMesh, t: [[i64; 3]; 3], sign: i8) {
+    let t = if sign > 0 { t } else { [t[0], t[2], t[1]] };
+    let base = mesh.positions.len() as u32;
+    for p in t {
+        mesh.positions.push(p.map(|c| c as f64));
+        mesh.normals.push([0.0, 0.0, 0.0]);
+    }
+    mesh.triangles.push([base, base + 1, base + 2]);
+}
+
+impl Engine for Pieces {
+    type Solid = Signed;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.pieces".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Signed, EngineError> {
+        let steps = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+        let outer: Vec<[i64; 3]> = profile.outer.iter().map(steps).collect();
+        if outer.len() < 3 || dot_steps(newell(&outer), by) == 0 {
+            return Err(EngineError::Invalid {
+                operation: "extrude",
+                what: "a flat loop of three or more corners, swept off its plane".to_owned(),
+            });
+        }
+        Ok(Signed {
+            pieces: vec![Piece {
+                outer,
+                holes: profile
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(steps).collect())
+                    .collect(),
+                by,
+                sign: 1,
+            }],
+        })
+    }
+
+    fn subtract(&mut self, target: &Signed, tool: &Signed) -> Result<Signed, EngineError> {
+        let refused = || EngineError::Unsupported {
+            operation: "subtract",
+            what: "anything but an upright box from upright boxes".to_owned(),
+        };
+        let [tool] = tool.pieces.as_slice() else {
+            return Err(refused());
+        };
+        let (tlo, thi) = upright(tool).ok_or_else(refused)?;
+        let mut pieces = target.pieces.clone();
+        for piece in &target.pieces {
+            let (lo, hi) = upright(piece).ok_or_else(refused)?;
+            let (lo, hi) = (
+                [0, 1, 2].map(|a| lo[a].max(tlo[a])),
+                [0, 1, 2].map(|a| hi[a].min(thi[a])),
+            );
+            if (0..3).all(|a| lo[a] < hi[a]) {
+                pieces.push(box_piece(lo, hi, -piece.sign));
+            }
+        }
+        Ok(Signed { pieces })
+    }
+
+    fn subtract_pieces(&mut self, _: &Signed, _: &Signed) -> Result<Vec<Signed>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Signed, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Signed, _: &Signed) -> Result<Signed, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Signed) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    fn mesh(&mut self, solid: &Signed) -> Result<DisplayMesh, EngineError> {
+        let mut mesh = DisplayMesh::default();
+        for piece in &solid.pieces {
+            let mut loops = vec![facing(&piece.outer, piece.by, true)];
+            loops.extend(piece.holes.iter().map(|h| facing(h, piece.by, false)));
+            for l in &loops {
+                for i in 1..l.len() - 1 {
+                    face(&mut mesh, [l[0], l[i + 1], l[i]], piece.sign);
+                    let top = [l[0], l[i], l[i + 1]].map(|p| plus(p, piece.by));
+                    face(&mut mesh, top, piece.sign);
+                }
+                for i in 0..l.len() {
+                    let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                    let (a2, b2) = (plus(a, piece.by), plus(b, piece.by));
+                    face(&mut mesh, [a, b, b2], piece.sign);
+                    face(&mut mesh, [a, b2, a2], piece.sign);
+                }
+            }
+        }
+        Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Signed, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn a_family_cuts_every_layer_and_stands_in_its_opening() {
+    kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(|| Pieces);
+}
+
+#[test]
+fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
+    kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(|| Pieces);
+}
+
+#[test]
+fn a_family_that_does_not_fit_is_refused_with_a_reason() {
+    kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
+}
