@@ -34,7 +34,9 @@
 //! each time, never stored), both in its own build and in the wall's, so the solids it is built
 //! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
 //! it again with the wall; a change to its own record (its type, or the recipe version it names)
-//! builds its wall again; nothing else is.
+//! builds its wall again; nothing else is. One of a family the document holds (job 7.6) reads
+//! the family's record too: its `reads` row names it, so a family's record written again builds
+//! every copy that names it, and their walls with them.
 
 use crate::hosting::{self, Hosting};
 use crate::levels;
@@ -1005,6 +1007,10 @@ fn reads_of(element: &Element) -> BTreeSet<String> {
         if let Some(type_id) = parameters::type_of(element) {
             read.insert(type_id.to_string());
         }
+    }
+    // A placed family of a family in the document is built from the family's record.
+    if let Some(family) = crate::families::in_document(&element.recipe) {
+        read.insert(family.to_string());
     }
     read
 }

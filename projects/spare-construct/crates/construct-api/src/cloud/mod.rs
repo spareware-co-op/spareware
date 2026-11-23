@@ -7,8 +7,9 @@
 //! - [`params`]: parameters, types, and an element's parameter values and type, through the same
 //!   log.
 //! - [`grids`]: grid lines and reference planes, through the same log.
-//! - [`families`]: placing a family of the library on a wall, a door or a window, through the same
-//!   log.
+//! - [`families`]: placing a family on a wall, a door or a window, through the same log.
+//! - [`loading`]: the families a document holds: loaded, reloaded keeping their placed copies,
+//!   swapped, and door and window types made by the generator, through the same log.
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
 //!   same log.
@@ -34,6 +35,7 @@ pub mod floors;
 pub mod grids;
 pub mod hosting;
 pub mod levels;
+pub mod loading;
 pub mod params;
 pub mod roofs;
 pub mod spaces;

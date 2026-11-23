@@ -512,6 +512,7 @@ dependencies = [
  "construct-api",
  "construct-categories",
  "construct-clash",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",

@@ -714,13 +714,14 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
-    /// The library's families with their types and the values each placed one holds, for the
-    /// page's family tool ([`cloud::families::read_library`]). Interim: the library is baked in
-    /// (job 7.6 stores families in the document).
+    /// A model's families with their types, the values each placed one holds, where each came
+    /// from and how many are placed, then the library's families it does not hold, for the page's
+    /// family tool ([`cloud::loading::read_families`]).
     ///
     /// # Errors
     ///
-    /// A [`Refusal`] when this person may not read the model or the store fails.
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a family's record cannot be read, saying why.
     pub async fn families(
         &self,
         person: &Id,
@@ -729,7 +730,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     ) -> Result<Vec<cloud::families::FamilyView>, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;
-        Ok(cloud::families::read_library())
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::loading::read_families(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
     }
 
     /// A model's floor types with their layers and the materials those are drawn in, for the

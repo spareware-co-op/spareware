@@ -38,7 +38,8 @@
 //! when it wrote a type or the parameter table every record of the document is read again; a
 //! failure is `"That can't be undone: "` and the reader's own words. So is leaving an element
 //! without its host: one it writes whose host is gone, or one hosted on a piece it deletes
-//! ([`crate::cloud::hosting::undo_rules`]). Every tie of what it wrote must name a level still
+//! ([`crate::cloud::hosting::undo_rules`]), or a placed family without the version of its family
+//! it names ([`crate::cloud::loading::undo_rules`]). Every tie of what it wrote must name a level still
 //! in the model, and when it wrote or took away a level, every element of the document is
 //! checked so (`levels::ties_hold`), and a view it wrote must still stand on its levels, phases
 //! and options ([`crate::cloud::views::undo_rules`]).
@@ -53,7 +54,9 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{families, floors, grids, hosting, levels, params, roofs, views, walls};
+use crate::cloud::{
+    families, floors, grids, hosting, levels, loading, params, roofs, views, walls,
+};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -495,6 +498,10 @@ pub async fn apply<T: Txn>(
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     if let Err(why) = hosting::undo_rules(txn, project, document, &written, &deleted).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a placed family without the version of its family it names.
+    if let Err(why) = loading::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     // An undo may not leave an element tied to a level that is no longer in the model.
