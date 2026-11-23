@@ -120,7 +120,10 @@ async fn listed<R: Reader>(
 }
 
 /// The records of a document of one kind, `at` that state.
-async fn of_kind<R: Reader>(
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn of_kind<R: Reader>(
     reader: &mut R,
     project: &Id,
     document: &Id,
@@ -139,7 +142,8 @@ async fn of_kind<R: Reader>(
 }
 
 /// The level an element's base is tied to, if it can be read.
-fn level_of(element: &Element) -> Option<Id> {
+#[must_use]
+pub fn level_of(element: &Element) -> Option<Id> {
     base_of(element).ok().flatten().map(|tie| tie.level)
 }
 
@@ -148,20 +152,33 @@ fn mm(value: i64) -> Option<i64> {
     Length::checked_from_mm(value).map(Length::steps)
 }
 
-/// The old box wall's outline: the box from its placement, `length` along x (or y when its
-/// `axis` is `y`) and `thickness` across, in whole millimetres, as the stand-in builds it.
-fn straight_outline(wall: &Element) -> Option<Vec<[i64; 2]>> {
+/// A wall in plan as the builders lay it out, in the model's grid steps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WallPlan {
+    /// The corners of its outline, in the order the builders give them.
+    pub corners: Vec<[i64; 2]>,
+    /// The direction its reference line runs, from its start to its end.
+    pub direction: [i64; 2],
+}
+
+/// The old box wall's plan: the box from its placement, `length` along x (or y when its `axis`
+/// is `y`) and `thickness` across, in whole millimetres, as the stand-in builds it.
+fn straight_outline(wall: &Element) -> Option<WallPlan> {
     let args = &wall.recipe.args;
     let whole = |key: &str| args.get(key).and_then(Json::as_i64).filter(|v| *v > 0);
     let (long, across) = (mm(whole("length")?)?, mm(whole("thickness")?)?);
-    let (w, d) = if args.get("axis").and_then(Json::as_str) == Some("y") {
+    let along_y = args.get("axis").and_then(Json::as_str) == Some("y");
+    let (w, d) = if along_y {
         (across, long)
     } else {
         (long, across)
     };
     let (x, y) = (mm(wall.placement.x)?, mm(wall.placement.y)?);
     let (x1, y1) = (x.checked_add(w)?, y.checked_add(d)?);
-    Some(vec![[x, y], [x1, y], [x1, y1], [x, y1]])
+    Some(WallPlan {
+        corners: vec![[x, y], [x1, y], [x1, y1], [x, y1]],
+        direction: if along_y { [0, 1] } else { [1, 0] },
+    })
 }
 
 /// A wall's outline in plan, as the builders lay it out, in the model's grid steps; `None` for a
@@ -173,6 +190,24 @@ async fn outline_of<R: Reader>(
     wall: &Element,
     at: At,
 ) -> Result<Option<Vec<[i64; 2]>>, StoreError> {
+    Ok(wall_plan_of(reader, project, document, wall, at)
+        .await?
+        .map(|plan| plan.corners))
+}
+
+/// A wall's plan, as the builders lay it out: its outline and the direction of its reference
+/// line; `None` for a wall that does not build, or a record of another operation. What rooms and
+/// the warnings read walls by, so they cannot disagree on where a wall is.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn wall_plan_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    wall: &Element,
+    at: At,
+) -> Result<Option<WallPlan>, StoreError> {
     if wall.recipe.op == "wall.straight" {
         return Ok(straight_outline(wall));
     }
@@ -198,10 +233,14 @@ async fn outline_of<R: Reader>(
     let (Some(dx), Some(dy)) = (mm(wall.placement.x), mm(wall.placement.y)) else {
         return Ok(None);
     };
-    Ok(corners
+    let moved: Option<Vec<[i64; 2]>> = corners
         .iter()
         .map(|&[x, y]| Some([x.checked_add(dx)?, y.checked_add(dy)?]))
-        .collect())
+        .collect();
+    Ok(moved.map(|corners| WallPlan {
+        corners,
+        direction: layered.plan.direction(),
+    }))
 }
 
 /// What becomes of the room `room`, its recipe `recipe` with its height already read from its

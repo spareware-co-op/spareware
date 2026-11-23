@@ -1251,3 +1251,77 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
+
+/// The warnings view on the kernel engine: the list is read from the document, so it is the same
+/// as on the default engine. A room whose wall is deleted is listed not enclosed; two walls drawn
+/// along each other are listed as an overlap, and the list is empty of both again when the
+/// second wall is deleted and the first wall of the room is back by undo.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let identities = || async {
+        s.warnings(&anna, &project, &model)
+            .await
+            .unwrap()
+            .warnings
+            .into_iter()
+            .map(|w| w.identity)
+            .collect::<Vec<_>>()
+    };
+    let base = identities().await;
+    assert!(base.iter().all(|w| !w.starts_with("room.")), "{base:?}");
+    edit(
+        "room.place",
+        json!({ "element": "R-900", "name": "Studio", "level": "1", "at": ["3 m", "4 m"],
+                "top": "2" }),
+    )
+    .await;
+    assert_eq!(identities().await, base, "enclosed: nothing to say");
+    edit("element.delete", json!({ "element": "W-103" })).await;
+    let open = identities().await;
+    assert_eq!(open.len(), base.len() + 1);
+    assert!(
+        open.contains(&"room.not_enclosed|R-900".to_owned()),
+        "{open:?}"
+    );
+
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    for (wall, from, to) in [("W-900", "50 m", "54 m"), ("W-901", "52 m", "56 m")] {
+        edit(
+            "wall.draw",
+            json!({ "element": wall, "type": "wall-partition", "start": [from, "0"],
+                    "end": [to, "0"], "level": "1", "height": "2.7 m" }),
+        )
+        .await;
+    }
+    let both = identities().await;
+    assert!(
+        both.contains(&"wall.overlap|W-900|W-901".to_owned()),
+        "{both:?}"
+    );
+    assert!(both.contains(&"room.not_enclosed|R-900".to_owned()));
+    edit("element.delete", json!({ "element": "W-901" })).await;
+    assert_eq!(identities().await, open);
+    for _ in 0..8 {
+        edit("edit.undo", json!({})).await;
+        if !identities()
+            .await
+            .contains(&"room.not_enclosed|R-900".to_owned())
+        {
+            break;
+        }
+    }
+    assert_eq!(identities().await, base);
+}

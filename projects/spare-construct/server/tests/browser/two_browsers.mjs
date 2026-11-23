@@ -2368,5 +2368,186 @@ await ben.keyboard.press('Delete');
 await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), slIdB);
 pass('each deletes their own floor, and both are gone from both plans');
 
+console.log('\n   Warnings, listed from the server');
+// The page keeps no rules: the count in the status bar and the list in the project browser are what
+// the server's /warnings gives, read again after every entry of the log. On the sound model both
+// browsers say there are none; Ben deletes the wall on the room's west side, so the room is not
+// enclosed and both browsers list it with the server's own sentence; Anna chooses it and the room is
+// selected. Ben draws a wall over the gap and both lists are empty again; his undo and redo bring the
+// warning back and take it away. Then Ben draws two walls along one line, so they overlap and the
+// other kind appears, naming both; his deleting one clears it, and undo and redo bring it back and
+// away. Anna only reads and chooses; Ben changes everything, so no claim of one is in the other's way.
+// Both browsers go back to the architecture plan of Level 1, as the Rooms section left it.
+for (const page of [anna, ben]) {
+  await toArchitecture(page);
+  await page.click('#browser [data-act="view"][data-a="l1"]');
+}
+const warnCount = (page, n) =>
+  page.waitForFunction((want) => document.querySelector('#st-warnings')?.dataset.count === want, String(n));
+const warnRowsAre = (page, kind, n) =>
+  page.waitForFunction(
+    ([selector, want]) => document.querySelectorAll(selector).length === want,
+    [`#browser [data-warning][data-kind="${kind}"]`, n],
+  );
+const warnEmptyWords = (page) =>
+  page.waitForFunction(() =>
+    document.querySelector('#browser [data-warnings-empty]')?.textContent.startsWith('No warnings'),
+  );
+const serverWarnings = async () => (await asAnna('warnings')).warnings;
+const severityWords = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+  check(
+    (await page.locator('#st-warnings').textContent()).includes('No warnings'),
+    `${name}'s status bar says there are no warnings, and the list says so in words`,
+  );
+}
+check((await serverWarnings()).length === 0, 'the server lists none for the sound model, so the page shows the server');
+await anna.locator('#st-warnings').click();
+check(
+  await anna.locator('#browser details[data-k="Warnings"]').evaluate((d) => d.open),
+  'the count in the status bar opens the list',
+);
+
+// Ben deletes the wall on the room's west side: the loop is open.
+const gap = await ben.evaluate(() => {
+  const at = document.querySelector('#pv-canvas g.element[data-id="W-103"] .body').getBBox();
+  return { x: at.x, y: at.y, width: at.width, height: at.height };
+});
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const westWall = await box(ben, 'W-103');
+await ben.mouse.click(westWall.x + westWall.width / 2, westWall.y + westWall.height / 2);
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await warnCount(page, 1);
+  await warnRowsAre(page, 'room.not_enclosed', 1);
+}
+const [open] = await serverWarnings();
+check(
+  open.kind === 'room.not_enclosed' && open.elements.length === 1 && open.elements[0] === roomId,
+  "Ben deletes the room's west wall: the server lists the room as not enclosed",
+);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const row = page.locator(`#browser [data-warning="${open.identity}"]`);
+  check(
+    (await row.getAttribute('data-severity')) === open.severity &&
+      (await row.locator('.leaf').textContent()) === `${severityWords(open.severity)}: ${open.words}`,
+    `${name}'s list shows it with how serious it is and the server's own sentence`,
+  );
+  check((await page.locator('#st-warnings').textContent()).includes('1 warning'), `and ${name}'s count reads 1 warning`);
+}
+await shot(anna, 'anna-warning-room');
+
+// Anna chooses the warning: the room is selected, and she lets go of it by clicking off.
+await anna.locator(`#browser [data-warning="${open.identity}"] .leaf`).click();
+await anna.waitForSelector('#pv-side input[data-key="room-name"]');
+check(
+  (await anna.locator('#pv-side input[data-key="room-name"]').inputValue()) === 'Studio A',
+  "Anna chooses the warning and the room it names is selected, in the plan's properties",
+);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Ben draws a wall where the deleted one stood, a little past each end, and the loop is closed.
+const warnWallAt = async (page, from, to) => {
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await page.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+  const a = await onPlan(page, from[0], from[1]);
+  const b = await onPlan(page, to[0], to[1]);
+  await page.mouse.click(a.x, a.y);
+  await page.mouse.click(b.x, b.y);
+  await page.keyboard.press('Escape');
+};
+const lengthwiseY = gap.height > gap.width;
+const middle = lengthwiseY ? gap.x + gap.width / 2 : gap.y + gap.height / 2;
+const past = 40;
+const closeFrom = lengthwiseY ? [middle, gap.y - past] : [gap.x - past, middle];
+const closeTo = lengthwiseY ? [middle, gap.y + gap.height + past] : [gap.x + gap.width + past, middle];
+await warnWallAt(ben, closeFrom, closeTo);
+for (const page of [anna, ben]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+}
+check((await serverWarnings()).length === 0, "Ben draws a wall across the gap: both lists are empty and so is the server's");
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'wall.draw');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 1);
+check((await serverWarnings()).length === 1, "Ben's undo takes the wall away: the warning is back in both browsers");
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 0);
+check((await serverWarnings()).length === 0, 'his redo puts the wall back: the warning is gone from both');
+
+// Two walls along one line: the other kind, naming both.
+const warnWalls = (page) =>
+  page.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered').map((p) => p.el.id));
+const warnBefore = await warnWalls(ben);
+const newWallAfter = async (known) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = (await warnWalls(ben)).find((id) => !known.includes(id));
+    if (found) return found;
+    await ben.waitForTimeout(100);
+  }
+  throw new Error('FAILED: the wall Ben drew never came');
+};
+await warnWallAt(ben, [6000, 9750], [9000, 9750]);
+const warnFirst = await newWallAfter(warnBefore);
+for (const page of [anna, ben]) await page.waitForSelector(`#pv-canvas g.element[data-id="${warnFirst}"]`);
+for (const page of [anna, ben]) await warnCount(page, 0);
+pass('one new wall alone gives no warning');
+await warnWallAt(ben, [7500, 9750], [10500, 9750]);
+const warnSecond = await newWallAfter([...warnBefore, warnFirst]);
+for (const page of [anna, ben]) {
+  await warnCount(page, 1);
+  await warnRowsAre(page, 'wall.overlap', 1);
+}
+const [overlap] = await serverWarnings();
+check(
+  overlap.kind === 'wall.overlap' && [...overlap.elements].sort().join() === [warnFirst, warnSecond].sort().join(),
+  'Ben draws a second wall over the first: the server lists the two as overlapping',
+);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const row = page.locator(`#browser [data-warning="${overlap.identity}"]`);
+  check(
+    (await row.locator('.leaf').textContent()) === `${severityWords(overlap.severity)}: ${overlap.words}` &&
+      (await row.locator('.stack-warning-at [data-act="stackwarning"]').count()) === 2,
+    `${name}'s list shows its sentence and offers each of the two walls`,
+  );
+}
+await anna
+  .locator(`#browser [data-warning="${overlap.identity}"] [data-act="stackwarning"][data-a="${overlap.elements[1]}"]`)
+  .click();
+await anna.waitForSelector(`#pv-canvas g.element[data-id="${overlap.elements[1]}"] .body.sel`);
+pass('Anna chooses one of the two walls and it is selected in the plan');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Ben deletes the second wall: the warning goes from both; undo and redo bring it back and away.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const overBox = await box(ben, warnSecond);
+await ben.mouse.click(overBox.x + overBox.width - 6, overBox.y + overBox.height / 2);
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+}
+check((await serverWarnings()).length === 0, 'Ben deletes one of the two: the warning is gone from both browsers');
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'element.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnRowsAre(page, 'wall.overlap', 1);
+pass("Ben's undo puts the wall back, and the overlap is listed again in both browsers");
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 0);
+pass('his redo takes it away again, in both');
+
+// A fresh load agrees with the server.
+const warnFresh = await signIn('anna');
+await warnFresh.waitForFunction(() => document.querySelector('#st-warnings')?.dataset.count === '0');
+await warnFresh.context().close();
+pass('a fresh load reads the same list, none');
+
 await browser.close();
 console.log('\nThe browser checks passed.');

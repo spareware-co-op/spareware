@@ -166,6 +166,10 @@ pub fn routes(app: Shared) -> Router {
         )
         .route("/api/projects/{project}/models/{model}/rooms", get(rooms))
         .route(
+            "/api/projects/{project}/models/{model}/warnings",
+            get(warnings),
+        )
+        .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
             get(filled),
         )
@@ -696,6 +700,18 @@ async fn rooms(
     Ok(Json(
         app.service
             .rooms(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn warnings(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .warnings(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

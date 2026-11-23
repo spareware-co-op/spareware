@@ -94,3 +94,9 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .room-tag text { pointer-events: none; fill: var(--ink-2); }
 .dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
 .dw .room-tag .room-state { fill: var(--danger); }
+
+/* The Warnings part of the project browser: each warning's sentence is a row that selects its
+   element; a warning of several elements offers each below it. */
+.stack-warning .leaf { align-items: flex-start; height: auto; padding-top: 4px; padding-bottom: 4px; }
+.stack-warning[data-severity="error"] .leaf { border-left-color: var(--danger, currentColor); }
+.stack-warning-at { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 4px 27px; }
