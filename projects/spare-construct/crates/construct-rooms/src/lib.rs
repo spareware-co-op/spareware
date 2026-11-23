@@ -15,8 +15,8 @@
 //! - [`measure`]: [`Measures`] and [`measure`](measure::measure); [`Outcome`] and [`assess`],
 //!   with [`Neighbour`] for the other rooms of a level.
 //! - [`room`]: the element record and its recipe ([`room_record`], [`room_recipe`], [`Limit`],
-//!   [`at_of`], [`limit_of`], [`number_of`], [`walls_arg`], [`reads_walls`]) and the recipe the
-//!   builders take ([`filled`]).
+//!   [`at_of`], [`limit_of`], [`number_of`], [`next_number`], [`walls_arg`], [`reads_walls`]) and
+//!   the recipe the builders take ([`filled`]).
 //! - [`error`]: [`RoomError`], every refusal as a value, with the code a build failure is filed
 //!   under.
 //!
@@ -46,6 +46,6 @@ pub use measure::{Measures, Neighbour, Outcome, assess, measure};
 pub use plane::{Bound, Corner, Found, LIMIT, Outline, find};
 pub use room::{
     AT_ARG, HEIGHT_ARG, LOOPS_ARG, Limit, NUMBER_KEY, OP_VERSION, ROOM_KIND, ROOM_OP, WALLS_ARG,
-    at_of, filled, is_room, is_room_recipe, limit_of, number_of, reads_walls, room_recipe,
-    room_record, walls_arg,
+    at_of, filled, is_room, is_room_recipe, limit_of, next_number, number_of, reads_walls,
+    room_recipe, room_record, walls_arg,
 };

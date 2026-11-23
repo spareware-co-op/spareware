@@ -13,7 +13,7 @@ use construct_levels::{Tie, base_of, top_of};
 use construct_params::Length;
 use construct_rooms::{
     Bound, Limit, NUMBER_KEY, Outline, RoomError, at_of, filled, find, is_room, limit_of,
-    number_of, reads_walls, room_recipe, room_record,
+    next_number, number_of, reads_walls, room_recipe, room_record,
 };
 use kit_core::Id;
 use serde_json::json;
@@ -188,4 +188,16 @@ fn the_filled_recipe_holds_the_loops_and_the_height() {
         filled(&recipe, &found),
         Err(RoomError::Malformed(_))
     ));
+}
+
+#[test]
+fn the_next_free_number_follows_the_largest_whole_number() {
+    assert_eq!(next_number([]), "1");
+    assert_eq!(next_number(["101", "102"]), "103");
+    assert_eq!(next_number(["G.04", "7"]), "8");
+    assert_eq!(next_number(["G.04"]), "1");
+    assert_eq!(next_number(["009", "3"]), "010");
+    assert_eq!(next_number(["99"]), "100");
+    // A number past what a u64 holds, and one that is no whole number, are passed over.
+    assert_eq!(next_number(["99999999999999999999999", "4"]), "5");
 }

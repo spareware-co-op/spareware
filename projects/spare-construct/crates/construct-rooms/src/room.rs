@@ -269,3 +269,30 @@ pub fn filled(recipe: &Recipe, found: &Found) -> Result<Recipe, RoomError> {
     out.args.insert(LOOPS_ARG.to_owned(), Json::Array(loops));
     Ok(out)
 }
+
+/// The next free room number among `used`: one more than the largest number made only of digits
+/// (written as wide as that one, so `009` is followed by `010`), or `1` where there is none; a
+/// number already used is skipped. What a person is offered when they place a room.
+#[must_use]
+pub fn next_number<'a>(used: impl IntoIterator<Item = &'a str>) -> String {
+    let used: Vec<&str> = used.into_iter().collect();
+    let mut largest: Option<(u64, usize)> = None;
+    for number in &used {
+        let digits = !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit());
+        if let (true, Ok(value)) = (digits, number.parse::<u64>())
+            && largest.is_none_or(|(most, _)| value >= most)
+        {
+            largest = Some((value, number.len()));
+        }
+    }
+    let (mut next, width) = largest.map_or((1_u64, 1), |(value, width)| {
+        (value.saturating_add(1), width)
+    });
+    loop {
+        let text = format!("{next:0width$}");
+        if !used.contains(&text.as_str()) {
+            return text;
+        }
+        next = next.saturating_add(1);
+    }
+}

@@ -31,19 +31,21 @@
 //! one, is to be read as construct-rooms' `Outline::Curved`, which refuses the room by name.
 
 use crate::levels;
+use crate::parameters::ParameterView;
 use crate::parameters::{self, At};
 use crate::wall_plan::{self, Layered};
 use construct_levels::base_of;
 use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::list;
-use construct_params::{Length, Value};
+use construct_params::{Definition, Holder, Kind, Length, Units, Value};
 use construct_rooms::{
-    Bound, HEIGHT_ARG, LOOPS_ARG, Neighbour, Outcome, Outline, ROOM_KIND, RoomError, assess, at_of,
-    reads_walls,
+    Bound, HEIGHT_ARG, LOOPS_ARG, Measures, Neighbour, Outcome, Outline, ROOM_KIND, RoomError,
+    assess, at_of, reads_walls,
 };
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
+use serde::Serialize;
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 
@@ -318,35 +320,166 @@ pub async fn filled<R: Reader>(
     recipe: Recipe,
     level: Option<&Id>,
 ) -> Result<Result<Recipe, GeometryError>, StoreError> {
-    if !reads_walls(&recipe) {
-        return Ok(Ok(recipe));
-    }
-    let outcome = outcome(
+    let (filled, _) = filled_at(
         reader,
         project,
         document,
         room,
-        &recipe,
+        recipe,
         level,
         At::Regenerated,
     )
     .await?;
+    Ok(filled)
+}
+
+/// A room's loop worked out at the state asked, with what it measures: the recipe the builders
+/// take (or the build failure, in words), and the measures when it is enclosed.
+pub type Worked = (Result<Recipe, GeometryError>, Option<Measures>);
+
+/// [`filled`] as the document stands `at` the state asked, with the room's measures: what a page
+/// is told a room is built from (`At::Now`), the same walls read the same way.
+///
+/// # Errors
+/// As [`filled`].
+pub async fn filled_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    recipe: Recipe,
+    level: Option<&Id>,
+    at: At,
+) -> Result<Worked, StoreError> {
+    if !reads_walls(&recipe) {
+        return Ok((Ok(recipe), None));
+    }
+    let outcome = outcome(reader, project, document, room, &recipe, level, at).await?;
     let who = match construct_rooms::number_of(room) {
         Some(number) if !number.is_empty() => format!("room {number} {}", room.name),
         _ => format!("room {}", room.name),
     };
     Ok(match outcome {
-        Ok(Outcome::Enclosed { found, .. }) => {
-            construct_rooms::filled(&recipe, &found).map_err(|e| refused(&e))
-        }
-        Ok(Outcome::NotEnclosed) => Err(failure(
-            "NotEnclosed",
-            format!("{who} is not enclosed: the walls round its point do not close"),
-        )),
-        Ok(Outcome::Redundant { first }) => Err(failure(
-            "Redundant",
-            format!("{who} is redundant: room {first} is already in the same loop"),
-        )),
-        Err(e) => Err(e),
+        Ok(Outcome::Enclosed { found, measures }) => (
+            construct_rooms::filled(&recipe, &found).map_err(|e| refused(&e)),
+            Some(measures),
+        ),
+        Ok(Outcome::NotEnclosed) => (
+            Err(failure(
+                "NotEnclosed",
+                format!("{who} is not enclosed: the walls round its point do not close"),
+            )),
+            None,
+        ),
+        Ok(Outcome::Redundant { first }) => (
+            Err(failure(
+                "Redundant",
+                format!("{who} is redundant: room {first} is already in the same loop"),
+            )),
+            None,
+        ),
+        Err(e) => (Err(e), None),
     })
+}
+
+/// What a page is told of a room besides its record: its state, in a word and in words, and what
+/// it measures, shown in the document's units. Worked out each time it is read, never stored.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RoomView {
+    /// `enclosed`, `not enclosed`, `redundant`, or `refused` for a room the search refuses.
+    pub state: &'static str,
+    /// Why the room has no area, in words; empty when it is enclosed.
+    pub words: String,
+    /// Its floor area, as `12.5 m²`; none unless enclosed.
+    pub area: Option<String>,
+    /// Its perimeter; none unless enclosed.
+    pub perimeter: Option<String>,
+    /// Its volume; none unless enclosed.
+    pub volume: Option<String>,
+}
+
+impl RoomView {
+    /// The view of a room from what became of it ([`filled_at`]), its measures shown in `units`.
+    #[must_use]
+    pub fn of(worked: &Worked, units: &Units) -> Self {
+        let (filled, measures) = worked;
+        let shown = |definition: Option<Definition>, value: Value| {
+            definition.and_then(|def| def.format(&value, units).ok())
+        };
+        let (state, words) = match filled {
+            Ok(_) => ("enclosed", String::new()),
+            Err(failed) if failed.code == "NotEnclosed" => ("not enclosed", failed.message.clone()),
+            Err(failed) if failed.code == "Redundant" => ("redundant", failed.message.clone()),
+            Err(failed) => ("refused", failed.message.clone()),
+        };
+        let measures = measures.filter(|_| filled.is_ok());
+        Self {
+            state,
+            words,
+            area: measures
+                .and_then(|m| shown(definition(AREA, "Area", Kind::Area), Value::Area(m.area))),
+            perimeter: measures.and_then(|m| {
+                shown(
+                    definition(PERIMETER, "Perimeter", Kind::Length),
+                    Value::Length(m.perimeter),
+                )
+            }),
+            volume: measures.and_then(|m| {
+                shown(
+                    definition(VOLUME, "Volume", Kind::Volume),
+                    Value::Volume(m.volume),
+                )
+            }),
+        }
+    }
+
+    /// The same as read-only parameters, as `/parameters/<room>` lists them after the ones its
+    /// category has: its state (in words when it is not enclosed), then, when enclosed, its area,
+    /// perimeter and volume. Each is marked `read-only`: nobody sets it.
+    #[must_use]
+    pub fn rows(&self) -> Vec<ParameterView> {
+        let row =
+            |id: &str, name: &str, kind: &str, shown: &str, reason: Option<String>| ParameterView {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                kind: kind.to_owned(),
+                holder: "instance",
+                value: Some(shown.to_owned()),
+                shown: Some(shown.to_owned()),
+                from: crate::slabs::READ_ONLY,
+                formula: None,
+                reason,
+            };
+        let mut rows = vec![row(
+            STATE,
+            "State",
+            "text",
+            self.state,
+            (!self.words.is_empty()).then(|| self.words.clone()),
+        )];
+        for (id, name, kind, shown) in [
+            (AREA, "Area", "area", &self.area),
+            (PERIMETER, "Perimeter", "length", &self.perimeter),
+            (VOLUME, "Volume", "volume", &self.volume),
+        ] {
+            if let Some(shown) = shown {
+                rows.push(row(id, name, kind, shown, None));
+            }
+        }
+        rows
+    }
+}
+
+/// The read-only parameter of a room's state.
+pub const STATE: &str = "room.state";
+/// The read-only parameter of a room's floor area.
+pub const AREA: &str = "room.area";
+/// The read-only parameter of a room's perimeter.
+pub const PERIMETER: &str = "room.perimeter";
+/// The read-only parameter of a room's volume.
+pub const VOLUME: &str = "room.volume";
+
+fn definition(id: &str, name: &str, kind: Kind) -> Option<Definition> {
+    let id = Id::parse(id).ok()?;
+    Definition::new(id, name, kind, Holder::Instance).ok()
 }
