@@ -2223,7 +2223,7 @@
   const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
   const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
   /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
-  const drawOrder = (el) => (el.kind === 'room' ? -1 : isFloor(el) || el.kind === 'roof' ? 0 : el.kind === 'wall' ? 1 : 2);
+  const drawOrder = (el) => (el.kind === 'roof' ? -2 : el.kind === 'room' ? -1 : isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
 
   DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
   TOOLNAME.floor = 'floor';
