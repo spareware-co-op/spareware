@@ -950,7 +950,8 @@ async fn retype<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> 
         Err(refusal) => return Ok(Err(refusal)),
     };
     let props = (|| {
-        let category = records::category_of(&record.recipe).map_err(why)?;
+        // The category the record says it is in (a placed family's is its family's), else its kind's.
+        let category = category_of_element(&record)?;
         let own = if let Some(from) = &from {
             let mut instance = context.instance(&record, from)?;
             instance.change_type(from, &to).map_err(why)?;

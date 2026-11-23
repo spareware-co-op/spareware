@@ -39,24 +39,38 @@
 //!   ([`DrawnSymbols`], [`DrawnSymbol`], [`Edge`]), each symbol's sketch solved as a step's
 //!   sketch is (added by piece A62, so a template's plan and elevation symbols can be read back
 //!   and tested at every type).
+//! - [`opening()`] and [`opening_within()`]: a hosted family's opening at one type's values: the
+//!   host it declares, the void's outline solved in the family's own frame, and how deep it is cut
+//!   ([`SolvedOpening`], [`Host`], [`Depth`]; piece A64, job 6.4). No engine is asked.
+//! - [`Turn`], [`evaluate_turned()`] and [`Evaluator::evaluate_turned`]: a family built turned
+//!   about its z axis by quarter turns, exactly, so it can stand in a host along any axis way
+//!   (piece A64).
+//! - [`extents()`]: the box each of a family's solids lies in at one type's values, worked out
+//!   without an engine ([`Extent`]; piece A64), for a builder that draws a family as boxes.
 //!
 //! Nothing here is interim: the engine behind the trait is the caller's choice (the sketch solver
-//! behind `construct_solver::solve` has its own interim note). Not here: a hosted family's opening
-//! cut in its host (job 6.4); placing evaluated families as elements, the edit log and the page
-//! (later jobs).
+//! behind `construct_solver::solve` has its own interim note). Not here: cutting the opening in a
+//! host and placing evaluated families as elements (construct-regen, job 6.4); the edit log and
+//! the page (later jobs).
 
 mod build;
 mod cache;
 mod error;
+mod extent;
+mod hosting;
 mod limits;
 mod sketch;
 mod symbols;
+mod turn;
 mod values;
 
 pub use cache::{CacheKey, Evaluator, TypeResult};
 pub use error::{EvalError, Place, Reason};
+pub use extent::{Extent, extents};
+pub use hosting::{Depth, Host, SolvedOpening, opening, opening_within};
 pub use limits::{Limit, Limits, Used};
 pub use symbols::{DrawnSymbol, DrawnSymbols, Edge, Point2, symbols, symbols_within};
+pub use turn::Turn;
 pub use values::TypeValues;
 
 use crate::model::{Key, Recipe, Visibility};
@@ -107,7 +121,7 @@ pub fn evaluate<E: Engine>(
     recipe: &Recipe,
     values: &TypeValues,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
-    build::run(engine, recipe, values, Limits::DEFAULT)
+    build::run(engine, recipe, values, Limits::DEFAULT, Turn::None)
 }
 
 /// As [`evaluate()`], within `limits`.
@@ -121,5 +135,21 @@ pub fn evaluate_within<E: Engine>(
     values: &TypeValues,
     limits: Limits,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
-    build::run(engine, recipe, values, limits)
+    build::run(engine, recipe, values, limits, Turn::None)
+}
+
+/// As [`evaluate_within()`], the family turned by `turn` about its z axis (piece A64): every
+/// corner and every extrusion's vector turned before the engine is asked, exactly.
+///
+/// # Errors
+///
+/// As [`evaluate()`].
+pub fn evaluate_turned<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    values: &TypeValues,
+    limits: Limits,
+    turn: Turn,
+) -> Result<Evaluated<E::Solid>, EvalError> {
+    build::run(engine, recipe, values, limits, turn)
 }

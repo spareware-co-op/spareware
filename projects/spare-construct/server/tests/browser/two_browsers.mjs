@@ -1432,5 +1432,152 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the roof's included, matches the server's`);
 }
 
+console.log('\n   Placed families');
+// Anna draws a wall of her own in clear ground above the building, where the floor was, and puts a window of the
+// library on it from the family tool; Ben sees the window, and the wall cut for it where this run's
+// geometry cuts. Ben changes its type after Anna lets go of it, and Anna sees the new size. Anna
+// deletes it and undoes the delete; a position past the wall's end is refused in words under the
+// field; a fresh load agrees. Nobody changes what the other touched in the last 30 s without the
+// other letting go first, and an undo claims the element it writes too.
+const famKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const famWallFrom = await onPlan(anna, 6500, -1200);
+const famWallTo = await onPlan(anna, 11000, -1200);
+await anna.mouse.click(famWallFrom.x, famWallFrom.y);
+await anna.mouse.click(famWallTo.x, famWallTo.y);
+const famWallOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(famWallOf, famKnown);
+const famWall = await ben.evaluate(famWallOf, famKnown);
+await anna.keyboard.press('Escape');
+pass("Anna's new wall for the family appears in Ben's browser");
+
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:family"]');
+await anna.waitForSelector('#pv-side select[data-key="family-choice"] option', { state: 'attached' });
+const famChoices = await anna.locator('#pv-side select[data-key="family-choice"] option').allTextContents();
+check(
+  ['Fixed window', 'Single swing door', 'Sliding window'].every((name) => famChoices.includes(name)),
+  `the family tool lists the library's door and window families: ${famChoices.join(', ')}`,
+);
+await anna.locator('#pv-side select[data-key="family-choice"]').selectOption({ label: 'Fixed window' });
+await anna.waitForSelector('#pv-side select[data-key="family-type"]');
+const famTypes = await anna.locator('#pv-side select[data-key="family-type"] option').allTextContents();
+check(famTypes.includes('1200 x 1200') && famTypes.includes('1800 x 1200'), "and the family's types");
+await anna.locator('#pv-side select[data-key="family-type"]').selectOption({ label: '1200 x 1200' });
+const famWallBox = await box(anna, famWall);
+await anna.mouse.click(famWallBox.x + famWallBox.width * 0.3, famWallBox.y + famWallBox.height / 2 - 1);
+const famOn = (wall) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.references?.[0]?.element === wall)?.el.id;
+await ben.waitForFunction(famOn, famWall);
+const famId = await ben.evaluate(famOn, famWall);
+await anna.keyboard.press('Escape');
+const famRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, famId);
+check(
+  famRecord.kind === 'window' &&
+    famRecord.props['@category'] === '400' &&
+    famRecord.references[0].kind === 'face' &&
+    /^length:q0:/.test(famRecord.props['@host.along']) &&
+    famRecord.recipe.args.type === 'w1200x1200',
+  "the window Anna places is in Ben's browser: a window of its family's category, hosted on a named face of her wall at an offset along it",
+);
+const famParts = ([id]) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(famParts, [famId]);
+await anna.waitForFunction(famParts, [famId]);
+pass('and both browsers draw its frame and glass, each in its material');
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  const famCut = (names) => names.some((n) => n.role === `tool(${famId}).head`);
+  await until(async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [], famCut, 'the server cuts the wall for the window');
+  await ben.waitForFunction(
+    ([wall, cut]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${cut}).head`),
+    [famWall, famId],
+  );
+  pass("the window cuts the wall, on the server and as Ben's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the wall's cut)");
+}
+await shot(ben, 'ben-window');
+
+// The size of what is drawn, along the wall: its shape's bounds as a page holds them.
+const famSize = (page) =>
+  page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]);
+  }, famId);
+const famPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-family-properties="${id}"] select[data-key="family-retype"]`);
+};
+const famLetGo = async (page, other) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await other.waitForFunction((id) => !window.spare.claims.has(id), famId);
+};
+const famSizeBefore = await famSize(anna);
+await famPick(anna, famId);
+check((await anna.locator('#pv-side').textContent()).includes('Windows'), "Anna's palette gives the window its family's category, Windows");
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
+await famLetGo(anna, ben);
+pass('Anna lets go of the window, and Ben sees it free');
+await famPick(ben, famId);
+await ben.locator('#pv-side select[data-key="family-retype"]').selectOption({ label: '1800 x 1200' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.type === 'w1800x1200', famId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]) === before + 600;
+  },
+  [famId, famSizeBefore],
+);
+pass("Ben changes its type to 1800 x 1200, and Anna's browser draws the new size");
+await famLetGo(ben, anna);
+
+// Anna deletes it and undoes the delete.
+await famPick(anna, famId);
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), famId);
+pass("Anna deletes the window, and it is gone from Ben's plan");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'family.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(famParts, [famId]);
+await anna.waitForFunction(famParts, [famId]);
+pass('and her undo puts it back, in both browsers');
+// The undo wrote the window, so it is Anna's for 30 s: she works on it, and Ben leaves it.
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
+
+// A position past the wall's end is refused in words, under the field, and nothing changes.
+await famPick(anna, famId);
+const famAlong = '#pv-side input[data-key="family-along"]';
+await anna.locator(famAlong).fill('4900 mm');
+await anna.locator(famAlong).press('Enter');
+await anna.waitForSelector(`#pv-side [data-problem="family:${famId}"]`);
+const famWords = await anna.locator(`#pv-side [data-problem="family:${famId}"]`).textContent();
+check(famWords === `family ${famId}: it crosses the wall's end`, `the refusal reads: ${famWords}`);
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).el.props['@host.along'], famId)) ===
+    famRecord.props['@host.along'],
+  'and the window is where it was',
+);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A fresh load agrees: same record, same type, nothing built differently.
+const famFresh = await signIn('anna');
+await famFresh.waitForFunction(famParts, [famId]);
+const famHere = await anna.evaluate((id) => window.spare.elements.get(id).hash, famId);
+check(
+  (await famFresh.evaluate((id) => window.spare.elements.get(id).hash, famId)) === famHere,
+  "a fresh load holds the window's record as Anna's page does",
+);
+await famFresh.waitForFunction((id) => window.spare.elements.get(id).el.recipe.args.type === 'w1800x1200', famId);
+pass('at the type Ben gave it');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

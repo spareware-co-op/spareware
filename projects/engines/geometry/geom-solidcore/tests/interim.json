@@ -301,6 +301,50 @@
         "a corner or a layer face not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
       ],
       "replaced_by": "the kernel's own exact extrusion and ruled loft (geom-sweep, chapters 13.4 and 13.6) behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::family, a placed family's solids",
+      "operation": "family.instance (Kernel: the family recipe evaluated through construct-families' evaluate_turned, every step an Engine::extrude, subtract or unite of its own)",
+      "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), each solid meshed by the engine and drawn as a part with its material, every point the nearest millimetre; what each type builds to, turned as it stands, is kept by the evaluator's key",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_family_cuts_every_layer_and_stands_in_its_opening"
+      },
+      "known_faults": [
+        "a point not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
+        "a family is turned only by quarter turns, so it stands only in a wall along x or y"
+      ],
+      "replaced_by": "the kernel's own exact extrusion and booleans behind the same trait, and a turn by any angle once the seam can place a solid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::layered and kernel::opening, a placed family's opening",
+      "operation": "wall.layered hosting a family.instance (Kernel: the family's solved opening as an upright box through the wall's whole thickness, Engine::subtract from every layer)",
+      "answered_by": "Spare Construct's own code places the opening and asks every rule of the box door's before the engine is asked; solidcore's subtraction answers the cut on the server's kernel setting",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_family_that_does_not_fit_is_refused_with_a_reason"
+      },
+      "known_faults": [
+        "an opening outline that is not an upright rectangle is refused (OpeningNotRectangle), not cut",
+        "a face of the opening within the engine's tolerance of a face of the wall is refused, as a door's is (named fault SC-4)"
+      ],
+      "replaced_by": "the kernel's exact boolean behind the same trait, cutting an opening's own outline extruded through the wall"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a placed family",
+      "operation": "family.instance (a family recipe and its type)",
+      "answered_by": "one box per solid, the box each solid lies in at its type's values worked out without an engine (construct-families' extents), its sides rounded outward to whole millimetres, by Spare Construct's own code; its wall is built alone, no opening cut",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/families.rs",
+        "test": "a_family_is_seated_on_its_walls_centre_plane_facing_out_of_its_side"
+      },
+      "known_faults": [
+        "a family's frame, leaf or sash is drawn as its box, and its wall has no opening, on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's family builder, as the stand-in's own row says, once the browser's build can link the engine"
     }
   ]
 }

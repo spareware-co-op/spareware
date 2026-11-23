@@ -104,6 +104,7 @@ fn type_routes() -> Router<Shared> {
 }
 
 /// Every page and API route, each a handler over the app.
+#[allow(clippy::too_many_lines, reason = "one entry per route")]
 pub fn routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
@@ -159,6 +160,10 @@ pub fn routes(app: Shared) -> Router {
         .route("/api/projects/{project}/models/{model}/types", get(types))
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .merge(view_routes())
+        .route(
+            "/api/projects/{project}/models/{model}/families",
+            get(families),
+        )
         .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
             get(filled),
@@ -573,6 +578,18 @@ async fn wall_types(
     Ok(Json(
         app.service
             .wall_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn families(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .families(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

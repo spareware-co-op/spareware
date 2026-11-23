@@ -47,6 +47,8 @@ pub enum Place {
     Step(Key),
     /// The engine itself, before any step.
     Engine,
+    /// What the recipe is hosted on, and the opening it cuts there.
+    Hosting,
 }
 
 impl fmt::Display for Place {
@@ -63,6 +65,7 @@ impl fmt::Display for Place {
             }
             Self::Step(key) => write!(f, "step {key}"),
             Self::Engine => f.write_str("the geometry engine"),
+            Self::Hosting => f.write_str("hosting"),
         }
     }
 }
@@ -114,6 +117,8 @@ pub enum Reason {
     BadValue(ParamError),
     /// A type sets a parameter each instance holds.
     HeldByInstance,
+    /// An instance is given a value for a parameter its type holds (piece A64, job 7.1).
+    HeldByType,
     /// A type sets a parameter that is worked out by its formula.
     SetsFormula,
     /// A formula uses, or a parameter with a formula is, a parameter that is not a number a
@@ -162,6 +167,15 @@ pub enum Reason {
         /// What it allows.
         allowed: u64,
     },
+    /// The recipe declares no host, so it cuts nothing.
+    NotHosted,
+    /// The recipe is hosted on a host it cuts no opening in.
+    NoOpening {
+        /// The host, as the format spells it.
+        host: &'static str,
+    },
+    /// An opening's sketch is not on an `xz` plane, parallel to the wall.
+    NotOnWallPlane,
 }
 
 impl fmt::Display for Reason {
@@ -183,6 +197,7 @@ impl fmt::Display for Reason {
             Self::HeldByInstance => {
                 f.write_str("it is held by each instance, so a type cannot set it")
             }
+            Self::HeldByType => f.write_str("it is held by the type, so an instance cannot set it"),
             Self::SetsFormula => f.write_str("it is worked out by its formula, so nothing sets it"),
             Self::NotNumeric { key } => write!(f, "{key} is not a number a formula can use"),
             Self::Formula(e) => write!(f, "{e}"),
@@ -214,6 +229,14 @@ impl fmt::Display for Reason {
             Self::LimitReached { limit, allowed } => write!(
                 f,
                 "evaluating it would pass the limit of {allowed} {limit} for one type"
+            ),
+            Self::NotHosted => f.write_str("the family is not hosted, so it cuts no opening"),
+            Self::NoOpening { host } => write!(
+                f,
+                "the family is hosted on a {host}, and declares no opening to cut there"
+            ),
+            Self::NotOnWallPlane => f.write_str(
+                "the opening's sketch is not on an xz plane, parallel to the wall it is cut in",
             ),
         }
     }

@@ -20,8 +20,17 @@
 //!   it (a flat layer extruded straight up, a sloped layer lofted from verge to verge), in the
 //!   child module `roof` (job 5.3); its points are construct-params' steps ([`crate::roof_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
-//!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
-//!   a door's shape is decided.
+//!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
+//!   place its shape is decided.
+//! - `family.instance` (job 6.4, CON-A7-F3-P2): a placed family, its solids made by the recipe
+//!   evaluator (`construct_families::evaluate_turned`) through this builder's engine, turned as
+//!   the family stands, each meshed and drawn as a part with its material, in the child module
+//!   `family`. What a type builds to is kept by the evaluator's key ([`CacheKey`]: the recipe
+//!   version, the type's values and the turn), so a type is built once however many are placed
+//!   and however often their walls move. Its recipe comes from the builder's [`FamilySource`]
+//!   ([`Kernel::with_families`]; [`Kernel::new`] uses the library baked in at build time, interim
+//!   until job 7.6, [`crate::families`]). The wall it is hosted in cuts its opening on the same
+//!   path as a door's ([`opening`]), through every layer.
 //! - A wall with doors hosted in it ([`Kernel::build_hosting`], [`Hosted`]): the wall's extrusion
 //!   less each door's opening, through [`Engine::subtract`], one door after another in the order
 //!   of their keys, so the same model gives the same bytes whatever order the doors come in. An
@@ -83,6 +92,7 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod family;
 mod floor;
 mod layered;
 pub mod opening;
@@ -90,7 +100,9 @@ mod roof;
 
 pub use opening::Hosted;
 
+use crate::families::{self, FamilySource};
 use crate::wall_plan::{self, Layered};
+use construct_families::CacheKey;
 
 use construct_model::element::Placement;
 use construct_model::geometry::{
@@ -109,7 +121,7 @@ use opening::Cut;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// The grid Spare Construct builds on: `Q0`, 156.25 nm, the building grid (chapter 6).
 pub const STEP: GridStep = GridStep::Q0;
@@ -640,6 +652,11 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if families::is_instance(recipe) {
+        // A placed family hosts nothing, so none of its faces is named for a hosted element yet.
+        families::Instance::of(recipe)?;
+        return Ok(Vec::new());
+    }
     if crate::floor_plan::is_floor(recipe) {
         let plan = crate::floor_plan::FloorPlan::of(recipe)?;
         return floor::names(op_id(recipe)?, &plan);
@@ -694,6 +711,21 @@ pub fn fits(
     host: &Recipe,
     hosted: &[HostedAt<'_>],
 ) -> Result<(), GeometryError> {
+    fits_with(edition, host, hosted, &*families::baked())
+}
+
+/// As [`fits`], a placed family's recipe found in `families`.
+///
+/// # Errors
+///
+/// As [`fits`]; and for a placed family, [`crate::families::opening_of`]'s refusals with its key
+/// in front.
+pub fn fits_with(
+    edition: &Edition,
+    host: &Recipe,
+    hosted: &[HostedAt<'_>],
+    families: &dyn FamilySource,
+) -> Result<(), GeometryError> {
     let (units, band) = if let Some(report) = &edition.report {
         let units = Units::of_steps_per_mm(report.steps_per_mm)?;
         let tolerances = report
@@ -706,7 +738,13 @@ pub fn fits(
         (units, units.band_over(std::iter::empty()))
     };
     if wall_plan::is_layered(host) {
-        return layered::fits(&Layered::of(host)?, &on_grid(units, hosted)?, units, band);
+        return layered::fits(
+            &Layered::of(host)?,
+            &on_grid(units, hosted)?,
+            units,
+            band,
+            families,
+        );
     }
     let shape = Extrusion::of(host)?;
     opening::plan(host, &shape, &on_grid(units, hosted)?, units, band).map(|_| ())
@@ -715,6 +753,11 @@ pub fn fits(
 /// The builder over an engine: every shape is made by `E` through the kernel's engine seam.
 pub struct Kernel<E> {
     engine: Mutex<E>,
+    /// Where a placed family's recipe comes from.
+    families: Arc<dyn FamilySource>,
+    /// What each placed family's type built to, turned as it stands, by the evaluator's key, and
+    /// how many were built (not found kept).
+    family_shapes: Mutex<(BTreeMap<CacheKey, Built>, u64)>,
     units: Units,
     edition: Edition,
     /// How near two faces may come without being one, in steps ([`Units::band`]).
@@ -722,12 +765,25 @@ pub struct Kernel<E> {
 }
 
 impl<E: Engine> Kernel<E> {
-    /// A builder over `engine`, on the engine's own grid step.
+    /// A builder over `engine`, on the engine's own grid step, placed families' recipes found in
+    /// the library baked in at build time ([`families::baked`]).
     ///
     /// # Errors
     ///
     /// `UnitsUnavailable` when a millimetre is not a whole number of the engine's steps.
     pub fn new(engine: E) -> Result<Kernel<E>, GeometryError> {
+        Kernel::with_families(engine, families::baked())
+    }
+
+    /// A builder over `engine`, placed families' recipes found in `families`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Kernel::new`].
+    pub fn with_families(
+        engine: E,
+        families: Arc<dyn FamilySource>,
+    ) -> Result<Kernel<E>, GeometryError> {
         let report = engine.edition();
         let units = Units::on(report.step)?;
         Ok(Kernel {
@@ -735,7 +791,48 @@ impl<E: Engine> Kernel<E> {
             band: units.band(&report),
             units,
             engine: Mutex::new(engine),
+            families,
+            family_shapes: Mutex::new((BTreeMap::new(), 0)),
         })
+    }
+
+    /// How many placed families' types it has built (not found kept): each type, turned as it
+    /// stands, once.
+    ///
+    /// # Errors
+    ///
+    /// `EngineUnavailable` when an earlier build stopped part way.
+    pub fn family_builds(&self) -> Result<u64, GeometryError> {
+        self.family_shapes
+            .lock()
+            .map(|kept| kept.1)
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))
+    }
+
+    /// A placed family ([`family::build`]), as kept if its type was built before turned the same
+    /// way; it hosts nothing.
+    fn build_family(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        if let Some(first) = hosted.first() {
+            return Err(fault(
+                "NotAHost",
+                format!("{}: a placed family hosts nothing", first.key),
+            ));
+        }
+        let unavailable = || fault("EngineUnavailable", "an earlier build stopped part way");
+        let instance = families::Instance::of(host)?;
+        let resolved = families::resolve(&*self.families, &instance)?;
+        let key = CacheKey::turned(&resolved.recipe, &resolved.values, instance.turn);
+        let mut kept = self.family_shapes.lock().map_err(|_| unavailable())?;
+        if let Some(built) = kept.0.get(&key) {
+            return Ok(built.clone());
+        }
+        let built = {
+            let mut engine = self.engine.lock().map_err(|_| unavailable())?;
+            family::build(&mut *engine, &instance, &resolved, self.units)?
+        };
+        kept.0.insert(key, built.clone());
+        kept.1 = kept.1.saturating_add(1);
+        Ok(built)
     }
 
     /// Its units: whole millimetres to the engine's steps and back.
@@ -771,13 +868,18 @@ impl<E: Engine> Kernel<E> {
         if crate::roof_plan::is_roof(host) {
             return self.build_roof(host, hosted.len());
         }
+        if families::is_instance(host) {
+            return self.build_family(host, hosted);
+        }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;
             let mut engine = self
                 .engine
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
-            return layered::build(&mut *engine, host, &wall, hosted, self.units, self.band);
+            let (units, band) = (self.units, self.band);
+            let families = &*self.families;
+            return layered::build(&mut *engine, host, &wall, hosted, units, band, families);
         }
         let shape = Extrusion::of(host)?;
         let units = self.units;

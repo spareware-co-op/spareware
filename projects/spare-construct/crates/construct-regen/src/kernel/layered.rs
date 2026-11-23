@@ -18,6 +18,11 @@
 //!   families that declare their host and their void (job 6.4, CON-A7-F3-P2). Each cutter is
 //!   extruded once and subtracted from each layer, one door after another in the order of their
 //!   keys.
+//! - A placed family's opening (job 6.4, [`crate::families`]): the outline its recipe declares,
+//!   solved at its type's values, placed where the family stands (its origin and its turn, as the
+//!   regenerator seats it: construct-regen's `hosting::seat`) and cut through every layer on the
+//!   same path as a door's, by the same rules ([`super::opening::plan_in`]). Where the family's
+//!   recipe comes from is the caller's [`FamilySource`].
 //! - Wrapping: not built. A layer that wraps at an opening (construct-walls' `Layer::wraps`) is
 //!   cut flush with the opening as every other layer is; turning it round the opening's sides is
 //!   job 6.1 (CON-A4-F2-P4), and its place is [`build`]'s loop over the cutters.
@@ -40,11 +45,12 @@
 //! face share its one name where chapter 20.2 names each piece `Split` (CON-A3-F1-P2, with the
 //! body record).
 
-use super::opening::{self, Cut, Frame, Hosted};
+use super::opening::{self, Cut, Frame, Hosted, Placed, Span};
 use super::{
     AskedCut, Extrusion, KernelSolid, LayerSolid, NamedFace, Units, WALL_ROLES, as_steps, carrier,
     fault, from_engine, name, op_id,
 };
+use crate::families::{self, FamilySource};
 use crate::wall_plan::{Axis, Layered};
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
@@ -76,7 +82,7 @@ struct AskedLayer {
 }
 
 /// The low and high grid points a mesh reaches, in steps.
-type Extent = Option<([i64; 3], [i64; 3])>;
+pub(super) type Extent = Option<([i64; 3], [i64; 3])>;
 
 /// The persistent names of a layered wall's faces without building it, sorted by name: its six
 /// roles and the faces between its layers. An opening's faces are not among them.
@@ -247,6 +253,57 @@ impl WallFrame {
         })
     }
 
+    /// A placed family hosted in the wall, its opening placed in the frame: the outline its
+    /// recipe declares at its type's values ([`families::opening_of`]), along the wall from where
+    /// its origin is, the way its turn takes its x, and up from its origin's height. Its origin
+    /// must lie within the wall's thickness, and its x along the wall.
+    fn family<'a>(
+        &self,
+        hosted: &Hosted<'a>,
+        families: &dyn FamilySource,
+        units: Units,
+    ) -> Result<Placed<'a>, GeometryError> {
+        let key = hosted.key;
+        let named = |e: GeometryError| fault(&e.code, format!("family {key}: {}", e.message));
+        let refused = |code: &str, why: &str| fault(code, format!("family {key}: {why}"));
+        let (instance, span) = families::opening_of(families, hosted.recipe).map_err(named)?;
+        let [wx, wy] = instance.turn.plan([1, 0]).unwrap_or_default();
+        let [ux, uy] = self.unit;
+        // +1 when its x runs the way the wall does, -1 when against it, 0 when across it.
+        let way = add(times(wx, ux)?, times(wy, uy)?)?;
+        if way == 0 {
+            return Err(refused(
+                "OpeningAcrossWall",
+                "it is turned across its wall's axis",
+            ));
+        }
+        let [along, across] = self.to_frame([hosted.at.x.get(), hosted.at.y.get()])?;
+        let thickness = self.frame.size.get(1).copied().unwrap_or_default();
+        if across <= 0 || across >= thickness {
+            return Err(refused(
+                "OpeningNotInWall",
+                "its origin is not within the wall's thickness",
+            ));
+        }
+        let steps = |length: construct_params::Length| units.from_q0(length.steps()).map_err(named);
+        let (x0, x1) = (
+            add(along, times(way, steps(span.x[0])?)?)?,
+            add(along, times(way, steps(span.x[1])?)?)?,
+        );
+        let z = hosted.at.z.get();
+        Ok(Placed {
+            key,
+            noun: "family",
+            op: op_id(hosted.recipe)?,
+            span: Span {
+                start: x0.min(x1),
+                end: x0.max(x1),
+                foot: add(z, steps(span.z[0])?)?,
+                head: add(z, steps(span.z[1])?)?,
+            },
+        })
+    }
+
     /// A cut's cutter in plan, as the engine is asked for it: its corners at its foot, and the
     /// vector up to its head.
     fn cutter(&self, cut: &Cut) -> Result<(Profile, [i64; 3]), GeometryError> {
@@ -271,23 +328,39 @@ impl WallFrame {
     }
 }
 
-/// The cuts the doors `hosted` make in `wall`, with the frame they were asked in; none when
-/// nothing is hosted.
+/// The cuts the doors and placed families `hosted` make in `wall`, with the frame they were asked
+/// in; none when nothing is hosted. A family's recipe comes from `families`.
 fn cuts(
     wall: &Layered,
     hosted: &[Hosted<'_>],
     units: Units,
     band: i64,
+    families: &dyn FamilySource,
 ) -> Result<Option<(WallFrame, Vec<Cut>)>, GeometryError> {
-    let Some(first) = hosted.iter().map(|h| h.key).min() else {
+    let Some(first) = hosted.iter().min_by(|a, b| a.key.cmp(b.key)) else {
         return Ok(None);
     };
-    let frame = WallFrame::of(wall, units, first)?;
-    let framed = hosted
-        .iter()
+    if wall.plan.axis().is_none() && families::is_instance(first.recipe) {
+        return Err(fault(
+            "NotAHost",
+            format!(
+                "family {}: a family is hosted only on a wall along x or y; this wall runs at an                  angle",
+                first.key
+            ),
+        ));
+    }
+    let frame = WallFrame::of(wall, units, first.key)?;
+    let (placed, doors): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) =
+        hosted.iter().partition(|h| families::is_instance(h.recipe));
+    let framed = doors
+        .into_iter()
         .map(|h| frame.door(h, units))
         .collect::<Result<Vec<_>, _>>()?;
-    let cuts = opening::plan_in(frame.frame, &framed, units, band)?;
+    let placed = placed
+        .into_iter()
+        .map(|h| frame.family(h, families, units))
+        .collect::<Result<Vec<_>, _>>()?;
+    let cuts = opening::plan_in(frame.frame, &framed, &placed, units, band)?;
     Ok(Some((frame, cuts)))
 }
 
@@ -301,13 +374,14 @@ pub(super) fn fits(
     hosted: &[Hosted<'_>],
     units: Units,
     band: i64,
+    families: &dyn FamilySource,
 ) -> Result<(), GeometryError> {
-    cuts(wall, hosted, units, band).map(|_| ())
+    cuts(wall, hosted, units, band, families).map(|_| ())
 }
 
 /// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, and whether
 /// any was rounded; the lowest and highest grid steps it reaches widen `extent`.
-fn millimetres(
+pub(super) fn millimetres(
     mesh: &DisplayMesh,
     units: Units,
     extent: &mut Extent,
@@ -354,7 +428,7 @@ fn thirds(len: usize) -> Result<u32, GeometryError> {
 
 /// Puts `part` after what `into` holds, its points after `into`'s and its triangles numbered so,
 /// and gives its first triangle and how many it has.
-fn append(into: &mut Mesh, part: &Mesh) -> Result<[u32; 2], GeometryError> {
+pub(super) fn append(into: &mut Mesh, part: &Mesh) -> Result<[u32; 2], GeometryError> {
     let base = thirds(into.positions.len())?;
     let first = thirds(into.indices.len())?;
     into.positions.extend_from_slice(&part.positions);
@@ -380,7 +454,7 @@ fn outline(corners: &[[i64; 2]; 4], units: Units) -> Result<Vec<[i64; 2]>, Geome
 }
 
 /// An empty mesh.
-fn empty() -> Mesh {
+pub(super) fn empty() -> Mesh {
     Mesh {
         positions: Vec::new(),
         indices: Vec::new(),
@@ -403,9 +477,10 @@ pub(super) fn build<E: Engine>(
     hosted: &[Hosted<'_>],
     units: Units,
     band: i64,
+    families: &dyn FamilySource,
 ) -> Result<Built, GeometryError> {
     let op = op_id(recipe)?;
-    let (cut_list, tools) = match cuts(wall, hosted, units, band)? {
+    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
         None => (Vec::new(), Vec::new()),
         Some((frame, cuts)) => {
             let tools = cuts

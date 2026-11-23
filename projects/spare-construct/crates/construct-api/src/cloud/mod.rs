@@ -7,6 +7,8 @@
 //! - [`params`]: parameters, types, and an element's parameter values and type, through the same
 //!   log.
 //! - [`grids`]: grid lines and reference planes, through the same log.
+//! - [`families`]: placing a family of the library on a wall, a door or a window, through the same
+//!   log.
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
 //!   same log.
@@ -27,6 +29,7 @@ pub mod access;
 pub mod commands;
 pub mod directory;
 pub mod elements;
+pub mod families;
 pub mod floors;
 pub mod grids;
 pub mod hosting;

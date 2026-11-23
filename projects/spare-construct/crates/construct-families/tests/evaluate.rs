@@ -251,7 +251,10 @@ impl Engine for Prisms {
     }
 
     fn section(&mut self, _: &Shape, _: &GridPlane) -> Result<Cut, EngineError> {
-        Err(unsupported("section", "anything: evaluation never cuts a section"))
+        Err(unsupported(
+            "section",
+            "anything: evaluation never cuts a section",
+        ))
     }
 }
 
