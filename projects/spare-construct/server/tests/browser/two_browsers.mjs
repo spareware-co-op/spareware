@@ -426,7 +426,22 @@ async function until(read, ok, label) {
   }
   throw new Error(`FAILED: ${label}`);
 }
-const doorTypes = async () => (await asAnna('types?category=300')).types;
+const doorTypes = async () => {
+  const got = await anna.evaluate(
+    (url) => fetch(url).then(async (r) => ({ status: r.status, text: await r.text() })),
+    `${model}/types?category=300`,
+  );
+  let body = null;
+  try {
+    body = JSON.parse(got.text);
+  } catch {
+    // Not JSON: the message below shows what came back.
+  }
+  if (!body || !Array.isArray(body.types)) {
+    throw new Error(`types?category=300 answered HTTP ${got.status}: ${got.text.slice(0, 500)}`);
+  }
+  return body.types;
+};
 const leafWidth = (view) => view.parameters.find((p) => p.name === 'Leaf width');
 const manager = '#stack-manage';
 const closeDialog = async () => {
