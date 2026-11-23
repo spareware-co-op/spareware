@@ -755,5 +755,146 @@ const again = await openWorkshop(anna);
 await anna.waitForFunction(() => window.spare.workshop.state().loaded);
 await again.waitForFunction(() => window.WorkshopFrame.state().kept === 'model');
 check((await bracketWidth(again)) === 135.5, 'and after a reload the part comes back from the model');
+
+console.log('\n   Grids, on the page');
+// The seeded grids stand in the site setout, which the Arch model links as a shared package: both
+// browsers draw them, seen and never picked. Ben then draws, undoes and redoes, renames, moves and
+// deletes grids of the Arch model itself, and Anna's browser follows each step. Anna changes none of
+// them, so no claim of Ben's is ever in her way.
+const toArchitecture = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="architecture"]');
+  await page.waitForSelector('#pv-canvas g.element[data-id="D-101"]');
+};
+await toArchitecture(anna);
+await toArchitecture(ben);
+const seededGrids = '#pv-canvas g.datum.linked[data-kind="grid"]';
+const seededNames = (page) =>
+  page.locator(seededGrids).evaluateAll((groups) => groups.map((g) => g.dataset.name).sort().join());
+for (const page of [anna, ben]) {
+  await page.waitForFunction((at) => document.querySelectorAll(at).length === 5, seededGrids);
+}
+check(
+  (await seededNames(anna)) === '1,2,A,B,C' && (await seededNames(ben)) === '1,2,A,B,C',
+  "the site setout's five grids are drawn in both browsers",
+);
+check(
+  (await anna.locator(`${seededGrids}[data-name="A"] circle.bub`).count()) === 1 &&
+    (await anna.locator(`${seededGrids}[data-name="A"] text.tn`).textContent()) === 'A',
+  'each a chain line with its name in a bubble',
+);
+await shot(anna, 'anna-grids');
+
+// A point of the model on a page's screen, through the plan's own drawing.
+const onScreen = (page, x, y) =>
+  page.evaluate(([mx, my]) => {
+    const svg = document.querySelector('#pv-canvas svg');
+    const point = svg.createSVGPoint();
+    point.x = mx;
+    point.y = my;
+    const at = point.matrixTransform(svg.getScreenCTM());
+    return [at.x, at.y];
+  }, [x, y]);
+const clickModel = async (page, x, y) => {
+  const [sx, sy] = await onScreen(page, x, y);
+  await page.mouse.click(sx, sy);
+};
+const ownGrids = '#pv-canvas g.datum.own[data-kind="grid"]';
+const ownGrid = (name) => `${ownGrids}[data-name="${name}"]`;
+const gridGroup = (id) => `#pv-canvas g.datum[data-datum="${id}"]`;
+const gridName = '#pv-side input[data-key="datum-name"]';
+const drawGrid = async (from, to) => {
+  await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await ben.click('#ribbon [data-act="dtool"][data-a="architecture:grid"]');
+  await clickModel(ben, ...from);
+  await clickModel(ben, ...to);
+  await ben.keyboard.press('Escape');
+};
+// Ben picks a grid by its bubble, the way a person does, after clicking off whatever he had.
+const pickGrid = async (id) => {
+  await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await ben.waitForSelector(`${gridGroup(id)} circle.bub`);
+  const bubble = await ben.locator(`${gridGroup(id)} circle.bub`).boundingBox();
+  await ben.mouse.click(bubble.x + bubble.width / 2, bubble.y + bubble.height / 2);
+  await ben.waitForSelector(`${gridGroup(id)}[data-picked="yes"]`);
+  await ben.waitForSelector(gridName);
+};
+
+// Left of the building, top to bottom, clear of the zoom buttons at the top right: the bubble
+// goes at the top, where it starts.
+await drawGrid([-1000, -1000], [-1000, 9000]);
+await anna.waitForSelector(ownGrid('1'));
+pass("Ben draws a grid with the grid tool, and Anna's browser draws it with the server's first name, 1");
+const first = await anna.locator(ownGrid('1')).getAttribute('data-datum');
+await ben.waitForSelector(ownGrid('1'));
+check(
+  (await ben.locator(ownGrid('1')).getAttribute('data-datum')) === first,
+  'the same grid in both browsers',
+);
+
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'grid.create');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await anna.waitForFunction((at) => !document.querySelector(at), gridGroup(first));
+pass("Ben's undo takes the grid away, and Anna's browser follows");
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+await anna.waitForSelector(`${gridGroup(first)}[data-name="1"]`);
+pass('his redo puts it back, with its name, for her too');
+
+await pickGrid(first);
+await ben.locator(gridName).fill('A');
+await ben.locator(gridName).press('Enter');
+await anna.waitForSelector(`${gridGroup(first)}[data-name="A"]`);
+pass("Ben renames it A in the properties palette, and Anna's browser shows the new name");
+// Ben's page names the next grid after the one he last named, once the server's answer is in hand.
+await ben.waitForSelector(`${gridGroup(first)}[data-name="A"]`);
+
+// Along the bottom, left to right: the server names it after the grid Ben last named.
+await drawGrid([0, 9800], [12000, 9800]);
+await anna.waitForSelector(ownGrid('B'));
+pass('his next grid is given the next name by the server, B, in both browsers');
+const second = await anna.locator(ownGrid('B')).getAttribute('data-datum');
+
+await pickGrid(second);
+await ben.locator(gridName).fill('A');
+await ben.locator(gridName).press('Enter');
+const refusal = `#pv-side [data-problem="datum:${second}"]`;
+await ben.waitForSelector(refusal);
+const refused = await ben.locator(refusal).textContent();
+check(
+  refused.length > 0 && refused === (await ben.locator('#toast-m').textContent()),
+  "a second grid named A is refused in the server's words, beside its name",
+);
+check((await anna.locator(`${gridGroup(second)}[data-name="B"]`).count()) === 1, 'and B keeps its name');
+
+// A's far end, dragged by its handle from 9000 up to 8000.
+await pickGrid(first);
+const handle = await ben.locator(`${gridGroup(first)} [data-grid-end="1"]`).boundingBox();
+const [hx, hy] = [handle.x + handle.width / 2, handle.y + handle.height / 2];
+const [tx, ty] = await onScreen(ben, -1000, 8000);
+await ben.mouse.move(hx, hy);
+await ben.mouse.down();
+for (let i = 1; i <= 10; i += 1) {
+  await ben.mouse.move(hx + ((tx - hx) * i) / 10, hy + ((ty - hy) * i) / 10);
+  await ben.waitForTimeout(16);
+}
+await ben.mouse.up();
+await anna.waitForFunction((at) => document.querySelector(at)?.dataset.y1 === '8000', gridGroup(first));
+const ends = (page) => page.locator(gridGroup(first)).evaluate((g) => [g.dataset.x0, g.dataset.y0, g.dataset.x1, g.dataset.y1].join());
+check((await ends(anna)) === '-1000,-1000,-1000,8000', "Ben drags A's end, and Anna's browser draws it where he left it");
+await ben.waitForFunction((at) => document.querySelector(at)?.dataset.y1 === '8000', gridGroup(first));
+check((await ends(ben)) === (await ends(anna)), "and Ben's shows the server's answer, the same");
+
+await pickGrid(second);
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((at) => !document.querySelector(at), gridGroup(second));
+pass("Ben deletes B with the Delete key, and it goes from Anna's browser");
+check(
+  (await anna.locator(ownGrids).count()) === 1 && (await anna.locator(seededGrids).count()) === 5,
+  'A stays, and so do the seeded grids',
+);
+await shot(ben, 'ben-grids');
 await browser.close();
 console.log('\nThe browser checks passed.');
