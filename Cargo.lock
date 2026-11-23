@@ -599,6 +599,7 @@ dependencies = [
  "construct-params",
  "construct-solver",
  "construct-types",
+ "engine-geometry",
  "hex",
  "jsonschema",
  "kit-core",
