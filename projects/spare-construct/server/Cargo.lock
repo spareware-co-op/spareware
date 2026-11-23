@@ -658,6 +658,7 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-clash",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -702,6 +703,16 @@ dependencies = [
  "construct-model",
  "engine-geometry",
  "kit-store",
+]
+
+[[package]]
+name = "construct-doorgen"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-params",
+ "engine-geometry",
+ "kit-core",
 ]
 
 [[package]]

@@ -24,7 +24,7 @@
 //! `frame_material` and `leaf_material` (material ids). The generated recipe is checked by
 //! construct-doorgen's `verify` before anything is stored.
 //!
-//! Every recipe a document takes passes the same checks ([`takes`]): no more than
+//! Every recipe a document takes passes the same checks (`takes`): no more than
 //! construct-families' `MOST_RECIPE_BYTES` of text, the reader, the checker against the project's
 //! categories and materials, every type it names evaluated within the evaluator's default limits,
 //! and a wall-hosted family's opening cut as a builder cuts it. Each command is refused, as its
@@ -39,7 +39,7 @@
 //!
 //! The generic commands are not a back door ([`generic_rules`]): a family's record is not made,
 //! changed, moved nor deleted by `element.*`. An undo that would leave a placed copy without the
-//! version of its family it names is refused ([`undo_rules`]).
+//! version of its family it names is refused (`undo_rules`).
 //!
 //! For the page, without the log: [`read_families`], the document's families and then the
 //! library's that it does not hold, as the server's families route lists them. Nothing here reads
