@@ -649,7 +649,9 @@ async fn layered(
 
 /// Through the server's commands on the kernel: two wall types made, a partition with 12.5 mm
 /// linings drawn along x from level 1 to a level of its own and a concrete wall along y of a
-/// height, each built one solid per layer (the display lists each layer's material); a door
+/// height from its end, each built one solid per layer (the display lists each layer's material)
+/// and joined at the corner (the partition's exterior lining runs to the concrete's outer face,
+/// the concrete from the partition's stud's exterior face); a door
 /// hosted on the partition cuts every layer; the top level moved and a layer thickened build the
 /// partition again, writing no wall; undo and redo of the thickening; and the whole model
 /// rebuilt from empty gives the same bytes.
@@ -696,7 +698,7 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     .await;
 
     let (shown, names, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 2700]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 2700]));
     let materials: Vec<&str> = shown
         .display
         .as_ref()
@@ -717,7 +719,7 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
         assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
     }
     let (concrete, _, bounds) = layered(&s, &project, &model, "W-901").await;
-    assert_eq!(bounds, ([53_900, 0, 0], [54_100, 4000, 2700]));
+    assert_eq!(bounds, ([53_900, -45, 0], [54_100, 4000, 2700]));
     assert_eq!(concrete.display.as_ref().unwrap().parts.len(), 1);
 
     let exterior = names
@@ -754,22 +756,102 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     )
     .await;
     let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 3000]));
     edit(
         "wall.type.layers",
         json!({ "type": "wall-partition", "assembly": partition("140 mm") }),
     )
     .await;
     let (thicker, names, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -83, 0], [54_000, 83, 3000]));
+    assert_eq!(bounds, ([50_000, -83, 0], [54_100, 83, 3000]));
     assert_eq!(thicker.built.input, wall, "no wall was written");
     assert_eq!(cut_roles(&names).len(), 3, "the door still cuts it");
     edit("edit.undo", json!({})).await;
     let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 3000]));
     edit("edit.redo", json!({})).await;
     let (again, _, _) = layered(&s, &project, &model, "W-900").await;
     assert_eq!(again.built.result, thicker.built.result);
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
+}
+
+/// Six times the volume a shape's finest display holds, part by part, each part closed, in cubic
+/// millimetres.
+fn parts_six(shown: &ShapeView) -> i128 {
+    let display = shown.display.as_ref().unwrap();
+    (0..display.parts.len())
+        .map(|at| kernel_suite::closed_mesh_six_volume(&kernel_suite::part_mesh(display, at)))
+        .sum()
+}
+
+/// Through the server's commands on the kernel: three walls of a lined type (20, 100 and 20 mm)
+/// drawn to make an L and a T are each built with their joints, and their pieces' volumes add up
+/// exactly to the joined shape's, so they neither overlap nor leave a gap; moving the corner wall
+/// away builds the first again with a square end, its record unwritten; the whole model rebuilt
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn walls_drawn_to_meet_through_commands_are_joined_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let layer = |function: &str, thickness: &str, material: &str| {
+        json!({ "function": function, "thickness": thickness, "material": material })
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-lined", "name": "Lined", "assembly": {
+            "core": { "exterior": 1, "interior": 2 }, "layers": [
+                layer("finish", "20 mm", "plasterboard-gypsum"),
+                layer("structure", "100 mm", "timber-douglas-fir"),
+                layer("finish", "20 mm", "plasterboard-gypsum"),
+            ] } }),
+    )
+    .await;
+    for (id, start, end) in [
+        ("W-910", ["60 m", "-20 m"], ["64 m", "-20 m"]),
+        ("W-911", ["64 m", "-20 m"], ["64 m", "-17 m"]),
+        ("W-912", ["62 m", "-23 m"], ["62 m", "-20 m"]),
+    ] {
+        edit(
+            "wall.draw",
+            json!({ "element": id, "type": "wall-lined", "start": start, "end": end,
+                    "level": "1", "height": "2.7 m" }),
+        )
+        .await;
+    }
+    let (first, _, bounds) = layered(&s, &project, &model, "W-910").await;
+    assert_eq!(bounds, ([60_000, -20_070, 0], [64_070, -19_930, 2700]));
+    assert_eq!(
+        first.display.as_ref().unwrap().parts.len(),
+        4,
+        "its exterior lining is in two pieces"
+    );
+    let mut six = parts_six(&first);
+    for wall in ["W-911", "W-912"] {
+        six += parts_six(&layered(&s, &project, &model, wall).await.0);
+    }
+    let area = 4070 * 140 + 140 * 2930 + 140 * 2930;
+    assert_eq!(six, 6 * area * 2700, "the walls fill the joined shape");
+
+    edit(
+        "element.move",
+        json!({ "element": "W-911", "placement": { "x": 1000, "y": 0, "z": 0 } }),
+    )
+    .await;
+    let (moved, _, bounds) = layered(&s, &project, &model, "W-910").await;
+    assert_eq!(bounds, ([60_000, -20_070, 0], [64_000, -19_930, 2700]));
+    assert_eq!(moved.built.input, first.built.input, "no wall was written");
 
     let before = derived(&store, &project).await;
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
