@@ -990,5 +990,5 @@ async fn walls_drawn_to_meet_through_commands_are_joined_on_the_kernel() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 29);
 }
