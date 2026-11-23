@@ -959,7 +959,9 @@
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
       if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
-      if ((piece.touched ?? 0) > through) continue; // what is hosted in it changed after this checkpoint
+      // What is hosted in it changed at or after the last entry this checkpoint covers: it is built again with that
+      // change on its way, so the next checkpoint compares it.
+      if ((piece.touched ?? 0) >= through) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -1176,7 +1178,7 @@
       const placing = ['hosted.place', 'family.place', 'family.move', 'opening.place', 'opening.draw', 'opening.move'].includes(entry.cmd);
       const hosts = new Set([piece && hostIdOf(piece.el), placing && entry.args.host]);
       if (cuts) {
-        // A host is built with what is hosted in it: until a checkpoint covers this entry, it is not compared.
+        // A host is built with what is hosted in it: until a checkpoint after this entry, it is not compared.
         for (const id of hosts) if (id && into.get(id)) Object.assign(into.get(id), { stale: true, touched: entry.seq });
       }
       const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
