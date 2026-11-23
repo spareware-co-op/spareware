@@ -849,6 +849,25 @@ impl<E: Engine> Kernel<E> {
         self.band
     }
 
+    /// A floor, a roof or a placed family, each built by its own builder; `None` for any other
+    /// recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
+    fn build_other_kind(
+        &self,
+        host: &Recipe,
+        hosted: &[Hosted<'_>],
+    ) -> Option<Result<Built, GeometryError>> {
+        if crate::floor_plan::is_floor(host) {
+            return Some(self.build_floor(host, hosted.len()));
+        }
+        if crate::roof_plan::is_roof(host) {
+            return Some(self.build_roof(host, hosted.len()));
+        }
+        if families::is_instance(host) {
+            return Some(self.build_family(host, hosted));
+        }
+        None
+    }
+
     /// Builds `host` with an opening cut through it for each element in `hosted`: the host's
     /// extrusion less each opening, through [`Engine::subtract`], in the order of the hosted
     /// elements' keys. With nothing hosted it is [`Geometry::build`].
@@ -862,14 +881,8 @@ impl<E: Engine> Kernel<E> {
         host: &Recipe,
         hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
-        if crate::floor_plan::is_floor(host) {
-            return self.build_floor(host, hosted.len());
-        }
-        if crate::roof_plan::is_roof(host) {
-            return self.build_roof(host, hosted.len());
-        }
-        if families::is_instance(host) {
-            return self.build_family(host, hosted);
+        if let Some(built) = self.build_other_kind(host, hosted) {
+            return built;
         }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;
