@@ -25,6 +25,7 @@ cloud = [
     "dep:construct-roofs",
     "dep:construct-rooms",
     "dep:construct-phases",
+    "dep:construct-styles",
 ]
 
 [dependencies]
@@ -61,9 +62,12 @@ construct-roofs = { path = "../construct-roofs", optional = true }
 construct-rooms = { path = "../construct-rooms", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
+# The view graphics commands: the pens, line patterns and object styles a rule is checked against.
+construct-styles = { path = "../construct-styles", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
+construct-sheets = { path = "../construct-sheets" }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }

@@ -9,6 +9,12 @@
 //! the stored model, the view and the project's styles, so every browser asks and gets the same
 //! bytes, and the page draws no geometry of its own.
 //!
+//! A view's graphics rules reach the drawing through [`ViewLooks`]: for each line and fill the
+//! drawing asks it how its category looks on its edge, and it answers with construct-views'
+//! `resolve` (through construct-api's `look_in`) and nothing of its own: weight, pattern, colour,
+//! a cut's fill, halftone, transparency, and a hidden category left out. A view with no rules
+//! resolves to the project's object styles, so its drawing is the bytes it was before rules.
+//!
 //! The engine behind it is whatever [`Kernel`] was made over: the geometry kernel's seam, whose
 //! `section` only a server built with the `kernel` feature answers today (solidcore, behind the
 //! seam), so a server without it has no drawer and says so (`crate::geometry::drawer`).
@@ -26,9 +32,12 @@
 //! (construct-drawing's note) and the cut (the interim register) are both stand-ins for the
 //! kernel's own, behind the same types.
 
+use construct_api::cloud::views::{World, look_in};
 use construct_categories::{CategoryId, CategoryTable};
 use construct_drawing::drawing::Drawing;
+use construct_drawing::drawing::LineKind;
 use construct_drawing::hatch::FillPatterns;
+use construct_drawing::look::{FillLook, Look, Looks};
 use construct_drawing::pens::{Styles, widths};
 use construct_drawing::plan::{PlanElement, plan};
 use construct_drawing::svg::to_svg;
@@ -38,7 +47,7 @@ use construct_model::element::Placement;
 use construct_model::geometry::Recipe;
 use construct_params::Length;
 use construct_regen::kernel::Kernel;
-use construct_styles::{LineStyles, ObjectStyles, Scale};
+use construct_styles::{Edge, EdgeStyle, LineStyles, ObjectStyles, Scale};
 use engine_geometry::value::engine::Engine;
 use kit_core::Id;
 use serde::Serialize;
@@ -77,13 +86,68 @@ pub struct Drawn {
 /// Draws plans. One per server, chosen with its builder ([`crate::geometry::drawer`]).
 pub trait Drawer: Send + Sync {
     /// The plan cut at the height `cut` above the project's zero, of `elements`, printed at
-    /// `scale`.
+    /// `scale`, each category looking as `looks` says (`None`: as the project's object styles
+    /// say).
     ///
     /// # Errors
     ///
     /// In words, when the drawing as a whole cannot be made or printed; an element that cannot be
     /// drawn is in [`Drawn::skipped`] instead.
-    fn draw(&self, cut: Length, scale: Scale, elements: &[ToDraw]) -> Result<Drawn, String>;
+    fn draw(
+        &self,
+        cut: Length,
+        scale: Scale,
+        elements: &[ToDraw],
+        looks: Option<&dyn Looks>,
+    ) -> Result<Drawn, String>;
+}
+
+/// How a view's rules make each category look: every answer is `resolve`'s, through the document
+/// as it is at the log's head.
+pub struct ViewLooks<'a> {
+    world: &'a World,
+    view: &'a Id,
+}
+
+impl<'a> ViewLooks<'a> {
+    /// The looks of `view` in `world`.
+    #[must_use]
+    pub const fn new(world: &'a World, view: &'a Id) -> Self {
+        Self { world, view }
+    }
+}
+
+impl std::fmt::Debug for ViewLooks<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ViewLooks")
+            .field("view", &self.view)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Looks for ViewLooks<'_> {
+    fn look(&self, category: CategoryId, kind: LineKind) -> Result<Look, String> {
+        let edge = match kind {
+            LineKind::Cut => Edge::Cut,
+            LineKind::Projected => Edge::Projected,
+        };
+        let found = look_in(self.world, self.view, category, edge)?;
+        let rule = found.style;
+        Ok(Look {
+            shown: rule.shown,
+            edge: EdgeStyle {
+                width: found.width,
+                colour: rule.colour,
+                pattern: rule.pattern,
+            },
+            fill: rule.fill.map(|fill| FillLook {
+                pattern: fill.pattern,
+                colour: fill.colour,
+            }),
+            halftone: rule.halftone,
+            transparency: rule.transparency,
+        })
+    }
 }
 
 /// The default metric styles a plan is penned with, until a project keeps its own.
@@ -106,8 +170,9 @@ impl Defaults {
         }
     }
 
-    fn styles(&self) -> Styles<'_> {
+    fn styles<'a>(&'a self, looks: Option<&'a dyn Looks>) -> Styles<'a> {
         Styles {
+            looks,
             categories: &self.categories,
             lines: &self.lines,
             objects: &self.objects,
@@ -124,6 +189,7 @@ fn one<E: Engine + Send + 'static>(
     view: View,
     defaults: &Defaults,
     scale: Scale,
+    looks: Option<&dyn Looks>,
     element: &ToDraw,
 ) -> Result<Drawing, String> {
     let layers = kernel.layers(&element.recipe).map_err(|e| e.message)?;
@@ -143,17 +209,23 @@ fn one<E: Engine + Send + 'static>(
         })
         .collect();
     let drawing = plan(kernel, view, &parts).map_err(|e| e.to_string())?;
-    widths(&drawing, defaults.styles(), scale).map_err(|e| e.to_string())?;
+    widths(&drawing, defaults.styles(looks), scale).map_err(|e| e.to_string())?;
     Ok(drawing)
 }
 
 impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
-    fn draw(&self, cut: Length, scale: Scale, elements: &[ToDraw]) -> Result<Drawn, String> {
+    fn draw(
+        &self,
+        cut: Length,
+        scale: Scale,
+        elements: &[ToDraw],
+        looks: Option<&dyn Looks>,
+    ) -> Result<Drawn, String> {
         let defaults = Defaults::new();
         let view = View::plan(cut);
         let (mut lines, mut regions, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
         for element in elements {
-            match one(self, view, &defaults, scale, element) {
+            match one(self, view, &defaults, scale, looks, element) {
                 Ok(drawing) => {
                     lines.extend(drawing.lines().iter().cloned());
                     regions.extend(drawing.regions().iter().cloned());
@@ -165,7 +237,7 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
             }
         }
         let drawing = Drawing::new(view, lines, regions).map_err(|e| e.to_string())?;
-        let svg = to_svg(&drawing, defaults.styles(), scale).map_err(|e| e.to_string())?;
+        let svg = to_svg(&drawing, defaults.styles(looks), scale).map_err(|e| e.to_string())?;
         Ok(Drawn { svg, skipped })
     }
 }

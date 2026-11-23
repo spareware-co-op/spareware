@@ -23,9 +23,10 @@ use kit_core::Id;
 use crate::DrawingError;
 use crate::drawing::{Drawing, Line, LineKind, Shape, ViewPoint};
 use crate::hatch::hatch;
+use crate::look::opacity;
 use crate::merge::merge;
 use crate::overlay::Overlay;
-use crate::pens::{Styles, style};
+use crate::pens::{Styles, look_of, style};
 
 /// One printed line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,6 +41,9 @@ pub struct Stroke {
     pub colour: Colour,
     /// Its line pattern.
     pub pattern: PatternId,
+    /// How much of full strength it prints at, in whole percent (100 unless its view says halftone
+    /// or transparency).
+    pub opacity: u8,
     /// The element it came from.
     pub element: Id,
     /// What the element's operation calls the face or edge it came from.
@@ -55,6 +59,8 @@ pub struct Hatch {
     pub width: Micrometres,
     /// Their colour: the material's cut colour.
     pub colour: Colour,
+    /// How much of full strength it prints at, in whole percent.
+    pub opacity: u8,
     /// The lines, each from its first point to its second, in view coordinates.
     pub lines: Vec<[ViewPoint; 2]>,
 }
@@ -95,9 +101,39 @@ fn stroke(
         width: pen.width,
         colour: pen.colour,
         pattern: pen.pattern,
+        opacity: look_of(styles, line)?.as_ref().map_or(100, opacity),
         element: line.source.element.clone(),
         role: line.source.role.clone(),
     })
+}
+
+/// What the view draws of `drawing`: with view rules, the lines and regions whose category its
+/// rules show; with none, `drawing` as it is.
+fn shown(drawing: &Drawing, styles: Styles<'_>) -> Result<Option<Drawing>, DrawingError> {
+    let Some(looks) = styles.looks else {
+        return Ok(None);
+    };
+    let mut lines = Vec::new();
+    for line in drawing.lines() {
+        if looks
+            .look(line.category, line.kind)
+            .map_err(DrawingError::Style)?
+            .shown
+        {
+            lines.push(line.clone());
+        }
+    }
+    let mut regions = Vec::new();
+    for region in drawing.regions() {
+        if looks
+            .look(region.category, LineKind::Cut)
+            .map_err(DrawingError::Style)?
+            .shown
+        {
+            regions.push(region.clone());
+        }
+    }
+    Drawing::new(drawing.view(), lines, regions).map(Some)
 }
 
 /// `drawing` ready to print at `scale` with `styles`.
@@ -112,6 +148,8 @@ pub fn picture(
     styles: Styles<'_>,
     scale: Scale,
 ) -> Result<Picture, DrawingError> {
+    let left = shown(drawing, styles)?;
+    let drawing = left.as_ref().unwrap_or(drawing);
     let merged = merge(drawing)?;
     let mut hatches = Vec::new();
     for region in &merged {
@@ -122,13 +160,27 @@ pub fn picture(
             .materials
             .get(id)
             .ok_or_else(|| DrawingError::NoMaterial(id.as_str().to_owned()))?;
-        let Some(fill) = &material.drawing.cut.fill else {
+        // The view's fill for the category, where it has one, in place of the material's.
+        let cut = styles
+            .looks
+            .map(|looks| looks.look(region.category, LineKind::Cut))
+            .transpose()
+            .map_err(DrawingError::Style)?;
+        let over = cut.as_ref().and_then(|look| look.fill.as_ref());
+        let Some(fill) = over.map(|f| f.pattern.as_str()).or_else(|| {
+            material
+                .drawing
+                .cut
+                .fill
+                .as_ref()
+                .map(construct_materials::RefName::as_str)
+        }) else {
             continue;
         };
         let pattern = styles
             .fills
-            .get(fill.as_str())
-            .ok_or_else(|| DrawingError::NoFillPattern(fill.as_str().to_owned()))?;
+            .get(fill)
+            .ok_or_else(|| DrawingError::NoFillPattern(fill.to_owned()))?;
         let lines = hatch(&region.loops, pattern, scale)?;
         if lines.is_empty() {
             continue;
@@ -140,7 +192,8 @@ pub fn picture(
                 .model_pens
                 .width(pattern.pen, scale)
                 .map_err(|why| DrawingError::Style(format!("{why:?}")))?,
-            colour: material.drawing.cut.colour,
+            colour: over.map_or(material.drawing.cut.colour, |f| f.colour),
+            opacity: cut.as_ref().map_or(100, opacity),
             lines,
         });
     }
