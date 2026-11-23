@@ -2,9 +2,10 @@
 //! the builder's suite (construct-regen's `tests/kernel_suite`) on `SolidcoreEngine`, its doors
 //! cut from their walls (one door, a raised opening, a wall with two doors, the cases at the edge
 //! and what the engine does with a face within its tolerance) among them, the whole
-//! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened, and
-//! a document of one edition reported, not rebuilt, by a server of another. Built and run only
-//! with `--features kernel`.
+//! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
+//! layered walls drawn and their types changed through the commands, and a document of one
+//! edition reported, not rebuilt, by a server of another. Built and run only with
+//! `--features kernel`.
 
 #![cfg(feature = "kernel")]
 // The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
@@ -592,4 +593,168 @@ fn every_construct_row_of_the_interim_register_names_a_real_test() {
         seen >= 3,
         "the stand-in and the kernel builder's interim places are listed"
     );
+}
+
+/// A wall type's layers and core as `wall.type.create` and `wall.type.layers` take them: the
+/// partition of construct-walls' defaults, its frame `stud` thick.
+fn partition(stud: &str) -> serde_json::Value {
+    let layer = |function: &str, thickness: &str, material: &str, wraps: bool| {
+        json!({ "function": function, "thickness": thickness, "material": material,
+                "wraps": wraps })
+    };
+    json!({ "core": { "exterior": 1, "interior": 2 }, "layers": [
+        layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+        layer("structure", stud, "timber-douglas-fir", false),
+        layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+    ] })
+}
+
+/// A layered wall as the server stored it, its finest display, and its bounds.
+async fn layered(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> (ShapeView, Vec<FaceName>, ([i64; 3], [i64; 3])) {
+    s.regenerate(project).await.unwrap();
+    let shown = s
+        .shape(&i("anna"), project, model, &i(wall), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { names, bounds, .. } = &shown.built.result else {
+        panic!("{wall} builds: {:?}", shown.built.result);
+    };
+    let (names, bounds) = (names.clone(), (bounds.min, bounds.max));
+    (shown, names, bounds)
+}
+
+/// Through the server's commands on the kernel: two wall types made, a partition with 12.5 mm
+/// linings drawn along x from level 1 to a level of its own and a concrete wall along y of a
+/// height, each built one solid per layer (the display lists each layer's material); a door
+/// hosted on the partition cuts every layer; the top level moved and a layer thickened build the
+/// partition again, writing no wall; undo and redo of the thickening; and the whole model
+/// rebuilt from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-concrete", "name": "Concrete 200", "assembly": {
+            "core": { "exterior": 0, "interior": 1 },
+            "layers": [{ "function": "structure", "thickness": "200 mm",
+                         "material": "concrete-regular" }] } }),
+    )
+    .await;
+    edit(
+        "level.create",
+        json!({ "level": "L-top", "name": "Head", "elevation": "2.7 m", "storey": false }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-900", "type": "wall-partition", "start": ["50 m", "0"],
+                "end": ["54 m", "0"], "level": "1", "top": "L-top" }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-901", "type": "wall-concrete", "start": ["54 m", "0"],
+                "end": ["54 m", "4 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await;
+
+    let (shown, names, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 2700]));
+    let materials: Vec<&str> = shown
+        .display
+        .as_ref()
+        .unwrap()
+        .parts
+        .iter()
+        .map(|part| part.material.as_str())
+        .collect();
+    assert_eq!(
+        materials,
+        [
+            "plasterboard-gypsum",
+            "timber-douglas-fir",
+            "plasterboard-gypsum"
+        ]
+    );
+    for role in ["exterior", "interior", "face.1", "face.2", "end0", "end1"] {
+        assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
+    }
+    let (concrete, _, bounds) = layered(&s, &project, &model, "W-901").await;
+    assert_eq!(bounds, ([53_900, 0, 0], [54_100, 4000, 2700]));
+    assert_eq!(concrete.display.as_ref().unwrap().parts.len(), 1);
+
+    let exterior = names
+        .iter()
+        .find(|n| n.role == "exterior")
+        .unwrap()
+        .name
+        .clone();
+    edit(
+        "hosted.place",
+        json!({ "element": "D-1", "host": "W-900", "face": exterior, "along": "1200 mm",
+                "recipe": kernel_suite::door_of(900, 2100, "x") }),
+    )
+    .await;
+    let (_, names, _) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(D-1).head",
+            "tool(D-1).jamb.end",
+            "tool(D-1).jamb.start"
+        ]
+    );
+    let wall = s
+        .shape(&anna, &project, &model, &i("W-900"), None)
+        .await
+        .unwrap()
+        .built
+        .input;
+
+    edit(
+        "level.elevation",
+        json!({ "level": "L-top", "elevation": "3 m" }),
+    )
+    .await;
+    let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    edit(
+        "wall.type.layers",
+        json!({ "type": "wall-partition", "assembly": partition("140 mm") }),
+    )
+    .await;
+    let (thicker, names, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -83, 0], [54_000, 83, 3000]));
+    assert_eq!(thicker.built.input, wall, "no wall was written");
+    assert_eq!(cut_roles(&names).len(), 3, "the door still cuts it");
+    edit("edit.undo", json!({})).await;
+    let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    edit("edit.redo", json!({})).await;
+    let (again, _, _) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(again.built.result, thicker.built.result);
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
 }

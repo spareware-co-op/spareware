@@ -976,3 +976,111 @@ async fn every_stored_shape_matches_its_recipe_after_the_seed() {
     );
     assert_eq!(regen.verify(&i("example-1")).await.unwrap(), 31);
 }
+
+/// The partition and the plain concrete wall of construct-walls' defaults, as `wall.type.create`
+/// takes them: layers from the exterior face, each thickness typed text.
+fn wall_types() -> [Value; 2] {
+    let layer = |function: &str, thickness: &str, material: &str, wraps: bool| {
+        json!({ "function": function, "thickness": thickness, "material": material,
+                "wraps": wraps })
+    };
+    [
+        json!({ "type": "wall-partition", "name": "Partition, 90 stud",
+                "assembly": { "core": { "exterior": 1, "interior": 2 }, "layers": [
+                    layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+                    layer("structure", "90 mm", "timber-douglas-fir", false),
+                    layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+                ] } }),
+        json!({ "type": "wall-concrete", "name": "Concrete 200",
+                "assembly": { "core": { "exterior": 0, "interior": 1 }, "layers": [
+                    layer("structure", "200 mm", "concrete-regular", false),
+                ] } }),
+    ]
+}
+
+/// A wall's built bounds, after the server has caught up.
+async fn wall_bounds(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> ([i64; 3], [i64; 3]) {
+    s.regenerate(project).await.unwrap();
+    let shown = s
+        .shape(&i("anna"), project, model, &i(wall), None)
+        .await
+        .unwrap();
+    match shown.built.result {
+        BuiltResult::Shape { bounds, .. } => (bounds.min, bounds.max),
+        failed @ BuiltResult::Failed { .. } => panic!("{wall}: {failed:?}"),
+    }
+}
+
+/// Through the server's commands on the stand-in: wall types made, a layered wall drawn between
+/// two points of one, from level 1 to level 2, built as one box of the type's thickness; a door
+/// hosted on it; a change to its type's layers builds it again, and undo and redo take that back
+/// and forth; a person off the team can't draw one; every stored shape matches its recipe.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_layered_wall_drawn_by_command_is_built_from_its_type() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    for ty in wall_types() {
+        s.edit(&anna, &project, &model, "wall.type.create", ty)
+            .await
+            .unwrap();
+    }
+    let draw = json!({ "element": "W-900", "type": "wall-partition", "start": ["50 m", "0"],
+                       "end": ["54 m", "0"], "level": "1", "top": "2" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "wall.draw", draw.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "wall.draw", draw)
+        .await
+        .unwrap();
+    assert_eq!(
+        wall_bounds(s, &project, &model, "W-900").await,
+        ([50_000, -58, 0], [54_000, 58, 3000])
+    );
+    let door = json!({ "element": "D-900", "host": "W-900", "face": "box.exterior",
+                       "along": "1200 mm",
+                       "recipe": { "owner": "construct", "schema": 1, "op": "door.single",
+                                   "op_version": 1,
+                                   "args": { "width": 900, "thickness": 100, "height": 2100 } } });
+    s.edit(&anna, &project, &model, "hosted.place", door)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+    let hosted = s
+        .shape(&anna, &project, &model, &i("D-900"), None)
+        .await
+        .unwrap();
+    assert!(matches!(hosted.built.result, BuiltResult::Shape { .. }));
+
+    let concrete = wall_types()[1]["assembly"].clone();
+    let layers = json!({ "type": "wall-partition", "assembly": concrete });
+    s.edit(&anna, &project, &model, "wall.type.layers", layers)
+        .await
+        .unwrap();
+    let thick = ([50_000, -100, 0], [54_000, 100, 3000]);
+    assert_eq!(wall_bounds(s, &project, &model, "W-900").await, thick);
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        wall_bounds(s, &project, &model, "W-900").await,
+        ([50_000, -58, 0], [54_000, 58, 3000])
+    );
+    s.edit(&anna, &project, &model, "edit.redo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(wall_bounds(s, &project, &model, "W-900").await, thick);
+
+    let regen = construct_regen::regenerator::Regenerator::new(
+        stack.store.clone(),
+        stack.files.clone(),
+        construct_regen::geometry(),
+    );
+    assert_eq!(regen.verify(&project).await.unwrap(), 33);
+}
