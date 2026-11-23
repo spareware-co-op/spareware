@@ -209,6 +209,16 @@ fn a_rectangle_floor_is_its_layers() {
     kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
 }
 
+#[test]
+fn an_opening_in_a_wall_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_wall_is_refused_by_name(|| Cuboids);
+}
+
+#[test]
+fn an_opening_in_a_floor_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_floor_is_refused_by_name(|| Cuboids);
+}
+
 /// A test engine that answers as [`Cuboids`] does, and records every subtraction it is asked for
 /// by the tool's lowest corner, answering it with the target unchanged: it judges what the builder
 /// asks and names, not the shape a cut gives.

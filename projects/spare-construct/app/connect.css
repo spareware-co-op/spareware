@@ -61,6 +61,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .stack-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; padding: 4px 0; }
 .stack-manage .note.bad { margin-top: 6px; }
 
+/* An opening or a shaft: the rectangle or outline it cuts, a quiet tint over what it cuts so it can be picked; the rectangle being drawn. */
+.dw .void { fill: var(--sink); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 1px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; }
+.dw .void.shaft { stroke: var(--ink); }
+.dw .void.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .void.sketch { fill-opacity: .15; pointer-events: none; }
 /* The server's drawing of the open view sits under the live elements. While it is there a wall
    draws no fill or outline of its own (it stays in the plan, transparent, so a click still picks
    it; a selected wall keeps its highlight). */

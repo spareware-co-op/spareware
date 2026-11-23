@@ -159,6 +159,26 @@ fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
 }
 
 #[test]
+fn an_opening_cuts_every_layer_of_a_layered_wall() {
+    kernel_suite::an_opening_cuts_every_layer_of_a_layered_wall(engine);
+}
+
+#[test]
+fn an_opening_in_a_wall_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_wall_is_refused_by_name(engine);
+}
+
+#[test]
+fn openings_and_a_shaft_cut_every_layer_of_a_floor() {
+    kernel_suite::openings_and_a_shaft_cut_every_layer_of_a_floor(engine);
+}
+
+#[test]
+fn an_opening_in_a_floor_is_refused_by_name() {
+    kernel_suite::an_opening_in_a_floor_is_refused_by_name(engine);
+}
+
+#[test]
 fn a_family_cuts_every_layer_and_stands_in_its_opening() {
     kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
 }

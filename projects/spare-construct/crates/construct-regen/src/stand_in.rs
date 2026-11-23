@@ -32,6 +32,9 @@
 //! the frame on either edition. Its recipe comes from the library baked in at build time, the
 //! source the browser has too (interim until job 7.6). Its body is the box around them all.
 //!
+//! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
+//! the kernel's edition, with no solid and no face.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
@@ -666,6 +669,9 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if construct_openings::is_void(recipe) {
+        return Ok(Vec::new());
+    }
     if families::is_instance(recipe) {
         Instance::of(recipe)?;
         return Ok(Vec::new());
@@ -804,6 +810,9 @@ impl Geometry for Boxes {
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         if let Some(datum) = crate::datum::build(recipe) {
             return datum;
+        }
+        if let Some(void) = crate::voids::build(recipe) {
+            return void;
         }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);

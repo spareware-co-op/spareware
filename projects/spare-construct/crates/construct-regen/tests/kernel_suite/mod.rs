@@ -10,7 +10,11 @@
 //! wall with doors hosted in it, centred on its thickness as the seed places them (50 mm proud of
 //! each side): one door to the floor, a raised opening, two doors, and the cases at the edge. The
 //! cases that cut need an engine that subtracts; the refusals and the names do not reach the
-//! engine's subtraction, so a test engine that only extrudes runs them too.
+//! engine's subtraction, so a test engine that only extrudes runs them too. Openings and shafts
+//! (job 4.2): a plain opening cut through every layer of a layered wall beside a door, a floor
+//! opening and a shaft cut through every layer of a floor, each with its volume exact, and every
+//! refusal of either in its words; the cuts need an engine that subtracts and extrudes a profile
+//! with holes, the refusals do not.
 //!
 //! Placed families (job 6.4): the library's single-swing door (`d900x2100`) and fixed window
 //! (`w1200x1200`) in a three-layer wall of whole-millimetre faces, each layer losing exactly the
@@ -2047,4 +2051,342 @@ pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 's
         .unwrap_err();
     assert_eq!(hosts.code, "NotAHost");
     assert_eq!(k.build(&unnamed).unwrap_err().code, "FamilyType");
+}
+
+/// A plain opening through a wall (construct-openings' `opening.wall`): `width` by `height`
+/// millimetres, its wall along `axis`, its lengths stored exactly.
+pub fn plain_opening(width: i64, height: i64, axis: &str) -> Recipe {
+    recipe(
+        "opening.wall",
+        json!({ "width": q0(width * 6400), "height": q0(height * 6400), "axis": axis }),
+    )
+}
+
+/// An outline of corners in whole millimetres, stored in grid steps.
+pub fn outline_mm(corners: &[[i64; 2]]) -> Value {
+    Value::Array(
+        corners
+            .iter()
+            .map(|&[x, y]| json!([x * 6400, y * 6400]))
+            .collect(),
+    )
+}
+
+/// The rectangle from `(x0, y0)` to `(x1, y1)` millimetres, anticlockwise.
+pub fn square_mm(x0: i64, y0: i64, x1: i64, y1: i64) -> Vec<[i64; 2]> {
+    vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+}
+
+/// A floor opening (`opening.floor`) of `corners` millimetres in its floor's frame.
+pub fn floor_opening(corners: &[[i64; 2]]) -> Recipe {
+    recipe("opening.floor", json!({ "outline": outline_mm(corners) }))
+}
+
+/// A shaft (`shaft`) of `corners` millimetres from its place, its height filled: `height` mm.
+pub fn shaft(corners: &[[i64; 2]], height: i64) -> Recipe {
+    recipe(
+        "shaft",
+        json!({ "outline": outline_mm(corners), "height": q0(height * 6400) }),
+    )
+}
+
+/// An 8 m by 6 m floor, its edges `e0` to `e3` anticlockwise from the origin.
+pub const BIG: [(&str, i64, i64); 4] = [
+    ("e0", 0, 0),
+    ("e1", 8000, 0),
+    ("e2", 8000, 6000),
+    ("e3", 0, 6000),
+];
+
+/// A plain opening cuts every layer of a layered wall on the door's own path: each layer's part
+/// is closed and holds its layer less the opening, exactly for the 90 mm stud layer (4000 by 2700
+/// less 1200 by 1000, by 90: 864,000,000 mm3) and within the engine's tolerance for the two
+/// boards whose faces are rounded; its four faces, a sill too, are named by the opening's key,
+/// the body records its cutter, and a door beside it is cut as well. Along x and along y.
+pub fn an_opening_cuts_every_layer_of_a_layered_wall<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    for axis in ["x", "y"] {
+        let wall = partition(axis);
+        let plain = built(&k, &wall);
+        let opening = plain_opening(1200, 1000, axis);
+        let door = door_of(900, 2100, axis);
+        let (window_at, door_at) = if axis == "y" {
+            ([0, 1000, 900], [-150, 2700, 0])
+        } else {
+            ([1000, 0, 900], [2700, -150, 0])
+        };
+        let cut = hosting(
+            &k,
+            &wall,
+            &[
+                hosted("O-1", &opening, at(&k, window_at)),
+                hosted("D-1", &door, at(&k, door_at)),
+            ],
+        );
+        assert_eq!(cut.bounds, plain.bounds, "{axis}");
+        let fine = &cut.displays[0];
+        assert_eq!(fine.parts.len(), 3);
+        for (at, thick) in [(0, 13), (1, 90), (2, 13)] {
+            let (whole, surface) = box_of([4000, thick, 2700]);
+            let less = 6 * thick * (1200 * 1000 + 900 * 2100);
+            let reveals = 2 * thick * (1200 + 1000) + 2 * thick * (900 + 2100);
+            holds(&k, &part_mesh(fine, at), whole - less, surface + reveals);
+        }
+        assert_eq!(
+            closed_mesh_six_volume(&part_mesh(fine, 1)),
+            6 * (4000 * 2700 - 1200 * 1000 - 900 * 2100) * 90,
+            "{axis}: the stud layer, exactly"
+        );
+        let named = by_role(&cut);
+        for role in [
+            "tool(O-1).jamb.start",
+            "tool(O-1).jamb.end",
+            "tool(O-1).head",
+            "tool(O-1).sill",
+            "tool(D-1).head",
+        ] {
+            assert!(named.contains_key(role), "{axis}: {role}");
+        }
+        let body: Value = serde_json::from_slice(&cut.body).unwrap();
+        let keys: Vec<&str> = body["subtract"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["key"].as_str().unwrap())
+            .collect();
+        assert_eq!(keys, ["D-1", "O-1"]);
+    }
+}
+
+/// A plain opening is refused in a wall as a door is, before the engine is asked, naming the
+/// opening, and `fits` says the same word for word: wholly outside the wall, across its end, its
+/// head above the wall's top, overlapping a door, across its wall's axis, in a wall at an angle.
+pub fn an_opening_in_a_wall_is_refused_by_name<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    type Case<'a> = (&'a str, &'a Recipe, Vec<Hosted<'a>>, &'a str, &'a str);
+    let k = kernel(make());
+    let wall = partition("x");
+    let opening = plain_opening(1200, 1000, "x");
+    let across = plain_opening(1200, 1000, "y");
+    let door = door();
+    let angled = layered_wall([0, 0], [2400, 3200], 2700, &PARTITION);
+    let mm = |x: i64, z: i64| at(&k, [x, 0, z]);
+    let one = |recipe, at| vec![hosted("O-1", recipe, at)];
+    let cases: Vec<Case<'_>> = vec![
+        (
+            "beyond its end",
+            &wall,
+            one(&opening, mm(5000, 900)),
+            "OpeningOutsideHost",
+            "opening O-1: it lies outside its wall: an opening is cut inside the wall that hosts it",
+        ),
+        (
+            "across its end",
+            &wall,
+            one(&opening, mm(3500, 900)),
+            "OpeningPastEnd",
+            "opening O-1: it crosses the wall's end",
+        ),
+        (
+            "its head above the top",
+            &wall,
+            one(&opening, mm(1000, 2000)),
+            "OpeningTooTall",
+            "opening O-1: its head is at or above the wall's top, which leaves no wall over it",
+        ),
+        (
+            "over a door",
+            &wall,
+            vec![
+                hosted("O-1", &opening, mm(1000, 900)),
+                hosted("D-1", &door, at(&k, [1500, -150, 0])),
+            ],
+            "OpeningsOverlap",
+            "door D-1 and opening O-1: their openings overlap",
+        ),
+        (
+            "across its wall",
+            &wall,
+            one(&across, mm(1000, 900)),
+            "OpeningAcrossWall",
+            "opening O-1: it does not run along its wall's axis",
+        ),
+        (
+            "at an angle",
+            &angled,
+            one(&opening, mm(1000, 900)),
+            "NotAHost",
+            "opening O-1: a door or an opening is hosted only on a wall along x or y until doors \
+             are families; this wall runs at an angle",
+        ),
+    ];
+    let edition = k.edition();
+    for (case, host, hosted, code, words) in &cases {
+        let error = k.build_hosting(host, hosted).expect_err(case);
+        assert_eq!(&error.code, code, "{case}: {}", error.message);
+        assert_eq!(error.message, *words, "{case}");
+        let placed: Vec<construct_model::geometry::Hosted<'_>> = hosted
+            .iter()
+            .map(|h| construct_model::geometry::Hosted {
+                key: h.key,
+                recipe: h.recipe,
+                at: construct_model::element::Placement {
+                    x: k.units().millimetres(h.at.x.get()).unwrap(),
+                    y: k.units().millimetres(h.at.y.get()).unwrap(),
+                    z: k.units().millimetres(h.at.z.get()).unwrap(),
+                },
+            })
+            .collect();
+        let said = construct_regen::kernel::fits(&edition, host, &placed).expect_err(case);
+        assert_eq!(said, error, "{case}: fits says what building says");
+    }
+}
+
+/// A floor opening and a shaft cut every layer of a floor, through the floor's own profile: each
+/// layer's part is closed and holds, exactly, the floor's 48 m2 less the opening's 1 m2 and the
+/// shaft's 1.8 m2, by its thickness (50 and 150 mm); a shaft beside the floor in plan passes it
+/// by; the cuts' sides are named by their keys; the body lists the cuts in key order and each
+/// layer's holes; the same model in another order gives the same bytes.
+pub fn openings_and_a_shaft_cut_every_layer_of_a_floor<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let floor = floor_of(&[&BIG], &[("finish", 50), ("structure", 150)]);
+    let hole = floor_opening(&square_mm(1000, 1000, 2000, 2000));
+    let lift = shaft(&square_mm(0, 0, 1200, 1500), 9000);
+    let beside = shaft(&square_mm(0, 0, 1000, 1000), 9000);
+    let cuts = [
+        hosted("S-1", &lift, at(&k, [4000, 2000, 0])),
+        hosted("O-1", &hole, at(&k, [0, 0, 0])),
+        hosted("S-0", &beside, at(&k, [20_000, 0, 0])),
+    ];
+    let cut = hosting(&k, &floor, &cuts);
+    let area = 8000 * 6000 - 1000 * 1000 - 1200 * 1500;
+    assert_eq!(area, 45_200_000);
+    let fine = &cut.displays[0];
+    assert_eq!(fine.parts.len(), 2);
+    for (at, thick) in [(0, 50), (1, 150)] {
+        let layer = part_mesh(fine, at);
+        assert_eq!(
+            closed_mesh_six_volume(&layer),
+            6 * area * thick,
+            "layer {at}"
+        );
+    }
+    assert_eq!(signed_six_volume(&fine.mesh), 6 * area * 200);
+    let named = by_role(&cut);
+    for key in ["O-1", "S-1"] {
+        for side in 0..4 {
+            assert!(
+                named.contains_key(&format!("tool({key}).side.{side}")),
+                "{key} {side}"
+            );
+        }
+    }
+    assert!(!named.keys().any(|r| r.contains("S-0")));
+    let body: Value = serde_json::from_slice(&cut.body).unwrap();
+    assert_eq!(body["cut"], json!(["O-1", "S-1"]));
+    assert_eq!(body["layers"][1]["holes"].as_array().unwrap().len(), 2);
+    let mut backwards = cuts;
+    backwards.reverse();
+    let again = hosting(&kernel(make()), &floor, &backwards);
+    assert_eq!(again.body_id(), cut.body_id());
+    assert_eq!(again.names, cut.names);
+    assert_eq!(again.displays[0].bytes(), cut.displays[0].bytes());
+}
+
+/// Each floor opening or shaft a floor cannot take is refused before the engine is asked, naming
+/// the element and why, and `fits` says the same: an opening outside its floor, one across its
+/// edge, two overlapping, one over the floor's own hole, a curved outline, an outline crossing
+/// itself, a shaft taking the whole floor, a door hosted on a floor.
+pub fn an_opening_in_a_floor_is_refused_by_name<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    type Case<'a> = (&'a str, Vec<Hosted<'a>>, &'a str, &'a str);
+    let k = kernel(make());
+    let floor = floor_of(&[&L_OUTER, &L_HOLE], &[("structure", 200)]);
+    let outside = floor_opening(&square_mm(9000, 0, 9500, 500));
+    let across = floor_opening(&square_mm(7500, 500, 8500, 1500));
+    let first = floor_opening(&square_mm(4500, 500, 5500, 1500));
+    let second = floor_opening(&square_mm(5000, 1000, 6000, 2000));
+    let over = floor_opening(&square_mm(2500, 2500, 3500, 3500));
+    let curved = recipe(
+        "opening.floor",
+        json!({ "outline": [[0, 0], { "arc": [6400, 6400] }, [0, 6400]] }),
+    );
+    let bow = floor_opening(&[[4500, 500], [5500, 1500], [5500, 500], [4500, 1500]]);
+    let round = shaft(&square_mm(-1000, -1000, 9000, 9000), 9000);
+    let door = door();
+    let zero = at(&k, [0, 0, 0]);
+    let one = |key, recipe| vec![hosted(key, recipe, zero)];
+    let cases: Vec<Case<'_>> = vec![
+        (
+            "outside",
+            one("O-1", &outside),
+            "OpeningOutsideHost",
+            "opening O-1 lies outside its floor: an opening is cut wholly inside the floor it is in",
+        ),
+        (
+            "across its edge",
+            one("O-1", &across),
+            "OpeningAcrossEdge",
+            "opening O-1 crosses or touches the edge of its floor: it must lie wholly inside the \
+             floor, clear of its edge",
+        ),
+        (
+            "overlapping",
+            vec![hosted("O-2", &second, zero), hosted("O-1", &first, zero)],
+            "OpeningsOverlap",
+            "opening O-1 and opening O-2 overlap or touch; move one clear of the other",
+        ),
+        (
+            "over its hole",
+            one("O-1", &over),
+            "OpeningOverHole",
+            "opening O-1 overlaps or touches a hole of its floor's own boundary; move it clear of \
+             the hole",
+        ),
+        (
+            "curved",
+            one("O-1", &curved),
+            "CurvedOutline",
+            "opening O-1: its outline has a curved edge, and a curved opening cannot be cut \
+             exactly yet: draw it with straight edges",
+        ),
+        (
+            "crossing itself",
+            one("O-1", &bow),
+            "OutlineCrossesItself",
+            "opening O-1: its outline crosses or touches itself; draw it as one loop that does not",
+        ),
+        (
+            "round the floor",
+            one("S-1", &round),
+            "ShaftTakesFloor",
+            "shaft S-1 takes the whole of its floor: a shaft cuts a hole in a floor, not the floor \
+             away",
+        ),
+        (
+            "a door",
+            one("D-1", &door),
+            "NotAnOpening",
+            "door D-1: a door.single is not cut through a floor; only an opening.floor or a shaft \
+             is",
+        ),
+    ];
+    let edition = k.edition();
+    for (case, hosted, code, words) in &cases {
+        let error = k.build_hosting(&floor, hosted).expect_err(case);
+        assert_eq!(&error.code, code, "{case}: {}", error.message);
+        assert_eq!(error.message, *words, "{case}");
+        let placed: Vec<construct_model::geometry::Hosted<'_>> = hosted
+            .iter()
+            .map(|h| construct_model::geometry::Hosted {
+                key: h.key,
+                recipe: h.recipe,
+                at: construct_model::element::Placement { x: 0, y: 0, z: 0 },
+            })
+            .collect();
+        let said = construct_regen::kernel::fits(&edition, &floor, &placed).expect_err(case);
+        assert_eq!(said, error, "{case}: fits says what building says");
+    }
 }

@@ -21,6 +21,7 @@ cloud = [
     "dep:construct-walls",
     "dep:construct-materials",
     "dep:construct-slabs",
+    "dep:construct-openings",
     "dep:construct-roofs",
     "dep:construct-phases",
 ]
@@ -51,6 +52,8 @@ construct-walls = { path = "../construct-walls", optional = true }
 construct-materials = { path = "../construct-materials", optional = true }
 # The floor type and floor commands: construct-slabs checks every layer and boundary.
 construct-slabs = { path = "../construct-slabs", optional = true }
+# The opening and shaft commands: construct-openings checks every outline and fit.
+construct-openings = { path = "../construct-openings", optional = true }
 # The roof type and roof commands: construct-roofs checks every footprint, form, pitch and overhang.
 construct-roofs = { path = "../construct-roofs", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.

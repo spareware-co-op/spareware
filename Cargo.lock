@@ -520,6 +520,7 @@ dependencies = [
  "construct-levels",
  "construct-materials",
  "construct-model",
+ "construct-openings",
  "construct-params",
  "construct-phases",
  "construct-regen",
@@ -685,6 +686,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-openings"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-slabs",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-params"
 version = "0.0.0"
 dependencies = [
@@ -725,6 +741,7 @@ dependencies = [
  "construct-levels",
  "construct-materials",
  "construct-model",
+ "construct-openings",
  "construct-params",
  "construct-regen",
  "construct-roofs",

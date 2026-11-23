@@ -105,6 +105,10 @@ pub struct FilledView {
     /// Why it doesn't, as a build failure: `code` and `message`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failed: Option<Value>,
+    /// For a floor, what cuts it: the outline of each opening and shaft, and the shafts as its
+    /// builder is handed them ([`cloud::openings::FloorCuts`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut_by: Option<cloud::openings::FloorCuts>,
 }
 
 const NO_DRAWER: &str =
@@ -575,7 +579,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
 
     /// What the page shows of an element: its category, its type, and its parameters with the
     /// values it reads and where each came from, shown in units. The same reader the commands
-    /// check against and the regenerator builds from (`construct_regen::parameters`).
+    /// check against and the regenerator builds from (`construct_regen::parameters`). A floor's
+    /// area, volume and mass are those after the openings and shafts that cut it
+    /// ([`cloud::openings::floor_cuts`]).
     ///
     /// # Errors
     ///
@@ -607,7 +613,15 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     .map_err(Refusal::Bad)?,
             ),
         };
-        context.view(&record, ty.as_ref()).map_err(Refusal::Bad)
+        // A floor reads back its area, volume and mass after the openings and shafts that cut it.
+        let cuts = if construct_regen::floor_plan::is_floor(&record.recipe) {
+            cloud::openings::floor_cuts(&mut snapshot, project, model, &record).await?
+        } else {
+            Vec::new()
+        };
+        context
+            .view_cut(&record, ty.as_ref(), &cuts)
+            .map_err(Refusal::Bad)
     }
 
     /// The kinds of parameter and the categories of a model, for the page's lists: read from the
@@ -809,15 +823,27 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let at = records::At::Now;
         Ok(
             match levels::recipe_at(&mut snapshot, project, model, &record, at).await? {
-                Ok(recipe) => FilledView {
-                    head,
-                    recipe: Some(recipe),
-                    failed: None,
-                },
+                Ok(recipe) => {
+                    let cut_by = if construct_regen::floor_plan::is_floor(&record.recipe) {
+                        Some(
+                            cloud::openings::floor_view(&mut snapshot, project, model, &record)
+                                .await?,
+                        )
+                    } else {
+                        None
+                    };
+                    FilledView {
+                        head,
+                        recipe: Some(recipe),
+                        failed: None,
+                        cut_by,
+                    }
+                }
                 Err(failed) => FilledView {
                     head,
                     recipe: None,
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
+                    cut_by: None,
                 },
             },
         )
