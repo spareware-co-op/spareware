@@ -107,7 +107,8 @@ async fn every_log_replays_after_the_seed() {
     let check = verify_log(&mut snapshot, &Scope::Project(i("example-1")))
         .await
         .unwrap();
-    assert_eq!(check.pieces, 31);
+    // The elements, and arch-model's three wall types and its parameter table.
+    assert_eq!(check.pieces, 35);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -377,11 +378,21 @@ async fn the_page_reads_kinds_categories_parameters_and_types_to_manage_them() {
     s.edit(&anna, &project, &model, "parameter.define", width)
         .await
         .unwrap();
+    // The seed's wall types defined the two wall parameters beside it.
+    let named = |table: &Value, name: &str| {
+        table["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == name)
+            .unwrap()
+            .clone()
+    };
     let table =
         serde_json::to_value(s.project_parameters(&anna, &project, &model).await.unwrap()).unwrap();
-    assert_eq!(table["parameters"][0]["name"], "Leaf width");
+    assert_eq!(table["parameters"].as_array().unwrap().len(), 3);
     assert_eq!(
-        table["parameters"][0]["categories"],
+        named(&table, "Leaf width")["categories"],
         json!([]),
         "defined, bound nowhere"
     );
@@ -391,7 +402,7 @@ async fn the_page_reads_kinds_categories_parameters_and_types_to_manage_them() {
         .unwrap();
     let table =
         serde_json::to_value(s.project_parameters(&anna, &project, &model).await.unwrap()).unwrap();
-    let leaf = &table["parameters"][0];
+    let leaf = &named(&table, "Leaf width");
     assert_eq!(leaf["holder"], "type");
     assert_eq!(leaf["default"], "900 mm");
     assert_eq!(leaf["categories"], json!([{ "id": 300, "name": "Doors" }]));
@@ -415,16 +426,16 @@ async fn the_page_reads_kinds_categories_parameters_and_types_to_manage_them() {
     assert_eq!(flush["elements"], 1);
     assert_eq!(flush["parameters"][0]["shown"], "2400 mm");
     assert_eq!(flush["parameters"][0]["from"], "type");
-    // Another category has no types; every type is listed when none is asked for.
+    // Walls has the seed's three wall types; every type is listed when none is asked for.
     let walls = s.types(&anna, &project, &model, Some(100)).await.unwrap();
-    assert_eq!(walls.types.len(), 0);
+    assert_eq!(walls.types.len(), 3);
     assert_eq!(
         s.types(&anna, &project, &model, None)
             .await
             .unwrap()
             .types
             .len(),
-        1
+        4
     );
 
     // A delete that is refused says so in the server's words; the page shows them as they are.
@@ -507,7 +518,8 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
                 "Level 2".to_owned(),
                 "3000 mm".to_owned(),
                 true,
-                9
+                // Its nine elements, and the tops of Level 1's five walls.
+                14
             ),
         ]
     );
@@ -530,7 +542,7 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
                 "First floor".to_owned(),
                 "3000 mm".to_owned(),
                 false,
-                9
+                14
             ),
             (
                 "L-roof".to_owned(),
@@ -1056,7 +1068,7 @@ fn wall_types() -> [Value; 2] {
                     layer("structure", "90 mm", "timber-douglas-fir", false),
                     layer("finish", "12.5 mm", "plasterboard-gypsum", true),
                 ] } }),
-        json!({ "type": "wall-concrete", "name": "Concrete 200",
+        json!({ "type": "wall-concrete", "name": "Plain concrete 200",
                 "assembly": { "core": { "exterior": 0, "interior": 1 }, "layers": [
                     layer("structure", "200 mm", "concrete-regular", false),
                 ] } }),
@@ -1271,4 +1283,114 @@ async fn a_floor_drawn_by_command_shows_its_quantities_in_units() {
         .await
         .unwrap();
     assert_eq!(quantities(s, &project, &model, "F-900").await, read);
+}
+
+/// The seed draws its walls as a person does, layered walls of construct-walls' default types made
+/// through the log, and writes no old box wall. The page reads a model's wall types with their
+/// layers, the materials and the defaults, and an element's recipe filled as it is built, with how
+/// far the log had got; the stand-in's displays draw each layer as a part. Someone off the team
+/// reads neither.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_seeds_walls_are_layered_and_the_page_reads_their_types_and_filled_recipes() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let types = s.wall_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "wall-brick-veneer-90",
+            "wall-concrete-200",
+            "wall-partition-stud-90"
+        ]
+    );
+    assert_eq!(types.defaults.len(), 3);
+    assert!(types.materials.iter().any(|m| m.id == "timber-douglas-fir"));
+    assert!(refused(s.wall_types(&dan, &project, &model).await));
+
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let head: u64 = kit_store::read_row(&mut snapshot, &Scope::Project(project.clone()).head())
+        .await
+        .unwrap()
+        .unwrap();
+    for wall in ["W-101", "W-105", "W-201"] {
+        let shown = s
+            .shape(&anna, &project, &model, &i(wall), Some(0))
+            .await
+            .unwrap();
+        let record = s
+            .record(&anna, &project, &model, &shown.built.input)
+            .await
+            .unwrap();
+        assert_eq!(record.recipe.op, "wall.layered", "{wall}");
+        assert_eq!(record.recipe.args["layers"], json!({ "wall": "type" }));
+        let filled = s.filled(&anna, &project, &model, &i(wall)).await.unwrap();
+        assert!(filled.head >= head && filled.failed.is_none(), "{wall}");
+        let recipe = filled.recipe.unwrap();
+        let layers = recipe.args["layers"].as_array().unwrap();
+        let parts = &shown.display.as_ref().unwrap().parts;
+        let materials: Vec<&str> = parts.iter().map(|p| p.material.as_str()).collect();
+        if wall == "W-105" {
+            assert_eq!(layers.len(), 3);
+            assert_eq!(
+                materials,
+                [
+                    "plasterboard-gypsum",
+                    "timber-douglas-fir",
+                    "plasterboard-gypsum"
+                ]
+            );
+        } else {
+            // The wrap has no thickness, so it is a layer and no part.
+            assert_eq!(layers.len(), 5);
+            assert_eq!(
+                materials,
+                [
+                    "brick-clay",
+                    "air-dry",
+                    "timber-douglas-fir",
+                    "plasterboard-gypsum"
+                ]
+            );
+        }
+        assert!(recipe.args["height"].is_string(), "the top tie is filled");
+    }
+    // The bottom wall runs along x on its line 100 mm in, 250 mm thick about it, from level 1 to 2.
+    let BuiltResult::Shape { bounds, .. } = s
+        .shape(&anna, &project, &model, &i("W-101"), None)
+        .await
+        .unwrap()
+        .built
+        .result
+    else {
+        panic!("W-101 builds");
+    };
+    assert_eq!(
+        (bounds.min, bounds.max),
+        ([-25, -25, 0], [12_025, 225, 3000])
+    );
+    // A door's recipe reads nothing, so it is as stored.
+    let door = s
+        .filled(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    assert_eq!(door.recipe.unwrap().op, "door.single");
+    assert!(refused(s.filled(&dan, &project, &model, &i("W-101")).await));
+    assert!(matches!(
+        s.filled(&anna, &project, &model, &i("W-999")).await,
+        Err(Refusal::NotFound)
+    ));
+    // The seed writes no old box wall.
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    for project in ["example-1", "riverside"] {
+        let log = read_log(&mut snapshot, &Scope::Project(i(project)), 0, u64::MAX - 1)
+            .await
+            .unwrap();
+        assert!(
+            !log.iter()
+                .any(|entry| entry.args.to_string().contains("wall.straight")),
+            "{project}"
+        );
+    }
 }

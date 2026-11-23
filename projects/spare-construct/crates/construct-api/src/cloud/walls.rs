@@ -41,14 +41,19 @@
 //! would refuse, in their words.
 //!
 //! Typed text is read with construct-params' metric display settings until a project keeps its
-//! own. Later, with their places: changing a drawn wall's ends and its location line (the page's
-//! wall tool, beside `wall.draw`); a person's default wall types seeded into a new document.
+//! own. Later, with its place: changing a drawn wall's ends, its location line and its side (a
+//! command beside `wall.draw`).
+//!
+//! For the page and the seed, without the log: [`default_type_args`], the `wall.type.create`
+//! arguments of construct-walls' default wall types, which the page sends where a document has no
+//! wall types and the seed sends for its models; and [`read_wall_types`], a document's wall types
+//! with their layers as these commands take them, and the materials the layers are drawn in.
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{levels, params};
 use construct_categories::WALLS;
 use construct_levels::{Length, Tie, parse_length, write_base, write_top};
-use construct_materials::MaterialId;
+use construct_materials::{MaterialId, Materials};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
 use construct_params::{ProjectParams, Units, Value};
@@ -58,14 +63,14 @@ use construct_regen::wall_plan::{self, Layered};
 use construct_regen::walls::type_arg;
 use construct_types::{ElementType, Instance, TypeError, Types};
 use construct_walls::{
-    Assembly, FLIPPED, Function, LOCATION_LINE, Layer, LocationLine, WallError, assembly_of,
-    location_line_value, new_wall_type, parameter_definitions, with_assembly,
+    Assembly, FLIPPED, Function, LOCATION_LINE, Layer, LocationLine, Side, WallError, assembly_of,
+    default_walls, location_line_value, new_wall_type, parameter_definitions, with_assembly,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, ClaimChange, Edit};
-use kit_store::{Place, StoreError, Txn, read_row, to_row};
+use kit_store::{Place, Reader, StoreError, Txn, read_row, to_row};
 use kit_sync::{Applied, Context as Ordered, Outcome, claims};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
@@ -699,4 +704,150 @@ fn own_values(
             .map_err(why)?;
     }
     Ok(instance.to_props())
+}
+
+/// A wall type's layers and core as `wall.type.create` and `wall.type.layers` take them: from the
+/// exterior face, each thickness as typed text that reads back exactly.
+#[must_use]
+pub fn assembly_args(assembly: &Assembly) -> serde_json::Value {
+    let layers: Vec<serde_json::Value> = assembly
+        .layers()
+        .iter()
+        .map(|layer| {
+            json!({ "function": layer.function, "thickness": layer.thickness.to_string(),
+                    "material": layer.material.as_str(), "wraps": layer.wraps })
+        })
+        .collect();
+    json!({
+        "core": {
+            "exterior": assembly.boundary(Side::Exterior),
+            "interior": assembly.boundary(Side::Interior),
+        },
+        "layers": layers,
+    })
+}
+
+/// The `wall.type.create` arguments that make construct-walls' default wall types, in their order,
+/// each under its permanent ID: what the seed sends for its models, and what the page sends where a
+/// document has no wall types, so that both go through the log.
+///
+/// # Errors
+/// None for this fixed data; construct-walls checks each layer, in its words.
+pub fn default_type_args() -> Result<Vec<serde_json::Value>, String> {
+    Ok(default_walls()
+        .map_err(why)?
+        .iter()
+        .map(|wall| {
+            json!({ "type": wall.id, "name": wall.name, "assembly": assembly_args(&wall.assembly) })
+        })
+        .collect())
+}
+
+/// A document's wall types, as the page lists them for its wall tool: each with its layers, the
+/// materials those are drawn in, and the defaults to make where there are none.
+#[derive(Serialize, Debug)]
+pub struct WallTypesView {
+    /// Every type of the walls category with layers, by name, then ID.
+    pub types: Vec<WallTypeView>,
+    /// The materials a layer may be made of, each with the colours a view draws it in.
+    pub materials: Vec<MaterialView>,
+    /// [`default_type_args`].
+    pub defaults: Vec<serde_json::Value>,
+}
+
+/// One wall type.
+#[derive(Serialize, Debug)]
+pub struct WallTypeView {
+    /// Its ID.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// Its whole thickness, as typed text.
+    pub thickness: String,
+    /// Its layers and core, as [`assembly_args`] gives them.
+    pub assembly: serde_json::Value,
+}
+
+/// A material, as a view draws it.
+#[derive(Serialize, Debug)]
+pub struct MaterialView {
+    /// Its ID, as a layer names it.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// Its colour seen in projection, `#rrggbb`.
+    pub surface: String,
+    /// Its colour where a view cuts it, `#rrggbb`.
+    pub cut: String,
+}
+
+/// A colour's red, green and blue as `#rrggbb`.
+fn hex(red: u8, green: u8, blue: u8) -> String {
+    format!("#{red:02x}{green:02x}{blue:02x}")
+}
+
+/// A document's wall types as they are now, and the materials: construct-materials' default
+/// library until a project keeps its own. The inner error is a record the document's rules can't
+/// read, in their words.
+///
+/// # Errors
+/// A store error.
+pub async fn read_wall_types<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+) -> Result<Result<WallTypesView, String>, StoreError> {
+    let context = match records::read_context(reader, project, document).await? {
+        Ok(context) => context,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let all = records::read_document(reader, project, document).await?;
+    let records: Vec<Element> = all
+        .into_values()
+        .map(|(_, record)| record)
+        .filter(|record| record.kind == TYPE_KIND)
+        .collect();
+    let types = match Types::from_records(&records, &context.params, &context.categories) {
+        Ok(types) => types,
+        Err(e) => return Ok(Err(why(e))),
+    };
+    let mut listed: Vec<WallTypeView> = types
+        .in_category(WALLS)
+        .into_iter()
+        .filter_map(|ty| {
+            let assembly = assembly_of(ty).ok()?;
+            Some(WallTypeView {
+                id: ty.id().to_string(),
+                name: ty.name().to_owned(),
+                thickness: assembly.total().to_string(),
+                assembly: assembly_args(&assembly),
+            })
+        })
+        .collect();
+    listed.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
+    let materials = Materials::default_metric()
+        .materials()
+        .iter()
+        .map(|material| {
+            let (surface, cut) = (
+                &material.drawing.surface.colour,
+                &material.drawing.cut.colour,
+            );
+            MaterialView {
+                id: material.id.as_str().to_owned(),
+                name: material.name.clone(),
+                surface: hex(surface.0, surface.1, surface.2),
+                cut: hex(cut.0, cut.1, cut.2),
+            }
+        })
+        .collect();
+    let defaults = match default_type_args() {
+        Ok(defaults) => defaults,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    Ok(Ok(WallTypesView {
+        types: listed,
+        materials,
+        defaults,
+    }))
 }
