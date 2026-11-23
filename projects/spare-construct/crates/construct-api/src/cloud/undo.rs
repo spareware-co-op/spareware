@@ -36,7 +36,11 @@
 //! writes and lets go of each it deletes, as `element.set` and `element.delete` do. Last, every
 //! record it wrote must read under the document's rules (its type exists, its values read), and
 //! when it wrote a type or the parameter table every record of the document is read again; a
-//! failure is `"That can't be undone: "` and the reader's own words.
+//! failure is `"That can't be undone: "` and the reader's own words. So is leaving an element
+//! without its host: one it writes whose host is gone, or one hosted on a piece it deletes
+//! ([`crate::cloud::hosting::undo_rules`]). Every tie of what it wrote must name a level still
+//! in the model, and when it wrote or took away a level, every element of the document is
+//! checked so (`levels::ties_hold`).
 //!
 //! **All or nothing** (CON-A2-F5-P2, A05 "that command is turned back"): an undo is one command,
 //! so any of those refusals turns the whole undo back and none of its pieces is written
@@ -48,7 +52,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::params;
+use crate::cloud::{hosting, levels, params};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -93,7 +97,11 @@ pub fn is_command(cmd: &str) -> bool {
 /// Whether an applied entry of this command is a step.
 #[must_use]
 pub fn is_step(cmd: &str) -> bool {
-    ELEMENT_STEPS.contains(&cmd) || params::is_command(cmd) || is_command(cmd)
+    ELEMENT_STEPS.contains(&cmd)
+        || params::is_command(cmd)
+        || hosting::is_command(cmd)
+        || levels::is_command(cmd)
+        || is_command(cmd)
 }
 
 /// A step a person could undo or redo now: the newest entry of it, and its command.
@@ -400,7 +408,7 @@ struct Planned {
     id: Id,
     current: Option<Id>,
     next: Option<Element>,
-    /// Whether it is, or was, a type or the parameter table.
+    /// Whether it is, or was, a type, the parameter table or a level.
     not_an_element: bool,
 }
 
@@ -440,6 +448,7 @@ pub async fn apply<T: Txn>(
     let mut taken: Vec<ClaimChange> = Vec::new();
     let mut whole = false;
     let mut written = Vec::new();
+    let mut deleted = Vec::new();
     for planned in plan {
         whole |= planned.not_an_element;
         let pointer = Place::Piece {
@@ -465,6 +474,7 @@ pub async fn apply<T: Txn>(
         } else {
             txn.delete(pointer.key()).await?;
             taken.push(claims::release(txn, project, document, &planned.id).await?);
+            deleted.push(planned.id.clone());
             None
         };
         changes.push(Change {
@@ -475,6 +485,13 @@ pub async fn apply<T: Txn>(
     }
 
     if let Err(why) = check(txn, project, document, &written, whole).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    if let Err(why) = hosting::undo_rules(txn, project, document, &written, &deleted).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // An undo may not leave an element tied to a level that is no longer in the model.
+    if let Err(why) = levels::ties_hold(txn, project, document, &written, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {
@@ -540,7 +557,11 @@ async fn plan<T: Txn>(
             };
             return Ok(Err(refusal));
         };
-        let kind = |record: &Element| record.kind == TYPE_KIND || record.kind == TABLE_KIND;
+        let kind = |record: &Element| {
+            record.kind == TYPE_KIND
+                || record.kind == TABLE_KIND
+                || record.kind == construct_levels::LEVEL_KIND
+        };
         let not_an_element = base.as_ref().is_some_and(kind) || target.as_ref().is_some_and(kind);
         let current = now.map(|(hash, _)| hash);
         plan.push(Planned {

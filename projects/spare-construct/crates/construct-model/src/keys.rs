@@ -43,8 +43,9 @@ pub enum Place {
         project: Id,
         /// The document the element is in.
         document: Id,
-        /// The level.
-        level: i32,
+        /// The level, by its permanent ID. A key written when levels were integers holds the
+        /// integer's decimal text, which is the ID of the level it implies (construct-levels).
+        level: Id,
         /// The cell's column, counted in 5 m steps.
         x: i64,
         /// The cell's row, counted in 5 m steps.
@@ -64,8 +65,8 @@ pub enum Place {
         /// The element.
         element: Id,
     },
-    /// Which elements of a document build their shape from parameter values, so a change to a
-    /// type or to the document's parameters rebuilds them. Derived.
+    /// Which elements of a document build their shape from another record (parameter values, a
+    /// type, a level), so a change to that record rebuilds them. Derived.
     Reads {
         /// The project.
         project: Id,
@@ -209,8 +210,8 @@ impl Place {
                 y,
                 element,
             } => {
-                let (level, x, y) = (level.to_string(), x.to_string(), y.to_string());
-                let parts = [document.as_str(), &level, &x, &y, element.as_str()];
+                let (x, y) = (x.to_string(), y.to_string());
+                let parts = [document.as_str(), level.as_str(), &x, &y, element.as_str()];
                 in_project(project).table("area", &parts)
             }
             Self::Kind {
@@ -336,7 +337,7 @@ impl Place {
             ["area", document, level, x, y, element] => Self::Area {
                 project,
                 document: id(document)?,
-                level: number(level)?,
+                level: id(level)?,
                 x: number(x)?,
                 y: number(y)?,
                 element: id(element)?,
@@ -390,9 +391,9 @@ pub mod list {
 
     /// The elements that touch one 5 m cell of a level of a document.
     #[must_use]
-    pub fn cell(project: &Id, document: &Id, level: i32, x: i64, y: i64) -> Prefix {
-        let (level, x, y) = (level.to_string(), x.to_string(), y.to_string());
-        in_project(project).table_prefix("area", &[document.as_str(), &level, &x, &y])
+    pub fn cell(project: &Id, document: &Id, level: &Id, x: i64, y: i64) -> Prefix {
+        let (x, y) = (x.to_string(), y.to_string());
+        in_project(project).table_prefix("area", &[document.as_str(), level.as_str(), &x, &y])
     }
     /// What regeneration made of every element of a document.
     #[must_use]
@@ -404,7 +405,8 @@ pub mod list {
     pub fn kind(project: &Id, document: &Id, kind: &Id) -> Prefix {
         in_project(project).table_prefix("kind", &[document.as_str(), kind.as_str()])
     }
-    /// The elements of a document whose shape reads parameter values.
+    /// The elements of a document whose shape reads another record: parameter values, a type, a
+    /// level.
     #[must_use]
     pub fn reads(project: &Id, document: &Id) -> Prefix {
         in_project(project).table_prefix("reads", &[document.as_str()])
@@ -498,15 +500,12 @@ mod tests {
         ] {
             assert_eq!(Place::parse(&key(bad)), None, "{bad}");
         }
-        let negative = Place::parse(&key("p:x/area/m/-1/-7/0/e"));
-        assert!(matches!(
-            negative,
-            Some(Place::Area {
-                level: -1,
-                x: -7,
-                ..
-            })
-        ));
+        let negative = Place::parse(&key("p:x/area/m/m1/-7/0/e"));
+        assert!(matches!(negative, Some(Place::Area { x: -7, .. })));
+        // A level is named by its ID: a key of the old negative integer names no level.
+        assert_eq!(Place::parse(&key("p:x/area/m/-1/-7/0/e")), None);
+        let old = Place::parse(&key("p:x/area/m/1/0/0/e"));
+        assert!(matches!(old, Some(Place::Area { level, .. }) if level.as_str() == "1"));
     }
 
     #[test]

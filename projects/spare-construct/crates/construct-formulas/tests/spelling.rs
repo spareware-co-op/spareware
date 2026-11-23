@@ -66,3 +66,51 @@ fn what_doesnt_read_has_no_spelling() {
         assert!(canonical(bad).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn renaming_a_parameter_rewrites_only_its_names_in_the_one_spelling() {
+    for (text, from, to, renamed) in [
+        (
+            "Width - 2 * Frame",
+            "Width",
+            "Opening",
+            Some("Opening - 2 * Frame"),
+        ),
+        ("Width - 2 * Frame", "Frame", "m", Some("Width - 2 * m")),
+        (
+            "min(Width, 900 mm) + Width",
+            "Width",
+            "W",
+            Some("min(W, 900 mm) + W"),
+        ),
+        (
+            "Wide ? Width : 2 * Width",
+            "Width",
+            "Leaf",
+            Some("Wide ? Leaf : 2 * Leaf"),
+        ),
+        ("-(a + b) / c", "b", "bb", Some("-(a + bb) / c")),
+        // A function's name and a unit are not the parameter's.
+        ("min(a, 2 mm)", "min", "least", None),
+        ("2 mm", "mm", "x", None),
+        ("Width - 2 * Frame", "Height", "Tall", None),
+    ] {
+        assert_eq!(
+            construct_formulas::rename(text, from, to)
+                .unwrap()
+                .as_deref(),
+            renamed,
+            "{text}"
+        );
+        if let Some(renamed) = renamed {
+            assert_eq!(canonical(renamed).unwrap(), renamed);
+        }
+    }
+    // A name that can't stand in a formula is refused, only where the formula uses the parameter.
+    let refused = construct_formulas::rename("Width / 2", "Width", "Door width").unwrap_err();
+    assert_eq!(refused.code, "Name");
+    assert_eq!(
+        construct_formulas::rename("Frame / 2", "Width", "Door width").unwrap(),
+        None
+    );
+}

@@ -7,8 +7,11 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$here"
 . config/local.env
 target="${CARGO_TARGET_DIR:-$here/target}"
+# A server on the geometry kernel (STACK_GEOMETRY=kernel) is built with its kernel feature.
+features=()
+if [ "${STACK_GEOMETRY:-}" = kernel ]; then features=(--features kernel); fi
 
-cargo build --release -p spare-server --bins --examples
+cargo build --release -p spare-server --bins --examples "${features[@]}"
 pkill -u "$(id -u)" -x spare-server || true
 bash scripts/stack-wipe.sh
 if ! pgrep -u "$(id -u)" -x mock_oidc >/dev/null; then

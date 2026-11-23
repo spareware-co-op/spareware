@@ -418,6 +418,52 @@ impl ProjectParams {
         )
     }
 
+    /// The table with a parameter it has given a new name or formula. Its ID, kind, holder,
+    /// choices and group stay, and so do its binding and every stored value: those are what
+    /// values are kept under and checked against. The name is still the project's only one of its
+    /// spelling (case does not matter).
+    ///
+    /// # Errors
+    /// [`ProjectError::UnknownParameter`]; [`ProjectError::KindConflict`] or
+    /// [`ProjectError::Conflict`] naming the field that may not change; or
+    /// [`ProjectError::DuplicateName`].
+    pub fn redefine(&self, definition: Definition) -> Result<Self, ProjectError> {
+        let id = definition.id().clone();
+        let existing = self
+            .entries
+            .get(&id)
+            .ok_or_else(|| ProjectError::UnknownParameter(id.clone()))?;
+        let old = &existing.definition;
+        let conflict = |field| ProjectError::Conflict {
+            id: id.clone(),
+            name: old.name().to_owned(),
+            field,
+        };
+        if old.kind() != definition.kind() {
+            return Err(ProjectError::KindConflict {
+                id: id.clone(),
+                name: old.name().to_owned(),
+                existing: old.kind(),
+                incoming: definition.kind(),
+            });
+        }
+        if old.holder() != definition.holder() {
+            return Err(conflict("holder"));
+        }
+        if old.choices() != definition.choices() {
+            return Err(conflict("choices"));
+        }
+        if self.entries.values().any(|other| {
+            other.definition.id() != &id && same_name(other.definition.name(), definition.name())
+        }) {
+            return Err(ProjectError::DuplicateName(definition.name().to_owned()));
+        }
+        let mut next = self.clone();
+        let group = existing.group.clone();
+        next.entries.insert(id, Entry { definition, group });
+        Ok(next)
+    }
+
     /// Binds the parameter to `targets`, as `holder`: every element of those categories has it.
     /// Categories it was already bound to stay. `default` is the value an element or type has when
     /// it has set none (the resolution order is instance, then type, then this); it must be a

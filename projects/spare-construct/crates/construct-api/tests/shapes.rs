@@ -203,7 +203,7 @@ impl Stack {
 
     async fn in_cell(&self, x: i64) -> Vec<String> {
         let mut snapshot = self.store.snapshot().await.unwrap();
-        let prefix = list::cell(&i("p"), &i(DOCUMENT), 1, x, 0);
+        let prefix = list::cell(&i("p"), &i(DOCUMENT), &i("1"), x, 0);
         let rows = snapshot.scan(&prefix).await.unwrap();
         rows.into_iter()
             .map(|(key, _)| key.as_str().to_owned())

@@ -3,6 +3,7 @@
 
 use crate::geometry::Builder;
 use clap::Args;
+use std::path::PathBuf;
 
 /// The server's settings, from its command line or its environment.
 #[derive(Args, Clone, Debug)]
@@ -57,4 +58,14 @@ pub struct Settings {
     /// built with the `kernel` feature.
     #[arg(long, env = "STACK_GEOMETRY", value_enum, default_value_t = Builder::StandIn)]
     pub geometry: Builder,
+    /// Where the kernel's geometry for the browser is, which a server built with the `kernel`
+    /// feature serves to the page for a document on the kernel's edition.
+    /// `scripts/build-shapes-kernel.sh` builds it into `app/pkg-kernel`, the default; it isn't
+    /// committed, being far larger than the stand-in's (note CON-A3-F1-P1-kernel-in-the-browser).
+    #[arg(
+        long,
+        env = "STACK_SHAPES_KERNEL",
+        default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../app/pkg-kernel")
+    )]
+    pub shapes_kernel: PathBuf,
 }
