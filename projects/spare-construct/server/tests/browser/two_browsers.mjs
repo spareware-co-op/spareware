@@ -1674,8 +1674,11 @@ await ben.locator('#pv-side input[data-key="floor-edge-depth"]').fill('400 mm');
 await ben.locator('#pv-side input[data-key="floor-edge-depth"]').press('Enter');
 await ben.click('#pv-side [data-key="floor-edge-pick"]');
 await ben.waitForSelector('#pv-side [data-floor-pick="edge"]');
-const slSide = await boxOf(ben.locator('#pv-canvas line[data-floor-edge="o0"]'), 'the floor’s first side');
-await ben.mouse.click(slSide.x + slSide.width / 2, slSide.y + slSide.height / 2);
+// A side is a line with no height, which the page never counts as visible: wait for it to be drawn,
+// then click where the plan puts its middle.
+await ben.waitForSelector('#pv-canvas line[data-floor-edge="o0"]', { state: 'attached' });
+const slSide = await onPlan(ben, 12000, -2300);
+await ben.mouse.click(slSide.x, slSide.y);
 const slEdgeDrawn = (id) => `g.element[data-id="${id}"] path[data-slab-edge="o0"][data-kind="downturn"]`;
 await ben.waitForSelector('#pv-side [data-slab-edge-row="o0"]');
 await anna.waitForSelector(slEdgeDrawn(slIdB));
@@ -1736,6 +1739,7 @@ pass("Ben removes the slab edge and undoes that, and Anna's plan follows both");
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(JSON.stringify(mismatched).slice(0, 3000));
   check(mismatched.length === 0, `every body ${name}'s page built, the shaped floors included, matches the server's`);
 }
 
