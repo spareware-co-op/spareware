@@ -8,6 +8,8 @@
 //!   [`kernel`] replaces it once the browser can run the kernel's engine too.
 //! - [`kernel`]: builds through the geometry kernel's engine seam, over whichever engine the
 //!   program hands it. It names no engine.
+//! - [`datum`]: the display shape of grids and reference planes, which have no solid; both
+//!   builders hand a datum's recipe to it first.
 //! - [`regenerator`]: reads the log and keeps a project's derived shapes up to date.
 //! - [`parameters`]: how categories, parameters and types sit in a document's records, and how a
 //!   recipe that names a parameter is filled before it is built; the server's commands read
@@ -43,6 +45,7 @@
 
 #[cfg(feature = "server")]
 pub mod catalog;
+pub mod datum;
 pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;

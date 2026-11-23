@@ -1040,6 +1040,12 @@ pub(crate) fn solve(sketch: &Sketch, budget: Budget) -> Result<Solved, SolveErro
     solve_counted(sketch, budget, &mut steps)
 }
 
+/// Checks a sketch as drawn: see [`crate::check_drawn`].
+pub(crate) fn check_drawn(sketch: &Sketch) -> Result<(), SolveError> {
+    let radii: Vec<i64> = sketch.curves().iter().map(Curve::radius).collect();
+    commit::check(sketch, sketch.points(), &radii)
+}
+
 /// Drags one point towards a target: see [`crate::drag`].
 pub(crate) fn drag(
     sketch: &Sketch,

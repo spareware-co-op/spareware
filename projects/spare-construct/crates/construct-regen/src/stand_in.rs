@@ -663,6 +663,9 @@ impl Geometry for Boxes {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if let Some(datum) = crate::datum::build(recipe) {
+            return datum;
+        }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);
         }

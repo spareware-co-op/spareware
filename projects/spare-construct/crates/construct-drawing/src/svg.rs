@@ -1,28 +1,31 @@
-//! A drawing as SVG, so a person can see it.
+//! A picture as SVG, so a person can see it.
 //!
-//! What it does: [`to_svg`] writes a drawing as one SVG document, by hand in a few lines (SVG is
-//! plain text, so no library is needed). Coordinates are model millimetres, the view's x to the
+//! What it does: [`Svg`] is the SVG [`Output`]: it writes a [`Picture`] as one SVG document, by
+//! hand in a few lines (SVG is plain text, so no library is needed). [`to_svg`] makes the picture
+//! of a drawing at a scale and writes it. Coordinates are model millimetres, the view's x to the
 //! right and its y up the sheet (SVG's y runs down, so it is written negated); the document's
-//! `width` and `height` are the paper size at the scale given, in millimetres, with a margin of
-//! 5 mm of paper all round. Each line is an SVG `line` (a segment) or `path` (an arc), drawn in its
-//! pen's colour at its pen's printed width at that scale ([`crate::pens`]), carrying its element
-//! and its face's role as `data-element` and `data-role`. Regions are not filled yet (note A12's
-//! step 4), and line patterns are drawn solid.
+//! `width` and `height` are the paper size at the picture's scale, in millimetres, with a margin
+//! of 5 mm of paper all round. Each hatch is one SVG `path` of straight pieces in its pen's colour
+//! at its printed width, with square ends cut off at the region's edge (`stroke-linecap="butt"`),
+//! carrying its material as `data-material`; the strokes follow, over the hatches, each an SVG
+//! `line` (a segment) or `path` (an arc) at its printed width with round ends, carrying its
+//! element and its face's role as `data-element` and `data-role`. Line patterns are drawn solid.
 //!
 //! Numbers: a length of the drawing in millimetres is `steps / 6400`, a terminating decimal, and is
 //! written exactly; so is a point of the paper size at a scale whose denominator has no prime
-//! factor but 2 and 5 (1:50, 1:100, 1:200). Any other value, an arc's radius or a fraction of a
-//! step from a sloped cut, is written to the nearest nanometre, the one rounding of an export
-//! (chapter 18.3 of the geometry architecture). The same drawing and scale always give the same
-//! bytes.
+//! factor but 2 and 5 (1:50, 1:100, 1:200), and a hatch line's end at such a scale where the
+//! region's corners are grid points. Any other value, an arc's radius or a fraction of a step from
+//! a sloped cut, is written to the nearest nanometre, the one rounding of an export (chapter 18.3
+//! of the geometry architecture). The same picture always gives the same bytes.
 
 use std::fmt::Write as _;
 
-use construct_styles::Scale;
+use construct_styles::{Colour, Micrometres, Scale};
 
 use crate::DrawingError;
 use crate::drawing::{Drawing, Shape, Turn, ViewPoint};
-use crate::pens::{Styles, style};
+use crate::pens::Styles;
+use crate::picture::{Output, Picture, picture};
 
 /// `num / den` as a decimal: exact when it terminates, else to nine places.
 fn decimal(num: i128, den: i128) -> Result<String, DrawingError> {
@@ -109,11 +112,16 @@ fn approx(p: ViewPoint) -> (f64, f64) {
     (p.x as f64 / d, p.y as f64 / d)
 }
 
-/// The least and greatest of the drawing's points along each axis, as `(num, den)`.
-fn extent(drawing: &Drawing) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
+/// The least and greatest of the picture's points along each axis, as `(num, den)`.
+fn extent(picture: &Picture) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
     let mut points = Vec::new();
-    for line in drawing.lines() {
-        match line.shape {
+    for hatch in &picture.hatches {
+        for [a, b] in &hatch.lines {
+            points.extend([*a, *b]);
+        }
+    }
+    for stroke in &picture.strokes {
+        match stroke.shape {
             Shape::Segment { start, end } => points.extend([start, end]),
             Shape::Arc {
                 centre, start, end, ..
@@ -159,14 +167,14 @@ fn extent(drawing: &Drawing) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
 
 /// The document's opening tag: the paper size at 1:`n` and the box round the drawing in model
 /// millimetres, grown by 5 mm of paper on every side.
-fn opening(drawing: &Drawing, n: i128) -> Result<String, DrawingError> {
+fn opening(picture: &Picture, n: i128) -> Result<String, DrawingError> {
     let big = || DrawingError::TooBig;
     // The margin: 5 mm of paper, in steps of the model.
     let margin = n
         .checked_mul(5)
         .and_then(|m| m.checked_mul(PER_MM))
         .ok_or_else(big)?;
-    let [lo, hi] = extent(drawing)?.unwrap_or([ViewPoint::grid(0, 0), ViewPoint::grid(0, 0)]);
+    let [lo, hi] = extent(picture)?.unwrap_or([ViewPoint::grid(0, 0), ViewPoint::grid(0, 0)]);
     let both = lo.den.checked_mul(hi.den).ok_or_else(big)?;
     let twice = margin
         .checked_mul(2)
@@ -235,53 +243,98 @@ fn arc(
     ))
 }
 
-/// `drawing` as an SVG document at `scale`, each line at its pen's printed width there.
+/// A pen's printed `width` at 1:`n` as the stroke attributes of `colour`: printed micrometres at
+/// 1:n are n micrometres of the model each, so the width is micrometres times n over 1000, in
+/// model millimetres.
+fn pen(colour: Colour, width: Micrometres, n: i128) -> Result<String, DrawingError> {
+    let width = i128::from(width.get())
+        .checked_mul(n)
+        .ok_or(DrawingError::TooBig)?;
+    Ok(format!(
+        "stroke=\"#{:02x}{:02x}{:02x}\" stroke-width=\"{}\"",
+        colour.0,
+        colour.1,
+        colour.2,
+        decimal(width, 1000)?
+    ))
+}
+
+/// The SVG output.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Svg;
+
+impl Svg {
+    /// `picture` as an SVG document.
+    ///
+    /// # Errors
+    ///
+    /// [`DrawingError::TooBig`] for a number past 128 bits.
+    pub fn document(self, picture: &Picture) -> Result<String, DrawingError> {
+        let n = i128::from(picture.scale.denominator());
+        let mut out = opening(picture, n)?;
+        out.push('\n');
+        for hatch in &picture.hatches {
+            let mut d = String::new();
+            for [a, b] in &hatch.lines {
+                let ((x1, y1), (x2, y2)) = (xy(*a)?, xy(*b)?);
+                if !d.is_empty() {
+                    d.push(' ');
+                }
+                let _ = write!(d, "M {x1} {y1} L {x2} {y2}");
+            }
+            let _ = writeln!(
+                out,
+                "<path d=\"{d}\" fill=\"none\" {} stroke-linecap=\"butt\" data-material=\"{}\"/>",
+                pen(hatch.colour, hatch.width, n)?,
+                hatch.material.as_str()
+            );
+        }
+        for line in &picture.strokes {
+            let stroke = format!(
+                "{} stroke-linecap=\"round\"",
+                pen(line.colour, line.width, n)?
+            );
+            let data = format!(
+                "data-element=\"{}\" data-role=\"{}\"",
+                line.element.as_str(),
+                line.role
+            );
+            match line.shape {
+                Shape::Segment { start, end } => {
+                    let ((x1, y1), (x2, y2)) = (xy(start)?, xy(end)?);
+                    let _ = writeln!(
+                        out,
+                        "<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" {stroke} {data}/>"
+                    );
+                }
+                Shape::Arc {
+                    centre,
+                    start,
+                    end,
+                    turn,
+                } => {
+                    let d = arc(centre, start, end, turn)?;
+                    let _ = writeln!(out, "<path d=\"{d}\" fill=\"none\" {stroke} {data}/>");
+                }
+            }
+        }
+        out.push_str("</svg>\n");
+        Ok(out)
+    }
+}
+
+impl Output for Svg {
+    fn write(&self, picture: &Picture) -> Result<Vec<u8>, DrawingError> {
+        self.document(picture).map(String::into_bytes)
+    }
+}
+
+/// `drawing` as an SVG document at `scale`: its picture ([`picture`]: regions merged and hatched,
+/// each line at its pen's printed width there) written by [`Svg`].
 ///
 /// # Errors
 ///
-/// What [`crate::pens::style`] gives for a line it cannot style, and [`DrawingError::TooBig`]
-/// for a number past 128 bits.
+/// What [`picture`] refuses, and [`DrawingError::TooBig`] for a number past 128 bits.
 pub fn to_svg(drawing: &Drawing, styles: Styles<'_>, scale: Scale) -> Result<String, DrawingError> {
-    let n = i128::from(scale.denominator());
-    let mut out = opening(drawing, n)?;
-    out.push('\n');
-    for line in drawing.lines() {
-        let pen = style(styles, line, scale)?;
-        // Printed micrometres at 1:n are n micrometres of the model each: µm × n / 1000 mm.
-        let width = i128::from(pen.width.get())
-            .checked_mul(n)
-            .ok_or(DrawingError::TooBig)?;
-        let stroke = format!(
-            "stroke=\"#{:02x}{:02x}{:02x}\" stroke-width=\"{}\" stroke-linecap=\"round\"",
-            pen.colour.0,
-            pen.colour.1,
-            pen.colour.2,
-            decimal(width, 1000)?
-        );
-        let data = format!(
-            "data-element=\"{}\" data-role=\"{}\"",
-            line.source.element.as_str(),
-            line.source.role
-        );
-        match line.shape {
-            Shape::Segment { start, end } => {
-                let ((x1, y1), (x2, y2)) = (xy(start)?, xy(end)?);
-                let _ = writeln!(
-                    out,
-                    "<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" {stroke} {data}/>"
-                );
-            }
-            Shape::Arc {
-                centre,
-                start,
-                end,
-                turn,
-            } => {
-                let d = arc(centre, start, end, turn)?;
-                let _ = writeln!(out, "<path d=\"{d}\" fill=\"none\" {stroke} {data}/>");
-            }
-        }
-    }
-    out.push_str("</svg>\n");
-    Ok(out)
+    Svg.document(&picture(drawing, styles, scale)?)
 }

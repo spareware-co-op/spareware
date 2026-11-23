@@ -41,6 +41,12 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .floor-sketch { pointer-events: none; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
+/* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
+.dw .datum.linked { pointer-events: none; }
+.dw .datum.own { cursor: pointer; }
+.dw .datum-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .datum-end { cursor: move; }
+
 /* The Types and Project parameters dialogs. */
 .stack-manage section { padding: 8px 0; border-bottom: 1px solid var(--hairline); }
 .stack-manage section:last-of-type { border-bottom: 0; }

@@ -11,6 +11,7 @@ use kit_accounts::sign_in::email_hash;
 use kit_core::Id;
 use kit_store::{FileStore, Kv, Reader, StoreError};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn id(text: &str) -> Id {
     // Every ID in this file is a constant, and valid.
@@ -285,11 +286,10 @@ async fn models<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refu
 }
 
 /// Each floor of Example model 1, split between the models that draw it: the architecture with
-/// its doors, the joinery, the grid lines and the columns.
-fn example_floors() -> [Vec<Step>; 4] {
+/// its doors, the joinery and the columns. The grid lines stand on no floor ([`setout_grids`]).
+fn example_floors() -> [Vec<Step>; 3] {
     let mut arch = Vec::new();
     let mut interiors = Vec::new();
-    let mut setout = Vec::new();
     let mut structure = Vec::new();
     for level in [1, 2] {
         arch.extend(arch_floor(level));
@@ -319,28 +319,6 @@ fn example_floors() -> [Vec<Step>; 4] {
                 (width, 600, 900),
             )));
         }
-        for (name, x) in [("A", 100), ("B", 6100), ("C", 11_900)] {
-            let name = format!("GL-{name}{level}");
-            setout.push(create(thing(
-                &name,
-                "grid",
-                level,
-                x,
-                -1500,
-                (40, 11_000, 10),
-            )));
-        }
-        for (name, y) in [("1", 100), ("2", 7900)] {
-            let name = format!("GL-{name}{level}");
-            setout.push(create(thing(
-                &name,
-                "grid",
-                level,
-                -1500,
-                y,
-                (15_000, 40, 10),
-            )));
-        }
         for (index, (x, y)) in [(0, 0), (11_600, 0), (0, 7600), (11_600, 7600), (5900, 3900)]
             .iter()
             .enumerate()
@@ -357,13 +335,30 @@ fn example_floors() -> [Vec<Step>; 4] {
         }
     }
     arch.push(create(door("D-104", 2, 8800, -50, 900, 300, "FD30")));
-    [arch, interiors, setout, structure]
+    [arch, interiors, structure]
+}
+
+/// The site setout's grid lines, on the walls' centre lines and past them on every side, made
+/// with `grid.create` like any grid: lettered across, numbered up.
+fn setout_grids() -> Vec<Value> {
+    let mut grids = Vec::new();
+    for (name, x) in [("A", 100), ("B", 6100), ("C", 11_900)] {
+        let x = x.to_string();
+        grids.push(json!({ "grid": format!("GL-{name}"), "name": name,
+                           "x0": x, "y0": "-1500", "x1": x, "y1": "9500" }));
+    }
+    for (name, y) in [("1", 100), ("2", 7900)] {
+        let y = y.to_string();
+        grids.push(json!({ "grid": format!("GL-{name}"), "name": name,
+                           "x0": "-1500", "y0": y, "x1": "13500", "y1": y }));
+    }
+    grids
 }
 
 /// Every element of every model. A model that has walls first gets construct-walls' default wall
 /// types, through `wall.type.create`, as the page makes them in a model that has none.
 async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Refusal> {
-    let [arch, interiors, setout, structure] = example_floors();
+    let [arch, interiors, structure] = example_floors();
     let mut riverside = arch_floor(1);
     riverside.push(create(door("D-101", 1, 2500, -50, 900, 300, "FD30")));
     let planter = vec![create(thing("P-1", "planter", 1, 0, 0, (2000, 800, 600)))];
@@ -372,12 +367,12 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
     for (person, project, model, elements) in [
         ("anna", "example-1", "arch-model", arch),
         ("anna", "example-1", "interiors-model", interiors),
-        ("ben", "example-1", "site-setout", setout),
         ("dan", "example-1-bridged", "structure-model", structure),
         ("cara", "riverside", "riverside-model", riverside),
         ("eve", "riverside-bridged", "landscape-model", planter),
     ] {
         let (person, project, model) = (id(person), id(project), id(model));
+        let levels = levels_of(&elements);
         if elements.iter().any(|(cmd, _)| *cmd == "wall.draw") {
             for args in &wall_types {
                 service
@@ -388,8 +383,37 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
         for (cmd, args) in elements {
             service.edit(&person, &project, &model, cmd, args).await?;
         }
+        // One floor plan for each level the model's elements stand on, with the commands' defaults.
+        for level in levels {
+            let args = json!({ "view": format!("VP-{level}"), "kind": "floor_plan",
+                               "name": format!("Level {level} plan"), "level": level.to_string() });
+            service
+                .edit(&person, &project, &model, "view.create", args)
+                .await?;
+        }
+    }
+    // The setout's grids stand on no level, so it has no floor plan.
+    let (ben, example, setout) = (id("ben"), id("example-1"), id("site-setout"));
+    for args in setout_grids() {
+        service
+            .edit(&ben, &example, &setout, "grid.create", args)
+            .await?;
     }
     Ok(())
+}
+
+/// The levels a model's elements stand on, lowest first, each once: `element.create` names its
+/// level as a number, `wall.draw` as a level's ID.
+fn levels_of(elements: &[Step]) -> BTreeSet<i64> {
+    elements
+        .iter()
+        .filter_map(|(_, args)| {
+            let level = args.get("level")?;
+            level
+                .as_i64()
+                .or_else(|| level.as_str().and_then(|text| text.parse().ok()))
+        })
+        .collect()
 }
 
 /// The packages published, bridged and taken in, the links between models, and every project's

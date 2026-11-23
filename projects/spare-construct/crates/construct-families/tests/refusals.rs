@@ -502,3 +502,106 @@ fn every_problem_is_reported_in_document_order() {
         assert_ne!(problem.to_string(), "");
     }
 }
+
+// The type table.
+
+/// The door with its type table, after one change to the JSON.
+fn table_with(change: impl FnOnce(&mut serde_json::Value)) -> String {
+    edit(&common::door_with_table(), change)
+}
+
+#[test]
+fn a_type_table_with_settable_columns_and_full_rows_passes() {
+    assert_eq!(problems(&common::door_with_table()), []);
+}
+
+#[test]
+fn a_type_table_row_must_have_one_value_per_column() {
+    let text = table_with(|v| {
+        v["type_table"]["rows"][1]["values"]
+            .as_array_mut()
+            .unwrap()
+            .pop();
+    });
+    assert_has(&problems(&text), "/type_table/rows/1/values", |kind| {
+        *kind
+            == ProblemKind::ValueCount {
+                values: 1,
+                columns: 2,
+            }
+    });
+    let text = table_with(|v| {
+        v["type_table"]["rows"][0]["values"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("length:q0:6400"));
+    });
+    assert_has(&problems(&text), "/type_table/rows/0/values", |kind| {
+        matches!(
+            kind,
+            ProblemKind::ValueCount {
+                values: 3,
+                columns: 2
+            }
+        )
+    });
+}
+
+#[test]
+fn a_type_table_value_must_be_its_columns_in_its_one_spelling() {
+    for bad in ["angle:405000000", "length:620", "material:glass-plate"] {
+        let text = table_with(|v| v["type_table"]["rows"][0]["values"][0] = json!(bad));
+        assert_has(&problems(&text), "/type_table/rows/0/values/0", |kind| {
+            matches!(kind, ProblemKind::BadValue(_))
+        });
+    }
+}
+
+#[test]
+fn a_type_table_column_must_be_a_parameter_the_type_sets() {
+    let text = table_with(|v| v["type_table"]["columns"][1] = json!("swing"));
+    assert_has(
+        &problems(&text),
+        "/type_table/columns/1",
+        |kind| matches!(kind, ProblemKind::HeldByInstance { key } if key == "swing"),
+    );
+    let text = table_with(|v| v["type_table"]["columns"][1] = json!("opening_width"));
+    assert_has(
+        &problems(&text),
+        "/type_table/columns/1",
+        |kind| matches!(kind, ProblemKind::SetsFormula { key } if key == "opening_width"),
+    );
+    let text = table_with(|v| v["type_table"]["columns"][1] = json!("depth"));
+    assert_has(
+        &problems(&text),
+        "/type_table/columns/1",
+        missing(Sort::Parameter, "depth"),
+    );
+    let text = table_with(|v| v["type_table"]["columns"][1] = json!("width"));
+    assert_has(
+        &problems(&text),
+        "/type_table/columns/1",
+        duplicate("width"),
+    );
+}
+
+/// A row's key and name are unique among the built-in types and the rows together.
+#[test]
+fn a_type_table_row_shares_keys_and_names_with_the_built_in_types() {
+    let text = table_with(|v| v["type_table"]["rows"][0]["key"] = json!("d820"));
+    assert_has(
+        &problems(&text),
+        "/type_table/rows/0/key",
+        duplicate("d820"),
+    );
+    let text = table_with(|v| v["type_table"]["rows"][2]["name"] = json!(" 820 X 2040 "));
+    assert_has(&problems(&text), "/type_table/rows/2/name", |kind| {
+        matches!(kind, ProblemKind::DuplicateName { .. })
+    });
+    let text = table_with(|v| v["type_table"]["rows"][2]["key"] = json!("d620"));
+    assert_has(
+        &problems(&text),
+        "/type_table/rows/2/key",
+        duplicate("d620"),
+    );
+}

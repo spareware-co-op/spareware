@@ -13,6 +13,7 @@ cloud = [
     "dep:kit-sync",
     "dep:construct-categories",
     "dep:construct-formulas",
+    "dep:construct-grids",
     "dep:construct-params",
     "dep:construct-regen",
     "dep:construct-types",
@@ -20,6 +21,7 @@ cloud = [
     "dep:construct-walls",
     "dep:construct-materials",
     "dep:construct-slabs",
+    "dep:construct-phases",
 ]
 
 [dependencies]
@@ -35,6 +37,8 @@ construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
 # Formula parameters: the commands check a formula and work it out before they accept a change.
 construct-formulas = { path = "../construct-formulas", optional = true }
+# Grid lines and reference planes: the grid commands check every change with it.
+construct-grids = { path = "../construct-grids", optional = true }
 construct-params = { path = "../construct-params", optional = true }
 construct-regen = { path = "../construct-regen", features = ["server"], optional = true }
 construct-types = { path = "../construct-types", optional = true }
@@ -46,6 +50,8 @@ construct-walls = { path = "../construct-walls", optional = true }
 construct-materials = { path = "../construct-materials", optional = true }
 # The floor type and floor commands: construct-slabs checks every layer and boundary.
 construct-slabs = { path = "../construct-slabs", optional = true }
+# The view commands: a view's staging and phase settings are the phases crate's values.
+construct-phases = { path = "../construct-phases", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
