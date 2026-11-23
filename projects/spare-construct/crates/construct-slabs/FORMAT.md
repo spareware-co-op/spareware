@@ -61,13 +61,15 @@ A boundary that is not exactly as written is refused, never repaired; and one th
 
 A command gives a boundary in a plain form, `{"outer":[<corner>, ...],"holes":[[<corner>, ...], ...]}`, each corner `{"id":"<edge ID>","at":[x,y]}` in grid steps, the edge from it to the next; `id` may be left out, for `o<n>` on the outer loop and `h<k>-<n>` on hole `k` (both from 0), and `holes` may be left out. It is written as a new sketch, the outer loop's points and lines first, then each hole's, and stored in the form above.
 
+The server's commands (`floor.create`, `floor.boundary`: construct-model's FORMAT.md, "Commands") take the same form with each `at` as two typed lengths (`["8 m", "4000"]`), read in the document's units and turned into grid steps before this crate reads it, so a person never types steps. A boundary they take also has an area of a whole number of square grid steps; typed lengths, on the hundredth of a millimetre at the finest, always give one.
+
 ## What a builder takes
 
 Before it is built, a floor's recipe is filled from its type (construct-regen's `slabs`): its `args` become exactly `loops` and `layers`. `loops` is the outer loop anticlockwise seen from above, then each hole clockwise, a loop drawn the other way run backwards from its first corner, each corner `{"id":"<edge ID>","at":[x,y]}` in grid steps with the edge from it to the next. `layers` is the type's layers from the top down, each `{"function":"<function>","material":"<material ID>","thickness":<grid steps>}`. This form is never stored in a record: it is what a builder is handed, and its bytes go into no hash but the built shape's.
 
 ## What is worked out and never stored
 
-A floor's area (the shoelace sum over grid steps, holes subtracted), its perimeter (every edge of every loop, each to the nearest step), its thickness, its volume (per layer, the area by the layer's thickness) and its mass (per layer, from the material's density where the project's materials hold one) are its read-only parameters `floor.area`, `floor.perimeter`, `floor.thickness`, `floor.volume` and `floor.mass` (kilograms), worked from the record each time.
+A floor's area (the shoelace sum over grid steps, holes subtracted), its perimeter (every edge of every loop, each to the nearest step), its thickness, its volume (per layer, the area by the layer's thickness) and its mass (per layer, from the material's density where the project's materials hold one) are its read-only parameters `floor.area`, `floor.perimeter`, `floor.thickness`, `floor.volume` and `floor.mass` (kilograms), worked from the record each time. Each layer's volume and mass are `floor.layer-<k>.volume` and `floor.layer-<k>.mass` (kilograms), layer `k` counted from 1 at the top, named `Layer <k> (<function>, <material>) volume` and `... mass (kg)`. A mass has no value while the library lacks the layer's material, and the floor's none while any layer's has none. The server's parameters view lists them after the parameters a floor's category has, each shown in the document's units, with `from` `read-only`.
 
 ## Later versions
 

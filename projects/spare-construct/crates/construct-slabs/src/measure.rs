@@ -19,6 +19,9 @@
 //!   IDs ([`AREA`], [`PERIMETER`], [`THICKNESS`], [`VOLUME`], [`MASS`]), held by the instance and
 //!   never stored, for a page to show and a schedule to list. Mass is a number of kilograms
 //!   (three places, so exact to the gram): construct-params has no mass kind yet.
+//! - **Per layer** ([`layer_read_only`]): each layer's volume and mass the same way, layer `k`
+//!   (from 1 at the top) under the fixed IDs `floor.layer-<k>.volume` and `floor.layer-<k>.mass`,
+//!   named with the layer's function and material.
 
 use crate::boundary::{Boundary, twice_signed_area};
 use crate::error::SlabError;
@@ -179,6 +182,17 @@ pub fn quantities(
     })
 }
 
+/// Grams as a number of kilograms, three places: exact to the gram.
+fn kilograms(grams: Option<u64>) -> Result<Option<Value>, SlabError> {
+    Ok(match grams {
+        Some(grams) => Some(Value::number(Decimal::new(
+            i64::try_from(grams).map_err(|_| SlabError::OutOfRange)?,
+            3,
+        ))),
+        None => None,
+    })
+}
+
 /// One of this crate's fixed parameter IDs.
 fn fixed(text: &str) -> Result<Id, SlabError> {
     Id::parse(text).map_err(|_| SlabError::Malformed(format!("{text:?} is not an ID")))
@@ -195,13 +209,7 @@ pub fn read_only(q: &Quantities) -> Result<Vec<(Definition, Option<Value>)>, Sla
         Definition::new(fixed(id)?, name, kind, Holder::Instance)
             .map_err(|e| SlabError::Malformed(e.to_string()))
     };
-    let kilograms = match q.mass_grams {
-        Some(grams) => Some(Value::number(Decimal::new(
-            i64::try_from(grams).map_err(|_| SlabError::OutOfRange)?,
-            3,
-        ))),
-        None => None,
-    };
+    let kilograms = kilograms(q.mass_grams)?;
     Ok(vec![
         (define(AREA, "Area", Kind::Area)?, Some(Value::Area(q.area))),
         (
@@ -218,4 +226,53 @@ pub fn read_only(q: &Quantities) -> Result<Vec<(Definition, Option<Value>)>, Sla
         ),
         (define(MASS, "Mass (kg)", Kind::Number)?, kilograms),
     ])
+}
+
+/// Each layer's read-only parameters, top first: its volume and its mass, layer `k` (from 1 at
+/// the top) as `floor.layer-<k>.volume` and `floor.layer-<k>.mass`, named
+/// `Layer <k> (<function>, <material>) volume` and `... mass (kg)`. A mass has no value when the
+/// library lacks the layer's material. `q` is [`quantities`] of these `layers`.
+///
+/// # Errors
+/// [`SlabError::OutOfRange`] for a mass beyond a decimal; [`SlabError::Malformed`] when `q` is
+/// not of these layers (it holds another count of them).
+pub fn layer_read_only(
+    layers: &Layers,
+    q: &Quantities,
+) -> Result<Vec<(Definition, Option<Value>)>, SlabError> {
+    if layers.layers().len() != q.layers.len() {
+        return Err(SlabError::Malformed(
+            "the quantities are of other layers".to_owned(),
+        ));
+    }
+    let mut rows = Vec::with_capacity(q.layers.len().saturating_mul(2));
+    for (at, (layer, share)) in layers.layers().iter().zip(&q.layers).enumerate() {
+        let k = at.saturating_add(1);
+        let function = serde_json::to_value(layer.function)
+            .ok()
+            .and_then(|f| f.as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let what = format!("Layer {k} ({function}, {})", layer.material.as_str());
+        let define = |id: String, name: String, kind: Kind| {
+            Definition::new(fixed(&id)?, &name, kind, Holder::Instance)
+                .map_err(|e| SlabError::Malformed(e.to_string()))
+        };
+        rows.push((
+            define(
+                format!("floor.layer-{k}.volume"),
+                format!("{what} volume"),
+                Kind::Volume,
+            )?,
+            Some(Value::Volume(share.volume)),
+        ));
+        rows.push((
+            define(
+                format!("floor.layer-{k}.mass"),
+                format!("{what} mass (kg)"),
+                Kind::Number,
+            )?,
+            kilograms(share.mass_grams)?,
+        ));
+    }
+    Ok(rows)
 }

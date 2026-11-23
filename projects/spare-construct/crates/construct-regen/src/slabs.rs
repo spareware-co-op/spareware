@@ -13,12 +13,27 @@
 //!   layers builds every floor of it again, and a floor changed to another type is built with the
 //!   new type's layers. Its level is read as every element's is ([`crate::levels`]): the floor's
 //!   top face stands at its level's elevation plus its offset, which its built row holds.
+//! - What a page shows of a floor ([`read_only_view`]), after the parameters its category has:
+//!   its area, perimeter, thickness, volume and mass, and each layer's volume and mass
+//!   (construct-slabs' `read_only` and `layer_read_only`), worked out from its boundary and its
+//!   type each time it is read, never stored, each shown in the document's units and marked
+//!   `read-only`. Masses come from construct-materials' default library, the one a project reads
+//!   until it keeps its own; a layer of a material the library lacks has no mass, and then nor
+//!   has the floor.
 //!
-//! Depends on construct-model (the recipe), construct-types (the type) and construct-slabs (the
-//! layers, the boundary and the filled form). Nothing here is interim.
+//! Depends on construct-model (the recipe), construct-types (the type), construct-slabs (the
+//! layers, the boundary, the filled form and the quantities), construct-materials (the library)
+//! and construct-params (units). Nothing here is interim.
 
+use crate::parameters::ParameterView;
+use construct_materials::Materials;
+use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
-use construct_slabs::{SlabError, filled as slabs_filled, layers_of, reads_layers};
+use construct_params::{Definition, Units, Value};
+use construct_slabs::{
+    SlabError, boundary_of, filled as slabs_filled, is_floor, layer_read_only, layers_of,
+    quantities, read_only, reads_layers,
+};
 use construct_types::ElementType;
 
 fn failure(code: &str, message: String) -> GeometryError {
@@ -55,4 +70,52 @@ pub fn filled(recipe: &Recipe, ty: Option<&ElementType>) -> Result<Recipe, Geome
     let layers = layers_of(ty)
         .map_err(|e: SlabError| failure("BadFloorType", format!("its type {}: {e}", ty.id())))?;
     slabs_filled(recipe, &layers).map_err(|e| failure("BadBoundary", e.to_string()))
+}
+
+/// Where a read-only value came from, as a page shows it: worked out, never set.
+pub const READ_ONLY: &str = "read-only";
+
+/// A floor's read-only parameters as a page shows them, as the module header says: the floor's
+/// five, then each layer's volume and mass, top first. Not a floor, or one whose boundary or
+/// type's layers cannot be read (its built row says why): none.
+#[must_use]
+pub fn read_only_view(
+    element: &Element,
+    ty: Option<&ElementType>,
+    units: &Units,
+) -> Vec<ParameterView> {
+    if !is_floor(element) {
+        return Vec::new();
+    }
+    let rows = (|| {
+        let boundary = boundary_of(&element.recipe)?;
+        let layers = layers_of(ty.ok_or(SlabError::NotAFloor("it names no type".to_owned()))?)?;
+        let q = quantities(&boundary, &layers, &Materials::default_metric())?;
+        let mut rows = read_only(&q)?;
+        rows.extend(layer_read_only(&layers, &q)?);
+        Ok::<_, SlabError>(rows)
+    })();
+    rows.map_or_else(
+        |_| Vec::new(),
+        |rows| {
+            rows.into_iter()
+                .map(|(def, value)| shown(&def, value, units))
+                .collect()
+        },
+    )
+}
+
+/// One read-only parameter as a page shows it.
+fn shown(def: &Definition, value: Option<Value>, units: &Units) -> ParameterView {
+    ParameterView {
+        id: def.id().to_string(),
+        name: def.name().to_owned(),
+        kind: def.kind().to_string(),
+        holder: "instance",
+        shown: value.as_ref().and_then(|v| def.format(v, units).ok()),
+        value: value.map(|value| value.stored()),
+        from: READ_ONLY,
+        formula: None,
+        reason: None,
+    }
 }

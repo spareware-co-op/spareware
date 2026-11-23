@@ -15,7 +15,7 @@
 //! - [`floor_type`]: [`new_floor_type`], [`with_layers`], [`layers_of`].
 //! - [`boundary`]: [`Boundary`], [`Segment`], [`Edge`], [`Ring`], [`Corner`]; every check and
 //!   refusal; [`Boundary::profile`] for the builder; the stored and the plain (command) forms.
-//! - [`measure`]: [`area`], [`perimeter`], [`quantities`], [`read_only`].
+//! - [`measure`]: [`area`], [`perimeter`], [`quantities`], [`read_only`], [`layer_read_only`].
 //! - [`floor`]: the element record and its recipe ([`floor_record`], [`floor_recipe`],
 //!   [`boundary_of`], [`with_boundary`], [`filled`]).
 //! - [`defaults`]: [`default_floors`], [`default_floor_types`].
@@ -51,7 +51,7 @@ pub use floor::{
 pub use floor_type::{layers_of, new_floor_type, with_layers};
 pub use layers::{FloorLayer, Function, Layers, MOST_TOTAL};
 pub use measure::{
-    AREA, LayerQuantity, MASS, PERIMETER, Quantities, THICKNESS, VOLUME, area, perimeter,
-    quantities, read_only,
+    AREA, LayerQuantity, MASS, PERIMETER, Quantities, THICKNESS, VOLUME, area, layer_read_only,
+    perimeter, quantities, read_only,
 };
 pub use stored::{FORMAT_VERSION, OWNER};

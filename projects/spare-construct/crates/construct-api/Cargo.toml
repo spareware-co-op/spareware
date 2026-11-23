@@ -19,6 +19,7 @@ cloud = [
     "dep:construct-levels",
     "dep:construct-walls",
     "dep:construct-materials",
+    "dep:construct-slabs",
 ]
 
 [dependencies]
@@ -43,6 +44,8 @@ construct-levels = { path = "../construct-levels", optional = true }
 # material is construct-materials' ID.
 construct-walls = { path = "../construct-walls", optional = true }
 construct-materials = { path = "../construct-materials", optional = true }
+# The floor type and floor commands: construct-slabs checks every layer and boundary.
+construct-slabs = { path = "../construct-slabs", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }

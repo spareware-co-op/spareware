@@ -372,7 +372,8 @@ impl Context {
     }
 
     /// What a page shows of an element: its category, its type, and every parameter its category
-    /// has with the value it reads, where that came from, and the value shown in units.
+    /// has with the value it reads, where that came from, and the value shown in units; then, for
+    /// a floor, its read-only quantities ([`crate::slabs::read_only_view`]).
     ///
     /// # Errors
     /// The refusal of a stored value or of the element's type, in words.
@@ -433,6 +434,8 @@ impl Context {
                 reason,
             });
         }
+        // A floor's area, perimeter, volume and mass, worked out and never stored.
+        parameters.extend(crate::slabs::read_only_view(element, ty, &self.units));
         Ok(ElementView {
             element: element.id.to_string(),
             category: category.and_then(|id| {
@@ -498,7 +501,8 @@ pub struct ParameterView {
     /// The same value shown in the document's units, such as `820 mm`.
     pub shown: Option<String>,
     /// Where the value came from: `instance`, `type`, `default` or `unset`; `formula` when its
-    /// formula gives it, which a person can't set.
+    /// formula gives it, which a person can't set; `read-only` for what a floor reads back from
+    /// its boundary and its type ([`crate::slabs::read_only_view`]), which nobody sets.
     pub from: &'static str,
     /// Its formula, in its one spelling, when it has one.
     pub formula: Option<String>,

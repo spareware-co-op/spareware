@@ -16,7 +16,7 @@ use construct_materials::{MaterialId, Materials};
 use construct_params::{Area, Decimal, Kind, Length, Value, Volume};
 use construct_slabs::{
     AREA, Boundary, Corner, Function, Layers, MASS, PERIMETER, SlabError, THICKNESS, VOLUME, area,
-    perimeter, quantities, read_only,
+    layer_read_only, perimeter, quantities, read_only,
 };
 use construct_solver::Point;
 
@@ -130,4 +130,52 @@ fn the_read_only_parameters() {
     // With a material the library lacks, the mass has no value.
     let rows = read_only(&quantities(&l_with_hole(), &slab(), &library).unwrap()).unwrap();
     assert_eq!(rows[4].1, None);
+}
+
+/// Each layer's volume and mass as read-only parameters, top first, named by the layer's place,
+/// function and material; a layer whose material the library lacks has no mass; quantities of
+/// other layers are refused.
+#[test]
+fn each_layers_volume_and_mass_as_read_only_parameters() {
+    let library = Materials::default_metric();
+    let q = quantities(&l_with_hole(), &slab(), &library).unwrap();
+    let rows = layer_read_only(&slab(), &q).unwrap();
+    let ids: Vec<String> = rows.iter().map(|(d, _)| d.id().to_string()).collect();
+    assert_eq!(
+        ids,
+        [
+            "floor.layer-1.volume",
+            "floor.layer-1.mass",
+            "floor.layer-2.volume",
+            "floor.layer-2.mass"
+        ]
+    );
+    let names: Vec<&str> = rows.iter().map(|(d, _)| d.name()).collect();
+    assert_eq!(
+        names,
+        [
+            "Layer 1 (finish, screed-cement) volume",
+            "Layer 1 (finish, screed-cement) mass (kg)",
+            "Layer 2 (structure, concrete-regular) volume",
+            "Layer 2 (structure, concrete-regular) mass (kg)"
+        ]
+    );
+    assert_eq!(
+        rows[0].1,
+        Some(Value::Volume(Volume::from_mm3(2_200_000_000)))
+    );
+    assert_eq!(rows[1].1, None, "no screed in the library yet");
+    let grams = q.layers[1].mass_grams.unwrap();
+    assert_eq!(
+        rows[3].1,
+        Some(Value::number(Decimal::new(
+            i64::try_from(grams).unwrap(),
+            3
+        )))
+    );
+    let one = Layers::new(vec![layer(Function::Structure, 200, "concrete-regular")]).unwrap();
+    assert!(matches!(
+        layer_read_only(&one, &q),
+        Err(SlabError::Malformed(_))
+    ));
 }

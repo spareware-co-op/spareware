@@ -360,3 +360,53 @@ async fn a_floor_is_built_again_when_its_type_or_its_level_changes() {
         Ok(([0, 0, -260], [8000, 8000, 0]))
     );
 }
+
+/// What a page shows of a floor after its category's parameters: its area, perimeter, thickness,
+/// volume and mass, then each layer's volume and mass, worked out from its boundary and its type,
+/// shown in the document's units and marked read-only. A layer of a material the default library
+/// lacks has no mass, and then nor has the floor; a floor with no type, and an element that is not
+/// a floor, show none.
+#[test]
+fn a_floors_read_only_quantities_are_worked_out_from_its_boundary_and_type() {
+    use construct_params::{Area, Units, Value, Volume};
+    let units = Units::default();
+    let ty = floor_type("floor-concrete-200");
+    let element = floor("F-1", "floor-concrete-200", "1", 0);
+    let rows = slabs::read_only_view(&element, Some(&ty), &units);
+    let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "floor.area",
+            "floor.perimeter",
+            "floor.thickness",
+            "floor.volume",
+            "floor.mass",
+            "floor.layer-1.volume",
+            "floor.layer-1.mass"
+        ]
+    );
+    assert!(rows.iter().all(|row| row.from == slabs::READ_ONLY));
+    let area = Value::Area(Area::from_mm2(44_000_000)).stored();
+    assert_eq!(rows[0].value.as_deref(), Some(area.as_str()));
+    assert_eq!(rows[0].shown.as_deref(), Some("44.00 m²"));
+    assert_eq!(rows[1].shown.as_deref(), Some("40000 mm"));
+    assert_eq!(rows[2].shown.as_deref(), Some("200 mm"));
+    let volume = Value::Volume(Volume::from_mm3(8_800_000_000)).stored();
+    assert_eq!(rows[3].value.as_deref(), Some(volume.as_str()));
+    assert_eq!(rows[3].shown.as_deref(), Some("8.80 m³"));
+    assert!(rows[4].value.is_some(), "concrete is in the library");
+    assert_eq!(rows[4].value, rows[6].value, "one layer is the whole floor");
+
+    let screed = floor_type(SLAB);
+    let rows = slabs::read_only_view(&floor("F-2", SLAB, "1", 0), Some(&screed), &units);
+    assert_eq!(rows.len(), 5 + 4);
+    assert_eq!(rows[4].value, None, "no screed in the library yet");
+    assert_eq!(rows[6].value, None);
+    assert!(rows[8].value.is_some());
+
+    assert_eq!(slabs::read_only_view(&element, None, &units).len(), 0);
+    let level = Level::new(i("L-1"), "First floor", mm(3200), true).unwrap();
+    let level = level.to_record(&i(DOCUMENT));
+    assert_eq!(slabs::read_only_view(&level, None, &units).len(), 0);
+}

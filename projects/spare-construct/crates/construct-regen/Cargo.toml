@@ -19,6 +19,7 @@ server = [
     "dep:construct-levels",
     "dep:construct-walls",
     "dep:construct-slabs",
+    "dep:construct-materials",
 ]
 
 [dependencies]
@@ -42,6 +43,9 @@ construct-walls = { path = "../construct-walls", optional = true }
 # A floor's layers are read from its floor type and its boundary checked (src/slabs.rs). Same
 # workspace.
 construct-slabs = { path = "../construct-slabs", optional = true }
+# A floor's read-only mass is its layers' volumes of their materials, from the default library
+# (src/slabs.rs). Same workspace.
+construct-materials = { path = "../construct-materials", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

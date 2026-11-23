@@ -11,6 +11,8 @@
 //!   same log.
 //! - [`walls`]: wall types and their layers, and drawing layered walls of them, through the same
 //!   log.
+//! - [`floors`]: floor types and their layers, and floors drawn from a boundary, through the same
+//!   log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -21,6 +23,7 @@ pub mod access;
 pub mod commands;
 pub mod directory;
 pub mod elements;
+pub mod floors;
 pub mod hosting;
 pub mod levels;
 pub mod params;
