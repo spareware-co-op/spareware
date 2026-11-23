@@ -3,11 +3,17 @@
 //! not worked out, the text is its one stored spelling), every other parameter reads its default,
 //! and every formula is worked out with construct-formulas over the numbers (lengths, angles,
 //! numbers and whole numbers). Length formulas outside the parameters (plane offsets, extrusion
-//! heights, constraint lengths) are read against the same numbers.
+//! heights, constraint lengths) are read against the same numbers. Every formula's text is
+//! counted against the evaluation's formula limit before it is worked out.
+//!
+//! A named type's values ([`TypeValues::of`]) are a built-in type's as written, or a type table
+//! row's read column by column; a row without a value for a column, or with more values than
+//! columns, is refused naming the type (and the column).
 
 use super::error::{EvalError, Place, Reason};
+use super::limits::Meter;
 use crate::check::{Sort, definition, formula_kind, formula_text, names, stored_value};
-use crate::model::{Key, ParameterValue, Recipe};
+use crate::model::{Key, NamedType, ParameterValue, Recipe};
 use construct_formulas::{Entry, FormulaError, evaluate, parse, value_of};
 use construct_params::{Definition, Holder, Kind, Length, Value};
 use kit_core::Id;
@@ -28,27 +34,60 @@ impl TypeValues {
         Self::default()
     }
 
-    /// The values a recipe's built-in type sets.
+    /// The values a type the recipe names sets: a built-in type's, or a type table row's, read
+    /// column by column. Each value is checked here, as evaluation checks a value it is given,
+    /// so a refusal names the type and the parameter.
     ///
     /// # Errors
     ///
-    /// [`Reason::NoSuchType`] if the recipe has no type with this key, [`Reason::Duplicate`] if
-    /// the type sets one parameter twice.
+    /// At [`Place::Type`]: [`Reason::NoSuchType`] if the recipe names no type with this key,
+    /// [`Reason::ExtraValues`] for a row with more values than columns. At [`Place::TypeValue`]
+    /// (the type and the parameter): [`Reason::NoValue`] for a column the row has no value for,
+    /// [`Reason::Duplicate`] for a parameter set twice, and for a value the type may not set or
+    /// that is not its parameter's (not its kind or units, or not its one spelling) the reason
+    /// evaluation gives it ([`Reason::Missing`], [`Reason::HeldByInstance`],
+    /// [`Reason::SetsFormula`], [`Reason::BadValue`]). At [`Place::Parameter`]: a parameter whose
+    /// definition construct-params refuses.
     pub fn of(recipe: &Recipe, ty: &Key) -> Result<Self, EvalError> {
-        let Some(found) = recipe.types.iter().find(|t| t.key == *ty) else {
+        let Some(found) = recipe.named_type(ty) else {
             return Err(EvalError::new(Place::Type(ty.clone()), Reason::NoSuchType));
         };
-        let mut values = Self::new();
-        for value in &found.values {
-            if values.values.contains_key(&value.parameter) {
+        let at = |parameter: &Key, reason| {
+            EvalError::new(
+                Place::TypeValue {
+                    ty: ty.clone(),
+                    parameter: parameter.clone(),
+                },
+                reason,
+            )
+        };
+        if let NamedType::Row { columns, row } = found {
+            if let Some(column) = columns.get(row.values.len()..).and_then(<[Key]>::first) {
+                return Err(at(column, Reason::NoValue));
+            }
+            if row.values.len() > columns.len() {
                 return Err(EvalError::new(
                     Place::Type(ty.clone()),
-                    Reason::Duplicate {
-                        key: value.parameter.as_str().to_owned(),
+                    Reason::ExtraValues {
+                        values: row.values.len(),
+                        columns: columns.len(),
                     },
                 ));
             }
-            values.set(value.parameter.clone(), value.value.clone());
+        }
+        let defs = definitions(recipe)?;
+        let mut values = Self::new();
+        for (parameter, text) in found.written() {
+            if values.values.contains_key(parameter) {
+                return Err(at(
+                    parameter,
+                    Reason::Duplicate {
+                        key: parameter.as_str().to_owned(),
+                    },
+                ));
+            }
+            settable(recipe, &defs, parameter, text).map_err(|reason| at(parameter, reason))?;
+            values.set(parameter.clone(), text);
         }
         Ok(values)
     }
@@ -130,45 +169,48 @@ fn definitions(recipe: &Recipe) -> Result<Vec<(Key, Definition)>, EvalError> {
     Ok(defs)
 }
 
-/// Checks that every value the type sets is one it may set.
-fn check_given(
+/// Checks that a type may set `key` to `text`: the parameter exists, the type holds it, it is not
+/// worked out, and the text is one of its values in its one spelling.
+fn settable(
     recipe: &Recipe,
     defs: &[(Key, Definition)],
-    given: &TypeValues,
-) -> Result<(), EvalError> {
-    for (key, text) in given.iter() {
-        let Some((row, def)) = recipe
-            .parameters
-            .iter()
-            .zip(defs)
-            .find(|(row, _)| row.key == *key)
-            .map(|(row, (_, def))| (row, def))
-        else {
-            return refuse(
-                key,
-                Reason::Missing {
-                    sort: Sort::Parameter,
-                    key: key.as_str().to_owned(),
-                },
-            );
-        };
-        if def.holder() == Holder::Instance {
-            return refuse(key, Reason::HeldByInstance);
-        }
-        if matches!(row.value, ParameterValue::Formula(_)) {
-            return refuse(key, Reason::SetsFormula);
-        }
-        if let Err(e) = stored_value(def, text) {
-            return refuse(key, Reason::BadValue(e));
-        }
+    key: &Key,
+    text: &str,
+) -> Result<(), Reason> {
+    let Some((row, def)) = recipe
+        .parameters
+        .iter()
+        .zip(defs)
+        .find(|(row, _)| row.key == *key)
+        .map(|(row, (_, def))| (row, def))
+    else {
+        return Err(Reason::Missing {
+            sort: Sort::Parameter,
+            key: key.as_str().to_owned(),
+        });
+    };
+    if def.holder() == Holder::Instance {
+        return Err(Reason::HeldByInstance);
     }
-    Ok(())
+    if matches!(row.value, ParameterValue::Formula(_)) {
+        return Err(Reason::SetsFormula);
+    }
+    stored_value(def, text)
+        .map(|_| ())
+        .map_err(Reason::BadValue)
 }
 
-/// Works out every parameter of `recipe` for the type whose values are `given`.
-pub(crate) fn work_out(recipe: &Recipe, given: &TypeValues) -> Result<Worked, EvalError> {
+/// Works out every parameter of `recipe` for the type whose values are `given`, counting the
+/// formula text against `meter`.
+pub(crate) fn work_out(
+    recipe: &Recipe,
+    given: &TypeValues,
+    meter: &mut Meter,
+) -> Result<Worked, EvalError> {
     let defs = definitions(recipe)?;
-    check_given(recipe, &defs, given)?;
+    for (key, text) in given.iter() {
+        settable(recipe, &defs, key, text).or_else(|reason| refuse(key, reason))?;
+    }
     // Every parameter that is not worked out: the type's value, or its default.
     let mut stored: BTreeMap<&str, Value> = BTreeMap::new();
     let mut entries: Vec<(Key, Entry)> = Vec::new();
@@ -228,6 +270,13 @@ pub(crate) fn work_out(recipe: &Recipe, given: &TypeValues) -> Result<Worked, Ev
             return refuse(&row.key, Reason::NotNumeric { key });
         }
     }
+    // The whole table is worked out at once, so its text is counted first, refused at the
+    // parameter whose formula or value would pass the limit.
+    for (key, entry) in &entries {
+        meter
+            .formula(&entry.text)
+            .or_else(|reason| refuse(key, reason))?;
+    }
     let table: Vec<Entry> = entries.iter().map(|(_, entry)| entry.clone()).collect();
     let results = evaluate(&table);
     let mut numbers = BTreeMap::new();
@@ -273,8 +322,9 @@ fn not_numeric(text: &str, kinds: &BTreeMap<String, Kind>) -> Option<String> {
 }
 
 impl Worked {
-    /// A length formula worked out over these values.
-    pub(crate) fn length(&self, text: &str) -> Result<Length, Reason> {
+    /// A length formula worked out over these values, its text counted against `meter`.
+    pub(crate) fn length(&self, text: &str, meter: &mut Meter) -> Result<Length, Reason> {
+        meter.formula(text)?;
         if let Some(key) = not_numeric(text, &self.kinds) {
             return Err(Reason::NotNumeric { key });
         }

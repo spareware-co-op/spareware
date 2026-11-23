@@ -75,6 +75,8 @@ pub struct Recipe {
     pub hosting: Hosting,
     /// Its built-in types.
     pub types: Vec<BuiltInType>,
+    /// Its type table, if it has one: more types, as rows of values.
+    pub type_table: Option<TypeTable>,
 }
 
 /// One parameter: a construct-params definition, the key formulas know it by, and its default
@@ -506,4 +508,100 @@ pub struct TypeValue {
     pub parameter: Key,
     /// The value, in stored text.
     pub value: String,
+}
+
+/// A type table: many types written as rows of values, one column per parameter they set, as a
+/// catalogue of sizes is written. Each row is a type of the family, as a built-in type is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeTable {
+    /// The parameters each row sets, in column order.
+    pub columns: Vec<Key>,
+    /// The rows, in the order written.
+    pub rows: Vec<TableRow>,
+}
+
+/// One row of a type table: a type, its name, and one value per column.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableRow {
+    /// Its key, unique among the built-in types and the rows.
+    pub key: Key,
+    /// The name people see.
+    pub name: String,
+    /// Its values, in stored text, in column order.
+    pub values: Vec<String>,
+}
+
+/// A type a recipe names by its key: a built-in type, or a row of its type table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamedType<'r> {
+    /// A built-in type.
+    BuiltIn(&'r BuiltInType),
+    /// A row of the type table, with the table's columns.
+    Row {
+        /// The table's columns.
+        columns: &'r [Key],
+        /// The row.
+        row: &'r TableRow,
+    },
+}
+
+impl<'r> NamedType<'r> {
+    /// Its key.
+    #[must_use]
+    pub fn key(self) -> &'r Key {
+        match self {
+            Self::BuiltIn(ty) => &ty.key,
+            Self::Row { row, .. } => &row.key,
+        }
+    }
+
+    /// Its name.
+    #[must_use]
+    pub fn name(self) -> &'r str {
+        match self {
+            Self::BuiltIn(ty) => &ty.name,
+            Self::Row { row, .. } => &row.name,
+        }
+    }
+
+    /// The values it sets as written, each with its parameter, in the order written. A row is
+    /// read column by column, as far as both its values and the columns go; whether the two
+    /// agree is the checker's question, and evaluation's ([`crate::TypeValues::of`]).
+    #[must_use]
+    pub fn written(self) -> Vec<(&'r Key, &'r str)> {
+        match self {
+            Self::BuiltIn(ty) => ty
+                .values
+                .iter()
+                .map(|v| (&v.parameter, v.value.as_str()))
+                .collect(),
+            Self::Row { columns, row } => columns
+                .iter()
+                .zip(&row.values)
+                .map(|(column, value)| (column, value.as_str()))
+                .collect(),
+        }
+    }
+}
+
+impl Recipe {
+    /// Every type the recipe names, in order: its built-in types as written, then its type
+    /// table's rows as written.
+    #[must_use]
+    pub fn named_types(&self) -> Vec<NamedType<'_>> {
+        let mut all: Vec<NamedType<'_>> = self.types.iter().map(NamedType::BuiltIn).collect();
+        if let Some(table) = &self.type_table {
+            all.extend(table.rows.iter().map(|row| NamedType::Row {
+                columns: &table.columns,
+                row,
+            }));
+        }
+        all
+    }
+
+    /// The first type the recipe names with this key, if one has it.
+    #[must_use]
+    pub fn named_type(&self, key: &Key) -> Option<NamedType<'_>> {
+        self.named_types().into_iter().find(|ty| ty.key() == key)
+    }
 }

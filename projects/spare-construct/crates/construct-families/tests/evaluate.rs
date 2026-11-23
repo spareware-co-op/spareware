@@ -1,6 +1,7 @@
-//! Recipe evaluation (CON-A7-F1-P2, first half): the evaluation suite (`evaluate_suite`) on a test
-//! engine of this file's own, then every refusal, each with its place and reason, and the cache
-//! per type. Everything is judged through this crate's types and the `Engine` trait only.
+//! Recipe evaluation (CON-A7-F1-P2, P3 and P6): the evaluation suite (`evaluate_suite`) on a test
+//! engine of this file's own, then every refusal, each with its place and reason (an unsolvable
+//! sketch among them), named types and the type table, the limits, and the cache per type.
+//! Everything is judged through this crate's types and the `Engine` trait only.
 
 #![allow(
     clippy::unwrap_used,
@@ -16,9 +17,10 @@
 mod common;
 mod evaluate_suite;
 
-use common::{EXAMPLES, Fixture, read};
+use common::{EXAMPLES, Fixture, door_table, read};
 use construct_families::{
-    CacheKey, EvalError, Evaluator, Place, Reason, Recipe, Sort, TypeValues, evaluate,
+    CacheKey, EvalError, Evaluator, Limit, Limits, Place, Reason, Recipe, Sort, TypeValues,
+    evaluate, evaluate_within,
 };
 use construct_solver::{ConstraintId, SolveError};
 use engine_geometry::value::engine::{
@@ -266,6 +268,21 @@ fn a_formula_change_moves_a_face() {
 }
 
 #[test]
+fn every_door_type_is_solved_to_its_size() {
+    evaluate_suite::every_door_type_is_solved_to_its_size(Prisms::new);
+}
+
+#[test]
+fn a_taller_type_moves_the_head() {
+    evaluate_suite::a_taller_type_moves_the_head(Prisms::new);
+}
+
+#[test]
+fn a_free_part_of_a_sketch_stays_as_drawn() {
+    evaluate_suite::a_free_part_of_a_sketch_stays_as_drawn(Prisms::new);
+}
+
+#[test]
 fn a_void_cuts_its_target() {
     evaluate_suite::a_void_cuts_its_target(Prisms::new);
 }
@@ -294,34 +311,43 @@ fn the_suites_block_passes_every_check() {
     assert_eq!(recipe.check(&fixture.library()), Ok(()));
 }
 
-/// Every example evaluates for every built-in type its sketches are drawn for, and the others are
-/// refused as not solved.
+/// Every example evaluates for every type it names, and at its defaults, well within the
+/// default limits.
 #[test]
-fn every_example_evaluates_where_its_sketches_are_drawn() {
+fn every_example_evaluates_for_every_type_it_names() {
     let mut evaluated = Vec::new();
     for (name, text) in EXAMPLES {
         let recipe = read(text);
-        for ty in &recipe.types {
-            let values = TypeValues::of(&recipe, &ty.key).unwrap();
-            match evaluate(&mut Prisms::new(), &recipe, &values) {
-                Ok(built) => {
-                    assert!(!built.solids.is_empty(), "{name} {}", ty.key);
-                    evaluated.push(format!("{name} {}", ty.key));
-                }
-                Err(e) => assert!(
-                    matches!(e.reason(), Reason::NotSolved(_)),
-                    "{name} {}: {e}",
-                    ty.key
-                ),
-            }
+        let mut evaluator = Evaluator::new(Prisms::new());
+        for (ty, result) in evaluator.evaluate_types(&recipe) {
+            let built = result.unwrap_or_else(|e| panic!("{name} {ty}: {e}"));
+            assert!(!built.solids.is_empty(), "{name} {ty}");
+            evaluated.push(format!("{name} {ty}"));
         }
         let defaults = evaluate(&mut Prisms::new(), &recipe, &TypeValues::new());
         assert!(defaults.is_ok(), "{name} at its defaults: {defaults:?}");
     }
-    assert!(
-        evaluated.contains(&"single-swing-door d820".to_owned()),
-        "{evaluated:?}"
-    );
+    for ty in ["d720", "d820", "d920"] {
+        assert!(
+            evaluated.contains(&format!("single-swing-door {ty}")),
+            "{evaluated:?}"
+        );
+    }
+}
+
+/// The same recipe and values give the same solids and the same counts on every run.
+#[test]
+fn solving_gives_the_same_answer_every_run() {
+    let recipe = door();
+    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
+    let first = evaluate(&mut Prisms::new(), &recipe, &values).unwrap();
+    for _ in 0..3 {
+        assert_eq!(
+            evaluate(&mut Prisms::new(), &recipe, &values).unwrap(),
+            first
+        );
+    }
+    assert!(first.used.solver_steps > 0, "{:?}", first.used);
 }
 
 // Refusals: each with its place and reason.
@@ -417,35 +443,43 @@ fn a_formula_that_reads_a_material_is_refused() {
     );
 }
 
-/// The 720 mm door moves its elevation sketch: this half takes sketches as stored, so it is
-/// refused at the first constraint the stored sketch does not meet (the 360 mm half width, drawn
-/// 410 mm), saying solving is not built yet.
+/// The door with one more constraint: its two fixed points 1000 mm apart are also to be the
+/// door's width and 180 mm apart. That holds for the 820 mm type and for no other: the 720 mm
+/// type is over-constrained, and is refused naming the sketch and that constraint.
 #[test]
-fn a_type_that_moves_a_sketch_is_refused_as_not_solved() {
-    let recipe = door();
-    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
-    let e = refusal(&recipe, &values);
+fn a_sketch_that_cannot_be_solved_at_a_types_values_is_refused_naming_the_constraint() {
+    let recipe = door_with(|v| {
+        v["sketches"][0]["constraints"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"kind": "distance", "a": "o", "b": "e", "length": "width + 180 mm"}));
+    });
+    assert_eq!(recipe.check(&Fixture::new().library()), Ok(()));
+    let d820 = TypeValues::of(&recipe, &key("d820")).unwrap();
+    assert!(evaluate(&mut Prisms::new(), &recipe, &d820).is_ok());
+    let d720 = TypeValues::of(&recipe, &key("d720")).unwrap();
+    let e = refusal(&recipe, &d720);
     assert_eq!(e.step(), Some(&key("frame")));
     assert_eq!(
         e.place(),
         &Place::Constraint {
             sketch: key("elevation"),
-            index: 6
+            index: 22
         }
     );
     assert_eq!(
         e.reason(),
-        &Reason::NotSolved(SolveError::RoundingRefused {
-            constraint: ConstraintId(6),
-            residual_mm: 50.0
+        &Reason::NotSolved(SolveError::OverConstrained {
+            conflicting: vec![ConstraintId(22)]
         })
     );
     let text = e.to_string();
     assert!(
-        text.starts_with("step frame: sketch elevation, constraint 6: "),
+        text.starts_with(
+            "step frame: sketch elevation, constraint 22: the sketch cannot be solved"
+        ),
         "{text}"
     );
-    assert!(text.contains("not built yet"), "{text}");
 }
 
 #[test]
@@ -674,8 +708,8 @@ fn a_refusal_is_not_kept_and_a_new_recipe_version_is_built() {
     let recipe = door();
     let mut evaluator = Evaluator::new(Prisms::new());
     evaluator.evaluate(&recipe, &d820()).unwrap();
-    let d720 = TypeValues::of(&recipe, &key("d720")).unwrap();
-    assert!(evaluator.evaluate(&recipe, &d720).is_err());
+    let stray = d820().with(key("depth"), length(100));
+    assert!(evaluator.evaluate(&recipe, &stray).is_err());
     assert_eq!((evaluator.builds(), evaluator.kept()), (1, 1));
     let changed = door_with(|v| v["steps"][1]["start"] = json!("frame_depth / 2 - 2 * panel"));
     evaluator.evaluate(&changed, &d820()).unwrap();
@@ -684,4 +718,290 @@ fn a_refusal_is_not_kept_and_a_new_recipe_version_is_built() {
     assert_eq!(evaluator.kept(), 1);
     assert!(evaluator.has(&CacheKey::of(&changed, &d820())));
     assert!(!evaluator.has(&CacheKey::of(&recipe, &d820())));
+}
+
+// Named types and the type table.
+
+/// The door with its type table (`common::door_table`).
+fn door_with_table() -> Recipe {
+    door_with(|v| v["type_table"] = door_table())
+}
+
+/// The door with its type table, after one more change to the table.
+fn table_with(change: impl FnOnce(&mut Value)) -> Recipe {
+    door_with(|v| {
+        v["type_table"] = door_table();
+        change(&mut v["type_table"]);
+    })
+}
+
+/// A row is a type like a built-in one: its values, column by column, solved and built to its
+/// size.
+#[test]
+fn a_type_table_row_is_evaluated_like_a_built_in_type() {
+    let recipe = door_with_table();
+    let values = TypeValues::of(&recipe, &key("d921")).unwrap();
+    assert_eq!(values.get("width"), Some(length(920).as_str()));
+    assert_eq!(values.get("height"), Some(length(2100).as_str()));
+    let mut evaluator = Evaluator::new(Prisms::new());
+    let built = evaluator.evaluate_type(&recipe, &key("d921")).unwrap();
+    let frame = evaluate_suite::measure(evaluator.engine_mut(), &built.solids[0].solid);
+    assert_eq!(frame, evaluate_suite::frame_of(920, 2100, 110));
+    let d620 = evaluator.evaluate_type(&recipe, &key("d620")).unwrap();
+    let frame = evaluate_suite::measure(evaluator.engine_mut(), &d620.solids[0].solid);
+    assert_eq!(frame, evaluate_suite::frame_of(620, 2040, 110));
+}
+
+/// A table is evaluated row by row through the per-type cache: every type once, a row with a
+/// built-in type's values shares its evaluation, and asking again builds nothing.
+#[test]
+fn a_type_table_is_built_once_per_type() {
+    let recipe = door_with_table();
+    let mut evaluator = Evaluator::new(Prisms::new());
+    let all = evaluator.evaluate_types(&recipe);
+    let keys: Vec<&str> = all.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, ["d720", "d820", "d920", "d620", "d921", "d820t"]);
+    assert!(all.iter().all(|(_, r)| r.is_ok()));
+    assert_eq!((evaluator.builds(), evaluator.kept()), (5, 5));
+    assert_eq!(evaluator.engine().extrusions, 10, "two for each type built");
+    let d820 = all[1].1.as_ref().unwrap();
+    let d820t = all[5].1.as_ref().unwrap();
+    assert!(Arc::ptr_eq(d820, d820t));
+    let again = evaluator.evaluate_types(&recipe);
+    assert_eq!((evaluator.builds(), evaluator.engine().extrusions), (5, 10));
+    for ((_, a), (_, b)) in all.iter().zip(&again) {
+        assert!(Arc::ptr_eq(a.as_ref().unwrap(), b.as_ref().unwrap()));
+    }
+    // A changed type is the only one built again.
+    let d921 = TypeValues::of(&recipe, &key("d921")).unwrap();
+    evaluator
+        .evaluate(&recipe, &d921.with(key("frame"), length(50)))
+        .unwrap();
+    assert_eq!((evaluator.builds(), evaluator.engine().extrusions), (6, 12));
+}
+
+/// One row's refusal does not stop the others.
+#[test]
+fn one_rows_refusal_leaves_the_others() {
+    let recipe = table_with(|t| t["rows"][0]["values"][0] = json!("angle:405000000"));
+    let mut evaluator = Evaluator::new(Prisms::new());
+    let all = evaluator.evaluate_types(&recipe);
+    let refused: Vec<&str> = all
+        .iter()
+        .filter(|(_, r)| r.is_err())
+        .map(|(k, _)| k.as_str())
+        .collect();
+    assert_eq!(refused, ["d620"]);
+    assert_eq!(evaluator.builds(), 4);
+}
+
+#[test]
+fn a_row_without_a_value_names_the_type_and_the_column() {
+    let recipe = table_with(|t| {
+        t["rows"][0]["values"].as_array_mut().unwrap().pop();
+    });
+    let e = TypeValues::of(&recipe, &key("d620")).unwrap_err();
+    assert_eq!(
+        e.place(),
+        &Place::TypeValue {
+            ty: key("d620"),
+            parameter: key("height")
+        }
+    );
+    assert_eq!(e.reason(), &Reason::NoValue);
+    assert_eq!(
+        e.to_string(),
+        "type d620, parameter height: the type table row has no value for it"
+    );
+    let recipe = table_with(|t| {
+        t["rows"][0]["values"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(length(1)));
+    });
+    let e = TypeValues::of(&recipe, &key("d620")).unwrap_err();
+    assert_eq!(e.place(), &Place::Type(key("d620")));
+    assert_eq!(
+        e.reason(),
+        &Reason::ExtraValues {
+            values: 3,
+            columns: 2
+        }
+    );
+}
+
+/// A value of another kind or units, or not in its one spelling, names the type, the parameter
+/// and why, whether it is a row's or a built-in type's.
+#[test]
+fn a_wrong_unit_value_names_the_type_and_the_parameter() {
+    for bad in ["angle:405000000", "length:620", "material:glass-plate"] {
+        let recipe = table_with(|t| t["rows"][0]["values"][0] = json!(bad));
+        let e = TypeValues::of(&recipe, &key("d620")).unwrap_err();
+        assert_eq!(
+            e.place(),
+            &Place::TypeValue {
+                ty: key("d620"),
+                parameter: key("width")
+            },
+            "{bad}"
+        );
+        assert!(matches!(e.reason(), Reason::BadValue(_)), "{bad}: {e}");
+        assert!(
+            e.to_string().starts_with("type d620, parameter width: "),
+            "{e}"
+        );
+    }
+    let recipe = door_with(|v| v["types"][0]["values"][0]["value"] = json!("angle:405000000"));
+    let e = TypeValues::of(&recipe, &key("d720")).unwrap_err();
+    assert_eq!(
+        e.place(),
+        &Place::TypeValue {
+            ty: key("d720"),
+            parameter: key("width")
+        }
+    );
+    let recipe = table_with(|t| t["columns"][1] = json!("swing"));
+    let e = TypeValues::of(&recipe, &key("d620")).unwrap_err();
+    assert_eq!(
+        e.place(),
+        &Place::TypeValue {
+            ty: key("d620"),
+            parameter: key("swing")
+        }
+    );
+    assert_eq!(e.reason(), &Reason::HeldByInstance);
+}
+
+// The limits.
+
+/// The door uses far less than every default limit: under a hundredth of each.
+#[test]
+fn the_door_passes_the_default_limits_easily() {
+    let recipe = door();
+    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
+    let used = evaluate(&mut Prisms::new(), &recipe, &values).unwrap().used;
+    let limits = Limits::DEFAULT;
+    assert_eq!(Limits::default(), limits);
+    assert_eq!((used.solid_steps, used.corners), (2, 12));
+    assert!(used.solver_steps > 0 && used.solver_steps * 100 < limits.solver_steps);
+    assert!(used.formula_bytes > 0 && used.formula_bytes * 100 < limits.formula_bytes);
+    assert!(u64::from(used.solid_steps) * 100 < u64::from(limits.solid_steps));
+    assert!(used.corners * 100 < limits.corners);
+}
+
+fn within(limits: Limits) -> EvalError {
+    let recipe = door();
+    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
+    let e = evaluate_within(&mut Prisms::new(), &recipe, &values, limits).unwrap_err();
+    // The same limit is reached at the same place on every run.
+    assert_eq!(
+        evaluate_within(&mut Prisms::new(), &recipe, &values, limits).unwrap_err(),
+        e
+    );
+    e
+}
+
+#[test]
+fn running_out_of_solver_steps_is_refused_at_the_sketch() {
+    let mut limits = Limits::DEFAULT;
+    limits.solver_steps = 1;
+    let e = within(limits);
+    assert_eq!(e.step(), Some(&key("frame")));
+    assert_eq!(e.place(), &Place::Sketch(key("elevation")));
+    assert_eq!(
+        e.reason(),
+        &Reason::LimitReached {
+            limit: Limit::SolverSteps,
+            allowed: 1
+        }
+    );
+    assert_eq!(
+        e.to_string(),
+        "step frame: sketch elevation: evaluating it would pass the limit of 1 sketch solver \
+         steps for one type"
+    );
+}
+
+#[test]
+fn too_many_solid_steps_are_refused_at_the_step() {
+    let mut limits = Limits::DEFAULT;
+    limits.solid_steps = 1;
+    let e = within(limits);
+    assert_eq!(e.place(), &Place::Step(key("panel")));
+    assert_eq!(
+        e.reason(),
+        &Reason::LimitReached {
+            limit: Limit::SolidSteps,
+            allowed: 1
+        }
+    );
+}
+
+#[test]
+fn too_many_corners_are_refused_at_the_step() {
+    let mut limits = Limits::DEFAULT;
+    limits.corners = 11;
+    let e = within(limits);
+    assert_eq!(e.place(), &Place::Step(key("panel")));
+    assert_eq!(
+        e.reason(),
+        &Reason::LimitReached {
+            limit: Limit::ResultSize,
+            allowed: 11
+        }
+    );
+    limits.corners = 12;
+    let recipe = door();
+    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
+    assert!(evaluate_within(&mut Prisms::new(), &recipe, &values, limits).is_ok());
+}
+
+#[test]
+fn too_much_formula_text_is_refused_where_it_is_reached() {
+    let mut limits = Limits::DEFAULT;
+    limits.formula_bytes = 10;
+    let e = within(limits);
+    assert!(matches!(e.place(), Place::Parameter(_)), "{e}");
+    assert_eq!(
+        e.reason(),
+        &Reason::LimitReached {
+            limit: Limit::FormulaWork,
+            allowed: 10
+        }
+    );
+    // One byte short of what the door uses is refused; exactly what it uses is enough.
+    let recipe = door();
+    let values = TypeValues::of(&recipe, &key("d720")).unwrap();
+    let used = evaluate(&mut Prisms::new(), &recipe, &values)
+        .unwrap()
+        .used
+        .formula_bytes;
+    limits.formula_bytes = used - 1;
+    let e = within(limits);
+    assert!(
+        matches!(
+            e.reason(),
+            Reason::LimitReached {
+                limit: Limit::FormulaWork,
+                ..
+            }
+        ),
+        "{e}"
+    );
+    limits.formula_bytes = used;
+    assert!(evaluate_within(&mut Prisms::new(), &recipe, &values, limits).is_ok());
+}
+
+/// An evaluator keeps its limits for every type it builds, and a type refused by a limit is not
+/// kept.
+#[test]
+fn an_evaluator_evaluates_within_its_limits() {
+    let mut limits = Limits::DEFAULT;
+    limits.solid_steps = 1;
+    let mut evaluator = Evaluator::with_limits(Prisms::new(), limits);
+    assert_eq!(evaluator.limits(), limits);
+    let e = evaluator.evaluate(&door(), &d820()).unwrap_err();
+    assert!(matches!(e.reason(), Reason::LimitReached { .. }));
+    assert_eq!((evaluator.builds(), evaluator.kept()), (0, 0));
+    assert_eq!(Evaluator::new(Prisms::new()).limits(), Limits::DEFAULT);
 }

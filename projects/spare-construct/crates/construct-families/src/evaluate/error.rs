@@ -1,6 +1,7 @@
 //! Why a recipe was not evaluated, as a value a caller can show a person: the step being built
 //! when it stopped (if one was), the place in the recipe, and the reason.
 
+use super::limits::Limit;
 use crate::check::Sort;
 use crate::model::Key;
 use construct_formulas::FormulaError;
@@ -13,8 +14,15 @@ use std::fmt;
 /// Where in a recipe evaluation stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Place {
-    /// A built-in type of the recipe.
+    /// A type the recipe names (built-in, or a type table row).
     Type(Key),
+    /// One value a named type sets, or lacks.
+    TypeValue {
+        /// The type.
+        ty: Key,
+        /// The parameter.
+        parameter: Key,
+    },
     /// A parameter: its definition, its value or its formula.
     Parameter(Key),
     /// A plane: its offset.
@@ -45,6 +53,7 @@ impl fmt::Display for Place {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Type(key) => write!(f, "type {key}"),
+            Self::TypeValue { ty, parameter } => write!(f, "type {ty}, parameter {parameter}"),
             Self::Parameter(key) => write!(f, "parameter {key}"),
             Self::Plane(key) => write!(f, "plane {key}"),
             Self::Sketch(key) => write!(f, "sketch {key}"),
@@ -62,8 +71,17 @@ impl fmt::Display for Place {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Reason {
-    /// The recipe has no built-in type with this key.
+    /// The recipe names no type with this key (built-in or a type table row).
     NoSuchType,
+    /// A type table row has no value for this column.
+    NoValue,
+    /// A type table row has more values than the table has columns.
+    ExtraValues {
+        /// The row's values.
+        values: usize,
+        /// The table's columns.
+        columns: usize,
+    },
     /// Nothing of this sort has this key.
     Missing {
         /// What was looked for.
@@ -114,9 +132,10 @@ pub enum Reason {
     },
     /// The sketch solver does not take the item or constraint as written.
     BadSketch(SketchError),
-    /// The sketch as stored does not meet its constraints at these values. This half of
-    /// evaluation takes sketches as they are stored; solving one inside a recipe is not built
-    /// yet, so a type whose values move a sketch is refused here.
+    /// The sketch cannot be solved at these values, from its stored geometry: its constraints
+    /// conflict (over-constrained), no position meeting them is found from where it is drawn, the
+    /// answer does not stay within the model tolerance on the grid, or the solver cannot tell
+    /// (the solver's error says which, and names the constraints).
     NotSolved(SolveError),
     /// An extrusion's profile or hole is not one closed loop of three or more lines.
     NotALoop,
@@ -136,12 +155,24 @@ pub enum Reason {
     },
     /// The engine gave no answer.
     Engine(EngineError),
+    /// Going on would pass one of the evaluation's limits ([`crate::Limits`]).
+    LimitReached {
+        /// Which limit.
+        limit: Limit,
+        /// What it allows.
+        allowed: u64,
+    },
 }
 
 impl fmt::Display for Reason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoSuchType => f.write_str("the recipe has no such type"),
+            Self::NoValue => f.write_str("the type table row has no value for it"),
+            Self::ExtraValues { values, columns } => write!(
+                f,
+                "the type table row has {values} values for {columns} columns"
+            ),
             Self::Missing { sort, key } => write!(f, "there is no {sort} {key}"),
             Self::WrongSort { key, wanted, found } => {
                 write!(f, "{key} is a {found}, and a {wanted} is wanted")
@@ -159,9 +190,7 @@ impl fmt::Display for Reason {
             Self::BadSketch(e) => write!(f, "the sketch solver does not take it: {e}"),
             Self::NotSolved(e) => write!(
                 f,
-                "the sketch as stored does not meet its constraints at these values ({e}); \
-                 solving a sketch inside a recipe is not built yet, so only values the sketch is \
-                 drawn for can be evaluated"
+                "the sketch cannot be solved at these values from where it is drawn: {e}"
             ),
             Self::NotALoop => f.write_str("the lines are not one closed loop"),
             Self::NoThickness => f.write_str("it starts and ends at the same height"),
@@ -182,6 +211,10 @@ impl fmt::Display for Reason {
                     write!(f, "the engine's {operation} does not answer {what} yet")
                 }
             },
+            Self::LimitReached { limit, allowed } => write!(
+                f,
+                "evaluating it would pass the limit of {allowed} {limit} for one type"
+            ),
         }
     }
 }

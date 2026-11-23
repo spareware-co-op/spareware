@@ -1,25 +1,31 @@
-//! A recipe's sketch as construct-solver's sketch at one type's values, checked as stored, and
-//! its profiles as the engine's corners.
+//! A recipe's sketch as construct-solver's sketch, solved at one type's values, and its profiles
+//! as the engine's corners.
 //!
 //! Each point, line, arc, circle and constraint maps one to one onto the solver's own (arcs
 //! before circles in the solver's one list of curves), every constraint length the length its
-//! formula gives at these values, in grid steps. The sketch is then checked as drawn
-//! (`construct_solver::check_drawn`): its stored points and radii must already meet every
-//! constraint within the model tolerance, or it is refused as not solved. Solving it there is the
-//! second half of evaluation (job 5.5), which hands the same solver sketch to
-//! `construct_solver::solve` instead and takes its points.
+//! formula gives at these values, in grid steps; its points and radii start where they are
+//! stored. The sketch is then solved (`construct_solver::solve`) from there: the solver's steps
+//! are the least change from the start, so the answer is the one nearest what was drawn, a part
+//! no constraint holds stays where it was drawn, and the same sketch gives the same points on
+//! every machine and every run. The solved points and radii are already on the grid, by the
+//! solver's own rounding rule and its check after rounding; nothing here rounds again. A sketch
+//! the solver refuses (over-constrained, not converged from the stored start, refused at
+//! rounding, too close to call) is refused with the solver's error, at the first constraint (or
+//! curve, or point) it names; running out of the evaluation's solver steps is the limit's
+//! refusal, at the sketch.
 //!
 //! A profile's corners are its lines' points in loop order, placed in the family's coordinates
 //! by the sketch's plane: on `xy` a sketch's (first, second) is (x, y) at height z; on `xz`
 //! (x, z) at y; on `yz` (y, z) at x (FORMAT.md, "Coordinates").
 
 use super::error::{EvalError, Place, Reason};
+use super::limits::Meter;
 use super::values::Worked;
 use crate::check::Sort;
 use crate::model::{Base, Constraint as Written, Key, Recipe, Sketch as RecipeSketch};
 use construct_params::{Length, Value};
 use construct_solver::{
-    Constraint, CurveId, LineId, Point, PointId, Sketch, SolveError, check_drawn,
+    Constraint, ConstraintId, CurveId, LineId, PointId, Sketch, SolveError, solve,
 };
 use engine_geometry::value::grid::P3;
 use std::collections::BTreeMap;
@@ -42,7 +48,7 @@ impl Item {
     }
 }
 
-/// A sketch at one type's values, checked as stored, on its plane.
+/// A sketch solved at one type's values, on its plane.
 pub(crate) struct Drawn {
     base: Base,
     offset: Length,
@@ -69,6 +75,8 @@ struct Builder<'r> {
     radii: Vec<i64>,
     /// Each curve's key, in the solver's curve order.
     curve_keys: Vec<Key>,
+    /// Each point's key, in the solver's point order.
+    point_keys: Vec<Key>,
 }
 
 impl Builder<'_> {
@@ -141,8 +149,13 @@ impl Builder<'_> {
     }
 
     /// The solver's constraint for a written one, its lengths worked out.
-    fn constraint(&self, written: &Written, worked: &Worked) -> Result<Constraint, Reason> {
-        let steps = |text: &str| worked.length(text).map(Length::steps);
+    fn constraint(
+        &self,
+        written: &Written,
+        worked: &Worked,
+        meter: &mut Meter,
+    ) -> Result<Constraint, Reason> {
+        let mut steps = |text: &str| worked.length(text, meter).map(Length::steps);
         Ok(match written {
             Written::Coincident { a, b } => Constraint::Coincident(self.point(a)?, self.point(b)?),
             Written::Horizontal { line } => Constraint::Horizontal(self.line(line)?),
@@ -209,36 +222,50 @@ fn wrong(key: &Key, wanted: Sort, found: Item) -> Reason {
     }
 }
 
-/// The place a refusal of the solver's check names: the constraint or curve it is about.
-fn place_of(key: &Key, curve_keys: &[Key], e: &SolveError) -> Place {
-    let curve = |id: CurveId| {
-        usize::try_from(id.0)
+/// The place a refusal of the solver names: the first constraint, curve or point it is about, in
+/// authoring order, or the sketch as a whole.
+fn place_of(key: &Key, b: &Builder<'_>, e: &SolveError) -> Place {
+    let item = |keys: &[Key], n: u32| {
+        usize::try_from(n)
             .ok()
-            .and_then(|n| curve_keys.get(n))
+            .and_then(|n| keys.get(n))
             .map(|item| Place::Item {
                 sketch: key.clone(),
                 item: item.clone(),
             })
     };
-    let constraint = |n: u32| {
-        usize::try_from(n).ok().map(|index| Place::Constraint {
-            sketch: key.clone(),
-            index,
-        })
+    let constraint = |c: Option<&ConstraintId>| {
+        c.and_then(|c| usize::try_from(c.0).ok())
+            .map(|index| Place::Constraint {
+                sketch: key.clone(),
+                index,
+            })
     };
     let found = match e {
         SolveError::RoundingRefused { constraint: c, .. }
-        | SolveError::Degenerate { constraint: c } => constraint(c.0),
+        | SolveError::Degenerate { constraint: c } => constraint(Some(c)),
+        SolveError::OverConstrained { conflicting: all }
+        | SolveError::RankUnclear { constraints: all } => constraint(all.first()),
+        SolveError::NotConverged { unmet } => constraint(unmet.first().map(|u| &u.constraint)),
         SolveError::ArcEndRefused { curve: c, .. } | SolveError::DegenerateCurve { curve: c } => {
-            curve(*c)
+            item(&b.curve_keys, c.0)
         }
-        _ => None,
+        SolveError::OutOfRange { point } | SolveError::UnknownPoint { point } => {
+            item(&b.point_keys, point.0)
+        }
+        SolveError::WorkLimit { .. } | SolveError::Decomposition => None,
     };
     found.unwrap_or_else(|| Place::Sketch(key.clone()))
 }
 
-/// The recipe's sketch `key` at these values, on its plane, checked as stored.
-pub(crate) fn resolve(recipe: &Recipe, key: &Key, worked: &Worked) -> Result<Drawn, EvalError> {
+/// The recipe's sketch `key` solved at these values, on its plane, its solver steps counted
+/// against `meter`.
+pub(crate) fn resolve(
+    recipe: &Recipe,
+    key: &Key,
+    worked: &Worked,
+    meter: &mut Meter,
+) -> Result<Drawn, EvalError> {
     let Some(written) = recipe.sketches.iter().find(|s| s.key == *key) else {
         return Err(EvalError::new(
             Place::Sketch(key.clone()),
@@ -258,29 +285,35 @@ pub(crate) fn resolve(recipe: &Recipe, key: &Key, worked: &Worked) -> Result<Dra
         ));
     };
     let offset = worked
-        .length(&plane.offset)
+        .length(&plane.offset, meter)
         .map_err(|reason| EvalError::new(Place::Plane(plane.key.clone()), reason))?;
-    let builder = build(key, written, worked)?;
-    let Builder {
-        sketch,
-        items,
-        radii,
-        curve_keys,
-        ..
-    } = builder;
-    let positions: Vec<Point> = sketch.points().to_vec();
-    let sketch = sketch
-        .with_positions(&positions, &radii)
-        .map_err(|e| EvalError::new(Place::Sketch(key.clone()), Reason::BadSketch(e)))?;
-    if let Err(e) = check_drawn(&sketch) {
-        let at = place_of(key, &curve_keys, &e);
-        return Err(EvalError::new(at, Reason::NotSolved(e)));
-    }
+    let b = build(key, written, worked, meter)?;
+    let bad = |e| EvalError::new(Place::Sketch(key.clone()), Reason::BadSketch(e));
+    // The start: the points as stored (already in the sketch) and the radii as stored.
+    let start = b
+        .sketch
+        .with_positions(b.sketch.points(), &b.radii)
+        .map_err(bad)?;
+    let solved = match solve(&start, meter.solver_budget()) {
+        Ok(solved) => solved,
+        Err(SolveError::WorkLimit { steps }) => {
+            meter.solved(steps);
+            return Err(EvalError::new(
+                Place::Sketch(key.clone()),
+                meter.out_of_solver_steps(),
+            ));
+        }
+        Err(e) => return Err(EvalError::new(place_of(key, &b, &e), Reason::NotSolved(e))),
+    };
+    meter.solved(solved.steps);
+    let sketch = start
+        .with_positions(&solved.points, &solved.radii)
+        .map_err(bad)?;
     Ok(Drawn {
         base: plane.base,
         offset,
         sketch,
-        items,
+        items: b.items,
     })
 }
 
@@ -289,6 +322,7 @@ fn build<'r>(
     key: &'r Key,
     written: &RecipeSketch,
     worked: &Worked,
+    meter: &mut Meter,
 ) -> Result<Builder<'r>, EvalError> {
     let mut b = Builder {
         key,
@@ -296,6 +330,7 @@ fn build<'r>(
         items: BTreeMap::new(),
         radii: Vec::new(),
         curve_keys: Vec::new(),
+        point_keys: Vec::new(),
     };
     for p in &written.points {
         let x = stored_length(&p.x).map_err(|r| b.at_item(&p.key, r))?;
@@ -305,6 +340,7 @@ fn build<'r>(
             .add_point(x.steps(), y.steps())
             .map_err(|e| b.at_item(&p.key, Reason::BadSketch(e)))?;
         b.add(&p.key, Item::Point(id))?;
+        b.point_keys.push(p.key.clone());
     }
     for l in &written.lines {
         let ends = b.point(&l.start).and_then(|s| Ok((s, b.point(&l.end)?)));
@@ -350,7 +386,7 @@ fn build<'r>(
                 reason,
             )
         };
-        let constraint = b.constraint(c, worked).map_err(at)?;
+        let constraint = b.constraint(c, worked, meter).map_err(at)?;
         b.sketch
             .add_constraint(constraint)
             .map_err(|e| at(Reason::BadSketch(e)))?;
