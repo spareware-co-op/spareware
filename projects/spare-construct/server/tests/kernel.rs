@@ -4,7 +4,8 @@
 //! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
-//! through the commands and its quantities read back, and a document of one edition reported,
+//! through the commands and its quantities read back, a door and a window placed from the
+//! family library cutting a three-layer wall (job 6.4), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -134,6 +135,21 @@ fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
 #[test]
 fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
     kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(engine);
+}
+
+#[test]
+fn a_family_cuts_every_layer_and_stands_in_its_opening() {
+    kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
+}
+
+#[test]
+fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
+    kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(engine);
+}
+
+#[test]
+fn a_family_that_does_not_fit_is_refused_with_a_reason() {
+    kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(engine);
 }
 
 #[test]

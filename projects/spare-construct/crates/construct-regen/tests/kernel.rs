@@ -525,3 +525,221 @@ fn an_engines_refusal_is_a_recipe_that_cant_build() {
     assert_eq!(error.code, "EngineRefused");
     assert_eq!(error.message, "extrude: the checker refused it");
 }
+
+/// A test engine for placed families: it extrudes any flat polygon with holes along any vector,
+/// keeping it as a piece, and takes an upright box from a solid whose every piece is an upright
+/// box, keeping the box each piece shares with it as a piece taken away (so a wall's layers less
+/// their openings are signed boxes). Its mesh draws every piece, a piece taken away turned inside
+/// out, so the signed volume of a mesh is exactly the solid's. It is judged by the suite like any
+/// engine; it is not a geometry engine.
+struct Pieces;
+
+/// One piece: a profile's outer loop and holes, the vector it is extruded along, and whether it
+/// is added (`1`) or taken away (`-1`).
+#[derive(Clone, Debug)]
+struct Piece {
+    outer: Vec<[i64; 3]>,
+    holes: Vec<Vec<[i64; 3]>>,
+    by: [i64; 3],
+    sign: i8,
+}
+
+#[derive(Clone, Debug)]
+struct Signed {
+    pieces: Vec<Piece>,
+}
+
+fn plus(a: [i64; 3], b: [i64; 3]) -> [i64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+/// A loop's normal by Newell's method, unscaled.
+fn newell(points: &[[i64; 3]]) -> [i128; 3] {
+    let mut n = [0i128; 3];
+    for (i, p) in points.iter().enumerate() {
+        let q = points[(i + 1) % points.len()];
+        let (p, q) = (p.map(i128::from), q.map(i128::from));
+        n[0] += (p[1] - q[1]) * (p[2] + q[2]);
+        n[1] += (p[2] - q[2]) * (p[0] + q[0]);
+        n[2] += (p[0] - q[0]) * (p[1] + q[1]);
+    }
+    n
+}
+
+fn dot3(a: [i128; 3], b: [i64; 3]) -> i128 {
+    a[0] * i128::from(b[0]) + a[1] * i128::from(b[1]) + a[2] * i128::from(b[2])
+}
+
+/// The loop turned so that its normal runs along `by` (`along`) or against it.
+fn facing(points: &[[i64; 3]], by: [i64; 3], along: bool) -> Vec<[i64; 3]> {
+    let mut points = points.to_vec();
+    if (dot3(newell(&points), by) > 0) != along {
+        points.reverse();
+    }
+    points
+}
+
+/// The upright box a piece is, if it is one: four corners whose box, swept along `by` (which runs
+/// along an axis), holds exactly the piece's volume.
+fn upright(piece: &Piece) -> Option<([i64; 3], [i64; 3])> {
+    if piece.outer.len() != 4 || !piece.holes.is_empty() {
+        return None;
+    }
+    if piece.by.iter().filter(|&&c| c != 0).count() != 1 {
+        return None;
+    }
+    let mut lo = [i64::MAX; 3];
+    let mut hi = [i64::MIN; 3];
+    for p in &piece.outer {
+        for q in [*p, plus(*p, piece.by)] {
+            for a in 0..3 {
+                lo[a] = lo[a].min(q[a]);
+                hi[a] = hi[a].max(q[a]);
+            }
+        }
+    }
+    // Twice the profile's area times the sweep, against twice the box's volume.
+    let twice = dot3(newell(&piece.outer), piece.by).abs();
+    let size = [0, 1, 2].map(|a| i128::from(hi[a] - lo[a]));
+    (twice == 2 * size[0] * size[1] * size[2]).then_some((lo, hi))
+}
+
+/// The upright box from `lo` to `hi` as a piece of `sign`.
+fn box_piece(lo: [i64; 3], hi: [i64; 3], sign: i8) -> Piece {
+    Piece {
+        outer: vec![
+            [lo[0], lo[1], lo[2]],
+            [hi[0], lo[1], lo[2]],
+            [hi[0], hi[1], lo[2]],
+            [lo[0], hi[1], lo[2]],
+        ],
+        holes: Vec::new(),
+        by: [0, 0, hi[2] - lo[2]],
+        sign,
+    }
+}
+
+/// Adds one triangle, turned over for a piece taken away.
+fn face(mesh: &mut DisplayMesh, t: [[i64; 3]; 3], sign: i8) {
+    let t = if sign > 0 { t } else { [t[0], t[2], t[1]] };
+    let base = mesh.positions.len() as u32;
+    for p in t {
+        mesh.positions.push(p.map(|c| c as f64));
+        mesh.normals.push([0.0, 0.0, 0.0]);
+    }
+    mesh.triangles.push([base, base + 1, base + 2]);
+}
+
+impl Engine for Pieces {
+    type Solid = Signed;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.pieces".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Signed, EngineError> {
+        let steps = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+        let outer: Vec<[i64; 3]> = profile.outer.iter().map(steps).collect();
+        if outer.len() < 3 || dot3(newell(&outer), by) == 0 {
+            return Err(EngineError::Invalid {
+                operation: "extrude",
+                what: "a flat loop of three or more corners, swept off its plane".to_owned(),
+            });
+        }
+        Ok(Signed {
+            pieces: vec![Piece {
+                outer,
+                holes: profile
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(steps).collect())
+                    .collect(),
+                by,
+                sign: 1,
+            }],
+        })
+    }
+
+    fn subtract(&mut self, target: &Signed, tool: &Signed) -> Result<Signed, EngineError> {
+        let refused = || EngineError::Unsupported {
+            operation: "subtract",
+            what: "anything but an upright box from upright boxes".to_owned(),
+        };
+        let [tool] = tool.pieces.as_slice() else {
+            return Err(refused());
+        };
+        let (tlo, thi) = upright(tool).ok_or_else(refused)?;
+        let mut pieces = target.pieces.clone();
+        for piece in &target.pieces {
+            let (lo, hi) = upright(piece).ok_or_else(refused)?;
+            let (lo, hi) = (
+                [0, 1, 2].map(|a| lo[a].max(tlo[a])),
+                [0, 1, 2].map(|a| hi[a].min(thi[a])),
+            );
+            if (0..3).all(|a| lo[a] < hi[a]) {
+                pieces.push(box_piece(lo, hi, -piece.sign));
+            }
+        }
+        Ok(Signed { pieces })
+    }
+
+    fn subtract_pieces(&mut self, _: &Signed, _: &Signed) -> Result<Vec<Signed>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Signed, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Signed, _: &Signed) -> Result<Signed, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Signed) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    fn mesh(&mut self, solid: &Signed) -> Result<DisplayMesh, EngineError> {
+        let mut mesh = DisplayMesh::default();
+        for piece in &solid.pieces {
+            let mut loops = vec![facing(&piece.outer, piece.by, true)];
+            loops.extend(piece.holes.iter().map(|h| facing(h, piece.by, false)));
+            for l in &loops {
+                for i in 1..l.len() - 1 {
+                    face(&mut mesh, [l[0], l[i + 1], l[i]], piece.sign);
+                    let top = [l[0], l[i], l[i + 1]].map(|p| plus(p, piece.by));
+                    face(&mut mesh, top, piece.sign);
+                }
+                for i in 0..l.len() {
+                    let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                    let (a2, b2) = (plus(a, piece.by), plus(b, piece.by));
+                    face(&mut mesh, [a, b, b2], piece.sign);
+                    face(&mut mesh, [a, b2, a2], piece.sign);
+                }
+            }
+        }
+        Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Signed, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn a_family_cuts_every_layer_and_stands_in_its_opening() {
+    kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(|| Pieces);
+}
+
+#[test]
+fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
+    kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(|| Pieces);
+}
+
+#[test]
+fn a_family_that_does_not_fit_is_refused_with_a_reason() {
+    kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
+}
