@@ -1,0 +1,70 @@
+[package]
+name = "construct-roofs"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# The roofs category. Same workspace.
+construct-categories = { path = "../construct-categories" }
+# A roof's base is tied to a level by construct-levels' tie, in its record's props. Same workspace.
+construct-levels = { path = "../construct-levels" }
+# A layer's material ID, the default library and the mass of a volume. Same workspace.
+construct-materials = { path = "../construct-materials" }
+# A roof's record and its recipe are construct-model's, unchanged. Same workspace.
+construct-model = { path = "../construct-model" }
+# Lengths, areas, volumes, slopes and angles, and the read-only parameters. Same workspace.
+construct-params = { path = "../construct-params" }
+# A roof's footprint is a floor's boundary and its type's layers a floor type's layers, read and
+# checked by construct-slabs' own code (the decision note says why they are shared). Same
+# workspace.
+construct-slabs = { path = "../construct-slabs" }
+# A footprint's corners are the sketch solver's points. Same workspace.
+construct-solver = { path = "../construct-solver" }
+# A roof type is an element type with a system block. Same workspace.
+construct-types = { path = "../construct-types" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# The tangent of a pitch given in degrees, the one float here: a pure Rust port of musl's libm, so
+# the same angle gives the same bits on every machine (src/pitch.rs). MIT OR Apache-2.0.
+libm = "0.2.16"
+# Exact square roots of products too wide for 128 bits: a face's height along a slope and a
+# slope's true area (src/exact.rs). MIT OR Apache-2.0.
+num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
+# The stored text is JSON. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# Reader fuzz targets, as in construct-model's tests. MIT.
+bolero = "0.13.7"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# The kernel's chapter 21 bans live in its own clippy.toml and are not Spare Construct's; these two
+# stay denied so a ban added to projects/spare-construct/clippy.toml is an error at once.
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name.
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
+# may use native arithmetic and casts: each test file allows these four.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# No float is stored or compared here; a float comparison is an error.
+float_cmp = "deny"
