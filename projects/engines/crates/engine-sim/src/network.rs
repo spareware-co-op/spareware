@@ -86,10 +86,10 @@ impl Turns {
         let nt = off[m] as usize;
         let mut p = vec![0.0f64; nt];
         let mut t_to = vec![0i32; nt];
-        for a in 0..m {
+        for (a, &off_a) in off.iter().enumerate().take(m) {
             let v = net.to[a] as usize;
             let h = net.head[v];
-            let o = off[a] - h;
+            let o = off_a - h;
             for k in net.out_range(v) {
                 let t = (o + k as i32) as usize;
                 let b = net.out[k];

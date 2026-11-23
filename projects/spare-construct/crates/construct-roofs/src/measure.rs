@@ -11,7 +11,8 @@
 //!
 //! The read-only parameters ([`read_only`]), with fixed IDs: [`AREA`], [`SLOPE_AREA`],
 //! [`THICKNESS`], [`VOLUME`], [`MASS`], and for a sloped roof [`PITCH`] (the pitch as given, a
-//! slope or an angle) and for a gable [`RIDGE_HEIGHT`]; per layer ([`layer_read_only`]), layer
+//! slope or an angle; a gable's first slope's) and for a gable, or a solved roof rising from more
+//! than one edge, [`RIDGE_HEIGHT`] (a solved roof's: its top face's highest point); per layer ([`layer_read_only`]), layer
 //! `k` from 1 at the top, `roof.layer-<k>.volume` and `roof.layer-<k>.mass`, named with the
 //! layer's function and material, as a floor's are.
 
@@ -109,12 +110,17 @@ pub fn quantities(
         .and_then(|eaves| roof.edge(eaves))
         .and_then(|spec| spec.pitch)
         .map(crate::Pitch::value);
+    // A gable's ridge, or a solved roof's highest point where two or more slopes meet.
+    let ridge_height = match roof.form() {
+        crate::Form::Solved { eaves } if eaves.len() > 1 => Some(built.height),
+        _ => built.ridge.map(|ridge| ridge.height),
+    };
     Ok(Quantities {
         area: built.plan_area,
         slope_area: built.slope_area,
         thickness: layers.total(),
         pitch,
-        ridge_height: built.ridge.map(|ridge| ridge.height),
+        ridge_height,
         volume,
         layers: each,
         mass_grams: mass,

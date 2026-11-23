@@ -12,7 +12,10 @@
 //! - [`roof`]: [`Roof`], [`EdgeSpec`], [`Form`]: every check and refusal of a footprint and its
 //!   edges, the stored and the plain (command) forms.
 //! - [`shape`]: [`shape`] gives a roof's [`Shape`] for its layers: the eaves outline, each face's
-//!   height, each layer's [`Solid`] ([`LayerSolid`]), a gable's [`Ridge`], the exact areas.
+//!   height, each layer's [`Solid`] ([`LayerSolid`]), a gable's [`Ridge`], its [`Plane`]s and
+//!   [`Line`]s ([`LineKind`]: ridge, hip, valley, eave, verge), the exact areas.
+//! - [`solve`]: roof solving (job 6.2): where the planes of a roof with a slope per edge meet,
+//!   worked in exact fractions after the straight skeleton of a polygon, then put on the grid.
 //! - [`measure`]: [`quantities`], [`read_only`], [`layer_read_only`].
 //! - [`roof_type`]: [`new_roof_type`], [`with_layers`], [`layers_of`], under the owner tag
 //!   [`OWNER`].
@@ -32,14 +35,15 @@
 //! panics. No float is stored; the one float computed is the tangent of a pitch given as an angle
 //! ([`pitch`]'s header says why it is exact enough). Depends on construct-slabs, construct-solver,
 //! construct-types, construct-params, construct-materials, construct-levels, construct-model,
-//! construct-categories, kit-core, libm and num-bigint.
+//! construct-categories, kit-core, libm, num-bigint, num-rational and num-traits.
 //!
-//! Not here, each refused in words naming the job that brings it: hips, valleys, an uneven gable
-//! and a sloped roof on any footprint but a rectangle along the plan's axes (job 6.2, roof
-//! solving), an overhang on a flat footprint with an edge off the axes (job 6.2), and an opening
-//! through a roof (job 4.2). The commands that make roofs are construct-api's
-//! `cloud::roofs`, the server's view of them reads this crate's quantities, and the page's roof
-//! tool is the app's. Nothing here is interim.
+//! Not here, each refused in words: an overhang on a footprint with an edge off the axes; a sloped
+//! roof on a footprint that is not right-angled; slopes of different pitch that meet at a hip or a
+//! valley (an uneven gable on a rectangle along the axes is built); gable ends on a footprint with
+//! an inside corner; an arc edge (construct-slabs refuses it); and an opening through a roof (job
+//! 4.2). The commands that make roofs are construct-api's `cloud::roofs`, the server's view of
+//! them reads this crate's quantities, and the page's roof tool is the app's. Nothing here is
+//! interim.
 
 pub mod defaults;
 pub mod error;
@@ -50,6 +54,7 @@ pub mod record;
 pub mod roof;
 pub mod roof_type;
 pub mod shape;
+pub mod solve;
 
 pub use defaults::{DefaultRoof, default_roof_types, default_roofs};
 pub use error::RoofError;
@@ -60,9 +65,10 @@ pub use measure::{
 };
 pub use pitch::{ANGLE_RUN, MOST_SLOPE, Pitch};
 pub use record::{
-    EDGES_ARG, FOOTPRINT_ARG, FORM_ARG, LAYERS_ARG, OP_VERSION, OUTLINE_ARG, ROOF_KIND, ROOF_OP,
-    SLOPES_ARG, filled, is_roof, roof_of, roof_recipe, roof_record, with_roof,
+    EDGES_ARG, FOOTPRINT_ARG, FORM_ARG, LAYERS_ARG, LINES_ARG, OP_VERSION, OUTLINE_ARG, ROOF_KIND,
+    ROOF_OP, SLOPES_ARG, filled, is_roof, roof_of, roof_recipe, roof_record, with_roof,
 };
 pub use roof::{EdgeSpec, Form, Roof};
 pub use roof_type::{OWNER, layers_of, new_roof_type, with_layers};
-pub use shape::{LayerSolid, Ridge, Shape, Solid, shape};
+pub use shape::{LayerSolid, Plane, Ridge, Shape, Solid, shape};
+pub use solve::{Line, LineKind};
