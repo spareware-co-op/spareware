@@ -32,13 +32,10 @@ pub const PHASING_KEY: &str = "@view.phasing";
 /// The view's own staging fields (the phase it was created and demolished in, its design option),
 /// as the phases crate's JSON.
 pub const STAGING_KEY: &str = "@staging";
-/// A plan's range: the level its top is tied to, then the offset key beside it, and so on.
-pub const RANGE_KEYS: [(&str, &str); 4] = [
-    ("@view.range.top", "@view.range.top.offset"),
-    ("@view.range.cut", "@view.range.cut.offset"),
-    ("@view.range.bottom", "@view.range.bottom.offset"),
-    ("@view.range.depth", "@view.range.depth.offset"),
-];
+/// A plan's range: the level its top is tied to, then the offset key beside it, and so on. The one
+/// list is construct-levels', which counts these ties so that a level a view's range is tied to is
+/// not deleted.
+pub const RANGE_KEYS: [(&str, &str); 4] = construct_levels::RANGE_TIES;
 /// A section's or elevation's line: x and y of the first end, then of the second, each a stored
 /// length.
 pub const LINE_KEYS: [&str; 4] = [

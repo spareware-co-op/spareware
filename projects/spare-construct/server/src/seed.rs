@@ -11,6 +11,7 @@ use kit_accounts::sign_in::email_hash;
 use kit_core::Id;
 use kit_store::{FileStore, Kv, Reader, StoreError};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn id(text: &str) -> Id {
     // Every ID in this file is a constant, and valid.
@@ -371,6 +372,7 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
         ("eve", "riverside-bridged", "landscape-model", planter),
     ] {
         let (person, project, model) = (id(person), id(project), id(model));
+        let levels = levels_of(&elements);
         if elements.iter().any(|(cmd, _)| *cmd == "wall.draw") {
             for args in &wall_types {
                 service
@@ -381,7 +383,16 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
         for (cmd, args) in elements {
             service.edit(&person, &project, &model, cmd, args).await?;
         }
+        // One floor plan for each level the model's elements stand on, with the commands' defaults.
+        for level in levels {
+            let args = json!({ "view": format!("VP-{level}"), "kind": "floor_plan",
+                               "name": format!("Level {level} plan"), "level": level.to_string() });
+            service
+                .edit(&person, &project, &model, "view.create", args)
+                .await?;
+        }
     }
+    // The setout's grids stand on no level, so it has no floor plan.
     let (ben, example, setout) = (id("ben"), id("example-1"), id("site-setout"));
     for args in setout_grids() {
         service
@@ -389,6 +400,20 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
             .await?;
     }
     Ok(())
+}
+
+/// The levels a model's elements stand on, lowest first, each once: `element.create` names its
+/// level as a number, `wall.draw` as a level's ID.
+fn levels_of(elements: &[Step]) -> BTreeSet<i64> {
+    elements
+        .iter()
+        .filter_map(|(_, args)| {
+            let level = args.get("level")?;
+            level
+                .as_i64()
+                .or_else(|| level.as_str().and_then(|text| text.parse().ok()))
+        })
+        .collect()
 }
 
 /// The packages published, bridged and taken in, the links between models, and every project's

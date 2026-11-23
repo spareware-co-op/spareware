@@ -20,6 +20,7 @@ server = [
     "dep:construct-walls",
     "dep:construct-slabs",
     "dep:construct-materials",
+    "dep:construct-views",
 ]
 
 [dependencies]
@@ -49,6 +50,8 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 # A floor's read-only mass is its layers' volumes of their materials, from the default library
 # (src/slabs.rs). Same workspace.
 construct-materials = { path = "../construct-materials", optional = true }
+# A view is a record with no shape, so the regenerator passes it over.
+construct-views = { path = "../construct-views", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

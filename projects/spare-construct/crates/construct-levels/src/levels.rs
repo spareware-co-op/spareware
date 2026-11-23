@@ -7,7 +7,7 @@ use crate::error::LevelError;
 use crate::implied;
 use crate::implied::implied_number;
 use crate::level::{LEVEL_KIND, Level, clean_name};
-use crate::tie::{base_of, top_of};
+use crate::tie::{base_of, range_tied_to, top_of};
 use construct_model::element::Element;
 use construct_params::Length;
 use kit_core::Id;
@@ -243,8 +243,8 @@ impl Levels {
     }
 }
 
-/// How many of `records` are tied to the level `id`, by the base or the top: an element tied by
-/// both counts once.
+/// How many of `records` are tied to the level `id`, by the base, the top or a view's range: an
+/// element tied in more than one of these counts once.
 ///
 /// # Errors
 /// [`LevelError::Malformed`] for a tie that is not as written.
@@ -259,7 +259,7 @@ pub fn tied_to<'a>(
         }
         let base = base_of(record)?.is_some_and(|tie| tie.level == *id);
         let top = top_of(record)?.is_some_and(|tie| tie.level == *id);
-        if base || top {
+        if base || top || range_tied_to(record, id)? {
             count = count.saturating_add(1);
         }
     }

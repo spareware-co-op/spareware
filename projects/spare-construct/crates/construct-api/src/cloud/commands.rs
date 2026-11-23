@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, floors, grids, hosting, levels, params, undo, walls};
+use crate::cloud::{elements, floors, grids, hosting, levels, params, undo, views, walls};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -113,7 +113,8 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
 }
 
 impl<K: Kv, D: Decider> ProjectCommands<K, D> {
-    /// An `element.*` command, after the hosting, floor and wall rules of the generic commands.
+    /// An `element.*` command, after the view, hosting, floor and wall rules of the generic
+    /// commands.
     async fn element<T: kit_store::Txn>(
         &self,
         staged: &mut T,
@@ -121,6 +122,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         context: &Context<'_>,
         edit: &Edit,
     ) -> Result<Outcome, StoreError> {
+        if let Err(refused) = views::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = hosting::element_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -160,7 +164,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || hosting::is_command(cmd)
                 || levels::is_command(cmd)
                 || walls::is_command(cmd)
-                || floors::is_command(cmd) =>
+                || floors::is_command(cmd)
+                || views::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -209,7 +214,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter, type, level, wall and floor edit of a model, and every undo and redo,
+    /// Every element, parameter, type, level, wall, floor and view edit of a model, and every undo and redo,
     /// has the same answer, so a batch asks Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
         if edit.cmd.starts_with("element.")
@@ -220,6 +225,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
+            || views::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -259,6 +265,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if floors::is_command(&edit.cmd) {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if views::is_command(&edit.cmd) {
+            views::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
             self.element(&mut staged, project, context, edit).await?
         } else if edit.cmd == "document.checkpoint" {

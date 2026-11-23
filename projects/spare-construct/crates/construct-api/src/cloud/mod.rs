@@ -14,6 +14,7 @@
 //!   log.
 //! - [`floors`]: floor types and their layers, and floors drawn from a boundary, through the same
 //!   log.
+//! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -32,6 +33,7 @@ pub mod params;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;
+pub mod views;
 pub mod walls;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
