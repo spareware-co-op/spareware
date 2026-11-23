@@ -744,7 +744,7 @@
     if (into.get(id) !== piece || piece.asked !== asked) return;
     const answer = await shapeFor(model, piece.el, into, fill);
     if (into.get(id) !== piece || piece.asked !== asked) return;
-    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false, settled: asked });
     queueDraw();
     if (id === S.sel) refreshSide();
   }
@@ -993,10 +993,13 @@
   async function buildHostAgain(model, into, id) {
     const host = id && into.get(id);
     if (!host) return;
+    const asked = host.asked;
     const answer = await shapeFor(model, host.el, into, host.fill);
-    if (into.get(id) !== host) return;
+    // A refill (`fillAgain`) that began or ended meanwhile has the newer fill: its build stands.
+    if (into.get(id) !== host || host.asked !== asked) return;
     Object.assign(host, { shape: undefined, failed: undefined }, answer);
-    host.stale = false;
+    // A refill still in flight (`fillAgain`) keeps it out of the checkpoint compare: this build used the fill held now.
+    host.stale = (host.asked || 0) !== (host.settled || 0);
   }
 
   async function loadClaims() {
