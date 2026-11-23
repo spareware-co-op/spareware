@@ -16,7 +16,7 @@
 )]
 
 use construct_api::cloud::undo::{self, State};
-use construct_api::cloud::{Access, ProjectCommands};
+use construct_api::cloud::{Access, ProjectCommands, walls};
 use construct_categories::WALLS;
 use construct_model::element::Element;
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
@@ -820,4 +820,62 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
     let incremental = stack.derived().await;
     stack.regen.rebuild(&i("p")).await.unwrap();
     assert_eq!(stack.derived().await, incremental);
+}
+
+/// The defaults' `wall.type.create` arguments make construct-walls' default wall types, each under
+/// its own ID; the document's wall types are then listed by name with their layers as the commands
+/// take them, beside the materials the layers are drawn in and the defaults. A plain type of walls,
+/// with no layers, is not a wall type and is not listed.
+#[tokio::test]
+async fn the_default_wall_types_are_made_through_the_log_and_listed_with_their_layers() {
+    let stack = Stack::new().await;
+    let read = || async {
+        let mut snapshot = stack.store.snapshot().await.unwrap();
+        walls::read_wall_types(&mut snapshot, &i("p"), &i(DOCUMENT))
+            .await
+            .unwrap()
+            .unwrap()
+    };
+    let empty = read().await;
+    assert!(empty.types.is_empty());
+    let defaults = walls::default_type_args().unwrap();
+    assert_eq!(empty.defaults, defaults);
+    assert_eq!(defaults[0], wall_type(PARTITION));
+    assert_eq!(defaults[1], wall_type(CONCRETE));
+
+    let plain = json!({ "type": "T-plain", "name": "Plain", "category": 100 });
+    stack.edit("type.create", plain).await.unwrap();
+    for args in &defaults {
+        stack.edit("wall.type.create", args.clone()).await.unwrap();
+    }
+    for wall in default_walls().unwrap() {
+        assert_eq!(
+            assembly_of(&stack.wall_type(wall.id).await).unwrap(),
+            wall.assembly
+        );
+    }
+    let listed = read().await;
+    let names: Vec<&str> = listed.types.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Brick veneer, 40 cavity, 90 timber frame, 10 plasterboard",
+            "Concrete 200",
+            "Partition, 90 timber stud, 12.5 plasterboard both sides",
+        ]
+    );
+    let partition = &listed.types[2];
+    assert_eq!(partition.id, PARTITION);
+    assert_eq!(partition.thickness, "115 mm");
+    assert_eq!(partition.assembly, layers_of(PARTITION));
+    assert_eq!(listed.types[0].thickness, "250 mm");
+    let concrete = listed
+        .materials
+        .iter()
+        .find(|m| m.id == "concrete-regular")
+        .unwrap();
+    assert_eq!(
+        (concrete.surface.as_str(), concrete.cut.as_str()),
+        ("#969696", "#5a5a5a")
+    );
 }

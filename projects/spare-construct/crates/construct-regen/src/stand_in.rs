@@ -6,7 +6,8 @@
 //! The operations are Spare Construct's, named for what they make: `wall.straight`, not "box".
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
-//! its layers are the kernel's to build.
+//! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
+//! view shows the layers and their materials on either edition.
 //!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
@@ -14,7 +15,7 @@
 
 use crate::wall_plan::{self, Layered};
 use construct_model::geometry::{
-    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Recipe,
+    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
 use construct_params::Length;
 use serde::Serialize;
@@ -135,6 +136,18 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     Ok(box_names())
 }
 
+fn too_many() -> GeometryError {
+    GeometryError {
+        code: "TooBig".to_owned(),
+        message: "a wall with more layers than a display can count".to_owned(),
+    }
+}
+
+/// A count of a display's corners or triangles, as its mesh numbers them.
+fn part_count(n: usize) -> Result<u32, GeometryError> {
+    u32::try_from(n).map_err(|_| too_many())
+}
+
 /// A layered wall's body, as the stand-in stores it: its outer outline and its height, in whole
 /// millimetres.
 #[derive(Serialize)]
@@ -146,7 +159,9 @@ struct WallBody {
 
 /// A layered wall as one box of its whole thickness: the prism on its outer outline, the strip
 /// from its exterior face to its interior face ([`crate::wall_plan`]), each corner the nearest
-/// whole millimetre, from its base to its top. Its bounds are rounded outward.
+/// whole millimetre, from its base to its top. Its bounds are rounded outward. Its displays draw
+/// each layer with a thickness as a part of its own, the prism on that layer's strip, so a view
+/// shows the layers and their materials as the kernel's displays do; its body is the one box.
 fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     let wall = Layered::of(recipe)?;
     let (exterior, interior) = wall.outer();
@@ -159,13 +174,32 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     };
     let outline: Vec<[i64; 2]> = corners.iter().map(|&[x, y]| [near(x), near(y)]).collect();
     let height = near(wall.height);
-    let deviation = i64::from(rounded);
-    let mut positions = Vec::with_capacity(24);
-    for z in [0, height] {
-        for &[x, y] in &outline {
-            positions.extend([x, y, z]);
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    let mut parts = Vec::new();
+    for layer in wall.layers.iter().filter(|layer| layer.thickness() > 0) {
+        let (strip, _) = wall.plan.strip(layer.exterior, layer.interior)?;
+        let shape: Vec<[i64; 2]> = strip.iter().map(|&[x, y]| [near(x), near(y)]).collect();
+        let (first, base) = (
+            part_count(indices.len() / 3)?,
+            part_count(positions.len() / 3)?,
+        );
+        for z in [0, height] {
+            for &[x, y] in &shape {
+                positions.extend([x, y, z]);
+            }
         }
+        for index in TRIANGLES {
+            indices.push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: shape,
+        });
     }
+    let deviation = i64::from(rounded);
     let (mut min, mut max) = ([0, 0, 0], [0, 0, wall.height]);
     for axis in 0..2 {
         let values = corners.iter().filter_map(|c| c.get(axis).copied());
@@ -192,10 +226,10 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
             deviation,
             mesh: Mesh {
                 positions: positions.clone(),
-                indices: TRIANGLES.to_vec(),
+                indices: indices.clone(),
             },
             outline: outline.clone(),
-            parts: Vec::new(),
+            parts: parts.clone(),
         })
         .collect();
     Ok(Built {
@@ -382,8 +416,27 @@ mod tests {
             built.body,
             br#"{"kind":"wall","outline":[[0,-58],[4000,-58],[4000,58],[0,58]],"height":2700}"#
         );
-        assert_eq!(built.displays[0].mesh.positions.len(), 24);
+        // Each layer is a part of the displays: its strip's prism, its material and function.
+        let parts = &built.displays[0].parts;
+        let outlines: Vec<&Vec<[i64; 2]>> = parts.iter().map(|part| &part.outline).collect();
+        assert_eq!(
+            outlines,
+            [
+                &vec![[0, -58], [4000, -58], [4000, -45], [0, -45]],
+                &vec![[0, -45], [4000, -45], [4000, 45], [0, 45]],
+                &vec![[0, 45], [4000, 45], [4000, 58], [0, 58]],
+            ]
+        );
+        let triangles: Vec<[u32; 2]> = parts.iter().map(|part| part.triangles).collect();
+        assert_eq!(triangles, [[0, 12], [12, 12], [24, 12]]);
+        let functions: Vec<&str> = parts.iter().map(|part| part.function.as_str()).collect();
+        assert_eq!(functions, ["finish", "structure", "finish"]);
+        assert!(parts.iter().all(|part| part.material == "m"));
+        assert_eq!(built.displays[0].mesh.positions.len(), 72);
+        assert_eq!(built.displays[0].mesh.indices.len(), 108);
+        assert_eq!(built.displays[0].mesh.indices[36], 8);
         assert_eq!(built.displays[1].mesh, built.displays[0].mesh);
+        assert_eq!(built.displays[1].parts, built.displays[0].parts);
         // A 3-4-5 wall from the origin: its exterior face is (46, -34.5) mm off its line.
         let angled = Boxes
             .build(&partition([0, 0], [15_360_000, 20_480_000]))

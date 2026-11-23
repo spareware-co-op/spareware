@@ -177,10 +177,10 @@ fn server_on(
     )
 }
 
-/// The whole seed runs on the kernel and every stored shape matches its recipe. A door hosted on
-/// a wall's exterior names the face the suite recorded, and when the wall is lengthened and built
-/// again, its exterior keeps that name, so the door's reference still lands, and the wall is built
-/// with the door's opening cut.
+/// The whole seed runs on the kernel and every stored shape matches its recipe. On an old box wall
+/// (`wall.straight`, which still reads and builds), a door hosted on its exterior names the face
+/// the suite recorded, and when the wall is lengthened and built again, its exterior keeps that
+/// name, so the door's reference still lands, and the wall is built with the door's opening cut.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     let (store, files) = (Memory::new(), MemoryFiles::default());
@@ -191,8 +191,17 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     let regen = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     assert_eq!(regen.verify(&project).await.unwrap(), 31);
 
+    let old = json!({
+        "element": "W-950", "kind": "wall", "level": 1,
+        "placement": { "x": 0, "y": -10_000, "z": 0 },
+        "recipe": kernel_suite::wall(12_000, "x"),
+    });
+    s.edit(&anna, &project, &model, "element.create", old)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
     let wall = s
-        .shape(&anna, &project, &model, &i("W-101"), None)
+        .shape(&anna, &project, &model, &i("W-950"), None)
         .await
         .unwrap();
     assert_eq!(wall.built.edition, kernel.edition());
@@ -209,8 +218,8 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     let door = json!({
         "element": "D-900", "kind": "door", "level": 1,
         "recipe": kernel_suite::door(),
-        "placement": { "x": 1000, "y": 0, "z": 0 },
-        "references": [{ "doc": null, "element": "W-101", "name": face.name, "kind": "face",
+        "placement": { "x": 1000, "y": -10_000, "z": 0 },
+        "references": [{ "doc": null, "element": "W-950", "name": face.name, "kind": "face",
                          "want": "carrier", "signature": null }],
     });
     s.edit(&anna, &project, &model, "element.create", door)
@@ -231,13 +240,13 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
         &project,
         &model,
         "element.set",
-        json!({ "element": "W-101", "recipe": longer }),
+        json!({ "element": "W-950", "recipe": longer }),
     )
     .await
     .unwrap();
     s.regenerate(&project).await.unwrap();
     let again = s
-        .shape(&anna, &project, &model, &i("W-101"), None)
+        .shape(&anna, &project, &model, &i("W-950"), None)
         .await
         .unwrap();
     assert_ne!(again.built.input, wall.built.input, "the wall was edited");
@@ -652,7 +661,7 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     .await;
     edit(
         "wall.type.create",
-        json!({ "type": "wall-concrete", "name": "Concrete 200", "assembly": {
+        json!({ "type": "wall-concrete", "name": "Plain concrete 200", "assembly": {
             "core": { "exterior": 0, "interior": 1 },
             "layers": [{ "function": "structure", "thickness": "200 mm",
                          "material": "concrete-regular" }] } }),
