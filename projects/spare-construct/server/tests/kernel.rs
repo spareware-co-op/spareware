@@ -805,9 +805,7 @@ async fn walls_drawn_to_meet_through_commands_are_joined_on_the_kernel() {
         let (s, anna, project, model) = (&s, &anna, &project, &model);
         async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
     };
-    let layer = |function: &str, thickness: &str, material: &str| {
-        json!({ "function": function, "thickness": thickness, "material": material })
-    };
+    let layer = |function: &str, thickness: &str, material: &str| json!({ "function": function, "thickness": thickness, "material": material });
     edit(
         "wall.type.create",
         json!({ "type": "wall-lined", "name": "Lined", "assembly": {
