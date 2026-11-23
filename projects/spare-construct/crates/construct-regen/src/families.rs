@@ -16,6 +16,11 @@
 //!   its opening) and `@host.up` (from the wall's base to the family's origin: a door's foot, a
 //!   window's floor line, under its sill).
 //!
+//! - each value its instance holds for a parameter each instance holds (a window's sill height, a
+//!   door's swing) as a recipe argument named [`VALUE_PREFIX`] and the parameter's key, in stored
+//!   text (`value.sill_height`: `length:q0:5760000`); one the instance does not set reads its
+//!   parameter's default. They are flat strings so that a recipe with them reads no record.
+//!
 //! Derived and never stored: [`TURN_ARG`], how far the family is turned about its z axis to stand
 //! in its wall ([`crate::hosting::seat`] writes it into the recipe a builder is handed), its
 //! solids, and its opening.
@@ -33,9 +38,6 @@
 //!   (`OpeningNotRectangle`), because a wall's openings are cut as boxes along its axis, by the
 //!   same rules as the old box door's (the kernel's `opening`). An arched or angled opening needs
 //!   its outline extruded through the wall and the rules asked of a polygon.
-//! - **Instance values**: evaluation takes the values a type holds; an instance parameter (a
-//!   window's sill height, a door's swing) reads its default until the placing commands (job 7.1)
-//!   give instances their own values.
 
 use construct_families::{
     ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Turn, TypeValues, opening_within,
@@ -55,6 +57,9 @@ pub const TYPE_ARG: &str = "type";
 /// The argument a builder is handed with how far the family is turned (0 to 3 quarter turns,
 /// anticlockwise seen from above). Derived from the host, never stored.
 pub const TURN_ARG: &str = "turn";
+/// The recipe arguments that hold an instance's own values start with this, then the parameter's
+/// key: `value.sill_height`.
+pub const VALUE_PREFIX: &str = "value.";
 /// The owner of Spare Construct's own operations.
 const OWN: &str = "construct";
 
@@ -134,6 +139,11 @@ impl Library {
         self.recipes.keys().cloned().collect()
     }
 
+    /// Every recipe it holds, by content id, in order.
+    pub fn recipes(&self) -> impl Iterator<Item = (&ContentId, &Arc<FamilyRecipe>)> {
+        self.recipes.iter()
+    }
+
     /// The latest version it holds of the family with the permanent id `id`, if it holds one,
     /// and that version's content id: what a placing command names a family by.
     #[must_use]
@@ -175,6 +185,30 @@ pub fn recipe(family: &ContentId, ty: &Key) -> Recipe {
     Recipe::construct(OP, args)
 }
 
+/// `recipe` with the value `stored` for the instance parameter `key` (an empty text takes the
+/// value away, so the parameter reads its default again).
+#[must_use]
+pub fn with_value(recipe: &Recipe, key: &Key, stored: &str) -> Recipe {
+    let mut changed = recipe.clone();
+    let name = format!("{VALUE_PREFIX}{}", key.as_str());
+    if stored.is_empty() {
+        changed.args.remove(&name);
+    } else {
+        changed.args.insert(name, Value::String(stored.to_owned()));
+    }
+    changed
+}
+
+/// `recipe` with another type.
+#[must_use]
+pub fn with_type(recipe: &Recipe, ty: &Key) -> Recipe {
+    let mut changed = recipe.clone();
+    changed
+        .args
+        .insert(TYPE_ARG.to_owned(), Value::String(ty.as_str().to_owned()));
+    changed
+}
+
 /// `recipe` with the turn a builder is handed ([`TURN_ARG`]).
 #[must_use]
 pub fn turned(recipe: &Recipe, turn: Turn) -> Recipe {
@@ -194,6 +228,8 @@ pub struct Instance {
     pub ty: Key,
     /// How far it is turned about its z axis: none unless it is seated in a host.
     pub turn: Turn,
+    /// The values it holds for the parameters each instance holds, in stored text, by key.
+    pub values: BTreeMap<Key, String>,
 }
 
 impl Instance {
@@ -231,7 +267,31 @@ impl Instance {
                 .and_then(Turn::of_quarters)
                 .ok_or_else(|| fault("BadInstance", format!("{TURN_ARG} must be 0, 1, 2 or 3")))?,
         };
-        Ok(Instance { family, ty, turn })
+        let mut values = BTreeMap::new();
+        for (name, value) in &recipe.args {
+            let Some(key) = name.strip_prefix(VALUE_PREFIX) else {
+                continue;
+            };
+            let key = Key::parse(key).ok_or_else(|| {
+                fault(
+                    "BadInstance",
+                    format!("{name} must name one of the family's parameters"),
+                )
+            })?;
+            let stored = value.as_str().ok_or_else(|| {
+                fault(
+                    "BadInstance",
+                    format!("{name} must be a value in stored text"),
+                )
+            })?;
+            values.insert(key, stored.to_owned());
+        }
+        Ok(Instance {
+            family,
+            ty,
+            turn,
+            values,
+        })
     }
 }
 
@@ -265,8 +325,11 @@ pub fn resolve(source: &dyn FamilySource, instance: &Instance) -> Result<Resolve
             ),
         )
     })?;
-    let values =
+    let mut values =
         TypeValues::of(&recipe, &instance.ty).map_err(|e| refused("FamilyType", &recipe, &e))?;
+    for (key, stored) in &instance.values {
+        values.set_instance(key.clone(), stored.clone());
+    }
     Ok(Resolved { recipe, values })
 }
 
@@ -380,6 +443,47 @@ mod tests {
         wall.op = "wall.layered".to_owned();
         assert_eq!(Instance::of(&wall).unwrap_err().code, "NotAFamily");
         assert!(Library::read(["{}"]).unwrap_err().starts_with("recipe 0: "));
+    }
+
+    /// An instance's own values ride in the recipe as flat arguments, read back by key; a window's
+    /// opening rises with its sill height, a value of another kind or key is refused.
+    #[test]
+    fn an_instance_holds_its_own_values() {
+        let library = Library::baked();
+        let (id, _) = library
+            .family("library.doors-windows.fixed-window")
+            .unwrap();
+        let ty = Key::parse("w1200x1200").unwrap();
+        let sill = Key::parse("sill_height").unwrap();
+        let plain = recipe(&id, &ty);
+        let raised = with_value(&plain, &sill, "length:q0:7040000");
+        assert_eq!(Instance::of(&plain).unwrap().values.len(), 0);
+        let read = Instance::of(&raised).unwrap();
+        assert_eq!(
+            read.values.get(&sill).map(String::as_str),
+            Some("length:q0:7040000")
+        );
+        let (_, low) = opening_of(&*library, &plain).unwrap();
+        let (_, high) = opening_of(&*library, &raised).unwrap();
+        assert_eq!(low.z, [Length::from_mm(900), Length::from_mm(2100)]);
+        assert_eq!(high.z, [Length::from_mm(1100), Length::from_mm(2300)]);
+        assert_eq!(with_value(&raised, &sill, ""), plain);
+        let bad = with_value(&plain, &Key::parse("width").unwrap(), "length:q0:6400000");
+        assert_eq!(
+            opening_of(&*library, &bad).unwrap_err().code,
+            "OpeningRefused"
+        );
+        let mut odd = plain.clone();
+        odd.args.insert("value.Sill".to_owned(), Value::from("x"));
+        assert_eq!(Instance::of(&odd).unwrap_err().code, "BadInstance");
+        odd.args
+            .insert("value.sill_height".to_owned(), Value::from(5));
+        odd.args.remove("value.Sill");
+        assert_eq!(Instance::of(&odd).unwrap_err().code, "BadInstance");
+        assert_eq!(
+            with_type(&plain, &Key::parse("w600x600").unwrap()).args["type"],
+            "w600x600"
+        );
     }
 
     /// The single-swing door's opening at 900 by 2100 is the outside of its frame from the floor;

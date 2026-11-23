@@ -29,7 +29,9 @@
 //!   (CON-A7-F3-P2, piece A64), [`opening()`], the opening it cuts in its host solved at a type's
 //!   values, [`evaluate_turned()`], its solids built turned by quarter turns ([`Turn`]) to stand
 //!   in a host along any axis way, and [`extents()`], the box each solid lies in, without an
-//!   engine.
+//!   engine. A placed instance holds its own values for the parameters each instance holds
+//!   ([`Recipe::instance_parameters`], [`Recipe::instance_value`], [`instance`], and
+//!   [`TypeValues::set_instance`]; job 7.1).
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -55,6 +57,7 @@
 pub mod check;
 pub mod evaluate;
 pub mod family_type;
+pub mod instance;
 pub mod model;
 pub mod read;
 pub mod write;
@@ -67,6 +70,7 @@ pub use evaluate::{
     symbols, symbols_within,
 };
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
+pub use instance::InstanceParameter;
 pub use model::{
     Base, BuiltInType, Condition, Constraint, DefinitionRow, FORMAT_VERSION, Hosting, Key,
     MaterialRef, NamedType, Opening, Operation, Parameter, ParameterValue, Plane, Recipe, Sketch,

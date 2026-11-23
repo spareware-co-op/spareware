@@ -117,6 +117,8 @@ pub enum Reason {
     BadValue(ParamError),
     /// A type sets a parameter each instance holds.
     HeldByInstance,
+    /// An instance is given a value for a parameter its type holds (piece A64, job 7.1).
+    HeldByType,
     /// A type sets a parameter that is worked out by its formula.
     SetsFormula,
     /// A formula uses, or a parameter with a formula is, a parameter that is not a number a
@@ -195,6 +197,7 @@ impl fmt::Display for Reason {
             Self::HeldByInstance => {
                 f.write_str("it is held by each instance, so a type cannot set it")
             }
+            Self::HeldByType => f.write_str("it is held by the type, so an instance cannot set it"),
             Self::SetsFormula => f.write_str("it is worked out by its formula, so nothing sets it"),
             Self::NotNumeric { key } => write!(f, "{key} is not a number a formula can use"),
             Self::Formula(e) => write!(f, "{e}"),

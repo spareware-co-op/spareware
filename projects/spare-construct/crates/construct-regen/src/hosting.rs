@@ -211,6 +211,24 @@ pub fn side(edition: &Edition, host: &Recipe, face: &str) -> Result<FaceName, St
         })
 }
 
+/// The side of `host` whose role is `role` (`exterior` or `interior`), under `edition`.
+///
+/// # Errors
+///
+/// Why not, in words: the host's faces cannot be named, or the role is not one of its sides.
+pub fn side_by_role(edition: &Edition, host: &Recipe, role: &str) -> Result<FaceName, String> {
+    let names = crate::face_names(edition, host).map_err(|e| e.message)?;
+    names
+        .into_iter()
+        .find(|n| n.role == role && SIDES.contains(&n.role.as_str()))
+        .ok_or_else(|| {
+            format!(
+                "{role} is not one of its sides; an element sits on a wall's {} or its {}",
+                SIDES[0], SIDES[1]
+            )
+        })
+}
+
 /// Where `hosted` sits in `host`'s frame, in whole millimetres: what a builder is handed with the
 /// host. `host_recipe` and `hosted_recipe` are their recipes as built, each parameter filled, and
 /// `edition` is the document's, which names the host's faces.
