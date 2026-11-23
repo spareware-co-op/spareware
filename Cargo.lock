@@ -529,6 +529,7 @@ dependencies = [
  "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-styles",
  "construct-transport",
  "construct-types",
  "construct-versions",
@@ -944,6 +945,7 @@ dependencies = [
  "construct-spatial",
  "construct-styles",
  "kit-core",
+ "serde",
  "serde_json",
 ]
 

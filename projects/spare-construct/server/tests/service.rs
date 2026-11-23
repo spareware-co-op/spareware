@@ -1682,6 +1682,141 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
     assert_eq!(item.name, "Arch package v12");
 }
 
+/// A view's graphics rules are read behind the same access as the views, and as the log's head
+/// has them: none at first, then what `view.graphics.set` wrote, by category, with the category's
+/// name. The fill patterns a rule may name are the drawing's own, no more and no fewer.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let (plan_1, plan_2) = (i("VP-1"), i("VP-2"));
+    let summary = json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan",
+                          "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium" });
+
+    let none = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
+    let none = serde_json::to_value(&none).unwrap();
+    assert_eq!(none["view"], summary);
+    assert_eq!(none["rules"], json!([]));
+    // What the page edits from: every category as it looks now, a category before its
+    // subcategories, each edge with where it came from; the pens, patterns and fills a rule may
+    // name. The views category is not there, and what cannot be cut has no cut.
+    let looks = none["looks"].as_array().unwrap();
+    let walls = looks.iter().find(|l| l["category"] == 100).unwrap();
+    assert_eq!(walls["name"], "Walls");
+    assert_eq!(walls["cut"]["origin"], "project");
+    assert_eq!(walls["projection"]["style"]["shown"], true);
+    assert!(
+        walls["cut"]["width"].as_u64().unwrap() > walls["projection"]["width"].as_u64().unwrap()
+    );
+    let sub = looks.iter().position(|l| l["parent"] == 100).unwrap();
+    assert!(looks.iter().position(|l| l["category"] == 100).unwrap() < sub);
+    assert!(
+        looks
+            .iter()
+            .all(|l| l["cut"].is_null() != l["cuttable"].as_bool().unwrap())
+    );
+    assert!(none["pens"].as_array().unwrap().len() > 1);
+    assert!(none["annotation_pens"].as_array().unwrap().len() > 1);
+    assert!(none["line_patterns"].as_array().unwrap().len() > 1);
+    assert_eq!(none["fill_patterns"].as_array().unwrap().len(), 9);
+
+    let hide = json!({ "shown": false, "transparency": 30 });
+    let set = |view: &str, category: u32, edge: &str, style: Value| json!({ "view": view, "category": category, "edge": edge, "style": style });
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.graphics.set",
+        set("VP-1", 101, "cut", hide),
+    )
+    .await
+    .unwrap();
+    let doors = json!({ "halftone": true });
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.graphics.set",
+        set("VP-1", 300, "projection", doors),
+    )
+    .await
+    .unwrap();
+    let after =
+        serde_json::to_value(s.graphics(&anna, &project, &model, &plan_1).await.unwrap()).unwrap();
+    let rules = after["rules"].as_array().unwrap();
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0]["category"], 101);
+    assert_eq!(rules[0]["parent"], 100);
+    assert_eq!(rules[0]["projection"], Value::Null);
+    assert_eq!(rules[0]["cut"]["shown"], false);
+    assert_eq!(rules[0]["cut"]["transparency"], 30);
+    assert_eq!(rules[0]["cut"]["fill"], Value::Null);
+    assert_eq!(rules[1]["category"], 300);
+    assert_eq!(rules[1]["name"], "Doors");
+    assert_eq!(rules[1]["parent"], Value::Null);
+    assert_eq!(rules[1]["cut"], Value::Null);
+    assert_eq!(rules[1]["projection"]["halftone"], true);
+    // Another view says nothing; a view that is not there, a wall, a person who may not read.
+    let other = s.graphics(&anna, &project, &model, &plan_2).await.unwrap();
+    assert_eq!(other.rules.len(), 0);
+    let missing = s.graphics(&anna, &project, &model, &i("VP-9")).await;
+    assert!(matches!(missing, Err(Refusal::NotFound)));
+    let wall = s.graphics(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(s.graphics(&dan, &project, &model, &plan_1).await));
+    // A refusal is the command's words, and the rules stay as they were.
+    let bad = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "view.graphics.set",
+            set("VP-1", 31, "cut", json!({})),
+        )
+        .await;
+    assert!(matches!(bad, Err(Refusal::Refused(why)) if why == "There is no category 31."));
+    let again = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
+    assert_eq!(again.rules.len(), 2);
+
+    // The fill patterns a rule may name are the drawing's own: each of them is taken, and the
+    // refusal of any other lists exactly them.
+    let drawing = construct_drawing::hatch::FillPatterns::default_metric();
+    let names: Vec<&str> = drawing.patterns().iter().map(|p| p.name.as_str()).collect();
+    for name in &names {
+        let fill = json!({ "fill": { "pattern": name, "colour": [0, 0, 0] } });
+        s.edit(
+            &anna,
+            &project,
+            &model,
+            "view.graphics.set",
+            set("VP-2", 100, "cut", fill),
+        )
+        .await
+        .unwrap();
+    }
+    let fill = json!({ "fill": { "pattern": "tartan", "colour": [0, 0, 0] } });
+    let Err(Refusal::Refused(why)) = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "view.graphics.set",
+            set("VP-2", 100, "cut", fill),
+        )
+        .await
+    else {
+        panic!("a fill pattern the drawing does not have was taken");
+    };
+    assert_eq!(
+        why,
+        format!(
+            "There is no fill pattern \"tartan\". The fill patterns are {}.",
+            names.join(", ")
+        )
+    );
+}
+
 /// A drawer that only records what the server asks of it, so the read path is tested without an
 /// engine: the cut height and scale of the view, and the elements the plan cuts as the model
 /// holds them.
@@ -1691,7 +1826,13 @@ struct Recording {
 }
 
 impl Drawer for Recording {
-    fn draw(&self, cut: Length, scale: Scale, elements: &[ToDraw]) -> Result<Drawn, String> {
+    fn draw(
+        &self,
+        cut: Length,
+        scale: Scale,
+        elements: &[ToDraw],
+        _looks: Option<&dyn construct_drawing::look::Looks>,
+    ) -> Result<Drawn, String> {
         self.asked
             .lock()
             .unwrap()

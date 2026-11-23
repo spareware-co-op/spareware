@@ -26,6 +26,7 @@ cloud = [
     "dep:construct-rooms",
     "dep:construct-phases",
     "dep:construct-schedules",
+    "dep:construct-styles",
 ]
 
 [dependencies]
@@ -64,6 +65,8 @@ construct-rooms = { path = "../construct-rooms", optional = true }
 construct-phases = { path = "../construct-phases", optional = true }
 # The schedule commands: construct-schedules checks every schedule and works out its rows.
 construct-schedules = { path = "../construct-schedules", optional = true }
+# The view graphics commands: the pens, line patterns and object styles a rule is checked against.
+construct-styles = { path = "../construct-styles", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }

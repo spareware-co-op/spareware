@@ -50,6 +50,45 @@ pub enum ViewError {
     Style(String),
     /// A record that is not a view as written.
     Malformed(String),
+    /// A view of this kind shows no model, so it holds no graphics rules.
+    NoGraphicsOnKind {
+        /// The kind, in words.
+        kind: String,
+    },
+    /// A view of this kind cuts nothing, so it holds no cut rule.
+    NoCutInKind {
+        /// The kind, in words.
+        kind: String,
+    },
+    /// A cut rule for a category that cannot be cut.
+    CutOnUncuttable(CategoryId),
+    /// A category a view does not draw (the views category itself).
+    NotStyled(CategoryId),
+    /// A category given where a top-level category is needed.
+    NotTopLevel(CategoryId),
+    /// A subcategory given with a category that is not its parent.
+    NotASubcategory {
+        /// The subcategory.
+        subcategory: CategoryId,
+        /// The category it was given with.
+        category: CategoryId,
+    },
+    /// A pen the pen table of the category's kind does not have.
+    NoSuchPen {
+        /// The pen number given.
+        pen: u16,
+    },
+    /// A line pattern the project does not have.
+    NoSuchPattern {
+        /// The pattern number given.
+        pattern: u32,
+    },
+    /// A fill pattern that is not one we have.
+    NoSuchFill(String),
+    /// A fill on a projection rule: only what is cut has one.
+    FillOnProjection,
+    /// A transparency above 100 percent.
+    TransparencyAbove(u8),
 }
 
 impl fmt::Display for ViewError {
@@ -80,6 +119,45 @@ impl fmt::Display for ViewError {
             Self::Phase(error) => write!(f, "{error}"),
             Self::Spatial(error) => write!(f, "{error}"),
             Self::Style(why) | Self::Malformed(why) => f.write_str(why),
+            Self::NoGraphicsOnKind { kind } => write!(
+                f,
+                "A {kind} view shows no model, so it has no graphics rules."
+            ),
+            Self::NoCutInKind { kind } => {
+                write!(f, "A {kind} view cuts nothing, so it has no cut rules.")
+            }
+            Self::CutOnUncuttable(id) => {
+                write!(f, "Category {} cannot be cut, so it has no cut rule.", id.0)
+            }
+            Self::NotStyled(id) => write!(f, "Category {} is not drawn in a view.", id.0),
+            Self::NotTopLevel(id) => write!(
+                f,
+                "Category {} is a subcategory; name its parent as the category.",
+                id.0
+            ),
+            Self::NotASubcategory {
+                subcategory,
+                category,
+            } => write!(
+                f,
+                "Category {} is not a subcategory of category {}.",
+                subcategory.0, category.0
+            ),
+            Self::NoSuchPen { pen } => write!(f, "There is no pen {pen} for this category."),
+            Self::NoSuchPattern { pattern } => write!(f, "There is no line pattern {pattern}."),
+            Self::NoSuchFill(name) => write!(
+                f,
+                "There is no fill pattern {name:?}. The fill patterns are {}.",
+                crate::graphics::FILL_PATTERNS.join(", ")
+            ),
+            Self::FillOnProjection => {
+                write!(f, "Only a cut has a fill: a projection rule has none.")
+            }
+            Self::TransparencyAbove(n) => write!(
+                f,
+                "Transparency is a percentage from 0 to {}, not {n}.",
+                crate::graphics::MOST_TRANSPARENCY
+            ),
         }
     }
 }

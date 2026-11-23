@@ -214,6 +214,10 @@ fn view_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/views/{view}/plan",
             get(plan),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/graphics",
+            get(graphics),
+        )
         .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
         .route(
             "/api/projects/{project}/models/{model}/sheets/{sheet}",
@@ -662,6 +666,18 @@ async fn views(
     Ok(Json(
         app.service
             .views(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn graphics(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .graphics(&person, &id(&project)?, &id(&model)?, &id(&view)?)
             .await?,
     ))
 }
