@@ -1760,6 +1760,9 @@ pass('at the type Ben gave it');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) {
+    console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 4000)}`);
+  }
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
 }
 
