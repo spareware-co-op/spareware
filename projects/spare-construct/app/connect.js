@@ -2125,6 +2125,8 @@
   C.sched = null; // the schedule last opened: { id, table, error, seq, gone, shown, draft }
   C.schedulesSeq = 0; // goes up with each read of the list, so an old answer is not kept
   C.schedulesTimer = null;
+  C.schedulesBusy = false; // a read is out
+  C.schedulesAgain = false; // an entry came while it was
   C.newScheduleCategory = null;
 
   const COMPARISONS = {
@@ -2138,8 +2140,26 @@
     begins_with: 'begins with',
   };
 
-  /** Reads the model's schedules and the categories they may list, and the open table again. */
+  /** Reads the model's schedules and the open table again; one read at a time, and one more if entries came meanwhile. */
   async function loadSchedules() {
+    if (C.schedulesBusy) {
+      C.schedulesAgain = true;
+      return;
+    }
+    C.schedulesBusy = true;
+    try {
+      await readSchedules();
+    } finally {
+      C.schedulesBusy = false;
+    }
+    if (C.schedulesAgain) {
+      C.schedulesAgain = false;
+      loadSchedules();
+    }
+  }
+
+  /** Reads the model's schedules and the categories they may list, and the open table again. */
+  async function readSchedules() {
     if (!C.model) return;
     const model = C.model.id;
     C.schedulesSeq += 1;
@@ -2185,6 +2205,8 @@
   /** An entry of the log arrived for the open model: its schedules and the open table may differ. */
   function schedulesChanged(entry) {
     if (/^element\.(claim|release)$/.test(entry.cmd)) return;
+    // With no schedule there are no rows to follow; one is made or comes back only by these.
+    if (C.schedules && !C.schedules.length && !/^schedule\.|^edit\.(undo|redo)$/.test(entry.cmd)) return;
     clearTimeout(C.schedulesTimer);
     C.schedulesTimer = setTimeout(loadSchedules, 100);
   }

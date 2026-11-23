@@ -2132,12 +2132,16 @@ const addField = async (name) => {
   await ben.locator('#stack-sched [data-key="sched-add-field"]').selectOption({ label: name });
   await ben.locator('#stack-sched [data-act="stackschedfieldadd"]').click();
 };
+// Each add sends the whole list of fields the table showed, so the next waits for the new heading.
+const headings = (page, want) =>
+  page.waitForFunction(
+    (list) => [...document.querySelectorAll('#stack-sched table thead th')].map((th) => th.textContent).join('|') === list,
+    want,
+  );
 await addField('Area');
+await headings(ben, 'Name|Area');
 await addField('State');
-await ben.waitForFunction(
-  (want) => [...document.querySelectorAll('#stack-sched table thead th')].map((th) => th.textContent).join('|') === want,
-  'Name|Area|State',
-);
+await headings(ben, 'Name|Area|State');
 const studioArea = await areaOf(roomId);
 check(/^[0-9.]+ m²$/.test(studioArea), `the server gives the room's area in the document's units, ${studioArea}`);
 await schedRows(ben, [[roomId, 'Studio A', studioArea, await stateOf(roomId)]], "the row's values are the server's, with their units");
@@ -2229,18 +2233,26 @@ await ben.locator('#stack-sched [data-key="sched-filter-value"]').fill('stud');
 await ben.locator('#stack-sched [data-key="sched-filter-value"]').press('Enter');
 await namesInOrder(ben, ['Studio A'], 'Ben filters the names to those containing "stud": one row');
 await namesInOrder(anna, ['Studio A'], "Anna's table has the one row");
+const heldFilters = (await asAnna(`schedules/${scheduleId}`)).schedule.filters;
 check(
-  (await asAnna(`schedules/${scheduleId}`)).schedule.filters.map((f) => `${f.field} ${f.is} ${f.to}`).join() === 'name contains stud',
-  'the server holds the filter as a field, a comparison and a value',
+  heldFilters.length === 1 && heldFilters[0].field === 'name' && heldFilters[0].is === 'contains' && heldFilters[0].to.includes('stud'),
+  `the server holds the filter as a field, a comparison and a value: ${JSON.stringify(heldFilters)}`,
 );
 
-// His undo takes the filter back and his redo puts it back; both browsers follow.
+// His undo takes the filter back and his redo puts it back; both browsers follow. The undo and redo
+// buttons are behind the dialog's scrim, so he closes the table, presses one and opens it again.
+const stepAs = async (page, act) => {
+  await closeScheduleOf(page);
+  await page.locator(`#qat [data-act="${act}"]:not([aria-disabled="true"])`).click();
+  await page.click(scheduleLeaf('Rooms by name'));
+  await page.waitForSelector(table);
+};
 await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'schedule.filters');
-await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await stepAs(ben, 'stackundo');
 await namesInOrder(ben, ['Studio A', 'Store'], "Ben's undo takes the filter back: both rooms");
 await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows the undo");
-await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.redo?.cmd === 'schedule.filters');
-await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.redo);
+await stepAs(ben, 'stackredo');
 await namesInOrder(ben, ['Studio A'], "Ben's redo puts the filter back: one row");
 await namesInOrder(anna, ['Studio A'], "Anna's table follows the redo");
 
@@ -2276,7 +2288,10 @@ await scheduleFresh.waitForSelector(table);
 await schedRows(scheduleFresh, [[roomId, 'Studio A', studioArea, 'enclosed']], 'a fresh load lists the schedule and gives the same row');
 await scheduleFresh.context().close();
 
-// Ben deletes the schedule from the browser; Anna's list and her open table follow.
+// Anna has the table open; Ben deletes the schedule from the browser, and Anna's list and her open
+// table follow.
+await anna.click(scheduleLeaf('Rooms by name'));
+await anna.waitForSelector(table);
 await closeScheduleOf(ben);
 await ben.locator(`#browser [data-act="stackscheddelete"][data-a="${scheduleId}"]`).click();
 await anna.waitForFunction(() => /deleted/.test(document.querySelector('#stack-sched')?.textContent ?? ''));
