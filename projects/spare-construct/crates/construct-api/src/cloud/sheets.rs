@@ -154,13 +154,13 @@ struct Named {
 }
 
 /// A command's answer: a store failure, or the command's own result.
-type Answer = Result<Outcome, StoreError>;
+pub(crate) type Answer = Result<Outcome, StoreError>;
 
-fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
+pub(crate) fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
     value.ok_or_else(|| format!("This command needs {what}."))
 }
 
-fn length(text: &str) -> Result<Length, String> {
+pub(crate) fn length(text: &str) -> Result<Length, String> {
     parse_length(text, &Units::default()).map_err(|e| e.to_string())
 }
 
@@ -452,19 +452,19 @@ pub fn listing_of_sheet(
 
 /// A write a command makes: a record put (with the hash it replaces), or a piece taken away (with
 /// the hash it had).
-enum Write {
+pub(crate) enum Write {
     Put(Box<Element>, Option<Id>),
     Remove(Id, Id),
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
-struct Run<'a, T: Txn> {
-    txn: &'a mut T,
-    project: &'a Id,
-    document: &'a Id,
-    edit: &'a Edit,
-    now_ms: u64,
-    claim_ms: u64,
+pub(crate) struct Run<'a, T: Txn> {
+    pub(crate) txn: &'a mut T,
+    pub(crate) project: &'a Id,
+    pub(crate) document: &'a Id,
+    pub(crate) edit: &'a Edit,
+    pub(crate) now_ms: u64,
+    pub(crate) claim_ms: u64,
 }
 
 impl<T: Txn> Run<'_, T> {
@@ -500,7 +500,7 @@ impl<T: Txn> Run<'_, T> {
 
     /// Makes the writes of one command, taking this person's claim on every piece first: another
     /// person's claim on any of them refuses it all.
-    async fn write_all(&mut self, writes: Vec<Write>) -> Answer {
+    pub(crate) async fn write_all(&mut self, writes: Vec<Write>) -> Answer {
         let mut held = Vec::with_capacity(writes.len());
         for write in &writes {
             let piece = match write {

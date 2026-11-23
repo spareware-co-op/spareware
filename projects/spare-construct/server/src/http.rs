@@ -201,7 +201,8 @@ pub fn routes(app: Shared) -> Router {
         .with_state(app)
 }
 
-/// A model's views: the list, what one shows, and its plan as the server draws it; and its sheets.
+/// A model's views: the list, what one shows, its plan as the server draws it, its text notes; and
+/// its sheets.
 fn view_routes() -> Router<Shared> {
     Router::new()
         .route("/api/projects/{project}/models/{model}/views", get(views))
@@ -216,6 +217,10 @@ fn view_routes() -> Router<Shared> {
         .route(
             "/api/projects/{project}/models/{model}/views/{view}/graphics",
             get(graphics),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/text",
+            get(text),
         )
         .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
         .route(
@@ -624,6 +629,18 @@ async fn graphics(
     Ok(Json(
         app.service
             .graphics(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
+async fn text(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .text(&person, &id(&project)?, &id(&model)?, &id(&view)?)
             .await?,
     ))
 }

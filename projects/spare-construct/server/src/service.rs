@@ -7,6 +7,7 @@ use crate::directory::DirectoryCommands;
 use crate::plan::{Drawer, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
+use construct_api::cloud::text::FontMetrics;
 use construct_api::cloud::{self, ProjectCommands, Target};
 use construct_model::element::Element;
 use construct_model::geometry::{Display, Edition, Geometry};
@@ -234,6 +235,9 @@ pub struct Service<K: Kv, F: FileStore> {
     regenerating: Mutex<HashSet<Id>>,
     /// What draws a view's plan; none on a server built without the geometry kernel.
     drawer: Option<Arc<dyn Drawer>>,
+    /// What measures text in a font, so that a view's notes can be laid out; none while the server
+    /// has no font files, and then the notes are listed with no layout.
+    metrics: Option<Arc<dyn FontMetrics + Send + Sync>>,
 }
 
 impl<K: Kv, F: FileStore> Service<K, F> {
@@ -258,6 +262,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             regen: Arc::new(regen),
             regenerating: Mutex::new(HashSet::new()),
             drawer: None,
+            metrics: None,
         }
     }
 
@@ -265,6 +270,17 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     #[must_use]
     pub fn with_drawer(mut self, drawer: Option<Arc<dyn Drawer>>) -> Self {
         self.drawer = drawer;
+        self
+    }
+
+    /// This service with `metrics` measuring the fonts text notes are laid out in
+    /// ([`Service::text`]). Without them the notes are listed with no layout, never a guessed one.
+    #[must_use]
+    pub fn with_font_metrics(
+        mut self,
+        metrics: Option<Arc<dyn FontMetrics + Send + Sync>>,
+    ) -> Self {
+        self.metrics = metrics;
         self
     }
 
@@ -987,6 +1003,36 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)?;
         let shaped = shaped_of(&mut snapshot, project, model).await?;
         cloud::sheets::listing_of_sheet(&world, &views, sheet, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
+    /// One view's text notes with their laid-out boxes, and the model's text styles. The layout is
+    /// worked from each note's record, its style and the server's font metrics every time it is
+    /// asked; with no metrics the notes are listed with no layout.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a record cannot be read or a note cannot be laid out, saying why.
+    pub async fn text(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::text::TextListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::text::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let metrics = self
+            .metrics
+            .as_deref()
+            .map(|metrics| metrics as &dyn FontMetrics);
+        cloud::text::listing_of_view(&world, view, metrics)
             .map_err(Refusal::Bad)?
             .ok_or(Refusal::NotFound)
     }

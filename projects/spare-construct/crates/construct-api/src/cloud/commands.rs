@@ -8,7 +8,7 @@ use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folde
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
     elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms, sheets,
-    undo, views, walls,
+    text, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -131,6 +131,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = sheets::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = text::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = families::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -188,7 +191,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || roofs::is_command(cmd)
                 || rooms::is_command(cmd)
                 || views::is_command(cmd)
-                || sheets::is_command(cmd) =>
+                || sheets::is_command(cmd)
+                || text::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -254,6 +258,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || rooms::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
             || sheets::is_command(&edit.cmd)
+            || text::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -317,6 +322,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             views::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if sheets::is_command(&edit.cmd) {
             sheets::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if text::is_command(&edit.cmd) {
+            text::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
             self.element(&mut staged, project, context, edit).await?
         } else if edit.cmd == "document.checkpoint" {

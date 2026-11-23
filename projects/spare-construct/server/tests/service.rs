@@ -2251,3 +2251,119 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         Err(Refusal::NotFound)
     ));
 }
+
+/// Test metrics: every character is 600 thousandths of the size wide, a line 1,200 high.
+struct Fixed;
+
+impl construct_api::cloud::text::FontMetrics for Fixed {
+    fn advance(
+        &self,
+        _: &construct_api::cloud::text::Face<'_>,
+        text: &str,
+    ) -> Result<u64, construct_api::cloud::text::TextError> {
+        Ok(text.chars().count() as u64 * 600)
+    }
+
+    fn line_height(
+        &self,
+        _: &construct_api::cloud::text::Face<'_>,
+    ) -> Result<u64, construct_api::cloud::text::TextError> {
+        Ok(1200)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_a_views_text_notes_and_lays_them_out_only_with_fonts() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    let empty = s.text(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(empty.styles.is_empty() && empty.notes.is_empty() && !empty.laid_out);
+
+    edit(
+        "text.style.create",
+        json!({ "style": "TS-1", "name": "General", "font": "Test Sans", "size": "5" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "text.note.create",
+        json!({ "note": "TN-1", "view": "VP-1", "style": "TS-1", "text": "hello wide world",
+                "x": "100", "y": "200", "width": "30" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "text.leader.add",
+        json!({ "note": "TN-1", "points": [["0", "0"], ["50", "50"]] }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "text.note.create",
+        json!({ "note": "TN-2", "view": "VP-2", "style": "TS-1", "text": "other view",
+                "x": "0", "y": "0" }),
+    )
+    .await
+    .unwrap();
+
+    // No font files on this server: the notes are listed, with no layout and no guessed one.
+    let listed = s.text(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(!listed.laid_out);
+    assert_eq!(listed.notes.len(), 1);
+    let note = serde_json::to_value(&listed.notes[0]).unwrap();
+    assert_eq!(note["id"], "TN-1");
+    assert_eq!(note["lines"], json!(["hello wide world"]));
+    assert_eq!(
+        note["leaders"][0]["points"][1],
+        json!(["length:q0:320000", "length:q0:320000"])
+    );
+    assert!(note["laid"].is_null());
+    assert_eq!(listed.styles.len(), 1);
+    assert_eq!(listed.styles[0].notes, 2);
+
+    // With fonts the same record is laid out: ten characters of 3 mm fit 30 mm.
+    let measured =
+        build(&stack.store, &stack.files).with_font_metrics(Some(std::sync::Arc::new(Fixed)));
+    let laid = measured
+        .text(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert!(laid.laid_out);
+    let box_of = laid.notes[0].laid.as_ref().unwrap();
+    assert_eq!(box_of.width, "length:q0:192000");
+    assert_eq!(box_of.height, "length:q0:76800");
+    assert_eq!(
+        box_of
+            .lines
+            .iter()
+            .map(|l| l.text.as_str())
+            .collect::<Vec<_>>(),
+        ["hello wide", "world"]
+    );
+
+    // A view that holds notes is not deleted, and the notes are read back as written.
+    assert!(refused(
+        s.edit(
+            &anna,
+            &project,
+            &model,
+            "view.delete",
+            json!({ "view": "VP-1" })
+        )
+        .await
+    ));
+    assert!(refused(s.text(&dan, &project, &model, &i("VP-1")).await));
+    assert!(matches!(
+        s.text(&anna, &project, &model, &i("VP-9")).await,
+        Err(Refusal::NotFound)
+    ));
+    assert!(matches!(
+        s.text(&anna, &project, &model, &i("TS-1")).await,
+        Err(Refusal::NotFound)
+    ));
+}

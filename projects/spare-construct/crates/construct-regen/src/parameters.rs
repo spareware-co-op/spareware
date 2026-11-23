@@ -82,7 +82,7 @@ pub fn category_of(recipe: &Recipe) -> Result<CategoryId, CategoryError> {
 }
 
 /// Whether a record is an element with a shape: type records, parameter tables, levels, views,
-/// sheets and viewports
+/// sheets, viewports, text styles and text notes
 /// are not.
 #[must_use]
 pub fn has_shape(element: &Element) -> bool {
@@ -92,6 +92,8 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_views::VIEW_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
+        && element.kind != construct_text::STYLE_KIND
+        && element.kind != construct_text::NOTE_KIND
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).

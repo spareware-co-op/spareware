@@ -7,7 +7,7 @@
 
 use crate::{
     CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
-    REFERENCE_PLANES, ROOFS, ROOMS, SHEETS, VIEWPORTS, VIEWS, WALLS,
+    REFERENCE_PLANES, ROOFS, ROOMS, SHEETS, TEXT_NOTES, VIEWPORTS, VIEWS, WALLS,
 };
 
 /// Every element kind that exists, with its category, sorted by kind name.
@@ -32,6 +32,9 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("roof", ROOFS),
     ("room", ROOMS),
     ("sheet", SHEETS),
+    ("text-note", TEXT_NOTES),
+    // A style is the notes' own record, so it shares their category.
+    ("text-style", TEXT_NOTES),
     ("view", VIEWS),
     ("viewport", VIEWPORTS),
     ("wall.layered", WALLS),
