@@ -23,15 +23,19 @@ mod support;
 
 use construct_api::cloud::spaces::folders;
 use construct_model::rows::{BuiltResult, LinkKind};
+use construct_params::Length;
+use construct_styles::Scale;
 use kit_core::Id;
 use kit_store::memory::{Memory, MemoryFiles};
 use kit_store::{FileStore, Kv, Scope};
 use kit_sync::{read_log, verify_log};
 use serde_json::{Value, json};
 use spare_server::backup;
+use spare_server::plan::{Drawer, Drawn, ToDraw};
 use spare_server::seed::seed;
 use spare_server::service::{Refusal, Service, View};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 fn i(text: &str) -> Id {
@@ -1567,4 +1571,115 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         .await
         .unwrap();
     assert_eq!(item.name, "Arch package v12");
+}
+
+/// A drawer that only records what the server asks of it, so the read path is tested without an
+/// engine: the cut height and scale of the view, and the elements the plan cuts as the model
+/// holds them.
+#[derive(Default)]
+struct Recording {
+    asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
+}
+
+impl Drawer for Recording {
+    fn draw(&self, cut: Length, scale: Scale, elements: &[ToDraw]) -> Result<Drawn, String> {
+        self.asked
+            .lock()
+            .unwrap()
+            .push((cut, scale.denominator(), elements.to_vec()));
+        Ok(Drawn {
+            svg: "<svg/>".to_owned(),
+            skipped: Vec::new(),
+        })
+    }
+}
+
+/// The page asks the server for a plan: the server cuts it at the view's own height, hands the
+/// drawer what that plane crosses with each recipe filled and each base's height added, and sends
+/// back what the drawer drew with how far regeneration had got. A server with no drawer, a view
+/// that is not there, and a person who may not read the model are each answered as for any read.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_plan_is_the_drawers_picture_of_what_the_views_plane_cuts() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let recording = Arc::new(Recording::default());
+    let drawer: Arc<dyn Drawer> = recording.clone();
+    let service = build(&store, &files).with_drawer(Some(drawer));
+    seed(&store, &service).await.unwrap();
+    let s = &service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+
+    let one = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert_eq!(one.svg, "<svg/>");
+    assert_eq!(one.view.name, "Level 1 plan");
+    assert_eq!(one.skipped, Vec::new());
+    assert!(one.through > 0);
+    let two = s.plan(&anna, &project, &model, &i("VP-2")).await.unwrap();
+    assert_eq!(two.view.name, "Level 2 plan");
+
+    {
+        let asked = recording.asked.lock().unwrap();
+        let (cut, scale, elements) = &asked[0];
+        assert_eq!((*cut, *scale), (Length::from_mm(1200), 100));
+        let mut ids: Vec<String> = elements.iter().map(|e| e.id.to_string()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            [
+                "D-101", "D-102", "D-103", "W-101", "W-102", "W-103", "W-104", "W-105"
+            ]
+        );
+        let wall = elements.iter().find(|e| e.id.as_str() == "W-101").unwrap();
+        assert_eq!(wall.recipe.op, "wall.layered");
+        assert!(
+            wall.recipe.args["layers"].is_array(),
+            "the layers are read from the wall's type: {:?}",
+            wall.recipe.args
+        );
+        assert_eq!(wall.placement.z, 0);
+        // Level 2 is cut 1200 mm above its own level, which stands at 3000 mm, and what stands on it
+        // is drawn from that base.
+        let (cut, _, elements) = &asked[1];
+        assert_eq!(*cut, Length::from_mm(4200));
+        let wall = elements.iter().find(|e| e.id.as_str() == "W-201").unwrap();
+        assert_eq!(wall.placement.z, 3000);
+    }
+
+    // Only floor plans are drawn yet: a three-dimensional view says so.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.create",
+        json!({ "view": "V3", "kind": "three_d", "name": "House in 3D" }),
+    )
+    .await
+    .unwrap();
+    let Err(Refusal::Bad(why)) = s.plan(&anna, &project, &model, &i("V3")).await else {
+        panic!("a 3D view is not drawn as a plan");
+    };
+    assert!(why.contains("only floor plans are drawn yet"), "{why}");
+
+    let none = s.plan(&anna, &project, &model, &i("VP-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    let wall = s.plan(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(s.plan(&dan, &project, &model, &i("VP-1")).await));
+}
+
+/// Without the kernel a server cannot cut a plan, and says so in words the page shows.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_server_without_a_drawer_says_it_cannot_draw_plans() {
+    let stack = seeded().await;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let Err(Refusal::Bad(why)) = stack
+        .service
+        .plan(&anna, &project, &model, &i("VP-1"))
+        .await
+    else {
+        panic!("a plan needs a drawer");
+    };
+    assert_eq!(
+        why,
+        "This server was built without the geometry kernel, so it cannot draw plans."
+    );
 }

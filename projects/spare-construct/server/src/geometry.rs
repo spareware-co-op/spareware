@@ -53,3 +53,24 @@ fn kernel() -> Result<Arc<dyn Geometry>, String> {
 fn kernel() -> Result<Arc<dyn Geometry>, String> {
     Err("this server was built without the kernel: build it with --features kernel".to_owned())
 }
+
+/// What draws a view's plan ([`crate::plan`]): the kernel's builder over solidcore's engine, on a
+/// server built with the `kernel` feature (whatever builder makes its shapes: a plan is drawn
+/// from the stored recipes, not from the stored shapes), and nothing on a server built without
+/// it, which says so when a plan is asked for. Interim, as [`geometry`]'s kernel: the engine that
+/// answers the cut is the one line below.
+#[cfg(feature = "kernel")]
+#[must_use]
+pub fn drawer() -> Option<Arc<dyn crate::plan::Drawer>> {
+    use construct_regen::kernel::{Kernel, STEP};
+    use geom_solidcore::engine::SolidcoreEngine;
+    let built = Kernel::new(SolidcoreEngine::new(STEP)).ok()?;
+    Some(Arc::new(built))
+}
+
+/// What draws a view's plan: nothing, on a server built without the `kernel` feature.
+#[cfg(not(feature = "kernel"))]
+#[must_use]
+pub fn drawer() -> Option<Arc<dyn crate::plan::Drawer>> {
+    None
+}

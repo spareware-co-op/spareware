@@ -4,6 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
+use crate::plan::{Drawer, Skipped, ToDraw};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -14,6 +15,7 @@ use construct_model::rows::{
     BuiltElement, BuiltResult, Hub, HubRole, Incoming, Item, Link, LinkKind, Model, Project,
     Stored, Team,
 };
+use construct_params::{Length, Value as StoredValue};
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
 use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
@@ -105,6 +107,97 @@ pub struct FilledView {
     pub failed: Option<Value>,
 }
 
+const NO_DRAWER: &str =
+    "This server was built without the geometry kernel, so it cannot draw plans.";
+
+/// A floor plan as the server draws it from the stored model.
+#[derive(Serialize, Debug)]
+pub struct PlanDrawing {
+    /// The view that was drawn.
+    pub view: cloud::views::ViewSummary,
+    /// How far regeneration had got when it was read; the plan is of the model as of that point.
+    pub through: u64,
+    /// The drawing, as one SVG document in model millimetres, y up the sheet.
+    pub svg: String,
+    /// The elements the plan cuts that it could not draw, each with the reason.
+    pub skipped: Vec<Skipped>,
+}
+
+/// The built elements of a model with a shape: each record, the box of its shape and the height
+/// of its base.
+async fn shaped_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+) -> Result<Vec<cloud::views::Shaped>, Refusal> {
+    let mut shaped = Vec::new();
+    for (_, (_, record)) in records::read_document(reader, project, model).await? {
+        if !records::has_shape(&record) {
+            continue;
+        }
+        let place = Place::Built {
+            project: project.clone(),
+            document: model.clone(),
+            element: record.id.clone(),
+        };
+        let built: Option<BuiltElement> = read_row(reader, &place.key()).await?;
+        let Some(built) = built else { continue };
+        if let BuiltResult::Shape { bounds, .. } = built.result {
+            shaped.push(cloud::views::Shaped {
+                record,
+                bounds,
+                elevation: built.elevation,
+            });
+        }
+    }
+    Ok(shaped)
+}
+
+/// What the drawer needs of one element: its category, its place with its base's height added
+/// (whole millimetres) and its recipe as the regenerator fills it. The inner error says, in
+/// words, why this element cannot be drawn.
+async fn to_draw<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    one: &cloud::views::Shaped,
+) -> Result<Result<ToDraw, String>, StoreError> {
+    let record = &one.record;
+    let Some(category) =
+        records::stored_category(record).or_else(|| records::category_of(&record.recipe).ok())
+    else {
+        return Ok(Err("it has no category".to_owned()));
+    };
+    let recipe = match levels::recipe_at(reader, project, model, record, records::At::Now).await? {
+        Ok(recipe) => recipe,
+        Err(failed) => return Ok(Err(failed.message)),
+    };
+    let base = match one.elevation.as_deref().map(StoredValue::from_stored) {
+        None => 0,
+        Some(Some(StoredValue::Length(length)))
+            if length.steps().rem_euclid(Length::STEPS_PER_MM) == 0 =>
+        {
+            length.steps().div_euclid(Length::STEPS_PER_MM)
+        }
+        Some(_) => {
+            return Ok(Err(
+                "its base is not a length on a whole millimetre".to_owned()
+            ));
+        }
+    };
+    let mut placement = record.placement;
+    let Some(z) = placement.z.checked_add(base) else {
+        return Ok(Err("it stands too high to be drawn".to_owned()));
+    };
+    placement.z = z;
+    Ok(Ok(ToDraw {
+        id: record.id.clone(),
+        category,
+        placement,
+        recipe,
+    }))
+}
+
 /// An area of a level.
 pub struct View {
     /// The level, by its permanent ID. A level an old record's integer implies has that integer
@@ -132,6 +225,8 @@ pub struct Service<K: Kv, F: FileStore> {
     files: F,
     regen: Arc<Regenerator<K, F>>,
     regenerating: Mutex<HashSet<Id>>,
+    /// What draws a view's plan; none on a server built without the geometry kernel.
+    drawer: Option<Arc<dyn Drawer>>,
 }
 
 impl<K: Kv, F: FileStore> Service<K, F> {
@@ -155,7 +250,15 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             files,
             regen: Arc::new(regen),
             regenerating: Mutex::new(HashSet::new()),
+            drawer: None,
         }
+    }
+
+    /// This service with `drawer` drawing the plans people open ([`Service::plan`]).
+    #[must_use]
+    pub fn with_drawer(mut self, drawer: Option<Arc<dyn Drawer>>) -> Self {
+        self.drawer = drawer;
+        self
     }
 
     /// Starts this project's shapes keeping up with its log, the first time it is used.
@@ -721,29 +824,73 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let world = cloud::views::read_world(&mut snapshot, project, model)
             .await?
             .map_err(Refusal::Bad)?;
-        let mut shaped = Vec::new();
-        for (_, (_, record)) in records::read_document(&mut snapshot, project, model).await? {
-            if !records::has_shape(&record) {
-                continue;
-            }
-            let place = Place::Built {
-                project: project.clone(),
-                document: model.clone(),
-                element: record.id.clone(),
-            };
-            let built: Option<BuiltElement> = read_row(&mut snapshot, &place.key()).await?;
-            let Some(built) = built else { continue };
-            if let BuiltResult::Shape { bounds, .. } = built.result {
-                shaped.push(cloud::views::Shaped {
-                    record,
-                    bounds,
-                    elevation: built.elevation,
-                });
-            }
-        }
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
         cloud::views::listing_of(&world, view, &shaped)
             .map_err(Refusal::Bad)?
             .ok_or(Refusal::NotFound)
+    }
+
+    /// A floor plan drawn from the stored model as of the log's head: the cut edges of what its
+    /// cut plane crosses, hatched by material, as the geometry kernel's drawing makes them
+    /// ([`crate::plan`]). The page asks for it when a person opens the view and again when the
+    /// model changes, and draws nothing of its own.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when this server has no drawer (it was built without the geometry
+    /// kernel), when the view is not a floor plan, or when the drawing cannot be made, saying why.
+    pub async fn plan(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<PlanDrawing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let cut = cloud::views::plan_cut(&world, view)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let Some(drawer) = &self.drawer else {
+            return Err(Refusal::Bad(NO_DRAWER.to_owned()));
+        };
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
+        let listing = cloud::views::listing_of(&world, view, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let mut elements = Vec::new();
+        let mut left_out = Vec::new();
+        for one in &shaped {
+            if !listing.cut.contains(&one.record.id.to_string()) {
+                continue;
+            }
+            match to_draw(&mut snapshot, project, model, one).await? {
+                Ok(element) => elements.push(element),
+                Err(why) => left_out.push(Skipped {
+                    element: one.record.id.to_string(),
+                    why,
+                }),
+            }
+        }
+        let drawn = drawer
+            .draw(cut.cut, cut.scale, &elements)
+            .map_err(Refusal::Bad)?;
+        left_out.extend(drawn.skipped);
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        };
+        let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
+        Ok(PlanDrawing {
+            view: listing.view,
+            through,
+            svg: drawn.svg,
+            skipped: left_out,
+        })
     }
 
     /// What this person can undo and redo in a model now: the step an undo would reverse and the
