@@ -119,63 +119,63 @@ struct Args {
 /// One layer as a person sends it.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct LayerArgs {
-    function: Function,
+pub(super) struct LayerArgs {
+    pub(super) function: Function,
     /// Typed text.
-    thickness: String,
-    material: String,
+    pub(super) thickness: String,
+    pub(super) material: String,
 }
 
 /// A boundary as a person sends it: its outer loop and its holes, each a list of corners.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct BoundaryArgs {
-    outer: Vec<CornerArgs>,
+pub(super) struct BoundaryArgs {
+    pub(super) outer: Vec<CornerArgs>,
     #[serde(default)]
-    holes: Vec<Vec<CornerArgs>>,
+    pub(super) holes: Vec<Vec<CornerArgs>>,
 }
 
 /// One corner as a person sends it: where it is, as typed text, and the ID of the edge that
 /// starts there, if given.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CornerArgs {
+pub(super) struct CornerArgs {
     #[serde(default)]
-    id: Option<String>,
-    at: [String; 2],
+    pub(super) id: Option<String>,
+    pub(super) at: [String; 2],
 }
 
 /// The part of a person's row a claim needs.
 #[derive(Deserialize)]
-struct Named {
-    name: String,
+pub(super) struct Named {
+    pub(super) name: String,
 }
 
 /// A command's answer: a store failure, or the command's own result.
-type Answer = Result<Outcome, StoreError>;
+pub(super) type Answer = Result<Outcome, StoreError>;
 
-fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
+pub(super) fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
     value.ok_or_else(|| format!("This command needs {what}."))
 }
 
 /// Turns a data crate's refusal into the command's result.
-fn why(error: impl std::fmt::Display) -> String {
+pub(super) fn why(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
 /// How typed lengths are read: construct-params' metric display settings, until a project keeps
 /// its own.
-fn units() -> Units {
+pub(super) fn units() -> Units {
     Units::default()
 }
 
 /// A typed length, or construct-levels' refusal of the text.
-fn length(text: &str) -> Result<Length, String> {
+pub(super) fn length(text: &str) -> Result<Length, String> {
     parse_length(text, &units()).map_err(why)
 }
 
 /// A floor type's layers from what a person sent, checked by construct-slabs.
-fn layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
+pub(super) fn layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
     let mut layers = Vec::with_capacity(sent.len());
     for (at, layer) in sent.into_iter().enumerate() {
         let thickness = parse_length(&layer.thickness, &units())
@@ -190,6 +190,14 @@ fn layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
 /// construct-slabs ([`Boundary::from_plain`]), and its area held exactly. A refusal names the
 /// loop and the edge, after `name`.
 fn boundary(sent: BoundaryArgs, name: &str) -> Result<Boundary, String> {
+    let plain = plain_boundary(sent)?;
+    let checked = Boundary::from_plain(&plain).and_then(|b| area(&b).map(|_| b));
+    checked.map_err(|e| format!("{name}'s boundary: {e}"))
+}
+
+/// A boundary in construct-slabs' plain form (its corners in grid steps) from what a person sent:
+/// each corner's typed text read as a length. Nothing else is checked here.
+pub(super) fn plain_boundary(sent: BoundaryArgs) -> Result<Json, String> {
     let corners = |list: Vec<CornerArgs>| -> Result<Vec<Json>, String> {
         list.into_iter()
             .map(|corner| {
@@ -208,24 +216,22 @@ fn boundary(sent: BoundaryArgs, name: &str) -> Result<Boundary, String> {
         .into_iter()
         .map(corners)
         .collect::<Result<Vec<_>, _>>()?;
-    let plain = json!({ "outer": outer, "holes": holes });
-    let checked = Boundary::from_plain(&plain).and_then(|b| area(&b).map(|_| b));
-    checked.map_err(|e| format!("{name}'s boundary: {e}"))
+    Ok(json!({ "outer": outer, "holes": holes }))
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
-struct Run<'a, T: Txn> {
-    txn: &'a mut T,
-    project: &'a Id,
-    document: &'a Id,
-    edit: &'a Edit,
-    now_ms: u64,
-    claim_ms: u64,
+pub(super) struct Run<'a, T: Txn> {
+    pub(super) txn: &'a mut T,
+    pub(super) project: &'a Id,
+    pub(super) document: &'a Id,
+    pub(super) edit: &'a Edit,
+    pub(super) now_ms: u64,
+    pub(super) claim_ms: u64,
 }
 
 impl<T: Txn> Run<'_, T> {
     /// The claim this person takes on a piece, or who else holds it.
-    async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
+    pub(super) async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
         let holder = claims::held_by_another(
             self.txn,
             self.project,
@@ -250,12 +256,12 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// The document's current record of a piece, and its hash.
-    async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
+    pub(super) async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
         records::read_element(self.txn, self.project, self.document, id).await
     }
 
     /// Writes a record and points its piece at it; the change, from what it was.
-    async fn put(&mut self, record: &Element) -> Result<Change, StoreError> {
+    pub(super) async fn put(&mut self, record: &Element) -> Result<Change, StoreError> {
         let before = self.current(&record.id).await?.map(|(hash, _)| hash);
         let hash = write_record(self.txn, self.project, record).await?;
         let pointer = Place::Piece {
@@ -272,7 +278,7 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// Writes one record whose piece this person claims, as the command's whole result.
-    async fn put_claimed(&mut self, record: &Element) -> Answer {
+    pub(super) async fn put_claimed(&mut self, record: &Element) -> Answer {
         let claim = match self.claim(&record.id).await? {
             Ok(claim) => claim,
             Err(refusal) => return Ok(Err(refusal)),
@@ -288,7 +294,7 @@ impl<T: Txn> Run<'_, T> {
 
     /// Writes new floor types, each piece claimed first so another person's claim turns it all
     /// back, as the command's whole result.
-    async fn put_types(&mut self, made: &[ElementType]) -> Answer {
+    pub(super) async fn put_types(&mut self, made: &[ElementType]) -> Answer {
         let mut held = Vec::with_capacity(made.len());
         for ty in made {
             match self.claim(ty.id()).await? {
@@ -312,7 +318,10 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// Every type of the document, read against `context`, as construct-types keeps them.
-    async fn types(&mut self, context: &Context) -> Result<Result<Types, String>, StoreError> {
+    pub(super) async fn types(
+        &mut self,
+        context: &Context,
+    ) -> Result<Result<Types, String>, StoreError> {
         let all = records::read_document(self.txn, self.project, self.document).await?;
         let records: Vec<Element> = all
             .into_values()

@@ -205,7 +205,7 @@ struct AskedLayer {
 }
 
 /// The low and high grid points a mesh reaches, in the engine's steps.
-type Extent = Option<([i64; 3], [i64; 3])>;
+pub(super) type Extent = Option<([i64; 3], [i64; 3])>;
 
 /// The roles of a floor's faces, in order: `top`, `bottom`, the faces between its layers and the
 /// side of each edge of each loop.
@@ -238,14 +238,15 @@ fn thirds(len: usize) -> Result<u32, GeometryError> {
 
 /// What [`append`] put in a mesh: its first triangle and how many, and whether any point was
 /// rounded.
-struct Appended {
-    triangles: [u32; 2],
-    rounded: bool,
+pub(super) struct Appended {
+    pub(super) triangles: [u32; 2],
+    pub(super) rounded: bool,
 }
 
 /// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, put after what
-/// `into` holds; the lowest and highest steps it reaches widen `extent`.
-fn append(
+/// `into` holds; the lowest and highest steps it reaches widen `extent`. A roof's layers are put
+/// together the same way ([`super::roof`]).
+pub(super) fn append(
     into: &mut Mesh,
     mesh: &DisplayMesh,
     units: Units,

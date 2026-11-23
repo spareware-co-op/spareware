@@ -1273,6 +1273,165 @@ check(
   'a fresh load lists the same views, by name',
 );
 await fresh.context().close();
+console.log('\n   Roofs, on a rectangle');
+// Anna makes a gable roof over the seed building, of a type she chooses in the roof tool's options;
+// Ben sees it, its ridge drawn from its record. A roof the server refuses (hips) is turned back in the
+// server's words beside the tool, and nothing is drawn wrongly. She picks the roof, reads its area,
+// and lets go of it; only then does Ben pick it and change its pitch, and Anna sees the new pitch
+// and slope area. Ben lets go; Anna deletes the roof and undoes the delete, and a fresh load of
+// Ben's page agrees.
+const roofHome = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="architecture"]');
+  await page.waitForSelector('g.element[data-id="D-101"] .body');
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+await roofHome(anna);
+await roofHome(ben);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:roof"]');
+const roofTypeField = '#pv-side select[data-key="roof-type"]';
+await anna.waitForSelector(`${roofTypeField} option[value="roof-steel-rafter-150"]`, { state: 'attached' });
+check(
+  (await asAnna('roof-types')).types.length === 2 && (await anna.locator(`${roofTypeField} option`).count()) === 2,
+  'the roof tool has the server make its default roof types through the log, and offers them',
+);
+await anna.locator(roofTypeField).selectOption({ label: 'Sheet steel on 150 rafters' });
+await anna.waitForSelector('#pv-side [data-roof-layers="roof-steel-rafter-150"]');
+check(
+  (await anna.locator('#pv-side [data-roof-layers="roof-steel-rafter-150"] tr').count()) === 3 &&
+    (await anna.locator('#pv-side select[data-key="roof-form"]').inputValue()) === 'gable',
+  'Anna chooses the steel roof type, and the palette lists its three layers, outside first, and a gable',
+);
+const roofClicks = async (page, corners) => {
+  for (const [x, y] of corners) {
+    const at = await onPlan(page, x, y);
+    await page.mouse.click(at.x, at.y);
+  }
+};
+const roofFootprint = [[0, 0], [12000, 0], [12000, 8000], [0, 8000]];
+await roofClicks(anna, [...roofFootprint, roofFootprint[0]]);
+await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
+await anna.keyboard.press('Enter');
+const roofOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'roof')?.el.id;
+await ben.waitForFunction(roofOf);
+const roofId = await ben.evaluate(roofOf);
+const roofDrawn = (id) =>
+  document.querySelector(`g.element[data-id="${id}"] path.roof[data-form="gable"]`) &&
+  document.querySelector(`g.element[data-id="${id}"] [data-roof-ridge]`);
+await ben.waitForFunction(roofDrawn, roofId);
+pass("Anna's gable roof appears in Ben's browser, its ridge drawn from its record");
+const roofRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, roofId);
+check(
+  roofRecord.recipe.op === 'roof' &&
+    roofRecord.recipe.args.layers.type === 'layers' &&
+    roofRecord.props['@type'] === 'roof-steel-rafter-150' &&
+    roofRecord.props['@level'] === '1' &&
+    roofRecord.recipe.args.edges.filter((edge) => edge.pitch).length === 2,
+  'its record reads its layers from the type she chose, its base tied to Level 1, two edges rising',
+);
+await shot(ben, 'ben-roof');
+
+// Hips: the roof tool's edge numbers name two edges that meet at a corner; the server's reason, beside
+// the tool, and the footprint it turned back, with no second roof.
+await anna.locator('#pv-side input[data-key="roof-eaves"]').fill('1, 2');
+await anna.locator('#pv-side input[data-key="roof-eaves"]').press('Tab');
+await roofClicks(anna, [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500], [7000, -2300]]);
+await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
+await anna.keyboard.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="roof-draw"]');
+const roofRefusal = await anna.locator('#pv-side [data-problem="roof-draw"]').textContent();
+check(
+  /slope and meet at a corner: hips come with job 6\.2/.test(roofRefusal) &&
+    roofRefusal === (await anna.locator('#toast-m').textContent()),
+  "edges that meet at a corner are turned back in the server's words, beside the roof tool",
+);
+await anna.waitForSelector('#pv-canvas [data-roof-refused]');
+check(
+  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length)) === 1,
+  'drawn where it was turned back, and no second roof made',
+);
+await shot(anna, 'anna-roof-refused');
+await anna.keyboard.press('Escape');
+
+// Its area and what else the server works out of it, in units, apart from what a person sets.
+const roofShown = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => view.parameters?.some((p) => p.id === 'roof.area' && p.from === 'read-only'),
+  'the server works out the area of the roof',
+);
+const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+const roofArea = roofRead(roofShown, 'roof.area');
+const roofSlopeArea = roofRead(roofShown, 'roof.slope-area');
+check(/^[0-9.]+ m²$/.test(roofArea) && roofRead(roofShown, 'roof.pitch') !== undefined, `the server gives its area in the document's units, ${roofArea}`);
+const roofAreaIs = (shown) => document.querySelector('#pv-side [data-read-only="roof.area"]')?.textContent === shown;
+// Picked in its overhang, where no wall is: the roof alone is there.
+const roofAtAnna = await onPlan(anna, -150, 4000);
+await anna.mouse.click(roofAtAnna.x, roofAtAnna.y);
+await anna.waitForFunction(roofAreaIs, roofArea);
+check(
+  (await anna.locator('#pv-side input[data-key="roof-own-pitch"]').inputValue()) === '1:4' &&
+    (await anna.locator('#pv-side input[data-key="roof-own-overhang"]').inputValue()) === '300 mm',
+  "Anna's palette shows its pitch and overhang as typed, and its area read-only",
+);
+await shot(anna, 'anna-roof-area');
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', roofId);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), roofId);
+pass('Anna lets go of the roof, and Ben sees it free');
+
+// Ben changes its pitch; Anna sees the new pitch and the new slope area, and the same area in plan.
+const roofAtBen = await onPlan(ben, -150, 4000);
+await ben.mouse.click(roofAtBen.x, roofAtBen.y);
+await ben.waitForFunction(roofAreaIs, roofArea);
+const roofPitch = ben.locator('#pv-side input[data-key="roof-own-pitch"]');
+await roofPitch.fill('1:2');
+await roofPitch.press('Enter');
+await anna.waitForFunction(
+  (id) => window.spare.elements.get(id)?.el.recipe.args.edges[0].pitch === 'slope:1/2',
+  roofId,
+);
+const roofSteeper = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  'the server works out the new slope area',
+);
+check(
+  roofRead(roofSteeper, 'roof.area') === roofArea && /^[0-9.]+ m²$/.test(roofRead(roofSteeper, 'roof.slope-area')),
+  "Ben's new pitch reaches Anna's browser, with a new slope area and the same area in plan",
+);
+await shot(ben, 'ben-roof-pitch');
+
+// Ben lets go; Anna deletes the roof, and her undo puts it back.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), roofId);
+const roofAtAnnaAgain = await onPlan(anna, -150, 4000);
+await anna.mouse.click(roofAtAnnaAgain.x, roofAtAnnaAgain.y);
+await anna.waitForFunction(roofAreaIs, roofArea);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), roofId);
+pass("Anna deletes the roof, and it is gone from Ben's plan");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'roof.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(roofDrawn, roofId);
+await anna.waitForFunction(roofDrawn, roofId);
+pass("Anna's undo puts the roof back, in both browsers");
+
+// A fresh load agrees: the same roof, pitch and ridge, drawn from the server's records.
+await ben.reload();
+await ben.waitForSelector('html[data-stack="ready"]');
+await roofHome(ben);
+await ben.waitForFunction(roofDrawn, roofId);
+const roofReloaded = await ben.evaluate((id) => window.spare.elements.get(id).el, roofId);
+check(
+  roofReloaded.recipe.args.edges[0].pitch === 'slope:1/2' && roofReloaded.recipe.args.edges[2].pitch === 'slope:1/2',
+  'a fresh load of Ben’s page shows the same roof, at the pitch Ben gave it',
+);
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the roof's included, matches the server's`);
+}
 
 console.log('\n   Placed families');
 // Anna draws a wall of her own in clear ground above the building, where the floor was, and puts a window of the

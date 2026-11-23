@@ -768,6 +768,28 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
+    /// A model's roof types with their layers and the materials those are drawn in, for the
+    /// page's roof tool ([`cloud::roofs::read_roof_types`]); where it has none, the page sends
+    /// `roof.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn roof_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::roofs::RoofTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::roofs::read_roof_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
     /// The recipe an element is built from now, each argument that reads a record filled (its
     /// parameters, its wall type's layers, its top tie), as the regenerator fills it
     /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an

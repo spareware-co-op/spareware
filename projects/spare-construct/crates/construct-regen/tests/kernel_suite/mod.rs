@@ -1438,6 +1438,182 @@ pub fn a_layered_wall_at_an_angle_is_its_strips_extruded<E: Engine + Send + 'sta
     }
 }
 
+/// A filled roof recipe (construct-roofs' `filled` form) of the 6 m by 4 m footprint with 500 mm
+/// over its eaves and 300 mm over its verges, every point a whole millimetre, written in grid
+/// steps: `form` `gable` rising at 1 in 4 from `o0` (y = 0) and `o2` (y = 4 m) to a ridge at
+/// y = 2 m, `mono` rising at 1 in 4 from `o0` to a high side 300 mm past `o2`, or `flat`; `faces`
+/// the upright heights of its layer faces above its bottom face, top first and 0 last, each layer
+/// between two of them (as construct-roofs gives them, a face of a slope stands higher upright
+/// than square to it: 206 mm upright is 200 mm square at 1 in 4).
+pub fn roof_of(form: &str, faces: &[i64]) -> Recipe {
+    let steps = |mm: i64| mm * 6400;
+    let outline = json!([
+        { "id": "o0", "at": [steps(-300), steps(-500)] },
+        { "id": "o1", "at": [steps(6300), steps(-500)] },
+        { "id": "o2", "at": [steps(6300), steps(4500)] },
+        { "id": "o3", "at": [steps(-300), steps(4500)] },
+    ]);
+    // The bottom face across the roof, (y, z) in mm.
+    let bottom: Vec<(i64, i64)> = match form {
+        "gable" => vec![(-500, -125), (2000, 500), (4500, -125)],
+        _ => vec![(-500, -125), (4300, 1075)],
+    };
+    let functions = ["finish", "substrate", "structure"];
+    let mut layers = Vec::new();
+    for (at, pair) in faces.windows(2).enumerate() {
+        let (high, low) = (pair[0], pair[1]);
+        let solid = if form == "flat" {
+            let corner = |x: i64, y: i64| [steps(x), steps(y), steps(low)];
+            json!({
+                "extrude": [corner(-300, -500), corner(6300, -500), corner(6300, 4500), corner(-300, 4500)],
+                "by": [0, 0, steps(high - low)],
+            })
+        } else {
+            let section = |x: i64| {
+                let mut out: Vec<[i64; 3]> = bottom
+                    .iter()
+                    .map(|&(y, z)| [steps(x), steps(y), steps(z + low)])
+                    .collect();
+                out.extend(
+                    bottom
+                        .iter()
+                        .rev()
+                        .map(|&(y, z)| [steps(x), steps(y), steps(z + high)]),
+                );
+                out
+            };
+            json!({ "loft": [section(-300), section(6300)] })
+        };
+        layers.push(json!({
+            "function": functions[at % 3], "material": "concrete-regular",
+            "thickness": steps(high - low), "solid": solid,
+        }));
+    }
+    let slopes = match form {
+        "gable" => json!(["o0", "o2"]),
+        "mono" => json!(["o0"]),
+        _ => json!([]),
+    };
+    recipe(
+        "roof",
+        json!({ "form": form, "slopes": slopes, "outline": outline, "layers": layers }),
+    )
+}
+
+/// A gable roof is one solid per layer, each its chevron lofted from verge to verge: each layer's
+/// part is a closed mesh holding exactly its volume (5 m across by its upright thickness, 6.6 m
+/// long), the parts top first in their materials, the bounds the stand-in's box; its faces are
+/// named by the edges its slopes rise from and by every edge's side, the same names when its
+/// layers change, and as `construct_regen::kernel::names` gives them without building. The body
+/// lists each layer's two sections exactly in steps.
+pub fn a_gable_roof_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let two = roof_of("gable", &[210, 206, 0]);
+    let b = built(&k, &two);
+    assert_eq!(b.bounds.min, [-300, -500, -125]);
+    assert_eq!(b.bounds.max, [6300, 4500, 710]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&two).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[-300, -500], [6300, -500], [6300, 4500], [-300, 4500]]
+    );
+    assert_eq!(b.displays[0].deviation, 0);
+    let parts = &b.displays[0].parts;
+    let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+    assert_eq!(functions, ["finish", "substrate"]);
+    for (at, upright) in [(0, 4_i128), (1, 206)] {
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * 5000 * upright * 6600, "layer {at}");
+    }
+    assert_eq!(b.displays[1].mesh, b.displays[0].mesh);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from([
+            "top.o0",
+            "bottom.o0",
+            "face.1.o0",
+            "top.o2",
+            "bottom.o2",
+            "face.1.o2",
+            "side.o0",
+            "side.o1",
+            "side.o2",
+            "side.o3",
+        ])
+    );
+    let mut sorted = b.names.clone();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(construct_regen::kernel::names(&two).unwrap(), sorted);
+    let thicker = built(&k, &roof_of("gable", &[300, 250, 0]));
+    assert_eq!(by_role(&thicker), names, "a roof keeps its faces' names");
+    let floor = by_role(&built(&k, &floor_of(&[&RECTANGLE], &[("structure", 200)])));
+    assert!(names.values().all(|n| !floor.values().any(|f| f == n)));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let asked = body["layers"].as_array().unwrap();
+    assert_eq!(asked.len(), 2);
+    assert_eq!(asked[1]["loft"], two.args["layers"][1]["solid"]["loft"]);
+    assert!(asked[1].get("extrude").is_none());
+}
+
+/// A mono-pitch roof is one solid per layer, its parallelogram lofted from verge to verge: a
+/// closed mesh holding exactly 4.8 m across by 206 mm upright by 6.6 m; its slope named by its
+/// eaves edge.
+pub fn a_mono_roof_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let one = roof_of("mono", &[206, 0]);
+    let b = built(&k, &one);
+    assert_eq!(b.bounds.min, [-300, -500, -125]);
+    assert_eq!(b.bounds.max, [6300, 4300, 1281]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&one).unwrap().bounds
+    );
+    assert_eq!(closed_six_volume(&b), 6 * 4800 * 206 * 6600);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from([
+            "top.o0",
+            "bottom.o0",
+            "side.o0",
+            "side.o1",
+            "side.o2",
+            "side.o3"
+        ])
+    );
+}
+
+/// A flat roof is one solid per layer, its eaves outline extruded straight up from the base: two
+/// closed meshes of 6.6 m by 5 m by 100 and 200 mm, `face.1` between them.
+pub fn a_flat_roof_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let two = roof_of("flat", &[300, 200, 0]);
+    let b = built(&k, &two);
+    assert_eq!(b.bounds.min, [-300, -500, 0]);
+    assert_eq!(b.bounds.max, [6300, 4500, 300]);
+    for (at, thick) in [(0, 100_i128), (1, 200)] {
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * 6600 * 5000 * thick, "layer {at}");
+    }
+    let names = by_role(&b);
+    assert!(
+        names.contains_key("top") && names.contains_key("face.1") && names.len() == 7,
+        "{names:?}"
+    );
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["by"], json!([0, 0, 100 * 6400]));
+    assert_eq!(
+        body["layers"][1]["extrude"][0],
+        json!([-300 * 6400, -500 * 6400, 0])
+    );
+}
+
 // Placed families (job 6.4, CON-A7-F3-P2): a door and a window made from the library's recipes
 // in a three-layer wall.
 
