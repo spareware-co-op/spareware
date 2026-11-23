@@ -1010,8 +1010,32 @@ impl Engine for Pieces {
         Err(unsupported("subtract_pieces"))
     }
 
-    fn loft(&mut self, _: &[Section]) -> Result<Signed, EngineError> {
-        Err(unsupported("loft"))
+    fn loft(&mut self, sections: &[Section]) -> Result<Signed, EngineError> {
+        // A section lofted to the same section moved by one vector: that section extruded.
+        let point = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+        let [first, second] = sections else {
+            return Err(unsupported("loft"));
+        };
+        let (a, b): (Vec<[i64; 3]>, Vec<[i64; 3]>) = (
+            first.corners.iter().map(point).collect(),
+            second.corners.iter().map(point).collect(),
+        );
+        if a.len() < 3 || a.len() != b.len() {
+            return Err(unsupported("loft"));
+        }
+        let by = [0, 1, 2].map(|k| b[0][k] - a[0][k]);
+        if !a
+            .iter()
+            .zip(&b)
+            .all(|(p, q)| [0, 1, 2].map(|k| q[k] - p[k]) == by)
+        {
+            return Err(unsupported("loft"));
+        }
+        let profile = Profile {
+            outer: first.corners.clone(),
+            holes: Vec::new(),
+        };
+        self.extrude(&profile, by)
     }
 
     fn unite(&mut self, a: &Signed, b: &Signed) -> Result<Signed, EngineError> {

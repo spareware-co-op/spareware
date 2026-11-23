@@ -9,7 +9,9 @@
 //!   roof's layer is its section across the roof at one verge lofted to the same section at the
 //!   other ([`Engine::loft`]: every wall of such a loft is flat, each joining two corners of one
 //!   section to the same two of the other); a solved roof's layer (job 6.2) is each of its flat
-//!   pieces extruded straight up ([`Engine::extrude`]) and united in the order the recipe gives
+//!   pieces lofted from its lower face straight up to the same piece on its upper face
+//!   ([`Engine::loft`]: the engine's extrusion of a sloped profile is not yet flat-faced, its
+//!   loft of a section to the same section moved is) and united in the order the recipe gives
 //!   ([`Engine::unite`]), each piece sharing a side with one before it, so the union stays one
 //!   solid. A layer of no thickness (a membrane) is a face between
 //!   its neighbours and has no solid. Each solid is the engine's, so the kernel's checker has
@@ -168,6 +170,7 @@ impl<E: Engine> Kernel<E> {
                         engine.loft(&sections).map_err(from_engine)?
                     }
                     PlanSolid::Unite { profiles, by } => {
+                        let solid_by = *by;
                         let by = [
                             units.from_q0(by[0])?,
                             units.from_q0(by[1])?,
@@ -176,17 +179,25 @@ impl<E: Engine> Kernel<E> {
                         entry.by = Some(by);
                         let mut united = None;
                         for profile in profiles {
-                            let outer = on_engine(profile, units)?;
-                            entry.unite.push(as_steps(&outer));
-                            let piece = engine
-                                .extrude(
-                                    &Profile {
-                                        outer,
-                                        holes: Vec::new(),
-                                    },
-                                    by,
-                                )
-                                .map_err(from_engine)?;
+                            let lower = on_engine(profile, units)?;
+                            entry.unite.push(as_steps(&lower));
+                            let upper: Vec<[i64; 3]> = profile
+                                .iter()
+                                .map(|p| {
+                                    [
+                                        p[0].saturating_add(solid_by[0]),
+                                        p[1].saturating_add(solid_by[1]),
+                                        p[2].saturating_add(solid_by[2]),
+                                    ]
+                                })
+                                .collect();
+                            let sections = [
+                                Section { corners: lower },
+                                Section {
+                                    corners: on_engine(&upper, units)?,
+                                },
+                            ];
+                            let piece = engine.loft(&sections).map_err(from_engine)?;
                             united = Some(match united {
                                 None => piece,
                                 Some(so_far) => {
