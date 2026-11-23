@@ -1235,3 +1235,73 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
+
+/// A plan's stored view range feeds the drawing's cut height: with the cut plane at 1200 mm the
+/// plan draws the walls and the doors (2100 mm high) they hold; raised to 2500 mm it draws the
+/// walls and no door; raised above the walls' tops (3000 mm) it has nothing cut to draw. The
+/// default range draws the bytes it always did, undo and redo each go there and back, and a
+/// crop stored on the view changes nothing in the drawing yet (the clipping is the next job).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_stored_range_sets_where_the_plan_is_cut() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = || async {
+        s.plan(&anna, &project, &model, &i("VP-1"))
+            .await
+            .unwrap()
+            .svg
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let has = |svg: &str, element: &str| svg.contains(&format!("data-element=\"{element}\""));
+    let low = draw().await;
+    assert!(has(&low, "W-101") && has(&low, "D-101"));
+
+    // Cut at 2500 mm, the top raised with it so the range stays in order.
+    let range = json!({ "top": { "offset": "3.5 m" }, "cut": { "offset": "2.5 m" } });
+    edit("view.set", json!({ "view": "VP-1", "range": range })).await;
+    let high = draw().await;
+    assert_ne!(high, low);
+    assert!(has(&high, "W-101"), "a wall 3000 mm high is cut at 2500");
+    assert!(!has(&high, "D-101"), "a door 2100 mm high is not");
+    assert_eq!(high, draw().await, "the same range draws the same bytes");
+
+    // Above the walls' tops nothing is cut.
+    let range = json!({ "top": { "offset": "4.5 m" }, "cut": { "offset": "3.5 m" } });
+    edit("view.set", json!({ "view": "VP-1", "range": range })).await;
+    let above = draw().await;
+    assert!(!has(&above, "W-101") && !has(&above, "D-101"));
+
+    // A crop is stored and served; the drawing is not clipped to it yet.
+    edit(
+        "view.set",
+        json!({ "view": "VP-1", "range": { "top": { "offset": "2.3 m" },
+                "cut": { "offset": "1.2 m" } } }),
+    )
+    .await;
+    assert_eq!(
+        draw().await,
+        low,
+        "the default range draws what it always did"
+    );
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await;
+    assert_eq!(draw().await, low);
+
+    // Undo and redo take the range there and back.
+    edit("edit.undo", json!({})).await;
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, above);
+    edit("edit.redo", json!({})).await;
+    edit("edit.redo", json!({})).await;
+    assert_eq!(draw().await, low);
+}
