@@ -882,5 +882,132 @@ const again = await openWorkshop(anna);
 await anna.waitForFunction(() => window.spare.workshop.state().loaded);
 await again.waitForFunction(() => window.WorkshopFrame.state().kept === 'model');
 check((await bracketWidth(again)) === 135.5, 'and after a reload the part comes back from the model');
+
+console.log('\n   Floors, from a boundary');
+// Anna draws an L-shaped floor with a hole, of a type she chooses in the floor tool's options, south
+// of the building where nothing else is; Ben sees it, its hole drawn from its record. A boundary
+// that crosses itself is turned back with the server's reason, beside the tool. Her undo and redo
+// of the draw take it away and put it back. Then she picks it, reads its area in units, and lets go
+// of it; only then does Ben pick it, read the same, and delete it, so the plan ends as it began.
+const floorHome = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="architecture"]');
+  await page.waitForSelector('g.element[data-id="D-101"] .body');
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+await floorHome(anna);
+await floorHome(ben);
+check((await asAnna('floor-types')).types.length === 0, 'the seed has no floor types yet');
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
+const floorTypeField = '#pv-side select[data-key="floor-type"]';
+await anna.waitForSelector(`${floorTypeField} option[value="floor-concrete-150-screed-50"]`);
+const floorTypesMade = await asAnna('floor-types');
+check(
+  floorTypesMade.types.length === 3 && (await anna.locator(`${floorTypeField} option`).count()) === 3,
+  'the floor tool has the server make its default floor types through the log, and offers them',
+);
+await anna.locator(floorTypeField).selectOption({ label: 'Concrete 150, 50 screed' });
+await anna.waitForSelector('#pv-side [data-floor-layers="floor-concrete-150-screed-50"]');
+check(
+  (await anna.locator('#pv-side [data-floor-layers="floor-concrete-150-screed-50"] tr').count()) === 2,
+  'Anna chooses Concrete 150, 50 screed, and the palette lists its two layers, top first',
+);
+// Corners in the model's millimetres, clicked where the plan draws them.
+const floorClicks = async (page, corners) => {
+  for (const [x, y] of corners) {
+    const at = await onPlan(page, x, y);
+    await page.mouse.click(at.x, at.y);
+  }
+};
+const floorEdge = [[7000, -2300], [10000, -2300], [10000, -1300], [8500, -1300], [8500, -500], [7000, -500]];
+const floorHole = [[7500, -2000], [8000, -2000], [8000, -1600], [7500, -1600]];
+await floorClicks(anna, [...floorEdge, floorEdge[0]]);
+await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+await floorClicks(anna, [...floorHole, floorHole[0]]);
+await anna.waitForFunction(() => /1 hole/.test(document.querySelector('#pv-side [data-floor-sketch="closed"]')?.textContent ?? ''));
+pass('her edge closes on its first corner, and a hole inside it on its own');
+await anna.keyboard.press('Enter');
+const floorOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'floor')?.el.id;
+await ben.waitForFunction(floorOf);
+const floorId = await ben.evaluate(floorOf);
+const floorDrawn = (id) => document.querySelector(`g.element[data-id="${id}"] path.floor[data-holes="1"]`);
+await ben.waitForFunction(floorDrawn, floorId);
+pass("Anna's floor appears in Ben's browser, its hole drawn from its record");
+const floorRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, floorId);
+check(
+  floorRecord.recipe.op === 'floor' &&
+    floorRecord.recipe.args.layers.type === 'layers' &&
+    floorRecord.props['@type'] === 'floor-concrete-150-screed-50' &&
+    floorRecord.props['@level'] === '1',
+  'its record reads its layers from the type she chose, its top tied to Level 1',
+);
+await shot(ben, 'ben-floor');
+
+// A boundary that crosses itself: the server's reason, beside the tool, and the loop it turned back.
+await floorClicks(anna, [[11000, -2300], [12500, -800], [12500, -2300], [11000, -800]]);
+await anna.keyboard.press('Enter');
+await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+await anna.keyboard.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="floor-draw"]');
+const floorRefusal = await anna.locator('#pv-side [data-problem="floor-draw"]').textContent();
+check(
+  /'s boundary: the outer loop crosses or touches itself/.test(floorRefusal) &&
+    floorRefusal === (await anna.locator('#toast-m').textContent()),
+  "a boundary whose edges cross is turned back in the server's words, beside the floor tool",
+);
+await anna.waitForSelector('#pv-canvas [data-floor-refused]');
+check(
+  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'floor').length)) === 1,
+  'drawn where it was turned back, and no second floor made',
+);
+await shot(anna, 'anna-floor-refused');
+
+await anna.keyboard.press('Escape');
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.create');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), floorId);
+pass("Anna's undo takes the floor she drew away, in Ben's browser too");
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(floorDrawn, floorId);
+await anna.waitForFunction(floorDrawn, floorId);
+pass('and her redo puts it back, in both browsers');
+
+// Its area and what else the server works out of it, in units, apart from what a person sets.
+const floorInside = async (page) => onPlan(page, 9500, -1800);
+const floorShown = await until(
+  () => asAnna(`parameters/${floorId}`),
+  (view) => view.parameters?.some((p) => p.id === 'floor.area' && p.from === 'read-only'),
+  'the server works out the area of the floor',
+);
+const floorArea = floorShown.parameters.find((p) => p.id === 'floor.area').shown;
+check(/^[0-9.]+ m²$/.test(floorArea), `the server gives its area in the document's units, ${floorArea}`);
+const floorAreaIs = (shown) => document.querySelector('#pv-side [data-read-only="floor.area"]')?.textContent === shown;
+const floorAtAnna = await floorInside(anna);
+await anna.mouse.click(floorAtAnna.x, floorAtAnna.y);
+await anna.waitForFunction(floorAreaIs, floorArea);
+check(
+  (await anna.locator('#pv-side [data-read-only-rows] input').count()) === 0 &&
+    (await anna.locator('#pv-side [data-floor-offset]').textContent()) === '0 mm',
+  "Anna's palette shows it read-only, apart from the floor's type, level and offset",
+);
+await shot(anna, 'anna-floor-area');
+// Picking it claimed it for her, as her redo had: Ben waits until she lets go.
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', floorId);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), floorId);
+pass('Anna lets go of the floor, and Ben sees it free');
+const floorAtBen = await floorInside(ben);
+await ben.mouse.click(floorAtBen.x, floorAtBen.y);
+await ben.waitForFunction(floorAreaIs, floorArea);
+pass('Ben picks it and reads the same area in his palette');
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), floorId);
+pass("Ben deletes it, and it is gone from Anna's plan");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the floor's included, matches the server's`);
+}
 await browser.close();
 console.log('\nThe browser checks passed.');

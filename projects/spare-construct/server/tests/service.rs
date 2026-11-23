@@ -1207,9 +1207,27 @@ async fn a_floor_drawn_by_command_shows_its_quantities_in_units() {
     let stack = seeded().await;
     let s = &stack.service;
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    // The page's floor tool reads the floor types: none until it sends the defaults.
+    let none = s.floor_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert!(none.materials.iter().any(|m| m.id == "concrete-regular"));
+    assert!(refused(s.floor_types(&dan, &project, &model).await));
     s.edit(&anna, &project, &model, "floor.defaults", json!({}))
         .await
         .unwrap();
+    let types = s.floor_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids.len(), 3);
+    let concrete = types
+        .types
+        .iter()
+        .find(|t| t.id == "floor-concrete-200")
+        .unwrap();
+    assert_eq!(concrete.thickness, "200 mm");
+    assert_eq!(
+        concrete.layers,
+        json!([{ "function": "structure", "thickness": "200 mm", "material": "concrete-regular" }])
+    );
     let floor = json!({ "element": "F-900", "type": "floor-concrete-200", "level": "1",
                         "boundary": l_floor(60_000) });
     assert!(refused(

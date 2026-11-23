@@ -7,7 +7,9 @@
 //! A floor (`floor`) is one box: the box around its outer loop in plan, each side rounded outward
 //! to a whole millimetre, from its bottom face to its top face at `z = 0` ([`crate::floor_plan`]);
 //! its outline is its outer loop, each corner the nearest millimetre, and its deviation is 0 only
-//! when the box is the floor. Interim, as every stand-in shape: its layers and holes are the
+//! when the box is the floor. Its displays draw each layer with a thickness as a part, the box's
+//! slice from that layer's bottom face to its top, so a view colours the layers by material on
+//! either edition. Interim, as every stand-in shape: its layers as solids and its holes are the
 //! kernel's to build (the interim register's row).
 //!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
@@ -125,9 +127,69 @@ struct FloorBody {
     max: [i64; 3],
 }
 
+/// The corners of the box from `lo` to `hi`, in [`TRIANGLES`]' order.
+fn box_corners(lo: [i64; 3], hi: [i64; 3]) -> [[i64; 3]; 8] {
+    let [lx, ly, lz] = lo;
+    let [hx, hy, hz] = hi;
+    [
+        [lx, ly, lz],
+        [hx, ly, lz],
+        [hx, hy, lz],
+        [lx, hy, lz],
+        [lx, ly, hz],
+        [hx, ly, hz],
+        [hx, hy, hz],
+        [lx, hy, hz],
+    ]
+}
+
+/// A floor's displayed mesh and its parts: for each layer with a thickness, top first, the slice of
+/// the box from `min` to `max` between that layer's faces (each the nearest millimetre, the
+/// lowest the box's bottom), a part with the outline `outline`.
+fn floor_layers(
+    plan: &FloorPlan,
+    min: [i64; 3],
+    max: [i64; 3],
+    outline: &[[i64; 2]],
+) -> Result<(Mesh, Vec<Part>), GeometryError> {
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let slabs = plan.slabs();
+    let last = slabs.len().saturating_sub(1);
+    for (n, (_, layer, bottom, top)) in slabs.iter().enumerate() {
+        let low = if n == last {
+            min[2]
+        } else {
+            floor_plan::nearest_mm(*bottom).0
+        };
+        let high = floor_plan::nearest_mm(*top).0.min(max[2]);
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        let corners = box_corners([min[0], min[1], low], [max[0], max[1], high]);
+        mesh.positions.extend(corners.concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: outline.to_vec(),
+        });
+    }
+    Ok((mesh, parts))
+}
+
 /// A floor as one box ([`crate::floor_plan`]): the box around its outer loop, its sides rounded
 /// outward to whole millimetres, from its bottom face (rounded down) to its top face at 0. Named
-/// `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each loop, in loop order.
+/// `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each loop, in loop order. Its
+/// displays draw each layer as a part ([`floor_layers`]); its body is the one box.
 fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
     let plan = FloorPlan::of(recipe)?;
     let total = plan.total().unwrap_or_default();
@@ -166,18 +228,7 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
             .unwrap_or(i64::MAX)
             .saturating_add(i64::from(rounded))
     };
-    let [lx, ly, lz] = min;
-    let [hx, hy, hz] = max;
-    let corners = [
-        [lx, ly, lz],
-        [hx, ly, lz],
-        [hx, hy, lz],
-        [lx, hy, lz],
-        [lx, ly, hz],
-        [hx, ly, hz],
-        [hx, hy, hz],
-        [lx, hy, hz],
-    ];
+    let (mesh, parts) = floor_layers(&plan, min, max, &outline)?;
     let names = floor_names(&plan);
     let body = FloorBody {
         kind: "floor",
@@ -188,12 +239,9 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         .map(|lod| Display {
             lod,
             deviation,
-            mesh: Mesh {
-                positions: corners.concat(),
-                indices: TRIANGLES.to_vec(),
-            },
+            mesh: mesh.clone(),
             outline: outline.clone(),
-            parts: Vec::new(),
+            parts: parts.clone(),
         })
         .collect();
     Ok(Built {
@@ -646,6 +694,29 @@ mod tests {
         );
         // The diagonal of 8 m by 8 m is 11,313.7 mm.
         assert_eq!(l.displays[0].deviation, 11_314);
+        // Each layer is a part: the box's slice between its faces, top first, in its material.
+        let parts = &l.displays[0].parts;
+        let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+        assert_eq!(functions, ["finish", "structure"]);
+        let triangles: Vec<[u32; 2]> = parts.iter().map(|p| p.triangles).collect();
+        assert_eq!(triangles, [[0, 12], [12, 12]]);
+        assert!(parts.iter().all(|p| p.outline == l.displays[0].outline));
+        assert!(parts.iter().all(|p| p.material == "m"));
+        let heights: Vec<i64> = l.displays[0]
+            .mesh
+            .positions
+            .iter()
+            .skip(2)
+            .step_by(3)
+            .copied()
+            .collect();
+        let (a, b, c) = (-50, 0, -200);
+        assert_eq!(
+            heights,
+            [a, a, a, a, b, b, b, b, c, c, c, c, a, a, a, a],
+            "finish from -50 to 0, structure from -200 to -50"
+        );
+        assert_eq!(l.displays[1].parts, *parts);
         let roles: Vec<&str> = l.names.iter().map(|n| n.role.as_str()).collect();
         assert_eq!(roles.len(), 2 + 6 + 4);
         assert_eq!(&roles[..3], ["top", "bottom", "side.e0"]);

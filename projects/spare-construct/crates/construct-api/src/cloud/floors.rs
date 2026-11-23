@@ -51,12 +51,17 @@
 //! `element.set` of a floor's recipe, `type.create` of a floors type and `type.rename`,
 //! `type.duplicate` or `type.delete` of a floor type are refused, naming the command to use.
 //!
+//! For the page, without the log: [`read_floor_types`], a document's floor types with their layers
+//! as these commands take them ([`layers_args`]) and the materials the layers are drawn in, which
+//! the page's floor tool lists (it sends `floor.defaults` where there are none).
+//!
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own. A floor's level and offset are changed by `level.tie`, as any element's. Later, with
 //! their places: a sketch with constraints for its boundary (job 5.2); arc edges, once the
 //! kernel's sweep takes them (the interim register).
 
 use crate::cloud::elements::write_record;
+use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{levels, params};
 use construct_categories::{CategoryId, FLOORS};
 use construct_levels::{Length, Tie, parse_length};
@@ -73,9 +78,9 @@ use construct_slabs::{
 use construct_types::{ElementType, TypeError, Types};
 use kit_core::Id;
 use kit_ops::{Change, Claim, ClaimChange, Edit};
-use kit_store::{Place, StoreError, Txn, read_row, to_row};
+use kit_store::{Place, Reader, StoreError, Txn, read_row, to_row};
 use kit_sync::{Applied, Context as Ordered, Outcome, claims};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value as Json, json};
 
 /// Every command here.
@@ -680,4 +685,89 @@ pub async fn generic_rules<T: Txn>(
         }
         _ => Ok(()),
     })
+}
+
+/// A floor type's layers as `floor.type.create` and `floor.type.layers` take them: from the top
+/// face down, each thickness as typed text that reads back exactly.
+#[must_use]
+pub fn layers_args(layers: &Layers) -> Json {
+    Json::Array(
+        layers
+            .layers()
+            .iter()
+            .map(|layer| {
+                json!({ "function": layer.function, "thickness": layer.thickness.to_string(),
+                        "material": layer.material.as_str() })
+            })
+            .collect(),
+    )
+}
+
+/// A document's floor types, as the page lists them for its floor tool: each with its layers, and
+/// the materials those are drawn in.
+#[derive(Serialize, Debug)]
+pub struct FloorTypesView {
+    /// Every type of the floors category with layers, by name, then ID.
+    pub types: Vec<FloorTypeView>,
+    /// The materials a layer may be made of, each with the colours a view draws it in.
+    pub materials: Vec<MaterialView>,
+}
+
+/// One floor type.
+#[derive(Serialize, Debug)]
+pub struct FloorTypeView {
+    /// Its ID.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// Its whole thickness, as typed text.
+    pub thickness: String,
+    /// Its layers from the top face down, as [`layers_args`] gives them.
+    pub layers: Json,
+}
+
+/// A document's floor types as they are now, and the materials: construct-materials' default
+/// library until a project keeps its own. A type of the floors category without layers is not
+/// listed (no floor can be of it). The inner error is a record the document's rules can't read, in
+/// their words.
+///
+/// # Errors
+/// A store error.
+pub async fn read_floor_types<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+) -> Result<Result<FloorTypesView, String>, StoreError> {
+    let context = match records::read_context(reader, project, document).await? {
+        Ok(context) => context,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let all = records::read_document(reader, project, document).await?;
+    let records: Vec<Element> = all
+        .into_values()
+        .map(|(_, record)| record)
+        .filter(|record| record.kind == TYPE_KIND)
+        .collect();
+    let types = match Types::from_records(&records, &context.params, &context.categories) {
+        Ok(types) => types,
+        Err(e) => return Ok(Err(why(e))),
+    };
+    let mut listed: Vec<FloorTypeView> = types
+        .in_category(FLOORS)
+        .into_iter()
+        .filter_map(|ty| {
+            let layers = layers_of(ty).ok()?;
+            Some(FloorTypeView {
+                id: ty.id().to_string(),
+                name: ty.name().to_owned(),
+                thickness: layers.total().to_string(),
+                layers: layers_args(&layers),
+            })
+        })
+        .collect();
+    listed.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
+    Ok(Ok(FloorTypesView {
+        types: listed,
+        materials: materials_view(),
+    }))
 }

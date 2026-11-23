@@ -22,9 +22,11 @@
 //! - Displays: levels 0 and 1 the same mesh (a floor has no openings yet), the layers' meshes one
 //!   after another, in whole millimetres, each coordinate the nearest millimetre to the engine's
 //!   grid point (a corner at 12.5 mm is not on one); a level that rounded anything strays by 1 mm.
-//!   The outline is the outer loop, each corner the nearest millimetre; holes are not in it (a
-//!   display's outline is one polygon), so a plan draws a floor's holes from its record. The
-//!   bounds are rounded outward.
+//!   Each layer with a thickness is a part ([`Part`]): its material, its function, its triangles
+//!   in the mesh and, seen from above, the outer loop, as a layered wall's layers are, so a page
+//!   colours each layer by its material. The outline is the outer loop, each corner the nearest
+//!   millimetre; holes are not in it nor in a part's outline (a display's outline is one polygon),
+//!   so a plan draws a floor's holes from its record. The bounds are rounded outward.
 //!
 //! Depends on the parent module's units, naming and errors, and [`crate::floor_plan`]. Interim: as
 //! the parent module's (the engine behind the seam, the body's bytes being the engine's request,
@@ -33,7 +35,9 @@
 
 use super::{Kernel, Units, as_steps, fault, from_engine, name, op_id, too_big};
 use crate::floor_plan::{self, FloorPlan, PlanCorner};
-use construct_model::geometry::{Bounds, Built, Display, FaceName, GeometryError, Mesh, Recipe};
+use construct_model::geometry::{
+    Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
+};
 use engine_geometry::value::engine::{DisplayMesh, Engine, Profile};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
@@ -82,18 +86,30 @@ pub(super) fn names(op: OpId, plan: &FloorPlan) -> Result<Vec<FaceName>, Geometr
     Ok(names)
 }
 
+/// A count of a mesh's items, of three numbers each, as a display's triangle numbers are.
+fn thirds(len: usize) -> Result<u32, GeometryError> {
+    u32::try_from(len.checked_div(3).unwrap_or(0))
+        .map_err(|_| fault("TooBig", "a mesh with too many points or triangles"))
+}
+
+/// What [`append`] put in a mesh: its first triangle and how many, and whether any point was
+/// rounded.
+struct Appended {
+    triangles: [u32; 2],
+    rounded: bool,
+}
+
 /// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, put after what
-/// `into` holds, and whether any was rounded; the lowest and highest steps it reaches widen
-/// `extent`.
+/// `into` holds; the lowest and highest steps it reaches widen `extent`.
 fn append(
     into: &mut Mesh,
     mesh: &DisplayMesh,
     units: Units,
     extent: &mut Extent,
-) -> Result<bool, GeometryError> {
+) -> Result<Appended, GeometryError> {
     let many = || fault("TooBig", "a mesh with too many points");
-    let base =
-        u32::try_from(into.positions.len().checked_div(3).unwrap_or(0)).map_err(|_| many())?;
+    let base = thirds(into.positions.len())?;
+    let first = thirds(into.indices.len())?;
     let mut rounded = false;
     for point in &mesh.positions {
         let mut steps = [0_i64; 3];
@@ -123,7 +139,11 @@ fn append(
         }
         into.indices.push(index.checked_add(base).ok_or_else(many)?);
     }
-    Ok(rounded)
+    let count = thirds(into.indices.len())?.saturating_sub(first);
+    Ok(Appended {
+        triangles: [first, count],
+        rounded,
+    })
 }
 
 /// One loop's corners as grid points of the engine at height `z` (engine steps).
@@ -162,6 +182,15 @@ impl<E: Engine> Kernel<E> {
         };
         let mut extent: Extent = None;
         let mut rounded = false;
+        let outline: Vec<[i64; 2]> = plan
+            .outer()
+            .iter()
+            .map(|corner| {
+                let [x, y] = corner.at;
+                [floor_plan::nearest_mm(x).0, floor_plan::nearest_mm(y).0]
+            })
+            .collect();
+        let mut parts = Vec::new();
         {
             let mut engine = self
                 .engine
@@ -187,7 +216,14 @@ impl<E: Engine> Kernel<E> {
                 let profile = Profile { outer, holes };
                 let solid = engine.extrude(&profile, by).map_err(from_engine)?;
                 let shown = engine.mesh(&solid).map_err(from_engine)?;
-                rounded |= append(&mut mesh, &shown, units, &mut extent)?;
+                let appended = append(&mut mesh, &shown, units, &mut extent)?;
+                rounded |= appended.rounded;
+                parts.push(Part {
+                    material: layer.material.clone(),
+                    function: layer.function.clone(),
+                    triangles: appended.triangles,
+                    outline: outline.clone(),
+                });
             }
         }
         let (lo, hi) =
@@ -196,14 +232,6 @@ impl<E: Engine> Kernel<E> {
             min: lo.map(|s| units.floor_mm(s)),
             max: hi.map(|s| units.ceil_mm(s)),
         };
-        let outline: Vec<[i64; 2]> = plan
-            .outer()
-            .iter()
-            .map(|corner| {
-                let [x, y] = corner.at;
-                [floor_plan::nearest_mm(x).0, floor_plan::nearest_mm(y).0]
-            })
-            .collect();
         let deviation = i64::from(rounded);
         let displays = (0..2)
             .map(|lod| Display {
@@ -211,7 +239,7 @@ impl<E: Engine> Kernel<E> {
                 deviation,
                 mesh: mesh.clone(),
                 outline: outline.clone(),
-                parts: Vec::new(),
+                parts: parts.clone(),
             })
             .collect();
         Ok(Built {

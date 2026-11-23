@@ -795,6 +795,29 @@ fn hex(red: u8, green: u8, blue: u8) -> String {
     format!("#{red:02x}{green:02x}{blue:02x}")
 }
 
+/// The materials a layer may be made of, each with the colours a view draws it in:
+/// construct-materials' default library until a project keeps its own. The wall types' and the
+/// floor types' views both list them.
+#[must_use]
+pub fn materials_view() -> Vec<MaterialView> {
+    Materials::default_metric()
+        .materials()
+        .iter()
+        .map(|material| {
+            let (surface, cut) = (
+                &material.drawing.surface.colour,
+                &material.drawing.cut.colour,
+            );
+            MaterialView {
+                id: material.id.as_str().to_owned(),
+                name: material.name.clone(),
+                surface: hex(surface.0, surface.1, surface.2),
+                cut: hex(cut.0, cut.1, cut.2),
+            }
+        })
+        .collect()
+}
+
 /// A document's wall types as they are now, and the materials: construct-materials' default
 /// library until a project keeps its own. The inner error is a record the document's rules can't
 /// read, in their words.
@@ -834,22 +857,7 @@ pub async fn read_wall_types<R: Reader>(
         })
         .collect();
     listed.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
-    let materials = Materials::default_metric()
-        .materials()
-        .iter()
-        .map(|material| {
-            let (surface, cut) = (
-                &material.drawing.surface.colour,
-                &material.drawing.cut.colour,
-            );
-            MaterialView {
-                id: material.id.as_str().to_owned(),
-                name: material.name.clone(),
-                surface: hex(surface.0, surface.1, surface.2),
-                cut: hex(cut.0, cut.1, cut.2),
-            }
-        })
-        .collect();
+    let materials = materials_view();
     let defaults = match default_type_args() {
         Ok(defaults) => defaults,
         Err(refusal) => return Ok(Err(refusal)),

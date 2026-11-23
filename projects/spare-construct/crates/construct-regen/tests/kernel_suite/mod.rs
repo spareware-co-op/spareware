@@ -989,6 +989,29 @@ pub fn a_rectangle_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn
         signed_six_volume(&two.displays[0].mesh),
         6 * 4000 * 3000 * 200
     );
+    // Each layer is a part, top first, in its material: its own triangles of the mesh, between
+    // its faces, the outer loop seen from above.
+    let parts = &two.displays[0].parts;
+    let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+    assert_eq!(functions, ["finish", "structure"]);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    assert!(parts.iter().all(|p| p.outline == two.displays[0].outline));
+    let mesh = &two.displays[0].mesh;
+    let mut next = 0;
+    for (part, faces) in parts.iter().zip([[-50, 0], [-200, -50]]) {
+        let [first, count] = part.triangles;
+        assert_eq!(first, next, "{}", part.function);
+        next = first + count;
+        let from = usize::try_from(first).unwrap() * 3;
+        let to = usize::try_from(next).unwrap() * 3;
+        let at: BTreeSet<i64> = mesh.indices[from..to]
+            .iter()
+            .map(|&i| mesh.positions[usize::try_from(i).unwrap() * 3 + 2])
+            .collect();
+        assert_eq!(at, BTreeSet::from(faces), "{}", part.function);
+    }
+    assert_eq!(usize::try_from(next).unwrap() * 3, mesh.indices.len());
+    assert_eq!(two.displays[1].parts, *parts);
     let names = by_role(&two);
     assert!(
         names.contains_key("face.1") && names.len() == 7,
