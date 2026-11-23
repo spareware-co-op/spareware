@@ -183,8 +183,25 @@ impl Txn for TikvTxn {
             .map_err(classify)
     }
 
+    /// A commit that fails is rolled back, unless it may have landed. `tikv-client` prewrites a
+    /// transaction in batches of 16 KiB, side by side, and a batch that loses a write conflict
+    /// fails the commit while the others keep the locks they wrote; it hands them back to the
+    /// caller, whose `rollback` clears them (`Transaction::rollback`: "a transaction that already
+    /// started committing may have placed prewrite (2PC) locks"), as client-go's committer does
+    /// for itself. Left alone, a read that meets one asks after a primary that was never locked,
+    /// and fails with `TxnNotFound` until the lock's time to live runs out.
+    ///
+    /// If the rollback fails as well, the locks are left to run out as a dead writer's are, and
+    /// the commit's own error is still the one to act on, so the rollback's is not returned.
     async fn commit(mut self) -> Result<(), StoreError> {
-        self.0.commit().await.map(|_| ()).map_err(classify)
+        let error = match self.0.commit().await {
+            Ok(_) => return Ok(()),
+            Err(error) => classify(error),
+        };
+        if !matches!(error, StoreError::Undetermined(_)) {
+            let _ = self.0.rollback().await;
+        }
+        Err(error)
     }
 
     async fn rollback(mut self) -> Result<(), StoreError> {

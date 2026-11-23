@@ -134,19 +134,52 @@ async fn a_read_waits_out_the_locks_of_a_writer_that_died() {
     let store = tikv().await;
     let scope = fresh("dead-writer");
     let scenario = fail::FailScenario::setup();
-    // Stops each commit after its locks are written, as killing the writer there would.
+    // Stops each commit after its locks are written, as killing the writer there would, and
+    // stops the rollback a failed commit is given, which a dead writer never sends.
     fail::cfg("after-prewrite", "return").unwrap();
+    fail::cfg("before-rollback", "return").unwrap();
     let mut txn = store.begin().await.unwrap();
     txn.put(scope.head(), b"1".to_vec()).await.unwrap();
     txn.put(scope.log(1), b"a".to_vec()).await.unwrap();
     let died = txn.commit().await;
     fail::remove("after-prewrite");
+    fail::remove("before-rollback");
     assert!(died.is_err(), "the commit should stop after its prewrite");
 
     let mut snapshot = store.snapshot().await.unwrap();
     assert_eq!(snapshot.get(&scope.head()).await, Ok(None));
     assert_eq!(snapshot.scan(&list::log(&scope)).await, Ok(vec![]));
     scenario.teardown();
+}
+
+/// A commit that loses a write conflict on its primary key, after another of its prewrite batches
+/// has locked a key no one else wrote, leaves no lock there. Two servers regenerating one project
+/// met exactly this: a transaction's first key (its primary) lost to the other server, a second
+/// key in a batch of its own kept its lock, and every read of that key failed with `TxnNotFound`
+/// until the lock ran out, `verify` among them.
+///
+/// The overlap is forced, not waited for: the loser writes its primary first and big enough
+/// (over `tikv-client`'s 16 KiB batch) to go alone, the winner commits that key in between, and
+/// the read comes straight after, well inside the lock's three seconds.
+#[tokio::test]
+#[ignore = "needs a running TiKV"]
+async fn a_commit_that_loses_a_conflict_leaves_no_locks() {
+    let store = tikv().await;
+    let scope = fresh("lost-conflict");
+    let mut loser = store.begin().await.unwrap();
+    loser
+        .put(scope.head(), vec![b'x'; 20 * 1024])
+        .await
+        .unwrap();
+    loser.put(scope.log(1), b"a".to_vec()).await.unwrap();
+    let mut winner = store.begin().await.unwrap();
+    winner.put(scope.head(), b"1".to_vec()).await.unwrap();
+    winner.commit().await.unwrap();
+    assert_eq!(loser.commit().await, Err(StoreError::Conflict));
+
+    let mut snapshot = store.snapshot().await.unwrap();
+    assert_eq!(snapshot.get(&scope.log(1)).await, Ok(None));
+    assert_eq!(snapshot.get(&scope.head()).await, Ok(Some(b"1".to_vec())));
 }
 
 #[tokio::test]
