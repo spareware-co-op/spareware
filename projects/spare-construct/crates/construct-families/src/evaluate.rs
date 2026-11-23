@@ -35,6 +35,10 @@
 //! - [`Evaluated`] and [`Built`]: the result, with what it [`Used`]; [`EvalError`], [`Place`] and
 //!   [`Reason`]: why there is none, as a value to show a person.
 //! - [`Limits`], [`Limit`]: the limits and which one was reached.
+//! - [`symbols()`] and [`symbols_within()`]: the family's 2D symbols drawn at one type's values
+//!   ([`DrawnSymbols`], [`DrawnSymbol`], [`Edge`]), each symbol's sketch solved as a step's
+//!   sketch is (added by piece A62, so a template's plan and elevation symbols can be read back
+//!   and tested at every type).
 //!
 //! Nothing here is interim: the engine behind the trait is the caller's choice (the sketch solver
 //! behind `construct_solver::solve` has its own interim note). Not here: a hosted family's opening
@@ -46,11 +50,13 @@ mod cache;
 mod error;
 mod limits;
 mod sketch;
+mod symbols;
 mod values;
 
 pub use cache::{CacheKey, Evaluator, TypeResult};
 pub use error::{EvalError, Place, Reason};
 pub use limits::{Limit, Limits, Used};
+pub use symbols::{DrawnSymbol, DrawnSymbols, Edge, Point2, symbols, symbols_within};
 pub use values::TypeValues;
 
 use crate::model::{Key, Recipe, Visibility};

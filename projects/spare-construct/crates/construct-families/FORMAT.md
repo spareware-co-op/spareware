@@ -183,6 +183,8 @@ The single-swing door uses under a hundredth of each. What an evaluation used is
 
 A refusal names the step being built, the place (type, a type's value, parameter, plane, sketch, sketch item, constraint or step) and the reason.
 
+**Symbols** at a type's values (`symbols()`, added by piece A62): each symbol's sketch is solved exactly as a step's sketch is, within the same limits, and each edge it names is read back as its solved line, arc or circle, in the sketch's two coordinates. Every symbol is given with its condition as written; whether it is drawn (a door's swing, set per placed door) is the view's question.
+
 ## Versions
 
 A later format is `format` 2 with its own schema file beside this one; format 1 is read for ever. What counts as a breaking change, and what does not, is in [the recipe format note](../../notes/CON-A7-F1-P1-recipe-format.md).

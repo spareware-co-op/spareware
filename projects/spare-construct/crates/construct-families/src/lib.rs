@@ -24,7 +24,8 @@
 //!   through the kernel's `Engine` interface, its sketches solved at the type's values
 //!   ([`evaluate()`], [`evaluate_within()`], [`Evaluator`] keeping each type it builds by
 //!   [`CacheKey`] and evaluating a recipe's named types one by one), within [`Limits`], with
-//!   refusals as [`EvalError`] values (CON-A7-F1-P2, P3 and P6; FORMAT.md, "Evaluation").
+//!   refusals as [`EvalError`] values (CON-A7-F1-P2, P3 and P6; FORMAT.md, "Evaluation"); and
+//!   [`symbols()`], a recipe's 2D symbols drawn at one type's values.
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -55,8 +56,9 @@ pub mod write;
 
 pub use check::{Library, Problem, ProblemKind, Sort};
 pub use evaluate::{
-    Built, CacheKey, EvalError, Evaluated, Evaluator, Limit, Limits, Place, Reason, TypeResult,
-    TypeValues, Used, evaluate, evaluate_within,
+    Built, CacheKey, DrawnSymbol, DrawnSymbols, Edge, EvalError, Evaluated, Evaluator, Limit,
+    Limits, Place, Point2, Reason, TypeResult, TypeValues, Used, evaluate, evaluate_within,
+    symbols, symbols_within,
 };
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
 pub use model::{
