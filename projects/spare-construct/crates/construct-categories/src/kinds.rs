@@ -5,7 +5,7 @@
 //! owner in front (`workshop.part`). This crate does not depend on the crates that define the
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
-use crate::{CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, LEVELS, WALLS};
+use crate::{CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, LEVELS, ROOFS, WALLS};
 
 /// Every element kind that exists, with its category, sorted by kind name.
 ///
@@ -16,6 +16,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("door.single", DOORS),
     ("floor", FLOORS),
     ("level", LEVELS),
+    ("roof", ROOFS),
     ("wall.layered", WALLS),
     ("wall.straight", WALLS),
     ("workshop.assembly", GENERIC_MODELS),

@@ -4,7 +4,8 @@
 //! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
-//! through the commands and its quantities read back, and a document of one edition reported,
+//! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
+//! solid per layer (each sloped layer lofted), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -114,6 +115,21 @@ fn a_rectangle_floor_is_its_layers() {
 #[test]
 fn an_l_shaped_floor_with_a_hole_is_its_layers() {
     kernel_suite::an_l_shaped_floor_with_a_hole_is_its_layers(engine);
+}
+
+#[test]
+fn a_gable_roof_is_its_layers() {
+    kernel_suite::a_gable_roof_is_its_layers(engine);
+}
+
+#[test]
+fn a_mono_roof_is_its_layers() {
+    kernel_suite::a_mono_roof_is_its_layers(engine);
+}
+
+#[test]
+fn a_flat_roof_is_its_layers() {
+    kernel_suite::a_flat_roof_is_its_layers(engine);
 }
 
 #[test]
