@@ -31,6 +31,10 @@ The outline of an oblique wall is rounded once to the kernel's grid (wall_plan's
 
 What construct-rooms already finds ([CON-A4-F7-P1](CON-A4-F7-P1-rooms.md)): the room's point has no closed loop of the walls of its level round it. A redundant room (a second room in one loop), a room the search refuses (a point in a wall, a curved wall) and an enclosed room are not warnings of this list: the first two have their own words on the room's view and may become kinds (`room.redundant`) as one entry each; the feature text names none, so this piece adds none.
 
+## The page (piece A77, the page half)
+
+The page shows the list and keeps nothing of its own: no rule, no copy of one, no stored warning. The status bar always shows the count ("No warnings", "1 warning", "3 warnings") as a button, and the project browser has a Warnings part with each warning's severity and the server's sentence; an empty list says so in words. The list is read from `/warnings` when a model opens and again, after a short pause so entries arriving together are read once, after every entry of the log that changes the model: another person's edit, the person's own, an undo and a redo (claims and releases change no warning and are skipped). A late answer to an earlier read is dropped. Choosing a warning selects the element it names, as the page's other lists do; the page selects one element at a time, so a warning of two walls offers a button for each. Nothing is accepted or dismissed.
+
 ## Not decided here
 
-The panel (list, filters, selecting a warning's elements), fixes, accepting a warning, and kinds that need more of the product (a door off its wall, a floor with no walls under it).
+Filters, zooming to a warning's elements, fixes, accepting a warning, and kinds that need more of the product (a door off its wall, a floor with no walls under it).

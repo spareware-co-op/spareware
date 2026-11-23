@@ -19,7 +19,7 @@
   const WORKS = new Set([
     'go', 'view', 'vtab', 'vclose', 'vcloseothers', 'browser', 'uipal', 'dockreset', 'pref', 'zoom',
     'tool', 'dtool', 'seltool', 'deselect', 'closeAll', 'dgclose', 'discmenu', 'account', 'vbmenu',
-    'detailset', 'disc',
+    'detailset', 'disc', 'warnlist',
   ]);
 
   const C = {
@@ -115,7 +115,7 @@
     history.replaceState(null, '', `#${curView()}`);
     S.units = 'mm';
     BOPEN.clear();
-    for (const open of ['Projects', 'Views', 'Project files', 'Linked models']) BOPEN.add(open);
+    for (const open of ['Projects', 'Views', 'Warnings', 'Project files', 'Linked models']) BOPEN.add(open);
 
     document.addEventListener(
       'click',
@@ -141,7 +141,7 @@
       const waiting = C.pending.length ? `${C.pending.length} waiting · ` : '';
       const checks = C.checked ? `${C.checked} shapes checked · ` : '';
       const speed = last === undefined ? '' : `Last edit from someone else: ${last} ms · `;
-      $('#status-r').innerHTML = `<span id="st-log" class="mono">${esc(waiting + checks + speed)}Edit ${C.head}</span>`;
+      $('#status-r').innerHTML = `${warningsCount()}<span id="st-log" class="mono">${esc(waiting + checks + speed)}Edit ${C.head}</span>`;
     };
     renderBrowser = drawBrowser;
 
@@ -387,6 +387,7 @@
       `<div class="sub">Floor plans</div>${['l1', 'l2'].map((v) => leaf('view', v, VIEWS[v].name, S.screen === 'plan' && S.view === v && !C.openView, 'plan')).join('')}<div class="sub">3D views</div>${leaf('go', '3d', 'Default 3D', S.screen === '3d', 'cube')}${modelViews(leaf)}`,
     );
     if (C.data) tree += group('Project files', projectFiles(leaf));
+    if (C.model) tree += group('Warnings', warningsList());
     if (C.model) tree += group('Linked models', linkedModels());
     if (C.people) {
       const names = (list) => esc(list.join(', ')) || 'None';
@@ -571,6 +572,9 @@
     C.steps = { undo: null, redo: null };
     C.params = C.typeList = C.manage = C.wallTypes = null;
     C.views = C.openView = C.drawn = null;
+    C.warnings = null;
+    C.warnSeq += 1;
+    clearTimeout(C.warnTimer);
     C.problems.clear();
     C.asked.clear();
     C.cuts = false;
@@ -598,6 +602,7 @@
     await loadWorkshop();
     await loadSteps();
     await loadViews();
+    await loadWarnings();
   }
 
   async function openPackage(team, folder, id) {
@@ -1207,6 +1212,7 @@
         else C.claims.delete(change.piece);
       }
       viewsChanged(entry);
+      warningsChanged(entry);
     }
     queueDraw();
   }
@@ -1902,6 +1908,80 @@
   };
 
   // --- Views ---
+  // --- Warnings ---
+  // The problems the model holds (construct-warnings, A2-F7): the server works the list out of the
+  // document each time it is asked, so this page keeps no rules and no copy of one. It reads the
+  // list when a model opens and again after every entry of the log that changes the model, an undo
+  // and a redo included, whoever made it, so the count in the status bar and the list in the project
+  // browser are never stale. Choosing a warning selects the element it names, the way any list in
+  // the page does; a warning of two walls offers each.
+
+  C.warnings = null; // the open model's warnings as the server lists them; null until they come
+  C.warnSeq = 0; // goes up with each read, so an old answer is not kept
+  C.warnTimer = null;
+
+  /** Reads the model's warnings and draws the count and the list. */
+  async function loadWarnings() {
+    if (!C.model) return;
+    const model = C.model.id;
+    C.warnSeq += 1;
+    const seq = C.warnSeq;
+    let answer;
+    try {
+      answer = await api(`${modelUrl(model)}/warnings`);
+    } catch {
+      return;
+    }
+    if (C.model?.id !== model || seq !== C.warnSeq) return;
+    C.warnings = answer.warnings;
+    statusBar();
+    drawBrowser();
+  }
+
+  /** An entry of the log arrived for the open model: read the list again once the entries arriving together have come. */
+  function warningsChanged(entry) {
+    if (/^element\.(claim|release)$/.test(entry.cmd)) return;
+    clearTimeout(C.warnTimer);
+    C.warnTimer = setTimeout(loadWarnings, 100);
+  }
+
+  /** The count, always in the status bar: a button that shows the list. */
+  function warningsCount() {
+    if (!C.model) return '';
+    const n = C.warnings?.length;
+    const words = n === undefined ? 'Warnings' : n === 0 ? 'No warnings' : plural(n, 'warning');
+    return `<button id="st-warnings" data-act="warnlist" data-count="${n ?? ''}">${ic('warn', 'sm')}${esc(words)}</button><span class="sep"></span>`;
+  }
+
+  const SEVERITY = { notice: 'Notice', warning: 'Warning', error: 'Error' };
+
+  /** The project browser's Warnings part: each warning with how serious it is and its sentence. */
+  function warningsList() {
+    if (!C.warnings) return '<p class="pad small faint">Loading.</p>';
+    if (!C.warnings.length) return '<p class="pad small faint" data-warnings-empty>No warnings: nothing in this model needs a look.</p>';
+    let html = '';
+    for (const w of C.warnings) {
+      html += `<div class="stack-warning" data-warning="${esc(w.identity)}" data-severity="${esc(w.severity)}" data-kind="${esc(w.kind)}">`;
+      html += `<button class="leaf" data-act="stackwarning" data-a="${esc(w.elements[0])}">${ic('warn', 'sm')}<span><b>${esc(SEVERITY[w.severity] || w.severity)}</b>: ${esc(w.words)}</span></button>`;
+      if (w.elements.length > 1) {
+        html += '<div class="stack-warning-at">';
+        for (const id of w.elements) html += `<button class="btn sm" data-act="stackwarning" data-a="${esc(id)}">${esc(id)}</button>`;
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    return html;
+  }
+
+  ACT.stackwarning = (button) => select(button.dataset.a);
+
+  /** The count in the status bar, and the ribbon's Warnings, show the list. */
+  ACT.warnlist = () => {
+    BOPEN.add('Warnings');
+    drawBrowser();
+    $('#browser [data-k="Warnings"]')?.scrollIntoView({ block: 'start' });
+  };
+
   // A view is a record of the model with a name, a kind, a scale and, for a plan, a level
   // (construct-views' FORMAT.md). The project browser lists them as the server reads them and keeps
   // the list live through the log; a person makes, renames and deletes one there with the view
