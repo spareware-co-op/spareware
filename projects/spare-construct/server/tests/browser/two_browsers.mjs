@@ -1236,7 +1236,7 @@ await shot(ben, 'ben-roof');
 // the tool, and the footprint it turned back, with no second roof.
 await anna.locator('#pv-side input[data-key="roof-eaves"]').fill('1, 2');
 await anna.locator('#pv-side input[data-key="roof-eaves"]').press('Tab');
-await roofClicks(anna, [[1000, -6000], [5000, -6000], [5000, -3000], [1000, -3000], [1000, -6000]]);
+await roofClicks(anna, [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500], [7000, -2300]]);
 await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
 await anna.keyboard.press('Enter');
 await anna.waitForSelector('#pv-side [data-problem="roof-draw"]');
