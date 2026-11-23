@@ -6,10 +6,11 @@
 //! ([`Engine::extrude`]), one solid less another ([`Engine::subtract`]) and every piece that leaves
 //! ([`Engine::subtract_pieces`]), a loft through flat
 //! polygon sections ([`Engine::loft`]), two solids united ([`Engine::unite`]), a solid's volume
-//! ([`Engine::volume`]), a display mesh of it ([`Engine::mesh`]) and the engine's own record of
-//! what answers each of them ([`Engine::edition`]). Every argument and result is a kernel value or
-//! a plain number: grid points and steps of the engine's [`GridStep`] (chapter 6), exactness
-//! classes, and this module's [`Profile`], [`Section`], [`Volume`], [`DisplayMesh`], [`Edition`] and
+//! ([`Engine::volume`]), a display mesh of it ([`Engine::mesh`]), the closed loops where a plane
+//! cuts it ([`Engine::section`]) and the engine's own record of what answers each of them
+//! ([`Engine::edition`]). Every argument and result is a kernel value or a plain number: grid
+//! points and steps of the engine's [`GridStep`] (chapter 6), exactness classes, and this module's
+//! [`Profile`], [`Section`], [`Volume`], [`DisplayMesh`], [`GridPlane`], [`Cut`], [`Edition`] and
 //! [`EngineError`]. Each engine keeps its own solid type behind [`Engine::Solid`]. The first
 //! engine is geom-solidcore's (decision 32.70), outside the kernel's workspace; an exact engine of
 //! the kernel's own takes its place by implementing the same trait.
@@ -81,6 +82,62 @@ pub struct DisplayMesh {
     pub normals: Vec<[f64; 3]>,
     /// Triangles as indices into the positions, counter-clockwise seen from outside.
     pub triangles: Vec<[u32; 3]>,
+}
+
+/// A plane in grid steps: the points `p` with `normal · p = offset`. Its normal points to one side,
+/// so it says which way the plane faces as well as where it lies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GridPlane {
+    /// The normal, whole numbers, not all zero.
+    pub normal: [i128; 3],
+    /// `normal · p` for every point `p` of the plane, in steps times the normal's units.
+    pub offset: i128,
+}
+
+/// A point of a cut, exactly: `num[i] / den` grid steps along each axis, in lowest terms, `den`
+/// positive. A grid point has `den` 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CutPoint {
+    /// The numerators along x, y and z.
+    pub num: [i128; 3],
+    /// The common denominator, positive.
+    pub den: i128,
+}
+
+/// One straight edge of a cut loop ([`Cut`]), from `start` to `end`, lying in one face of the
+/// solid.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CutEdge {
+    /// Where the edge starts.
+    pub start: CutPoint,
+    /// Where it ends: the next edge's start.
+    pub end: CutPoint,
+    /// The plane of the face it lies in (its carrier, chapter 20.4), its normal pointing out of the
+    /// solid and its coefficients with no common factor. Faces on one plane, such as a wall's face
+    /// split by an opening, share it.
+    pub face: GridPlane,
+}
+
+/// One closed loop of a cut: edges end to end, the last ending where the first starts.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CutLoop {
+    /// The edges, in order round the loop.
+    pub edges: Vec<CutEdge>,
+}
+
+/// Where a plane cuts a solid ([`Engine::section`]): the closed loops bounding the region of the
+/// plane with material on both sides of it (chapter 18.4).
+///
+/// Seen from where the plane's normal points, a loop turns counter-clockwise round material and
+/// clockwise round a hole. Two edges in a row never lie in one face. Each loop starts at its least
+/// point (by x, then y, then z, exactly), and the loops are in the order of their first points, so
+/// the same solid and plane give the same value on every engine that answers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cut {
+    /// The loops; none when the plane misses the solid or only touches it.
+    pub loops: Vec<CutLoop>,
+    /// The exactness of the loops: the solid's, for an engine that cuts exactly.
+    pub exactness: Exactness,
 }
 
 /// One tolerance an engine works to.
@@ -238,4 +295,19 @@ pub trait Engine {
     /// [`EngineError::Unsupported`] for a face the engine does not mesh yet, and the engine's
     /// refusals.
     fn mesh(&mut self, solid: &Self::Solid) -> Result<DisplayMesh, EngineError>;
+
+    /// Where `plane` cuts `solid`: the closed loops of the cut ([`Cut`]), each edge naming the
+    /// plane of the face it lies in; `solid` is not changed.
+    ///
+    /// The rule is chapter 18.4's: the cut is the region of the plane with material on both sides,
+    /// and its boundary. A plane that misses the solid, or only touches it (a face or an edge in
+    /// the plane with all the material on one side), cuts nothing: a [`Cut`] with no loops, not an
+    /// error. Every loop is closed, or the answer is an error.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Invalid`] for a plane with a zero normal, [`EngineError::Unsupported`] for a
+    /// plane or a solid the engine does not cut yet, and the engine's refusals, a loop that does
+    /// not close among them.
+    fn section(&mut self, solid: &Self::Solid, plane: &GridPlane) -> Result<Cut, EngineError>;
 }

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="42mm" viewBox="-500 -3700 5000 4200">
+<line x1="4000" y1="0" x2="4000" y2="-200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-a" data-role="end1"/>
+<line x1="4000" y1="-200" x2="0" y2="-200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-a" data-role="interior"/>
+<line x1="0" y1="-200" x2="0" y2="0" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-a" data-role="end0"/>
+<line x1="0" y1="0" x2="4000" y2="0" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-a" data-role="exterior"/>
+<line x1="4000" y1="-3200" x2="3800" y2="-3200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-b" data-role="end1"/>
+<line x1="3800" y1="-3200" x2="3800" y2="-200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-b" data-role="interior"/>
+<line x1="3800" y1="-200" x2="4000" y2="-200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-b" data-role="end0"/>
+<line x1="4000" y1="-200" x2="4000" y2="-3200" stroke="#000000" stroke-width="50" stroke-linecap="round" data-element="wall-b" data-role="exterior"/>
+</svg>

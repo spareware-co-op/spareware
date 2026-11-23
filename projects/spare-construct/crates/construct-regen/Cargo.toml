@@ -14,6 +14,7 @@ server = [
     "dep:kit-store",
     "dep:kit-sync",
     "dep:construct-categories",
+    "dep:construct-formulas",
     "dep:construct-types",
     "dep:construct-levels",
     "dep:construct-walls",
@@ -26,8 +27,10 @@ kit-store = { path = "../../../kit/crates/kit-store", optional = true }
 kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
+# The one formula language: a parameter with a formula is worked out when it is read.
+construct-formulas = { path = "../construct-formulas", optional = true }
 # Stored lengths: a layered wall's recipe holds its lengths in their stored spelling
-# (src/wall_plan.rs), which both builders read. Same workspace.
+# (src/wall_plan.rs), which both builders read, so it is not optional. Same workspace.
 construct-params = { path = "../construct-params" }
 construct-types = { path = "../construct-types", optional = true }
 # An element's place and a top-tied wall's height read its levels.

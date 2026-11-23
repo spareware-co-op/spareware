@@ -5,9 +5,10 @@
 //!   a browser builds what this server builds and compares it with the server's checkpoints.
 //! - `kernel`: `construct_regen::kernel::Kernel` over the geometry kernel's engine seam, with
 //!   geom-solidcore's `SolidcoreEngine` behind it on the building grid. Only a server built with
-//!   the `kernel` feature has it, since that links solidcore (a long build, decision 32.70), and
-//!   until the browser can run that engine it is a viewer of a kernel-built document's stored
-//!   shapes (construct-model's FORMAT.md, "A document").
+//!   the `kernel` feature has it, since that links solidcore (a long build, decision 32.70). The
+//!   browser builds a kernel-built document with the same builder over the same engine, its own
+//!   package (`shapes-kernel`), which only such a server serves (`http.rs`); a browser without it
+//!   is a viewer of the stored shapes (construct-model's FORMAT.md, "A document").
 //!
 //! Interim: solidcore answers behind the engine seam where the kernel's own exact operations do
 //! not yet; `projects/engines/geometry/geom-solidcore/tests/interim.json` says which part answers

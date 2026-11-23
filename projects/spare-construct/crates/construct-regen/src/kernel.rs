@@ -27,6 +27,9 @@
 //! - Two levels of detail, each from [`Engine::mesh`] in whole millimetres: level 0 the body
 //!   itself, openings cut, straying from it by nothing; level 1 the extrusion before its openings
 //!   were cut, straying by at most the bound [`opening`] gives (none for a wall without openings).
+//! - For a drawing: [`Kernel::solid`] gives a recipe's solid made the same way, with the plane of
+//!   each named face (its carrier, as [`Engine::section`] names a cut edge's face), and
+//!   [`Kernel::section`] cuts it by a plane through the engine.
 //! - Every face carries a persistent name for its role (chapter 20.2): a wall's and a door's
 //!   `exterior`, `interior`, `top`, `base`, `end0` and `end1`; a block's `cap.start`, `cap.end` and
 //!   `side.0` to `side.3`. A name is the kernel's `NameScheme v1` id of the face's `Created` name:
@@ -87,7 +90,8 @@ use construct_model::geometry::{
     Geometry, GeometryError, Hosted as HostedAt, Mesh, Recipe,
 };
 use engine_geometry::value::engine::{
-    DisplayMesh, Edition as EngineEdition, Engine, EngineError, Profile,
+    Cut as EngineCut, DisplayMesh, Edition as EngineEdition, Engine, EngineError, GridPlane,
+    Profile,
 };
 use engine_geometry::value::grid::{GridStep, P3};
 use engine_geometry::value::name::{Role, TopoName};
@@ -840,6 +844,132 @@ impl<E: Engine> Kernel<E> {
             displays,
         })
     }
+
+    /// The engine's solid of `recipe`, made as [`Geometry::build`] makes it, with the plane of each
+    /// named face, for a drawing to cut ([`Kernel::section`]).
+    ///
+    /// Each face's plane is its carrier as [`Engine::section`] names a cut edge's face: in grid
+    /// steps, its normal pointing out of the solid, its coefficients with no common factor. A
+    /// side's plane stands on the plan's edge that sweeps it; the caps' are the floor and the top.
+    ///
+    /// # Errors
+    ///
+    /// What [`Geometry::build`] gives for a recipe it cannot build, and the engine's errors.
+    pub fn solid(&self, recipe: &Recipe) -> Result<KernelSolid<E::Solid>, GeometryError> {
+        let shape = Extrusion::of(recipe)?;
+        let units = self.units;
+        let corners = shape.corners();
+        let outer = corners
+            .iter()
+            .map(|&[x, y]| units.point([x, y, 0]))
+            .collect::<Result<Vec<P3>, _>>()?;
+        let height = units.steps(shape.height)?;
+        let profile = Profile {
+            outer,
+            holes: Vec::new(),
+        };
+        let solid = self
+            .engine
+            .lock()
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?
+            .extrude(&profile, [0, 0, height])
+            .map_err(from_engine)?;
+        let op = op_id(recipe)?;
+        let mut faces = Vec::new();
+        for (role, plane) in [
+            (shape.caps[0], carrier([0, 0, -1], 0)),
+            (shape.caps[1], carrier([0, 0, 1], i128::from(height))),
+        ] {
+            faces.push(NamedFace {
+                plane: plane?,
+                name: name(op, role)?,
+            });
+        }
+        for (i, role) in shape.sides.into_iter().enumerate() {
+            let start = corners.get(i).copied().ok_or_else(too_big)?;
+            let next = i
+                .checked_add(1)
+                .and_then(|n| n.checked_rem(corners.len()))
+                .ok_or_else(too_big)?;
+            let end = corners.get(next).copied().ok_or_else(too_big)?;
+            let [x0, y0] = start.map(|c| units.steps(c));
+            let [x1, y1] = end.map(|c| units.steps(c));
+            let (x0, y0, x1, y1) = (x0?, y0?, x1?, y1?);
+            // The plan turns counter-clockwise, so the outside is on the right of each edge.
+            let less = |a: i64, b: i64| i128::from(a).checked_sub(i128::from(b));
+            let normal = [
+                less(y1, y0).ok_or_else(too_big)?,
+                less(x0, x1).ok_or_else(too_big)?,
+                0,
+            ];
+            let offset = normal[0]
+                .checked_mul(i128::from(x0))
+                .and_then(|a| {
+                    normal[1]
+                        .checked_mul(i128::from(y0))
+                        .and_then(|b| a.checked_add(b))
+                })
+                .ok_or_else(too_big)?;
+            faces.push(NamedFace {
+                plane: carrier(normal, offset)?,
+                name: name(op, role)?,
+            });
+        }
+        Ok(KernelSolid { solid, faces })
+    }
+
+    /// Where `plane` cuts `solid`, by the engine ([`Engine::section`]).
+    ///
+    /// # Errors
+    ///
+    /// The engine's errors, under codes of their own (`EngineInvalid`, `EngineRefused`,
+    /// `EngineUnsupported`).
+    pub fn section(&self, solid: &E::Solid, plane: &GridPlane) -> Result<EngineCut, GeometryError> {
+        self.engine
+            .lock()
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?
+            .section(solid, plane)
+            .map_err(from_engine)
+    }
+}
+
+/// A recipe's solid as the engine made it ([`Kernel::solid`]), and its named faces' planes.
+#[derive(Debug)]
+pub struct KernelSolid<S> {
+    /// The engine's solid.
+    pub solid: S,
+    /// Each named face and the plane it lies on.
+    pub faces: Vec<NamedFace>,
+}
+
+/// A face's persistent name and the plane it lies on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedFace {
+    /// The face's plane, as [`Engine::section`] names a cut edge's face.
+    pub plane: GridPlane,
+    /// Its persistent name and role.
+    pub name: FaceName,
+}
+
+/// The plane `normal · p = offset` with its coefficients' common factor taken out, its normal's
+/// way kept.
+fn carrier(normal: [i128; 3], offset: i128) -> Result<GridPlane, GeometryError> {
+    let mut g = offset.unsigned_abs();
+    for c in normal {
+        let mut b = c.unsigned_abs();
+        while b != 0 {
+            (g, b) = (b, g.checked_rem(b).unwrap_or(0));
+        }
+    }
+    let g = i128::try_from(g)
+        .ok()
+        .filter(|g| *g > 0)
+        .ok_or_else(|| fault("EmptyShape", "a face with no plane"))?;
+    let part = |c: i128| c.checked_div(g).ok_or_else(too_big);
+    Ok(GridPlane {
+        normal: [part(normal[0])?, part(normal[1])?, part(normal[2])?],
+        offset: part(offset)?,
+    })
 }
 
 impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
