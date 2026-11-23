@@ -1161,7 +1161,11 @@
     // A type, a parameter or a level changed, or may have: what the selected element reads may have
     // too, and so may what a recipe that reads records is filled with.
     const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
-    if (reads) fillAgain(entry.target, into);
+    // A wall drawn, moved, retyped or deleted changes the ends of the walls that meet it, though
+    // their own records stay as they are: the log names only the wall that changed, so every wall
+    // that reads records is asked of the server again (its `filled` holds the joints; this page
+    // never works a join out), and the ones the change did not touch come back the same.
+    if (reads || MEETS_WALLS.test(entry.cmd)) fillAgain(entry.target, into);
     if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
@@ -1177,6 +1181,9 @@
     }
     queueDraw();
   }
+
+  /** The commands that can change where walls meet: a wall made, moved, retyped, changed or deleted. */
+  const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
   const READ_BY_RECIPES = /^(type|parameter|level|wall\.type)\./;

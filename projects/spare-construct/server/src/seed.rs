@@ -384,6 +384,25 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
                     .edit(&person, &project, &model, "wall.type.create", args.clone())
                     .await?;
             }
+            // Making a type claims it, and the parameter table the walls' parameters grow, for
+            // half a minute; the seed lets them go, so the first person to define a parameter or
+            // change a type is not turned back for the seed's claim.
+            let mut made: Vec<Value> = wall_types
+                .iter()
+                .filter_map(|args| args.get("type").cloned())
+                .collect();
+            made.push(json!(construct_regen::parameters::TABLE_ID));
+            for piece in made {
+                service
+                    .edit(
+                        &person,
+                        &project,
+                        &model,
+                        "element.release",
+                        json!({ "element": piece }),
+                    )
+                    .await?;
+            }
         }
         for (cmd, args) in elements {
             service.edit(&person, &project, &model, cmd, args).await?;

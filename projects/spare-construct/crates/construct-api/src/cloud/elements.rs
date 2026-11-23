@@ -281,7 +281,9 @@ pub async fn apply<T: Txn>(
     let before: Element = read_row(txn, &place.key())
         .await?
         .ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-    if !records::has_shape(&before) {
+    // Letting go of a claim is allowed on any piece, a type or the parameter table too: the
+    // commands that make those take a claim on them, and nothing else gives it back early.
+    if edit.cmd != "element.release" && !records::has_shape(&before) {
         return Ok(Err(NOT_AN_ELEMENT.to_owned()));
     }
     if let Some(props) = &args.props

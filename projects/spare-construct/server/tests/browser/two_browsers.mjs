@@ -726,7 +726,8 @@ await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
 const wallTypeField = '#pv-side select[data-key="wall-type"]';
 const wallTopField = '#pv-side select[data-key="wall-top"]';
 await anna.waitForSelector(wallTypeField);
-await anna.waitForSelector(`${wallTopField} option[value="2"]`);
+// An option inside a closed list has no box, so it is waited for as present, not as visible.
+await anna.waitForSelector(`${wallTopField} option[value="2"]`, { state: 'attached' });
 check(
   (await anna.locator(`${wallTypeField} option`).count()) === layeredTypes.types.length,
   "the wall tool offers the model's wall types, as the server lists them",
@@ -828,6 +829,80 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the layered wall's included, matches the server's`);
 }
 await shot(anna, 'anna-layered-wall');
+
+console.log('\n   Walls that meet');
+// Anna draws a second Concrete 200 wall from the end of the first, to make a corner: the server
+// re-works the first wall's end, and both browsers take what it says (`filled`) for that wall, as
+// they take it for the wall that was drawn. Then she deletes the new wall and undoes that, and
+// moves it away: each time the first wall is put right, in both browsers and in a fresh load.
+// Everything here is Anna's own wall, so Ben takes nothing of hers and she nothing of his.
+const filledByServer = async (id) => JSON.stringify((await asAnna(`filled/${id}`)).recipe);
+const filledOnPage = (page, id) => page.evaluate((w) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe), id);
+const bothTake = async (id, want, label) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(([w, text]) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe) === text, [id, want]);
+  }
+  pass(label);
+};
+const freeEnd = await filledByServer(layeredId);
+check((await filledOnPage(ben, layeredId)) === freeEnd, "the first wall's end is free, and both pages hold the server's filling of it");
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector(wallTypeField);
+await anna.locator(wallTypeField).selectOption({ label: 'Concrete 200' });
+const cornerStart = await onPlan(anna, 5000, 9500);
+const cornerEnd = await onPlan(anna, 5000, 10300);
+await anna.mouse.click(cornerStart.x, cornerStart.y);
+await anna.mouse.click(cornerEnd.x, cornerEnd.y);
+await anna.keyboard.press('Escape');
+const secondWall = (first) =>
+  [...window.spare.elements.values()].find((p) => p.el.props['@type'] === 'wall-concrete-200' && p.el.id !== first)?.el.id;
+await ben.waitForFunction(secondWall, layeredId);
+const cornerId = await ben.evaluate(secondWall, layeredId);
+await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== freeEnd,
+  "the server works the first wall's end for the wall that meets it",
+);
+const cornered = await filledByServer(layeredId);
+await bothTake(layeredId, cornered, "a wall drawn to meet it: both pages take the server's filling of the first wall's end");
+const spots = (page, id) => page.evaluate((w) => [...document.querySelectorAll(`g.element[data-id="${w}"] polygon.part`)].map((p) => p.getAttribute('points')), id);
+check(
+  JSON.stringify(await spots(anna, layeredId)) === JSON.stringify(await spots(ben, layeredId)),
+  "and draw the first wall's layers alike",
+);
+
+// Deleted: the first wall's end is free again.
+const cornerBox = await box(anna, cornerId);
+await anna.mouse.click(cornerBox.x + cornerBox.width / 2, cornerBox.y + cornerBox.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), cornerId);
+await bothTake(layeredId, freeEnd, 'the corner wall deleted: both pages put the first wall right, its end free again');
+
+// Her undo puts the corner wall back, and the first wall's end is worked again.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body`), cornerId);
+await bothTake(layeredId, cornered, 'her undo brings the corner wall back, and both pages take the first wall as it was at the corner');
+
+// Moved away: the walls no longer meet.
+await drag(anna, cornerId, 150, 0);
+await anna.mouse.up();
+await bothTake(layeredId, freeEnd, 'the corner wall moved away: both pages put the first wall right again');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the joined walls included, matches the server's`);
+}
+const fresh = await signIn('ben');
+await fresh.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+check(
+  (await filledOnPage(fresh, layeredId)) === freeEnd &&
+    JSON.stringify(await spots(fresh, layeredId)) === JSON.stringify(await spots(anna, layeredId)),
+  'a fresh load takes the first wall as the server has it now, and draws it as the others do',
+);
+await fresh.context().close();
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
