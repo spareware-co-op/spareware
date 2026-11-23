@@ -1319,8 +1319,11 @@ await roomTagIs(anna, 'room-area', roomFirst);
 await ben.waitForSelector(`#pv-canvas g.element[data-id="${roomId}"] path.room-fill`);
 await shot(ben, 'ben-room');
 
-// Anna leaves the tool and lets go of the room.
+// Anna leaves the tool, picks the room she placed and lets go of it by clicking off.
 await anna.keyboard.press('Escape');
+const roomFirstPick = await onPlan(anna, 2000, 6000);
+await anna.mouse.click(roomFirstPick.x, roomFirstPick.y);
+await anna.waitForSelector('#pv-side input[data-key="room-name"]');
 await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await ben.waitForFunction((id) => !window.spare.claims.has(id), roomId);
 pass('Anna lets go of the room, and Ben sees it free');
