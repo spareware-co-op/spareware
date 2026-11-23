@@ -740,7 +740,8 @@ await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
 const wallTypeField = '#pv-side select[data-key="wall-type"]';
 const wallTopField = '#pv-side select[data-key="wall-top"]';
 await anna.waitForSelector(wallTypeField);
-await anna.waitForSelector(`${wallTopField} option[value="2"]`);
+// An option of a closed select is never visible: it is waited for once it is in the page.
+await anna.waitForSelector(`${wallTopField} option[value="2"]`, { state: 'attached' });
 check(
   (await anna.locator(`${wallTypeField} option`).count()) === layeredTypes.types.length,
   "the wall tool offers the model's wall types, as the server lists them",
@@ -1064,7 +1065,7 @@ await floorHome(ben);
 check((await asAnna('floor-types')).types.length === 0, 'the seed has no floor types yet');
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
 const floorTypeField = '#pv-side select[data-key="floor-type"]';
-await anna.waitForSelector(`${floorTypeField} option[value="floor-concrete-150-screed-50"]`);
+await anna.waitForSelector(`${floorTypeField} option[value="floor-concrete-150-screed-50"]`, { state: 'attached' });
 const floorTypesMade = await asAnna('floor-types');
 check(
   floorTypesMade.types.length === 3 && (await anna.locator(`${floorTypeField} option`).count()) === 3,
