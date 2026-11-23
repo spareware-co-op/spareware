@@ -2648,15 +2648,15 @@
   };
 
   /** Starts or stops waiting for clicks in the plan for the selected floor. */
-  function pick(what) {
+  function startPick(what) {
     const stopping = PICK.now?.floor === S.sel && PICK.now.what === what;
     PICK.now = stopping || !S.sel ? null : { floor: S.sel, what, tail: null };
     clearProblems(/^floor-(slope|edge)$/);
     refreshSide();
     queueDraw();
   }
-  ACT.stackslopepick = () => pick('slope');
-  ACT.stackedgepick = () => pick('edge');
+  ACT.stackslopepick = () => startPick('slope');
+  ACT.stackedgepick = () => startPick('edge');
   ACT.stackslopeclear = () => {
     if (S.sel) manage('floor.slope.clear', { element: S.sel }, 'floor-slope');
   };
