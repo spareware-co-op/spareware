@@ -222,6 +222,18 @@
     },
     {
       "program": "spare-construct",
+      "place": "construct-drawing's overlay module (type Overlay, crate-private), used by merge::merge and hatch::hatch",
+      "operation": "the union of cut regions of one category and material, keeping each outline edge's source; line work drawn once; a hatch family's lines clipped to a region",
+      "answered_by": "Spare Construct's own exact code, no engine: every edge split at every crossing and touch, winding numbers counted off each piece's midpoint by a symbolic step, loops traced by the tightest left turn, holes given to the least outline holding them; fractions of any size (num-rational); no geom-2d operation is reachable through engine-geometry yet",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-drawing/tests/merge.rs",
+        "test": "two_walls_of_one_material_at_a_corner_are_one_region"
+      },
+      "known_faults": ["time grows with the square of the edges of one material group (every edge is compared with every other)", "straight edges only: a cut region's loops are points, so a curved cut waits for the kernel's arrangement of lines and arcs"],
+      "replaced_by": "the kernel's 2D arrangement, booleans and hatches through engine-geometry (geom-2d, chapter 14.4 to 14.6: pieces G196, G199, G200, G202 and G210), under the same tests (tests/merge.rs and tests/hatch.rs)"
+    },
+    {
+      "program": "spare-construct",
       "place": "construct-regen's stand_in::Boxes, a floor",
       "operation": "floor (a filled floor recipe: its loops and layers)",
       "answered_by": "one box around the floor's outer loop, its sides rounded outward to whole millimetres, from its bottom face to its top face at 0, by Spare Construct's own code with no engine; its outline is the outer loop and its deviation the box's plan diagonal, 0 when the floor is an upright rectangle",

@@ -2,8 +2,9 @@
 //! takes them; every formula read by construct-formulas, naming only number parameters, with
 //! units that agree and no loop; every key a sketch, step, symbol or type names present, of the
 //! right sort, and a step's inputs earlier than it; every profile one closed loop of lines; every
-//! category, subcategory and material known to the project; every type value one its type holds;
-//! and no two things with one key. Each problem names its place as a JSON Pointer, and every
+//! category, subcategory and material known to the project; every type value one its type holds,
+//! and every type table row one such value per column; and no two things with one key (built-in
+//! types and table rows share one set of keys and one of names). Each problem names its place as a JSON Pointer, and every
 //! problem is reported, in document order.
 
 use crate::model::{
@@ -175,6 +176,13 @@ pub enum ProblemKind {
         /// The parameter.
         key: String,
     },
+    /// A type table's row has another number of values than the table has columns.
+    ValueCount {
+        /// The row's values.
+        values: usize,
+        /// The table's columns.
+        columns: usize,
+    },
 }
 
 impl fmt::Display for ProblemKind {
@@ -219,6 +227,9 @@ impl fmt::Display for ProblemKind {
                 write!(f, "{key} is held by each instance, so a type cannot set it")
             }
             Self::SetsFormula { key } => write!(f, "{key} is worked out by its formula"),
+            Self::ValueCount { values, columns } => {
+                write!(f, "the row has {values} values for {columns} columns")
+            }
         }
     }
 }
@@ -286,7 +297,7 @@ pub(crate) fn stored_value(def: &Definition, text: &str) -> Result<Value, ParamE
 }
 
 /// The formula kind of a parameter kind, if formulas can use it.
-fn formula_kind(kind: Kind) -> Option<Kind> {
+pub(crate) fn formula_kind(kind: Kind) -> Option<Kind> {
     match kind {
         Kind::Length | Kind::Angle | Kind::Number | Kind::Whole => Some(kind),
         _ => None,
@@ -295,7 +306,7 @@ fn formula_kind(kind: Kind) -> Option<Kind> {
 
 /// A value as formula text that reads back to it exactly: a length in exact millimetres (its own
 /// text, whatever its step count), an angle as a ratio of degrees, numbers as they are.
-fn formula_text(def: &Definition, value: &Value) -> Option<String> {
+pub(crate) fn formula_text(def: &Definition, value: &Value) -> Option<String> {
     match value {
         Value::Length(length) => {
             def.check(value).ok()?;
@@ -312,7 +323,7 @@ fn formula_text(def: &Definition, value: &Value) -> Option<String> {
 }
 
 /// Every parameter name a formula reads.
-fn names(expr: &Expr, out: &mut Vec<String>) {
+pub(crate) fn names(expr: &Expr, out: &mut Vec<String>) {
     match expr {
         Expr::Name(name) => out.push(name.clone()),
         Expr::Neg(inner) | Expr::Not(inner) => names(inner, out),
@@ -1102,6 +1113,7 @@ impl<'r> Checker<'r, '_> {
         }
     }
 
+    /// The built-in types, then the type table: one set of keys and one set of names for both.
     fn types(&mut self) {
         let recipe = self.recipe;
         let mut keys = BTreeSet::new();
@@ -1109,62 +1121,113 @@ impl<'r> Checker<'r, '_> {
         for (n, ty) in recipe.types.iter().enumerate() {
             let at = format!("/types/{n}");
             self.unique(&mut keys, &ty.key, format!("{at}/key"));
-            let name = ty.name.trim();
-            if name.is_empty() {
-                self.push(format!("{at}/name"), ProblemKind::EmptyName);
-            } else if !names.insert(name.to_lowercase()) {
-                self.push(
-                    format!("{at}/name"),
-                    ProblemKind::DuplicateName {
-                        name: name.to_owned(),
-                    },
-                );
-            }
+            self.type_name(&mut names, &ty.name, format!("{at}/name"));
             let mut set = BTreeSet::new();
             for (v, value) in ty.values.iter().enumerate() {
                 let here = format!("{at}/values/{v}");
-                let key = value.parameter.as_str();
-                if !set.insert(key) {
+                if !set.insert(value.parameter.as_str()) {
                     self.push(
                         format!("{here}/parameter"),
                         ProblemKind::Duplicate {
-                            key: key.to_owned(),
+                            key: value.parameter.as_str().to_owned(),
                         },
                     );
                     continue;
                 }
-                let Some(param) = self.params.get(key) else {
-                    self.push(
-                        format!("{here}/parameter"),
-                        ProblemKind::Missing {
-                            sort: Sort::Parameter,
-                            key: key.to_owned(),
-                        },
-                    );
-                    continue;
-                };
-                let formula = matches!(param.row.value, ParameterValue::Formula(_));
-                let Some(def) = param.definition.clone() else {
-                    continue;
-                };
-                if def.holder() == Holder::Instance {
-                    self.push(
-                        format!("{here}/parameter"),
-                        ProblemKind::HeldByInstance {
-                            key: key.to_owned(),
-                        },
-                    );
-                } else if formula {
-                    self.push(
-                        format!("{here}/parameter"),
-                        ProblemKind::SetsFormula {
-                            key: key.to_owned(),
-                        },
-                    );
-                } else {
+                if let Some(def) = self.settable(&value.parameter, format!("{here}/parameter")) {
                     self.value(&def, &value.value, format!("{here}/value"));
                 }
             }
+        }
+        let Some(table) = &recipe.type_table else {
+            return;
+        };
+        let mut set = BTreeSet::new();
+        let mut columns = Vec::with_capacity(table.columns.len());
+        for (c, column) in table.columns.iter().enumerate() {
+            let at = format!("/type_table/columns/{c}");
+            if set.insert(column.as_str()) {
+                columns.push(self.settable(column, at));
+            } else {
+                self.push(
+                    at,
+                    ProblemKind::Duplicate {
+                        key: column.as_str().to_owned(),
+                    },
+                );
+                columns.push(None);
+            }
+        }
+        for (r, row) in table.rows.iter().enumerate() {
+            let at = format!("/type_table/rows/{r}");
+            self.unique(&mut keys, &row.key, format!("{at}/key"));
+            self.type_name(&mut names, &row.name, format!("{at}/name"));
+            if row.values.len() != columns.len() {
+                self.push(
+                    format!("{at}/values"),
+                    ProblemKind::ValueCount {
+                        values: row.values.len(),
+                        columns: columns.len(),
+                    },
+                );
+            }
+            for (v, (value, def)) in row.values.iter().zip(&columns).enumerate() {
+                if let Some(def) = def {
+                    self.value(def, value, format!("{at}/values/{v}"));
+                }
+            }
+        }
+    }
+
+    /// Records an empty name, or one another type already has (case and end spaces aside).
+    fn type_name(&mut self, names: &mut BTreeSet<String>, name: &str, at: String) {
+        let name = name.trim();
+        if name.is_empty() {
+            self.push(at, ProblemKind::EmptyName);
+        } else if !names.insert(name.to_lowercase()) {
+            self.push(
+                at,
+                ProblemKind::DuplicateName {
+                    name: name.to_owned(),
+                },
+            );
+        }
+    }
+
+    /// The definition of a parameter a type may set (it exists, the type holds it, it is not
+    /// worked out), or `None` with the problem recorded at `at`.
+    fn settable(&mut self, key: &Key, at: String) -> Option<Definition> {
+        let key = key.as_str();
+        let Some(param) = self.params.get(key) else {
+            self.push(
+                at,
+                ProblemKind::Missing {
+                    sort: Sort::Parameter,
+                    key: key.to_owned(),
+                },
+            );
+            return None;
+        };
+        let formula = matches!(param.row.value, ParameterValue::Formula(_));
+        let def = param.definition.clone()?;
+        if def.holder() == Holder::Instance {
+            self.push(
+                at,
+                ProblemKind::HeldByInstance {
+                    key: key.to_owned(),
+                },
+            );
+            None
+        } else if formula {
+            self.push(
+                at,
+                ProblemKind::SetsFormula {
+                    key: key.to_owned(),
+                },
+            );
+            None
+        } else {
+            Some(def)
         }
     }
 }

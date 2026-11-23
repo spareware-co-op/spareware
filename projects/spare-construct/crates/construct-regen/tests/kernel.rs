@@ -200,6 +200,11 @@ fn a_recipe_that_cant_build_says_why() {
 }
 
 #[test]
+fn a_datum_is_built_as_the_stand_in_builds_it() {
+    kernel_suite::a_datum_is_built_as_the_stand_in_builds_it(|| Cuboids);
+}
+
+#[test]
 fn a_rectangle_floor_is_its_layers() {
     kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
 }
