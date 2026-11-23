@@ -515,12 +515,15 @@ dependencies = [
  "construct-elements",
  "construct-families",
  "construct-formulas",
+ "construct-grids",
  "construct-interop",
  "construct-levels",
  "construct-materials",
  "construct-model",
  "construct-params",
+ "construct-phases",
  "construct-regen",
+ "construct-slabs",
  "construct-transport",
  "construct-types",
  "construct-versions",
@@ -576,6 +579,10 @@ dependencies = [
  "engine-geometry",
  "kit-core",
  "kit-ops",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
  "serde",
  "serde_json",
 ]
@@ -601,6 +608,7 @@ dependencies = [
  "construct-params",
  "construct-solver",
  "construct-types",
+ "engine-geometry",
  "hex",
  "jsonschema",
  "kit-core",
@@ -617,6 +625,18 @@ dependencies = [
  "dashu-ratio 0.6.1",
  "kit-core",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "construct-grids"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "libm",
+ "serde_json",
 ]
 
 [[package]]
@@ -699,11 +719,15 @@ dependencies = [
  "bolero",
  "construct-categories",
  "construct-formulas",
+ "construct-grids",
  "construct-levels",
+ "construct-materials",
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-slabs",
  "construct-types",
+ "construct-views",
  "construct-walls",
  "engine-geometry",
  "hex",
@@ -725,6 +749,24 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "construct-walls",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -791,11 +833,15 @@ dependencies = [
 name = "construct-views"
 version = "0.0.0"
 dependencies = [
- "construct-elements",
+ "construct-categories",
+ "construct-levels",
  "construct-model",
- "engine-draw2d",
- "engine-pdf",
- "engine-text",
+ "construct-params",
+ "construct-phases",
+ "construct-spatial",
+ "construct-styles",
+ "kit-core",
+ "serde_json",
 ]
 
 [[package]]

@@ -14,6 +14,7 @@
 //! here, only by the parameter commands ([`crate::cloud::params`]), which check them. Types and
 //! the parameter table are records with no shape and their own commands, so these refuse them.
 
+use crate::cloud::grids;
 use crate::cloud::levels;
 use construct_model::element::{Element, Placement, Reference};
 use construct_model::geometry::Recipe;
@@ -94,6 +95,9 @@ async fn create<T: Txn>(
     if kind == records::TYPE_KIND || kind == records::TABLE_KIND || id.as_str() == records::TABLE_ID
     {
         return Ok(Err(NOT_AN_ELEMENT.to_owned()));
+    }
+    if grids::is_datum(&kind, &recipe) {
+        return Ok(Err(grids::BY_COMMAND.to_owned()));
     }
     let category = match records::category_of(&recipe) {
         Ok(category) => category,
@@ -190,8 +194,33 @@ async fn props_allowed<T: Txn>(
     })
 }
 
+/// Why an `element.*` command on an existing record refuses it before anything else is read: a
+/// record of no shape (a type, a level, the parameter table) is changed by its own commands, and
+/// `element.delete` does not delete a grid or a reference plane, which their own commands delete
+/// ([`grids::delete_refusal`]). A grid's move or change is refused in [`edited`].
+fn refusal(before: &Element, cmd: &str) -> Option<String> {
+    // Letting go of a claim is allowed on any piece, a type or the parameter table too: the
+    // commands that make those take a claim on them, and nothing else gives it back early.
+    if cmd != "element.release" && !records::has_shape(before) {
+        return Some(NOT_AN_ELEMENT.to_owned());
+    }
+    if cmd == "element.delete" {
+        return grids::delete_refusal(before);
+    }
+    None
+}
+
 /// The element after an `element.move` or `element.set`, or why the edit cannot be made.
 fn edited(mut after: Element, cmd: &str, args: Args) -> Result<Element, String> {
+    // A grid or a reference plane, or a recipe that makes one, is the grid commands' to change.
+    if grids::is_datum(&after.kind, &after.recipe)
+        || args
+            .recipe
+            .as_ref()
+            .is_some_and(|recipe| grids::is_datum("", recipe))
+    {
+        return Err(grids::BY_COMMAND.to_owned());
+    }
     let mut changed_recipe = false;
     match cmd {
         "element.move" => {
@@ -281,10 +310,8 @@ pub async fn apply<T: Txn>(
     let before: Element = read_row(txn, &place.key())
         .await?
         .ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-    // Letting go of a claim is allowed on any piece, a type or the parameter table too: the
-    // commands that make those take a claim on them, and nothing else gives it back early.
-    if edit.cmd != "element.release" && !records::has_shape(&before) {
-        return Ok(Err(NOT_AN_ELEMENT.to_owned()));
+    if let Some(why) = refusal(&before, &edit.cmd) {
+        return Ok(Err(why));
     }
     if let Some(props) = &args.props
         && let Err(why) = props_allowed(txn, project, document, props).await?

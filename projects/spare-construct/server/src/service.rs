@@ -611,6 +611,28 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
+    /// A model's floor types with their layers and the materials those are drawn in, for the
+    /// page's floor tool ([`cloud::floors::read_floor_types`]); where it has none, the page sends
+    /// `floor.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn floor_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::floors::FloorTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::floors::read_floor_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
     /// The recipe an element is built from now, each argument that reads a record filled (its
     /// parameters, its wall type's layers, its top tie) and a layered wall's joints with the walls
     /// it meets, as the regenerator fills it (`construct_regen::joins::recipe_at`), with how far
@@ -659,6 +681,72 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 },
             },
         )
+    }
+
+    /// A model's views: each with its kind, name, level (a plan's), scale and detail level, by name.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a view record cannot be read, saying why.
+    pub async fn views(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::views::ViewSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::views::summaries(&world))
+    }
+
+    /// What one view shows: the elements it cuts and the ones it sees, from construct-views' own
+    /// rule over the model's stored shapes, as of the log's head.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when the view does not stand in the model, saying why.
+    pub async fn view(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::views::ViewListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let mut shaped = Vec::new();
+        for (_, (_, record)) in records::read_document(&mut snapshot, project, model).await? {
+            if !records::has_shape(&record) {
+                continue;
+            }
+            let place = Place::Built {
+                project: project.clone(),
+                document: model.clone(),
+                element: record.id.clone(),
+            };
+            let built: Option<BuiltElement> = read_row(&mut snapshot, &place.key()).await?;
+            let Some(built) = built else { continue };
+            if let BuiltResult::Shape { bounds, .. } = built.result {
+                shaped.push(cloud::views::Shaped {
+                    record,
+                    bounds,
+                    elevation: built.elevation,
+                });
+            }
+        }
+        cloud::views::listing_of(&world, view, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
     }
 
     /// What this person can undo and redo in a model now: the step an undo would reverse and the
@@ -854,8 +942,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             };
             let element: Option<Element> = read_row(&mut snapshot, &place.key()).await?;
             let element = element.ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-            // A type, the parameter table and a level have no shape: a package carries what is
-            // drawn, and an element reads them when it is built, not when it is drawn.
+            // A type (a wall or floor type among them), the parameter table, a level and a view
+            // have no shape: a package carries what is drawn, and an element reads them when it
+            // is built, not when it is drawn.
             if !records::has_shape(&element) {
                 continue;
             }

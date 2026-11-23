@@ -3,9 +3,9 @@
 //! cut from their walls (one door, a raised opening, a wall with two doors, the cases at the edge
 //! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
-//! layered walls drawn and their types changed through the commands, and a document of one
-//! edition reported, not rebuilt, by a server of another. Built and run only with
-//! `--features kernel`.
+//! layered walls drawn and their types changed through the commands, a floor with a hole drawn
+//! through the commands and its quantities read back, and a document of one edition reported,
+//! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
 // The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
@@ -87,6 +87,11 @@ fn a_recipe_that_cant_build_says_why() {
 }
 
 #[test]
+fn a_datum_is_built_as_the_stand_in_builds_it() {
+    kernel_suite::a_datum_is_built_as_the_stand_in_builds_it(engine);
+}
+
+#[test]
 fn a_door_cuts_a_real_opening() {
     kernel_suite::a_door_cuts_a_real_opening(engine);
 }
@@ -104,6 +109,16 @@ fn the_walls_names_survive_its_openings() {
 #[test]
 fn an_opening_at_the_edge_is_refused_with_its_door_and_reason() {
     kernel_suite::an_opening_at_the_edge_is_refused_with_its_door_and_reason(engine);
+}
+
+#[test]
+fn a_rectangle_floor_is_its_layers() {
+    kernel_suite::a_rectangle_floor_is_its_layers(engine);
+}
+
+#[test]
+fn an_l_shaped_floor_with_a_hole_is_its_layers() {
+    kernel_suite::an_l_shaped_floor_with_a_hole_is_its_layers(engine);
 }
 
 #[test]
@@ -199,7 +214,7 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     seed(&store, &s).await.unwrap();
     let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
     let regen = Regenerator::new(store.clone(), files.clone(), kernel.clone());
-    assert_eq!(regen.verify(&project).await.unwrap(), 31);
+    assert_eq!(regen.verify(&project).await.unwrap(), 26);
 
     let old = json!({
         "element": "W-950", "kind": "wall", "level": 1,
@@ -536,7 +551,7 @@ async fn two_doors_placed_through_commands_cut_their_wall_and_move_with_it() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 33);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 28);
 }
 
 /// A document records the edition it was made on, and a server running another edition doesn't
@@ -570,7 +585,7 @@ async fn a_document_of_one_edition_is_reported_on_another() {
             assert!(shown.display.is_none());
         }
         let regen = Regenerator::new(store.clone(), files.clone(), opened_with);
-        assert_eq!(regen.verify(&project).await.unwrap(), 31);
+        assert_eq!(regen.verify(&project).await.unwrap(), 26);
     }
 }
 
@@ -777,7 +792,127 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
+    // The seed's shapes (the site setout's five grids among them) and what this test drew.
+    assert_eq!(fresh.verify(&project).await.unwrap(), 29);
+}
+
+/// A corner of a floor's boundary as `floor.create` takes it, in millimetres as typed text.
+fn corner(id: &str, x: i64, y: i64) -> serde_json::Value {
+    json!({ "id": id, "at": [x.to_string(), y.to_string()] })
+}
+
+/// A floor's read-only parameters as the page reads them: each one's stored value and its text in
+/// units, by ID.
+async fn quantities(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    floor: &str,
+) -> BTreeMap<String, (Option<String>, Option<String>)> {
+    let view = s
+        .parameters(&i("anna"), project, model, &i(floor))
+        .await
+        .unwrap();
+    view.parameters
+        .into_iter()
+        .filter(|p| p.from == "read-only")
+        .map(|p| (p.id, (p.value, p.shown)))
+        .collect()
+}
+
+/// Through the server's commands on the kernel: the default floor types made and an L-shaped
+/// floor with a hole drawn of the screed type, built one solid per layer with the hole through
+/// each, a side named by each edge; its parameters view lists its area, perimeter, volume and
+/// each layer's volume and mass in units, read-only, the same as on the stand-in; its type's
+/// layers changed and its boundary changed build it again; and the whole model rebuilt from empty
+/// gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_floor_drawn_through_commands_is_built_one_solid_per_layer() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit("floor.defaults", json!({})).await;
+    let x0 = 60_000;
+    let l = json!({
+        "outer": [corner("e0", x0, 0), corner("e1", x0 + 8000, 0), corner("e2", x0 + 8000, 4000),
+                  corner("e3", x0 + 4000, 4000), corner("e4", x0 + 4000, 8000),
+                  corner("e5", x0, 8000)],
+        "holes": [[corner("h0", x0 + 1000, 1000), corner("h1", x0 + 3000, 1000),
+                   corner("h2", x0 + 3000, 3000), corner("h3", x0 + 1000, 3000)]],
+    });
+    edit(
+        "floor.create",
+        json!({ "element": "F-900", "type": "floor-concrete-150-screed-50", "level": "1",
+                "boundary": l }),
+    )
+    .await;
+    let (_, names, bounds) = layered(&s, &project, &model, "F-900").await;
+    assert_eq!(bounds, ([60_000, 0, -200], [68_000, 8000, 0]));
+    let mut roles: Vec<&str> = names.iter().map(|n| n.role.as_str()).collect();
+    roles.sort_unstable();
+    assert_eq!(
+        roles,
+        [
+            "bottom", "face.1", "side.e0", "side.e1", "side.e2", "side.e3", "side.e4", "side.e5",
+            "side.h0", "side.h1", "side.h2", "side.h3", "top"
+        ]
+    );
+    let read = quantities(&s, &project, &model, "F-900").await;
+    let area = construct_params::Value::Area(construct_params::Area::from_mm2(44_000_000));
+    assert_eq!(
+        read["floor.area"],
+        (Some(area.stored()), Some("44.00 m²".to_owned()))
+    );
+    assert_eq!(read["floor.perimeter"].1.as_deref(), Some("40000 mm"));
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("8.80 m³"));
+    assert_eq!(read["floor.layer-1.volume"].1.as_deref(), Some("2.20 m³"));
+    assert_eq!(read["floor.layer-2.volume"].1.as_deref(), Some("6.60 m³"));
+    assert_eq!(
+        read["floor.layer-1.mass"].0, None,
+        "no screed in the library yet"
+    );
+    assert_eq!(read["floor.mass"].0, None);
+    assert!(read["floor.layer-2.mass"].0.is_some());
+    let wrote = s
+        .shape(&anna, &project, &model, &i("F-900"), None)
+        .await
+        .unwrap()
+        .built
+        .input;
+
+    edit(
+        "floor.type.layers",
+        json!({ "type": "floor-concrete-150-screed-50", "layers": [
+            { "function": "structure", "thickness": "250 mm", "material": "concrete-regular" }] }),
+    )
+    .await;
+    let (thicker, _, bounds) = layered(&s, &project, &model, "F-900").await;
+    assert_eq!(bounds, ([60_000, 0, -250], [68_000, 8000, 0]));
+    assert_eq!(thicker.built.input, wrote, "no floor was written");
+    let read = quantities(&s, &project, &model, "F-900").await;
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("11.00 m³"));
+    assert!(read["floor.mass"].0.is_some());
+
+    edit(
+        "floor.boundary",
+        json!({ "element": "F-900", "boundary": { "outer": [
+            corner("r0", x0, 0), corner("r1", x0 + 4000, 0), corner("r2", x0 + 4000, 3000),
+            corner("r3", x0, 3000)] } }),
+    )
+    .await;
+    let (_, _, bounds) = layered(&s, &project, &model, "F-900").await;
+    assert_eq!(bounds, ([60_000, 0, -250], [64_000, 3000, 0]));
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
 }
 
 /// Six times the volume a shape's finest display holds, part by part, each part closed, in cubic

@@ -3,13 +3,27 @@ name = "construct-views"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
+# A view's record is construct-model's element record, unchanged; its bounds are construct-model's.
 construct-model = { path = "../construct-model" }
-construct-elements = { path = "../construct-elements" }
-engine-draw2d = { path = "../../../engines/crates/engine-draw2d" }
-engine-text = { path = "../../../engines/crates/engine-text" }
-engine-pdf = { path = "../../../engines/crates/engine-pdf" }
+# A view is of the views category, and a view shows only the categories that are model or import.
+construct-categories = { path = "../construct-categories" }
+# A plan stands on a level and its view range is tied to levels; heights go through construct-levels.
+construct-levels = { path = "../construct-levels" }
+# Offsets, line ends and depths are construct-params' Length, stored and typed as its values are.
+construct-params = { path = "../construct-params" }
+# A view's phase, its phase filter and the rule that decides what it shows.
+construct-phases = { path = "../construct-phases" }
+# "What is in this box" for the elements a view might show.
+construct-spatial = { path = "../construct-spatial" }
+# The view's scale is construct-styles' Scale, and it is what picks a pen's printed width.
+construct-styles = { path = "../construct-styles" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# A view's phase settings and an element's staging are JSON text in a record, as the phases crate
+# spells them. MIT OR Apache-2.0.
+serde_json = "1.0.154"
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -33,12 +47,10 @@ todo = "deny"
 unimplemented = "deny"
 unreachable = "deny"
 # Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
-# may use native arithmetic and casts: each test file and test module allows these four, and other
-# code allows a cast only where its bound is written beside it.
+# may use native arithmetic and casts: each test file allows these four.
 arithmetic_side_effects = "deny"
 cast_possible_truncation = "deny"
 cast_possible_wrap = "deny"
 cast_sign_loss = "deny"
-# As in the kernel: doubles are compared exactly. Here a comparison asks whether a stored input
-# changed, never whether two computed values are close.
-float_cmp = "allow"
+# No float is stored or compared here; a float comparison is an error.
+float_cmp = "deny"

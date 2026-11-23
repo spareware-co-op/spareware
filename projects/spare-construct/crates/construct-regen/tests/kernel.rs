@@ -199,6 +199,16 @@ fn a_recipe_that_cant_build_says_why() {
     kernel_suite::a_recipe_that_cant_build_says_why(|| Cuboids);
 }
 
+#[test]
+fn a_datum_is_built_as_the_stand_in_builds_it() {
+    kernel_suite::a_datum_is_built_as_the_stand_in_builds_it(|| Cuboids);
+}
+
+#[test]
+fn a_rectangle_floor_is_its_layers() {
+    kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
+}
+
 /// A test engine that answers as [`Cuboids`] does, and records every subtraction it is asked for
 /// by the tool's lowest corner, answering it with the target unchanged: it judges what the builder
 /// asks and names, not the shape a cut gives.

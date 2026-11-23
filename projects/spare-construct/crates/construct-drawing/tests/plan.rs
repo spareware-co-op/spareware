@@ -1,6 +1,8 @@
 //! The plan of two walls meeting at a corner, made by the kernel builder over a test engine of this
 //! file's own: its segments exactly, its regions, its bytes twice, its stored form, its printed
-//! widths with the default styles, and its SVG at 1:100, pinned.
+//! widths with the default styles, and its SVG at 1:100, pinned. Then printed: the two concrete
+//! walls merged into one hatched region outlined at the walls' cut weight for the scale, and a
+//! third wall of plaster beside them keeping its line, drawn once; that SVG pinned too.
 
 // The crate denies native arithmetic, lossy casts and unchecked indexing outside tests
 // (Cargo.toml); a test's helpers may use them, and a broken helper must stop the test loudly.
@@ -21,11 +23,13 @@ use construct_categories::{CategoryTable, WALLS};
 use construct_drawing::drawing::{
     Drawing, Entity, Line, LineKind, Region, Shape, Source, ViewPoint,
 };
+use construct_drawing::hatch::FillPatterns;
 use construct_drawing::pens::{Styles, widths};
+use construct_drawing::picture::{Output, picture};
 use construct_drawing::plan::{PlanElement, plan};
-use construct_drawing::svg::{PER_MM, to_svg};
+use construct_drawing::svg::{PER_MM, Svg, to_svg};
 use construct_drawing::view::View;
-use construct_materials::MaterialId;
+use construct_materials::{MaterialId, Materials};
 use construct_model::element::Placement;
 use construct_model::geometry::Recipe;
 use construct_params::Length;
@@ -227,28 +231,58 @@ fn walls() -> [(Id, Recipe, Placement); 2] {
     ]
 }
 
-/// The plan of the two walls cut 1200 mm up, and each wall's named faces.
-fn two_walls() -> (Drawing, Vec<KernelSolid<Cuboid>>) {
+/// The plan of `walls`, each with its material, cut 1200 mm up, and each wall's named faces.
+fn plan_of(walls: &[(Id, Recipe, Placement, &str)]) -> (Drawing, Vec<KernelSolid<Cuboid>>) {
     let kernel = Kernel::new(Boxes).unwrap();
-    let walls = walls();
     let shapes: Vec<KernelSolid<Cuboid>> = walls
         .iter()
-        .map(|(_, r, _)| kernel.solid(r).unwrap())
+        .map(|(_, r, _, _)| kernel.solid(r).unwrap())
         .collect();
-    let concrete = MaterialId::parse("concrete-regular").unwrap();
     let elements: Vec<PlanElement<'_, Cuboid>> = walls
         .iter()
         .zip(&shapes)
-        .map(|((id, _, placement), shape)| PlanElement {
+        .map(|((id, _, placement, material), shape)| PlanElement {
             id: id.clone(),
             category: WALLS,
-            material: Some(concrete.clone()),
+            material: Some(MaterialId::parse(material).unwrap()),
             placement: *placement,
             shape,
         })
         .collect();
     let drawing = plan(&kernel, View::plan(Length::from_mm(1200)), &elements).unwrap();
     (drawing, shapes)
+}
+
+/// The plan of the two concrete walls cut 1200 mm up, and each wall's named faces.
+fn two_walls() -> (Drawing, Vec<KernelSolid<Cuboid>>) {
+    let walls: Vec<_> = walls()
+        .into_iter()
+        .map(|(id, r, at)| (id, r, at, "concrete-regular"))
+        .collect();
+    plan_of(&walls)
+}
+
+/// The two concrete walls and a third of plaster, 1000 mm long, carrying the first wall on west
+/// from its end at the origin.
+fn two_walls_and_one() -> Drawing {
+    let mut walls: Vec<_> = walls()
+        .into_iter()
+        .map(|(id, r, at)| (id, r, at, "concrete-regular"))
+        .collect();
+    walls.push((
+        Id::parse("wall-c").unwrap(),
+        recipe(
+            "wall.straight",
+            json!({ "length": 1000, "thickness": 200, "height": 2700 }),
+        ),
+        Placement {
+            x: -1000,
+            y: 0,
+            z: 0,
+        },
+        "plaster-gypsum",
+    ));
+    plan_of(&walls).0
 }
 
 fn p(x: i128, y: i128) -> ViewPoint {
@@ -357,15 +391,34 @@ fn the_two_wall_plan_is_stored_as_pinned() {
     );
 }
 
-fn styles<'a>(
-    categories: &'a CategoryTable,
-    lines: &'a LineStyles,
-    objects: &'a ObjectStyles,
-) -> Styles<'a> {
-    Styles {
-        categories,
-        lines,
-        objects,
+/// The default styles, materials and fill patterns, kept for a test to borrow.
+struct Defaults {
+    categories: CategoryTable,
+    lines: LineStyles,
+    objects: ObjectStyles,
+    materials: Materials,
+    fills: FillPatterns,
+}
+
+impl Defaults {
+    fn new() -> Self {
+        Self {
+            categories: CategoryTable::new(),
+            lines: LineStyles::default_metric(),
+            objects: ObjectStyles::default_metric(),
+            materials: Materials::default_metric(),
+            fills: FillPatterns::default_metric(),
+        }
+    }
+
+    fn styles(&self) -> Styles<'_> {
+        Styles {
+            categories: &self.categories,
+            lines: &self.lines,
+            objects: &self.objects,
+            materials: &self.materials,
+            fills: &self.fills,
+        }
     }
 }
 
@@ -374,12 +427,8 @@ fn styles<'a>(
 #[test]
 fn the_cut_walls_print_with_the_default_pens() {
     let (drawing, _) = two_walls();
-    let (categories, lines, objects) = (
-        CategoryTable::new(),
-        LineStyles::default_metric(),
-        ObjectStyles::default_metric(),
-    );
-    let s = styles(&categories, &lines, &objects);
+    let defaults = Defaults::new();
+    let s = defaults.styles();
     let at = |n: u32| -> Vec<u32> {
         widths(&drawing, s, Scale::new(n).unwrap())
             .unwrap()
@@ -395,24 +444,98 @@ fn the_cut_walls_print_with_the_default_pens() {
     assert_eq!(projected.width.get(), 250);
 }
 
-/// The two-wall plan as SVG at 1:100, pinned: a person can open `tests/two_walls_plan.svg`.
+/// The two-wall plan as SVG at 1:100, pinned: a person can open `tests/two_walls_plan.svg`. The
+/// two concrete walls draw as one region, hatched, with no line where they meet.
 #[test]
 fn the_two_wall_plan_as_svg_is_pinned() {
     let (drawing, _) = two_walls();
-    let (categories, lines, objects) = (
-        CategoryTable::new(),
-        LineStyles::default_metric(),
-        ObjectStyles::default_metric(),
-    );
-    let svg = to_svg(
-        &drawing,
-        styles(&categories, &lines, &objects),
-        Scale::new(100).unwrap(),
-    )
-    .unwrap();
+    let defaults = Defaults::new();
+    let svg = to_svg(&drawing, defaults.styles(), Scale::new(100).unwrap()).unwrap();
     pinned(
         "two_walls_plan.svg",
         svg.as_bytes(),
         include_bytes!("two_walls_plan.svg"),
+    );
+}
+
+fn segment(start: ViewPoint, end: ViewPoint) -> Shape {
+    Shape::Segment { start, end }
+}
+
+/// Printed at 1:100, the two concrete walls are one hatched region: one hatch of the concrete
+/// pattern, and their outline is seven strokes round both, none where they meet; the plaster wall
+/// is its own hatched region, and the line it shares with the first wall is one stroke.
+#[test]
+fn walls_of_one_material_print_as_one_hatched_region() {
+    let drawing = two_walls_and_one();
+    let defaults = Defaults::new();
+    let pic = picture(&drawing, defaults.styles(), Scale::new(100).unwrap()).unwrap();
+    let materials: Vec<&str> = pic.hatches.iter().map(|h| h.material.as_str()).collect();
+    assert_eq!(materials, ["concrete-regular", "plaster-gypsum"]);
+    assert!(pic.hatches.iter().all(|h| !h.lines.is_empty()));
+    let on = |shape: Shape| {
+        pic.strokes
+            .iter()
+            .filter(|s| {
+                let Shape::Segment { start, end } = s.shape else {
+                    return false;
+                };
+                shape == segment(start, end) || shape == segment(end, start)
+            })
+            .count()
+    };
+    // Where the walls of one material meet: nothing.
+    assert_eq!(on(segment(p(3800, 200), p(4000, 200))), 0);
+    // Between concrete and plaster: one line.
+    assert_eq!(on(segment(p(0, 0), p(0, 200))), 1);
+    // The concrete outline's seven edges and the plaster's three others: the shared one is the
+    // concrete wall's.
+    assert_eq!(pic.strokes.len(), 7 + 3);
+    let concrete = pic
+        .strokes
+        .iter()
+        .filter(|s| s.element.as_str() != "wall-c")
+        .count();
+    assert_eq!(concrete, 7);
+}
+
+/// The merged outline prints at the walls' cut pen for the view's scale: 0.5 mm at 1:100 and
+/// 0.7 mm at 1:20 with the default pens; the hatch lines at pen 1, 0.13 mm at both, in the
+/// material's cut colour.
+#[test]
+fn the_outline_weight_is_chosen_by_scale() {
+    let drawing = two_walls_and_one();
+    let defaults = Defaults::new();
+    let at = |n: u32| picture(&drawing, defaults.styles(), Scale::new(n).unwrap()).unwrap();
+    for (n, cut) in [(100, 500), (20, 700)] {
+        let pic = at(n);
+        assert!(pic.strokes.iter().all(|s| s.width.get() == cut), "1:{n}");
+        assert!(pic.hatches.iter().all(|h| h.width.get() == 130), "1:{n}");
+    }
+    let concrete = defaults
+        .materials
+        .get(&MaterialId::parse("concrete-regular").unwrap())
+        .unwrap();
+    assert_eq!(at(100).hatches[0].colour, concrete.drawing.cut.colour);
+}
+
+/// Two concrete walls at a corner and a plaster wall beside them, as SVG at 1:100, pinned: a
+/// person can open `tests/two_walls_and_one.svg`. The same drawing gives the same bytes twice,
+/// and the SVG output written through its trait gives the same bytes.
+#[test]
+fn two_walls_and_one_as_svg_is_pinned() {
+    let defaults = Defaults::new();
+    let scale = Scale::new(100).unwrap();
+    let svg = to_svg(&two_walls_and_one(), defaults.styles(), scale).unwrap();
+    assert_eq!(
+        svg,
+        to_svg(&two_walls_and_one(), defaults.styles(), scale).unwrap()
+    );
+    let pic = picture(&two_walls_and_one(), defaults.styles(), scale).unwrap();
+    assert_eq!(Svg.write(&pic).unwrap(), svg.as_bytes());
+    pinned(
+        "two_walls_and_one.svg",
+        svg.as_bytes(),
+        include_bytes!("two_walls_and_one.svg"),
     );
 }

@@ -206,6 +206,37 @@ fn a_built_in_type_becomes_a_family_type() {
     );
 }
 
+/// A type table's row becomes a family type as a built-in type does: its name, its values column
+/// by column, and a block naming the row's key.
+#[test]
+fn a_type_table_row_becomes_a_family_type() {
+    let fixture = Fixture::new();
+    let door = read(&common::door_with_table());
+    assert_eq!(door.check(&fixture.library()), Ok(()));
+    let params = parameters(&door).unwrap();
+    let id = Id::parse("T-921").unwrap();
+    let ty = family_type(&door, &fixture.library(), &key("d921"), id, &params).unwrap();
+    assert_eq!(ty.name(), "920 x 2100");
+    let value = |name: &str| {
+        let id = Id::parse(&format!("01KAXF3M1Y0D00R5W1NG000001.{name}")).unwrap();
+        ty.value(&id).map(Value::stored)
+    };
+    assert_eq!(value("width").as_deref(), Some("length:q0:5888000"));
+    assert_eq!(value("height").as_deref(), Some("length:q0:13440000"));
+    assert_eq!(value("frame"), None);
+    let named = family_of(&ty).unwrap().unwrap();
+    assert_eq!(named.type_key, key("d921"));
+    assert_eq!(named.recipe, door.content_id());
+    let keys: Vec<&str> = door
+        .named_types()
+        .iter()
+        .map(|t| t.key().as_str())
+        .collect();
+    assert_eq!(keys, ["d720", "d820", "d920", "d620", "d921", "d820t"]);
+    assert_eq!(door.named_type(&key("d620")).unwrap().name(), "620 x 2040");
+    assert!(door.named_type(&key("d999")).is_none());
+}
+
 /// A type that is not in the recipe, and a recipe that does not pass its checks, give no type.
 #[test]
 fn a_family_type_needs_a_checked_recipe_and_a_known_type() {

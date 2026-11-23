@@ -184,7 +184,7 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
     assert_eq!(shown.built.edition, prisms.edition());
 
     let regen = Regenerator::new(store.clone(), files.clone(), prisms);
-    assert_eq!(regen.verify(&project).await.unwrap(), 31);
+    assert_eq!(regen.verify(&project).await.unwrap(), 26);
 
     for project in [
         "example-1",
