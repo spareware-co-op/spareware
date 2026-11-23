@@ -940,6 +940,30 @@ impl<E: Engine> Kernel<E> {
         Ok(KernelSolid { solid, faces })
     }
 
+    /// The solids of `recipe` for a drawing to cut: one for each layer of a layered wall (a layer
+    /// of no thickness has none), each with its material and the plane of each named face, and
+    /// for any other recipe the one [`Kernel::solid`] makes, with no material. A wall's openings
+    /// are not cut in them.
+    ///
+    /// # Errors
+    ///
+    /// As [`Kernel::solid`], and the plan's refusals for a layered wall.
+    pub fn layers(&self, recipe: &Recipe) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+        if wall_plan::is_layered(recipe) {
+            let wall = Layered::of(recipe)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return layered::solids(&mut *engine, recipe, &wall, self.units);
+        }
+        Ok(vec![LayerSolid {
+            function: String::new(),
+            material: None,
+            solid: self.solid(recipe)?,
+        }])
+    }
+
     /// Where `plane` cuts `solid`, by the engine ([`Engine::section`]).
     ///
     /// # Errors
@@ -953,6 +977,18 @@ impl<E: Engine> Kernel<E> {
             .section(solid, plane)
             .map_err(from_engine)
     }
+}
+
+/// One solid of an element for a drawing to cut ([`Kernel::layers`]): a layer of a layered wall,
+/// or a whole element that has no layers.
+#[derive(Debug)]
+pub struct LayerSolid<S> {
+    /// What the layer does (`structure`, `finish`, ...); empty for an element with no layers.
+    pub function: String,
+    /// What it is made of, by material ID; `None` for an element with no layers.
+    pub material: Option<String>,
+    /// Its solid and the plane of each named face.
+    pub solid: KernelSolid<S>,
 }
 
 /// A recipe's solid as the engine made it ([`Kernel::solid`]), and its named faces' planes.

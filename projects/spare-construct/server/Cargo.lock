@@ -704,6 +704,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-drawing"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-regen",
+ "construct-styles",
+ "engine-geometry",
+ "kit-core",
+ "kit-ops",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-elements"
 version = "0.0.0"
 dependencies = [
@@ -4297,9 +4318,13 @@ dependencies = [
  "chrono",
  "clap",
  "construct-api",
+ "construct-categories",
+ "construct-drawing",
+ "construct-materials",
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-styles",
  "engine-geometry",
  "flate2",
  "futures",

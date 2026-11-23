@@ -93,7 +93,8 @@ fn build(
         clock.clone(),
         settings.tail_ms,
     );
-    let service = Service::new(kv, access, accounts, orderers, clock, files, geometry);
+    let service = Service::new(kv, access, accounts, orderers, clock, files, geometry)
+        .with_drawer(spare_server::geometry::drawer());
     Ok(Arc::new(App { service, settings }))
 }
 
