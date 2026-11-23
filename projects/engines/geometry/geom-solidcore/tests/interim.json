@@ -273,6 +273,34 @@
         "a floor with a curved edge cannot be made"
       ],
       "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a roof",
+      "operation": "roof (a filled roof recipe: its eaves outline and each layer's solid)",
+      "answered_by": "one box around every layer's solid, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw a flat roof's layers as the box's slices between their faces and a sloped roof's layers as their lofts, each section cut into quadrilaterals, every point the nearest millimetre",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/src/stand_in.rs",
+        "test": "a_roof_is_its_layers_drawn_on_the_stand_in"
+      },
+      "known_faults": [
+        "a roof's layers are not solids on the stand-in's edition, and a flat roof's displays are the box around its outline"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's roof builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::roof, a roof's layers",
+      "operation": "roof (Kernel: one Engine::extrude of the eaves outline for each flat layer, one Engine::loft of its two sections, verge to verge, for each sloped layer)",
+      "answered_by": "the engine behind the Engine trait, each layer a solid of its own: on the server's kernel setting solidcore's engine, an extrusion by the kernel's make.prism for a convex outline and solidcore's linear sweep otherwise, a loft by the engine's own exact rows (each wall a flat face through the sections' grid corners); the layers' meshes put one after another in whole millimetres, each point the nearest millimetre, the roof's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_gable_roof_is_its_layers"
+      },
+      "known_faults": [
+        "a corner or a layer face not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion and ruled loft (geom-sweep, chapters 13.4 and 13.6) behind the same trait, and display meshes on the kernel's grid"
     }
   ]
 }

@@ -215,6 +215,7 @@
       { stack: [planButton('l1'), planButton('l2'), { label: 'Default 3D', icon: 'cube', act: 'go', a: '3d', pressed: S.screen === '3d' }] },
     ]);
     floorRibbon(config); // the floor tool beside the wall tool
+    roofRibbon(config); // and the roof tool beside the floor tool
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -1179,7 +1180,7 @@
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (reads || /^element\.(type|create|delete)$|^wall\.draw$/.test(entry.cmd)) {
+    if (reads || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -1193,7 +1194,7 @@
   }
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
-  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type)\.|^floor\.defaults$/;
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type)\.|^(floor|roof)\.defaults$/;
 
   const WORDS = {
     'element.create': 'added',
@@ -1410,7 +1411,7 @@
 
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
-      edit('element.delete', { element: S.sel });
+      edit(C.elements.get(S.sel)?.el.kind === 'roof' ? 'roof.delete' : 'element.delete', { element: S.sel });
       S.sel = null;
       refresh();
     }
@@ -2192,7 +2193,7 @@
   const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
   const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
   /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
-  const drawOrder = (el) => (isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
+  const drawOrder = (el) => (isFloor(el) || el.kind === 'roof' ? 0 : el.kind === 'wall' ? 1 : 2);
 
   DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
   TOOLNAME.floor = 'floor';
@@ -2261,10 +2262,12 @@
   }
 
   /** What the sketch holds, and the button that sends it. */
+  const sketching = () => S.tool === 'floor' || S.tool === 'roof';
   function sketchHtml() {
+    const noun = S.tool === 'roof' ? 'roof' : 'floor';
     const [outer, ...holes] = FLOOR.loops;
     let state = 'empty';
-    let text = 'Click the corners of the floor’s edge in the plan. Close it on its first corner or with Enter.';
+    let text = `Click the corners of the ${noun}’s ${noun === 'roof' ? 'footprint' : 'edge'} in the plan. Close it on its first corner or with Enter.`;
     if (FLOOR.current.length) {
       state = 'open';
       const which = outer ? `Hole ${holes.length + 1}` : 'Edge';
@@ -2272,10 +2275,10 @@
     } else if (outer) {
       state = 'closed';
       const holeText = holes.length ? `, ${plural(holes.length, 'hole')}` : '';
-      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the floor.`;
+      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the ${noun}.`;
     }
     const ready = state === 'closed' ? '' : ' disabled';
-    return `<p class="pad small muted" data-floor-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stackfloormake" data-key="floor-make"${ready}>Make floor</button></div>`;
+    return `<p class="pad small muted" data-${noun}-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stack${noun}make" data-key="${noun}-make"${ready}>Make ${noun}</button></div>`;
   }
 
   function floorToolHtml() {
@@ -2314,6 +2317,7 @@
   ACT.stackfloormake = () => makeFloor();
 
   function floorHint() {
+    if (S.tool === 'roof') return roofHint();
     if (FLOOR.current.length) return '<b>Floor:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
     if (FLOOR.loops.length) return '<b>Floor:</b> click to start a hole, or press Enter to make the floor. Esc to stop.';
     return '<b>Floor:</b> click the corners of its edge. Choose its type in the properties palette.';
@@ -2385,7 +2389,7 @@
   document.addEventListener(
     'pointerdown',
     (event) => {
-      if (S.tool !== 'floor' || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (!sketching() || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
       event.stopPropagation();
       if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
       else floorClick(event);
@@ -2393,7 +2397,7 @@
     true,
   );
   window.addEventListener('pointermove', (event) => {
-    if (S.tool !== 'floor' || !FLOOR.current.length || !$('#pv-canvas svg')) return;
+    if (!sketching() || !FLOOR.current.length || !$('#pv-canvas svg')) return;
     const at = toModel(event);
     FLOOR.at = [snap(at.x), snap(at.y)];
     queueDraw();
@@ -2405,9 +2409,10 @@
       clearSketch();
       return;
     }
-    if (S.tool !== 'floor' || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
+    if (!sketching() || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
     event.preventDefault();
     if (FLOOR.current.length) closeLoop();
+    else if (S.tool === 'roof') makeRoof();
     else makeFloor();
   });
   const toolBeforeFloors = ACT.tool;
@@ -2428,10 +2433,11 @@
 
   /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
   function floorSketch() {
-    if (S.tool !== 'floor') return '';
+    if (!sketching()) return '';
     let svg = '';
-    if (FLOOR.sent && C.problems.has('floor-draw')) {
-      svg += `<path class="floor-refused" data-floor-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
+    const where = S.tool === 'roof' ? 'roof-draw' : 'floor-draw';
+    if (FLOOR.sent && C.problems.has(where)) {
+      svg += `<path class="floor-refused" data-${S.tool}-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
     }
     for (const loop of FLOOR.loops) svg += `<path class="ln ap floor-sketch" d="${ringPath(loop)}"/>`;
     const open = FLOOR.at && FLOOR.current.length ? [...FLOOR.current, FLOOR.at] : FLOOR.current;
@@ -2506,6 +2512,323 @@
   function floorPalette(piece) {
     if (S.tool === 'floor' && canEdit()) return floorToolHtml();
     if (piece && isFloor(piece.el) && !(S.tool === 'wall' && canEdit())) return floorProperties(piece);
+    return '';
+  }
+
+  // --- The roof tool, and a roof in the plan and the properties palette ---
+  // A roof is made over a footprint sketched by clicks in the plan, as a floor's edge is: one loop
+  // of corners closed on its first corner or with Enter; Enter on no open loop, or Make roof,
+  // sends one `roof.create` of the roof type, form, pitch and overhang chosen in the properties
+  // palette, its base on the plan's level the offset typed there above it (construct-model's
+  // FORMAT.md, "Roofs"). The page checks nothing and works out no geometry: the roof types, their
+  // layers and the materials come from the server (`/roof-types`); where a model has none the page
+  // has the server make its default ones through the log (`roof.defaults`); a refusal (hips, an
+  // uneven gable, a pitch on a footprint off the axes, a hole) is the server's reason in the
+  // server's words, under the tool's options, with the footprint it turned back drawn in the plan.
+  // In the plan a roof is its eaves outline from its recipe as the server filled it
+  // (`/filled/<element>`) and, where it slopes, the line its top face rises to; a selected roof
+  // shows its type, level, form, pitch and overhang, which are changed there (`roof.retype`,
+  // `roof.form`, `roof.pitch`, `roof.overhang`), what the server works out of it, and Delete
+  // removes it (`roof.delete`).
+
+  const ROOF_OP = 'roof';
+  const isRoof = (record) => record?.kind === 'roof' && record?.recipe?.op === ROOF_OP;
+
+  DTOOLS.architecture.push(['roof', 'Roof', 'family', 'Click the corners of its footprint. Close the loop on its first corner or with Enter.']);
+  TOOLNAME.roof = 'roof';
+  Object.assign(WORDS, {
+    'roof.create': 'made a roof',
+    'roof.footprint': 'changed the footprint of',
+    'roof.form': 'changed the form of',
+    'roof.pitch': 'changed the pitch of',
+    'roof.overhang': 'changed the overhang of',
+    'roof.level': 'tied to a level',
+    'roof.retype': 'changed the type of',
+    'roof.delete': 'deleted',
+    'roof.defaults': 'made the default roof types',
+    'roof.type.create': 'made a roof type',
+    'roof.type.layers': 'changed the layers of a roof type',
+    'roof.type.rename': 'renamed a roof type',
+    'roof.type.duplicate': 'copied a roof type',
+    'roof.type.delete': 'deleted a roof type',
+  });
+  Object.assign(STEP_WORDS, {
+    'roof.create': 'making a roof',
+    'roof.footprint': 'a roof’s footprint',
+    'roof.form': 'a roof’s form',
+    'roof.pitch': 'a roof’s pitch',
+    'roof.overhang': 'a roof’s overhang',
+    'roof.level': 'a roof’s level',
+    'roof.retype': 'a change of a roof’s type',
+    'roof.delete': 'deleting a roof',
+    'roof.defaults': 'making the default roof types',
+    'roof.type.create': 'making a roof type',
+    'roof.type.layers': 'the layers of a roof type',
+    'roof.type.rename': 'renaming a roof type',
+    'roof.type.duplicate': 'copying a roof type',
+    'roof.type.delete': 'deleting a roof type',
+  });
+
+  C.roofTypes = null; // { key, view } of the open model
+  C.roofTool = { type: null, form: 'gable', pitch: '1:4', overhang: '300 mm', offset: '0 mm', eaves: '' };
+  C.madeRoofDefaults = null; // the model the default roof types were asked for
+
+  /** The open model's roof types and materials; null until they have come. */
+  function roofTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.roofTypes?.key !== key && C.roofTypesLoading !== key) {
+      C.roofTypesLoading = key;
+      api(`${modelUrl(model)}/roof-types`)
+        .then((view) => {
+          C.roofTypes = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.roofTypes?.key.startsWith(`${model}/`) ? C.roofTypes.view : null;
+  }
+
+  /** The open model's roof types, read now if they have not come yet. */
+  async function roofTypesNow() {
+    const view = roofTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/roof-types`);
+    C.roofTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  const chosenRoofType = (view) => view.types.find((t) => t.id === C.roofTool.type) ?? view.types[0] ?? null;
+
+  /** Has the server make its default roof types, once for a model, where it has none. */
+  function makeDefaultRoofs() {
+    if (!canEdit() || C.madeRoofDefaults === C.model.id) return;
+    C.madeRoofDefaults = C.model.id;
+    manage('roof.defaults', {}, 'roof-draw');
+  }
+
+  const ROOF_FORMS = [['flat', 'Flat'], ['mono', 'Mono-pitch'], ['gable', 'Gable']];
+
+  function roofToolHtml() {
+    let html = typeSel('family', 'Roof', '<b>New roof</b>');
+    const view = roofTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the roof types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(makeDefaultRoofs);
+      return `${html}<p class="pad small faint" data-roof-tool="making">This model has no roof types yet, so the default ones are being made.</p>${problem('roof-draw')}`;
+    }
+    const chosen = chosenRoofType(view);
+    const here = levelOf();
+    const level = (modelLevels() || []).find((l) => l.id === here)?.name ?? here;
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const forms = ROOF_FORMS.map(([id, name]) => `<option value="${id}"${id === C.roofTool.form ? ' selected' : ''}>${name}</option>`);
+    const field = (key, label, value, extra = '') => `<input class="inp" data-chg="stackroof${key}" data-key="roof-${key}" value="${esc(value)}" aria-label="${esc(label)}"${extra}>`;
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackrooftool" data-key="roof-type" aria-label="Roof type">${types.join('')}</select>`);
+    html += prow('Form', `<select class="inp" data-chg="stackroofformtool" data-key="roof-form" aria-label="Roof form">${forms.join('')}</select>`);
+    if (C.roofTool.form !== 'flat') html += prow('Pitch', field('pitch', 'Pitch, as 1:4, 25% or 30°', C.roofTool.pitch));
+    if (C.roofTool.form !== 'flat') html += prow('Rises from', field('eaves', 'Edge numbers it rises from, blank for automatic', C.roofTool.eaves, ' placeholder="automatic"'));
+    html += prow('Overhang', field('overhang', 'Overhang past its edges', C.roofTool.overhang));
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Level', esc(level));
+    html += prow('Offset', field('offset', 'Offset of the roof’s base above its level', C.roofTool.offset));
+    html += '</table>';
+    html += `<span class="lbl">Layers, outside first</span><table class="props" data-roof-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    return html + sketchHtml() + problem('roof-draw');
+  }
+
+  CHG.stackrooftool = (select) => {
+    C.roofTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackroofformtool = (select) => {
+    C.roofTool.form = select.value;
+    refreshSide();
+  };
+  for (const key of ['pitch', 'eaves', 'overhang', 'offset']) {
+    CHG[`stackroof${key}`] = (input) => {
+      C.roofTool[key] = input.value;
+    };
+  }
+  ACT.stackroofmake = () => makeRoof();
+
+  function roofHint() {
+    if (FLOOR.current.length) return '<b>Roof:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
+    if (FLOOR.loops.length) return '<b>Roof:</b> press Enter to make the roof. Esc to stop.';
+    return '<b>Roof:</b> click the corners of its footprint. Choose its type, form and pitch in the properties palette.';
+  }
+
+  /** Sends the sketch as it is: what the server makes of it, or why it refuses, comes back through the log. */
+  async function makeRoof() {
+    if (!FLOOR.loops.length || FLOOR.current.length || !canEdit()) return;
+    let view;
+    try {
+      view = await roofTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const corners = (loop) => loop.map(([x, y]) => ({ at: [`${x} mm`, `${y} mm`] }));
+    const [outer, ...holes] = FLOOR.loops;
+    const tool = C.roofTool;
+    const args = { element: newId('R'), level: levelOf(), form: tool.form, footprint: { outer: corners(outer), holes: holes.map(corners) } };
+    const type = chosenRoofType(view);
+    if (type) args.type = type.id;
+    if (tool.form !== 'flat' && tool.pitch.trim() !== '') args.pitch = tool.pitch;
+    if (tool.overhang.trim() !== '') args.overhang = tool.overhang;
+    if (tool.offset.trim() !== '') args.offset = tool.offset;
+    // Edges are numbered from 1 in the order the corners were clicked; the server names them o0, o1, ...
+    const numbers = tool.eaves.split(/[\s,]+/).filter((n) => n !== '');
+    if (tool.form !== 'flat' && numbers.length) args.eaves = numbers.map((n) => `o${Number(n) - 1}`);
+    const sent = { loops: FLOOR.loops };
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent });
+    manage('roof.create', args, 'roof-draw', () => {
+      if (FLOOR.sent === sent) FLOOR.sent = null;
+      queueDraw();
+    });
+    sketchChanged();
+  }
+
+  /** The ribbon: the roof tool beside the floor tool, in the Build panel. */
+  function roofRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:roof')) return;
+    const floor = build.items.findIndex((item) => item.a === 'architecture:floor');
+    build.items.splice(floor + 1, 0, DT_('architecture', 'roof'));
+  }
+
+  /** The point `[x, y, z]` of a solid, in whole millimetres in plan. */
+  const planPoint = (p) => [nearestMm(p[0]), nearestMm(p[1])];
+
+  /**
+   * A roof in the plan: its eaves outline from its recipe as the server filled it (the outline of
+   * its display until that has come), in its outer layer's colour seen from above, and, where it
+   * slopes, the line its outer face rises to: the highest points of its outer layer's two end
+   * sections, as the server worked them out.
+   */
+  function roofInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const { x, y } = placementOf(e);
+    const args = piece.fill?.recipe?.args;
+    const outline = Array.isArray(args?.outline) && args.outline.length
+      ? args.outline.map((corner) => planPoint(corner.at))
+      : piece.shape.displays[0].outline;
+    const ring = outline.map(([px, py]) => [x + px, y + py]);
+    const outer = args?.layers?.[0];
+    const colour = outer && colourOf(outer.material, 'surface');
+    const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+    const box = around(piece);
+    const chosen = S.sel === e.id;
+    let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
+    group += `<path class="body roof${chosen ? ' sel' : ''}" data-form="${esc(args?.form ?? '')}" data-material="${esc(outer?.material ?? '')}"${fill} d="${ringPath(ring)}"/>`;
+    const sections = outer?.solid?.loft;
+    if (Array.isArray(sections) && sections.length === 2) {
+      const high = (section) => section.reduce((best, p) => (p[2] > best[2] ? p : best), section[0]);
+      const [a, b] = sections.map((section) => planPoint(high(section)));
+      group += `<line class="roof-ridge" data-roof-ridge x1="${x + a[0]}" y1="${y + a[1]}" x2="${x + b[0]}" y2="${y + b[1]}"/>`;
+    }
+    const claim = heldClaim(e.id);
+    if (claim) {
+      const theirs = claim.person !== C.me.person.id;
+      group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
+      if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
+    }
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** A stored pitch typed as a person would: `slope:1/4` as 1:4, `angle:270000000` as 30°. */
+  function typedPitch(stored) {
+    if (stored.startsWith('slope:')) return stored.slice(6).replace('/', ':');
+    if (stored.startsWith('angle:')) return `${Number(stored.slice(6)) / 9000000}°`;
+    return stored;
+  }
+
+  /** What the properties palette reads of a selected roof's record: its form, pitch and overhangs. */
+  function roofSpecs(e) {
+    const edges = Array.isArray(e.recipe.args.edges) ? e.recipe.args.edges : [];
+    const sloping = edges.filter((edge) => edge.pitch);
+    const form = ['flat', 'mono', 'gable'][Math.min(sloping.length, 2)] ?? 'flat';
+    const overhangs = [...new Set(edges.map((edge) => `${storedMm(edge.overhang)} mm`))];
+    return {
+      form: sloping.length > 2 ? 'hip' : form,
+      pitch: sloping[0] ? typedPitch(sloping[0].pitch) : '',
+      overhang: overhangs.length === 1 ? overhangs[0] : '',
+    };
+  }
+
+  /** The base's offset above its level, as stored. */
+  function roofOffset(e) {
+    const stored = e.props?.['@level.offset'];
+    return `${stored === undefined ? 0 : storedMm(stored)} mm`;
+  }
+
+  /** What the properties palette shows of a selected roof. */
+  function roofProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const types = roofTypes();
+    const claim = heldClaim(e.id);
+    const specs = roofSpecs(e);
+    const editable = canEdit();
+    let html = typeSel('family', 'Roof', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-roof-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None'));
+    if (types && editable) {
+      const options = types.types.map((t) => `<option value="${esc(t.id)}"${t.id === view?.type?.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+      html += prow('Type', `<select class="inp" data-chg="stackrooftype" data-key="roof-own-type" aria-label="Roof type">${options.join('')}</select>`);
+    } else if (view) {
+      html += prow('Type', esc(view.type?.name || 'None'));
+    }
+    html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-roof-offset>${esc(roofOffset(e))}</span>`);
+    if (editable) {
+      const forms = ROOF_FORMS.map(([id, name]) => `<option value="${id}"${id === specs.form ? ' selected' : ''}>${name}</option>`);
+      html += prow('Form', `<select class="inp" data-chg="stackroofshape" data-key="roof-own-form" aria-label="Roof form">${forms.join('')}</select>`);
+      if (specs.form !== 'flat') html += prow('Pitch', `<input class="inp" data-chg="stackroofown" data-a="pitch" data-key="roof-own-pitch" value="${esc(specs.pitch)}" aria-label="Pitch, as 1:4, 25% or 30°">`);
+      html += prow('Overhang', `<input class="inp" data-chg="stackroofown" data-a="overhang" data-key="roof-own-overhang" value="${esc(specs.overhang)}" placeholder="varies" aria-label="Overhang past its edges">`);
+    } else {
+      html += prow('Form', esc(specs.form));
+      if (specs.pitch) html += prow('Pitch', esc(specs.pitch));
+    }
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    html += problem('roof-edit');
+    if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
+    if (view) {
+      html += readOnlyTable(view);
+      html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    }
+    if (editable) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="roof-delete">Delete roof</button></div>';
+    return html;
+  }
+
+  CHG.stackrooftype = (select) => {
+    if (S.sel) manage('roof.retype', { element: S.sel, type: select.value }, 'roof-edit');
+  };
+  CHG.stackroofshape = (select) => {
+    const piece = C.elements.get(S.sel);
+    if (!piece) return;
+    const args = { element: S.sel, form: select.value };
+    // Going from flat to a form that slopes needs a pitch: the tool's.
+    if (select.value !== 'flat' && !roofSpecs(piece.el).pitch) args.pitch = C.roofTool.pitch;
+    manage('roof.form', args, 'roof-edit');
+  };
+  CHG.stackroofown = (input) => {
+    if (!S.sel) return;
+    const cmd = input.dataset.a === 'pitch' ? 'roof.pitch' : 'roof.overhang';
+    manage(cmd, { element: S.sel, [input.dataset.a]: input.value }, 'roof-edit');
+    input.blur();
+  };
+
+  /** The properties palette's roof part: the roof tool's options, or a selected roof; '' for anything else. */
+  function roofPalette(piece) {
+    if (S.tool === 'roof' && canEdit()) return roofToolHtml();
+    if (piece && isRoof(piece.el) && !(S.tool === 'wall' && canEdit())) return roofProperties(piece);
     return '';
   }
 
@@ -2984,7 +3307,7 @@
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
     if (S.tool === 'grid') return gridHint();
-    if (S.tool === 'floor') return floorHint();
+    if (S.tool === 'floor' || S.tool === 'roof') return floorHint();
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
@@ -3003,7 +3326,7 @@
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    const floor = floorPalette(piece);
+    const floor = floorPalette(piece) || roofPalette(piece);
     if (floor) {
       html += floor;
     } else if (S.tool === 'wall' && canEdit()) {
@@ -3095,6 +3418,10 @@
       }
       if (isFloor(e)) {
         shapes += floorInPlan(piece, data, scale);
+        continue;
+      }
+      if (isRoof(e)) {
+        shapes += roofInPlan(piece, data, scale);
         continue;
       }
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';

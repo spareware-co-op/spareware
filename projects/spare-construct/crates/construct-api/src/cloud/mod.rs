@@ -14,6 +14,8 @@
 //!   log.
 //! - [`floors`]: floor types and their layers, and floors drawn from a boundary, through the same
 //!   log.
+//! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
+//!   through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
@@ -30,6 +32,7 @@ pub mod grids;
 pub mod hosting;
 pub mod levels;
 pub mod params;
+pub mod roofs;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;

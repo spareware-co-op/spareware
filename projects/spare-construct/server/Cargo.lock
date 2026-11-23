@@ -669,6 +669,7 @@ dependencies = [
  "construct-params",
  "construct-phases",
  "construct-regen",
+ "construct-roofs",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -851,6 +852,7 @@ dependencies = [
  "construct-materials",
  "construct-model",
  "construct-params",
+ "construct-roofs",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -861,6 +863,25 @@ dependencies = [
  "kit-ops",
  "kit-store",
  "kit-sync",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-roofs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-slabs",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
+ "libm",
+ "num-bigint",
  "serde",
  "serde_json",
 ]

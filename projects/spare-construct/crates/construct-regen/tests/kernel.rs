@@ -607,3 +607,208 @@ fn a_layered_walls_layers_are_solids_with_their_faces_named() {
     assert_eq!(boxed.len(), 1);
     assert!(boxed[0].material.is_none());
 }
+
+/// A test engine that answers an extrusion as [`Cuboids`] does, and a loft of two sections the
+/// second of which is the first moved by one vector, which it keeps as the prism it is and meshes
+/// as its two ends (each cut into triangles by clipping ears, so a section need not be convex) and
+/// a quad of two triangles per side, every triangle facing out. It is judged by the suite like any
+/// engine; it is not a geometry engine.
+struct Lofts;
+
+/// A solid of [`Lofts`]: a cuboid, or a loft's first section and the vector to its second.
+#[derive(Clone, Debug)]
+enum Lofted {
+    Cuboid(Cuboid),
+    Prism {
+        section: Vec<[i64; 3]>,
+        by: [i64; 3],
+    },
+}
+
+fn less(a: [i64; 3], b: [i64; 3]) -> [i128; 3] {
+    [0, 1, 2].map(|i| i128::from(a[i]) - i128::from(b[i]))
+}
+
+fn cross(a: [i128; 3], b: [i128; 3]) -> [i128; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn dot3(a: [i128; 3], b: [i128; 3]) -> i128 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/// The polygon's corners, by number, turned anticlockwise seen from the side `up` points to, and
+/// the polygon cut into triangles by clipping ears, each triangle facing `up`.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a polygon's corners and an ear's three, as the method names them"
+)]
+fn ears(polygon: &[[i64; 3]], up: [i128; 3]) -> (Vec<usize>, Vec<[usize; 3]>) {
+    let n = polygon.len();
+    let mut newell = [0_i128; 3];
+    for i in 0..n {
+        let (p, q) = (polygon[i], polygon[(i + 1) % n]);
+        newell = [0, 1, 2].map(|k| {
+            let (a, b) = ((k + 1) % 3, (k + 2) % 3);
+            newell[k]
+                + (i128::from(p[a]) - i128::from(q[a])) * (i128::from(p[b]) + i128::from(q[b]))
+        });
+    }
+    let mut left: Vec<usize> = (0..n).collect();
+    if dot3(newell, up) < 0 {
+        left.reverse();
+    }
+    let ring = left.clone();
+    let turn = |a: usize, b: usize, c: usize| {
+        dot3(
+            cross(less(polygon[b], polygon[a]), less(polygon[c], polygon[b])),
+            up,
+        )
+    };
+    let mut out = Vec::new();
+    while left.len() > 3 {
+        let m = left.len();
+        let ear = (0..m).find(|&i| {
+            let (a, b, c) = (left[(i + m - 1) % m], left[i], left[(i + 1) % m]);
+            turn(a, b, c) > 0
+                && left.iter().all(|&p| {
+                    [a, b, c].contains(&p)
+                        || !(turn(a, b, p) >= 0 && turn(b, c, p) >= 0 && turn(c, a, p) >= 0)
+                })
+        });
+        let Some(i) = ear else {
+            return (ring, Vec::new());
+        };
+        out.push([left[(i + m - 1) % m], left[i], left[(i + 1) % m]]);
+        left.remove(i);
+    }
+    out.push([left[0], left[1], left[2]]);
+    (ring, out)
+}
+
+impl Engine for Lofts {
+    type Solid = Lofted;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.lofts".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Lofted, EngineError> {
+        Cuboids.extrude(profile, by).map(Lofted::Cuboid)
+    }
+
+    fn subtract(&mut self, _: &Lofted, _: &Lofted) -> Result<Lofted, EngineError> {
+        Err(unsupported("subtract"))
+    }
+
+    fn subtract_pieces(&mut self, _: &Lofted, _: &Lofted) -> Result<Vec<Lofted>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, sections: &[Section]) -> Result<Lofted, EngineError> {
+        let point = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+        let [first, second] = sections else {
+            return Err(unsupported("loft"));
+        };
+        let a: Vec<[i64; 3]> = first.corners.iter().map(point).collect();
+        let b: Vec<[i64; 3]> = second.corners.iter().map(point).collect();
+        if a.len() < 3 || a.len() != b.len() {
+            return Err(unsupported("loft"));
+        }
+        let by = [0, 1, 2].map(|k| b[0][k] - a[0][k]);
+        let moved = a
+            .iter()
+            .zip(&b)
+            .all(|(p, q)| [0, 1, 2].map(|k| q[k] - p[k]) == by);
+        if !moved || by == [0, 0, 0] {
+            return Err(unsupported("loft"));
+        }
+        Ok(Lofted::Prism { section: a, by })
+    }
+
+    fn unite(&mut self, _: &Lofted, _: &Lofted) -> Result<Lofted, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Lofted) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a prism's corners and a triangle's three"
+    )]
+    fn mesh(&mut self, s: &Lofted) -> Result<DisplayMesh, EngineError> {
+        let (section, by) = match s {
+            Lofted::Cuboid(c) => return Cuboids.mesh(c),
+            Lofted::Prism { section, by } => (section, *by),
+        };
+        let n = section.len();
+        let up = by.map(i128::from);
+        let (ring, caps) = ears(section, up);
+        if caps.len() + 2 != n {
+            return Err(unsupported("mesh"));
+        }
+        let mut mesh = DisplayMesh::default();
+        for shift in [[0, 0, 0], by] {
+            for p in section {
+                mesh.positions
+                    .push([0, 1, 2].map(|k| (p[k] + shift[k]) as f64));
+                mesh.normals.push([0.0, 0.0, 0.0]);
+            }
+        }
+        let far = n as u32;
+        for [i, j, k] in &caps {
+            let (i, j, k) = (*i as u32, *j as u32, *k as u32);
+            // The first end faces back along the loft, the second along it.
+            mesh.triangles.push([i, k, j]);
+            mesh.triangles.push([far + i, far + j, far + k]);
+        }
+        // The sides, round the section the way the ends' triangles turn.
+        for at in 0..n {
+            let (i, j) = (ring[at] as u32, ring[(at + 1) % n] as u32);
+            mesh.triangles.push([i, j, far + j]);
+            mesh.triangles.push([i, far + j, far + i]);
+        }
+        Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Lofted, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn a_gable_roof_is_its_layers() {
+    kernel_suite::a_gable_roof_is_its_layers(|| Lofts);
+}
+
+#[test]
+fn a_mono_roof_is_its_layers() {
+    kernel_suite::a_mono_roof_is_its_layers(|| Lofts);
+}
+
+#[test]
+fn a_flat_roof_is_its_layers() {
+    kernel_suite::a_flat_roof_is_its_layers(|| Lofts);
+}
+
+/// A roof on an engine that does not loft says so, in the engine's words, and builds nothing.
+#[test]
+fn a_sloped_roof_on_an_engine_that_cannot_loft_is_refused() {
+    use construct_model::geometry::Geometry;
+    let k = construct_regen::kernel::Kernel::new(Cuboids).unwrap();
+    let refused = k
+        .build(&kernel_suite::roof_of("gable", &[206, 0]))
+        .unwrap_err();
+    assert_eq!(refused.code, "EngineUnsupported");
+    assert!(refused.message.starts_with("loft"), "{}", refused.message);
+    assert!(k.build(&kernel_suite::roof_of("flat", &[200, 0])).is_ok());
+}

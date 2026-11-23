@@ -22,6 +22,11 @@
 //!   layers in grid steps (job 4.3). The kernel builds one solid per layer, the stand-in one box.
 //! - [`slabs`]: how a floor's recipe reads its layers from its floor type and has its boundary
 //!   checked (construct-slabs), filled with the parameters by [`parameters::recipe_at`].
+//! - [`roof_plan`]: a roof (`roof`) as both builders read it: its filled recipe's form, slopes,
+//!   eaves outline and each layer's solid in grid steps (job 5.3). The kernel builds one solid per
+//!   layer, the stand-in one box with its layers drawn.
+//! - [`roofs`]: how a roof's recipe reads its layers from its roof type and has its shape worked
+//!   out (construct-roofs), filled with the parameters by [`parameters::recipe_at`].
 //!
 //! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
 //!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1). Both builders
@@ -51,6 +56,9 @@ pub mod levels;
 pub mod parameters;
 #[cfg(feature = "server")]
 pub mod regenerator;
+pub mod roof_plan;
+#[cfg(feature = "server")]
+pub mod roofs;
 #[cfg(feature = "server")]
 pub mod slabs;
 pub mod stand_in;
