@@ -194,6 +194,20 @@ async fn props_allowed<T: Txn>(
     })
 }
 
+/// Why an `element.*` command on an existing record refuses it before anything else is read: a
+/// record of no shape (a type, a level, the parameter table) is changed by its own commands, and
+/// `element.delete` does not delete a grid or a reference plane, which their own commands delete
+/// ([`grids::delete_refusal`]). A grid's move or change is refused in [`edited`].
+fn refusal(before: &Element, cmd: &str) -> Option<String> {
+    if !records::has_shape(before) {
+        return Some(NOT_AN_ELEMENT.to_owned());
+    }
+    if cmd == "element.delete" {
+        return grids::delete_refusal(before);
+    }
+    None
+}
+
 /// The element after an `element.move` or `element.set`, or why the edit cannot be made.
 fn edited(mut after: Element, cmd: &str, args: Args) -> Result<Element, String> {
     // A grid or a reference plane, or a recipe that makes one, is the grid commands' to change.
@@ -294,8 +308,8 @@ pub async fn apply<T: Txn>(
     let before: Element = read_row(txn, &place.key())
         .await?
         .ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-    if !records::has_shape(&before) {
-        return Ok(Err(NOT_AN_ELEMENT.to_owned()));
+    if let Some(why) = refusal(&before, &edit.cmd) {
+        return Ok(Err(why));
     }
     if let Some(props) = &args.props
         && let Err(why) = props_allowed(txn, project, document, props).await?

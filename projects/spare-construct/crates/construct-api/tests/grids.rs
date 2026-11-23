@@ -662,6 +662,53 @@ async fn the_element_commands_leave_grids_and_planes_to_their_own() {
 }
 
 #[tokio::test]
+async fn element_delete_names_the_command_that_deletes_a_grid_or_a_plane() {
+    let stack = Stack::new().await;
+    stack
+        .edit("grid.create", line("G-A", &json!("A"), 0))
+        .await
+        .unwrap();
+    stack
+        .edit("plane.create", vertical("P-1", &json!("Mid")))
+        .await
+        .unwrap();
+    stack
+        .edit("plane.create", horizontal("P-2", &Value::Null, "0"))
+        .await
+        .unwrap();
+    let delete = |id: &str| json!({ "element": id });
+    assert_eq!(
+        stack.edit("element.delete", delete("G-A")).await,
+        Err("A is a grid: delete it with grid.delete.".to_owned())
+    );
+    assert_eq!(
+        stack.edit("element.delete", delete("P-1")).await,
+        Err("Mid is a reference plane: delete it with plane.delete.".to_owned())
+    );
+    assert_eq!(
+        stack.edit("element.delete", delete("P-2")).await,
+        Err("That is a reference plane: delete it with plane.delete.".to_owned())
+    );
+    // Nothing went: each is still there, and the commands named delete them.
+    for id in ["G-A", "P-1", "P-2"] {
+        assert!(stack.maybe(id).await.is_some(), "{id} is kept");
+    }
+    // Picking one and letting it go are not changes, and stay allowed.
+    stack.edit("element.claim", delete("G-A")).await.unwrap();
+    stack.edit("element.release", delete("G-A")).await.unwrap();
+    stack
+        .edit("grid.delete", json!({ "grid": "G-A" }))
+        .await
+        .unwrap();
+    stack
+        .edit("plane.delete", json!({ "plane": "P-1" }))
+        .await
+        .unwrap();
+    assert!(stack.maybe("G-A").await.is_none());
+    assert!(stack.maybe("P-1").await.is_none());
+}
+
+#[tokio::test]
 async fn the_regenerator_gives_each_a_display_shape_the_same_after_a_rebuild() {
     let stack = Stack::new().await;
     stack

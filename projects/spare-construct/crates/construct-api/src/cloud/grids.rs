@@ -28,12 +28,14 @@
 //! stored yet (see construct-grids).
 //!
 //! The `element.*` commands refuse a grid or a reference plane, and a recipe of theirs
-//! ([`is_datum`]), so that each stays one the rules above have checked; undo and redo cover each
+//! ([`is_datum`]), so that each stays one the rules above have checked: `element.delete` of one
+//! is refused naming `grid.delete` or `plane.delete` ([`delete_refusal`]); undo and redo cover each
 //! command as an ordinary step ([`crate::cloud::undo`]) and re-check the names ([`check`]).
 
 use crate::cloud::elements::write_record;
 use construct_grids::{
-    Datums, Grid, GridError, PlaneShape, ReferencePlane, Shape, datum_of_recipe, is_datum_kind,
+    Datums, Grid, GridError, PLANE_KIND, PlaneShape, ReferencePlane, Shape, datum_of_recipe,
+    is_datum_kind,
 };
 use construct_model::element::Element;
 use construct_model::geometry::Recipe;
@@ -72,6 +74,25 @@ pub fn is_command(cmd: &str) -> bool {
 #[must_use]
 pub fn is_datum(kind: &str, recipe: &Recipe) -> bool {
     is_datum_kind(kind) || datum_of_recipe(recipe).is_some()
+}
+
+/// Why `element.delete` refuses a record, if it is a grid line or a reference plane: the reason
+/// names the command that deletes it, which keeps the document's grid and plane names checked.
+/// `None` for any other record.
+#[must_use]
+pub fn delete_refusal(record: &Element) -> Option<String> {
+    if !is_datum(&record.kind, &record.recipe) {
+        return None;
+    }
+    let plane = record.kind == PLANE_KIND || record.recipe.op.starts_with("refplane.");
+    Some(match (plane, record.name.is_empty()) {
+        (false, _) => format!("{} is a grid: delete it with grid.delete.", record.name),
+        (true, false) => format!(
+            "{} is a reference plane: delete it with plane.delete.",
+            record.name
+        ),
+        (true, true) => "That is a reference plane: delete it with plane.delete.".to_owned(),
+    })
 }
 
 /// The arguments of every command here; each uses some of them. Lengths and angles are text.
