@@ -97,6 +97,7 @@ impl Geometry for Wedges {
                 deviation: 0,
                 mesh,
                 outline: vec![[0, 0], [long, 0], [0, long]],
+                parts: Vec::new(),
             }],
         })
     }

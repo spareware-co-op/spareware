@@ -51,9 +51,9 @@
     journeys: [], // the same, split: to the server, on to this page, then onto the screen
     log: [],
     three: null,
-    geometry: null, // the shape builder, or null if this browser couldn't load it
-    edition: null, // what it is
+    builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
     viewing: false, // this browser can't build the open model, so it draws what's stored
+    cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
     steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
@@ -562,6 +562,7 @@
     C.params = C.typeList = C.manage = null;
     C.problems.clear();
     C.asked.clear();
+    C.cuts = false;
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -569,10 +570,12 @@
   }
 
   async function openModel(team, model) {
+    const builder = await builderFor(model);
     forgetTheOpenModel();
     C.model = model;
     C.team = team;
-    C.viewing = !canBuild(model);
+    C.viewing = !builder;
+    C.cuts = Boolean(builder) && typeof builder.shapes.build_hosting === 'function';
     C.readOnly = C.viewing;
     C.watching.add(model.id);
     send({ t: 'watch', document: model.id, since: C.head });
@@ -610,34 +613,54 @@
 
   // --- Shapes ---
 
-  async function loadGeometry() {
+  // Two packages build shapes, chosen by the engine a document's edition names: the geometry
+  // kernel's for a document built on it, the stand-in's otherwise. The stand-in's loads with the
+  // page; the kernel's, far larger, the first time a document names it. Each loads once.
+  const KERNEL = 'construct.kernel';
+  const STAND_IN_PACKAGE = '/shapes/construct_shapes.js';
+  const KERNEL_PACKAGE = '/shapes/kernel/construct_shapes_kernel.js';
+
+  function loadGeometry(edition) {
+    const path = edition?.engine === KERNEL ? KERNEL_PACKAGE : STAND_IN_PACKAGE;
+    if (!C.builders.has(path)) C.builders.set(path, loadPackage(path));
+    return C.builders.get(path);
+  }
+
+  async function loadPackage(path) {
     try {
-      const shapes = await import('/shapes/construct_shapes.js');
+      const shapes = await import(path);
       await shapes.default();
-      C.edition = JSON.parse(shapes.edition());
-      C.geometry = shapes;
+      // built: recipe text -> what it builds to, which never changes; hosting: the same for a host
+      // and what is hosted in it
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
+      return null;
     }
   }
 
-  function canBuild(model) {
-    const wanted = model.edition;
-    const have = C.edition;
-    return (
-      C.geometry !== null &&
-      wanted.engine === have.engine &&
-      wanted.version === have.version &&
-      wanted.name_scheme === have.name_scheme
+  /** A value as text with every object's keys in order, so two editions compare field by field. */
+  const canonical = (value) =>
+    JSON.stringify(value, (_, v) =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : v,
     );
+
+  /**
+   * The package that builds `model`'s edition, or null: then this browser shows what's stored. Two
+   * editions are the same only when every field is, the engine's report included (FORMAT.md, "A
+   * document").
+   */
+  async function builderFor(model) {
+    const builder = await loadGeometry(model.edition);
+    return builder && canonical(builder.edition) === canonical(model.edition) ? builder : null;
   }
 
-  const built = new Map(); // recipe text -> what it builds to, which never changes
-
-  function buildShape(recipe) {
+  function buildShape(builder, recipe) {
     const text = JSON.stringify(recipe);
-    if (!built.has(text)) built.set(text, JSON.parse(C.geometry.build(text)));
-    return built.get(text);
+    if (!builder.built.has(text)) builder.built.set(text, JSON.parse(builder.shapes.build(text)));
+    return builder.built.get(text);
   }
 
   /** What the server stored, as `buildShape` gives it. */
@@ -656,20 +679,110 @@
     }
   }
 
-  function shapeFor(model, record) {
+  /**
+   * What `record` builds to here. A wall with elements hosted in it on this page is built with them,
+   * each opening cut, as the server's regenerator builds it, when the package can (the kernel's
+   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does.
+   */
+  function buildOn(builder, record, into) {
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into) : [];
+    if (!guests.length) return buildShape(builder, record.recipe);
+    // Each guest by its place in the host's frame, so a host that moves builds to the same text.
+    const host = JSON.stringify({ recipe: record.recipe, placement: { x: 0, y: 0, z: 0 } });
+    const hosted = JSON.stringify(guests);
+    const text = `${host}\n${hosted}`;
+    if (!builder.hosting.has(text)) builder.hosting.set(text, JSON.parse(builder.shapes.build_hosting(host, hosted)));
+    return builder.hosting.get(text);
+  }
+
+  async function shapeFor(model, record, into) {
     const row = C.models.get(model);
-    return row && canBuild(row) ? buildShape(record.recipe) : storedShape(model, record.id);
+    const builder = row && (await builderFor(row));
+    return builder ? buildOn(builder, record, into) : storedShape(model, record.id);
+  }
+
+  /** A stored length, `length:q0:<steps>`, in millimetres. */
+  const storedMm = (text) => Number(String(text).split(':').pop()) / 6400;
+
+  /** The face reference a hosted door names its wall by, and that wall, if it is on this page. */
+  function hostOf(el) {
+    const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+    const host = face && C.elements.get(face.element);
+    return host ? { face, host } : null;
+  }
+
+  /**
+   * The ID of the element `el` is hosted on, as construct-regen's `hosting::read` reads its record:
+   * a face reference with both offsets, or an older door with a face reference and neither.
+   */
+  function hostIdOf(el) {
+    const faces = (el.references || []).filter((ref) => ref.kind === 'face' && !ref.doc);
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    if (along === undefined && up === undefined) {
+      const opening = el.recipe?.owner === 'construct' && el.recipe?.op === 'door.single';
+      return opening && faces.length ? faces[0].element : null;
+    }
+    return along !== undefined && up !== undefined && faces.length === 1 ? faces[0].element : null;
+  }
+
+  /**
+   * What is hosted in `host` among `into`'s elements, as the kernel's package takes them: each by
+   * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
+   * regenerator hands them to its builder.
+   */
+  function guestsOf(host, into) {
+    const drawn = { el: host, shape: into.get(host.id)?.shape };
+    const guests = [];
+    for (const [id, piece] of into) {
+      if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
+      const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+      const at = placedOn(piece.el, face, drawn);
+      const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
+      guests.push({ key: id, recipe: piece.el.recipe, placement });
+    }
+    return guests;
+  }
+
+  /**
+   * Where an element sits. A door hosted on a face of its wall sits where its offsets put it on
+   * the wall, as the server reads it (construct-regen's `hosting`): along the wall from its start,
+   * up from its base, and flush with its side; so it moves with its wall, whose record alone
+   * changes. Anything else, or a door whose wall is not here, sits at its own placement.
+   */
+  function placementOf(el) {
+    const hosted = hostOf(el);
+    return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
+  }
+
+  /** Where `el` sits hosted on `face` of `host` (`{el, shape}`): `placementOf`'s rule. */
+  function placedOn(el, face, host) {
+    const along = el.props?.['@host.along'];
+    const up = el.props?.['@host.up'];
+    if (along === undefined || up === undefined) return el.placement;
+    const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    const thickness = host.el.recipe.args.thickness;
+    const own = el.recipe.args.thickness;
+    if (!Number.isFinite(thickness) || !Number.isFinite(own)) return el.placement;
+    const alongY = host.el.recipe.args.axis === 'y';
+    // Along x the exterior is the wall's side at y = 0; along y, its side at x = its thickness.
+    const across = (role === 'exterior') !== alongY ? 0 : thickness - own;
+    const [a, u] = [storedMm(along), storedMm(up)];
+    const at = host.el.placement;
+    return alongY
+      ? { x: at.x + across, y: at.y + a, z: at.z + u }
+      : { x: at.x + a, y: at.y + across, z: at.z + u };
   }
 
   /** The box around a piece in the model. */
   function around(piece) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const { min, max } = piece.shape.bounds;
     return { x: x + min[0], y: y + min[1], w: max[0] - min[0], d: max[1] - min[1] };
   }
 
   function outlineOf(piece, paint) {
-    const { x, y } = piece.el.placement;
+    const { x, y } = placementOf(piece.el);
     const points = piece.shape.displays[0].outline.map(([px, py]) => `${x + px},${y + py}`);
     return `<polygon class="${paint}" points="${points.join(' ')}"/>`;
   }
@@ -733,8 +846,23 @@
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
     }
-    const answer = await shapeFor(model, record);
+    const answer = await shapeFor(model, record, into);
     if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    // What it is hosted in is built again with it, as the server builds a host with its guests.
+    if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
+  }
+
+  /** Whether this page builds `model`'s hosts with what is hosted in them, into `into`. */
+  const cutsIn = (model, into) => C.cuts && model === C.model?.id && into === C.elements;
+
+  /** Builds host `id` again with what is now hosted in it on this page, and lets it be compared. */
+  async function buildHostAgain(model, into, id) {
+    const host = id && into.get(id);
+    if (!host) return;
+    const answer = await shapeFor(model, host.el, into);
+    if (into.get(id) !== host) return;
+    Object.assign(host, { shape: undefined, failed: undefined }, answer);
+    host.stale = false;
   }
 
   async function loadClaims() {
@@ -872,18 +1000,33 @@
       const piece = into.get(change.piece);
       if (piece && piece.seq >= entry.seq) continue;
       const stillMine = C.pending.some((edit) => edit.args.element === change.piece);
+      // A host is built with what is hosted in it: while what it hosts changes here, it is not
+      // compared with the server's, and once that is in hand it is built again.
+      const cuts = cutsIn(entry.target, into);
+      const hosts = new Set([piece && hostIdOf(piece.el), entry.cmd === 'hosted.place' && entry.args.host]);
+      if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
+      const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
+        if (cuts) again().then(queueDraw);
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
         if (!(mine && stillMine)) piece.el = { ...piece.el, placement: entry.args.placement };
+        // A door hosted by its position sits apart from its host's frame, so a move of either
+        // moves it in that frame.
+        if (cuts) {
+          hosts.add(change.piece);
+          again().then(queueDraw);
+        }
       } else {
         if (piece) piece.stale = true;
-        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn).then(() => {
-          queueDraw();
-          if (change.piece === S.sel) refreshSide();
-        });
+        loadPiece(entry.target, change.piece, change.after, entry.seq, into, drawn)
+          .then(() => (cuts ? again() : undefined))
+          .then(() => {
+            queueDraw();
+            if (change.piece === S.sel) refreshSide();
+          });
       }
     }
     // A type or a parameter changed, or may have: what the selected element reads may have too.
@@ -913,12 +1056,15 @@
     'element.param': 'set a value of',
     'element.type': 'changed the type of',
     'parameter.define': 'defined a parameter',
+    'parameter.change': 'changed a parameter',
     'parameter.bind': 'bound a parameter to categories',
     'type.create': 'made a type',
     'type.rename': 'renamed a type',
     'type.duplicate': 'copied a type',
     'type.delete': 'deleted a type',
     'type.set': 'set a value of a type',
+    'hosted.place': 'placed on a wall',
+    'hosted.move': 'moved along its wall',
     'level.create': 'made a level',
     'level.rename': 'renamed a level',
     'level.elevation': 'moved a level',
@@ -977,6 +1123,7 @@
     'element.param': 'a value',
     'element.type': 'a change of type',
     'parameter.define': 'defining a parameter',
+    'parameter.change': 'changing a parameter',
     'parameter.bind': 'binding a parameter',
     'type.create': 'making a type',
     'type.rename': 'renaming a type',
@@ -1040,7 +1187,13 @@
   // and parameter values"). A change is the `element.param` edit, through the same log as a move:
   // the server parses the typed text with its units, and a refusal comes back as its reason.
 
-  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set' };
+  const FROM = { type: 'From its type', default: 'Default', unset: 'Not set', formula: 'From its formula' };
+
+  /** A value its formula gives: shown, never typed, with the formula and, when it gives none, the server's reason. */
+  function worked(p) {
+    const reason = p.reason ? `<div class="note bad small" data-reason="${esc(p.id)}">${esc(p.reason)}</div>` : '';
+    return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
+  }
   function hasShape(record) {
     return record.kind !== 'type' && record.kind !== 'parameters' && record.kind !== 'level';
   }
@@ -1068,8 +1221,9 @@
     let html = '<span class="lbl">Parameters</span><table class="props">';
     for (const p of view.parameters) {
       const value = p.shown ?? '';
-      const field =
-        p.holder === 'instance' && editable
+      const field = p.formula
+        ? worked(p)
+        : p.holder === 'instance' && editable
           ? `<input class="inp" data-chg="stackparam" data-a="${esc(p.id)}" data-key="param:${esc(p.id)}" value="${esc(value)}" aria-label="${esc(p.name)}">`
           : esc(value);
       html += prow(esc(p.name), field + problem(`param:${p.id}`), FROM[p.from] || '');
@@ -1103,7 +1257,7 @@
 
   // --- Types and parameters ---
   // A person manages the project's parameters and the types of a category in two dialogs, and changes
-  // an element's type in the properties palette. Everything is one of the nine commands through the
+  // an element's type in the properties palette. Everything is one of the ten commands through the
   // same log (construct-model's FORMAT.md, "Categories, types and parameter values"): the page sends
   // what was typed and shows what the server answers. The lists (kinds, categories, parameters, types)
   // are read from the server, values are shown as the server formats them, and a refusal is shown in
@@ -1133,7 +1287,7 @@
     }
   }
 
-  /** Sends one of the nine commands, and remembers where to show the reason if it is turned back. */
+  /** Sends one of the ten commands, and remembers where to show the reason if it is turned back. */
   function manage(cmd, args, where, after) {
     if (!C.model || C.readOnly) {
       say('Open a model in your team’s WIP to change it.');
@@ -1304,7 +1458,9 @@
           const settable = p.holder === 'type' && editable;
           const control = p.holder !== 'type'
             ? 'Each element has its own'
-            : settable
+            : p.formula
+              ? worked(p)
+              : settable
               ? `<input class="inp" data-chg="stacktypeset" data-type="${esc(type.id)}" data-a="${esc(p.id)}" data-key="type-value:${esc(type.id)}:${esc(p.id)}" value="${esc(p.shown ?? '')}" aria-label="${label}: ${esc(p.name)}">`
               : esc(p.shown ?? '');
           html += prow(esc(p.name), control, FROM[p.from] || '');
@@ -1355,6 +1511,11 @@
       const standard = p.default === null ? '' : ` Default: ${esc(p.default)}.`;
       const choices = p.choices.length ? ` Choices: ${esc(p.choices.map((c) => c.label).join(', '))}.` : '';
       html += `<p class="small">${where}${standard}${choices}</p>`;
+      if (p.formula) html += `<p class="small" data-formula="${esc(p.id)}">Formula: ${esc(p.formula)}</p>`;
+      if (C.catalog.kinds.find((k) => k.tag === p.kind)?.takes_formula) {
+        html += `<label class="fld"><span>Formula of other parameters, such as Width - 2 * Frame (empty: a person sets the value)</span><input class="inp" data-enter="stackformula" data-a="${esc(p.id)}" data-key="formula:${esc(p.id)}" value="${esc(p.formula ?? '')}" aria-label="Formula for ${esc(p.name)}"${off}></label>`;
+        html += problem(`formula:${p.id}`);
+      }
       html += `<details data-open="${esc(p.id)}"${m.open.has(p.id) ? ' open' : ''}><summary>Bind to categories</summary><div class="stack-checks">`;
       for (const c of categories) {
         const on = bound.has(c.id);
@@ -1373,6 +1534,7 @@
     html += `<label class="fld"><span>Who holds the value</span><select class="inp" data-draft data-key="def-holder"${off}>${holders.join('')}</select></label>`;
     html += `<label class="fld"><span>Choices, for a choice only, separated by commas</span><input class="inp" data-draft data-key="def-choices"${off}></label>`;
     html += `<label class="fld"><span>Default (optional)</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-default"${off}></label>`;
+    html += `<label class="fld"><span>Formula of other parameters (optional), such as Width - 2 * Frame</span><input class="inp" data-draft data-enter="stackdefine" data-key="def-formula"${off}></label>`;
     html += '</div>';
     html += '<div class="lbl">Bind it to (optional)</div><div class="stack-checks">';
     for (const c of categories) {
@@ -1413,6 +1575,12 @@
     manage('parameter.bind', { parameter: id, categories: chosen(section), default: text === '' ? null : text }, `bind:${id}`);
   };
 
+  // A formula goes to the server as typed: the server checks it and stores it in its one spelling.
+  ACT.stackformula = (input) => {
+    const text = input.value.trim();
+    manage('parameter.change', { parameter: input.dataset.a, formula: text === '' ? null : text }, `formula:${input.dataset.a}`);
+  };
+
   ACT.stackdefine = () => {
     const id = newId('P');
     const labels = manageField('def-choices').value.split(',').map((text) => text.trim()).filter(Boolean);
@@ -1423,6 +1591,8 @@
       holder: manageField('def-holder').value,
       choices: labels.map((label) => ({ key: label, label })),
     };
+    const formula = manageField('def-formula').value.trim();
+    if (formula !== '') definition.formula = formula;
     const categories = $$('#stack-manage [data-key^="def-cat:"]:checked').map((box) => Number(box.value));
     const text = manageField('def-default').value;
     const clear = () => {
@@ -1667,7 +1837,7 @@
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${e.placement.x}, ${e.placement.y}</span>`)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1737,7 +1907,7 @@
     );
     for (const piece of inOrder) {
       const { el: e } = piece;
-      const { x, y } = e.placement;
+      const { x, y } = placementOf(e);
       const data = `class="element" data-id="${esc(e.id)}" data-x="${x}" data-y="${y}"`;
       if (!piece.shape) {
         // Nothing to draw yet, or a recipe that can't build: a mark, so it can still be found.
@@ -1821,21 +1991,29 @@
     }
     const box = around(wall);
     const along = box.w >= box.d;
-    const placement = along
-      ? { x: snap(at.x) - 450, y: box.y + box.d / 2 - 150, z: 0 }
-      : { x: box.x + box.w / 2 - 150, y: snap(at.y) - 450, z: 0 };
-    const args = { width: 900, thickness: 300, height: 2100, axis: along ? 'x' : 'y' };
-    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall.
-    const face = wall.shape.names.find((name) => name.role === 'exterior');
-    const host = {
-      doc: null,
-      element: wall.el.id,
-      name: face.name,
-      kind: 'face',
-      want: 'carrier',
-      signature: null,
-    };
-    add('door', 'D', placement, recipe('door.single', args), 'Doors', [host]);
+    const width = 900;
+    // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall:
+    // the side clicked (along x the exterior is the wall's low y side, along y its high x side),
+    // as far along the wall from its start as the click, less half the door, as thick as the wall.
+    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+    const exterior = along ? at.y < middle : at.x > middle;
+    const face = wall.shape.names.find((name) => name.role === (exterior ? 'exterior' : 'interior'));
+    if (!face) {
+      say('That wall has no side to place a door on.');
+      return;
+    }
+    const offset = (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2;
+    const thickness = along ? box.d : box.w;
+    const args = { width, thickness, height: 2100, axis: along ? 'x' : 'y' };
+    edit('hosted.place', {
+      element: `D-${crypto.randomUUID().slice(0, 8)}`,
+      kind: 'door',
+      host: wall.el.id,
+      face: face.name,
+      along: `${offset} mm`,
+      up: '0 mm',
+      recipe: recipe('door.single', args),
+    });
   }
 
   /** Spare Construct's own operations, by what they make. */
@@ -1875,9 +2053,12 @@
         say(`${claim.name} is working on this.`);
         return;
       }
-      const { placement } = C.elements.get(id).el;
+      const { el } = C.elements.get(id);
+      const placement = placementOf(el);
       edit('element.claim', { element: id });
-      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y };
+      // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
+      const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
+      drag = { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
     });
 
     window.addEventListener('pointermove', (event) => {
@@ -1887,6 +2068,18 @@
       const at = toModel(event);
       const x = snap(at.x - drag.dx);
       const y = snap(at.y - drag.dy);
+      if (drag.hosted) {
+        const hosted = hostOf(piece.el);
+        if (!hosted) return;
+        const wall = hosted.host.el;
+        const offset = wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
+        if (storedMm(piece.el.props['@host.along']) === offset) return;
+        const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        piece.el = { ...piece.el, props };
+        drag.along = offset;
+        queueDraw();
+        return;
+      }
       const { placement } = piece.el;
       if (x === placement.x && y === placement.y) return;
       piece.el = { ...piece.el, placement: { ...placement, x, y } };
@@ -1901,7 +2094,11 @@
     const finish = () => {
       if (!drag) return;
       const piece = C.elements.get(drag.id);
-      if (piece) edit('element.move', { element: drag.id, placement: piece.el.placement });
+      if (piece && drag.hosted) {
+        if (drag.along !== undefined) edit('hosted.move', { element: drag.id, along: `${drag.along} mm` });
+      } else if (piece) {
+        edit('element.move', { element: drag.id, placement: piece.el.placement });
+      }
       drag = null;
     };
     window.addEventListener('pointerup', finish);
@@ -1950,7 +2147,12 @@
     scene.add(meshes.group);
     C.three = {
       update() {
-        meshes.update(C.elements.values());
+        // Each where it sits: a hosted door on its wall (placementOf).
+        const placed = [...C.elements.values()].map((piece) => ({
+          ...piece,
+          el: { ...piece.el, placement: placementOf(piece.el) },
+        }));
+        meshes.update(placed);
       },
     };
     C.three.update();

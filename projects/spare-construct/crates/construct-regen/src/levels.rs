@@ -9,7 +9,8 @@
 //!   function, and is written in its built row with the level it is indexed under ([`Placed`]).
 //! - A recipe argument written `{"tie":"top"}` is filled, before the shape is built, with the
 //!   height from the element's base to its top tie (construct-levels' [`span`]), as the whole
-//!   millimetres the stand-in's recipes take. A wall whose top is tied to the level above so
+//!   millimetres the stand-in's recipes take, or, for a layered wall (`wall.layered`), as a
+//!   construct-params stored length, exactly. A wall whose top is tied to the level above so
 //!   follows that level when it moves, and its record never changes.
 //! - The levels a shape reads are [`levels_read`]: its base level, and its top level when its
 //!   recipe reads it. The regenerator lists them in its `reads` table, so a change to one of them
@@ -24,6 +25,7 @@
 //! changes with the kernel's recipes (job 1.1), and nothing else here knows the stand-in's units.
 
 use crate::parameters::{At, read_at, read_document};
+use crate::wall_plan;
 use construct_levels::{
     LEVEL_KIND, Length, Level, LevelError, Levels, Tie, base_of, height_of, implied_number, show,
     span, tied_to, top_of,
@@ -230,9 +232,45 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
         };
         let height =
             span((base, *from), (top, *to)).map_err(|e| failure("BadLevel", e.to_string()))?;
-        *arg = serde_json::Value::from(whole_mm(height, name)?);
+        // A layered wall holds its lengths as stored lengths, exactly; the stand-in's old box
+        // takes whole millimetres.
+        *arg = if wall_plan::is_layered(recipe) {
+            serde_json::Value::from(Value::Length(height).stored())
+        } else {
+            serde_json::Value::from(whole_mm(height, name)?)
+        };
     }
     Ok(out)
+}
+
+/// The recipe `element` is built from, as the document is `at` that state, every argument that
+/// reads a record filled: its parameters and its wall type's layers
+/// ([`crate::parameters::recipe_at`]), then its top tie ([`filled`]). What a command asks of a
+/// shape's rules (a door's fit in its wall) is asked of this, as the regenerator builds it.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails. The inner error is the build failure, as
+/// [`crate::parameters::recipe_at`], [`placed`] and [`filled`] give it.
+pub async fn recipe_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    at: At,
+) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    let recipe = match crate::parameters::recipe_at(reader, project, document, element, at).await? {
+        Ok(recipe) => recipe,
+        Err(e) => return Ok(Err(e)),
+    };
+    if !reads_top(&recipe) {
+        return Ok(Ok(recipe));
+    }
+    Ok(
+        match placed(reader, project, document, element, at).await? {
+            Ok(placed) => filled(&recipe, &placed),
+            Err(e) => Err(e),
+        },
+    )
 }
 
 /// Every level of a document as it is now: its level records and the implied levels its

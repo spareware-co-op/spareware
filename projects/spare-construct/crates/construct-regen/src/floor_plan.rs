@@ -305,16 +305,8 @@ fn read_layer(layer: &Value, at: usize) -> Result<PlanLayer, GeometryError> {
 }
 
 /// `steps` of the length grid to the nearest whole millimetre, a half away from zero, and whether
-/// that is exact: how a display in whole millimetres holds a corner that need not lie on one.
-#[must_use]
-pub fn nearest_mm(steps: i64) -> (i64, bool) {
-    let (floor, rest) = split(steps);
-    // 0 <= rest < 6,400, so twice it is well within an i64.
-    let twice = rest.saturating_mul(2);
-    let per = Length::STEPS_PER_MM;
-    let up = twice > per || (twice == per && floor >= 0);
-    (if up { floor.saturating_add(1) } else { floor }, rest == 0)
-}
+/// that is exact: the layered wall's rounding ([`crate::wall_plan::nearest_mm`]), one for both.
+pub use crate::wall_plan::nearest_mm;
 
 /// `steps` in whole millimetres, rounded down: a bound's low corner.
 #[must_use]

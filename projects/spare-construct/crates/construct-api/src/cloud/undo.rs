@@ -36,9 +36,11 @@
 //! writes and lets go of each it deletes, as `element.set` and `element.delete` do. Last, every
 //! record it wrote must read under the document's rules (its type exists, its values read), and
 //! when it wrote a type or the parameter table every record of the document is read again; a
-//! failure is `"That can't be undone: "` and the reader's own words. Every tie of what it wrote
-//! must name a level still in the model, and when it wrote or took away a level, every element of
-//! the document is checked so (`levels::ties_hold`).
+//! failure is `"That can't be undone: "` and the reader's own words. So is leaving an element
+//! without its host: one it writes whose host is gone, or one hosted on a piece it deletes
+//! ([`crate::cloud::hosting::undo_rules`]). Every tie of what it wrote must name a level still
+//! in the model, and when it wrote or took away a level, every element of the document is
+//! checked so (`levels::ties_hold`).
 //!
 //! **All or nothing** (CON-A2-F5-P2, A05 "that command is turned back"): an undo is one command,
 //! so any of those refusals turns the whole undo back and none of its pieces is written
@@ -50,7 +52,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{levels, params};
+use crate::cloud::{hosting, levels, params, walls};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -97,7 +99,9 @@ pub fn is_command(cmd: &str) -> bool {
 pub fn is_step(cmd: &str) -> bool {
     ELEMENT_STEPS.contains(&cmd)
         || params::is_command(cmd)
+        || hosting::is_command(cmd)
         || levels::is_command(cmd)
+        || walls::is_command(cmd)
         || is_command(cmd)
 }
 
@@ -445,6 +449,7 @@ pub async fn apply<T: Txn>(
     let mut taken: Vec<ClaimChange> = Vec::new();
     let mut whole = false;
     let mut written = Vec::new();
+    let mut deleted = Vec::new();
     for planned in plan {
         whole |= planned.not_an_element;
         let pointer = Place::Piece {
@@ -470,6 +475,7 @@ pub async fn apply<T: Txn>(
         } else {
             txn.delete(pointer.key()).await?;
             taken.push(claims::release(txn, project, document, &planned.id).await?);
+            deleted.push(planned.id.clone());
             None
         };
         changes.push(Change {
@@ -480,6 +486,9 @@ pub async fn apply<T: Txn>(
     }
 
     if let Err(why) = check(txn, project, document, &written, whole).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    if let Err(why) = hosting::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     // An undo may not leave an element tied to a level that is no longer in the model.

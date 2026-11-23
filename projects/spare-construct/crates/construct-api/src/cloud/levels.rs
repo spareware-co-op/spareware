@@ -368,8 +368,22 @@ async fn tie_level<T: Txn>(
     run: &mut Run<'_, T>,
     id: &Id,
 ) -> Result<Result<Level, String>, StoreError> {
+    level_now(run.txn, run.project, run.document, id).await
+}
+
+/// The level of a document an ID names, as it is now: a level record, or an implied level; the
+/// inner error is construct-levels' refusal of an unknown one, in words.
+///
+/// # Errors
+/// A store error.
+pub(crate) async fn level_now<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    id: &Id,
+) -> Result<Result<Level, String>, StoreError> {
     Ok(
-        match reader::level_at(run.txn, run.project, run.document, id, At::Now).await? {
+        match reader::level_at(txn, project, document, id, At::Now).await? {
             Ok(Some(level)) => Ok(level),
             Ok(None) => Err(why(&LevelError::UnknownLevel(id.clone()))),
             Err(refusal) => Err(refusal),
@@ -407,6 +421,21 @@ async fn top_above_base<T: Txn>(
     run: &mut Run<'_, T>,
     record: &Element,
 ) -> Result<Result<(), String>, StoreError> {
+    top_is_above_base(run.txn, run.project, run.document, record).await
+}
+
+/// Refuses a wall whose top would be at or below its base, by its ties to the document's levels
+/// as they are now, or whose recipe reads a top tie without both ties. A recipe that reads no
+/// top tie passes.
+///
+/// # Errors
+/// A store error; the inner error is the refusal, in words.
+pub(crate) async fn top_is_above_base<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    record: &Element,
+) -> Result<Result<(), String>, StoreError> {
     if !reader::reads_top(&record.recipe) {
         return Ok(Ok(()));
     }
@@ -415,11 +444,11 @@ async fn top_above_base<T: Txn>(
             "A wall's top is tied above its base, so it needs both.".to_owned(),
         ));
     };
-    let base_level = match tie_level(run, &base.level).await? {
+    let base_level = match level_now(txn, project, document, &base.level).await? {
         Ok(level) => level,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    let top_level = match tie_level(run, &top.level).await? {
+    let top_level = match level_now(txn, project, document, &top.level).await? {
         Ok(level) => level,
         Err(refusal) => return Ok(Err(refusal)),
     };

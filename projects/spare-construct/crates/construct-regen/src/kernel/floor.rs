@@ -31,10 +31,9 @@
 //! names written from the recipe, not read from the body); an arc edge is refused before it gets
 //! here (construct-slabs, the interim register's row) until the kernel's exact sweep takes arcs.
 
-use super::{EXACT_F64, Kernel, Units, as_steps, fault, from_engine, name, op_id, too_big};
+use super::{Kernel, Units, as_steps, fault, from_engine, name, op_id, too_big};
 use crate::floor_plan::{self, FloorPlan, PlanCorner};
 use construct_model::geometry::{Bounds, Built, Display, FaceName, GeometryError, Mesh, Recipe};
-use construct_params::Length;
 use engine_geometry::value::engine::{DisplayMesh, Engine, Profile};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
@@ -74,76 +73,13 @@ fn roles(plan: &FloorPlan) -> Vec<String> {
 }
 
 /// The names of a floor's faces, sorted by name.
-fn names(op: OpId, plan: &FloorPlan) -> Result<Vec<FaceName>, GeometryError> {
+pub(super) fn names(op: OpId, plan: &FloorPlan) -> Result<Vec<FaceName>, GeometryError> {
     let mut names = roles(plan)
         .iter()
         .map(|role| name(op, role))
         .collect::<Result<Vec<_>, _>>()?;
     names.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(names)
-}
-
-/// A length in construct-params' steps (6,400 to the millimetre) in the engine's steps, exactly:
-/// unchanged on `Q0`.
-fn from_q0(units: Units, q0: i64) -> Result<i64, GeometryError> {
-    let per = i128::from(Length::STEPS_PER_MM);
-    let product = i128::from(q0)
-        .checked_mul(i128::from(units.per_mm))
-        .ok_or_else(too_big)?;
-    match (product.checked_rem(per), product.checked_div(per)) {
-        (Some(0), Some(steps)) => i64::try_from(steps).map_err(|_| too_big()),
-        _ => Err(fault(
-            "NotOnTheGrid",
-            format!(
-                "a length of {q0} building-grid steps is not a whole number of this engine's steps"
-            ),
-        )),
-    }
-}
-
-/// `steps` of the engine as whole millimetres rounded down and the steps left over, at or above
-/// zero.
-fn split(units: Units, steps: i64) -> (i64, i64) {
-    // per_mm is above zero (`Units::on`), so neither is `None`.
-    (
-        steps.checked_div_euclid(units.per_mm).unwrap_or(0),
-        steps.checked_rem_euclid(units.per_mm).unwrap_or(0),
-    )
-}
-
-/// `steps` of the engine to the nearest whole millimetre, a half away from zero, and whether that
-/// is exact.
-fn nearest_mm(units: Units, steps: i64) -> (i64, bool) {
-    let (floor, rest) = split(units, steps);
-    // 0 <= rest < per_mm, so twice it is well within an i64.
-    let twice = rest.saturating_mul(2);
-    let up = twice > units.per_mm || (twice == units.per_mm && floor >= 0);
-    (if up { floor.saturating_add(1) } else { floor }, rest == 0)
-}
-
-/// `steps` of the engine in whole millimetres, rounded up.
-fn ceil_mm(units: Units, steps: i64) -> i64 {
-    match split(units, steps) {
-        (floor, 0) => floor,
-        (floor, _) => floor.saturating_add(1),
-    }
-}
-
-/// A mesh coordinate as the engine gives it, a whole number of steps held in an f64, as an
-/// integer.
-fn whole_steps(steps: f64) -> Result<i64, GeometryError> {
-    if steps.fract() != 0.0 || steps.abs() >= EXACT_F64 {
-        return Err(fault(
-            "NotOnTheGrid",
-            format!("a mesh coordinate of {steps} is not a whole number of steps"),
-        ));
-    }
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "a whole number under 2^53, checked above, which an i64 holds exactly"
-    )]
-    let steps = steps as i64;
-    Ok(steps)
 }
 
 /// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, put after what
@@ -162,10 +98,10 @@ fn append(
     for point in &mesh.positions {
         let mut steps = [0_i64; 3];
         for (slot, &c) in steps.iter_mut().zip(point) {
-            *slot = whole_steps(c)?;
+            *slot = Units::whole_steps(c)?;
         }
         for &s in &steps {
-            let (mm, exact) = nearest_mm(units, s);
+            let (mm, exact) = units.nearest_mm(s);
             rounded |= !exact;
             into.positions.push(mm);
         }
@@ -196,7 +132,7 @@ fn ring(corners: &[PlanCorner], units: Units, z: i64) -> Result<Vec<P3>, Geometr
         .iter()
         .map(|corner| {
             let [x, y] = corner.at;
-            P3::new(from_q0(units, x)?, from_q0(units, y)?, z).map_err(|_| too_big())
+            P3::new(units.from_q0(x)?, units.from_q0(y)?, z).map_err(|_| too_big())
         })
         .collect()
 }
@@ -232,8 +168,8 @@ impl<E: Engine> Kernel<E> {
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
             for (_, layer, bottom, top) in plan.slabs() {
-                let z = from_q0(units, bottom)?;
-                let up = from_q0(units, top.saturating_sub(bottom))?;
+                let z = units.from_q0(bottom)?;
+                let up = units.from_q0(top.saturating_sub(bottom))?;
                 let outer = ring(plan.outer(), units, z)?;
                 let holes = plan
                     .holes()
@@ -257,8 +193,8 @@ impl<E: Engine> Kernel<E> {
         let (lo, hi) =
             extent.ok_or_else(|| fault("EmptyShape", "a floor with no layer of any thickness"))?;
         let bounds = Bounds {
-            min: lo.map(|s| split(units, s).0),
-            max: hi.map(|s| ceil_mm(units, s)),
+            min: lo.map(|s| units.floor_mm(s)),
+            max: hi.map(|s| units.ceil_mm(s)),
         };
         let outline: Vec<[i64; 2]> = plan
             .outer()
@@ -275,6 +211,7 @@ impl<E: Engine> Kernel<E> {
                 deviation,
                 mesh: mesh.clone(),
                 outline: outline.clone(),
+                parts: Vec::new(),
             })
             .collect();
         Ok(Built {
@@ -283,34 +220,5 @@ impl<E: Engine> Kernel<E> {
             names: names(op, &plan)?,
             displays,
         })
-    }
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::arithmetic_side_effects,
-    reason = "test code; the rules are for the crate's own code"
-)]
-mod tests {
-    use super::*;
-    use engine_geometry::value::grid::GridStep;
-
-    /// A stored length goes to the engine's steps exactly (unchanged on `Q0`, 25 times on `Q1`),
-    /// and comes back to the nearest millimetre, a half away from zero, a bound rounding up.
-    #[test]
-    fn lengths_reach_the_engine_exactly_and_come_back_to_the_nearest_millimetre() {
-        let q0 = Units::on(GridStep::Q0).unwrap();
-        let q1 = Units::on(GridStep::Q1).unwrap();
-        assert_eq!(from_q0(q0, 80_000).unwrap(), 80_000);
-        assert_eq!(from_q0(q1, 80_000).unwrap(), 2_000_000);
-        assert_eq!(from_q0(q1, i64::MAX).unwrap_err().code, "TooBig");
-        assert_eq!(nearest_mm(q0, 368_000), (58, false));
-        assert_eq!(nearest_mm(q0, -368_000), (-58, false));
-        assert_eq!(nearest_mm(q1, 160_000), (1, true));
-        assert_eq!(ceil_mm(q0, -368_000), -57);
-        assert_eq!(split(q0, -368_000).0, -58);
-        assert_eq!(whole_steps(6400.0).unwrap(), 6400);
-        assert_eq!(whole_steps(0.5).unwrap_err().code, "NotOnTheGrid");
     }
 }

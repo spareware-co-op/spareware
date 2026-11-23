@@ -2,9 +2,10 @@
 //! the builder's suite (construct-regen's `tests/kernel_suite`) on `SolidcoreEngine`, its doors
 //! cut from their walls (one door, a raised opening, a wall with two doors, the cases at the edge
 //! and what the engine does with a face within its tolerance) among them, the whole
-//! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened, and
-//! a document of one edition reported, not rebuilt, by a server of another. Built and run only
-//! with `--features kernel`.
+//! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
+//! layered walls drawn and their types changed through the commands, and a document of one
+//! edition reported, not rebuilt, by a server of another. Built and run only with
+//! `--features kernel`.
 
 #![cfg(feature = "kernel")]
 // The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
@@ -29,7 +30,7 @@ mod kernel_suite;
 mod support;
 
 use construct_api::cloud::{POLICY, ProjectCommands, SCHEMA};
-use construct_model::geometry::{Edition, Geometry};
+use construct_model::geometry::{Edition, FaceName, Geometry};
 use construct_model::rows::BuiltResult;
 use construct_regen::kernel::STEP;
 use construct_regen::regenerator::Regenerator;
@@ -37,12 +38,14 @@ use geom_solidcore::engine::SolidcoreEngine;
 use kit_accounts::{Accounts, Cedar, SignInSettings};
 use kit_core::Id;
 use kit_store::memory::{Memory, MemoryFiles};
+use kit_store::{Kv, Reader, Scope};
 use kit_sync::{Clock, Orderers, SystemClock};
 use serde_json::json;
 use spare_server::directory::DirectoryCommands;
 use spare_server::geometry::{Builder, geometry};
 use spare_server::seed::seed;
-use spare_server::service::{Access, Service};
+use spare_server::service::{Access, Service, ShapeView};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 fn engine() -> SolidcoreEngine {
@@ -114,6 +117,26 @@ fn an_l_shaped_floor_with_a_hole_is_its_layers() {
 }
 
 #[test]
+fn a_layered_wall_is_one_solid_per_layer() {
+    kernel_suite::a_layered_wall_is_one_solid_per_layer(engine);
+}
+
+#[test]
+fn a_door_cuts_every_layer_of_a_layered_wall() {
+    kernel_suite::a_door_cuts_every_layer_of_a_layered_wall(engine);
+}
+
+#[test]
+fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
+    kernel_suite::a_door_in_a_layered_wall_is_refused_as_in_the_box(engine);
+}
+
+#[test]
+fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
+    kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(engine);
+}
+
+#[test]
 fn the_engine_keeps_a_sliver_within_its_tolerance() {
     kernel_suite::the_engine_keeps_a_sliver_within_its_tolerance(engine());
 }
@@ -166,7 +189,8 @@ fn server_on(
 
 /// The whole seed runs on the kernel and every stored shape matches its recipe. A door hosted on
 /// a wall's exterior names the face the suite recorded, and when the wall is lengthened and built
-/// again, its exterior keeps that name, so the door's reference still lands.
+/// again, its exterior keeps that name, so the door's reference still lands, and the wall is built
+/// with the door's opening cut.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     let (store, files) = (Memory::new(), MemoryFiles::default());
@@ -237,9 +261,23 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     };
     assert_ne!(grown, bounds, "the wall is longer");
     assert!(now.contains(&face), "the door's face is gone: {now:?}");
-    // Interim (the register's row): the regenerator builds the wall from its own recipe, so its
-    // hosted door cuts no opening in the stored shape yet.
-    assert!(now.iter().all(|n| !n.role.starts_with("tool(")), "{now:?}");
+    // A door written this way, by its position with a face reference, is hosted by that
+    // reference: the wall is built with its opening cut.
+    let mut cut: Vec<&str> = now
+        .iter()
+        .filter(|n| n.role.starts_with("tool("))
+        .map(|n| n.role.as_str())
+        .collect();
+    cut.sort_unstable();
+    assert_eq!(
+        cut,
+        [
+            "tool(D-900).head",
+            "tool(D-900).jamb.end",
+            "tool(D-900).jamb.start"
+        ],
+        "its jambs and head, and no sill for a door to the floor"
+    );
     let hosted = s
         .shape(&anna, &project, &model, &i("D-900"), None)
         .await
@@ -250,6 +288,246 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
         .unwrap();
     assert_eq!(door.references[0].name, face.name);
     assert!(matches!(hosted.built.result, BuiltResult::Shape { .. }));
+}
+
+/// The engine's largest length tolerance, in millimetres, as the edition records it.
+fn tolerance_mm(edition: &Edition) -> f64 {
+    edition
+        .report
+        .as_ref()
+        .unwrap()
+        .tolerances
+        .iter()
+        .filter(|t| t.unit == "m")
+        .map(|t| t.value.parse::<f64>().unwrap() * 1000.0)
+        .fold(0.0, f64::max)
+}
+
+/// Every derived row of a project, as bytes.
+async fn derived(store: &Memory, project: &Id) -> BTreeMap<String, Vec<u8>> {
+    let mut snapshot = store.snapshot().await.unwrap();
+    let mut rows = BTreeMap::new();
+    for table in ["body", "display", "built", "area", "kind", "reads"] {
+        let prefix = Scope::Project(project.clone()).table_prefix(table, &[]);
+        for (key, value) in snapshot.scan(&prefix).await.unwrap() {
+            rows.insert(key.as_str().to_owned(), value);
+        }
+    }
+    rows
+}
+
+/// A wall as the server stored it, and its finest mesh.
+async fn stored_wall(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> (ShapeView, Vec<FaceName>) {
+    s.regenerate(project).await.unwrap();
+    let shown = s
+        .shape(&i("anna"), project, model, &i(wall), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { names, .. } = &shown.built.result else {
+        panic!("{wall} builds: {:?}", shown.built.result);
+    };
+    let names = names.clone();
+    (shown, names)
+}
+
+/// Checks a wall's finest mesh is closed and holds a wall of `length` by 200 by 2700 mm less one
+/// 900 by 2100 mm opening for each of `doors`, within the engine's tolerance over its surface.
+fn holds(edition: &Edition, shown: &ShapeView, length: i128, doors: i128) {
+    let mesh = &shown.display.as_ref().unwrap().mesh;
+    let six = kernel_suite::closed_mesh_six_volume(mesh);
+    let expected = 6 * (length * 200 * 2700 - doors * 900 * 200 * 2100);
+    let surface = 2 * (length * 200 + 200 * 2700 + length * 2700) + doors * 2 * 200 * (900 + 2100);
+    let allowed = 6.0 * surface as f64 * tolerance_mm(edition);
+    assert!(
+        ((six - expected).abs() as f64) <= allowed,
+        "six times the volume is {six}, not {expected} within {allowed}"
+    );
+}
+
+/// The roles of a wall's faces its openings made, sorted.
+fn cut_roles(names: &[FaceName]) -> Vec<String> {
+    let mut roles: Vec<String> = names
+        .iter()
+        .filter(|n| n.role.starts_with("tool("))
+        .map(|n| n.role.clone())
+        .collect();
+    roles.sort_unstable();
+    roles
+}
+
+/// Through the server's commands on the kernel: two doors placed on a wall's two sides cut two
+/// openings from it (a closed mesh holding the wall less both, the wall's six names and each
+/// opening's, the first door's as the suite recorded them); a door moved along the wall moves its
+/// opening; a door deleted takes its opening away; the wall lengthened and moved keeps its door
+/// where its offset puts it, writing no door; and the log replayed from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn two_doors_placed_through_commands_cut_their_wall_and_move_with_it() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let edition = kernel.edition();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let wall = json!({
+        "element": "W-900", "kind": "wall", "level": 1,
+        "placement": { "x": 50_000, "y": 0, "z": 0 },
+        "recipe": kernel_suite::wall(4000, "x"),
+    });
+    s.edit(&anna, &project, &model, "element.create", wall)
+        .await
+        .unwrap();
+    let (_, names) = stored_wall(&s, &project, &model, "W-900").await;
+    let face = |role: &str| names.iter().find(|n| n.role == role).unwrap().name.clone();
+    let place = |id: &str, role: &str, along: &str| {
+        json!({ "element": id, "host": "W-900", "face": face(role), "along": along,
+                "recipe": kernel_suite::door_of(900, 2100, "x") })
+    };
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "hosted.place",
+        place("D-1", "exterior", "500 mm"),
+    )
+    .await
+    .unwrap();
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "hosted.place",
+        place("D-2", "interior", "2.5 m"),
+    )
+    .await
+    .unwrap();
+    let (two, names) = stored_wall(&s, &project, &model, "W-900").await;
+    holds(&edition, &two, 4000, 2);
+    for (role, name) in kernel_suite::WALL_NAMES {
+        assert!(
+            names.iter().any(|n| n.role == role && n.name == name),
+            "the wall's {role}: {names:?}"
+        );
+    }
+    for (role, name) in kernel_suite::D1_NAMES {
+        let found = names.iter().any(|n| n.role == role && n.name == name);
+        assert_eq!(found, !role.ends_with("sill"), "{role}: {names:?}");
+    }
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(D-1).head",
+            "tool(D-1).jamb.end",
+            "tool(D-1).jamb.start",
+            "tool(D-2).head",
+            "tool(D-2).jamb.end",
+            "tool(D-2).jamb.start"
+        ]
+    );
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "hosted.move",
+        json!({ "element": "D-1", "along": "1000 mm" }),
+    )
+    .await
+    .unwrap();
+    let (moved, after) = stored_wall(&s, &project, &model, "W-900").await;
+    holds(&edition, &moved, 4000, 2);
+    assert_eq!(
+        cut_roles(&after),
+        cut_roles(&names),
+        "the openings keep their names"
+    );
+    assert_ne!(
+        moved.built.result, two.built.result,
+        "the first opening moved with its door"
+    );
+
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "element.delete",
+        json!({ "element": "D-2" }),
+    )
+    .await
+    .unwrap();
+    let (one, names) = stored_wall(&s, &project, &model, "W-900").await;
+    holds(&edition, &one, 4000, 1);
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(D-1).head",
+            "tool(D-1).jamb.end",
+            "tool(D-1).jamb.start"
+        ]
+    );
+
+    let door = s
+        .shape(&anna, &project, &model, &i("D-1"), None)
+        .await
+        .unwrap()
+        .built;
+    let record = s
+        .record(&anna, &project, &model, &one.built.input)
+        .await
+        .unwrap();
+    let mut longer = record.recipe.clone();
+    longer.args.insert("length".to_owned(), json!(6000));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "element.set",
+        json!({ "element": "W-900", "recipe": longer }),
+    )
+    .await
+    .unwrap();
+    let (grown, names) = stored_wall(&s, &project, &model, "W-900").await;
+    holds(&edition, &grown, 6000, 1);
+    assert_eq!(cut_roles(&names).len(), 3);
+    let moved = json!({ "element": "W-900", "placement": { "x": 60_000, "y": 0, "z": 0 } });
+    s.edit(&anna, &project, &model, "element.move", moved)
+        .await
+        .unwrap();
+    let (shifted, _) = stored_wall(&s, &project, &model, "W-900").await;
+    assert_eq!(
+        shifted.built.result, grown.built.result,
+        "a move rebuilds no shape"
+    );
+    let now = s
+        .shape(&anna, &project, &model, &i("D-1"), None)
+        .await
+        .unwrap()
+        .built;
+    assert_eq!(now.input, door.input, "no door was written");
+    assert_ne!(
+        now.cells, door.cells,
+        "the door is indexed where its wall now is"
+    );
+    let refused = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "hosted.place",
+            place("D-3", "exterior", "5500"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(refused.to_string(), "door D-3: it crosses the wall's end");
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 33);
 }
 
 /// A document records the edition it was made on, and a server running another edition doesn't
@@ -325,4 +603,168 @@ fn every_construct_row_of_the_interim_register_names_a_real_test() {
         seen >= 3,
         "the stand-in and the kernel builder's interim places are listed"
     );
+}
+
+/// A wall type's layers and core as `wall.type.create` and `wall.type.layers` take them: the
+/// partition of construct-walls' defaults, its frame `stud` thick.
+fn partition(stud: &str) -> serde_json::Value {
+    let layer = |function: &str, thickness: &str, material: &str, wraps: bool| {
+        json!({ "function": function, "thickness": thickness, "material": material,
+                "wraps": wraps })
+    };
+    json!({ "core": { "exterior": 1, "interior": 2 }, "layers": [
+        layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+        layer("structure", stud, "timber-douglas-fir", false),
+        layer("finish", "12.5 mm", "plasterboard-gypsum", true),
+    ] })
+}
+
+/// A layered wall as the server stored it, its finest display, and its bounds.
+async fn layered(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    wall: &str,
+) -> (ShapeView, Vec<FaceName>, ([i64; 3], [i64; 3])) {
+    s.regenerate(project).await.unwrap();
+    let shown = s
+        .shape(&i("anna"), project, model, &i(wall), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { names, bounds, .. } = &shown.built.result else {
+        panic!("{wall} builds: {:?}", shown.built.result);
+    };
+    let (names, bounds) = (names.clone(), (bounds.min, bounds.max));
+    (shown, names, bounds)
+}
+
+/// Through the server's commands on the kernel: two wall types made, a partition with 12.5 mm
+/// linings drawn along x from level 1 to a level of its own and a concrete wall along y of a
+/// height, each built one solid per layer (the display lists each layer's material); a door
+/// hosted on the partition cuts every layer; the top level moved and a layer thickened build the
+/// partition again, writing no wall; undo and redo of the thickening; and the whole model
+/// rebuilt from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-concrete", "name": "Concrete 200", "assembly": {
+            "core": { "exterior": 0, "interior": 1 },
+            "layers": [{ "function": "structure", "thickness": "200 mm",
+                         "material": "concrete-regular" }] } }),
+    )
+    .await;
+    edit(
+        "level.create",
+        json!({ "level": "L-top", "name": "Head", "elevation": "2.7 m", "storey": false }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-900", "type": "wall-partition", "start": ["50 m", "0"],
+                "end": ["54 m", "0"], "level": "1", "top": "L-top" }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-901", "type": "wall-concrete", "start": ["54 m", "0"],
+                "end": ["54 m", "4 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await;
+
+    let (shown, names, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 2700]));
+    let materials: Vec<&str> = shown
+        .display
+        .as_ref()
+        .unwrap()
+        .parts
+        .iter()
+        .map(|part| part.material.as_str())
+        .collect();
+    assert_eq!(
+        materials,
+        [
+            "plasterboard-gypsum",
+            "timber-douglas-fir",
+            "plasterboard-gypsum"
+        ]
+    );
+    for role in ["exterior", "interior", "face.1", "face.2", "end0", "end1"] {
+        assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
+    }
+    let (concrete, _, bounds) = layered(&s, &project, &model, "W-901").await;
+    assert_eq!(bounds, ([53_900, 0, 0], [54_100, 4000, 2700]));
+    assert_eq!(concrete.display.as_ref().unwrap().parts.len(), 1);
+
+    let exterior = names
+        .iter()
+        .find(|n| n.role == "exterior")
+        .unwrap()
+        .name
+        .clone();
+    edit(
+        "hosted.place",
+        json!({ "element": "D-1", "host": "W-900", "face": exterior, "along": "1200 mm",
+                "recipe": kernel_suite::door_of(900, 2100, "x") }),
+    )
+    .await;
+    let (_, names, _) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(D-1).head",
+            "tool(D-1).jamb.end",
+            "tool(D-1).jamb.start"
+        ]
+    );
+    let wall = s
+        .shape(&anna, &project, &model, &i("W-900"), None)
+        .await
+        .unwrap()
+        .built
+        .input;
+
+    edit(
+        "level.elevation",
+        json!({ "level": "L-top", "elevation": "3 m" }),
+    )
+    .await;
+    let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    edit(
+        "wall.type.layers",
+        json!({ "type": "wall-partition", "assembly": partition("140 mm") }),
+    )
+    .await;
+    let (thicker, names, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -83, 0], [54_000, 83, 3000]));
+    assert_eq!(thicker.built.input, wall, "no wall was written");
+    assert_eq!(cut_roles(&names).len(), 3, "the door still cuts it");
+    edit("edit.undo", json!({})).await;
+    let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    edit("edit.redo", json!({})).await;
+    let (again, _, _) = layered(&s, &project, &model, "W-900").await;
+    assert_eq!(again.built.result, thicker.built.result);
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
 }

@@ -71,6 +71,7 @@ impl Geometry for Prisms {
             deviation: i64::from(lod),
             mesh: mesh.clone(),
             outline: vec![[0, 0], [side, 0], [0, side]],
+            parts: Vec::new(),
         };
         Ok(Built {
             body: format!("prism/{side}/{height}").into_bytes(),

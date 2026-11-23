@@ -9,11 +9,21 @@
 //! its outline is its outer loop, each corner the nearest millimetre, and its deviation is 0 only
 //! when the box is the floor. Interim, as every stand-in shape: its layers and holes are the
 //! kernel's to build (the interim register's row).
+//!
+//! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
+//! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
+//! its layers are the kernel's to build.
+//!
+//! Interim: it cuts no openings. A wall built with the doors hosted in it
+//! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
+//! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
 use crate::floor_plan::{self, FloorPlan};
+use crate::wall_plan::{self, Layered};
 use construct_model::geometry::{
-    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Mesh, Recipe,
+    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Recipe,
 };
+use construct_params::Length;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -167,6 +177,35 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         [hx, hy, hz],
         [lx, hy, hz],
     ];
+    let names = floor_names(&plan);
+    let body = FloorBody {
+        kind: "floor",
+        min,
+        max,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: Mesh {
+                positions: corners.concat(),
+                indices: TRIANGLES.to_vec(),
+            },
+            outline: outline.clone(),
+            parts: Vec::new(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names,
+        displays,
+    })
+}
+
+/// A floor's face names: `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each
+/// loop, in loop order.
+fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
     let mut names = vec![
         FaceName {
             name: "box.top".to_owned(),
@@ -184,26 +223,108 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
             role,
         });
     }
-    let body = FloorBody {
-        kind: "floor",
-        min,
-        max,
+    names
+}
+
+/// The persistent names of a box's faces, one per role: the same six for every box.
+fn box_names() -> Vec<FaceName> {
+    ROLES
+        .iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role: (*role).to_owned(),
+        })
+        .collect()
+}
+
+/// The persistent names of the faces `recipe` builds, without building it: what a hosted element
+/// names its host's face by.
+///
+/// # Errors
+///
+/// As [`Geometry::build`]: a recipe it cannot build has no faces.
+pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if floor_plan::is_floor(recipe) {
+        return Ok(floor_names(&FloorPlan::of(recipe)?));
+    }
+    if wall_plan::is_layered(recipe) {
+        Layered::of(recipe)?;
+    } else {
+        size_of(recipe)?;
+    }
+    Ok(box_names())
+}
+
+/// A layered wall's body, as the stand-in stores it: its outer outline and its height, in whole
+/// millimetres.
+#[derive(Serialize)]
+struct WallBody {
+    kind: &'static str,
+    outline: Vec<[i64; 2]>,
+    height: i64,
+}
+
+/// A layered wall as one box of its whole thickness: the prism on its outer outline, the strip
+/// from its exterior face to its interior face ([`crate::wall_plan`]), each corner the nearest
+/// whole millimetre, from its base to its top. Its bounds are rounded outward.
+fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let wall = Layered::of(recipe)?;
+    let (exterior, interior) = wall.outer();
+    let (corners, _) = wall.plan.strip(exterior, interior)?;
+    let mut rounded = false;
+    let mut near = |steps: i64| {
+        let (mm, exact) = wall_plan::nearest_mm(steps);
+        rounded |= !exact;
+        mm
+    };
+    let outline: Vec<[i64; 2]> = corners.iter().map(|&[x, y]| [near(x), near(y)]).collect();
+    let height = near(wall.height);
+    let deviation = i64::from(rounded);
+    let mut positions = Vec::with_capacity(24);
+    for z in [0, height] {
+        for &[x, y] in &outline {
+            positions.extend([x, y, z]);
+        }
+    }
+    let (mut min, mut max) = ([0, 0, 0], [0, 0, wall.height]);
+    for axis in 0..2 {
+        let values = corners.iter().filter_map(|c| c.get(axis).copied());
+        if let (Some(lo), Some(hi)) = (values.clone().min(), values.max())
+            && let (Some(l), Some(h)) = (min.get_mut(axis), max.get_mut(axis))
+        {
+            (*l, *h) = (lo, hi);
+        }
+    }
+    let per = Length::STEPS_PER_MM;
+    let floor = |s: i64| s.checked_div_euclid(per).unwrap_or(0);
+    let ceil = |s: i64| match s.checked_rem_euclid(per) {
+        Some(0) => floor(s),
+        _ => floor(s).saturating_add(1),
+    };
+    let body = WallBody {
+        kind: "wall",
+        outline: outline.clone(),
+        height,
     };
     let displays = (0..2)
         .map(|lod| Display {
             lod,
             deviation,
             mesh: Mesh {
-                positions: corners.concat(),
+                positions: positions.clone(),
                 indices: TRIANGLES.to_vec(),
             },
             outline: outline.clone(),
+            parts: Vec::new(),
         })
         .collect();
     Ok(Built {
         body: serde_json::to_vec(&body).unwrap_or_default(),
-        bounds: Bounds { min, max },
-        names,
+        bounds: Bounds {
+            min: min.map(floor),
+            max: max.map(ceil),
+        },
+        names: box_names(),
         displays,
     })
 }
@@ -222,16 +343,13 @@ impl Geometry for Boxes {
         if floor_plan::is_floor(recipe) {
             return floor(recipe);
         }
+        if wall_plan::is_layered(recipe) {
+            return layered(recipe);
+        }
         let size = size_of(recipe)?;
         let [w, d, _] = size;
         let body = serde_json::to_vec(&BoxBody { kind: "box", size }).unwrap_or_default();
-        let names = ROLES
-            .iter()
-            .map(|role| FaceName {
-                name: format!("box.{role}"),
-                role: (*role).to_owned(),
-            })
-            .collect();
+        let names = box_names();
         let outline = vec![[0, 0], [w, 0], [w, d], [0, d]];
         // A box has no finer or coarser form, so both levels are the same shape. The kernel's
         // levels will differ: their bytes do here too, so the records already stand apart.
@@ -241,6 +359,7 @@ impl Geometry for Boxes {
                 deviation: 0,
                 mesh: mesh(size),
                 outline: outline.clone(),
+                parts: Vec::new(),
             })
             .collect();
         Ok(Built {
@@ -252,6 +371,13 @@ impl Geometry for Boxes {
             names,
             displays,
         })
+    }
+
+    /// Interim (the module header): the stand-in cuts no openings, so a host is built alone,
+    /// whatever is hosted in it, exactly as [`Geometry::build`] builds it.
+    fn build_hosting(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        let _ = hosted;
+        self.build(host)
     }
 }
 
@@ -304,6 +430,99 @@ mod tests {
             Boxes.build(&recipe("block", args)).unwrap_err().code,
             "EmptyShape"
         );
+    }
+
+    /// The stand-in cuts no openings: a wall with a door hosted in it is the wall alone, byte for
+    /// byte, and its faces are named without building it as building names them.
+    #[test]
+    fn a_wall_with_a_door_is_the_wall_alone() {
+        let wall = recipe(
+            "wall.straight",
+            json!({ "length": 3000, "thickness": 200, "height": 2700 }),
+        );
+        let door = recipe(
+            "door.single",
+            json!({ "width": 900, "thickness": 200, "height": 2100 }),
+        );
+        let at = construct_model::element::Placement {
+            x: 1000,
+            y: 0,
+            z: 0,
+        };
+        let hosted = [Hosted {
+            key: "D-1",
+            recipe: &door,
+            at,
+        }];
+        let alone = Boxes.build(&wall).unwrap();
+        assert_eq!(Boxes.build_hosting(&wall, &hosted).unwrap(), alone);
+        assert_eq!(names(&wall).unwrap(), alone.names);
+        assert_eq!(
+            names(&recipe("stair.spiral", json!({}))).unwrap_err().code,
+            "UnknownOperation"
+        );
+    }
+
+    fn q0(steps: i64) -> String {
+        construct_params::Value::Length(Length::from_steps(steps)).stored()
+    }
+
+    /// The default partition (12.5, 90, 12.5 mm) on a line from `start` to `end` in steps, 2700
+    /// mm high, centred on its line.
+    fn partition(start: [i64; 2], end: [i64; 2]) -> Recipe {
+        let layer = |f: &str, a: i64, b: i64| json!({ "function": f, "material": "m", "exterior": q0(a), "interior": q0(b) });
+        recipe(
+            "wall.layered",
+            json!({
+                "start": [q0(start[0]), q0(start[1])],
+                "end": [q0(end[0]), q0(end[1])],
+                "height": q0(17_280_000),
+                "layers": [
+                    layer("finish", 368_000, 288_000),
+                    layer("structure", 288_000, -288_000),
+                    layer("finish", -288_000, -368_000),
+                ],
+            }),
+        )
+    }
+
+    /// A layered wall is one box of its whole thickness: the prism on its outer outline, each
+    /// corner the nearest millimetre (57.5 mm rounds away from zero), its bounds rounded outward,
+    /// named as a box is; a layered wall at an angle is its outer parallelogram. Its recorded
+    /// bytes never change within an edition.
+    #[test]
+    fn a_layered_wall_is_one_box_of_its_whole_thickness() {
+        let wall = partition([0, 0], [25_600_000, 0]);
+        let built = Boxes.build(&wall).unwrap();
+        let outline = vec![[0, -58], [4000, -58], [4000, 58], [0, 58]];
+        assert_eq!(built.displays[0].outline, outline);
+        assert_eq!(built.displays[0].deviation, 1);
+        assert_eq!(built.bounds.min, [0, -58, 0]);
+        assert_eq!(built.bounds.max, [4000, 58, 2700]);
+        assert_eq!(built.names, box_names());
+        assert_eq!(names(&wall).unwrap(), built.names);
+        assert_eq!(
+            built.body,
+            br#"{"kind":"wall","outline":[[0,-58],[4000,-58],[4000,58],[0,58]],"height":2700}"#
+        );
+        assert_eq!(built.displays[0].mesh.positions.len(), 24);
+        assert_eq!(built.displays[1].mesh, built.displays[0].mesh);
+        // A 3-4-5 wall from the origin: its exterior face is (46, -34.5) mm off its line.
+        let angled = Boxes
+            .build(&partition([0, 0], [15_360_000, 20_480_000]))
+            .unwrap();
+        assert_eq!(
+            angled.displays[0].outline,
+            vec![[46, -35], [2446, 3166], [2354, 3235], [-46, 35]]
+        );
+        assert_eq!(angled.bounds.min, [-46, -35, 0]);
+        assert_eq!(angled.bounds.max, [2446, 3235, 2700]);
+        let mut unfilled = wall;
+        unfilled
+            .args
+            .insert("layers".to_owned(), json!({ "wall": "type" }));
+        assert_eq!(Boxes.build(&unfilled).unwrap_err().code, "Unfilled");
+        assert_eq!(names(&unfilled).unwrap_err().code, "Unfilled");
     }
 
     /// A filled floor: the L-shaped floor of 8 m by 8 m less its notch, with a 2 m square hole,
@@ -378,6 +597,7 @@ mod tests {
         assert_eq!(roles.len(), 2 + 6 + 4);
         assert_eq!(&roles[..3], ["top", "bottom", "side.e0"]);
         assert_eq!(l.names[2].name, "box.side.e0");
+        assert_eq!(names(&floor_of(false)).unwrap(), l.names);
         let mut unfilled = floor_of(true);
         unfilled
             .args
