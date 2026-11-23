@@ -176,6 +176,57 @@ pub(crate) async fn host_for<T: Txn>(
     }))
 }
 
+/// The floor `host`, checked: in this document, a floor, and its top face, which an opening drawn
+/// in its plan is hosted on. The inner error is the refusal, in words.
+pub(crate) async fn floor_for<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    host: &Id,
+) -> Result<Result<Host, String>, StoreError> {
+    let Some((_, record)) = records::read_element(txn, project, document, host).await? else {
+        return Ok(Err(format!(
+            "There is no element {host} in this model to hold an opening."
+        )));
+    };
+    if !is_floor(&record) {
+        return Ok(Err(format!(
+            "{} is not a floor: an opening is drawn in a floor's plan.",
+            record.name
+        )));
+    }
+    let recipe = match levels::recipe_at(txn, project, document, &record, At::Now).await? {
+        Ok(recipe) => recipe,
+        Err(e) => {
+            return Ok(Err(format!(
+                "{} can't be built: {}",
+                record.name, e.message
+            )));
+        }
+    };
+    let Some(edition) = edition_of(txn, project, document).await? else {
+        return Ok(Err("That model is not in this project.".to_owned()));
+    };
+    let names = match construct_regen::face_names(&edition, &recipe) {
+        Ok(names) => names,
+        Err(e) => return Ok(Err(format!("{}: {}", record.name, e.message))),
+    };
+    let Some(face) = names.into_iter().find(|n| n.role == "top") else {
+        return Ok(Err(format!("{} has no top face.", record.name)));
+    };
+    Ok(Ok(Host {
+        record,
+        recipe,
+        face,
+        edition,
+    }))
+}
+
+/// Whether `record` is a floor: its recipe is a floor's.
+pub(crate) fn is_floor(record: &Element) -> bool {
+    construct_regen::floor_plan::is_floor(&record.recipe)
+}
+
 /// Where `element` sits in `host`'s frame, from the records as they are now. The inner error is
 /// the refusal, in the words of what refused it.
 async fn frame_at<T: Txn>(
@@ -427,6 +478,10 @@ async fn move_along<T: Txn>(
     let up = match (&args.up, &hosting) {
         (Some(typed), _) => length("The offset up its host", typed),
         (None, Hosting::OnFace { up, .. }) => Ok(*up),
+        (None, Hosting::InPlan { .. }) => Err(format!(
+            "{} is drawn in its floor's plan: change its outline to move it.",
+            before.name
+        )),
         (None, Hosting::ByPosition { .. }) => {
             match frame_at(txn, project, document, &host, &before, &hosting).await? {
                 Ok((_, at)) => Length::checked_from_mm(at.z)

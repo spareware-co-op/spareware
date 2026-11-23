@@ -31,6 +31,11 @@ libm = "0.2.16"
 # Exact square roots of products too wide for 128 bits: a face's height along a slope and a
 # slope's true area (src/exact.rs). MIT OR Apache-2.0.
 num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
+# Exact fractions for where a roof's planes meet, before they are put on the grid (src/solve.rs).
+# MIT OR Apache-2.0.
+num-rational = "0.4.2"
+# The traits of those numbers (zero, sign, conversion). MIT OR Apache-2.0.
+num-traits = { version = "0.2.19", default-features = false, features = ["std"] }
 # The stored text is JSON. MIT OR Apache-2.0.
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
