@@ -1,6 +1,6 @@
 //! Where a roof is: its eaves outline, the height of each of its layer faces, each layer as the
-//! solid the builder asks the engine for, its ridge, and its exact areas and volumes, every corner
-//! a point of the kernel's grid in the roof's own frame.
+//! solid the builder asks the engine for, its ridge, its planes and lines, and its exact areas and
+//! volumes, every corner a point of the kernel's grid in the roof's own frame.
 //!
 //! **The frame.** Plan `x` and `y` are the model's, in grid steps; `z = 0` is the roof's base, its
 //! level's elevation plus its offset (its built row holds that height). The roof's bottom face
@@ -20,30 +20,48 @@
 //! along x or y moved square to itself, its corners where the moved edges meet, every one a grid
 //! point); each layer is that outline extruded straight up from its lower face to its upper face.
 //!
-//! **Mono-pitch and gable.** In the frame of the eaves edge `E` (`a` across the footprint from
-//! `E` toward the opposite edge, `b` along `E` from its start), the footprint is `0 <= a <= W` and
-//! `0 <= b <= L`. The bottom face is the plane `z = s a` (mono), or `z = s a` up to the ridge and
-//! `z = s (W - a)` beyond it (gable), with the eaves, high side and verges cut plumb (upright):
+//! **Mono-pitch and gable** (on a rectangle along the axes). In the frame of the eaves edge `E`
+//! (`a` across the footprint from `E` toward the opposite edge, `b` along `E` from its start), the
+//! footprint is `0 <= a <= W` and `0 <= b <= L`. The bottom face is the plane `z = s a` (mono), or
+//! `z = s a` up to the ridge and `z = s' (W - a)` beyond it (gable, `s'` the far edge's slope),
+//! with the eaves, high side and verges cut plumb (upright):
 //! - the eaves at `a = -o(E)`, the far side at `a = W + o(far)`, the verges at `b = -o(start)` and
 //!   `b = L + o(end)`, each `o` that edge's overhang;
-//! - the ridge of a gable at `a = W / 2`, the nearest step a half up, and its height the nearest
-//!   step to `s W / 2`; each eaves corner's height the nearest step to the plane's height there.
-//!   Those are the only corners rounded, each once; every other corner is one of them moved up by
-//!   a face's whole height, so a gable's two slopes meet at its ridge exactly in every face.
+//! - a gable's ridge on each face where its two slopes meet: for a face standing `u` and `u'`
+//!   upright above the bottom face on each slope, at `a = (s' W + u' - u) / (s + s')`, the nearest
+//!   step a half up, and the nearest step to `s a + u` high (worked exactly, [`crate::solve`]'s
+//!   `gable_ridge`); at one slope that is midway, `a = W / 2`, at `s W / 2 + u` on every face;
+//!   each eaves corner's height the nearest step to the plane's height there, moved up by the
+//!   face's whole height. Those are the only corners rounded, each once, so a gable's two slopes
+//!   meet at its ridge exactly in every face.
 //! - Each layer is the solid between its two faces: its section across the roof (a parallelogram,
 //!   or a gable's six-sided chevron) at one verge, lofted straight to the same section at the
 //!   other ([`Solid::Loft`]).
 //!
-//! **Exact readings.** Plan area: the eaves outline's, exact. Slope area: the top face as laid, the
-//! plan area times `sqrt(1 + s^2)`, the nearest square step once; a flat roof's is its plan area.
-//! Each layer's volume is the solid's exactly, from its grid corners: a flat layer's plan area
-//! times its height, a sloped layer's section area times its length between the verges. An area or
-//! volume that falls between two whole square or cubic steps is refused ([`RoofError::NotExact`]);
-//! corners on the hundredth of a millimetre never meet it.
+//! **Solved** (every other sloped roof, [`crate::solve`]): the bottom face is cut into flat
+//! pieces, each in one sloped edge's plane, every corner on the grid; the slopes rise at one
+//! pitch, so a face `h` square to the bottom face stands one height above it on every plane, and
+//! each layer is the union of its pieces, each piece moved up to the layer's lower face and
+//! extruded straight up to its upper face ([`Solid::Unite`]). Pieces meet side to side, so the
+//! union is one solid.
+//!
+//! **Planes and lines** ([`Plane`], [`Line`]) are of the top face: each plane the edge it rises
+//! from and its pieces; each line a ridge, hip, valley, eave or verge with its two ends.
+//!
+//! **Exact readings.** Plan area: the eaves outline's, exact (a solved roof's: its pieces', which
+//! are its outline's). Slope area: the top face as laid, the plan area times `sqrt(1 + s^2)`, the
+//! nearest square step once, for a mono-pitch roof or a gable as a whole (as version 1 gives it)
+//! and for a solved roof plane by plane, its whole their sum; each plane's own is its plan area's,
+//! the nearest square step. A flat roof's is its plan area. Each layer's volume is the solid's
+//! exactly, from its grid corners: a flat or solved layer's plan area times its upright height, a
+//! sloped layer's section area times its length between the verges. An area or volume that falls
+//! between two whole square or cubic steps is refused ([`RoofError::NotExact`]); corners on the
+//! hundredth of a millimetre never meet it.
 
 use crate::error::RoofError;
-use crate::exact::{along, height, on_grid, round_half_up};
+use crate::exact::{along, height, on_grid};
 use crate::roof::{EdgeSpec, Form, Roof, on_axis};
+use crate::solve::{self, Line, LineKind, Solution, gable_ridge};
 use construct_params::{Area, Length, Slope, Volume};
 use construct_slabs::{Boundary, Corner, Layers, SlabError};
 use construct_solver::Point;
@@ -64,6 +82,15 @@ pub enum Solid {
     Loft {
         /// The two sections, each in an upright plane across the roof.
         sections: [Vec<[i64; 3]>; 2],
+    },
+    /// A solved layer: each profile (a flat piece of its lower face, anticlockwise from above)
+    /// extruded by `by`, straight up, and the solids united in their order, each sharing a side
+    /// with one before it.
+    Unite {
+        /// The profiles.
+        profiles: Vec<Vec<[i64; 3]>>,
+        /// The vector each is extruded along.
+        by: [i64; 3],
     },
 }
 
@@ -89,6 +116,19 @@ pub struct Ridge {
     pub height: Length,
 }
 
+/// One plane of a roof's top face.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Plane {
+    /// The footprint edge it rises from; none for a flat roof's one plane.
+    pub edge: Option<Id>,
+    /// Its flat pieces, each anticlockwise from above, every corner in grid steps.
+    pub pieces: Vec<Vec<[i64; 3]>>,
+    /// The area it covers in plan, exact.
+    pub plan_area: Area,
+    /// Its area as laid: the plan area times `sqrt(1 + s^2)`, the nearest square step.
+    pub slope_area: Area,
+}
+
 /// A roof's shape for a set of layers ([`shape`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shape {
@@ -98,7 +138,7 @@ pub struct Shape {
     /// that starts there (the outline's edge beside it).
     pub outline: Vec<(Id, [i64; 2])>,
     /// The upright height of each layer face above the bottom face, top face first and the bottom
-    /// face (0) last: `n + 1` of them for `n` layers.
+    /// face (0) last: `n + 1` of them for `n` layers (on a gable, on its first slope).
     pub faces: Vec<Length>,
     /// Each layer with a thickness, top first; a layer of none (a membrane) is a face between its
     /// neighbours and has no solid.
@@ -109,13 +149,22 @@ pub struct Shape {
     pub plan_area: Area,
     /// The area of its top face as laid on its slopes.
     pub slope_area: Area,
+    /// The planes of its top face, in the footprint's order.
+    pub planes: Vec<Plane>,
+    /// The lines of its top face: ridges, hips, valleys, eaves and verges, by kind, then by their
+    /// ends.
+    pub lines: Vec<Line>,
+    /// The height of its top face's highest point above its base.
+    pub height: Length,
 }
 
-/// A sloped roof in the frame of its first eaves edge.
+/// A mono-pitch roof or gable in the frame of its first eaves edge.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Sloped {
-    /// The slope it rises at.
+    /// The slope it rises at from its first eaves edge.
     slope: Slope,
+    /// A gable's far eaves' slope.
+    far: Option<Slope>,
     /// The eaves edge's start, its unit direction `t` and the unit direction `n` across the
     /// footprint (to the left of `t`), in plan.
     origin: [i64; 2],
@@ -123,17 +172,20 @@ struct Sloped {
     n: [i64; 2],
     /// The verges, along `t`: from `b[0]` to `b[1]`.
     b: [i64; 2],
-    /// The bottom face's corners across the roof, `(a, z)`: the eaves and the far side for a mono
-    /// roof, the two eaves with the ridge between them for a gable.
-    bottom: Vec<(i64, i64)>,
+    /// The footprint's width across, `W`.
+    wide: i64,
+    /// The eaves and the far side across, `(a, z)` on the bottom face.
+    low: (i64, i64),
+    high: (i64, i64),
 }
 
-/// What a roof's shape is before its layers: its eaves outline and, sloped, its frame. Making one
-/// is every check the shape needs, so [`Roof::new`] makes one.
+/// What a roof's shape is before its layers: its eaves outline and, sloped, its frame or its
+/// solved bottom face. Making one is every check the shape needs, so [`Roof::new`] makes one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Plan {
     outline: Vec<(Id, [i64; 2])>,
     sloped: Option<Sloped>,
+    solved: Option<Solution>,
     area: Area,
 }
 
@@ -185,6 +237,7 @@ impl Plan {
             Form::Gable {
                 eaves: [first, second],
             } => Self::sloped(&corners, first, Some(second)),
+            Form::Solved { eaves } => Self::solved(&corners, eaves),
         }
     }
 
@@ -247,18 +300,11 @@ impl Plan {
                 return Err(RoofError::OverhangFolds { edge: id.clone() });
             }
         }
-        let first = outline.first().map(|(id, _)| id.clone());
-        let boundary = outline_boundary(&outline).map_err(|e| match e {
-            SlabError::Crossing { first, .. } => RoofError::OverhangFolds { edge: first },
-            SlabError::OutOfRange => RoofError::OutOfRange,
-            _ => first.map_or(RoofError::OutOfRange, |edge| RoofError::OverhangFolds {
-                edge,
-            }),
-        })?;
-        let area = construct_slabs::area(&boundary)?;
+        let area = outline_area(&outline)?;
         Ok(Plan {
             outline,
             sloped: None,
+            solved: None,
             area,
         })
     }
@@ -277,6 +323,10 @@ impl Plan {
         let ((_, start_point, own), (_, end_point, end), (_, _, opposite), (_, last_point, start)) =
             (corner(0)?, corner(1)?, corner(2)?, corner(3)?);
         let slope = own.pitch.ok_or(RoofError::OutOfRange)?.checked(eaves)?;
+        let far_slope = match far {
+            Some(far) => Some(opposite.pitch.ok_or(RoofError::OutOfRange)?.checked(far)?),
+            None => None,
+        };
         let along = unit(*start_point, *end_point);
         let across = [along[1].saturating_neg(), along[0]];
         let dot = |p: Point, d: [i64; 2]| -> Result<i64, RoofError> {
@@ -301,18 +351,41 @@ impl Plan {
         };
         let verges = [out(start)?, add(long, end.overhang.steps())?];
         let (a_lo, a_hi) = (out(own)?, add(wide, opposite.overhang.steps())?);
-        let bottom = match far {
-            None => mono_bottom(slope, a_lo, a_hi, eaves)?,
-            Some(far) => gable_bottom(slope, wide, (a_lo, out(opposite)?, a_hi), [eaves, far])?,
+        let z_lo = height(slope, a_lo)?;
+        let z_hi = match far_slope {
+            None => height(slope, a_hi)?,
+            Some(far_slope) => height(far_slope, out(opposite)?)?,
         };
         let sloped = Sloped {
             slope,
+            far: far_slope,
             origin: [start_point.x, start_point.y],
             t: along,
             n: across,
             b: verges,
-            bottom,
+            wide,
+            low: (a_lo, z_lo),
+            high: (a_hi, z_hi),
         };
+        // The bottom face rises: a mono-pitch roof to its high side, a gable to its ridge.
+        match (far, sloped.chevron(0, 0)?.as_slice()) {
+            (None, _) if z_hi <= z_lo => {
+                return Err(RoofError::TooShallow {
+                    edge: eaves.clone(),
+                });
+            }
+            (Some(far), [_, (ridge, z_ridge), _]) => {
+                if *ridge <= 0 || *ridge >= wide || *z_ridge <= z_lo {
+                    return Err(RoofError::TooShallow {
+                        edge: eaves.clone(),
+                    });
+                }
+                if *z_ridge <= z_hi {
+                    return Err(RoofError::TooShallow { edge: far.clone() });
+                }
+            }
+            _ => {}
+        }
         // The eaves outline, in the footprint's order: corner k after the eaves edge's start.
         let mut outline = Vec::with_capacity(4);
         for (j, (id, _, _)) in corners.iter().enumerate() {
@@ -332,55 +405,52 @@ impl Plan {
         Ok(Plan {
             outline,
             sloped: Some(sloped),
+            solved: None,
+            area,
+        })
+    }
+
+    /// A solved roof's plan ([`crate::solve`]), its sloped edges `eaves` at one slope.
+    fn solved(corners: &[(Id, Point, EdgeSpec)], eaves: &[Id]) -> Result<Plan, RoofError> {
+        let first = eaves.first().ok_or(RoofError::OutOfRange)?;
+        let slope = corners
+            .iter()
+            .find(|(id, _, _)| id == first)
+            .and_then(|(_, _, spec)| spec.pitch)
+            .ok_or(RoofError::OutOfRange)?
+            .checked(first)?;
+        let solution = solve::solve(corners, slope)?;
+        let area = half_area(solution.twice_area)?;
+        Ok(Plan {
+            outline: solution.outline.clone(),
+            sloped: None,
+            solved: Some(solution),
             area,
         })
     }
 }
 
-/// A mono-pitch roof's bottom face across it, `(a, z)`: its eaves at `a_lo` and its high side at
-/// `a_hi`, each height the nearest step to the plane's.
-fn mono_bottom(
-    slope: Slope,
-    a_lo: i64,
-    a_hi: i64,
-    eaves: &Id,
-) -> Result<Vec<(i64, i64)>, RoofError> {
-    let (z_lo, z_hi) = (height(slope, a_lo)?, height(slope, a_hi)?);
-    if z_hi <= z_lo {
-        return Err(RoofError::TooShallow {
-            edge: eaves.clone(),
-        });
+/// Half of twice an area: refused when it falls between two square steps.
+fn half_area(twice: i128) -> Result<Area, RoofError> {
+    if twice.checked_rem(2) != Some(0) {
+        return Err(RoofError::NotExact);
     }
-    Ok(vec![(a_lo, z_lo), (a_hi, z_hi)])
+    Ok(Area::from_square_steps(
+        twice.checked_div(2).ok_or(RoofError::OutOfRange)?,
+    ))
 }
 
-/// A gable's bottom face across it, `(a, z)`: its first eaves at `a_lo`, its ridge midway over the
-/// footprint `wide` steps across, its far eaves at `a_hi`, `far_out` steps past the far edge
-/// (negative, as `a_lo` is); each height the nearest step to its plane's.
-fn gable_bottom(
-    slope: Slope,
-    wide: i64,
-    (a_lo, far_out, a_hi): (i64, i64, i64),
-    [eaves, far]: [&Id; 2],
-) -> Result<Vec<(i64, i64)>, RoofError> {
-    let ridge = on_grid(round_half_up(i128::from(wide), 2)?)?;
-    let twice_run = i128::from(slope.run())
-        .checked_mul(2)
-        .ok_or(RoofError::OutOfRange)?;
-    let rise = i128::from(slope.rise())
-        .checked_mul(i128::from(wide))
-        .ok_or(RoofError::OutOfRange)?;
-    let z_ridge = on_grid(round_half_up(rise, twice_run)?)?;
-    let (z_lo, z_hi) = (height(slope, a_lo)?, height(slope, far_out)?);
-    if ridge <= 0 || ridge >= wide || z_ridge <= z_lo {
-        return Err(RoofError::TooShallow {
-            edge: eaves.clone(),
-        });
-    }
-    if z_ridge <= z_hi {
-        return Err(RoofError::TooShallow { edge: far.clone() });
-    }
-    Ok(vec![(a_lo, z_lo), (ridge, z_ridge), (a_hi, z_hi)])
+/// The area of an eaves outline, checked as a construct-slabs boundary.
+fn outline_area(outline: &[(Id, [i64; 2])]) -> Result<Area, RoofError> {
+    let first = outline.first().map(|(id, _)| id.clone());
+    let boundary = outline_boundary(outline).map_err(|e| match e {
+        SlabError::Crossing { first, .. } => RoofError::OverhangFolds { edge: first },
+        SlabError::OutOfRange => RoofError::OutOfRange,
+        _ => first.map_or(RoofError::OutOfRange, |edge| RoofError::OverhangFolds {
+            edge,
+        }),
+    })?;
+    Ok(construct_slabs::area(&boundary)?)
 }
 
 impl Sloped {
@@ -389,47 +459,133 @@ impl Sloped {
         plus(plus(self.origin, times(self.n, a)?)?, times(self.t, b)?)
     }
 
-    /// The section across the roof at `b` between faces `low` and `high` (upright heights above
-    /// the bottom face): the lower face's corners across, then the upper face's back.
-    fn section(&self, b: i64, low: i64, high: i64) -> Result<Vec<[i64; 3]>, RoofError> {
-        let mut out = Vec::with_capacity(self.bottom.len().saturating_mul(2));
-        let lifted = |(a, z): (i64, i64), up: i64| -> Result<[i64; 3], RoofError> {
+    /// A face's corners across the roof, `(a, z)`, the face standing `up` steps upright above the
+    /// bottom face on the first slope and `far_up` on a gable's far one: the eaves and the far
+    /// side for a mono-pitch roof, the two eaves with the ridge between them for a gable.
+    fn chevron(&self, up: i64, far_up: i64) -> Result<Vec<(i64, i64)>, RoofError> {
+        let (a_lo, z_lo) = self.low;
+        let (a_hi, z_hi) = self.high;
+        Ok(match self.far {
+            None => vec![(a_lo, add(z_lo, up)?), (a_hi, add(z_hi, up)?)],
+            Some(far) => {
+                let ridge = gable_ridge(self.slope, far, self.wide, up, far_up)?;
+                vec![(a_lo, add(z_lo, up)?), ridge, (a_hi, add(z_hi, far_up)?)]
+            }
+        })
+    }
+
+    /// The section across the roof at `b` between the faces `lower` and `upper` ([`chevron`]s):
+    /// the lower face's corners across, then the upper face's back.
+    fn section(
+        &self,
+        b: i64,
+        lower: &[(i64, i64)],
+        upper: &[(i64, i64)],
+    ) -> Result<Vec<[i64; 3]>, RoofError> {
+        let mut out = Vec::with_capacity(lower.len().saturating_add(upper.len()));
+        for &(a, z) in lower.iter().chain(upper.iter().rev()) {
             let [x, y] = self.plan(a, b)?;
-            Ok([x, y, on_grid(i128::from(z).saturating_add(i128::from(up)))?])
-        };
-        for &corner in &self.bottom {
-            out.push(lifted(corner, low)?);
-        }
-        for &corner in self.bottom.iter().rev() {
-            out.push(lifted(corner, high)?);
+            out.push([x, y, z]);
         }
         Ok(out)
     }
 
-    /// Twice the area of the section between faces `low` and `high`, in `(a, z)`: exact.
-    fn twice_section_area(&self, low: i64, high: i64) -> i128 {
-        let points: Vec<(i128, i128)> = self
-            .bottom
-            .iter()
-            .map(|&(a, z)| (i128::from(a), i128::from(z).saturating_add(i128::from(low))))
-            .chain(self.bottom.iter().rev().map(|&(a, z)| {
-                (
-                    i128::from(a),
-                    i128::from(z).saturating_add(i128::from(high)),
-                )
-            }))
-            .collect();
-        let mut twice = 0_i128;
-        for (at, &(a0, z0)) in points.iter().enumerate() {
-            let (a1, z1) = points
-                .get(next(at, points.len(), 1))
-                .copied()
-                .unwrap_or((a0, z0));
-            twice =
-                twice.saturating_add(a0.saturating_mul(z1).saturating_sub(a1.saturating_mul(z0)));
+    /// The top face's planes and lines, from its [`chevron`] `top`, with the edges the roof rises
+    /// from.
+    fn planes(
+        &self,
+        top: &[(i64, i64)],
+        eaves: &[Id],
+    ) -> Result<(Vec<Plane>, Vec<Line>), RoofError> {
+        let [b0, b1] = self.b;
+        let point = |(a, z): (i64, i64), b: i64| -> Result<[i64; 3], RoofError> {
+            let [x, y] = self.plan(a, b)?;
+            Ok([x, y, z])
+        };
+        let mut planes = Vec::new();
+        let mut lines = Vec::new();
+        for (k, pair) in top.windows(2).enumerate() {
+            let [lo, hi] = pair else {
+                continue;
+            };
+            let piece = vec![
+                point(*lo, b0)?,
+                point(*lo, b1)?,
+                point(*hi, b1)?,
+                point(*hi, b0)?,
+            ];
+            let plan_area = Area::from_square_steps(
+                i128::from(sub(b1, b0)?)
+                    .checked_mul(i128::from(sub(hi.0, lo.0)?))
+                    .ok_or(RoofError::OutOfRange)?,
+            );
+            let (edge, slope) = if k == 0 {
+                (eaves.first().cloned(), self.slope)
+            } else {
+                (eaves.get(1).cloned(), self.far.unwrap_or(self.slope))
+            };
+            let laid = along(
+                u128::try_from(plan_area.square_steps()).map_err(|_| RoofError::OutOfRange)?,
+                slope,
+            )?;
+            planes.push(Plane {
+                edge,
+                pieces: vec![piece],
+                plan_area,
+                slope_area: Area::from_square_steps(
+                    i128::try_from(laid).map_err(|_| RoofError::OutOfRange)?,
+                ),
+            });
+            for b in [b0, b1] {
+                lines.push(line(LineKind::Verge, point(*lo, b)?, point(*hi, b)?));
+            }
         }
-        twice
+        if let (Some(first), Some(last)) = (top.first(), top.last()) {
+            lines.push(line(LineKind::Eave, point(*first, b0)?, point(*first, b1)?));
+            let far_kind = if self.far.is_some() {
+                LineKind::Eave
+            } else {
+                LineKind::Verge
+            };
+            lines.push(line(far_kind, point(*last, b0)?, point(*last, b1)?));
+        }
+        if let [_, ridge, _] = top {
+            lines.push(line(
+                LineKind::Ridge,
+                point(*ridge, b0)?,
+                point(*ridge, b1)?,
+            ));
+        }
+        Ok((planes, sorted(lines)))
     }
+}
+
+/// Twice the area of a polygon `(a, z)`: exact.
+fn twice_area_across(points: &[(i64, i64)]) -> i128 {
+    let mut twice = 0_i128;
+    for (&(a0, z0), &(a1, z1)) in points.iter().zip(points.iter().cycle().skip(1)) {
+        let (a0, z0, a1, z1) = (
+            i128::from(a0),
+            i128::from(z0),
+            i128::from(a1),
+            i128::from(z1),
+        );
+        twice = twice.saturating_add(a0.saturating_mul(z1).saturating_sub(a1.saturating_mul(z0)));
+    }
+    twice
+}
+
+/// A line with its ends, the lower first.
+fn line(kind: LineKind, a: [i64; 3], b: [i64; 3]) -> Line {
+    let (from, to) = if a <= b { (a, b) } else { (b, a) };
+    Line { kind, from, to }
+}
+
+/// Lines by kind, then by their ends.
+fn sorted(mut lines: Vec<Line>) -> Vec<Line> {
+    lines.sort_by_key(|line| (line.kind, line.from, line.to));
+    lines.dedup();
+    lines
 }
 
 /// The eaves outline as a construct-slabs boundary, so its own checks judge it.
@@ -444,73 +600,121 @@ fn outline_boundary(outline: &[(Id, [i64; 2])]) -> Result<Boundary, SlabError> {
     Boundary::from_corners(&corners, &[])
 }
 
-/// The shape of `roof` with `layers`, as the module header says.
-///
-/// # Errors
-/// [`RoofError::OutOfRange`] for a corner beyond the kernel's grid; [`RoofError::NotExact`] for a
-/// volume between two cubic steps.
-pub fn shape(roof: &Roof, layers: &Layers) -> Result<Shape, RoofError> {
-    let plan = Plan::of(roof)?;
+/// Each face's upright height above the bottom face on `slope` (`None`: flat), from `layers`.
+fn uprights(layers: &Layers, slope: Option<Slope>) -> Result<Vec<Length>, RoofError> {
     let total = layers.total();
-    // Each face's height above the bottom face, measured square to it, and then upright.
     let mut faces = Vec::with_capacity(layers.depths().len());
     for depth in layers.depths() {
         let square = total.checked_sub(*depth).ok_or(RoofError::OutOfRange)?;
-        let upright = match &plan.sloped {
+        let upright = match slope {
             None => square.steps(),
-            Some(sloped) => {
-                let up = along(u128::from(square.steps().unsigned_abs()), sloped.slope)?;
+            Some(slope) => {
+                let up = along(u128::from(square.steps().unsigned_abs()), slope)?;
                 on_grid(i128::try_from(up).map_err(|_| RoofError::OutOfRange)?)?
             }
         };
         faces.push(Length::from_steps(upright));
     }
+    Ok(faces)
+}
+
+/// `p` moved up by `z`.
+fn lifted(p: [i64; 3], z: i64) -> Result<[i64; 3], RoofError> {
+    Ok([p[0], p[1], add(p[2], z)?])
+}
+
+/// The shape of `roof` with `layers`, as the module header says.
+///
+/// # Errors
+/// [`RoofError::OutOfRange`] for a corner beyond the kernel's grid; [`RoofError::NotExact`] for a
+/// volume between two cubic steps; [`RoofError::TooShallow`] for a gable whose ridge, on a face,
+/// leaves the span between its eaves.
+#[allow(
+    clippy::too_many_lines,
+    reason = "every form's layers, planes and readings, worked in the one order the module header gives"
+)]
+pub fn shape(roof: &Roof, layers: &Layers) -> Result<Shape, RoofError> {
+    let plan = Plan::of(roof)?;
+    let slope = match (&plan.sloped, &plan.solved) {
+        (Some(sloped), _) => Some(sloped.slope),
+        (_, Some(solved)) => Some(solved.slope),
+        _ => None,
+    };
+    let faces = uprights(layers, slope)?;
+    let far_faces = match plan.sloped.as_ref().and_then(|s| s.far) {
+        Some(far) => uprights(layers, Some(far))?,
+        None => faces.clone(),
+    };
+    let eaves = roof.form().eaves();
     let mut solids = Vec::new();
-    for (at, pair) in faces.windows(2).enumerate() {
-        let [high, low] = pair else {
+    let pairs = faces.windows(2).zip(far_faces.windows(2));
+    for (at, (pair, far_pair)) in pairs.enumerate() {
+        let ([high, low], [far_high, far_low]) = (pair, far_pair) else {
             continue;
         };
         let (high, low) = (high.steps(), low.steps());
         if high <= low {
             continue;
         }
-        let (solid, volume) = match &plan.sloped {
-            None => {
-                let profile = plan
-                    .outline
-                    .iter()
-                    .map(|(_, [x, y])| [*x, *y, low])
-                    .collect();
-                let up = sub(high, low)?;
-                let volume = plan
-                    .area
-                    .checked_mul(Length::from_steps(up))
-                    .ok_or(RoofError::OutOfRange)?;
-                (
-                    Solid::Extrude {
-                        profile,
-                        by: [0, 0, up],
-                    },
-                    volume,
-                )
-            }
-            Some(sloped) => {
-                let sections = [
-                    sloped.section(sloped.b[0], low, high)?,
-                    sloped.section(sloped.b[1], low, high)?,
-                ];
-                let length = i128::from(sub(sloped.b[1], sloped.b[0])?);
-                let twice = sloped
-                    .twice_section_area(low, high)
-                    .checked_mul(length)
-                    .ok_or(RoofError::OutOfRange)?;
-                if twice.checked_rem(2) != Some(0) {
-                    return Err(RoofError::NotExact);
+        let (solid, volume) = if let Some(sloped) = &plan.sloped {
+            let lower = sloped.chevron(low, far_low.steps())?;
+            let upper = sloped.chevron(high, far_high.steps())?;
+            for chevron in [&lower, &upper] {
+                if let [(a_lo, z_lo), (ridge, z_ridge), (a_hi, z_hi)] = chevron.as_slice()
+                    && (ridge <= a_lo || ridge >= a_hi || z_ridge <= z_lo || z_ridge <= z_hi)
+                {
+                    return Err(RoofError::TooShallow {
+                        edge: eaves.first().cloned().ok_or(RoofError::OutOfRange)?,
+                    });
                 }
-                let volume =
-                    Volume::from_cubic_steps(twice.checked_div(2).ok_or(RoofError::OutOfRange)?);
-                (Solid::Loft { sections }, volume)
             }
+            let sections = [
+                sloped.section(sloped.b[0], &lower, &upper)?,
+                sloped.section(sloped.b[1], &lower, &upper)?,
+            ];
+            let across: Vec<(i64, i64)> = lower.iter().chain(upper.iter().rev()).copied().collect();
+            let length = i128::from(sub(sloped.b[1], sloped.b[0])?);
+            let twice = twice_area_across(&across)
+                .checked_mul(length)
+                .ok_or(RoofError::OutOfRange)?;
+            if twice.checked_rem(2) != Some(0) {
+                return Err(RoofError::NotExact);
+            }
+            let volume =
+                Volume::from_cubic_steps(twice.checked_div(2).ok_or(RoofError::OutOfRange)?);
+            (Solid::Loft { sections }, volume)
+        } else {
+            let up = sub(high, low)?;
+            let volume = plan
+                .area
+                .checked_mul(Length::from_steps(up))
+                .ok_or(RoofError::OutOfRange)?;
+            let solid = match &plan.solved {
+                None => Solid::Extrude {
+                    profile: plan
+                        .outline
+                        .iter()
+                        .map(|(_, [x, y])| [*x, *y, low])
+                        .collect(),
+                    by: [0, 0, up],
+                },
+                Some(solved) => {
+                    let mut profiles = Vec::with_capacity(solved.pieces.len());
+                    for (_, piece) in &solved.pieces {
+                        profiles.push(
+                            piece
+                                .iter()
+                                .map(|p| lifted(*p, low))
+                                .collect::<Result<Vec<_>, _>>()?,
+                        );
+                    }
+                    Solid::Unite {
+                        profiles,
+                        by: [0, 0, up],
+                    }
+                }
+            };
+            (solid, volume)
         };
         solids.push(LayerSolid {
             layer: at,
@@ -519,23 +723,58 @@ pub fn shape(roof: &Roof, layers: &Layers) -> Result<Shape, RoofError> {
         });
     }
     let top = faces.first().copied().unwrap_or(Length::from_steps(0));
-    let (ridge, slope_area) = match &plan.sloped {
-        None => (None, plan.area),
-        Some(sloped) => {
-            let area =
-                u128::try_from(plan.area.square_steps()).map_err(|_| RoofError::OutOfRange)?;
-            let laid =
-                i128::try_from(along(area, sloped.slope)?).map_err(|_| RoofError::OutOfRange)?;
-            let ridge = match sloped.bottom.as_slice() {
-                [_, (a, z), _] => Some(Ridge {
-                    from: sloped.plan(*a, sloped.b[0])?,
-                    to: sloped.plan(*a, sloped.b[1])?,
-                    height: Length::from_steps(add(*z, top.steps())?),
-                }),
-                _ => None,
-            };
-            (ridge, Area::from_square_steps(laid))
+    let far_top = far_faces.first().copied().unwrap_or(top);
+    let (ridge, slope_area, planes, lines, peak) = if let Some(sloped) = &plan.sloped {
+        let area = u128::try_from(plan.area.square_steps()).map_err(|_| RoofError::OutOfRange)?;
+        let laid = i128::try_from(along(area, sloped.slope)?).map_err(|_| RoofError::OutOfRange)?;
+        let chevron = sloped.chevron(top.steps(), far_top.steps())?;
+        let ridge = match chevron.as_slice() {
+            [_, (a, z), _] => Some(Ridge {
+                from: sloped.plan(*a, sloped.b[0])?,
+                to: sloped.plan(*a, sloped.b[1])?,
+                height: Length::from_steps(*z),
+            }),
+            _ => None,
+        };
+        let peak = chevron.iter().map(|(_, z)| *z).max().unwrap_or(0);
+        let (planes, lines) = sloped.planes(&chevron, &eaves)?;
+        // An uneven gable's slopes are laid at two pitches: its whole is its planes' sum.
+        let laid = match sloped.far {
+            Some(far) if far != sloped.slope => {
+                let mut sum = Area::from_square_steps(0);
+                for plane in &planes {
+                    sum = sum
+                        .checked_add(plane.slope_area)
+                        .ok_or(RoofError::OutOfRange)?;
+                }
+                sum
+            }
+            _ => Area::from_square_steps(laid),
+        };
+        (ridge, laid, planes, lines, peak)
+    } else if let Some(solved) = &plan.solved {
+        let (planes, lines, peak) = solved_planes(roof, solved, top.steps())?;
+        let mut laid = Area::from_square_steps(0);
+        for plane in &planes {
+            laid = laid
+                .checked_add(plane.slope_area)
+                .ok_or(RoofError::OutOfRange)?;
         }
+        (None, laid, planes, lines, peak)
+    } else {
+        let z = top.steps();
+        let piece: Vec<[i64; 3]> = plan.outline.iter().map(|(_, [x, y])| [*x, *y, z]).collect();
+        let mut lines = Vec::with_capacity(piece.len());
+        for (a, b) in piece.iter().zip(piece.iter().cycle().skip(1)) {
+            lines.push(line(LineKind::Eave, *a, *b));
+        }
+        let plane = Plane {
+            edge: None,
+            pieces: vec![piece],
+            plan_area: plan.area,
+            slope_area: plan.area,
+        };
+        (None, plan.area, vec![plane], sorted(lines), z)
     };
     Ok(Shape {
         form: roof.form().clone(),
@@ -545,5 +784,73 @@ pub fn shape(roof: &Roof, layers: &Layers) -> Result<Shape, RoofError> {
         ridge,
         plan_area: plan.area,
         slope_area,
+        planes,
+        lines,
+        height: Length::from_steps(peak),
     })
+}
+
+/// A solved roof's top face: its planes in the footprint's order, its lines, and its highest
+/// point, each the bottom face's moved up by `top`.
+fn solved_planes(
+    roof: &Roof,
+    solved: &Solution,
+    top: i64,
+) -> Result<(Vec<Plane>, Vec<Line>, i64), RoofError> {
+    let mut planes = Vec::new();
+    let mut peak = i64::MIN;
+    for (at, (id, _)) in roof.edges().iter().enumerate() {
+        let mut pieces = Vec::new();
+        let mut twice = 0_i128;
+        for (edge, piece) in &solved.pieces {
+            if *edge != at {
+                continue;
+            }
+            let lifted_piece = piece
+                .iter()
+                .map(|p| lifted(*p, top))
+                .collect::<Result<Vec<_>, _>>()?;
+            for p in &lifted_piece {
+                peak = peak.max(p[2]);
+            }
+            twice = twice
+                .checked_add(solve_twice_area(&lifted_piece)?)
+                .ok_or(RoofError::OutOfRange)?;
+            pieces.push(lifted_piece);
+        }
+        if pieces.is_empty() {
+            continue;
+        }
+        let plan_area = half_area(twice)?;
+        let laid = along(
+            u128::try_from(plan_area.square_steps()).map_err(|_| RoofError::OutOfRange)?,
+            solved.slope,
+        )?;
+        planes.push(Plane {
+            edge: Some(id.clone()),
+            pieces,
+            plan_area,
+            slope_area: Area::from_square_steps(
+                i128::try_from(laid).map_err(|_| RoofError::OutOfRange)?,
+            ),
+        });
+    }
+    let mut lines = Vec::with_capacity(solved.lines.len());
+    for l in &solved.lines {
+        lines.push(line(l.kind, lifted(l.from, top)?, lifted(l.to, top)?));
+    }
+    Ok((planes, sorted(lines), peak.max(top)))
+}
+
+/// Twice a piece's plan area.
+fn solve_twice_area(piece: &[[i64; 3]]) -> Result<i128, RoofError> {
+    let mut sum = 0_i128;
+    for (a, b) in piece.iter().zip(piece.iter().cycle().skip(1)) {
+        let term = i128::from(a[0])
+            .checked_mul(i128::from(b[1]))
+            .and_then(|t| t.checked_sub(i128::from(b[0]).checked_mul(i128::from(a[1]))?))
+            .ok_or(RoofError::OutOfRange)?;
+        sum = sum.checked_add(term).ok_or(RoofError::OutOfRange)?;
+    }
+    Ok(sum)
 }
