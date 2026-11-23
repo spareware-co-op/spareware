@@ -387,7 +387,7 @@
       `<div class="sub">Floor plans</div>${['l1', 'l2'].map((v) => leaf('view', v, VIEWS[v].name, S.screen === 'plan' && S.view === v && !C.openView, 'plan')).join('')}<div class="sub">3D views</div>${leaf('go', '3d', 'Default 3D', S.screen === '3d', 'cube')}${modelViews(leaf)}`,
     );
     if (C.data) tree += group('Project files', projectFiles(leaf));
-    if (C.model) tree += group('Warnings', warningsList());
+    if (C.model) tree += group('Warnings', `<div data-warnings>${warningsList()}</div>`);
     if (C.model) tree += group('Linked models', linkedModels());
     if (C.people) {
       const names = (list) => esc(list.join(', ')) || 'None';
@@ -1940,9 +1940,14 @@
       return;
     }
     if (C.model?.id !== model || seq !== C.warnSeq) return;
+    const same = JSON.stringify(C.warnings) === JSON.stringify(answer.warnings);
     C.warnings = answer.warnings;
+    if (same) return;
     statusBar();
-    drawBrowser();
+    // Only the Warnings part is drawn again, never the whole browser: a person may be typing in it.
+    const part = $('#browser [data-warnings]');
+    if (part) part.innerHTML = warningsList();
+    else drawBrowser();
   }
 
   /** An entry of the log arrived for the open model: read the list again once the entries arriving together have come. */

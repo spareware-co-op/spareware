@@ -2245,6 +2245,7 @@ async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
         }
     }
     assert_eq!(warning_identities(s, &project, &model).await, base);
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {

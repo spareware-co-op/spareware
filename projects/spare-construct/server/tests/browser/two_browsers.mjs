@@ -2196,6 +2196,7 @@ if (withKernel) {
   }
 }
 pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
+
 console.log('\n   Warnings, listed from the server');
 // The page keeps no rules: the count in the status bar and the list in the project browser are what
 // the server's /warnings gives, read again after every entry of the log. On the sound model both
@@ -2205,6 +2206,11 @@ console.log('\n   Warnings, listed from the server');
 // warning back and take it away. Then Ben draws two walls along one line, so they overlap and the
 // other kind appears, naming both; his deleting one clears it, and undo and redo bring it back and
 // away. Anna only reads and chooses; Ben changes everything, so no claim of one is in the other's way.
+// Both browsers go back to the architecture plan of Level 1, as the Rooms section left it.
+for (const page of [anna, ben]) {
+  await toArchitecture(page);
+  await page.click('#browser [data-act="view"][data-a="l1"]');
+}
 const warnCount = (page, n) =>
   page.waitForFunction((want) => document.querySelector('#st-warnings')?.dataset.count === want, String(n));
 const warnRowsAre = (page, kind, n) =>
