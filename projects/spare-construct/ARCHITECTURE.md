@@ -391,6 +391,8 @@ A family is a recipe written as data: parameters, a constrained sketch and solid
 4. Check it: valid solids, clearances, a clean opening cut, and tags reading the right data.
 5. Publish to the shared library with a preview image.
 
+Built so far: `crates/construct-doorgen` (steps 1 to 4 for the single swing, fixed and sliding templates; note CON-A7-F4-P1-door-window-generator).
+
 **Low level**
 
 - Format: text-based (JSON or a small typed language), so diffs, reviews and AI edits work in git.

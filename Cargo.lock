@@ -568,6 +568,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-doorgen"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-families",
+ "construct-materials",
+ "construct-params",
+ "construct-types",
+ "engine-geometry",
+ "jsonschema",
+ "kit-core",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-drawing"
 version = "0.0.0"
 dependencies = [
