@@ -14,11 +14,17 @@
 //!
 //! A roof (`roof`) is one box too: the box around every layer's solid ([`crate::roof_plan`]),
 //! rounded outward to whole millimetres, named `box.<role>` for its outer faces. Its displays draw
-//! each layer as a part: a flat roof's as the box's slice between that layer's faces, as a floor's,
+//! each layer as a part (a solved roof's as each of its pieces drawn as the prism it is): a flat
+//! roof's as the box's slice between that layer's faces, as a floor's,
 //! a sloped roof's as the layer itself, its section cut into quadrilaterals lofted from verge to
 //! verge, each point the nearest millimetre, so a page shows the slopes on either edition.
 //! Interim, as every stand-in shape: its layers as solids are the kernel's to build (the interim
 //! register's row).
+//!
+//! A room (`room`) is one box too: the box around its outer loop from its base up to its height
+//! ([`crate::room_plan`]), outlined by its outer loop, its deviation 0 only when the box is the
+//! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
+//! to build (the interim register's row).
 //!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
@@ -32,6 +38,9 @@
 //! the frame on either edition. Its recipe comes from the library baked in at build time, the
 //! source the browser has too (interim until job 7.6). Its body is the box around them all.
 //!
+//! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
+//! the kernel's edition, with no solid and no face.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
@@ -39,6 +48,7 @@
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
+use crate::room_plan::{self, RoomPlan};
 use crate::wall_plan::{self, Layered};
 use construct_families::{Limits, extents};
 use construct_model::geometry::{
@@ -295,6 +305,31 @@ fn sloped_layers(
     };
     let corner = |list: &[[i64; 3]], k: usize| list.get(k).copied().unwrap_or_default();
     for layer in &plan.layers {
+        if let Some(PlanSolid::Unite { profiles, by }) = &layer.solid {
+            let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+            let mut triangles = 0_usize;
+            for profile in profiles {
+                let low: Vec<[i64; 3]> = profile.iter().map(|p| near(*p)).collect();
+                let high: Vec<[i64; 3]> = profile
+                    .iter()
+                    .map(|p| {
+                        near([
+                            p[0].saturating_add(by[0]),
+                            p[1].saturating_add(by[1]),
+                            p[2].saturating_add(by[2]),
+                        ])
+                    })
+                    .collect();
+                triangles = triangles.saturating_add(prism(&mut mesh, &low, &high)?);
+            }
+            parts.push(Part {
+                material: layer.material.clone(),
+                function: layer.function.clone(),
+                triangles: [start, part_count(triangles)?],
+                outline: outline.to_vec(),
+            });
+            continue;
+        }
         let Some(PlanSolid::Loft {
             sections: [first, second],
         }) = &layer.solid
@@ -358,6 +393,36 @@ fn sloped_layers(
         });
     }
     Ok((mesh, parts))
+}
+
+/// A prism between two rings of one count, `low` anticlockwise from above and `high` the same
+/// ring moved up, appended to `mesh` with every face outward: its two caps fanned from their first
+/// corner and each wall two triangles. The count of its triangles.
+fn prism(mesh: &mut Mesh, low: &[[i64; 3]], high: &[[i64; 3]]) -> Result<usize, GeometryError> {
+    let n = low.len();
+    let at = part_count(mesh.positions.len().checked_div(3).unwrap_or(0))?;
+    for p in low.iter().chain(high) {
+        mesh.positions.extend(*p);
+    }
+    let mut corners: Vec<[usize; 3]> = Vec::new();
+    for k in 1..n.saturating_sub(1) {
+        let next = k.saturating_add(1);
+        corners.push([0, next, k]);
+        corners.push([n, n.saturating_add(k), n.saturating_add(next)]);
+    }
+    for k in 0..n {
+        let next = k.saturating_add(1).checked_rem(n).unwrap_or(0);
+        let (top, top_next) = (n.saturating_add(k), n.saturating_add(next));
+        corners.push([k, next, top_next]);
+        corners.push([k, top_next, top]);
+    }
+    for triangle in &corners {
+        for &k in triangle {
+            mesh.indices
+                .push(at.checked_add(part_count(k)?).ok_or_else(too_many)?);
+        }
+    }
+    Ok(corners.len())
 }
 
 /// The normal of a flat polygon by Newell's sum, its length twice the polygon's area, pointing to
@@ -648,6 +713,83 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A room as one box ([`crate::room_plan`]): the box around its outer loop, its sides rounded
+/// outward to whole millimetres, from its base at 0 up to its height (rounded up). Named
+/// `box.bottom`, `box.top` and `box.side.<k>` for each edge of each loop, in loop order. Its
+/// outline is its outer loop, each corner the nearest millimetre; its deviation is 0 only when the
+/// box is the room, as a floor's; it has no parts (a room is space, of no material).
+fn room(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = RoomPlan::of(recipe)?;
+    let ([x0, y0], [x1, y1]) = plan.extent();
+    let min = [floor_plan::floor_mm(x0), floor_plan::floor_mm(y0), 0];
+    let max = [
+        floor_plan::ceil_mm(x1),
+        floor_plan::ceil_mm(y1),
+        floor_plan::ceil_mm(plan.height),
+    ];
+    let mut rounded = !floor_plan::nearest_mm(plan.height).1;
+    let mut outline = Vec::with_capacity(plan.outer().len());
+    for corner in plan.outer() {
+        let [x, y] = corner.at;
+        let ((x, a), (y, b)) = (floor_plan::nearest_mm(x), floor_plan::nearest_mm(y));
+        rounded |= !(a && b);
+        outline.push([x, y]);
+    }
+    // As a floor's box: it strays by nothing when it is the room, else by at most its plan's
+    // diagonal, and by one millimetre more where a corner or the height was rounded.
+    let deviation = if plan.is_box() {
+        i64::from(rounded)
+    } else {
+        let [w, d] = [
+            i128::from(max[0].saturating_sub(min[0])),
+            i128::from(max[1].saturating_sub(min[1])),
+        ];
+        let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+        let mut root = square.isqrt();
+        if root.saturating_mul(root) < square {
+            root = root.saturating_add(1);
+        }
+        i64::try_from(root)
+            .unwrap_or(i64::MAX)
+            .saturating_add(i64::from(rounded))
+    };
+    let body = FloorBody {
+        kind: "room",
+        min,
+        max,
+    };
+    let mesh = Mesh {
+        positions: box_corners(min, max).concat(),
+        indices: TRIANGLES.to_vec(),
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: Vec::new(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: room_names(&plan),
+        displays,
+    })
+}
+
+/// A room's face names: `box.<role>` for each of [`RoomPlan::roles`].
+fn room_names(plan: &RoomPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -666,6 +808,9 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if construct_openings::is_void(recipe) {
+        return Ok(Vec::new());
+    }
     if families::is_instance(recipe) {
         Instance::of(recipe)?;
         return Ok(Vec::new());
@@ -675,6 +820,9 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     }
     if roof_plan::is_roof(recipe) {
         return Ok(roof_names(&RoofPlan::of(recipe)?));
+    }
+    if room_plan::is_room(recipe) {
+        return Ok(room_names(&RoomPlan::of(recipe)?));
     }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
@@ -805,6 +953,9 @@ impl Geometry for Boxes {
         if let Some(datum) = crate::datum::build(recipe) {
             return datum;
         }
+        if let Some(void) = crate::voids::build(recipe) {
+            return void;
+        }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);
         }
@@ -813,6 +964,9 @@ impl Geometry for Boxes {
         }
         if families::is_instance(recipe) {
             return family(recipe);
+        }
+        if room_plan::is_room(recipe) {
+            return room(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);

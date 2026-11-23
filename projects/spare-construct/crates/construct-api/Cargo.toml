@@ -21,7 +21,9 @@ cloud = [
     "dep:construct-walls",
     "dep:construct-materials",
     "dep:construct-slabs",
+    "dep:construct-openings",
     "dep:construct-roofs",
+    "dep:construct-rooms",
     "dep:construct-phases",
     "dep:construct-doorgen",
 ]
@@ -52,8 +54,12 @@ construct-walls = { path = "../construct-walls", optional = true }
 construct-materials = { path = "../construct-materials", optional = true }
 # The floor type and floor commands: construct-slabs checks every layer and boundary.
 construct-slabs = { path = "../construct-slabs", optional = true }
+# The opening and shaft commands: construct-openings checks every outline and fit.
+construct-openings = { path = "../construct-openings", optional = true }
 # The roof type and roof commands: construct-roofs checks every footprint, form, pitch and overhang.
 construct-roofs = { path = "../construct-roofs", optional = true }
+# The room commands: construct-rooms checks every room.
+construct-rooms = { path = "../construct-rooms", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
 # The generated door and window types: construct-doorgen makes and verifies each before it is stored.

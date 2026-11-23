@@ -381,6 +381,21 @@ impl Context {
     /// # Errors
     /// The refusal of a stored value or of the element's type, in words.
     pub fn view(&self, element: &Element, ty: Option<&ElementType>) -> Result<ElementView, String> {
+        self.view_cut(element, ty, &[])
+    }
+
+    /// [`Context::view`] of a floor cut by `cuts`: the outlines of the openings and shafts that
+    /// pass through it (grid steps, its own frame), so its area, volume and mass are those after
+    /// the cut ([`crate::slabs::read_only_view_cut`]).
+    ///
+    /// # Errors
+    /// As [`Context::view`].
+    pub fn view_cut(
+        &self,
+        element: &Element,
+        ty: Option<&ElementType>,
+        cuts: &[Vec<[i64; 2]>],
+    ) -> Result<ElementView, String> {
         let category = Self::category_of_element(element);
         let mut worked = self.worked(element, ty)?;
         let mut parameters = Vec::new();
@@ -438,7 +453,12 @@ impl Context {
             });
         }
         // A floor's area, perimeter, volume and mass, worked out and never stored.
-        parameters.extend(crate::slabs::read_only_view(element, ty, &self.units));
+        parameters.extend(crate::slabs::read_only_view_cut(
+            element,
+            ty,
+            &self.units,
+            cuts,
+        ));
         // A roof's areas, pitch, ridge, volume and mass, the same way.
         parameters.extend(crate::roofs::read_only_view(element, ty, &self.units));
         Ok(ElementView {

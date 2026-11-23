@@ -16,9 +16,16 @@
 //! - `floor`: one solid per layer of its floor type, each its boundary with its holes extruded
 //!   from the layer's bottom face up to its top, the floor's top face at `z = 0`, in the child
 //!   module `floor` (job 4.3); its lengths are construct-params' steps ([`crate::floor_plan`]).
+//! - Openings and shafts (job 4.2): a plain opening (`opening.wall`) is cut through every layer of
+//!   its wall on the door's path below ([`opening`]); a floor's openings and the shafts passing
+//!   through it are more holes in each layer's profile (the child module `floor`). The void itself
+//!   is drawn by [`crate::voids`], as the stand-in draws it.
 //! - `roof`: one solid per layer of its roof type, each the solid construct-roofs worked out for
 //!   it (a flat layer extruded straight up, a sloped layer lofted from verge to verge), in the
 //!   child module `roof` (job 5.3); its points are construct-params' steps ([`crate::roof_plan`]).
+//! - `room`: one solid, its loop with its holes extruded from its base up to its upper limit, in
+//!   the child module `room` (job 5.4); its lengths are construct-params' steps
+//!   ([`crate::room_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
@@ -97,6 +104,7 @@ mod floor;
 mod layered;
 pub mod opening;
 mod roof;
+mod room;
 
 pub use opening::Hosted;
 
@@ -652,6 +660,9 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if construct_openings::is_void(recipe) {
+        return Ok(Vec::new());
+    }
     if families::is_instance(recipe) {
         // A placed family hosts nothing, so none of its faces is named for a hosted element yet.
         families::Instance::of(recipe)?;
@@ -664,6 +675,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     if crate::roof_plan::is_roof(recipe) {
         let plan = crate::roof_plan::RoofPlan::of(recipe)?;
         return roof::names(op_id(recipe)?, &plan);
+    }
+    if crate::room_plan::is_room(recipe) {
+        let plan = crate::room_plan::RoomPlan::of(recipe)?;
+        return room::names(op_id(recipe)?, &plan);
     }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
@@ -737,6 +752,9 @@ pub fn fits_with(
         let units = Units::on(STEP)?;
         (units, units.band_over(std::iter::empty()))
     };
+    if crate::floor_plan::is_floor(host) {
+        return floor::fits(host, &on_grid(units, hosted)?, units);
+    }
     if wall_plan::is_layered(host) {
         return layered::fits(
             &Layered::of(host)?,
@@ -857,7 +875,7 @@ impl<E: Engine> Kernel<E> {
         hosted: &[Hosted<'_>],
     ) -> Option<Result<Built, GeometryError>> {
         if crate::floor_plan::is_floor(host) {
-            return Some(self.build_floor(host, hosted.len()));
+            return Some(self.build_floor(host, hosted));
         }
         if crate::roof_plan::is_roof(host) {
             return Some(self.build_roof(host, hosted.len()));
@@ -883,6 +901,9 @@ impl<E: Engine> Kernel<E> {
     ) -> Result<Built, GeometryError> {
         if let Some(built) = self.build_other_kind(host, hosted) {
             return built;
+        }
+        if crate::room_plan::is_room(host) {
+            return self.build_room(host, hosted.len());
         }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;
@@ -1153,6 +1174,9 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         if let Some(datum) = crate::datum::build(recipe) {
             return datum;
+        }
+        if let Some(void) = crate::voids::build(recipe) {
+            return void;
         }
         self.build_hosting(recipe, &[])
     }

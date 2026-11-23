@@ -1,0 +1,57 @@
+[package]
+name = "construct-openings"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# The openings category. Same workspace.
+construct-categories = { path = "../construct-categories" }
+# A shaft's base and top are construct-levels' ties, in its record's props. Same workspace.
+construct-levels = { path = "../construct-levels" }
+# An opening's record and its recipe are construct-model's, unchanged. Same workspace.
+construct-model = { path = "../construct-model" }
+# Lengths, areas and volumes, and their stored spelling. Same workspace.
+construct-params = { path = "../construct-params" }
+# An outline is checked, and fitted inside its floor, by the floor's own boundary checks (its
+# `Boundary`: exact orientation tests on the grid), and its area is the floor's measure, so the
+# two can never disagree. Same workspace.
+construct-slabs = { path = "../construct-slabs" }
+# The corners those checks take. Same workspace.
+construct-solver = { path = "../construct-solver" }
+# The category key of a record. Same workspace.
+construct-types = { path = "../construct-types" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# The stored outline is JSON. MIT OR Apache-2.0.
+serde_json = "1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# The kernel's chapter 21 bans live in its own clippy.toml and are not Spare Construct's; these two
+# stay denied so a ban added to projects/spare-construct/clippy.toml is an error at once.
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name.
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
+# may use native arithmetic and casts: each test file allows these four.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# No float is stored or compared here; a float comparison is an error.
+float_cmp = "deny"
