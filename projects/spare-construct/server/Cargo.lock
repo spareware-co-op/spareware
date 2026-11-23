@@ -673,6 +673,7 @@ dependencies = [
  "construct-roofs",
  "construct-rooms",
  "construct-schedules",
+ "construct-sheets",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -875,6 +876,7 @@ dependencies = [
  "construct-roofs",
  "construct-rooms",
  "construct-schedules",
+ "construct-sheets",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -936,6 +938,17 @@ dependencies = [
  "kit-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "construct-sheets"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-styles",
+ "kit-core",
 ]
 
 [[package]]

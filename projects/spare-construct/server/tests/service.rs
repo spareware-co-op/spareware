@@ -2101,4 +2101,111 @@ async fn the_page_lists_schedules_and_their_live_rows() {
         .await
         .unwrap();
     assert_eq!(item.name, "Arch package v12");
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    assert_eq!(s.sheets(&anna, &project, &model).await.unwrap().len(), 0);
+
+    edit(
+        "sheet.create",
+        json!({ "sheet": "SH-1", "number": "A101", "name": "Ground floor plan" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "sheet.create",
+        json!({ "sheet": "SH-2", "number": "A102", "name": "First floor plan",
+                "paper": { "size": "a3", "orientation": "portrait" } }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "viewport.create",
+        json!({ "viewport": "PT-1", "sheet": "SH-1", "view": "VP-1", "x": "300 mm", "y": "300 mm" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "viewport.create",
+        json!({ "viewport": "PT-2", "sheet": "SH-1", "view": "VP-2", "x": "600 mm", "y": "300 mm" }),
+    )
+    .await
+    .unwrap();
+
+    let listed = s.sheets(&anna, &project, &model).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&listed).unwrap(),
+        json!([
+            { "id": "SH-1", "number": "A101", "name": "Ground floor plan", "paper": "a1",
+              "orientation": "landscape", "width": "length:q0:5382400", "height": "length:q0:3801600",
+              "shown": "A1 landscape (841 mm by 594 mm)", "viewports": 2 },
+            { "id": "SH-2", "number": "A102", "name": "First floor plan", "paper": "a3",
+              "orientation": "portrait", "width": "length:q0:1900800", "height": "length:q0:2688000",
+              "shown": "A3 portrait (297 mm by 420 mm)", "viewports": 0 },
+        ])
+    );
+
+    // Each viewport takes its view's scale and an outline from what the plan shows.
+    let first = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+    let shown = serde_json::to_value(&first).unwrap();
+    assert_eq!(shown["sheet"]["number"], "A101");
+    let ports = shown["viewports"].as_array().unwrap();
+    assert_eq!(ports.len(), 2);
+    assert_eq!(ports[0]["id"], "PT-1");
+    assert_eq!(ports[0]["view_name"], "Level 1 plan");
+    assert_eq!(ports[0]["scale"], 100);
+    assert_eq!(ports[0]["x"], "length:q0:1920000");
+    assert_eq!(ports[0]["title"], true);
+    // The plan shows 12,050 by 8,050 mm of walls at 1:100: 120.5 by 80.5 mm on the paper, about the
+    // centre.
+    assert_eq!(
+        ports[0]["outline"],
+        json!({ "min_x": "length:q0:1534400", "min_y": "length:q0:1662400",
+                "max_x": "length:q0:2305600", "max_y": "length:q0:2177600" })
+    );
+    assert_eq!(ports[0]["on_paper"], true);
+
+    // An alignment is data: the second viewport's left edge follows the first's, and the answer
+    // is worked from the views' extents every time it is asked.
+    edit(
+        "viewport.align",
+        json!({ "viewport": "PT-2", "across": { "to": "PT-1", "anchor": "min" } }),
+    )
+    .await
+    .unwrap();
+    let again = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+    let again = serde_json::to_value(&again).unwrap();
+    let ports = again["viewports"].as_array().unwrap();
+    assert_eq!(ports[0]["outline"]["min_x"], ports[1]["outline"]["min_x"]);
+    assert_eq!(
+        ports[1]["align_x"],
+        json!({ "to": "PT-1", "anchor": "min" })
+    );
+
+    // A view that is placed is not deleted, and the record is read back as it was written.
+    assert!(refused(
+        s.edit(
+            &anna,
+            &project,
+            &model,
+            "view.delete",
+            json!({ "view": "VP-1" })
+        )
+        .await
+    ));
+    assert!(refused(s.sheets(&dan, &project, &model).await));
+    assert!(matches!(
+        s.sheet(&anna, &project, &model, &i("SH-9")).await,
+        Err(Refusal::NotFound)
+    ));
+    assert!(matches!(
+        s.sheet(&anna, &project, &model, &i("VP-1")).await,
+        Err(Refusal::NotFound)
+    ));
 }

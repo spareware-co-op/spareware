@@ -253,6 +253,11 @@ fn every_kind_asks_its_category() {
         category_of_kind("schedule"),
         Ok(construct_categories::SCHEDULES)
     );
+    assert_eq!(category_of_kind("sheet"), Ok(construct_categories::SHEETS));
+    assert_eq!(
+        category_of_kind("viewport"),
+        Ok(construct_categories::VIEWPORTS)
+    );
     assert!(category_of_kind("part").is_err());
     assert_eq!(
         category_of_kind("teapot"),

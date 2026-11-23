@@ -856,7 +856,7 @@ async fn target<T: Txn>(
     let Some((hash, record)) = run.element(&id).await? else {
         return Ok(Err("That element no longer exists.".to_owned()));
     };
-    if !records::has_shape(&record) {
+    if !records::has_shape(&record) && record.kind != construct_sheets::SHEET_KIND {
         return Ok(Err(
             "Types, levels and the parameter table are changed by their own commands, not as elements."
                 .to_owned(),
