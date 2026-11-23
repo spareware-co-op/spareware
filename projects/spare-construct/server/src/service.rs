@@ -870,6 +870,30 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .ok_or(Refusal::NotFound)
     }
 
+    /// A view's graphics rules: how each category or subcategory it says anything about looks in
+    /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
+    /// project's object styles say. Read as of the log's head.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a view record cannot be read, saying why.
+    pub async fn graphics(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::views::GraphicsListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        cloud::views::graphics_of(&world, view).ok_or(Refusal::NotFound)
+    }
+
     /// A floor plan drawn from the stored model as of the log's head: the cut edges of what its
     /// cut plane crosses, hatched by material, as the geometry kernel's drawing makes them
     /// ([`crate::plan`]). The page asks for it when a person opens the view and again when the

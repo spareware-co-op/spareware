@@ -21,6 +21,8 @@ construct-spatial = { path = "../construct-spatial" }
 # The view's scale is construct-styles' Scale, and it is what picks a pen's printed width.
 construct-styles = { path = "../construct-styles" }
 kit-core = { path = "../../../kit/crates/kit-core" }
+# A view's graphics rules are JSON text in a record, read and written by derive. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
 # A view's phase settings and an element's staging are JSON text in a record, as the phases crate
 # spells them. MIT OR Apache-2.0.
 serde_json = "1.0.154"

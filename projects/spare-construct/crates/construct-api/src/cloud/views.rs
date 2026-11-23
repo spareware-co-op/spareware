@@ -17,6 +17,8 @@
 //! | `view.set` | `view`, and any of `scale`, `detail`, `level` and `range` (a plan), `from`, `to`, `look` and `depth` (a section or an elevation), `staging`, `phasing` (`null` for none) | The view; nothing at all when it already is so |
 //! | `view.duplicate` | `view`, `new` (the new ID), optional `name` | A view like the first, named `<name> copy` (then `copy 2`...) unless a name is given |
 //! | `view.delete` | `view` | Its pointer goes |
+//! | `view.graphics.set` | `view`, `category`, `edge` (`cut` or `projection`), `style` | One graphics rule of the view |
+//! | `view.graphics.clear` | `view`, `category`, optional `edge` | The rule, or both of the category's rules; nothing at all when there is none |
 //!
 //! The values: `kind` is one of `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`,
 //! `drafting`, `legend`. `scale` is the `n` of 1:n, a whole number from 1 to 1,000,000 (default
@@ -28,6 +30,19 @@
 //! `depth` typed text above zero. `staging` is the phases format's `{"created", "demolished",
 //! "design_option"}` and `phasing` its `{"phase", "filter", "choices"}`. Typed text is read with
 //! construct-params' metric display settings until a project keeps its own: `3.2 m`, `-450`.
+//!
+//! A graphics rule (CON-A8-F3-P2) is how one category or subcategory looks in one view, for what
+//! the view cuts (`cut`) or sees beyond the cut plane (`projection`). `category` is a category's
+//! number, a subcategory's included. `style` holds any of `pen` (a pen's number: the line
+//! weight), `pattern` (a line pattern's number), `colour` (`[red, green, blue]`, each 0 to 255),
+//! `fill` (`{"pattern": <name>, "colour": [r, g, b]}`, or `null` for none; a cut only),
+//! `halftone`, `transparency` (a whole percentage, 0 to 100) and `shown`. A part not named keeps
+//! what the element looks like in that view now (the rule it has, else its category's, else the
+//! project's object style), so a rule that only hides something names only `shown`. A rule is
+//! refused for an unknown category, for the views category, for a cut of what cannot be cut, for
+//! a pen, pattern or fill pattern there is not, for a value out of range, and for a view that
+//! cannot hold one (a drafting view or a legend, and a cut rule in a three-dimensional view).
+//! construct-views' `resolve` is how an element's look is worked out from the rules.
 //!
 //! A view's kind never changes: a plan is not made a section; a new view is made. An argument the
 //! kind has no use for (a `level` for a section, a `range` for a legend) is refused, naming the
@@ -45,7 +60,7 @@
 //! [`options`] with the document's own, and no caller changes.
 
 use crate::cloud::elements::write_record;
-use construct_categories::{CategoryTable, VIEWS};
+use construct_categories::{CategoryId, CategoryTable, VIEWS};
 use construct_levels::{Level, Levels, parse_length};
 use construct_model::element::Element;
 use construct_model::geometry::{Bounds, Recipe};
@@ -53,9 +68,10 @@ use construct_params::{Length, Units, Value};
 use construct_phases::{DesignOptions, ElementStaging, PhaseList, ViewSettings};
 use construct_regen::levels::read_levels;
 use construct_regen::parameters as records;
+use construct_styles::{Colour, Edge, LineStyles, ObjectStyles, PatternId};
 use construct_views::{
-    CutLine, DetailLevel, Model, PlanSetup, Point, Scale, Side, Tie, VIEW_KIND, View, ViewElement,
-    ViewKind, ViewRange, Views, list,
+    CutLine, DetailLevel, Fill, Model, PlanSetup, Point, RuleStyle, Scale, Side, Tie, VIEW_KIND,
+    View, ViewElement, ViewKind, ViewRange, Views, edge_from_key, list, resolve,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -64,12 +80,14 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 5] = [
+pub const COMMANDS: [&str; 7] = [
     "view.create",
     "view.rename",
     "view.set",
     "view.duplicate",
     "view.delete",
+    "view.graphics.set",
+    "view.graphics.clear",
 ];
 
 /// The scale of a view made without one: 1:100.
@@ -116,6 +134,35 @@ struct Args {
     /// The phase settings; `null` takes them away, so `null` is kept apart from none.
     #[serde(default, deserialize_with = "present")]
     phasing: Option<serde_json::Value>,
+    /// A graphics rule's category, a subcategory's included.
+    category: Option<i64>,
+    /// A graphics rule's edge: `cut` or `projection`.
+    edge: Option<String>,
+    /// A graphics rule's style.
+    style: Option<StyleArgs>,
+}
+
+/// The parts of a graphics rule's style a person names; the rest keep what they were.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct StyleArgs {
+    pen: Option<i64>,
+    pattern: Option<i64>,
+    colour: Option<Vec<i64>>,
+    /// The fill; `null` takes it away, so `null` is kept apart from none.
+    #[serde(default, deserialize_with = "present")]
+    fill: Option<serde_json::Value>,
+    halftone: Option<bool>,
+    transparency: Option<i64>,
+    shown: Option<bool>,
+}
+
+/// A fill as a person names it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FillArgs {
+    pattern: String,
+    colour: Vec<i64>,
 }
 
 /// An argument that is there, `null` included.
@@ -203,6 +250,8 @@ pub struct World {
     phases: PhaseList,
     options: DesignOptions,
     views: Views,
+    lines: LineStyles,
+    objects: ObjectStyles,
 }
 
 impl World {
@@ -227,6 +276,24 @@ impl World {
     #[must_use]
     pub fn levels(&self) -> &Levels {
         &self.levels
+    }
+
+    /// The categories views are drawn in.
+    #[must_use]
+    pub fn categories(&self) -> &CategoryTable {
+        &self.categories
+    }
+
+    /// The pens and line patterns a rule is checked against.
+    #[must_use]
+    pub fn line_styles(&self) -> &LineStyles {
+        &self.lines
+    }
+
+    /// The project's object styles: what a view with no rule for a category looks like.
+    #[must_use]
+    pub fn object_styles(&self) -> &ObjectStyles {
+        &self.objects
     }
 
     fn check(&self, view: &View) -> Result<(), String> {
@@ -262,6 +329,10 @@ pub async fn read_world<R: Reader>(
         phases,
         options: options(),
         views,
+        // Interim: a document stores no pens, patterns or object styles yet, so every document has
+        // our defaults. The job that stores them through the log replaces these two lines.
+        lines: LineStyles::default_metric(),
+        objects: ObjectStyles::default_metric(),
     }))
 }
 
@@ -552,6 +623,13 @@ pub async fn apply<T: Txn>(
         Ok(args) => args,
         Err(e) => return Ok(Err(format!("That edit isn't valid: {e}"))),
     };
+    let graphics = edit.cmd.starts_with("view.graphics.");
+    if !graphics && (args.category.is_some() || args.edge.is_some() || args.style.is_some()) {
+        return Ok(Err(format!(
+            "{} has no category, edge or style: graphics rules are set with view.graphics.set.",
+            edit.cmd
+        )));
+    }
     let mut run = Run {
         txn,
         project,
@@ -566,6 +644,8 @@ pub async fn apply<T: Txn>(
         "view.set" => set(&mut run, args).await,
         "view.duplicate" => duplicate(&mut run, args).await,
         "view.delete" => delete(&mut run, args).await,
+        "view.graphics.set" => set_graphics(&mut run, args).await,
+        "view.graphics.clear" => clear_graphics(&mut run, args).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
 }
@@ -917,7 +997,10 @@ async fn duplicate<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
             view.kind().clone(),
             view.staging().clone(),
         )
-        .map(|copy| copy.with_phasing(view.phasing().cloned()))
+        .map(|copy| {
+            copy.with_phasing(view.phasing().cloned())
+                .with_graphics(view.graphics().clone())
+        })
         .map_err(|e| e.to_string())
     });
     let copy = match copied {
@@ -962,6 +1045,198 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         claims: vec![released],
         ..Applied::default()
     }))
+}
+
+/// A whole number as a colour part, 0 to 255.
+fn colour_of(parts: &[i64]) -> Result<Colour, String> {
+    let words = || "A colour is [red, green, blue], each a whole number from 0 to 255.".to_owned();
+    match parts {
+        [r, g, b] => {
+            let part = |n: &i64| u8::try_from(*n).map_err(|_| words());
+            Ok(Colour(part(r)?, part(g)?, part(b)?))
+        }
+        _ => Err(words()),
+    }
+}
+
+/// The category a graphics command names, as the document has it.
+fn category_of(args: &Args, world: &World) -> Result<CategoryId, String> {
+    let n = need(args.category, "a category (its number)")?;
+    let missing = || format!("There is no category {n}.");
+    let id = CategoryId(u32::try_from(n).map_err(|_| missing())?);
+    world.categories.get(id).map(|_| id).ok_or_else(missing)
+}
+
+/// The edge a graphics command names.
+fn edge_of(key: &str) -> Result<Edge, String> {
+    edge_from_key(key).ok_or_else(|| format!("{key:?} is not an edge: cut or projection."))
+}
+
+/// How the element looks in the view now, on one edge: the base a rule's named parts go over.
+fn look_now(
+    world: &World,
+    view: &View,
+    category: CategoryId,
+    edge: Edge,
+) -> Result<RuleStyle, String> {
+    let parent = world
+        .categories
+        .get(category)
+        .and_then(|found| found.parent);
+    let (top, sub) = match parent {
+        Some(parent) => (parent, Some(category)),
+        None => (category, None),
+    };
+    resolve(
+        view,
+        &world.categories,
+        &world.objects,
+        &world.lines,
+        top,
+        sub,
+        edge,
+    )
+    .map(|found| found.style)
+    .map_err(|e| e.to_string())
+}
+
+/// A style with the parts a person named put over `base`.
+fn style_over(base: RuleStyle, args: &StyleArgs) -> Result<RuleStyle, String> {
+    let mut style = base;
+    if let Some(n) = args.pen {
+        style.pen =
+            u16::try_from(n).map_err(|_| format!("There is no pen {n} for this category."))?;
+    }
+    if let Some(n) = args.pattern {
+        style.pattern = u32::try_from(n)
+            .map(PatternId)
+            .map_err(|_| format!("There is no line pattern {n}."))?;
+    }
+    if let Some(parts) = &args.colour {
+        style.colour = colour_of(parts)?;
+    }
+    if let Some(value) = &args.fill {
+        style.fill = if value.is_null() {
+            None
+        } else {
+            let fill: FillArgs = serde_json::from_value(value.clone()).map_err(|e| {
+                format!("A fill is {{\"pattern\": <name>, \"colour\": [r, g, b]}} or null: {e}")
+            })?;
+            Some(Fill {
+                pattern: fill.pattern,
+                colour: colour_of(&fill.colour)?,
+            })
+        };
+    }
+    if let Some(on) = args.halftone {
+        style.halftone = on;
+    }
+    if let Some(n) = args.transparency {
+        style.transparency = u8::try_from(n)
+            .ok()
+            .filter(|n| *n <= construct_views::MOST_TRANSPARENCY)
+            .ok_or_else(|| format!("Transparency is a percentage from 0 to 100, not {n}."))?;
+    }
+    if let Some(on) = args.shown {
+        style.shown = on;
+    }
+    Ok(style)
+}
+
+/// The view after a `view.graphics.set`, or why it cannot be.
+fn graphics_set(args: &Args, world: &World, view: &View) -> Result<View, String> {
+    let category = category_of(args, world)?;
+    let edge = edge_of(need(args.edge.as_deref(), "an edge (cut or projection)")?)?;
+    let named = need(args.style.as_ref(), "a style")?;
+    let style = style_over(look_now(world, view, category, edge)?, named)?;
+    let graphics = view.graphics().with_style(category, edge, style);
+    graphics
+        .check(view.kind(), &world.categories, &world.lines)
+        .map_err(|e| e.to_string())?;
+    Ok(view.clone().with_graphics(graphics))
+}
+
+async fn set_graphics<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match graphics_set(&args, &world, &view) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// The view after a `view.graphics.clear`.
+fn graphics_cleared(args: &Args, world: &World, view: &View) -> Result<View, String> {
+    if args.style.is_some() {
+        return Err("view.graphics.clear takes no style.".to_owned());
+    }
+    let category = category_of(args, world)?;
+    let edge = args.edge.as_deref().map(edge_of).transpose()?;
+    Ok(view
+        .clone()
+        .with_graphics(view.graphics().without(category, edge)))
+}
+
+async fn clear_graphics<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match graphics_cleared(&args, &world, &view) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// One category's rule in a view, as a page lists it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RuleSummary {
+    /// The category's number (a subcategory's included).
+    pub category: u32,
+    /// The category's name.
+    pub name: String,
+    /// The category it is a subcategory of, if it is one.
+    pub parent: Option<u32>,
+    /// How it looks where the view cuts it, if the view says.
+    pub cut: Option<RuleStyle>,
+    /// How it looks where the view sees it beyond the cut plane, if the view says.
+    pub projection: Option<RuleStyle>,
+}
+
+/// A view's graphics rules as a page lists them: the rules the view holds, by category. A category
+/// with no rule is as the project's object styles say.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct GraphicsListing {
+    /// The view.
+    pub view: ViewSummary,
+    /// Its rules, in ascending category.
+    pub rules: Vec<RuleSummary>,
+}
+
+/// The graphics rules of the view `id`: `None` when the document has no such view.
+#[must_use]
+pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
+    let view = world.views.get(id)?;
+    let rules = view
+        .graphics()
+        .rules()
+        .filter_map(|(category, rule)| {
+            let found = world.categories.get(category)?;
+            Some(RuleSummary {
+                category: category.0,
+                name: found.name,
+                parent: found.parent.map(|parent| parent.0),
+                cut: rule.cut.clone(),
+                projection: rule.projection.clone(),
+            })
+        })
+        .collect();
+    Some(GraphicsListing {
+        view: summary(view, &world.levels),
+        rules,
+    })
 }
 
 /// The part of a generic command the rules below read.

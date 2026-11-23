@@ -30,6 +30,7 @@ A view is an element record like any other (the records in the database are the 
 | `@view.line.x0`, `@view.line.y0`, `@view.line.x1`, `@view.line.y1` | A section or an elevation | The first and second end of its line in the plan, stored length text, in the project's frame |
 | `@view.look` | A section or an elevation | `choice:left` or `choice:right`: the side of the line, walking from its first end to its second, that the view looks to |
 | `@view.far` | A section or an elevation | How far it sees, square to the line: stored length text, above zero |
+| `@view.graphics` | A view with graphics rules, never a drafting view or a legend | The rules, as JSON text, written only when the view has one: see "Graphics rules" below |
 
 Which keys a record has depends on its kind, and no other keys are allowed: a section with a `@level`, or a plan with a line, is refused. Lengths are construct-params' stored length text in its one spelling (`length:q0:` and the grid steps); the older whole-millimetre spelling is not accepted here, since no view was ever written with it. A view range's height is `height_of` of its level plus its offset (construct-levels), so moving a level moves every view range tied to it and no view record changes.
 
@@ -55,10 +56,38 @@ The view commands are construct-api's [`cloud::views`](../construct-api/src/clou
 
 The server reads them at `GET /api/projects/<project>/models/<model>/views` (a JSON list of `{id, name, kind, level, level_name, scale, detail}`, by name) and `.../views/<view>` (`{view, cut, seen, beyond}`: the sorted IDs of the elements the view cuts, sees, and a plan sees below its bottom), behind `model.read`. A floor plan is drawn at `.../views/<view>/plan` (`{view, through, svg, skipped}`: the cut at the view range's cut height, printed at the view's scale by construct-drawing, and the elements it could not draw, each with the reason), by the server's `plan` module over the kernel builder; a server built without the kernel refuses it in words. The second is [`list`](src/listing.rs) over the model's stored shapes, each box lifted by the height its level gives its base (the built row's `elevation`), the low corner rounded down and the high one up to whole millimetres.
 
+## Graphics rules
+
+A view holds graphics rules, per category and per subcategory (a category's number, as [construct-categories](../construct-categories/FORMAT.md) gives it): how it looks in this view where the view cuts it (`cut`) and where it sees it beyond the cut plane (`projection`). One JSON text under `@view.graphics`, keys in this order, no spare space, rules in ascending category, a rule never with neither edge:
+
+```json
+{"format":1,"rules":[{"category":100,"cut":{"pen":5,"pattern":1,"colour":[0,0,0],"fill":{"pattern":"concrete","colour":[90,90,90]},"halftone":false,"transparency":0,"shown":true},"projection":null}]}
+```
+
+| Part of a style | Value |
+| --- | --- |
+| `pen` | The line weight: a pen's number, in the model pens for a model, datum, analytical or import category and in the annotation pens for an annotation category ([construct-styles](../construct-styles/src/pens.rs)). It prints as thin or thick as the view's scale says |
+| `pattern` | A line pattern's number (the project's line patterns) |
+| `colour` | `[r, g, b]`, each a whole number from 0 to 255 |
+| `fill` | A cut's fill, `{"pattern": <name>, "colour": [r, g, b]}`, or `null`: no rule about it, the element's material fills the cut. The name is one of `concrete`, `earth`, `glass`, `insulation`, `membrane`, `metal`, `plaster`, `steel`, `timber` (the drawing's own fill patterns). Always `null` on a projection |
+| `halftone` | `true` or `false` |
+| `transparency` | A whole percentage from 0 (solid) to 100 |
+| `shown` | `false` hides it in this view |
+
+A rule is a whole style for one edge, never a part of one: a command that names only some parts writes the rest from what the element looks like in that view at the time. A reader refuses any other spelling, a version other than 1, an unknown field, a rule in the wrong order or with no edge, and rules a view of its kind cannot hold: a drafting view and a legend hold none, and a three-dimensional view holds projection rules only. A view with no `@view.graphics` has no rules, which is every view stored before this part existed.
+
+The rules a command checks, besides those above: the category exists and is not the views category; a cut rule only for a category that can be cut (a subcategory with its own flag, as the categories say); a fill only on a cut and only a pattern named above; the pen is in the pen table the category's kind uses; the line pattern exists; transparency is at most 100. These bind what commands write; reading a document never applies the ones that need the categories and the project's styles, so a document always reads.
+
+**How an element looks in a view** (`construct_views::resolve`, the one rule, not stored). For an element of a category, and of a subcategory when it has one, on an edge, the answer comes from the first of: the subcategory's rule in the view for that edge; the category's rule in the view for that edge; the project's object style for the subcategory (its parent's where it has none of its own) or the category, which gives its pen for the edge, its colour and its pattern, with no fill, no halftone, no transparency and shown. The two edges are resolved apart. Every answer says which level gave it (`subcategory`, `category` or `project`) and carries the pen's printed width at the view's scale. A cut edge of something that cannot be cut is refused.
+
+Through the log: `view.graphics.set` and `view.graphics.clear` ([cloud format](../construct-model/FORMAT.md)). Each is one undo step, runs behind `model.edit` and takes the claim on the view, and a set or a clear that changes nothing is no step. `view.duplicate` keeps the rules; the other view commands do not touch them, and the element commands refuse a view as before, so there is no way round the rules' checks. Read at `GET /api/projects/<project>/models/<model>/views/<view>/graphics`: `{view, rules}`, each rule `{category, name, parent, cut, projection}` with the stored styles, behind `model.read`; a category with no rule is not listed.
+
+Interim: a document stores no pens, line patterns or object styles yet, so rules are checked and resolved against our defaults (construct-styles' `default_metric`), and the fill patterns are the drawing's default set, named in this crate and pinned to the drawing's own by a test in the server. The jobs that store them replace those places and no stored view changes.
+
 ## What a view shows
 
 Not stored: `construct_views::list` answers it from the view and the model's elements (their category, box in whole millimetres in the project's frame, and staging), by the rules in that file's header: the category must be one a view draws (model and import categories), the phase rule is [construct-phases](../construct-phases/FORMAT.md)'s own, and the reach is the view range for a plan (cut, seen, beyond), the region of the line for a section or an elevation (cut, seen), and everything for a three-dimensional view. A drafting view and a legend show no model. Answers are sorted by element ID.
 
 ## Later versions
 
-Graphics rules per view, crop regions, a view template and per-element overrides will each be more reserved keys on this record, read strictly as these are; version 1 records read as views with none. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.
+Crop regions, a view template and per-element overrides will each be more reserved keys on this record, read strictly as these are; version 1 records read as views with none of them, and graphics rules (above) are the first of them. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.
