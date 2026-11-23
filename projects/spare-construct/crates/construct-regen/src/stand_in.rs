@@ -12,17 +12,35 @@
 //! either edition. Interim, as every stand-in shape: its layers as solids and its holes are the
 //! kernel's to build (the interim register's row).
 //!
+//! A roof (`roof`) is one box too: the box around every layer's solid ([`crate::roof_plan`]),
+//! rounded outward to whole millimetres, named `box.<role>` for its outer faces. Its displays draw
+//! each layer as a part: a flat roof's as the box's slice between that layer's faces, as a floor's,
+//! a sloped roof's as the layer itself, its section cut into quadrilaterals lofted from verge to
+//! verge, each point the nearest millimetre, so a page shows the slopes on either edition.
+//! Interim, as every stand-in shape: its layers as solids are the kernel's to build (the interim
+//! register's row).
+//!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
 //! view shows the layers and their materials on either edition.
 //!
+//! A placed family (`family.instance`, job 6.4, [`crate::families`]) is a box per solid: each the
+//! box its solid lies in at its type's values, turned as it stands, worked out without an engine
+//! (`construct_families::extents`), each side rounded outward to a whole millimetre; each a part
+//! of the displays with its solid's material and its step's key, so the glass shows apart from
+//! the frame on either edition. Its recipe comes from the library baked in at build time, the
+//! source the browser has too (interim until job 7.6). Its body is the box around them all.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
+use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::wall_plan::{self, Layered};
+use construct_families::{Limits, extents};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
@@ -186,6 +204,27 @@ fn floor_layers(
     Ok((mesh, parts))
 }
 
+/// How far a box from `min` to `max` strays from the shape it stands for: by nothing when it is
+/// the shape (`exact`); otherwise by at most its plan's diagonal (every point of one is within that
+/// of every point of the other); and by one millimetre more where anything was `rounded`.
+fn straying(min: [i64; 3], max: [i64; 3], exact: bool, rounded: bool) -> i64 {
+    if exact {
+        return i64::from(rounded);
+    }
+    let [w, d] = [
+        i128::from(max[0].saturating_sub(min[0])),
+        i128::from(max[1].saturating_sub(min[1])),
+    ];
+    let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+    let mut root = square.isqrt();
+    if root.saturating_mul(root) < square {
+        root = root.saturating_add(1);
+    }
+    i64::try_from(root)
+        .unwrap_or(i64::MAX)
+        .saturating_add(i64::from(rounded))
+}
+
 /// A floor as one box ([`crate::floor_plan`]): the box around its outer loop, its sides rounded
 /// outward to whole millimetres, from its bottom face (rounded down) to its top face at 0. Named
 /// `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each loop, in loop order. Its
@@ -209,25 +248,7 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         outline.push([x, y]);
     }
     rounded |= !floor_plan::nearest_mm(total).1;
-    // The box strays from the floor by nothing when it is the floor; otherwise by at most its
-    // plan's diagonal (every point of one is within that of every point of the other), and by
-    // one millimetre more where a corner or the thickness was rounded.
-    let deviation = if plan.is_box() {
-        i64::from(rounded)
-    } else {
-        let [w, d] = [
-            i128::from(max[0].saturating_sub(min[0])),
-            i128::from(max[1].saturating_sub(min[1])),
-        ];
-        let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
-        let mut root = square.isqrt();
-        if root.saturating_mul(root) < square {
-            root = root.saturating_add(1);
-        }
-        i64::try_from(root)
-            .unwrap_or(i64::MAX)
-            .saturating_add(i64::from(rounded))
-    };
+    let deviation = straying(min, max, plan.is_box(), rounded);
     let (mesh, parts) = floor_layers(&plan, min, max, &outline)?;
     let names = floor_names(&plan);
     let body = FloorBody {
@@ -250,6 +271,232 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         names,
         displays,
     })
+}
+
+/// A sloped roof's displayed mesh and its parts: each layer's loft drawn as it is, its section (a
+/// lower chain of corners and the upper chain back) cut into quadrilaterals between the two
+/// chains, each a prism from one verge to the other, every point the nearest millimetre.
+fn sloped_layers(
+    plan: &RoofPlan,
+    outline: &[[i64; 2]],
+    rounded: &mut bool,
+) -> Result<(Mesh, Vec<Part>), GeometryError> {
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut near = |p: [i64; 3]| {
+        p.map(|c| {
+            let (mm, exact) = floor_plan::nearest_mm(c);
+            *rounded |= !exact;
+            mm
+        })
+    };
+    let corner = |list: &[[i64; 3]], k: usize| list.get(k).copied().unwrap_or_default();
+    for layer in &plan.layers {
+        let Some(PlanSolid::Loft {
+            sections: [first, second],
+        }) = &layer.solid
+        else {
+            continue;
+        };
+        let count = first.len();
+        if count.checked_rem(2) != Some(0) {
+            return Err(GeometryError {
+                code: "MissingArgument".to_owned(),
+                message: "a sloped layer's section is a lower and an upper chain of corners"
+                    .to_owned(),
+            });
+        }
+        let a: Vec<[i64; 3]> = first.iter().map(|p| near(*p)).collect();
+        let b: Vec<[i64; 3]> = second.iter().map(|p| near(*p)).collect();
+        let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+        // The box's triangles face out when its first ring turns anticlockwise seen from the side
+        // its second ring is on.
+        let towards = {
+            let (p, q) = (corner(&a, 0), corner(&b, 0));
+            [
+                q[0].saturating_sub(p[0]),
+                q[1].saturating_sub(p[1]),
+                q[2].saturating_sub(p[2]),
+            ]
+        };
+        let mut quads = 0_usize;
+        for i in 0..count.checked_div(2).unwrap_or(0).saturating_sub(1) {
+            let mut quad = [
+                i,
+                i.saturating_add(1),
+                count.saturating_sub(2).saturating_sub(i),
+                count.saturating_sub(1).saturating_sub(i),
+            ];
+            let ring: Vec<[i64; 3]> = quad.iter().map(|&k| corner(&a, k)).collect();
+            if dot(newell(&ring), towards) < 0 {
+                quad.reverse();
+            }
+            let at = part_count(mesh.positions.len().checked_div(3).unwrap_or(0))?;
+            for list in [&a, &b] {
+                for &k in &quad {
+                    mesh.positions.extend(corner(list, k));
+                }
+            }
+            for index in TRIANGLES {
+                mesh.indices
+                    .push(at.checked_add(index).ok_or_else(too_many)?);
+            }
+            quads = quads.saturating_add(1);
+        }
+        let triangles = quads
+            .saturating_mul(TRIANGLES.len())
+            .checked_div(3)
+            .unwrap_or(0);
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [start, part_count(triangles)?],
+            outline: outline.to_vec(),
+        });
+    }
+    Ok((mesh, parts))
+}
+
+/// The normal of a flat polygon by Newell's sum, its length twice the polygon's area, pointing to
+/// the side it turns anticlockwise seen from. Every coordinate is a whole millimetre within the
+/// kernel's grid (under 2^28), so no sum comes near the range of an `i128`.
+fn newell(ring: &[[i64; 3]]) -> [i128; 3] {
+    let mut n = [0_i128; 3];
+    for (at, p) in ring.iter().enumerate() {
+        let next = at.saturating_add(1).checked_rem(ring.len()).unwrap_or(0);
+        let q = ring.get(next).copied().unwrap_or(*p);
+        let [px, py, pz] = p.map(i128::from);
+        let [qx, qy, qz] = q.map(i128::from);
+        let terms = [
+            (py.saturating_sub(qy)).saturating_mul(pz.saturating_add(qz)),
+            (pz.saturating_sub(qz)).saturating_mul(px.saturating_add(qx)),
+            (px.saturating_sub(qx)).saturating_mul(py.saturating_add(qy)),
+        ];
+        for (sum, term) in n.iter_mut().zip(terms) {
+            *sum = sum.saturating_add(term);
+        }
+    }
+    n
+}
+
+/// `n . d`.
+fn dot(n: [i128; 3], d: [i64; 3]) -> i128 {
+    n.iter().zip(d).fold(0_i128, |sum, (a, b)| {
+        sum.saturating_add(a.saturating_mul(i128::from(b)))
+    })
+}
+
+/// A flat roof's displayed mesh and its parts: for each layer with a thickness, top first, the
+/// slice of the box from `min` to `max` between that layer's faces, each the nearest millimetre.
+fn flat_layers(
+    plan: &RoofPlan,
+    min: [i64; 3],
+    max: [i64; 3],
+    outline: &[[i64; 2]],
+    rounded: &mut bool,
+) -> Result<(Mesh, Vec<Part>), GeometryError> {
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    for layer in &plan.layers {
+        let Some(PlanSolid::Extrude { profile, by }) = &layer.solid else {
+            continue;
+        };
+        let z = profile.first().map_or(0, |p| p[2]);
+        let (low, a) = floor_plan::nearest_mm(z);
+        let (high, b) = floor_plan::nearest_mm(z.saturating_add(by[2]));
+        *rounded |= !(a && b);
+        let (first, base) = (
+            part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?,
+            part_count(mesh.positions.len().checked_div(3).unwrap_or(0))?,
+        );
+        let corners = box_corners([min[0], min[1], low], [max[0], max[1], high]);
+        mesh.positions.extend(corners.concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [
+                first,
+                part_count(TRIANGLES.len().checked_div(3).unwrap_or(0))?,
+            ],
+            outline: outline.to_vec(),
+        });
+    }
+    Ok((mesh, parts))
+}
+
+/// A roof as one box ([`crate::roof_plan`]): the box around every layer's solid, rounded outward
+/// to whole millimetres, named `box.<role>` for its outer faces (its tops, bottoms and sides). Its
+/// displays draw each layer as a part: a flat roof's as the box's slice between that layer's
+/// faces ([`flat_layers`], as a floor's), a sloped roof's as its loft itself
+/// ([`sloped_layers`]); its body is the one box. A flat roof strays as a floor's box does; a
+/// sloped roof's displays are its layers, straying by 1 mm where a point was rounded.
+fn roof(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = RoofPlan::of(recipe)?;
+    let (lo, hi) = plan.extent();
+    let min = lo.map(floor_plan::floor_mm);
+    let max = hi.map(floor_plan::ceil_mm);
+    let mut rounded = false;
+    let mut outline = Vec::with_capacity(plan.outline.len());
+    for corner in &plan.outline {
+        let [x, y] = corner.at;
+        let ((x, a), (y, b)) = (floor_plan::nearest_mm(x), floor_plan::nearest_mm(y));
+        rounded |= !(a && b);
+        outline.push([x, y]);
+    }
+    let (mesh, parts, deviation) = if plan.slopes.is_empty() {
+        let (mesh, parts) = flat_layers(&plan, min, max, &outline, &mut rounded)?;
+        let upright = plan.outline.len() == 4
+            && plan
+                .outline
+                .iter()
+                .zip(plan.outline.iter().cycle().skip(1))
+                .all(|(a, b)| a.at[0] == b.at[0] || a.at[1] == b.at[1]);
+        (mesh, parts, straying(min, max, upright, rounded))
+    } else {
+        let (mesh, parts) = sloped_layers(&plan, &outline, &mut rounded)?;
+        (mesh, parts, i64::from(rounded))
+    };
+    let body = FloorBody {
+        kind: "roof",
+        min,
+        max,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: roof_names(&plan),
+        displays,
+    })
+}
+
+/// A roof's face names: `box.<role>` for each of its outer roles, in order.
+fn roof_names(plan: &RoofPlan) -> Vec<FaceName> {
+    plan.outer_roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
 }
 
 /// A floor's face names: `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each
@@ -275,6 +522,132 @@ fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
     names
 }
 
+/// A placed family's body, as the stand-in stores it: the family, its type and turn, and the box
+/// around its solids' boxes, in whole millimetres.
+#[derive(Serialize)]
+struct FamilyBody<'a> {
+    kind: &'static str,
+    family: &'a str,
+    #[serde(rename = "type")]
+    ty: &'a str,
+    turn: u8,
+    min: [i64; 3],
+    max: [i64; 3],
+}
+
+/// The smallest whole number of millimetres at or above the diagonal of a box of `size`.
+fn diagonal(size: [i64; 3]) -> i64 {
+    let square = size.iter().fold(0_i128, |sum, &length| {
+        let length = i128::from(length);
+        sum.saturating_add(length.saturating_mul(length))
+    });
+    let mut root = square.isqrt();
+    if root.saturating_mul(root) < square {
+        root = root.saturating_add(1);
+    }
+    i64::try_from(root).unwrap_or(i64::MAX)
+}
+
+/// A placed family as a box per solid ([`construct_families::extents`]): each solid's box, its
+/// sides rounded outward to whole millimetres, a part of both displays with its material and its
+/// step's key; the bounds and the body the box around them all. Each box strays from its solid by
+/// at most its diagonal (a door's frame is not its box), so that is the displays' deviation. It
+/// names no face.
+fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let instance = Instance::of(recipe)?;
+    let library = families::baked();
+    let resolved = families::resolve(&*library, &instance)?;
+    let boxes = extents(
+        &resolved.recipe,
+        &resolved.values,
+        Limits::DEFAULT,
+        instance.turn,
+    )
+    .map_err(|e| families::evaluation_refused(&resolved.recipe, &e))?;
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::with_capacity(boxes.len());
+    let mut reach: Option<([i64; 3], [i64; 3])> = None;
+    let mut deviation = 0_i64;
+    for solid in &boxes {
+        let lo = solid.low.map(|l| floor_plan::floor_mm(l.steps()));
+        let hi = solid.high.map(|l| floor_plan::ceil_mm(l.steps()));
+        let size = [
+            hi[0].saturating_sub(lo[0]),
+            hi[1].saturating_sub(lo[1]),
+            hi[2].saturating_sub(lo[2]),
+        ];
+        deviation = deviation.max(diagonal(size));
+        reach = Some(match reach {
+            None => (lo, hi),
+            Some((mut min, mut max)) => {
+                for (m, l) in min.iter_mut().zip(lo) {
+                    *m = (*m).min(l);
+                }
+                for (m, h) in max.iter_mut().zip(hi) {
+                    *m = (*m).max(h);
+                }
+                (min, max)
+            }
+        });
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        mesh.positions.extend(box_corners(lo, hi).concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: solid.material.as_str().to_owned(),
+            function: solid.step.as_str().to_owned(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: vec![
+                [lo[0], lo[1]],
+                [hi[0], lo[1]],
+                [hi[0], hi[1]],
+                [lo[0], hi[1]],
+            ],
+        });
+    }
+    let (min, max) = reach.ok_or_else(|| GeometryError {
+        code: "EmptyShape".to_owned(),
+        message: format!("family {}: it has no solid to draw", resolved.recipe.name),
+    })?;
+    let body = FamilyBody {
+        kind: "family",
+        family: instance.family.as_str(),
+        ty: instance.ty.as_str(),
+        turn: instance.turn.quarters(),
+        min,
+        max,
+    };
+    let outline = vec![
+        [min[0], min[1]],
+        [max[0], min[1]],
+        [max[0], max[1]],
+        [min[0], max[1]],
+    ];
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: Vec::new(),
+        displays,
+    })
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -293,8 +666,15 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if families::is_instance(recipe) {
+        Instance::of(recipe)?;
+        return Ok(Vec::new());
+    }
     if floor_plan::is_floor(recipe) {
         return Ok(floor_names(&FloorPlan::of(recipe)?));
+    }
+    if roof_plan::is_roof(recipe) {
+        return Ok(roof_names(&RoofPlan::of(recipe)?));
     }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
@@ -427,6 +807,12 @@ impl Geometry for Boxes {
         }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);
+        }
+        if roof_plan::is_roof(recipe) {
+            return roof(recipe);
+        }
+        if families::is_instance(recipe) {
+            return family(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
@@ -726,6 +1112,147 @@ mod tests {
         assert_eq!(l.names[2].name, "box.side.e0");
         assert_eq!(names(&floor_of(false)).unwrap(), l.names);
         let mut unfilled = floor_of(true);
+        unfilled
+            .args
+            .insert("layers".to_owned(), json!({ "type": "layers" }));
+        assert_eq!(Boxes.build(&unfilled).unwrap_err().code, "Unfilled");
+    }
+
+    /// A filled 6 m by 4 m roof (construct-roofs' `filled` form), every point in whole
+    /// millimetres: with `gable`, rising at 1 in 4 from o0 and o2 to a ridge at y = 2 m, 500 mm
+    /// over its eaves and 300 mm over its verges, one layer 206 mm upright; otherwise flat, two
+    /// layers of 100 and 200 mm over the same outline.
+    #[allow(clippy::arithmetic_side_effects, reason = "test code")]
+    fn roof_of(gable: bool) -> Recipe {
+        let mm = |v: i64| v * 6400;
+        let outline = json!([
+            { "id": "o0", "at": [mm(-300), mm(-500)] },
+            { "id": "o1", "at": [mm(6300), mm(-500)] },
+            { "id": "o2", "at": [mm(6300), mm(4500)] },
+            { "id": "o3", "at": [mm(-300), mm(4500)] },
+        ]);
+        if gable {
+            let section = |x: i64| {
+                json!([
+                    [mm(x), mm(-500), mm(-125)],
+                    [mm(x), mm(2000), mm(500)],
+                    [mm(x), mm(4500), mm(-125)],
+                    [mm(x), mm(4500), mm(81)],
+                    [mm(x), mm(2000), mm(706)],
+                    [mm(x), mm(-500), mm(81)],
+                ])
+            };
+            let layer = json!({ "function": "structure", "material": "m", "thickness": mm(200),
+                                "solid": { "loft": [section(-300), section(6300)] } });
+            return recipe(
+                "roof",
+                json!({ "form": "gable", "slopes": ["o0", "o2"], "outline": outline, "layers": [layer] }),
+            );
+        }
+        let profile = |z: i64| {
+            json!([
+                [mm(-300), mm(-500), mm(z)],
+                [mm(6300), mm(-500), mm(z)],
+                [mm(6300), mm(4500), mm(z)],
+                [mm(-300), mm(4500), mm(z)]
+            ])
+        };
+        let layer = |f: &str, z: i64, t: i64| {
+            json!({ "function": f, "material": "m", "thickness": mm(t),
+                    "solid": { "extrude": profile(z), "by": [0, 0, mm(t)] } })
+        };
+        recipe(
+            "roof",
+            json!({ "form": "flat", "slopes": [], "outline": outline,
+                    "layers": [layer("thermal", 200, 100), layer("structure", 0, 200)] }),
+        )
+    }
+
+    /// Six times the signed volume a mesh holds, in cubic millimetres.
+    #[allow(clippy::arithmetic_side_effects, reason = "test code")]
+    fn six_volume(mesh: &Mesh) -> i128 {
+        let p = |i: u32| {
+            let i = i as usize * 3;
+            [
+                i128::from(mesh.positions[i]),
+                i128::from(mesh.positions[i + 1]),
+                i128::from(mesh.positions[i + 2]),
+            ]
+        };
+        mesh.indices
+            .chunks(3)
+            .map(|t| {
+                let [a, b, c] = [p(t[0]), p(t[1]), p(t[2])];
+                a[0] * (b[1] * c[2] - b[2] * c[1])
+                    + a[1] * (b[2] * c[0] - b[0] * c[2])
+                    + a[2] * (b[0] * c[1] - b[1] * c[0])
+            })
+            .sum()
+    }
+
+    /// A roof is one box: the box around its layers, named by its outer faces. A gable's displays
+    /// draw its layer as it is, its chevron cut at the ridge into two quadrilaterals lofted from
+    /// verge to verge, facing out, holding the layer's volume exactly (5 m across by 206 mm
+    /// upright, 6.6 m long), straying by nothing; a flat roof's draw each layer as the box's slice.
+    #[test]
+    #[allow(clippy::arithmetic_side_effects, reason = "test code")]
+    fn a_roof_is_its_layers_drawn_on_the_stand_in() {
+        let gable = Boxes.build(&roof_of(true)).unwrap();
+        assert_eq!(gable.bounds.min, [-300, -500, -125]);
+        assert_eq!(gable.bounds.max, [6300, 4500, 706]);
+        assert_eq!(
+            gable.body,
+            br#"{"kind":"roof","min":[-300,-500,-125],"max":[6300,4500,706]}"#
+        );
+        let display = &gable.displays[0];
+        assert_eq!(display.deviation, 0);
+        assert_eq!(
+            display.outline,
+            vec![[-300, -500], [6300, -500], [6300, 4500], [-300, 4500]]
+        );
+        assert_eq!(display.parts.len(), 1);
+        assert_eq!(display.parts[0].triangles, [0, 24]);
+        assert_eq!(display.parts[0].function, "structure");
+        assert_eq!(six_volume(&display.mesh), 6 * 5000 * 206 * 6600);
+        assert_eq!(
+            gable.displays[1],
+            Display {
+                lod: 1,
+                ..display.clone()
+            }
+        );
+        let roles: Vec<&str> = gable.names.iter().map(|n| n.role.as_str()).collect();
+        assert_eq!(
+            roles,
+            [
+                "top.o0",
+                "bottom.o0",
+                "top.o2",
+                "bottom.o2",
+                "side.o0",
+                "side.o1",
+                "side.o2",
+                "side.o3"
+            ]
+        );
+        assert_eq!(gable.names[0].name, "box.top.o0");
+        assert_eq!(names(&roof_of(true)).unwrap(), gable.names);
+
+        let flat = Boxes.build(&roof_of(false)).unwrap();
+        assert_eq!(flat.bounds.min, [-300, -500, 0]);
+        assert_eq!(flat.bounds.max, [6300, 4500, 300]);
+        assert_eq!(flat.displays[0].deviation, 0);
+        let parts = &flat.displays[0].parts;
+        let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+        assert_eq!(functions, ["thermal", "structure"]);
+        assert_eq!(six_volume(&flat.displays[0].mesh), 6 * 6600 * 5000 * 300);
+        let roles: Vec<&str> = flat.names.iter().map(|n| n.role.as_str()).collect();
+        assert_eq!(
+            roles,
+            ["top", "bottom", "side.o0", "side.o1", "side.o2", "side.o3"]
+        );
+
+        let mut unfilled = roof_of(true);
         unfilled
             .args
             .insert("layers".to_owned(), json!({ "type": "layers" }));

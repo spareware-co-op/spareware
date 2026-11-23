@@ -1272,6 +1272,312 @@ check(
   'a fresh load lists the same views, by name',
 );
 await fresh.context().close();
+console.log('\n   Roofs, on a rectangle');
+// Anna makes a gable roof over the seed building, of a type she chooses in the roof tool's options;
+// Ben sees it, its ridge drawn from its record. A roof the server refuses (hips) is turned back in the
+// server's words beside the tool, and nothing is drawn wrongly. She picks the roof, reads its area,
+// and lets go of it; only then does Ben pick it and change its pitch, and Anna sees the new pitch
+// and slope area. Ben lets go; Anna deletes the roof and undoes the delete, and a fresh load of
+// Ben's page agrees.
+const roofHome = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="architecture"]');
+  await page.waitForSelector('g.element[data-id="D-101"] .body');
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+await roofHome(anna);
+await roofHome(ben);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:roof"]');
+const roofTypeField = '#pv-side select[data-key="roof-type"]';
+await anna.waitForSelector(`${roofTypeField} option[value="roof-steel-rafter-150"]`, { state: 'attached' });
+check(
+  (await asAnna('roof-types')).types.length === 2 && (await anna.locator(`${roofTypeField} option`).count()) === 2,
+  'the roof tool has the server make its default roof types through the log, and offers them',
+);
+await anna.locator(roofTypeField).selectOption({ label: 'Sheet steel on 150 rafters' });
+await anna.waitForSelector('#pv-side [data-roof-layers="roof-steel-rafter-150"]');
+check(
+  (await anna.locator('#pv-side [data-roof-layers="roof-steel-rafter-150"] tr').count()) === 3 &&
+    (await anna.locator('#pv-side select[data-key="roof-form"]').inputValue()) === 'gable',
+  'Anna chooses the steel roof type, and the palette lists its three layers, outside first, and a gable',
+);
+const roofClicks = async (page, corners) => {
+  for (const [x, y] of corners) {
+    const at = await onPlan(page, x, y);
+    await page.mouse.click(at.x, at.y);
+  }
+};
+const roofFootprint = [[0, 0], [12000, 0], [12000, 8000], [0, 8000]];
+await roofClicks(anna, [...roofFootprint, roofFootprint[0]]);
+await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
+await anna.keyboard.press('Enter');
+const roofOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'roof')?.el.id;
+await ben.waitForFunction(roofOf);
+const roofId = await ben.evaluate(roofOf);
+const roofDrawn = (id) =>
+  document.querySelector(`g.element[data-id="${id}"] path.roof[data-form="gable"]`) &&
+  document.querySelector(`g.element[data-id="${id}"] [data-roof-ridge]`);
+await ben.waitForFunction(roofDrawn, roofId);
+pass("Anna's gable roof appears in Ben's browser, its ridge drawn from its record");
+const roofRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, roofId);
+check(
+  roofRecord.recipe.op === 'roof' &&
+    roofRecord.recipe.args.layers.type === 'layers' &&
+    roofRecord.props['@type'] === 'roof-steel-rafter-150' &&
+    roofRecord.props['@level'] === '1' &&
+    roofRecord.recipe.args.edges.filter((edge) => edge.pitch).length === 2,
+  'its record reads its layers from the type she chose, its base tied to Level 1, two edges rising',
+);
+await shot(ben, 'ben-roof');
+
+// Hips: the roof tool's edge numbers name two edges that meet at a corner; the server's reason, beside
+// the tool, and the footprint it turned back, with no second roof.
+await anna.locator('#pv-side input[data-key="roof-eaves"]').fill('1, 2');
+await anna.locator('#pv-side input[data-key="roof-eaves"]').press('Tab');
+await roofClicks(anna, [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500], [7000, -2300]]);
+await anna.waitForSelector('#pv-side [data-roof-sketch="closed"]');
+await anna.keyboard.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="roof-draw"]');
+const roofRefusal = await anna.locator('#pv-side [data-problem="roof-draw"]').textContent();
+check(
+  /slope and meet at a corner: hips come with job 6\.2/.test(roofRefusal) &&
+    roofRefusal === (await anna.locator('#toast-m').textContent()),
+  "edges that meet at a corner are turned back in the server's words, beside the roof tool",
+);
+await anna.waitForSelector('#pv-canvas [data-roof-refused]');
+check(
+  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'roof').length)) === 1,
+  'drawn where it was turned back, and no second roof made',
+);
+await shot(anna, 'anna-roof-refused');
+await anna.keyboard.press('Escape');
+
+// Its area and what else the server works out of it, in units, apart from what a person sets.
+const roofShown = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => view.parameters?.some((p) => p.id === 'roof.area' && p.from === 'read-only'),
+  'the server works out the area of the roof',
+);
+const roofRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+const roofArea = roofRead(roofShown, 'roof.area');
+const roofSlopeArea = roofRead(roofShown, 'roof.slope-area');
+check(/^[0-9.]+ m²$/.test(roofArea) && roofRead(roofShown, 'roof.pitch') !== undefined, `the server gives its area in the document's units, ${roofArea}`);
+const roofAreaIs = (shown) => document.querySelector('#pv-side [data-read-only="roof.area"]')?.textContent === shown;
+// Picked in its overhang, where no wall is: the roof alone is there.
+const roofAtAnna = await onPlan(anna, -150, 4000);
+await anna.mouse.click(roofAtAnna.x, roofAtAnna.y);
+await anna.waitForFunction(roofAreaIs, roofArea);
+check(
+  (await anna.locator('#pv-side input[data-key="roof-own-pitch"]').inputValue()) === '1:4' &&
+    (await anna.locator('#pv-side input[data-key="roof-own-overhang"]').inputValue()) === '300 mm',
+  "Anna's palette shows its pitch and overhang as typed, and its area read-only",
+);
+await shot(anna, 'anna-roof-area');
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', roofId);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), roofId);
+pass('Anna lets go of the roof, and Ben sees it free');
+
+// Ben changes its pitch; Anna sees the new pitch and the new slope area, and the same area in plan.
+const roofAtBen = await onPlan(ben, -150, 4000);
+await ben.mouse.click(roofAtBen.x, roofAtBen.y);
+await ben.waitForFunction(roofAreaIs, roofArea);
+const roofPitch = ben.locator('#pv-side input[data-key="roof-own-pitch"]');
+await roofPitch.fill('1:2');
+await roofPitch.press('Enter');
+await anna.waitForFunction(
+  (id) => window.spare.elements.get(id)?.el.recipe.args.edges[0].pitch === 'slope:1/2',
+  roofId,
+);
+const roofSteeper = await until(
+  () => asAnna(`parameters/${roofId}`),
+  (view) => roofRead(view, 'roof.slope-area') !== roofSlopeArea,
+  'the server works out the new slope area',
+);
+check(
+  roofRead(roofSteeper, 'roof.area') === roofArea && /^[0-9.]+ m²$/.test(roofRead(roofSteeper, 'roof.slope-area')),
+  "Ben's new pitch reaches Anna's browser, with a new slope area and the same area in plan",
+);
+await shot(ben, 'ben-roof-pitch');
+
+// Ben lets go; Anna deletes the roof, and her undo puts it back.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), roofId);
+const roofAtAnnaAgain = await onPlan(anna, -150, 4000);
+await anna.mouse.click(roofAtAnnaAgain.x, roofAtAnnaAgain.y);
+await anna.waitForFunction(roofAreaIs, roofArea);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), roofId);
+pass("Anna deletes the roof, and it is gone from Ben's plan");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'roof.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(roofDrawn, roofId);
+await anna.waitForFunction(roofDrawn, roofId);
+pass("Anna's undo puts the roof back, in both browsers");
+
+// A fresh load agrees: the same roof, pitch and ridge, drawn from the server's records.
+await ben.reload();
+await ben.waitForSelector('html[data-stack="ready"]');
+await roofHome(ben);
+await ben.waitForFunction(roofDrawn, roofId);
+const roofReloaded = await ben.evaluate((id) => window.spare.elements.get(id).el, roofId);
+check(
+  roofReloaded.recipe.args.edges[0].pitch === 'slope:1/2' && roofReloaded.recipe.args.edges[2].pitch === 'slope:1/2',
+  'a fresh load of Ben’s page shows the same roof, at the pitch Ben gave it',
+);
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the roof's included, matches the server's`);
+}
+
+console.log('\n   Placed families');
+// Anna draws a wall of her own in clear ground above the building, where the floor was, and puts a window of the
+// library on it from the family tool; Ben sees the window, and the wall cut for it where this run's
+// geometry cuts. Ben changes its type after Anna lets go of it, and Anna sees the new size. Anna
+// deletes it and undoes the delete; a position past the wall's end is refused in words under the
+// field; a fresh load agrees. Nobody changes what the other touched in the last 30 s without the
+// other letting go first, and an undo claims the element it writes too.
+const famKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const famWallFrom = await onPlan(anna, 6500, -1200);
+const famWallTo = await onPlan(anna, 11000, -1200);
+await anna.mouse.click(famWallFrom.x, famWallFrom.y);
+await anna.mouse.click(famWallTo.x, famWallTo.y);
+const famWallOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(famWallOf, famKnown);
+const famWall = await ben.evaluate(famWallOf, famKnown);
+await anna.keyboard.press('Escape');
+pass("Anna's new wall for the family appears in Ben's browser");
+
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:family"]');
+await anna.waitForSelector('#pv-side select[data-key="family-choice"] option', { state: 'attached' });
+const famChoices = await anna.locator('#pv-side select[data-key="family-choice"] option').allTextContents();
+check(
+  ['Fixed window', 'Single swing door', 'Sliding window'].every((name) => famChoices.includes(name)),
+  `the family tool lists the library's door and window families: ${famChoices.join(', ')}`,
+);
+await anna.locator('#pv-side select[data-key="family-choice"]').selectOption({ label: 'Fixed window' });
+await anna.waitForSelector('#pv-side select[data-key="family-type"]');
+const famTypes = await anna.locator('#pv-side select[data-key="family-type"] option').allTextContents();
+check(famTypes.includes('1200 x 1200') && famTypes.includes('1800 x 1200'), "and the family's types");
+await anna.locator('#pv-side select[data-key="family-type"]').selectOption({ label: '1200 x 1200' });
+const famWallBox = await box(anna, famWall);
+await anna.mouse.click(famWallBox.x + famWallBox.width * 0.3, famWallBox.y + famWallBox.height / 2 - 1);
+const famOn = (wall) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.references?.[0]?.element === wall)?.el.id;
+await ben.waitForFunction(famOn, famWall);
+const famId = await ben.evaluate(famOn, famWall);
+await anna.keyboard.press('Escape');
+const famRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, famId);
+check(
+  famRecord.kind === 'window' &&
+    famRecord.props['@category'] === '400' &&
+    famRecord.references[0].kind === 'face' &&
+    /^length:q0:/.test(famRecord.props['@host.along']) &&
+    famRecord.recipe.args.type === 'w1200x1200',
+  "the window Anna places is in Ben's browser: a window of its family's category, hosted on a named face of her wall at an offset along it",
+);
+const famParts = ([id]) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(famParts, [famId]);
+await anna.waitForFunction(famParts, [famId]);
+pass('and both browsers draw its frame and glass, each in its material');
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  const famCut = (names) => names.some((n) => n.role === `tool(${famId}).head`);
+  await until(async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [], famCut, 'the server cuts the wall for the window');
+  await ben.waitForFunction(
+    ([wall, cut]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${cut}).head`),
+    [famWall, famId],
+  );
+  pass("the window cuts the wall, on the server and as Ben's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the wall's cut)");
+}
+await shot(ben, 'ben-window');
+
+// The size of what is drawn, along the wall: its shape's bounds as a page holds them.
+const famSize = (page) =>
+  page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]);
+  }, famId);
+const famPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-family-properties="${id}"] select[data-key="family-retype"]`);
+};
+const famLetGo = async (page, other) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await other.waitForFunction((id) => !window.spare.claims.has(id), famId);
+};
+const famSizeBefore = await famSize(anna);
+await famPick(anna, famId);
+check((await anna.locator('#pv-side').textContent()).includes('Windows'), "Anna's palette gives the window its family's category, Windows");
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
+await famLetGo(anna, ben);
+pass('Anna lets go of the window, and Ben sees it free');
+await famPick(ben, famId);
+await ben.locator('#pv-side select[data-key="family-retype"]').selectOption({ label: '1800 x 1200' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.type === 'w1800x1200', famId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]) === before + 600;
+  },
+  [famId, famSizeBefore],
+);
+pass("Ben changes its type to 1800 x 1200, and Anna's browser draws the new size");
+await famLetGo(ben, anna);
+
+// Anna deletes it and undoes the delete.
+await famPick(anna, famId);
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), famId);
+pass("Anna deletes the window, and it is gone from Ben's plan");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'family.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(famParts, [famId]);
+await anna.waitForFunction(famParts, [famId]);
+pass('and her undo puts it back, in both browsers');
+// The undo wrote the window, so it is Anna's for 30 s: she works on it, and Ben leaves it.
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
+
+// A position past the wall's end is refused in words, under the field, and nothing changes.
+await famPick(anna, famId);
+const famAlong = '#pv-side input[data-key="family-along"]';
+await anna.locator(famAlong).fill('4900 mm');
+await anna.locator(famAlong).press('Enter');
+await anna.waitForSelector(`#pv-side [data-problem="family:${famId}"]`);
+const famWords = await anna.locator(`#pv-side [data-problem="family:${famId}"]`).textContent();
+check(famWords === `family ${famId}: it crosses the wall's end`, `the refusal reads: ${famWords}`);
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).el.props['@host.along'], famId)) ===
+    famRecord.props['@host.along'],
+  'and the window is where it was',
+);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A fresh load agrees: same record, same type, nothing built differently.
+const famFresh = await signIn('anna');
+await famFresh.waitForFunction(famParts, [famId]);
+const famHere = await anna.evaluate((id) => window.spare.elements.get(id).hash, famId);
+check(
+  (await famFresh.evaluate((id) => window.spare.elements.get(id).hash, famId)) === famHere,
+  "a fresh load holds the window's record as Anna's page does",
+);
+await famFresh.waitForFunction((id) => window.spare.elements.get(id).el.recipe.args.type === 'w1800x1200', famId);
+pass('at the type Ben gave it');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
+}
 
 await browser.close();
 console.log('\nThe browser checks passed.');

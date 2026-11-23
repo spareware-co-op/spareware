@@ -86,7 +86,25 @@ impl FromRequestParts<Shared> for Me {
     }
 }
 
+/// The routes that list a model's types of the layered kinds, for the page's tools.
+fn type_routes() -> Router<Shared> {
+    Router::new()
+        .route(
+            "/api/projects/{project}/models/{model}/wall-types",
+            get(wall_types),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/floor-types",
+            get(floor_types),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/roof-types",
+            get(roof_types),
+        )
+}
+
 /// Every page and API route, each a handler over the app.
+#[allow(clippy::too_many_lines, reason = "one entry per route")]
 pub fn routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
@@ -96,6 +114,7 @@ pub fn routes(app: Shared) -> Router {
         .route("/shapes/construct_shapes.js", get(shapes_script))
         .route("/shapes/construct_shapes_bg.wasm", get(shapes_wasm))
         .merge(kernel_shapes())
+        .merge(type_routes())
         .route("/workshop/", get(workshop_page))
         .route("/workshop/js/{file}", get(workshop_script))
         .route(
@@ -142,12 +161,8 @@ pub fn routes(app: Shared) -> Router {
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .merge(view_routes())
         .route(
-            "/api/projects/{project}/models/{model}/wall-types",
-            get(wall_types),
-        )
-        .route(
-            "/api/projects/{project}/models/{model}/floor-types",
-            get(floor_types),
+            "/api/projects/{project}/models/{model}/families",
+            get(families),
         )
         .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
@@ -567,6 +582,18 @@ async fn wall_types(
     ))
 }
 
+async fn families(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .families(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
 async fn views(
     State(app): State<Shared>,
     Me(person): Me,
@@ -599,6 +626,18 @@ async fn floor_types(
     Ok(Json(
         app.service
             .floor_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn roof_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .roof_types(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

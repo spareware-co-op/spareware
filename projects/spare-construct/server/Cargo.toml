@@ -58,6 +58,9 @@ tracing-subscriber = { version = "=0.3.20", features = ["env-filter"] }  # MIT
 
 [dev-dependencies]
 kit-store = { path = "../../kit/crates/kit-store", features = ["memory"] }
+# Family recipes, for the suite's placed families (their types, turns and the evaluator the suite
+# asks the engine through). This repository's own, Apache-2.0.
+construct-families = { path = "../crates/construct-families" }
 chrono = "=0.4.45"                 # MIT OR Apache-2.0
 openidconnect = { version = "=4.0.1", default-features = false }   # MIT
 reqwest = { version = "=0.13.1", default-features = false, features = ["rustls", "cookies", "json"] }  # MIT OR Apache-2.0

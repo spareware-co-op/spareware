@@ -84,16 +84,24 @@ type Answer = Result<Outcome, StoreError>;
 
 /// A host, checked: its record, its recipe as built, the face an element sits on, and the
 /// document's edition, which names its faces and whose builder's rules a fit is asked by.
-struct Host {
-    record: Element,
-    recipe: Recipe,
-    face: FaceName,
-    edition: Edition,
+pub(crate) struct Host {
+    pub(crate) record: Element,
+    pub(crate) recipe: Recipe,
+    pub(crate) face: FaceName,
+    pub(crate) edition: Edition,
+}
+
+/// How a host's side is named to [`host_for`]: by the face's persistent name, or by its role.
+pub(crate) enum Which<'a> {
+    /// The persistent name of one of the host's sides.
+    Name(&'a str),
+    /// A side's role: `exterior` or `interior`.
+    Role(&'a str),
 }
 
 /// A typed length, such as `1200`, `1.2 m` or `1200mm`, read as construct-params reads a length
 /// parameter's value, with the metric display settings.
-fn length(what: &str, typed: &str) -> Result<Length, String> {
+pub(crate) fn length(what: &str, typed: &str) -> Result<Length, String> {
     let id = Id::parse("hosting-offset").map_err(|e| e.to_string())?;
     let definition =
         Definition::new(id, what, Kind::Length, Holder::Instance).map_err(|e| e.to_string())?;
@@ -119,13 +127,15 @@ async fn edition_of<T: Txn>(
 }
 
 /// The host `host` and its face `face`, checked: in this document, a wall, and the face one of its
-/// sides. The inner error is the refusal.
-async fn host_for<T: Txn>(
+/// sides. `what` is what the wall hosts, for the refusal (`a door`). The inner error is the
+/// refusal.
+pub(crate) async fn host_for<T: Txn>(
     txn: &mut T,
     project: &Id,
     document: &Id,
     host: &Id,
-    face: &str,
+    face: Which<'_>,
+    what: &str,
 ) -> Result<Result<Host, String>, StoreError> {
     let Some((_, record)) = records::read_element(txn, project, document, host).await? else {
         return Ok(Err(format!(
@@ -134,7 +144,7 @@ async fn host_for<T: Txn>(
     };
     if !records::has_shape(&record) || !hosting::is_host(&record.recipe) {
         return Ok(Err(format!(
-            "{} is not a wall: only a wall hosts a door.",
+            "{} is not a wall: only a wall hosts {what}.",
             record.name
         )));
     }
@@ -150,7 +160,11 @@ async fn host_for<T: Txn>(
     let Some(edition) = edition_of(txn, project, document).await? else {
         return Ok(Err("That model is not in this project.".to_owned()));
     };
-    let face = match hosting::side(&edition, &recipe, face) {
+    let face = match face {
+        Which::Name(name) => hosting::side(&edition, &recipe, name),
+        Which::Role(role) => hosting::side_by_role(&edition, &recipe, role),
+    };
+    let face = match face {
         Ok(face) => face,
         Err(why) => return Ok(Err(format!("{}: {why}.", record.name))),
     };
@@ -195,7 +209,7 @@ async fn frame_at<T: Txn>(
 /// Where `element`, hosted on `host`, sits in the model, if it fits there with everything else
 /// hosted on it, asked by the kernel builder's own rules. The inner error is the refusal: the
 /// builder's own words when it does not fit.
-async fn fit<T: Txn>(
+pub(crate) async fn fit<T: Txn>(
     txn: &mut T,
     project: &Id,
     document: &Id,
@@ -302,7 +316,16 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(length) => length,
         Err(why) => return Ok(Err(why)),
     };
-    let host = match host_for(txn, project, document, &host_id, &face).await? {
+    let host = match host_for(
+        txn,
+        project,
+        document,
+        &host_id,
+        Which::Name(&face),
+        "a door",
+    )
+    .await?
+    {
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
     };
@@ -388,7 +411,16 @@ async fn move_along<T: Txn>(
     if let Some(claim) = holder {
         return Ok(Err(format!("{} is working on this.", claim.name)));
     }
-    let host = match host_for(txn, project, document, hosting.host(), hosting.face()).await? {
+    let host = match host_for(
+        txn,
+        project,
+        document,
+        hosting.host(),
+        Which::Name(hosting.face()),
+        "a door",
+    )
+    .await?
+    {
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
     };
