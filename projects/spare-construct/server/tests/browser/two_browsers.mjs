@@ -37,18 +37,20 @@ async function signIn(person, blocked) {
   return page;
 }
 
-// An element's box on screen. A redraw (after Escape, a claim or an edit) replaces the element's
-// drawing, and boundingBox() is null while it is away, so wait until it is drawn again (a slow
-// runner caught it away once, between Escape and the click on the wall).
-async function box(page, id) {
-  const body = page.locator(`g.element[data-id="${id}"] .body`);
+// A drawn thing's box on screen. A redraw (after Escape, a claim, an edit, an undo or a redo)
+// replaces the drawing, and boundingBox() is null while it is away, so wait until it is drawn
+// again (a slow runner caught a wall away once, between Escape and the click on it, and a grid's
+// bubble away once, just after a redo). Never read boundingBox() of anything in the drawing
+// directly: go through here.
+async function boxOf(drawn, what) {
   for (let tries = 0; tries < 20; tries += 1) {
-    await body.waitFor({ state: 'visible' });
-    const found = await body.boundingBox();
+    await drawn.waitFor({ state: 'visible' });
+    const found = await drawn.boundingBox();
     if (found) return found;
   }
-  throw new Error(`${id} never stayed drawn long enough to find its box`);
+  throw new Error(`${what} never stayed drawn long enough to find its box`);
 }
+const box = (page, id) => boxOf(page.locator(`g.element[data-id="${id}"] .body`), id);
 const position = (page, id) =>
   page
     .locator(`g.element[data-id="${id}"]`)
@@ -965,8 +967,7 @@ const drawGrid = async (from, to) => {
 // Ben picks a grid by its bubble, the way a person does, after clicking off whatever he had.
 const pickGrid = async (id) => {
   await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
-  await ben.waitForSelector(`${gridGroup(id)} circle.bub`);
-  const bubble = await ben.locator(`${gridGroup(id)} circle.bub`).boundingBox();
+  const bubble = await boxOf(ben.locator(`${gridGroup(id)} circle.bub`), `grid ${id}'s bubble`);
   await ben.mouse.click(bubble.x + bubble.width / 2, bubble.y + bubble.height / 2);
   await ben.waitForSelector(`${gridGroup(id)}[data-picked="yes"]`);
   await ben.waitForSelector(gridName);
@@ -1020,7 +1021,7 @@ check((await anna.locator(`${gridGroup(second)}[data-name="B"]`).count()) === 1,
 
 // A's far end, dragged by its handle from 9000 up to 8000.
 await pickGrid(first);
-const handle = await ben.locator(`${gridGroup(first)} [data-grid-end="1"]`).boundingBox();
+const handle = await boxOf(ben.locator(`${gridGroup(first)} [data-grid-end="1"]`), "A's handle");
 const [hx, hy] = [handle.x + handle.width / 2, handle.y + handle.height / 2];
 const [tx, ty] = await onScreen(ben, -1000, 8000);
 await ben.mouse.move(hx, hy);
