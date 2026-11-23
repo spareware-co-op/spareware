@@ -1683,3 +1683,83 @@ async fn a_server_without_a_drawer_says_it_cannot_draw_plans() {
         "This server was built without the geometry kernel, so it cannot draw plans."
     );
 }
+
+/// A room placed in the seed's building: the server's views of it say what became of it, in the
+/// document's units. The filled view carries the loops and the room's state and measures, its
+/// parameters view lists them read-only, the next free number is offered; a wall deleted makes it
+/// not enclosed, with its words and no area, and the same walls restored enclose it again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_room_in_the_seeded_building_reports_its_state_and_measures() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    assert_eq!(
+        s.rooms(&anna, &project, &model).await.unwrap().next_number,
+        "1"
+    );
+    assert!(refused(s.rooms(&dan, &project, &model).await));
+    let place = json!({ "element": "R-900", "name": "Studio", "level": "1", "at": ["3 m", "4 m"],
+                        "top": "2" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "room.place", place.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "room.place", place)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.rooms(&anna, &project, &model).await.unwrap().next_number,
+        "2"
+    );
+
+    let filled = s
+        .filled(&anna, &project, &model, &i("R-900"))
+        .await
+        .unwrap();
+    let recipe = filled.recipe.unwrap();
+    assert_eq!(recipe.args["loops"].as_array().unwrap().len(), 1);
+    let room = filled.room.unwrap();
+    assert_eq!((room.state, room.words.as_str()), ("enclosed", ""));
+    let area = room.area.clone().unwrap();
+    assert!(area.ends_with(" m²"), "{area}");
+    let read = quantities(s, &project, &model, "R-900").await;
+    assert_eq!(read["room.area"].1.as_deref(), Some(area.as_str()));
+    assert_eq!(read["room.state"].1.as_deref(), Some("enclosed"));
+    assert_eq!(read["room.perimeter"].1, room.perimeter);
+    assert_eq!(read["room.volume"].1, room.volume);
+
+    // The left outer wall goes: the room stays and says why it has no area.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "element.delete",
+        json!({ "element": "W-103" }),
+    )
+    .await
+    .unwrap();
+    let open = s
+        .filled(&anna, &project, &model, &i("R-900"))
+        .await
+        .unwrap();
+    assert!(open.recipe.is_none());
+    let room = open.room.unwrap();
+    assert_eq!(room.state, "not enclosed");
+    assert!(
+        room.area.is_none() && room.words.contains("is not enclosed"),
+        "{room:?}"
+    );
+    let read = quantities(s, &project, &model, "R-900").await;
+    assert_eq!(
+        read.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["room.state"]
+    );
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    let back = s
+        .filled(&anna, &project, &model, &i("R-900"))
+        .await
+        .unwrap();
+    assert_eq!(back.room.unwrap().area, Some(area));
+}

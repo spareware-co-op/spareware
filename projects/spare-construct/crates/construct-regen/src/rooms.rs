@@ -46,6 +46,8 @@ use construct_rooms::{
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
 use serde::Serialize;
+
+pub use construct_rooms::is_room;
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 
@@ -482,4 +484,30 @@ pub const VOLUME: &str = "room.volume";
 fn definition(id: &str, name: &str, kind: Kind) -> Option<Definition> {
     let id = Id::parse(id).ok()?;
     Definition::new(id, name, kind, Holder::Instance).ok()
+}
+
+/// What becomes of a room as the document stands `at` that state, from its record alone: its
+/// levels read, then [`filled_at`]. What the page is told a room is built from. The inner error
+/// is a level that cannot be read, in words.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn worked_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    at: At,
+) -> Result<Result<Worked, GeometryError>, StoreError> {
+    let placed = match levels::placed(reader, project, document, room, at).await? {
+        Ok(placed) => placed,
+        Err(e) => return Ok(Err(e)),
+    };
+    let recipe = match levels::filled(&room.recipe, &placed) {
+        Ok(recipe) => recipe,
+        Err(e) => return Ok(Err(e)),
+    };
+    Ok(Ok(
+        filled_at(reader, project, document, room, recipe, placed.level.as_ref(), at).await?,
+    ))
 }
