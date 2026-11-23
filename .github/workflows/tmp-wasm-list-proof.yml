@@ -1,0 +1,124 @@
+name: TEMPORARY wasm listing proof (delete before merge)
+
+# Temporary: proves issue 1315 on a Linux runner. Runs only on a push to the branch that holds it.
+on:
+  push:
+    branches: [fix/wasm-list-pipe]
+    paths: [.github/workflows/tmp-wasm-list-proof.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: "1.99.0"
+          targets: wasm32-wasip1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+      - name: Build the one test binary
+        working-directory: projects/engines/geometry
+        run: |
+          set -euo pipefail
+          cargo test --locked --target wasm32-wasip1 -p geom-num --test attack_wide_tests --no-run --message-format=json > "$RUNNER_TEMP/build.json"
+          jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' "$RUNNER_TEMP/build.json" | grep attack_wide_tests > "$RUNNER_TEMP/module.txt"
+          cat "$RUNNER_TEMP/module.txt"
+      - name: Write the unchanged runner and the fixed one
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/wasi-run.mjs" <<'EOF'
+          import { createHash, randomBytes } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          import { WASI } from 'node:wasi';
+          import { argv, env, exit, stderr } from 'node:process';
+
+          const [file, ...args] = argv.slice(2);
+          const seed = env.WASI_RUN_SEED || randomBytes(16).toString('hex');
+          const wasi = new WASI({ version: 'preview1', args: [file, ...args], env, returnOnExit: true });
+          const imports = wasi.getImportObject();
+          let instance;
+          let block = 0;
+          imports.wasi_snapshot_preview1.random_get = (at, length) => {
+            const out = new Uint8Array(instance.exports.memory.buffer, at, length);
+            for (let done = 0; done < length; done += 32) {
+              const bytes = createHash('sha256').update(`${seed} ${block}`).digest();
+              block += 1;
+              out.set(bytes.subarray(0, length - done), done);
+            }
+            return 0;
+          };
+          const replay = () => stderr.write(`wasi-run: ${file} failed; WASI_RUN_SEED=${seed} replays its random bytes\n`);
+          const module = await WebAssembly.compile(await readFile(file));
+          instance = await WebAssembly.instantiate(module, imports);
+          let code;
+          try {
+            code = wasi.start(instance);
+          } catch (error) {
+            replay();
+            throw error;
+          }
+          if (code !== 0) replay();
+          exit(code);
+          EOF
+          sed -e "s|^import { WASI } from 'node:wasi';|&\nimport { openSync } from 'node:fs';\nconst blocking = (path, fd) => { try { return openSync(path, 'a'); } catch { return fd; } };|" \
+              -e "s|returnOnExit: true });|returnOnExit: true, stdin: 0, stdout: blocking('/dev/stdout', 1), stderr: blocking('/dev/stderr', 2) });|" \
+              "$RUNNER_TEMP/wasi-run.mjs" > "$RUNNER_TEMP/wasi-run-fixed.mjs"
+          diff "$RUNNER_TEMP/wasi-run.mjs" "$RUNNER_TEMP/wasi-run-fixed.mjs" || true
+          cat > "$RUNNER_TEMP/slow.py" <<'EOF'
+          # slow.py MODE WAIT CMD...: runs CMD with its stdout on a pipe, waits WAIT seconds, then reads it all.
+          # MODE "pipe" is an ordinary pipe; "nonblocking" is one whose write end has O_NONBLOCK, as a
+          # parent that runs its pipes through an event loop hands to its child.
+          import os, subprocess, sys, time
+          mode, wait, cmd = sys.argv[1], float(sys.argv[2]), sys.argv[3:]
+          r, w = os.pipe2(os.O_NONBLOCK) if mode == "nonblocking" else os.pipe()
+          os.set_blocking(r, True)
+          err = open(os.environ["RUNNER_TEMP"] + "/err.txt", "w")
+          p = subprocess.Popen(cmd, stdout=w, stderr=err)
+          os.close(w)
+          time.sleep(wait)
+          data = b""
+          while True:
+              chunk = os.read(r, 65536)
+              if not chunk:
+                  break
+              data += chunk
+          code = p.wait()
+          open(os.environ["RUNNER_TEMP"] + "/out.txt", "wb").write(data)
+          print(f"exit={code} lines={data.count(10)} bytes={len(data)}")
+          EOF
+      - name: Expected listing, written to a file
+        run: |
+          set -euo pipefail
+          node --no-warnings "$RUNNER_TEMP/wasi-run.mjs" "$(cat "$RUNNER_TEMP/module.txt")" --list --format terse > "$RUNNER_TEMP/expected.txt"
+          wc -lc "$RUNNER_TEMP/expected.txt"
+      - name: The four runs (unchanged and fixed runner, ordinary and non-blocking pipe)
+        run: |
+          set +e
+          m="$(cat "$RUNNER_TEMP/module.txt")"
+          : > "$RUNNER_TEMP/verdict.txt"
+          for runner in wasi-run wasi-run-fixed; do
+            for mode in pipe nonblocking; do
+              res="$(python3 "$RUNNER_TEMP/slow.py" $mode 5 node --no-warnings "$RUNNER_TEMP/$runner.mjs" "$m" --list --format terse)"
+              same=no; cmp -s "$RUNNER_TEMP/out.txt" "$RUNNER_TEMP/expected.txt" && same=yes
+              echo "== $runner / $mode: $res identical=$same"
+              echo "   stderr: $(head -c 300 "$RUNNER_TEMP/err.txt" | tr '\n' ' ')"
+              echo "$runner $mode $same" >> "$RUNNER_TEMP/verdict.txt"
+            done
+          done
+      - name: Verdict (needs the unchanged runner to fail on a non-blocking pipe and the fixed one to give the whole list)
+        run: |
+          cat "$RUNNER_TEMP/verdict.txt"
+          grep -qx 'wasi-run nonblocking no' "$RUNNER_TEMP/verdict.txt"
+          grep -qx 'wasi-run-fixed pipe yes' "$RUNNER_TEMP/verdict.txt"
+          grep -qx 'wasi-run-fixed nonblocking yes' "$RUNNER_TEMP/verdict.txt"
