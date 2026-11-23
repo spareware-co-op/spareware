@@ -26,7 +26,7 @@ A recipe is the kernel's envelope (architecture chapter 24):
 | Field | Meaning |
 | --- | --- |
 | `owner`, `schema` | Who owns the operation, and their schema version |
-| `op`, `op_version` | The operation, named for what it makes: `wall.layered`, `wall.straight`, `door.single`, `block` |
+| `op`, `op_version` | The operation, named for what it makes: `wall.layered`, `wall.straight`, `door.single`, `family.instance`, `block` |
 | `args` | Its arguments, sorted by name. Numbers are whole; the stand-in recipes (`op_version` 1) give lengths in whole millimetres, exact multiples of the grid step, and a recipe that needs a finer length gives grid steps under a new `op_version`. A `wall.layered` recipe holds its lengths as stored lengths instead (below, "Walls"). An argument may instead name a parameter, `{"param":"<id>"}`, read the height from the element's base to its top tie, `{"tie":"top"}`, or read the layers of the element's wall type, `{"wall":"type"}` (below) |
 
 A reference (chapter 20) points at part of a shape by persistent name, never by position in a list. A hosted door points at a face of a wall, not at the wall:
@@ -41,7 +41,7 @@ A reference (chapter 20) points at part of a shape by persistent name, never by 
 
 ### Hosted elements
 
-A hosted element (a door) sits on a face of its host (a wall), at an offset along that face and up it, and moves with its host: its record is not rewritten when the host moves or lengthens. A `wall.straight` hosts on its two sides, and so does a `wall.layered` that runs along x or y; a layered wall at an angle hosts nothing yet (a door is a box along an axis until doors are families, job 6.4). The reader is [construct-regen's `hosting`](../construct-regen/src/hosting.rs).
+A hosted element (a door) sits on a face of its host (a wall), at an offset along that face and up it, and moves with its host: its record is not rewritten when the host moves or lengthens. A `wall.straight` hosts on its two sides, and so does a `wall.layered` that runs along x or y; a layered wall at an angle hosts nothing yet (a door is a box along an axis, and a placed family turns only by quarter turns: below, "Placed families"). The reader is [construct-regen's `hosting`](../construct-regen/src/hosting.rs).
 
 | Where | What |
 | --- | --- |
@@ -54,6 +54,23 @@ A hosted element (a door) sits on a face of its host (a wall), at an offset alon
 A record with one offset and not the other, an offset that is not a stored length, or offsets without exactly one such reference does not read as hosted: it is built as failed (`BadHost`). One whose host is gone is built as failed (`HostMissing`).
 
 **An older record.** A `door.single` written before offsets were stored, with a reference of kind `face` (`doc` `null`) and no `@host.*` keys, is hosted by the element that reference names, and sits where its own placement puts it: its place in its host is the difference of the two placements. Its host is built with it, but it stays where it was placed when its host moves. `hosted.move` writes its offsets, and from then on it moves with its host ([note CON-A4-F3-P1](../../notes/CON-A4-F3-P1-hosting.md)).
+
+### Placed families
+
+**A placed family** (recipe `construct/family.instance`, op version 1; job 6.4, [note CON-A7-F3-P2-hosted-families](../../notes/CON-A7-F3-P2-hosted-families.md)): an element made from a family recipe ([construct-families' format](../construct-families/FORMAT.md)), such as a door or a window of the library's templates. It is hosted as a door is ("Hosted elements", above), on a side of a layered wall along x or y. The reader is [construct-regen's `families`](../construct-regen/src/families.rs).
+
+| Where | What |
+| --- | --- |
+| recipe `family` | The family recipe version, by its content id (`sha256:` and 64 lowercase hexadecimal digits: the SHA-256 of the recipe's one written form) |
+| recipe `type` | The key of a type the recipe names, a built-in type or a type table row (`d900x2100`) |
+| `references`, `props` `@host.along`, `@host.up` | As a hosted element's. `@host.along` runs from the wall's start to the family's insertion point, the middle of its opening; `@host.up` from the wall's base to the family's origin (a door's foot; a window's floor line, its sill above that at the recipe's own sill height) |
+| `kind` | What people call it (`door`, `window`); its category by kind alone is generic models, its own is its family's |
+
+Derived, never stored: where it sits and how it is turned. It is seated on its wall ([`hosting::seat`](../construct-regen/src/hosting.rs)): its origin on the wall's centre plane (the library's frames are centred on the family's `y = 0`), each coordinate the nearest millimetre, and turned about its z axis by quarter turns so that its `+y`, its front, points out of the side it is hosted on, never mirrored. The builders are handed its recipe with that turn as `turn` (0 to 3 quarter turns, anticlockwise from above). A family hosted on a `wall.straight`, or on a layered wall at an angle, is the build failure `NotAHost`.
+
+On the kernel's edition its solids are its recipe's, evaluated for its type (construct-families' `evaluate_turned`) through the engine, each a `parts` entry of both displays with its material and its step's key as its `function`; it names no face. Its wall cuts its opening (the outline its recipe's `hosting` declares, solved at its type's values) through every layer, on the same path and by the same rules as a box door's, in the same words with `family` in place of `door` (`"family F-1: it crosses the wall's end"`); the opening's faces are named by the family's key as a door's are. An opening whose outline is not an upright rectangle is refused (`OpeningNotRectangle`). The stand-in draws each solid as its box, worked out without an engine, and cuts nothing. A recipe the builder's family source does not hold is the build failure `FamilyMissing`, a type it does not name `FamilyType`, an evaluation it refuses `FamilyRefused` or `OpeningRefused`, each naming the family. Its `reads` row is a hosted element's: a wall moved or its type changed builds it again with its wall, and a change to its own record (its type, or the recipe version it names) builds its wall again.
+
+Interim: the family source is the library's templates baked in at build time; families stored in the document and loaded there are job 7.6.
 
 ### Categories, types and parameter values
 

@@ -1,0 +1,37 @@
+# CON-A7-F3-P2: hosted families, a door or window from a recipe cutting its wall
+
+Part CON-A7-F3-P2 (hosted families) of [FEATURES.md](../FEATURES.md), its shape half: job 6.4 of the build plan, piece A64. Status: built in `construct-families` (`opening`, `Turn` and `evaluate_turned`, `extents`) and `construct-regen` (`src/families.rs`, `hosting::seat`, `kernel/family.rs`, the opening path in `kernel/opening.rs` and `kernel/layered.rs`, the stand-in, the regenerator). The stored form is in [construct-model's FORMAT.md](../crates/construct-model/FORMAT.md), "Placed families"; the recipe's `hosting` is in [construct-families' format](../crates/construct-families/FORMAT.md).
+
+## The question
+
+A family recipe declares what it is hosted on and the opening it cuts (the door and window templates of piece A62 declare a wall and the outside of their frame). How is a family placed in a model stored, how is it seated in its wall and turned to face the right way, how is its opening cut through every layer without a second cutting path beside the box door's, where does the builder find its recipe, and what is refused?
+
+## Decisions
+
+1. **The kind: `family.instance`.** The family format's own word for a placed copy of a family is an instance: a parameter's holder is the type or the instance. So the operation is `construct` / `family.instance`, one kind for every placed family, hosted or (later) free. Its category by kind alone is generic models (construct-categories' one line); a placed door's own category is its family's, which the record carries and the placing command writes (job 7.1).
+2. **The record names a recipe version and a type.** Its recipe holds `family`, the recipe version's content id (construct-families' `ContentId`, the SHA-256 of its one written form), and `type`, a type key the recipe names. A content id names one version exactly, so the same record always builds the same shape, and a recipe changed is a record changed, which the log orders and undo reverses. It is hosted as a door is: one face reference to a side of its wall and the offsets `@host.along` (to the family's insertion point, the middle of its opening) and `@host.up` (to the family's origin). Nothing derived is stored.
+3. **Seated on the wall's centre plane, turned, never mirrored.** The library's frames are centred on the family's `y = 0` (the templates note), so a family's origin sits on its wall's centre plane, to the nearest millimetre as a placement holds it. It is turned about its z axis by whole quarter turns so that its `+y` (its front: a door's leaf is flush with it, and opens toward it) points out of the side it is hosted on, and its `+x` a quarter turn clockwise from that, so it is a turn and never a mirror: a left-hung door stays left-hung. The turn is derived from the wall and the face each time (`hosting::seat`) and handed to the builders in the recipe as `turn`.
+4. **Built turned, because the engine cannot move a solid.** The kernel's `Engine` trait makes solids and cannot turn or move one (adding a method would break every engine). So construct-families builds a family turned (`Turn`, `evaluate_turned`): every corner and every extrusion's vector turned before the engine is asked, which is exact on the grid (two coordinates swap, one changes sign). The family is built in its own frame, turned; its placement puts it in the model.
+5. **Cached per type and turn.** What a type builds to, turned as it stands, is kept by the evaluator's own key (`CacheKey`: the recipe version, the type's values, the turn), so a type is built once however many are placed and however often their walls move. The builder keeps the built shape, not the engine's solids, so a builder over any engine stays shareable between threads.
+6. **One cutting path.** The opening a recipe declares is solved at the type's values without an engine (`construct_families::opening`: the format's depth rule for a wall is through its whole thickness), placed in the wall's frame where the family stands (its origin and its turn), and handed to the same rules the box door's opening has always gone through: a `Span` along the wall and up it, cut by `opening::cut_span` with the same cutter (100 mm past both sides, below the base for a door to the floor), the same refusals in the same words with `family` for `door`, the same face names. The box door finds its span from its box; a family from its recipe. Nothing else differs, so the old `door` kind builds byte for byte as before.
+7. **The family source, interim.** Where a recipe comes from at build time is one trait of ours, `FamilySource` (given a content id, the recipe). `Library` answers it from recipes a caller passes in, or from the library folder's templates baked in at build time (`Library::baked`), which both builders use by default so the browser and the server build the same families. Job 7.6 (load and reload families) replaces it with families stored in the document, read from its records.
+8. **The stand-in draws boxes.** The stand-in has no engine, so a placed family is a box per solid: the box each solid lies in, worked out by running the evaluation over an engine of construct-families' own that keeps only boxes (`extents`), each a display part with its material. The default `STACK_GEOMETRY=stand-in` builds every model that holds families; the stand-in cuts no opening, as for doors.
+
+## Refused, each naming the family and why
+
+- In its wall: wider than the wall or off its end (`OpeningPastEnd`), touching its end (`OpeningAtEnd`), as tall as the wall (`OpeningTooTall`), below its base (`OpeningBelowBase`), overlapping or touching another opening (`OpeningsOverlap`), a face within the engine's tolerance of a wall face (`OpeningNearFace`), turned across the wall (`OpeningAcrossWall`), its origin outside the wall's thickness (`OpeningNotInWall`).
+- Its host: the old box wall, or a layered wall at an angle (`NotAHost`); a placed family hosts nothing (`NotAHost`).
+- Its recipe: not held by the source (`FamilyMissing`), no such type (`FamilyType`), an evaluation refused (`FamilyRefused`), an opening that cannot be cut (`OpeningRefused`: no host declared, a host with no opening, an outline that is not a loop, a sketch that does not solve, an opening off the wall's plane), an outline that is not an upright rectangle (`OpeningNotRectangle`).
+
+## Interim
+
+- The family source is the baked library (decision 7, job 7.6).
+- Openings are upright rectangles; an arched or angled opening needs its outline extruded through the wall and the rules asked of a polygon.
+- A family stands only in a wall along x or y (quarter turns only), and only on a layered wall.
+- Evaluation takes a type's values only: an instance parameter (a window's sill height, a door's swing) reads its default until the placing commands give instances their own values (job 7.1).
+- The interim register has the three rows: the kernel's family solids, its openings in a layered wall, and the stand-in's boxes.
+
+## Not done here
+
+- The commands to place, retype, move and delete a family through the log with undo, and retiring the box door tool and seed in favour of the library door (job 7.1); the page and its two-browser section; families stored in the document, loaded and reloaded (job 7.6). The browser's shapes package is not rebuilt here: it is owed to the page lane.
+- A family's own faces named for dimensions and tags; its coarse symbols drawn in place of its solids (the views).
