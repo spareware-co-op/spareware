@@ -853,14 +853,14 @@ fn newell(points: &[[i64; 3]]) -> [i128; 3] {
     n
 }
 
-fn dot3(a: [i128; 3], b: [i64; 3]) -> i128 {
+fn dot_steps(a: [i128; 3], b: [i64; 3]) -> i128 {
     a[0] * i128::from(b[0]) + a[1] * i128::from(b[1]) + a[2] * i128::from(b[2])
 }
 
 /// The loop turned so that its normal runs along `by` (`along`) or against it.
 fn facing(points: &[[i64; 3]], by: [i64; 3], along: bool) -> Vec<[i64; 3]> {
     let mut points = points.to_vec();
-    if (dot3(newell(&points), by) > 0) != along {
+    if (dot_steps(newell(&points), by) > 0) != along {
         points.reverse();
     }
     points
@@ -886,7 +886,7 @@ fn upright(piece: &Piece) -> Option<([i64; 3], [i64; 3])> {
         }
     }
     // Twice the profile's area times the sweep, against twice the box's volume.
-    let twice = dot3(newell(&piece.outer), piece.by).abs();
+    let twice = dot_steps(newell(&piece.outer), piece.by).abs();
     let size = [0, 1, 2].map(|a| i128::from(hi[a] - lo[a]));
     (twice == 2 * size[0] * size[1] * size[2]).then_some((lo, hi))
 }
@@ -930,7 +930,7 @@ impl Engine for Pieces {
     fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Signed, EngineError> {
         let steps = |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
         let outer: Vec<[i64; 3]> = profile.outer.iter().map(steps).collect();
-        if outer.len() < 3 || dot3(newell(&outer), by) == 0 {
+        if outer.len() < 3 || dot_steps(newell(&outer), by) == 0 {
             return Err(EngineError::Invalid {
                 operation: "extrude",
                 what: "a flat loop of three or more corners, swept off its plane".to_owned(),
