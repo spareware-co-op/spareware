@@ -524,6 +524,7 @@ dependencies = [
  "construct-phases",
  "construct-regen",
  "construct-roofs",
+ "construct-sheets",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -728,6 +729,7 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-roofs",
+ "construct-sheets",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -772,6 +774,18 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "construct-sheets"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-styles",
+ "kit-core",
+ "serde_json",
 ]
 
 [[package]]

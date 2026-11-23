@@ -53,7 +53,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{families, floors, grids, hosting, levels, params, roofs, views, walls};
+use crate::cloud::{families, floors, grids, hosting, levels, params, roofs, sheets, views, walls};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -108,6 +108,7 @@ pub fn is_step(cmd: &str) -> bool {
         || floors::is_command(cmd)
         || roofs::is_command(cmd)
         || views::is_command(cmd)
+        || sheets::is_command(cmd)
         || is_command(cmd)
 }
 
@@ -503,6 +504,10 @@ pub async fn apply<T: Txn>(
     }
     // Nor a view without the levels, phases or options it stands on.
     if let Err(why) = views::undo_rules(txn, project, document, &written, whole).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a sheet without its viewports' views, or a view placed twice.
+    if let Err(why) = sheets::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {

@@ -22,6 +22,7 @@ server = [
     "dep:construct-roofs",
     "dep:construct-materials",
     "dep:construct-views",
+    "dep:construct-sheets",
 ]
 
 [dependencies]
@@ -61,6 +62,8 @@ construct-materials = { path = "../construct-materials", optional = true }
 construct-families = { path = "../construct-families" }
 # A view is a record with no shape, so the regenerator passes it over.
 construct-views = { path = "../construct-views", optional = true }
+# A sheet and a viewport are records with no shape too (the viewport commands, A74).
+construct-sheets = { path = "../construct-sheets", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

@@ -16,7 +16,7 @@
 //! | `view.rename` | `view`, `name` | The view. A name is unique among the document's views, case aside |
 //! | `view.set` | `view`, and any of `scale`, `detail`, `level` and `range` (a plan), `from`, `to`, `look` and `depth` (a section or an elevation), `staging`, `phasing` (`null` for none) | The view; nothing at all when it already is so |
 //! | `view.duplicate` | `view`, `new` (the new ID), optional `name` | A view like the first, named `<name> copy` (then `copy 2`...) unless a name is given |
-//! | `view.delete` | `view` | Its pointer goes |
+//! | `view.delete` | `view` | Its pointer goes; refused while the view is placed on a sheet |
 //!
 //! The values: `kind` is one of `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`,
 //! `drafting`, `legend`. `scale` is the `n` of 1:n, a whole number from 1 to 1,000,000 (default
@@ -943,6 +943,12 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    // A view that is placed on a sheet is not deleted from under its viewport.
+    if let Some(refusal) =
+        crate::cloud::sheets::placed_refusal(run.txn, run.project, run.document, &id).await?
+    {
+        return Ok(Err(refusal));
+    }
     if let Err(refusal) = run.claim(&id).await? {
         return Ok(Err(refusal));
     }
