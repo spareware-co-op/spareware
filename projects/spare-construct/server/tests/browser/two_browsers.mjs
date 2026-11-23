@@ -903,14 +903,14 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the joined walls included, matches the server's`);
 }
-const fresh = await signIn('ben');
-await fresh.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+const freshWalls = await signIn('ben');
+await freshWalls.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
 check(
-  (await filledOnPage(fresh, layeredId)) === freeEnd &&
-    JSON.stringify(await spots(fresh, layeredId)) === JSON.stringify(await spots(anna, layeredId)),
-  'a fresh load takes the first wall as the server has it now, and draws it as the others do',
+  (await filledOnPage(freshWalls, layeredId)) === freeEnd &&
+    JSON.stringify(await spots(freshWalls, layeredId)) === JSON.stringify(await spots(anna, layeredId)),
+  'a freshWalls load takes the first wall as the server has it now, and draws it as the others do',
 );
-await fresh.context().close();
+await freshWalls.context().close();
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
