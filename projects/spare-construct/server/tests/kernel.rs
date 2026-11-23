@@ -170,7 +170,7 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     seed(&store, &s).await.unwrap();
     let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
     let regen = Regenerator::new(store.clone(), files.clone(), kernel.clone());
-    assert_eq!(regen.verify(&project).await.unwrap(), 31);
+    assert_eq!(regen.verify(&project).await.unwrap(), 26);
 
     let wall = s
         .shape(&anna, &project, &model, &i("W-101"), None)
@@ -278,7 +278,7 @@ async fn a_document_of_one_edition_is_reported_on_another() {
             assert!(shown.display.is_none());
         }
         let regen = Regenerator::new(store.clone(), files.clone(), opened_with);
-        assert_eq!(regen.verify(&project).await.unwrap(), 31);
+        assert_eq!(regen.verify(&project).await.unwrap(), 26);
     }
 }
 

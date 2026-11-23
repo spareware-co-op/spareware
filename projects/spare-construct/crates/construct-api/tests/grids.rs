@@ -224,7 +224,7 @@ fn degrees(value: i64) -> Angle {
     Angle::from_units(value * Angle::UNITS_PER_DEGREE)
 }
 
-fn line(grid: &str, name: Value, x: i32) -> Value {
+fn line(grid: &str, name: &Value, x: i32) -> Value {
     json!({ "grid": grid, "name": name, "x0": x.to_string(), "y0": "-1000",
             "x1": x.to_string(), "y1": "7000" })
 }
@@ -234,11 +234,11 @@ fn arc(grid: &str, name: &str) -> Value {
             "start": "0", "end": "90" })
 }
 
-fn vertical(plane: &str, name: Value) -> Value {
+fn vertical(plane: &str, name: &Value) -> Value {
     json!({ "plane": plane, "name": name, "x0": "3000", "y0": "0", "x1": "3000", "y1": "1000" })
 }
 
-fn horizontal(plane: &str, name: Value, elevation: &str) -> Value {
+fn horizontal(plane: &str, name: &Value, elevation: &str) -> Value {
     json!({ "plane": plane, "name": name, "elevation": elevation })
 }
 
@@ -246,16 +246,16 @@ fn horizontal(plane: &str, name: Value, elevation: &str) -> Value {
 async fn grids_and_planes_are_made_through_the_log_as_construct_grids_writes_them() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 6000))
+        .edit("grid.create", line("G-A", &json!("A"), 6000))
         .await
         .unwrap();
     stack.edit("grid.create", arc("G-B", "B")).await.unwrap();
     stack
-        .edit("plane.create", vertical("P-1", json!("Mid")))
+        .edit("plane.create", vertical("P-1", &json!("Mid")))
         .await
         .unwrap();
     stack
-        .edit("plane.create", horizontal("P-2", Value::Null, "-300"))
+        .edit("plane.create", horizontal("P-2", &Value::Null, "-300"))
         .await
         .unwrap();
 
@@ -296,7 +296,7 @@ async fn grids_and_planes_are_made_through_the_log_as_construct_grids_writes_the
 async fn a_grid_made_with_no_name_is_given_the_next_one() {
     let stack = Stack::new().await;
     let make = |grid: &'static str, after: Value| {
-        let mut args = line(grid, Value::Null, 1000);
+        let mut args = line(grid, &Value::Null, 1000);
         args["after"] = after;
         args
     };
@@ -317,11 +317,11 @@ async fn a_grid_made_with_no_name_is_given_the_next_one() {
 async fn refusals_are_the_commands_result_in_the_data_crates_words() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 0))
+        .edit("grid.create", line("G-A", &json!("A"), 0))
         .await
         .unwrap();
     stack
-        .edit("plane.create", vertical("P-1", json!("Mid")))
+        .edit("plane.create", vertical("P-1", &json!("Mid")))
         .await
         .unwrap();
     let before = stack.rows("piece").await;
@@ -336,13 +336,13 @@ async fn refusals_are_the_commands_result_in_the_data_crates_words() {
     // Names.
     refused(
         "grid.create",
-        line("G-2", json!("a"), 100),
+        line("G-2", &json!("a"), 100),
         "Another grid is already named",
     )
     .await;
     refused(
         "grid.create",
-        line("G-2", json!("  "), 100),
+        line("G-2", &json!("  "), 100),
         "besides spaces",
     )
     .await;
@@ -354,7 +354,7 @@ async fn refusals_are_the_commands_result_in_the_data_crates_words() {
     .await;
     refused(
         "plane.create",
-        vertical("P-2", json!("MID")),
+        vertical("P-2", &json!("MID")),
         "Another reference plane is already named",
     )
     .await;
@@ -411,7 +411,7 @@ async fn refusals_are_the_commands_result_in_the_data_crates_words() {
     // Who and what.
     refused(
         "grid.create",
-        line("G-A", json!("Q"), 100),
+        line("G-A", &json!("Q"), 100),
         "is already a grid or a reference plane",
     )
     .await;
@@ -456,7 +456,7 @@ async fn refusals_are_the_commands_result_in_the_data_crates_words() {
 async fn a_grid_is_renamed_moved_reshaped_and_deleted() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 0))
+        .edit("grid.create", line("G-A", &json!("A"), 0))
         .await
         .unwrap();
     stack.edit("grid.create", arc("G-B", "B")).await.unwrap();
@@ -506,7 +506,7 @@ async fn a_grid_is_renamed_moved_reshaped_and_deleted() {
     assert!(stack.maybe("G-A").await.is_none());
     // The name is free again.
     stack
-        .edit("grid.create", line("G-C", json!("A1"), 0))
+        .edit("grid.create", line("G-C", &json!("A1"), 0))
         .await
         .unwrap();
 }
@@ -515,11 +515,11 @@ async fn a_grid_is_renamed_moved_reshaped_and_deleted() {
 async fn a_plane_is_renamed_moved_and_deleted() {
     let stack = Stack::new().await;
     stack
-        .edit("plane.create", vertical("P-1", Value::Null))
+        .edit("plane.create", vertical("P-1", &Value::Null))
         .await
         .unwrap();
     stack
-        .edit("plane.create", horizontal("P-2", json!("Datum"), "0"))
+        .edit("plane.create", horizontal("P-2", &json!("Datum"), "0"))
         .await
         .unwrap();
     assert_eq!(
@@ -579,7 +579,7 @@ async fn a_plane_is_renamed_moved_and_deleted() {
 async fn another_persons_claim_refuses_and_a_grid_takes_the_claim_of_whoever_changes_it() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 0))
+        .edit("grid.create", line("G-A", &json!("A"), 0))
         .await
         .unwrap();
     let rename = |name: &str| json!({ "grid": "G-A", "name": name });
@@ -606,7 +606,7 @@ async fn another_persons_claim_refuses_and_a_grid_takes_the_claim_of_whoever_cha
 async fn the_element_commands_leave_grids_and_planes_to_their_own() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 0))
+        .edit("grid.create", line("G-A", &json!("A"), 0))
         .await
         .unwrap();
     let set = stack
@@ -665,16 +665,16 @@ async fn the_element_commands_leave_grids_and_planes_to_their_own() {
 async fn the_regenerator_gives_each_a_display_shape_the_same_after_a_rebuild() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 6000))
+        .edit("grid.create", line("G-A", &json!("A"), 6000))
         .await
         .unwrap();
     stack.edit("grid.create", arc("G-B", "B")).await.unwrap();
     stack
-        .edit("plane.create", vertical("P-1", json!("Mid")))
+        .edit("plane.create", vertical("P-1", &json!("Mid")))
         .await
         .unwrap();
     stack
-        .edit("plane.create", horizontal("P-2", Value::Null, "-300"))
+        .edit("plane.create", horizontal("P-2", &Value::Null, "-300"))
         .await
         .unwrap();
     stack.regen.catch_up(&i("p")).await.unwrap();
@@ -736,7 +736,7 @@ async fn undone_and_redone(stack: &Stack, cmd: &str, args: Value) {
 #[tokio::test]
 async fn undo_and_redo_cover_each_command() {
     let stack = Stack::new().await;
-    undone_and_redone(&stack, "grid.create", line("G-A", json!("A"), 0)).await;
+    undone_and_redone(&stack, "grid.create", line("G-A", &json!("A"), 0)).await;
     undone_and_redone(&stack, "grid.create", arc("G-B", "B")).await;
     undone_and_redone(
         &stack,
@@ -753,8 +753,8 @@ async fn undo_and_redo_cover_each_command() {
     let drag = json!({ "grid": "G-A", "x0": "100", "y0": "-1000", "x1": "100", "y1": "9000" });
     undone_and_redone(&stack, "grid.reshape", drag).await;
     undone_and_redone(&stack, "grid.delete", json!({ "grid": "G-A" })).await;
-    undone_and_redone(&stack, "plane.create", vertical("P-1", json!("Mid"))).await;
-    undone_and_redone(&stack, "plane.create", horizontal("P-2", Value::Null, "0")).await;
+    undone_and_redone(&stack, "plane.create", vertical("P-1", &json!("Mid"))).await;
+    undone_and_redone(&stack, "plane.create", horizontal("P-2", &Value::Null, "0")).await;
     undone_and_redone(
         &stack,
         "plane.rename",
@@ -781,7 +781,7 @@ async fn undo_and_redo_cover_each_command() {
 async fn an_undo_that_would_give_two_grids_one_name_is_turned_back_whole() {
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-1", json!("A"), 0))
+        .edit("grid.create", line("G-1", &json!("A"), 0))
         .await
         .unwrap();
     stack
@@ -790,7 +790,7 @@ async fn an_undo_that_would_give_two_grids_one_name_is_turned_back_whole() {
         .unwrap();
     // Ben takes the name while it is free.
     stack
-        .edit_as("ben", "grid.create", line("G-2", json!("a"), 500))
+        .edit_as("ben", "grid.create", line("G-2", &json!("a"), 500))
         .await
         .unwrap();
     let before = stack.rows("piece").await;
@@ -807,12 +807,12 @@ async fn an_undo_that_would_give_two_grids_one_name_is_turned_back_whole() {
 async fn replaying_the_log_from_empty_gives_the_same_records() {
     let stack = Stack::new().await;
     for (cmd, args) in [
-        ("grid.create", line("G-A", json!("A"), 0)),
+        ("grid.create", line("G-A", &json!("A"), 0)),
         ("grid.create", arc("G-B", "B")),
-        ("grid.create", line("G-C", Value::Null, 12_000)),
-        ("grid.create", line("G-D", json!("a"), 100)), // refused: a name in use
-        ("plane.create", vertical("P-1", json!("Mid"))),
-        ("plane.create", horizontal("P-2", Value::Null, "-300")),
+        ("grid.create", line("G-C", &Value::Null, 12_000)),
+        ("grid.create", line("G-D", &json!("a"), 100)), // refused: a name in use
+        ("plane.create", vertical("P-1", &json!("Mid"))),
+        ("plane.create", horizontal("P-2", &Value::Null, "-300")),
         (
             "grid.move",
             json!({ "grid": "G-A", "dx": "250", "dy": "-250" }),
@@ -877,11 +877,11 @@ async fn a_recipe_is_the_one_construct_grids_reads() {
     // The records the commands wrote read back, whole, through construct-grids.
     let stack = Stack::new().await;
     stack
-        .edit("grid.create", line("G-A", json!("A"), 0))
+        .edit("grid.create", line("G-A", &json!("A"), 0))
         .await
         .unwrap();
     stack
-        .edit("plane.create", horizontal("P-2", Value::Null, "0"))
+        .edit("plane.create", horizontal("P-2", &Value::Null, "0"))
         .await
         .unwrap();
     let datums = stack.datums(&["G-A", "P-2"]).await;
