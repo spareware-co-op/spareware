@@ -899,6 +899,7 @@ dependencies = [
  "construct-solver",
  "construct-types",
  "kit-core",
+ "num-bigint",
  "serde",
  "serde_json",
 ]

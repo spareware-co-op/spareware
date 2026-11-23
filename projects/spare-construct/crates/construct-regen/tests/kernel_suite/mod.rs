@@ -1120,6 +1120,146 @@ pub fn an_l_shaped_floor_with_a_hole_is_its_layers<E: Engine + Send + 'static>(
     assert!(by_role(&two).contains_key("face.1"));
 }
 
+/// A filled floor recipe of a sloped floor or one with slab edges (construct-slabs' `filled` form,
+/// version 2): `floor_of`'s with `extra` arguments, every length in whole millimetres written
+/// in grid steps by the caller.
+pub fn shaped_floor(base: Recipe, extra: &[(&str, Value)]) -> Recipe {
+    let mut recipe = base;
+    recipe.op_version = 2;
+    for (key, value) in extra {
+        recipe.args.insert((*key).to_owned(), value.clone());
+    }
+    recipe
+}
+
+/// A slab edge's filled form: its edge, its kind, its plan at the underside `top` at height
+/// `under` and at its foot at `foot`, all in whole millimetres.
+pub fn slab_edge(
+    id: &str,
+    kind: &str,
+    (top, under): ([[i64; 2]; 4], i64),
+    (foot, down): ([[i64; 2]; 4], i64),
+) -> Value {
+    let at = |p: &[[i64; 2]; 4], z: i64| -> Vec<[i64; 3]> {
+        p.iter()
+            .map(|&[x, y]| [x * 6400, y * 6400, z * 6400])
+            .collect()
+    };
+    json!({ "id": id, "kind": kind, "top": at(&top, under), "foot": at(&foot, down) })
+}
+
+/// A rectangle floor falling 40 mm towards x (construct-slabs' tops: 0 at x = 0, -40 mm at
+/// x = 4 m), of a 50 mm and a 150 mm layer: each layer is the rectangle lifted onto the sloped
+/// plane and extruded straight up, so the floor holds its plan area times its thickness exactly,
+/// 12 m2 by 200 mm; its corners stand at 0 and -40 mm on top and -200 and -240 mm below; its
+/// bounds are the stand-in's box, 240 mm deep; it keeps a flat floor's names; and the body lists
+/// each layer's sloped profile.
+pub fn a_sloped_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let flat = floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]);
+    let tops = json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let sloped = shaped_floor(flat.clone(), &[("tops", tops)]);
+    let b = built(&k, &sloped);
+    assert_eq!(b.bounds.min, [0, 0, -240]);
+    assert_eq!(b.bounds.max, [4000, 3000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&sloped).unwrap().bounds
+    );
+    let area = 12_000_000_i128;
+    let surface = 2 * area + 14_000 * 240;
+    holds(&k, &b.displays[0].mesh, 6 * area * 200, surface);
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * area * 200);
+    assert_eq!(
+        heights(&b.displays[0].mesh),
+        BTreeSet::from([-240, -200, -90, -50, -40, 0])
+    );
+    assert_eq!(by_role(&b), by_role(&built(&k, &flat)));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(
+        body["layers"][0]["extrude"][1],
+        json!([4000 * 6400, 0, -90 * 6400])
+    );
+    assert_eq!(body["layers"][0]["by"], json!([0, 0, 50 * 6400]));
+}
+
+/// A rectangle floor 200 mm thick with a thickened edge all round, 400 mm wide at its underside
+/// tapering to 200 mm at its foot 300 mm down, mitred at each corner: one solid, the slab united
+/// with the four pieces (construct-slabs' volumes: 1.148 m3 of edges), its faces named
+/// `edge.<edge ID>` besides the slab's; and a single 300 by 400 mm downturn, square at its ends.
+pub fn a_floor_with_slab_edges_is_one_solid<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let flat = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let thick = |id: &str, top: [[i64; 2]; 4], foot: [[i64; 2]; 4]| {
+        slab_edge(id, "thickened", (top, -200), (foot, -500))
+    };
+    let edges = json!([
+        thick(
+            "e0",
+            [[0, 0], [4000, 0], [3600, 400], [400, 400]],
+            [[0, 0], [4000, 0], [3800, 200], [200, 200]]
+        ),
+        thick(
+            "e1",
+            [[4000, 0], [4000, 3000], [3600, 2600], [3600, 400]],
+            [[4000, 0], [4000, 3000], [3800, 2800], [3800, 200]]
+        ),
+        thick(
+            "e2",
+            [[4000, 3000], [0, 3000], [400, 2600], [3600, 2600]],
+            [[4000, 3000], [0, 3000], [200, 2800], [3800, 2800]]
+        ),
+        thick(
+            "e3",
+            [[0, 3000], [0, 0], [400, 400], [400, 2600]],
+            [[0, 3000], [0, 0], [200, 200], [200, 2800]]
+        ),
+    ]);
+    let all_round = shaped_floor(flat.clone(), &[("edges", edges)]);
+    let b = built(&k, &all_round);
+    assert_eq!(b.bounds.min, [0, 0, -500]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry()
+            .build(&all_round)
+            .unwrap()
+            .bounds
+    );
+    let slab = 12_000_000_i128 * 200;
+    let six = 6 * (slab + 1_148_000_000);
+    holds(&k, &b.displays[0].mesh, six, 2 * 12_000_000 + 14_000 * 500);
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), six);
+    assert_eq!(b.displays[0].parts.len(), 1);
+    let names = by_role(&b);
+    for edge in ["e0", "e1", "e2", "e3"] {
+        assert!(names.contains_key(&format!("edge.{edge}")), "{edge}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["edges"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        body["layers"][0]["edges"][0]["loft"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let down = slab_edge(
+        "e0",
+        "downturn",
+        ([[0, 0], [4000, 0], [4000, 300], [0, 300]], -200),
+        ([[0, 0], [4000, 0], [4000, 300], [0, 300]], -600),
+    );
+    let one = built(&k, &shaped_floor(flat, &[("edges", json!([down]))]));
+    let six = 6 * (slab + 4000 * 300 * 400);
+    assert_eq!(signed_six_volume(&one.displays[0].mesh), six);
+    let body: Value = serde_json::from_slice(&one.body).unwrap();
+    assert_eq!(
+        body["layers"][0]["edges"][0]["by"],
+        json!([0, 0, 400 * 6400])
+    );
+}
+
 /// The default partition's layers (construct-walls' `wall-partition-stud-90`), from the exterior:
 /// function, material and thickness in grid steps (12.5 mm, 90 mm, 12.5 mm; 115 mm in all).
 pub const PARTITION: [(&str, &str, i64); 3] = [
