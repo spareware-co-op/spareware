@@ -12,8 +12,11 @@
 //!   engine's, so the kernel's checker has passed it, as the seam's contract says.
 //! - A sloped floor (job 5.2): the same, each layer's bottom face the floor's loops lifted onto
 //!   the sloped plane (every corner at its top's height, [`FloorPlan::top_at`], let down by the
-//!   layer's depth: grid points on one plane, as construct-slabs' `Shape` checked) and extruded
-//!   straight up by its thickness, so the layers are plumb and their side faces upright.
+//!   layer's depth: grid points on one plane, as construct-slabs' `Shape` checked) and lofted to
+//!   the same loop moved straight up by its thickness ([`Engine::loft`], every wall upright and
+//!   flat), each hole cut through by its own loft ([`Engine::subtract`]); so the layers are plumb
+//!   and their side faces upright. The engine answers an extrusion of a profile that is not level
+//!   with a curved surface, so a sloped layer is not asked for as one.
 //! - Slab edges (job 5.2): each piece of [`FloorPlan::edges`], a downturn as its foot extruded
 //!   straight up to the floor's underside ([`Engine::extrude`]) and a thickened edge as its foot
 //!   lofted to its top ([`Engine::loft`]: every wall of it flat), united in order with the lowest
@@ -69,6 +72,11 @@ struct AskedLayer {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     holes: Vec<Vec<[i64; 3]>>,
     by: [i64; 3],
+    /// A sloped layer's: its outer loop lofted from its bottom face to its top (`extrude` to it
+    /// moved by `by`), each hole cut through as its loop lofted from a step under the bottom face
+    /// to a step over the top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lofted: Option<bool>,
     /// The slab edges united with the lowest layer; none on any other.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     edges: Vec<AskedEdge>,
@@ -185,6 +193,47 @@ fn ring(
         .collect()
 }
 
+/// `points` each moved by `by` (engine steps).
+fn shifted(points: &[P3], by: [i64; 3]) -> Result<Vec<P3>, GeometryError> {
+    points
+        .iter()
+        .map(|p| {
+            let at = |c: i64, d: i64| c.checked_add(d).ok_or_else(too_big);
+            P3::new(
+                at(p.x.get(), by[0])?,
+                at(p.y.get(), by[1])?,
+                at(p.z.get(), by[2])?,
+            )
+            .map_err(|_| too_big())
+        })
+        .collect()
+}
+
+/// A sloped layer: its outer loop on its sloped bottom face lofted to the same loop moved up by
+/// `by` ([`Engine::loft`]: every wall upright and flat, both caps on the sloped planes), less each
+/// hole lofted the same way from one grid step under the bottom face to one over the top
+/// ([`Engine::subtract`]), so no face of a cutter lies on a face of the layer. An extrusion of a
+/// profile that is not level is not used: the engine answers it with a curved surface.
+fn sloped_layer<E: Engine>(
+    engine: &mut E,
+    outer: &[P3],
+    holes: &[Vec<P3>],
+    by: [i64; 3],
+) -> Result<E::Solid, GeometryError> {
+    let up = |points: &[P3], d: [i64; 3]| shifted(points, d).map(|corners| Section { corners });
+    let mut solid = engine
+        .loft(&[up(outer, [0, 0, 0])?, up(outer, by)?])
+        .map_err(from_engine)?;
+    for hole in holes {
+        let over = by[2].checked_add(1).ok_or_else(too_big)?;
+        let cutter = engine
+            .loft(&[up(hole, [0, 0, -1])?, up(hole, [0, 0, over])?])
+            .map_err(from_engine)?;
+        solid = engine.subtract(&solid, &cutter).map_err(from_engine)?;
+    }
+    Ok(solid)
+}
+
 /// Four corners of a slab edge's plan as grid points of the engine.
 fn corners(plan: &[[i64; 3]; 4], units: Units) -> Result<Vec<P3>, GeometryError> {
     plan.iter()
@@ -290,6 +339,7 @@ impl<E: Engine> Kernel<E> {
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
             let slabs = plan.slabs();
             let last = slabs.len().saturating_sub(1);
+            let sloped = plan.tops.iter().flatten().any(|&z| z != 0);
             for (n, (_, layer, bottom, top)) in slabs.into_iter().enumerate() {
                 let up = units.from_q0(top.saturating_sub(bottom))?;
                 let outer = ring(&plan, 0, plan.outer(), units, bottom)?;
@@ -306,10 +356,15 @@ impl<E: Engine> Kernel<E> {
                     extrude: as_steps(&outer),
                     holes: holes.iter().map(|h| as_steps(h)).collect(),
                     by,
+                    lofted: sloped.then_some(true),
                     edges: Vec::new(),
                 };
-                let profile = Profile { outer, holes };
-                let mut solid = engine.extrude(&profile, by).map_err(from_engine)?;
+                let mut solid = if sloped {
+                    sloped_layer(&mut *engine, &outer, &holes, by)?
+                } else {
+                    let profile = Profile { outer, holes };
+                    engine.extrude(&profile, by).map_err(from_engine)?
+                };
                 if n == last {
                     solid = with_edges(&mut *engine, &plan, units, solid, &mut entry.edges)?;
                 }

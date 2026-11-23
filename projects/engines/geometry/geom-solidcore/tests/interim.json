@@ -264,8 +264,8 @@
     {
       "program": "spare-construct",
       "place": "construct-regen's kernel::floor, a sloped floor's layers and slab edges",
-      "operation": "floor version 2 (Kernel: one Engine::extrude per layer of the loops lifted onto the sloped plane; each slab edge an Engine::extrude of its foot or an Engine::loft of its foot to its top, then Engine::unite with the lowest layer)",
-      "answered_by": "the engine behind the Engine trait: on the server's kernel setting solidcore's sweep for a profile that is not level and for a loft, and the kernel's own exact boolean for the union of flat-faced solids; construct-slabs works out every corner exactly on the grid first and refuses what is not (a corner between steps, a slope with slab edges)",
+      "operation": "floor version 2 (Kernel: a sloped layer one Engine::loft of its outer loop from its sloped bottom face to its top, less an Engine::loft of each hole by Engine::subtract; each slab edge an Engine::extrude of its foot or an Engine::loft of its foot to its top, then Engine::unite with the lowest layer)",
+      "answered_by": "the engine behind the Engine trait: on the server's kernel setting solidcore's loft, the kernel's prism for a level foot, and the kernel's own exact boolean for the cut and the union of flat-faced solids (an extrusion of a profile that is not level is not asked for: solidcore answers it with a spline surface the kernel has no kind for); construct-slabs works out every corner exactly on the grid first and refuses what is not (a corner between steps, a slope with slab edges)",
       "pinned_by": {
         "file": "projects/spare-construct/server/tests/kernel.rs",
         "test": "a_floor_with_slab_edges_is_one_solid"

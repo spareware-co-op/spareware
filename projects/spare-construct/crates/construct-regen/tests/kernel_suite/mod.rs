@@ -1167,8 +1167,16 @@ pub fn a_sloped_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() 
         construct_regen::geometry().build(&sloped).unwrap().bounds
     );
     let area = 12_000_000_i128;
-    let surface = 2 * area + 14_000 * 240;
-    holds(&k, &b.displays[0].mesh, 6 * area * 200, surface);
+    // One layer is one closed solid; two are two shells sharing a face, measured together.
+    let one = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let tops_one = json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let single = built(&k, &shaped_floor(one, &[("tops", tops_one)]));
+    holds(
+        &k,
+        &single.displays[0].mesh,
+        6 * area * 200,
+        2 * area + 14_000 * 240,
+    );
     assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * area * 200);
     assert_eq!(
         heights(&b.displays[0].mesh),
@@ -1181,6 +1189,19 @@ pub fn a_sloped_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() 
         json!([4000 * 6400, 0, -90 * 6400])
     );
     assert_eq!(body["layers"][0]["by"], json!([0, 0, 50 * 6400]));
+    assert_eq!(body["layers"][0]["lofted"], json!(true));
+
+    // The L-shaped floor with its hole, sloped along its diagonal from 100 mm at the origin
+    // falling 160 mm to (8 m, 8 m): z = 100 - (x + y) / 100 mm at each corner, the hole cut
+    // through each layer; 44 m2 by 200 mm, exactly.
+    let z = |x: i64, y: i64| (100 - (x + y) / 100) * 6400;
+    let ring = |r: &[(&str, i64, i64)]| r.iter().map(|&(_, x, y)| z(x, y)).collect::<Vec<_>>();
+    let tops = json!([ring(&L_OUTER), ring(&L_HOLE)]);
+    let l = floor_of(&[&L_OUTER, &L_HOLE], &[("structure", 200)]);
+    let b = built(&k, &shaped_floor(l, &[("tops", tops)]));
+    assert_eq!(b.bounds.max[2], 100);
+    assert_eq!(b.bounds.min[2], -220);
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * 44_000_000 * 200);
 }
 
 /// A rectangle floor 200 mm thick with a thickened edge all round, 400 mm wide at its underside
