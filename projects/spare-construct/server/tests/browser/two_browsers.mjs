@@ -695,6 +695,12 @@ await formulaField.fill('2 * Jamb + 1 m');
 await formulaField.press('Enter');
 await until(() => door('D-103'), (view) => clear(view).shown === '1100 mm', 'the new formula reaches the door');
 pass('a changed formula reaches every door that reads it');
+// The dialog is redrawn from the server after that change. What Ben types next is kept through a
+// redraw (the field is a draft), and he starts only once the dialog shows the formula the server stored.
+await ben.waitForFunction(
+  (id) => /2\s*\*\s*Jamb\s*\+\s*1/.test(document.querySelector(`#stack-manage p[data-formula="${id}"]`)?.textContent ?? ''),
+  clearDef.id,
+);
 await formulaField.fill('Jamb / 0');
 await formulaField.press('Enter');
 await ben.waitForSelector(`${manager} [data-problem="formula:${clearDef.id}"]`);
