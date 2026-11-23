@@ -9,6 +9,8 @@
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
 //!   same log.
+//! - [`walls`]: wall types and their layers, and drawing layered walls of them, through the same
+//!   log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -25,6 +27,7 @@ pub mod params;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;
+pub mod walls;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;

@@ -89,7 +89,9 @@ impl Engine for Cuboids {
         let [a, b, c, d] = corners[..] else {
             return Err(unsupported("extrude"));
         };
-        let upright = a[1] == b[1] && b[0] == c[0] && c[1] == d[1] && d[0] == a[0];
+        // Its first side along x, or along y.
+        let upright = (a[1] == b[1] && b[0] == c[0] && c[1] == d[1] && d[0] == a[0])
+            || (a[0] == b[0] && b[1] == c[1] && c[0] == d[0] && d[1] == a[1]);
         let level = [b, c, d].iter().all(|p| p[2] == a[2]);
         if !profile.holes.is_empty() || !upright || !level || a[0] == c[0] || a[1] == c[1] {
             return Err(unsupported("extrude"));
@@ -312,6 +314,167 @@ fn a_wall_without_doors_asks_for_no_cut() {
     );
     assert_eq!(built.displays[0].mesh, built.displays[1].mesh);
     assert_eq!(built.displays[1].deviation, 0);
+}
+
+#[test]
+fn a_layered_wall_is_one_solid_per_layer() {
+    kernel_suite::a_layered_wall_is_one_solid_per_layer(|| Cuboids);
+}
+
+#[test]
+fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
+    kernel_suite::a_door_in_a_layered_wall_is_refused_as_in_the_box(|| Cuboids);
+}
+
+/// A door in a layered wall is asked of the engine as one cutter, extruded once and subtracted
+/// from each layer that has a thickness, in the layers' order: the door's width and height at its
+/// place along the wall, through the wall's whole thickness and 100 mm past each side, from 100
+/// mm under the base. A membrane has no solid, so nothing is cut from it.
+#[test]
+fn a_door_is_cut_from_each_layer_of_a_layered_wall() {
+    use construct_regen::kernel::{Hosted, Kernel};
+    let engine = Recording::default();
+    let tools = engine.tools.clone();
+    let k = Kernel::new(engine).unwrap();
+    let mm = |v: i64| v * 6400;
+    let door = kernel_suite::door();
+    let with_membrane = [
+        kernel_suite::PARTITION[0],
+        ("membrane", "membrane-polyethylene", 0),
+        kernel_suite::PARTITION[1],
+        kernel_suite::PARTITION[2],
+    ];
+    let wall = kernel_suite::layered_wall([0, 0], [4000, 0], 2700, &with_membrane);
+    let hosted = [Hosted {
+        key: "D-1",
+        recipe: &door,
+        at: k.units().point([1000, -150, 0]).unwrap(),
+    }];
+    let built = k.build_hosting(&wall, &hosted).unwrap();
+    // The exterior face is 57.5 mm to the right of the line: at y = -57.5 mm along x.
+    let foot = [mm(1000), -368_000 - mm(100), mm(-100)];
+    assert_eq!(*tools.lock().unwrap(), [foot, foot, foot]);
+    assert_eq!(built.displays[0].parts.len(), 3);
+    let roles: Vec<&str> = built.names.iter().map(|n| n.role.as_str()).collect();
+    assert_eq!(roles.len(), 6 + 3 + 3, "{roles:?}");
+}
+
+#[test]
+fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
+    kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(|| Prisms);
+}
+
+/// A test engine that answers only an extrusion straight up of a strictly convex polygon, which
+/// it keeps as the prism it is and meshes as its two caps (fans from the first corner) and a quad
+/// of two triangles per side. It is judged by the suite like any engine; it is not a geometry
+/// engine.
+struct Prisms;
+
+/// A prism: its floor's corners counter-clockwise from above, its floor's height and its top's.
+#[derive(Clone, Debug)]
+struct Prism {
+    corners: Vec<[i64; 2]>,
+    z: [i64; 2],
+}
+
+impl Engine for Prisms {
+    type Solid = Prism;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.prisms".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a polygon's corners, its count and its height"
+    )]
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Prism, EngineError> {
+        let [0, 0, h] = by else {
+            return Err(unsupported("extrude"));
+        };
+        let z = profile.outer.first().map_or(0, |p| p.z.get());
+        let mut corners: Vec<[i64; 2]> = profile
+            .outer
+            .iter()
+            .map(|p| [p.x.get(), p.y.get()])
+            .collect();
+        let n = corners.len();
+        let turn = |i: usize, c: &[[i64; 2]]| {
+            let (a, b, d) = (c[i], c[(i + 1) % n], c[(i + 2) % n]);
+            i128::from(b[0] - a[0]) * i128::from(d[1] - b[1])
+                - i128::from(b[1] - a[1]) * i128::from(d[0] - b[0])
+        };
+        if n < 3
+            || h <= 0
+            || !profile.holes.is_empty()
+            || profile.outer.iter().any(|p| p.z.get() != z)
+        {
+            return Err(unsupported("extrude"));
+        }
+        if (0..n).all(|i| turn(i, &corners) < 0) {
+            corners.reverse();
+        }
+        if !(0..n).all(|i| turn(i, &corners) > 0) {
+            return Err(unsupported("extrude"));
+        }
+        Ok(Prism {
+            corners,
+            z: [z, z + h],
+        })
+    }
+
+    fn subtract(&mut self, _: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Err(unsupported("subtract"))
+    }
+
+    fn subtract_pieces(&mut self, _: &Prism, _: &Prism) -> Result<Vec<Prism>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Prism, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Prism) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "a prism, its corners' count and two corners' numbers"
+    )]
+    fn mesh(&mut self, s: &Prism) -> Result<DisplayMesh, EngineError> {
+        let n = s.corners.len() as u32;
+        let mut mesh = DisplayMesh::default();
+        for z in s.z {
+            for c in &s.corners {
+                mesh.positions.push([c[0] as f64, c[1] as f64, z as f64]);
+                mesh.normals.push([0.0, 0.0, 0.0]);
+            }
+        }
+        for i in 1..n - 1 {
+            // The floor seen from below, the top from above.
+            mesh.triangles.push([0, i + 1, i]);
+            mesh.triangles.push([n, n + i, n + i + 1]);
+        }
+        for i in 0..n {
+            let j = (i + 1) % n;
+            mesh.triangles.push([i, j, n + j]);
+            mesh.triangles.push([i, n + j, n + i]);
+        }
+        Ok(mesh)
+    }
+
+    fn section(&mut self, _: &Prism, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
 }
 
 /// An engine's refusal comes back as a shape that can't build, with the engine's words kept.

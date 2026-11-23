@@ -81,6 +81,7 @@ impl Geometry for Wedges {
             deviation: i64::from(lod) * 10,
             mesh: mesh.clone(),
             outline: vec![[0, 0], [long, 0], [0, long]],
+            parts: Vec::new(),
         };
         let filler = arg("filler").unwrap_or(0) as usize;
         let mut body = format!("wedge {long}").into_bytes();

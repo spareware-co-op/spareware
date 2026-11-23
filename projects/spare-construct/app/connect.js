@@ -559,7 +559,7 @@
     C.claims.clear();
     C.links = [];
     C.steps = { undo: null, redo: null };
-    C.params = C.typeList = C.manage = null;
+    C.params = C.typeList = C.manage = C.wallTypes = null;
     C.problems.clear();
     C.asked.clear();
     C.cuts = false;
@@ -682,23 +682,67 @@
   /**
    * What `record` builds to here. A wall with elements hosted in it on this page is built with them,
    * each opening cut, as the server's regenerator builds it, when the package can (the kernel's
-   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does.
+   * `build_hosting`); the stand-in's builds a host as the wall alone, as its `build` does. A recipe
+   * that reads records is built from `fill`, the recipe the server filled for it (`fillOf`).
    */
-  function buildOn(builder, record, into) {
-    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into) : [];
-    if (!guests.length) return buildShape(builder, record.recipe);
+  function buildOn(builder, record, into, fill) {
+    const recipe = fill?.recipe ?? record.recipe;
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill) : [];
+    if (!guests.length) return buildShape(builder, recipe);
     // Each guest by its place in the host's frame, so a host that moves builds to the same text.
-    const host = JSON.stringify({ recipe: record.recipe, placement: { x: 0, y: 0, z: 0 } });
+    const host = JSON.stringify({ recipe, placement: { x: 0, y: 0, z: 0 } });
     const hosted = JSON.stringify(guests);
     const text = `${host}\n${hosted}`;
     if (!builder.hosting.has(text)) builder.hosting.set(text, JSON.parse(builder.shapes.build_hosting(host, hosted)));
     return builder.hosting.get(text);
   }
 
-  async function shapeFor(model, record, into) {
+  async function shapeFor(model, record, into, fill) {
     const row = C.models.get(model);
     const builder = row && (await builderFor(row));
-    return builder ? buildOn(builder, record, into) : storedShape(model, record.id);
+    if (!builder) return storedShape(model, record.id);
+    if (fill?.failed) return { failed: fill.failed };
+    return buildOn(builder, record, into, fill);
+  }
+
+  // A recipe that reads records (a layered wall's layers from its wall type, a top tied to a level, a
+  // parameter's value) is filled by the server, the way its regenerator fills it, and this page builds
+  // what comes back: it never works out a type's layers or a level's height itself. The answer says
+  // how far the log had got, so a checkpoint from before then is not compared with it; an entry that
+  // may change what such a recipe reads has it filled and built again (`fillAgain`).
+
+  /** Whether a recipe reads records: an argument that is an object, such as `{"wall":"type"}`. */
+  const readsRecords = (recipe) =>
+    Object.values(recipe?.args || {}).some((arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg));
+
+  /** The server's filling of `record`'s recipe in `model`: `{head, recipe}` or `{head, failed}`; null when it reads nothing. */
+  async function fillOf(model, record) {
+    if (!readsRecords(record.recipe)) return null;
+    try {
+      return await api(`${modelUrl(model)}/filled/${record.id}`);
+    } catch (error) {
+      return { head: 0, failed: { code: 'NotFilled', message: error.message } };
+    }
+  }
+
+  /** Every element of `into` whose recipe reads records, filled and built again. */
+  function fillAgain(model, into) {
+    for (const [id, piece] of into) {
+      if (readsRecords(piece.el.recipe)) refill(model, into, id, piece);
+    }
+  }
+
+  async function refill(model, into, id, piece) {
+    piece.stale = true;
+    piece.asked = (piece.asked || 0) + 1;
+    const asked = piece.asked;
+    const fill = await fillOf(model, piece.el);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    const answer = await shapeFor(model, piece.el, into, fill);
+    if (into.get(id) !== piece || piece.asked !== asked) return;
+    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    queueDraw();
+    if (id === S.sel) refreshSide();
   }
 
   /** A stored length, `length:q0:<steps>`, in millimetres. */
@@ -731,8 +775,8 @@
    * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
    * regenerator hands them to its builder.
    */
-  function guestsOf(host, into) {
-    const drawn = { el: host, shape: into.get(host.id)?.shape };
+  function guestsOf(host, into, fill) {
+    const drawn = { el: host, shape: into.get(host.id)?.shape, fill: fill ?? into.get(host.id)?.fill };
     const guests = [];
     for (const [id, piece] of into) {
       if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
@@ -755,12 +799,13 @@
     return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
   }
 
-  /** Where `el` sits hosted on `face` of `host` (`{el, shape}`): `placementOf`'s rule. */
+  /** Where `el` sits hosted on `face` of `host` (`{el, shape, fill}`): `placementOf`'s rule. */
   function placedOn(el, face, host) {
     const along = el.props?.['@host.along'];
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
     const own = el.recipe.args.thickness;
     if (!Number.isFinite(thickness) || !Number.isFinite(own)) return el.placement;
@@ -772,6 +817,75 @@
     return alongY
       ? { x: at.x + across, y: at.y + a, z: at.z + u }
       : { x: at.x + a, y: at.y + across, z: at.z + u };
+  }
+
+  // A layered wall (`wall.layered`): drawn as a line between two points, its layers read from its
+  // wall type (construct-model's FORMAT.md, "Walls"). Lengths in its recipe are grid steps.
+  const LAYERED = 'wall.layered';
+  const STEPS_PER_MM = 6400;
+  const steps = (text) => Number(String(text).split(':').pop());
+
+  /** A number of steps to the nearest whole millimetre, a half away from zero, as construct-regen's `nearest_mm`. */
+  function nearestMm(value) {
+    const floor = Math.floor(value / STEPS_PER_MM);
+    const twice = (value - floor * STEPS_PER_MM) * 2;
+    return twice > STEPS_PER_MM || (twice === STEPS_PER_MM && floor >= 0) ? floor + 1 : floor;
+  }
+
+  /**
+   * A layered wall's line and outer faces, from the recipe the server filled for it: its start in
+   * steps, the axis it runs along (0 for x, 1 for y, null at an angle), which way, and its two
+   * finish faces' offsets to the right of the line, in steps. Null until it is filled.
+   */
+  function lineOf(host) {
+    const args = host.fill?.recipe?.args;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    const start = args.start.map(steps);
+    const end = args.end.map(steps);
+    const d = [end[0] - start[0], end[1] - start[1]];
+    const axis = d[1] === 0 ? 0 : d[0] === 0 ? 1 : null;
+    const unit = [Math.sign(d[0]), Math.sign(d[1])];
+    const exterior = steps(args.layers[0].exterior);
+    const interior = steps(args.layers.at(-1).interior);
+    return { start, end, d, axis, unit, exterior, interior };
+  }
+
+  /**
+   * Where `el` sits on side `role` of a layered wall, as construct-regen's `hosting` puts it: along
+   * the wall's line from its start the way the wall runs, flush with that side and reaching toward
+   * the other, each to the nearest millimetre, and up from its base. Only a wall along an axis hosts.
+   */
+  function onLayered(el, role, host, along, up) {
+    const line = lineOf(host);
+    const { width, thickness } = el.recipe.args;
+    if (!line || line.axis === null || !Number.isFinite(width) || !Number.isFinite(thickness)) return el.placement;
+    const a = line.axis;
+    const c = 1 - a;
+    const right = [line.unit[1], -line.unit[0]][c];
+    const [on, other] = role === 'interior' ? [line.interior, line.exterior] : [line.exterior, line.interior];
+    const lowAlong = line.unit[a] > 0
+      ? line.start[a] + steps(along)
+      : line.start[a] - (steps(along) + width * STEPS_PER_MM);
+    const face = line.start[c] + on * right;
+    const back = line.start[c] + other * right;
+    const lowAcross = back > face ? face : face - thickness * STEPS_PER_MM;
+    const at = [0, 0];
+    at[a] = nearestMm(lowAlong);
+    at[c] = nearestMm(lowAcross);
+    const base = host.el.placement;
+    return { x: base.x + at[0], y: base.y + at[1], z: base.z + storedMm(up) };
+  }
+
+  /** How far along its wall a hosted door at `x`, `y` (its low corner, in the model) is from the wall's start. */
+  function alongOn(host, el, x, y) {
+    const wall = host.el;
+    if (wall.recipe.op !== LAYERED) return wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
+    const line = lineOf(host);
+    if (!line || line.axis === null) return null;
+    const a = line.axis;
+    const at = [x - wall.placement.x, y - wall.placement.y][a];
+    const start = Math.round(line.start[a] / STEPS_PER_MM);
+    return line.unit[a] > 0 ? at - start : start - at - el.recipe.args.width;
   }
 
   /** The box around a piece in the model. */
@@ -787,6 +901,19 @@
     return `<polygon class="${paint}" points="${points.join(' ')}"/>`;
   }
 
+  /** Each part of a shape, filled with its material's colour where the plan cuts it. */
+  function partsOf(piece, parts) {
+    const { x, y } = placementOf(piece.el);
+    return parts
+      .map((part) => {
+        const points = part.outline.map(([px, py]) => `${x + px},${y + py}`).join(' ');
+        const colour = colourOf(part.material, 'cut');
+        const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+        return `<polygon class="part" data-material="${esc(part.material)}" data-function="${esc(part.function)}"${fill} points="${points}"/>`;
+      })
+      .join('');
+  }
+
   /** Compares what the server built with what this page holds (note A05). */
   function compareCheckpoint(entry) {
     const { through, bodies } = entry.args;
@@ -794,7 +921,8 @@
     if (!into) return;
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
-      if (!piece || piece.seq > through || piece.stale) continue;
+      // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -846,8 +974,9 @@
       if (model === C.model?.id) keepWorkshop(id, record, hash, seq, mine);
       return;
     }
-    const answer = await shapeFor(model, record, into);
-    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq });
+    const fill = await fillOf(model, record);
+    const answer = await shapeFor(model, record, into, fill);
+    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill });
     // What it is hosted in is built again with it, as the server builds a host with its guests.
     if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
   }
@@ -859,7 +988,7 @@
   async function buildHostAgain(model, into, id) {
     const host = id && into.get(id);
     if (!host) return;
-    const answer = await shapeFor(model, host.el, into);
+    const answer = await shapeFor(model, host.el, into, host.fill);
     if (into.get(id) !== host) return;
     Object.assign(host, { shape: undefined, failed: undefined }, answer);
     host.stale = false;
@@ -1029,12 +1158,15 @@
           });
       }
     }
-    // A type or a parameter changed, or may have: what the selected element reads may have too.
-    if ((/^(type|parameter|level)\./.test(entry.cmd) || UNDOING.has(entry.cmd)) && entry.target === C.model?.id) {
+    // A type, a parameter or a level changed, or may have: what the selected element reads may have
+    // too, and so may what a recipe that reads records is filled with.
+    const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
+    if (reads) fillAgain(entry.target, into);
+    if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (/^(type|parameter|level)\.|^element\.(type|create|delete)$/.test(entry.cmd) || UNDOING.has(entry.cmd)) {
+    if (reads || /^element\.(type|create|delete)$|^wall\.draw$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -1045,6 +1177,9 @@
     }
     queueDraw();
   }
+
+  /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type)\./;
 
   const WORDS = {
     'element.create': 'added',
@@ -1072,6 +1207,12 @@
     'level.delete': 'deleted a level',
     'level.tie': 'tied to a level',
     'level.top': 'tied the top of',
+    'wall.draw': 'drew',
+    'wall.type.create': 'made a wall type',
+    'wall.type.layers': 'changed the layers of a wall type',
+    'wall.type.rename': 'renamed a wall type',
+    'wall.type.duplicate': 'copied a wall type',
+    'wall.type.delete': 'deleted a wall type',
     'edit.undo': 'undid a change to',
     'edit.redo': 'redid a change to',
   };
@@ -1137,6 +1278,12 @@
     'level.delete': 'deleting a level',
     'level.tie': 'a tie to a level',
     'level.top': 'a tie of a top',
+    'wall.draw': 'drawing a wall',
+    'wall.type.create': 'making a wall type',
+    'wall.type.layers': 'the layers of a wall type',
+    'wall.type.rename': 'renaming a wall type',
+    'wall.type.duplicate': 'copying a wall type',
+    'wall.type.delete': 'deleting a wall type',
     'edit.redo': 'a redo',
   };
   const stepWords = (step) => STEP_WORDS[step.cmd] || step.cmd.replace('.', ' ');
@@ -1630,23 +1777,27 @@
     }
   }
 
+  /** The open model's levels, lowest first, as the server lists them; null until they have come. */
+  function modelLevels() {
+    if (!C.model) return null;
+    const key = `${C.model.id}/${C.paramsEpoch}`;
+    if (C.levelList?.key !== key && C.levelListLoading !== key) {
+      C.levelListLoading = key;
+      api(`${modelUrl(C.model.id)}/levels`)
+        .then((levels) => {
+          knowLevels(key, levels);
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.levelList?.key.startsWith(`${C.model.id}/`) ? C.levelList.levels : null;
+  }
+
   /** The name of the level a record stands on, from the server's list once it has come. */
   function levelName(record) {
     const id = levelIdOf(record);
     if (!id) return 'None';
-    if (C.model) {
-      const key = `${C.model.id}/${C.paramsEpoch}`;
-      if (C.levelList?.key !== key && C.levelListLoading !== key) {
-        C.levelListLoading = key;
-        api(`${modelUrl(C.model.id)}/levels`)
-          .then((levels) => {
-            knowLevels(key, levels);
-            refreshSide();
-          })
-          .catch(() => {});
-      }
-    }
-    return C.levelList?.levels.find((level) => level.id === id)?.name ?? id;
+    return modelLevels()?.find((level) => level.id === id)?.name ?? id;
   }
 
   function levelsHtml(m) {
@@ -1700,6 +1851,113 @@
       go('plan:l1');
     }
     renderManage();
+  };
+
+  // --- The wall tool ---
+  // A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
+  // palette, its base on the plan's level and its top on the level chosen there or a height typed
+  // there: one `wall.draw` edit (construct-model's FORMAT.md, "Walls"). The wall types, their layers
+  // and the colours their materials are drawn in come from the server; where a model has no wall
+  // types, the page sends the server's default ones through the log (`wall.type.create`). A refusal
+  // is the server's reason, under the tool's options.
+
+  C.wallTypes = null; // { key, view } of the open model
+  C.wallTool = { type: null, top: undefined, height: '3000 mm' }; // top: a level's ID, '' for a height, undefined for the level above
+  C.madeDefaults = null; // the model the default wall types were sent for
+
+  /** The open model's wall types, materials and defaults; null until they have come. */
+  function wallTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.wallTypes?.key !== key && C.wallTypesLoading !== key) {
+      C.wallTypesLoading = key;
+      api(`${modelUrl(model)}/wall-types`)
+        .then((view) => {
+          C.wallTypes = { key, view };
+          refreshSide();
+          queueDraw();
+        })
+        .catch(() => {});
+    }
+    return C.wallTypes?.key.startsWith(`${model}/`) ? C.wallTypes.view : null;
+  }
+
+  /** A material's colour where a view cuts it (`cut`) or seen beyond (`surface`); null for a material not listed. */
+  function colourOf(material, which) {
+    const found = wallTypes()?.materials.find((m) => m.id === material);
+    return found ? found[which] : null;
+  }
+
+  const materialName = (view, id) => view.materials.find((m) => m.id === id)?.name ?? id;
+
+  function chosenWallType(view) {
+    return view.types.find((t) => t.id === C.wallTool.type) ?? view.types[0] ?? null;
+  }
+
+  /** The top the tool draws to: a level's ID, or '' for a height. By default the level above the plan's. */
+  function wallTop(levels) {
+    const here = levelOf();
+    const others = (levels || []).filter((level) => level.id !== here);
+    const chosen = C.wallTool.top;
+    if (chosen === '' || others.some((level) => level.id === chosen)) return chosen;
+    const at = (levels || []).findIndex((level) => level.id === here);
+    return (at >= 0 && levels[at + 1]?.id) || '';
+  }
+
+  /** Sends the server's default wall types, once for a model, where it has none. */
+  function makeDefaultWalls(view) {
+    if (!canEdit() || C.madeDefaults === C.model.id) return;
+    C.madeDefaults = C.model.id;
+    for (const args of view.defaults) manage('wall.type.create', args, 'wall-draw');
+  }
+
+  function wallToolHtml() {
+    let html = typeSel('wall', 'Wall', '<b>New wall</b>');
+    const view = wallTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the wall types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(() => makeDefaultWalls(view));
+      return `${html}<p class="pad small faint" data-wall-tool="making">This model has no wall types yet, so the default ones are being made.</p>${problem('wall-draw')}`;
+    }
+    const chosen = chosenWallType(view);
+    const levels = modelLevels() || [];
+    const here = levelOf();
+    const top = wallTop(levels);
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const tops = levels
+      .filter((level) => level.id !== here)
+      .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+    tops.push(`<option value=""${top === '' ? ' selected' : ''}>A height</option>`);
+    const base = levels.find((level) => level.id === here)?.name ?? here;
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackwalltype" data-key="wall-type" aria-label="Wall type">${types.join('')}</select>`);
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Base', esc(base));
+    html += prow('Top', `<select class="inp" data-chg="stackwalltop" data-key="wall-top" aria-label="Top of the wall">${tops.join('')}</select>`);
+    if (top === '') {
+      html += prow('Height', `<input class="inp" data-chg="stackwallheight" data-key="wall-height" value="${esc(C.wallTool.height)}" aria-label="Height of the wall">`);
+    }
+    html += '</table>';
+    html += `<span class="lbl">Layers, exterior first</span><table class="props" data-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.assembly.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    return html + problem('wall-draw');
+  }
+
+  CHG.stackwalltype = (select) => {
+    C.wallTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackwalltop = (select) => {
+    C.wallTool.top = select.value;
+    refreshSide();
+  };
+  CHG.stackwallheight = (input) => {
+    C.wallTool.height = input.value;
   };
 
   // --- Workshop's elements ---
@@ -1823,21 +2081,33 @@
     if (C.viewing) return 'This browser can’t build this model, so it shows the server’s stored shapes. You can look, not edit.';
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
-    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point.';
+    if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
+  }
+
+  /** Where an element is, for the palette: a layered wall's line from end to end, anything else its position. */
+  function whereRow(e) {
+    const { start, end } = e.recipe.args;
+    if (e.recipe.op === LAYERED && Array.isArray(start) && Array.isArray(end)) {
+      const point = ([x, y]) => `${e.placement.x + storedMm(x)}, ${e.placement.y + storedMm(y)}`;
+      return prow('Line', `<span class="mono">${point(start)} to ${point(end)}</span>`);
+    }
+    return prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`);
   }
 
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    if (piece) {
+    if (S.tool === 'wall' && canEdit()) {
+      html += wallToolHtml();
+    } else if (piece) {
       const { el: e, shape, failed } = piece;
       const claim = heldClaim(e.id);
       const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
-      html += `<table class="props">${prow('Position', `<span class="mono">${placementOf(e).x}, ${placementOf(e).y}</span>`)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
+      html += `<table class="props">${whereRow(e)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
       if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
       if (shape) {
         const [min, max] = [shape.bounds.min, shape.bounds.max];
@@ -1917,7 +2187,11 @@
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';
       const box = around(piece);
       let group = S.sel === e.id ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
-      group += outlineOf(piece, `body ${paint}${S.sel === e.id ? ' sel' : ''}`);
+      // A shape of several parts (a layered wall's layers) draws each in its material's cut colour,
+      // under its outline.
+      const parts = piece.shape.displays[0]?.parts;
+      if (parts?.length) group += partsOf(piece, parts);
+      group += outlineOf(piece, `body ${parts?.length ? 'layered' : paint}${S.sel === e.id ? ' sel' : ''}`);
       const claim = heldClaim(e.id);
       if (claim) {
         const theirs = claim.person !== C.me.person.id;
@@ -1952,28 +2226,84 @@
 
   const snap = (value) => Math.round(value / SNAP_MM) * SNAP_MM;
 
-  function placeWall(at) {
+  /** The open model's wall types, read now if they have not come yet. */
+  async function wallTypesNow() {
+    const view = wallTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/wall-types`);
+    C.wallTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  /**
+   * The wall tool's second point draws the wall: straight along x or y, whichever the second point
+   * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
+   * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
+   */
+  async function placeWall(at) {
+    const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
-      S.pend = [snap(at.x), snap(at.y)];
+      S.pend = point;
       $('#hint').innerHTML = hint();
       return;
     }
     const [ax, ay] = S.pend;
     S.pend = null;
-    const dx = snap(at.x) - ax;
-    const dy = snap(at.y) - ay;
-    const along = Math.abs(dx) >= Math.abs(dy);
-    const length = Math.abs(along ? dx : dy);
-    if (length < 300) {
-      say('That wall is too short. Pick two points at least 300 mm apart.');
+    $('#hint').innerHTML = hint();
+    const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
+    const end = along ? [point[0], ay] : [ax, point[1]];
+    const level = levelOf();
+    let view;
+    try {
+      view = await wallTypesNow();
+    } catch (error) {
+      say(error.message);
       return;
     }
-    const placement = along
-      ? { x: Math.min(ax, ax + dx), y: ay - 55, z: 0 }
-      : { x: ax - 55, y: Math.min(ay, ay + dy), z: 0 };
-    const args = { length, thickness: 110, height: 3000, axis: along ? 'x' : 'y' };
-    add('wall', 'W', placement, recipe('wall.straight', args), 'Walls');
-    $('#hint').innerHTML = hint();
+    const args = { element: newId('W'), start: [`${ax} mm`, `${ay} mm`], end: [`${end[0]} mm`, `${end[1]} mm`], level };
+    const type = chosenWallType(view);
+    if (type) args.type = type.id;
+    const top = wallTop(modelLevels());
+    if (top === '') args.height = C.wallTool.height;
+    else args.top = top;
+    manage('wall.draw', args, 'wall-draw');
+  }
+
+  /**
+   * Where a click lands on a wall, for a door: the wall's side clicked (`exterior` or `interior`),
+   * how far along the wall from its start the door's near end is when the click is its middle, how
+   * thick the wall is, and the axis the wall runs along. A layered wall reads its line and faces from
+   * its filled recipe; the old box runs along x, its exterior at its low y side, or along y, its
+   * exterior at its high x side.
+   */
+  function onWall(wall, at, width) {
+    if (wall.el.recipe.op === LAYERED) {
+      const line = lineOf(wall);
+      if (!line) return null;
+      const { x, y } = wall.el.placement;
+      const p = [snap(at.x) - x - line.start[0] / STEPS_PER_MM, snap(at.y) - y - line.start[1] / STEPS_PER_MM];
+      const length = Math.hypot(line.d[0], line.d[1]);
+      const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+      const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+      const middle = (line.exterior + line.interior) / 2 / STEPS_PER_MM;
+      const exterior = right > middle === line.exterior > line.interior;
+      return {
+        exterior,
+        offset: Math.round(alongIt - width / 2),
+        thickness: Math.ceil(Math.abs(line.exterior - line.interior) / STEPS_PER_MM),
+        axis: line.axis === 1 ? 'y' : 'x',
+      };
+    }
+    const box = around(wall);
+    const along = box.w >= box.d;
+    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+    return {
+      exterior: along ? at.y < middle : at.x > middle,
+      offset: (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2,
+      thickness: along ? box.d : box.w,
+      axis: along ? 'x' : 'y',
+    };
   }
 
   function placeDoor(at) {
@@ -1989,22 +2319,18 @@
       say('Click on a wall to place a door.');
       return;
     }
-    const box = around(wall);
-    const along = box.w >= box.d;
     const width = 900;
     // A door is hosted on a face of the wall, by the name the geometry gave it, not on the wall:
-    // the side clicked (along x the exterior is the wall's low y side, along y its high x side),
-    // as far along the wall from its start as the click, less half the door, as thick as the wall.
-    const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
-    const exterior = along ? at.y < middle : at.x > middle;
-    const face = wall.shape.names.find((name) => name.role === (exterior ? 'exterior' : 'interior'));
+    // the side clicked, as far along the wall from its start as the click, less half the door, as
+    // thick as the wall.
+    const spot = onWall(wall, at, width);
+    const face = spot && wall.shape.names.find((name) => name.role === (spot.exterior ? 'exterior' : 'interior'));
     if (!face) {
       say('That wall has no side to place a door on.');
       return;
     }
-    const offset = (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2;
-    const thickness = along ? box.d : box.w;
-    const args = { width, thickness, height: 2100, axis: along ? 'x' : 'y' };
+    const { offset, thickness } = spot;
+    const args = { width, thickness, height: 2100, axis: spot.axis };
     edit('hosted.place', {
       element: `D-${crypto.randomUUID().slice(0, 8)}`,
       kind: 'door',
@@ -2018,12 +2344,6 @@
 
   /** Spare Construct's own operations, by what they make. */
   const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
-
-  function add(kind, tag, placement, how, category, references = []) {
-    const element = `${tag}-${crypto.randomUUID().slice(0, 8)}`;
-    const level = levelOf();
-    edit('element.create', { element, kind, level, placement, recipe: how, references, props: { category } });
-  }
 
   function watchThePlan() {
     const canvas = $('#pv-canvas');
@@ -2071,9 +2391,8 @@
       if (drag.hosted) {
         const hosted = hostOf(piece.el);
         if (!hosted) return;
-        const wall = hosted.host.el;
-        const offset = wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
-        if (storedMm(piece.el.props['@host.along']) === offset) return;
+        const offset = alongOn(hosted.host, piece.el, x, y);
+        if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
         const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
         piece.el = { ...piece.el, props };
         drag.along = offset;
@@ -2143,7 +2462,18 @@
     const paint = (name) =>
       new THREE.MeshLambertMaterial({ color: colour(name), side: THREE.DoubleSide });
     const paints = { wall: paint('--ink-3'), door: paint('--app'), other: paint('--sink') };
-    const meshes = elementMeshes(THREE, paints);
+    // A part of a shape (a layer of a wall) in its material's colour seen in projection, one paint
+    // per colour; a material the server doesn't list takes its element's paint.
+    const byColour = new Map();
+    const partPaint = (material) => {
+      const colour = colourOf(material, 'surface');
+      if (!colour) return null;
+      if (!byColour.has(colour)) {
+        byColour.set(colour, new THREE.MeshLambertMaterial({ color: new THREE.Color(colour), side: THREE.DoubleSide }));
+      }
+      return byColour.get(colour);
+    };
+    const meshes = elementMeshes(THREE, paints, partPaint);
     scene.add(meshes.group);
     C.three = {
       update() {
