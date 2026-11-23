@@ -14,6 +14,9 @@ use crate::{CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, LEVELS, WA
 const KINDS: &[(&str, CategoryId)] = &[
     ("block", GENERIC_MODELS),
     ("door.single", DOORS),
+    // A placed family (job 6.4): its own category is its family's, which its record carries; by
+    // its kind alone it is a generic model.
+    ("family.instance", GENERIC_MODELS),
     ("floor", FLOORS),
     ("level", LEVELS),
     ("wall.layered", WALLS),

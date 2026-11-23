@@ -46,6 +46,11 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 # A floor's read-only mass is its layers' volumes of their materials, from the default library
 # (src/slabs.rs). Same workspace.
 construct-materials = { path = "../construct-materials", optional = true }
+# A placed family is built from its family recipe: the recipe's reader, its opening solved at a
+# type's values, and its solids through the recipe evaluator over the builder's engine
+# (src/families.rs, src/kernel/family.rs). Both builders read it, so it is not optional. Same
+# workspace.
+construct-families = { path = "../construct-families" }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

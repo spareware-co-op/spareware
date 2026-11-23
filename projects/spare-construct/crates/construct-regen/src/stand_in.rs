@@ -17,12 +17,21 @@
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
 //! view shows the layers and their materials on either edition.
 //!
+//! A placed family (`family.instance`, job 6.4, [`crate::families`]) is a box per solid: each the
+//! box its solid lies in at its type's values, turned as it stands, worked out without an engine
+//! (`construct_families::extents`), each side rounded outward to a whole millimetre; each a part
+//! of the displays with its solid's material and its step's key, so the glass shows apart from
+//! the frame on either edition. Its recipe comes from the library baked in at build time, the
+//! source the browser has too (interim until job 7.6). Its body is the box around them all.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::wall_plan::{self, Layered};
+use construct_families::{Limits, extents};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
@@ -275,6 +284,132 @@ fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
     names
 }
 
+/// A placed family's body, as the stand-in stores it: the family, its type and turn, and the box
+/// around its solids' boxes, in whole millimetres.
+#[derive(Serialize)]
+struct FamilyBody<'a> {
+    kind: &'static str,
+    family: &'a str,
+    #[serde(rename = "type")]
+    ty: &'a str,
+    turn: u8,
+    min: [i64; 3],
+    max: [i64; 3],
+}
+
+/// The smallest whole number of millimetres at or above the diagonal of a box of `size`.
+fn diagonal(size: [i64; 3]) -> i64 {
+    let square = size.iter().fold(0_i128, |sum, &length| {
+        let length = i128::from(length);
+        sum.saturating_add(length.saturating_mul(length))
+    });
+    let mut root = square.isqrt();
+    if root.saturating_mul(root) < square {
+        root = root.saturating_add(1);
+    }
+    i64::try_from(root).unwrap_or(i64::MAX)
+}
+
+/// A placed family as a box per solid ([`construct_families::extents`]): each solid's box, its
+/// sides rounded outward to whole millimetres, a part of both displays with its material and its
+/// step's key; the bounds and the body the box around them all. Each box strays from its solid by
+/// at most its diagonal (a door's frame is not its box), so that is the displays' deviation. It
+/// names no face.
+fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let instance = Instance::of(recipe)?;
+    let library = families::baked();
+    let resolved = families::resolve(&*library, &instance)?;
+    let boxes = extents(
+        &resolved.recipe,
+        &resolved.values,
+        Limits::DEFAULT,
+        instance.turn,
+    )
+    .map_err(|e| families::evaluation_refused(&resolved.recipe, &e))?;
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::with_capacity(boxes.len());
+    let mut reach: Option<([i64; 3], [i64; 3])> = None;
+    let mut deviation = 0_i64;
+    for solid in &boxes {
+        let lo = solid.low.map(|l| floor_plan::floor_mm(l.steps()));
+        let hi = solid.high.map(|l| floor_plan::ceil_mm(l.steps()));
+        let size = [
+            hi[0].saturating_sub(lo[0]),
+            hi[1].saturating_sub(lo[1]),
+            hi[2].saturating_sub(lo[2]),
+        ];
+        deviation = deviation.max(diagonal(size));
+        reach = Some(match reach {
+            None => (lo, hi),
+            Some((mut min, mut max)) => {
+                for (m, l) in min.iter_mut().zip(lo) {
+                    *m = (*m).min(l);
+                }
+                for (m, h) in max.iter_mut().zip(hi) {
+                    *m = (*m).max(h);
+                }
+                (min, max)
+            }
+        });
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        mesh.positions.extend(box_corners(lo, hi).concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: solid.material.as_str().to_owned(),
+            function: solid.step.as_str().to_owned(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: vec![
+                [lo[0], lo[1]],
+                [hi[0], lo[1]],
+                [hi[0], hi[1]],
+                [lo[0], hi[1]],
+            ],
+        });
+    }
+    let (min, max) = reach.ok_or_else(|| GeometryError {
+        code: "EmptyShape".to_owned(),
+        message: format!("family {}: it has no solid to draw", resolved.recipe.name),
+    })?;
+    let body = FamilyBody {
+        kind: "family",
+        family: instance.family.as_str(),
+        ty: instance.ty.as_str(),
+        turn: instance.turn.quarters(),
+        min,
+        max,
+    };
+    let outline = vec![
+        [min[0], min[1]],
+        [max[0], min[1]],
+        [max[0], max[1]],
+        [min[0], max[1]],
+    ];
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: Vec::new(),
+        displays,
+    })
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -293,6 +428,10 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if families::is_instance(recipe) {
+        Instance::of(recipe)?;
+        return Ok(Vec::new());
+    }
     if floor_plan::is_floor(recipe) {
         return Ok(floor_names(&FloorPlan::of(recipe)?));
     }
@@ -424,6 +563,9 @@ impl Geometry for Boxes {
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         if floor_plan::is_floor(recipe) {
             return floor(recipe);
+        }
+        if families::is_instance(recipe) {
+            return family(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
