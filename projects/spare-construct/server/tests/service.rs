@@ -1874,7 +1874,14 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
     assert_eq!(ports[0]["scale"], 100);
     assert_eq!(ports[0]["x"], "length:q0:1920000");
     assert_eq!(ports[0]["title"], true);
-    assert_eq!(ports[0]["outline"], json!(null), "{}", ports[0]);
+    // The plan shows 12,050 by 8,050 mm of walls at 1:100: 120.5 by 80.5 mm on the paper, about the
+    // centre.
+    assert_eq!(
+        ports[0]["outline"],
+        json!({ "min_x": "length:q0:1534400", "min_y": "length:q0:1662400",
+                "max_x": "length:q0:2305600", "max_y": "length:q0:2177600" })
+    );
+    assert_eq!(ports[0]["on_paper"], true);
 
     // An alignment is data: the second viewport's left edge follows the first's, and the answer
     // is worked from the views' extents every time it is asked.
