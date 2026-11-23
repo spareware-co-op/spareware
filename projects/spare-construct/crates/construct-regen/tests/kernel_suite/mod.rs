@@ -1620,6 +1620,196 @@ pub fn a_layered_wall_at_an_angle_is_its_strips_extruded<E: Engine + Send + 'sta
     }
 }
 
+/// A lining, a stud and a lining of whole millimetres (20, 100 and 20 mm), so every corner of a
+/// joint is on a millimetre and a display holds each piece exactly.
+pub const LINED: [(&str, &str, i64); 3] = [
+    ("finish", "plasterboard-gypsum", 128_000),
+    ("structure", "timber-douglas-fir", 640_000),
+    ("finish", "plasterboard-gypsum", 128_000),
+];
+
+/// Two walls of [`LINED`] at an L, filled with their joints as the regenerator fills them: `A`
+/// along x from (-3000, 0) to the corner, `B` from the corner up y, 2700 mm high; the joined
+/// shape is 3070 by 140 mm and 140 by 2930 mm in plan.
+pub fn joined_l() -> Vec<Recipe> {
+    let a = layered_wall([-3000, 0], [0, 0], 2700, &LINED);
+    let b = layered_wall([0, 0], [0, 3000], 2700, &LINED);
+    construct_regen::joins::among(&[("A", &a), ("B", &b)])
+}
+
+/// A T of [`LINED`] walls: `C` along x from (-3000, 0) to (3000, 0), `D` from (0, -3000) up to
+/// `C`'s line; the joined shape is 6000 by 140 mm and 140 by 2930 mm in plan.
+pub fn joined_t() -> Vec<Recipe> {
+    let c = layered_wall([-3000, 0], [3000, 0], 2700, &LINED);
+    let d = layered_wall([0, -3000], [0, 0], 2700, &LINED);
+    construct_regen::joins::among(&[("C", &c), ("D", &d)])
+}
+
+/// Six times the volume each part of a built shape's finest display holds, every part closed, in
+/// cubic millimetres.
+fn parts_six_volumes(b: &Built) -> Vec<i128> {
+    (0..b.displays[0].parts.len())
+        .map(|at| closed_mesh_six_volume(&part_mesh(&b.displays[0], at)))
+        .collect()
+}
+
+/// Two layered walls at an L and at a T, each built with its joints: each piece of each layer is
+/// a closed solid, and the pieces' volumes add up exactly to the joined shape's, so the two walls
+/// neither overlap nor leave a gap; the body asks the engine for each piece; the L's walls run to
+/// the outer corner (70, -70); the T's through wall is cut back for the stud in two pieces; the
+/// display's outline is the joined outline.
+pub fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let height = 2700_i128;
+    for (case, walls, area, pieces) in [
+        ("L", joined_l(), 3070 * 140 + 140 * 2930, [3, 3]),
+        ("T", joined_t(), 6000 * 140 + 140 * 2930, [4, 3]),
+    ] {
+        let built: Vec<Built> = walls.iter().map(|w| built(&k, w)).collect();
+        let mut six = 0;
+        for (b, count) in built.iter().zip(pieces) {
+            let volumes = parts_six_volumes(b);
+            assert_eq!(volumes.len(), count, "{case}: one part per piece");
+            assert!(volumes.iter().all(|&v| v > 0), "{case}: {volumes:?}");
+            six += volumes.iter().sum::<i128>();
+            let body: Value = serde_json::from_slice(&b.body).unwrap();
+            assert_eq!(body["layers"].as_array().unwrap().len(), count, "{case}");
+            assert_eq!(
+                b.displays[0].deviation, 0,
+                "{case}: every corner on a millimetre"
+            );
+        }
+        assert_eq!(
+            six,
+            6 * area * height,
+            "{case}: the pieces fill the joined shape"
+        );
+    }
+    let corner = joined_l();
+    let along = built(&k, &corner[0]);
+    assert_eq!(along.bounds.min, [-3000, -70, 0]);
+    assert_eq!(along.bounds.max, [70, 70, 2700]);
+    assert_eq!(
+        along.displays[0].outline,
+        vec![[-3000, 70], [-3000, -70], [70, -70], [-70, 70]]
+    );
+    let tee = joined_t();
+    let through = built(&k, &tee[0]);
+    let lining: Vec<_> = through.displays[0].parts[..2]
+        .iter()
+        .map(|p| p.outline.clone())
+        .collect();
+    assert_eq!(
+        lining,
+        vec![
+            vec![[-3000, -70], [-50, -70], [-50, -50], [-3000, -50]],
+            vec![[50, -70], [3000, -70], [3000, -50], [50, -50]]
+        ]
+    );
+    let stand_in = construct_regen::geometry();
+    for wall in corner.iter().chain(&tee) {
+        assert!(stand_in.build(wall).is_ok(), "the stand-in keeps its box");
+    }
+}
+
+/// Each piece a joined wall's body asks for, made again on `e` straight from the body: its plan
+/// corners and its height, in steps.
+fn body_pieces<E: Engine>(e: &mut E, b: &Built) -> Vec<(E::Solid, i128)> {
+    use engine_geometry::value::engine::Profile;
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    body["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|layer| {
+            let outer: Vec<P3> = layer["extrude"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    let c: Vec<i64> = p
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_i64().unwrap())
+                        .collect();
+                    P3::new(c[0], c[1], c[2]).unwrap()
+                })
+                .collect();
+            let by: Vec<i64> = layer["by"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_i64().unwrap())
+                .collect();
+            let profile = Profile {
+                outer,
+                holes: vec![],
+            };
+            let solid = e
+                .extrude(&profile, [by[0], by[1], by[2]])
+                .unwrap_or_else(|e| panic!("a piece: {e:?}"));
+            let six = engine_six_volume(e, &solid);
+            (solid, six)
+        })
+        .collect()
+}
+
+/// Six times a solid's volume, in cubic steps, from the engine's mesh of it, which must close.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "mesh positions are whole steps under 2^40, which an i64 holds"
+)]
+fn engine_six_volume<E: Engine>(e: &mut E, solid: &E::Solid) -> i128 {
+    let mesh = e.mesh(solid).unwrap_or_else(|e| panic!("a mesh: {e:?}"));
+    let positions = mesh
+        .positions
+        .iter()
+        .flat_map(|q| q.map(|c| c as i64))
+        .collect();
+    let indices = mesh.triangles.iter().flatten().copied().collect();
+    closed_mesh_six_volume(&Mesh { positions, indices })
+}
+
+/// The two walls of an L and of a T, made on the engine itself from their bodies: each piece of
+/// one wall less every piece of the other keeps its whole volume, so no two overlap, and the
+/// pieces' volumes add up to the joined shape's, so there is no gap. Needs an engine that
+/// subtracts.
+pub fn joined_walls_meet_without_overlap_on_the_engine<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let mut e = make();
+    let per = 6400_i128;
+    for (case, walls, area) in [
+        ("L", joined_l(), 3070 * 140 + 140 * 2930),
+        ("T", joined_t(), 6000 * 140 + 140 * 2930),
+    ] {
+        let one = body_pieces(&mut e, &built(&k, &walls[0]));
+        let two = body_pieces(&mut e, &built(&k, &walls[1]));
+        let total: i128 = one.iter().chain(&two).map(|(_, v)| v).sum();
+        assert_eq!(
+            total,
+            6 * area * 2700 * per * per * per,
+            "{case}: the pieces fill the joined shape"
+        );
+        for (a, va) in &one {
+            for (b, _) in &two {
+                let less = e
+                    .subtract(a, b)
+                    .unwrap_or_else(|err| panic!("{case}: a piece less another: {err:?}"));
+                assert_eq!(
+                    engine_six_volume(&mut e, &less),
+                    *va,
+                    "{case}: no piece of one wall overlaps a piece of the other"
+                );
+            }
+        }
+    }
+}
+
 /// A filled roof recipe (construct-roofs' `filled` form) of the 6 m by 4 m footprint with 500 mm
 /// over its eaves and 300 mm over its verges, every point a whole millimetre, written in grid
 /// steps: `form` `gable` rising at 1 in 4 from `o0` (y = 0) and `o2` (y = 4 m) to a ridge at

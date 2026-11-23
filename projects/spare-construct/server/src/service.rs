@@ -843,8 +843,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     }
 
     /// The recipe an element is built from now, each argument that reads a record filled (its
-    /// parameters, its wall type's layers, its top tie), as the regenerator fills it
-    /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an
+    /// parameters, its wall type's layers, its top tie) and a layered wall's joints with the walls
+    /// it meets, as the regenerator fills it (`construct_regen::joins::recipe_at`), with how far
+    /// the log had got when it was read: a page builds an
     /// element whose recipe reads records from this, and compares what it built with the server's
     /// bodies from that point of the log on. A recipe that cannot be filled is the build failure,
     /// in its words.
@@ -907,7 +908,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             });
         }
         Ok(
-            match levels::recipe_at(&mut snapshot, project, model, &record, at).await? {
+            match construct_regen::joins::recipe_at(&mut snapshot, project, model, &record, at)
+                .await?
+            {
                 Ok(recipe) => {
                     let cut_by = if construct_regen::floor_plan::is_floor(&record.recipe) {
                         Some(

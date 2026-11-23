@@ -301,20 +301,6 @@ if (process.env.STACK_GEOMETRY === 'kernel') {
 }
 
 console.log('\n   Parameters, through the edit log');
-// The seed made the Arch model's wall types as Anna, and that wrote its parameters record (the
-// walls' location line and flip). A claim lasts 30 s after a person's last edit, and nobody can let
-// go of a parameters record, so Ben waits until hers has run out, as a person told "Anna is working
-// on this" would, before he changes the record.
-for (let tries = 0; ; tries += 1) {
-  const left = await ben.evaluate(() =>
-    fetch('/api/projects/example-1/models/arch-model/claims')
-      .then((r) => r.json())
-      .then((claims) => (claims.parameters ? claims.parameters.until_ms - Date.now() : 0)),
-  );
-  if (left <= 0) break;
-  if (tries > 80) throw new Error("FAILED: Anna's claim on the parameters record never ran out");
-  await ben.waitForTimeout(Math.min(left + 100, 1000));
-}
 // No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
 await ben.evaluate(() => {
   const definition = { id: 'P-sill', name: 'Sill height', kind: 'length', holder: 'instance', choices: [] };
@@ -727,6 +713,12 @@ await formulaField.fill('2 * Jamb + 1 m');
 await formulaField.press('Enter');
 await until(() => door('D-103'), (view) => clear(view).shown === '1100 mm', 'the new formula reaches the door');
 pass('a changed formula reaches every door that reads it');
+// The dialog is redrawn from the server after that change. What Ben types next is kept through a
+// redraw (the field is a draft), and he starts only once the dialog shows the formula the server stored.
+await ben.waitForFunction(
+  (id) => /2\s*\*\s*Jamb\s*\+\s*1/.test(document.querySelector(`#stack-manage p[data-formula="${id}"]`)?.textContent ?? ''),
+  clearDef.id,
+);
 await formulaField.fill('Jamb / 0');
 await formulaField.press('Enter');
 await ben.waitForSelector(`${manager} [data-problem="formula:${clearDef.id}"]`);
@@ -863,6 +855,80 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the layered wall's included, matches the server's`);
 }
 await shot(anna, 'anna-layered-wall');
+
+console.log('\n   Walls that meet');
+// Anna draws a second Concrete 200 wall from the end of the first, to make a corner: the server
+// re-works the first wall's end, and both browsers take what it says (`filled`) for that wall, as
+// they take it for the wall that was drawn. Then she deletes the new wall and undoes that, and
+// moves it away: each time the first wall is put right, in both browsers and in a fresh load.
+// Everything here is Anna's own wall, so Ben takes nothing of hers and she nothing of his.
+const filledByServer = async (id) => JSON.stringify((await asAnna(`filled/${id}`)).recipe);
+const filledOnPage = (page, id) => page.evaluate((w) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe), id);
+const bothTake = async (id, want, label) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(([w, text]) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe) === text, [id, want]);
+  }
+  pass(label);
+};
+const freeEnd = await filledByServer(layeredId);
+check((await filledOnPage(ben, layeredId)) === freeEnd, "the first wall's end is free, and both pages hold the server's filling of it");
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector(wallTypeField);
+await anna.locator(wallTypeField).selectOption({ label: 'Concrete 200' });
+const cornerStart = await onPlan(anna, 5000, 9500);
+const cornerEnd = await onPlan(anna, 5000, 10300);
+await anna.mouse.click(cornerStart.x, cornerStart.y);
+await anna.mouse.click(cornerEnd.x, cornerEnd.y);
+await anna.keyboard.press('Escape');
+const secondWall = (first) =>
+  [...window.spare.elements.values()].find((p) => p.el.props['@type'] === 'wall-concrete-200' && p.el.id !== first)?.el.id;
+await ben.waitForFunction(secondWall, layeredId);
+const cornerId = await ben.evaluate(secondWall, layeredId);
+await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== freeEnd,
+  "the server works the first wall's end for the wall that meets it",
+);
+const cornered = await filledByServer(layeredId);
+await bothTake(layeredId, cornered, "a wall drawn to meet it: both pages take the server's filling of the first wall's end");
+const spots = (page, id) => page.evaluate((w) => [...document.querySelectorAll(`g.element[data-id="${w}"] polygon.part`)].map((p) => p.getAttribute('points')), id);
+check(
+  JSON.stringify(await spots(anna, layeredId)) === JSON.stringify(await spots(ben, layeredId)),
+  "and draw the first wall's layers alike",
+);
+
+// Deleted: the first wall's end is free again.
+const cornerBox = await box(anna, cornerId);
+await anna.mouse.click(cornerBox.x + cornerBox.width / 2, cornerBox.y + cornerBox.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), cornerId);
+await bothTake(layeredId, freeEnd, 'the corner wall deleted: both pages put the first wall right, its end free again');
+
+// Her undo puts the corner wall back, and the first wall's end is worked again.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body`), cornerId);
+await bothTake(layeredId, cornered, 'her undo brings the corner wall back, and both pages take the first wall as it was at the corner');
+
+// Moved away: the walls no longer meet.
+await drag(anna, cornerId, 150, 0);
+await anna.mouse.up();
+await bothTake(layeredId, freeEnd, 'the corner wall moved away: both pages put the first wall right again');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the joined walls included, matches the server's`);
+}
+const freshWalls = await signIn('ben');
+await freshWalls.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+check(
+  (await filledOnPage(freshWalls, layeredId)) === freeEnd &&
+    JSON.stringify(await spots(freshWalls, layeredId)) === JSON.stringify(await spots(anna, layeredId)),
+  'a freshWalls load takes the first wall as the server has it now, and draws it as the others do',
+);
+await freshWalls.context().close();
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');

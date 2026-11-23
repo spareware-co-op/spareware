@@ -23,7 +23,7 @@ use construct_categories::{CategoryTable, WALLS};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
 use construct_model::keys::Place;
-use construct_model::rows::{BuiltElement, BuiltResult, Model};
+use construct_model::rows::{BuiltElement, BuiltResult, Model, Reads};
 use construct_params::{Choice, Definition, Holder, Kind, Length, ProjectParams, Value};
 use construct_regen::hosting;
 use construct_regen::parameters::{self, Context, TYPE_KEY};
@@ -54,7 +54,8 @@ fn i(text: &str) -> Id {
 }
 
 /// The stand-in, on its own edition, except that a host built with what is hosted on it lists
-/// each hosted element's key and where it sits in the host's frame.
+/// each hosted element's key and where it sits in the host's frame, and a layered wall built with
+/// joints lists them.
 struct Cutter;
 
 impl Geometry for Cutter {
@@ -63,7 +64,11 @@ impl Geometry for Cutter {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
-        Boxes.build(recipe)
+        let mut built = Boxes.build(recipe)?;
+        if let Some(joins) = recipe.args.get("joins") {
+            built.body = serde_json::to_vec(&json!({ "joins": joins })).unwrap();
+        }
+        Ok(built)
     }
 
     fn build_hosting(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
@@ -216,6 +221,42 @@ impl Stack {
             BuiltResult::Shape { bounds, .. } => Ok((bounds.min, bounds.max)),
             BuiltResult::Failed { code, message } => Err(format!("{code}: {message}")),
         }
+    }
+
+    /// An element's body, as JSON.
+    async fn body(&self, id: &str) -> Json {
+        let BuiltResult::Shape { body, .. } = self.built(id).await.result else {
+            panic!("{id} did not build");
+        };
+        let place = Place::Body {
+            project: i(PROJECT),
+            id: body.clone(),
+        };
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        let stored = read_row(&mut snapshot, &place.key())
+            .await
+            .unwrap()
+            .unwrap();
+        serde_json::from_slice(&self.regen.read_bytes(&stored, &body).await.unwrap()).unwrap()
+    }
+
+    /// The joints a layered wall was built with: its recipe's `joins`, or null.
+    async fn joins(&self, id: &str) -> Json {
+        self.body(id).await["joins"].clone()
+    }
+
+    /// The walls an element's `reads` row lists for its joints.
+    async fn joins_read(&self, id: &str) -> Vec<String> {
+        self.regen.catch_up(&i(PROJECT)).await.unwrap();
+        let place = Place::Reads {
+            project: i(PROJECT),
+            document: i(DOCUMENT),
+            element: i(id),
+        };
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        let row: Option<Reads> = read_row(&mut snapshot, &place.key()).await.unwrap();
+        row.map(|r| r.joins.into_iter().collect())
+            .unwrap_or_default()
     }
 
     /// Where each door sat in a wall it was built with.
@@ -565,4 +606,87 @@ async fn a_layered_walls_top_tie_is_filled_exactly() {
         stack.bounds("W-1").await,
         Ok(([0, -58, 0], [4000, 58, 3013]))
     );
+}
+
+/// Through the log: two layered walls drawn to meet at an L are each built with their joint (the
+/// first built again when the second is drawn), and each `reads` row lists the other; a wall
+/// drawn to abut the first's side makes a T with it; a change to the second's type builds the
+/// first again with the new joint; moving the second away builds the first without it. The
+/// stored shapes match their recipes, and a rebuild from empty gives the same joints.
+#[tokio::test]
+async fn walls_drawn_to_meet_are_joined_and_a_change_to_one_rebuilds_the_other() {
+    let stack = Stack::new().await;
+    let context = context();
+    stack
+        .put(&parameters::table_record(&i(DOCUMENT), &table()).unwrap())
+        .await;
+    stack
+        .put(&wall_type(&context, PARTITION).to_record(&i(DOCUMENT)))
+        .await;
+    let concrete = wall_type(&context, "wall-concrete-200");
+    stack.put(&concrete.to_record(&i(DOCUMENT))).await;
+    stack.put(&wall("W-1", PARTITION, [0, 0], [4000, 0])).await;
+    assert_eq!(stack.joins("W-1").await, Json::Null, "nothing meets it yet");
+    stack
+        .put(&wall("W-2", "wall-concrete-200", [4000, 0], [4000, 3000]))
+        .await;
+    let first = stack.joins("W-1").await;
+    assert_eq!(first["with"], json!(["W-2"]), "{first}");
+    assert_eq!(stack.joins("W-2").await["with"], json!(["W-1"]));
+    assert_eq!(stack.joins_read("W-1").await, ["W-2"]);
+    assert_eq!(stack.joins_read("W-2").await, ["W-1"]);
+    // The partition's exterior lining runs to the concrete's outer face, 100 mm past the corner.
+    let lining: Vec<&str> = first["layers"][0][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p[0].as_str().unwrap())
+        .collect();
+    assert!(lining.contains(&q0(4100 * 6400).as_str()), "{lining:?}");
+
+    stack
+        .put(&wall("W-3", PARTITION, [2000, -3000], [2000, 0]))
+        .await;
+    let tee = stack.joins("W-1").await;
+    assert_eq!(tee["with"], json!(["W-2", "W-3"]), "{tee}");
+    assert_eq!(
+        tee["layers"][0].as_array().unwrap().len(),
+        2,
+        "its exterior lining is cut back for W-3's stud"
+    );
+    assert_eq!(stack.joins("W-3").await["with"], json!(["W-1"]));
+
+    let veneer = assembly_of(&wall_type(&context, "wall-brick-veneer-90")).unwrap();
+    stack
+        .put(
+            &with_assembly(concrete, &veneer)
+                .unwrap()
+                .to_record(&i(DOCUMENT)),
+        )
+        .await;
+    let retyped = stack.joins("W-1").await;
+    assert_eq!(retyped["with"], json!(["W-2", "W-3"]));
+    assert_ne!(retyped["layers"], tee["layers"], "the new type's joint");
+
+    stack
+        .put(&wall("W-2", "wall-concrete-200", [6000, 0], [6000, 3000]))
+        .await;
+    let moved = stack.joins("W-1").await;
+    assert_eq!(moved["with"], json!(["W-3"]), "{moved}");
+    assert_eq!(stack.joins("W-2").await, Json::Null);
+    assert_eq!(stack.joins_read("W-2").await, Vec::<String>::new());
+
+    assert_eq!(stack.regen.verify(&i(PROJECT)).await.unwrap(), 3);
+    let before = [
+        stack.joins("W-1").await,
+        stack.joins("W-2").await,
+        stack.joins("W-3").await,
+    ];
+    stack.regen.rebuild(&i(PROJECT)).await.unwrap();
+    let after = [
+        stack.joins("W-1").await,
+        stack.joins("W-2").await,
+        stack.joins("W-3").await,
+    ];
+    assert_eq!(after, before, "a rebuild from empty gives the same joints");
 }
