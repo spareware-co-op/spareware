@@ -672,6 +672,7 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -873,6 +874,7 @@ dependencies = [
  "construct-params",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -920,6 +922,19 @@ dependencies = [
  "dashu-int",
  "dashu-ratio",
  "kit-core",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-schedules"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-phases",
+ "kit-core",
+ "serde",
  "serde_json",
 ]
 

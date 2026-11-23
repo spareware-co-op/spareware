@@ -22,6 +22,8 @@
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
+//! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
+//!   read of their rows, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -41,6 +43,7 @@ pub mod openings;
 pub mod params;
 pub mod roofs;
 pub mod rooms;
+pub mod schedules;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;
