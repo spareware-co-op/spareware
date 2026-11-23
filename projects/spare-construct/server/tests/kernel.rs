@@ -87,6 +87,11 @@ fn a_recipe_that_cant_build_says_why() {
 }
 
 #[test]
+fn a_datum_is_built_as_the_stand_in_builds_it() {
+    kernel_suite::a_datum_is_built_as_the_stand_in_builds_it(engine);
+}
+
+#[test]
 fn a_door_cuts_a_real_opening() {
     kernel_suite::a_door_cuts_a_real_opening(engine);
 }
@@ -189,7 +194,7 @@ async fn the_server_runs_on_the_kernel_and_a_hosted_door_keeps_its_face() {
     seed(&store, &s).await.unwrap();
     let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
     let regen = Regenerator::new(store.clone(), files.clone(), kernel.clone());
-    assert_eq!(regen.verify(&project).await.unwrap(), 31);
+    assert_eq!(regen.verify(&project).await.unwrap(), 26);
 
     let old = json!({
         "element": "W-950", "kind": "wall", "level": 1,
@@ -526,7 +531,7 @@ async fn two_doors_placed_through_commands_cut_their_wall_and_move_with_it() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 33);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 28);
 }
 
 /// A document records the edition it was made on, and a server running another edition doesn't
@@ -560,7 +565,7 @@ async fn a_document_of_one_edition_is_reported_on_another() {
             assert!(shown.display.is_none());
         }
         let regen = Regenerator::new(store.clone(), files.clone(), opened_with);
-        assert_eq!(regen.verify(&project).await.unwrap(), 31);
+        assert_eq!(regen.verify(&project).await.unwrap(), 26);
     }
 }
 

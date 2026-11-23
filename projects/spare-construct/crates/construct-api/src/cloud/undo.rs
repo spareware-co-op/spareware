@@ -52,7 +52,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{hosting, levels, params, walls};
+use crate::cloud::{grids, hosting, levels, params, walls};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -99,6 +99,7 @@ pub fn is_command(cmd: &str) -> bool {
 pub fn is_step(cmd: &str) -> bool {
     ELEMENT_STEPS.contains(&cmd)
         || params::is_command(cmd)
+        || grids::is_command(cmd)
         || hosting::is_command(cmd)
         || levels::is_command(cmd)
         || walls::is_command(cmd)
@@ -586,6 +587,9 @@ async fn check<T: Txn>(
     written: &[Element],
     whole: bool,
 ) -> Result<Result<(), String>, StoreError> {
+    if let Err(why) = grids::check(txn, project, document, written).await? {
+        return Ok(Err(why));
+    }
     let context = match records::read_context(txn, project, document).await? {
         Ok(context) => context,
         Err(why) => return Ok(Err(why)),

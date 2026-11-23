@@ -515,6 +515,7 @@ dependencies = [
  "construct-elements",
  "construct-families",
  "construct-formulas",
+ "construct-grids",
  "construct-interop",
  "construct-levels",
  "construct-materials",
@@ -625,6 +626,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-grids"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "libm",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-interop"
 version = "0.0.0"
 dependencies = [
@@ -704,6 +717,7 @@ dependencies = [
  "bolero",
  "construct-categories",
  "construct-formulas",
+ "construct-grids",
  "construct-levels",
  "construct-model",
  "construct-params",

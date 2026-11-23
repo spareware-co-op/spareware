@@ -106,8 +106,9 @@ async fn every_log_replays_after_the_seed() {
     let check = verify_log(&mut snapshot, &Scope::Project(i("example-1")))
         .await
         .unwrap();
-    // The elements, and arch-model's three wall types and its parameter table.
-    assert_eq!(check.pieces, 35);
+    // The elements (the site setout's five grids among them), and arch-model's three wall types
+    // and its parameter table.
+    assert_eq!(check.pieces, 30);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -209,6 +210,69 @@ async fn workshop_parts_are_elements_listed_by_kind() {
         .await
         .unwrap();
     assert_ne!(parts.pieces["WP-1"], hash.to_string());
+}
+
+/// A grid and a reference plane are elements of the datum categories, made through the log with
+/// their own commands, checked on the server, and found by kind: they stand on no level, so the
+/// plan's area of a level does not list them.
+#[tokio::test(flavor = "multi_thread")]
+async fn grids_and_planes_are_elements_made_by_their_own_commands_and_found_by_kind() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let line = json!({ "grid": "G-1", "name": null, "x0": "0", "y0": "0", "x1": "6 m", "y1": "0" });
+    let seq = s
+        .edit(&anna, &project, &model, "grid.create", line)
+        .await
+        .unwrap();
+    let plane = json!({ "plane": "P-1", "name": "Mid", "elevation": "1.2 m" });
+    s.edit(&anna, &project, &model, "plane.create", plane)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+
+    // Ben, on the same team, finds both by kind and reads them; the first grid is named 1.
+    let grids = s.kind(&ben, &project, &model, &i("grid")).await.unwrap();
+    assert!(grids.through >= seq);
+    let record = s
+        .record(&ben, &project, &model, &i(&grids.pieces["G-1"]))
+        .await
+        .unwrap();
+    assert_eq!(record.name, "1");
+    assert_eq!(record.props["@category"], "3700");
+    let planes = s
+        .kind(&ben, &project, &model, &i("refplane"))
+        .await
+        .unwrap();
+    assert_eq!(planes.pieces.len(), 1);
+    let area = s.area(&ben, &project, &model, &view()).await.unwrap();
+    assert!(!area.pieces.contains_key("G-1"), "a grid is on no level");
+
+    // A wrong value is turned back with the data crate's words, and the element commands leave
+    // a grid to its own.
+    let name =
+        json!({ "grid": "G-2", "name": "1", "x0": "0", "y0": "1 m", "x1": "6 m", "y1": "1 m" });
+    let clash = s.edit(&ben, &project, &model, "grid.create", name).await;
+    assert!(matches!(clash, Err(Refusal::Refused(why)) if why.contains("already named")));
+    let set = json!({ "element": "G-1", "name": "X" });
+    let by_hand = s.edit(&anna, &project, &model, "element.set", set).await;
+    assert!(matches!(by_hand, Err(Refusal::Refused(why)) if why.contains("their own commands")));
+    let delete = json!({ "element": "G-1" });
+    let gone = s
+        .edit(&anna, &project, &model, "element.delete", delete)
+        .await;
+    assert!(matches!(gone, Err(Refusal::Refused(why)) if why.contains("grid.delete")));
+    // Someone with no access to the model is refused, like any edit.
+    let line = json!({ "grid": "G-3", "name": "Q", "x0": "0", "y0": "0", "x1": "1 m", "y1": "0" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "grid.create", line).await
+    ));
 }
 
 /// A parameter is defined, bound and set through the log like any edit, checked on the server
@@ -1050,7 +1114,7 @@ async fn every_stored_shape_matches_its_recipe_after_the_seed() {
         stack.files.clone(),
         construct_regen::geometry(),
     );
-    assert_eq!(regen.verify(&i("example-1")).await.unwrap(), 31);
+    assert_eq!(regen.verify(&i("example-1")).await.unwrap(), 26);
 }
 
 /// The partition and the plain concrete wall of construct-walls' defaults, as `wall.type.create`

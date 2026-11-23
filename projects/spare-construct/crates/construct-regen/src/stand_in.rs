@@ -254,6 +254,9 @@ impl Geometry for Boxes {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if let Some(datum) = crate::datum::build(recipe) {
+            return datum;
+        }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
         }

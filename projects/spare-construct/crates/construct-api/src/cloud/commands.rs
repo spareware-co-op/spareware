@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, hosting, levels, params, undo, walls};
+use crate::cloud::{elements, grids, hosting, levels, params, undo, walls};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -134,6 +134,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             }
             cmd if params::is_command(cmd)
                 || undo::is_command(cmd)
+                || grids::is_command(cmd)
                 || hosting::is_command(cmd)
                 || levels::is_command(cmd)
                 || walls::is_command(cmd) =>
@@ -191,6 +192,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         if edit.cmd.starts_with("element.")
             || params::is_command(&edit.cmd)
             || undo::is_command(&edit.cmd)
+            || grids::is_command(&edit.cmd)
             || hosting::is_command(&edit.cmd)
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
@@ -213,6 +215,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         let mut staged = Staged::new(txn);
         let outcome = if params::is_command(&edit.cmd) {
             params::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if grids::is_command(&edit.cmd) {
+            grids::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if hosting::is_command(&edit.cmd) {
             hosting::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if undo::is_command(&edit.cmd) {

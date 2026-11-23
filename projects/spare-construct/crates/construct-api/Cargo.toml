@@ -13,6 +13,7 @@ cloud = [
     "dep:kit-sync",
     "dep:construct-categories",
     "dep:construct-formulas",
+    "dep:construct-grids",
     "dep:construct-params",
     "dep:construct-regen",
     "dep:construct-types",
@@ -34,6 +35,8 @@ construct-model = { path = "../construct-model" }
 construct-categories = { path = "../construct-categories", optional = true }
 # Formula parameters: the commands check a formula and work it out before they accept a change.
 construct-formulas = { path = "../construct-formulas", optional = true }
+# Grid lines and reference planes: the grid commands check every change with it.
+construct-grids = { path = "../construct-grids", optional = true }
 construct-params = { path = "../construct-params", optional = true }
 construct-regen = { path = "../construct-regen", features = ["server"], optional = true }
 construct-types = { path = "../construct-types", optional = true }
