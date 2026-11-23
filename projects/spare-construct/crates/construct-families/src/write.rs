@@ -11,7 +11,7 @@
 
 use crate::model::{
     BuiltInType, Constraint, FORMAT_VERSION, Hosting, MaterialRef, Operation, Parameter,
-    ParameterValue, Plane, Recipe, Sketch, Step, Symbol, View, Visibility,
+    ParameterValue, Plane, Recipe, Sketch, Step, Symbol, TypeTable, View, Visibility,
 };
 use construct_params::Holder;
 use construct_solver::{Side, Touch};
@@ -109,7 +109,7 @@ pub(crate) fn to_json(recipe: &Recipe) -> String {
 }
 
 fn tree(recipe: &Recipe) -> Tree {
-    Tree::Members(vec![
+    let mut members = vec![
         ("format", Tree::Whole(u64::from(FORMAT_VERSION))),
         ("id", text(recipe.id.as_str())),
         ("name", text(&recipe.name)),
@@ -136,7 +136,11 @@ fn tree(recipe: &Recipe) -> Tree {
             "types",
             Tree::List(recipe.types.iter().map(built_in_type).collect()),
         ),
-    ])
+    ];
+    if let Some(table) = &recipe.type_table {
+        members.push(("type_table", type_table(table)));
+    }
+    Tree::Members(members)
 }
 
 fn parameter(p: &Parameter) -> Tree {
@@ -451,6 +455,27 @@ fn built_in_type(t: &BuiltInType) -> Tree {
                         Tree::Members(vec![
                             ("parameter", text(v.parameter.as_str())),
                             ("value", text(&v.value)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+fn type_table(t: &TypeTable) -> Tree {
+    Tree::Members(vec![
+        ("columns", keys(&t.columns)),
+        (
+            "rows",
+            Tree::List(
+                t.rows
+                    .iter()
+                    .map(|row| {
+                        Tree::Members(vec![
+                            ("key", text(row.key.as_str())),
+                            ("name", text(&row.name)),
+                            ("values", texts(&row.values)),
                         ])
                     })
                     .collect(),

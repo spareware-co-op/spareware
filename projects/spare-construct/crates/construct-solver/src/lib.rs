@@ -16,7 +16,8 @@
 //!   them, and any redundant constraints), or an error value (over-constrained with the
 //!   conflicting constraints, not converged, out of work, refused at rounding); and what a drag
 //!   gives back.
-//! - [`solve`] and [`drag`]: the two calls.
+//! - [`solve`] and [`drag`]: the two calls; and [`check_drawn`], whether a sketch as drawn
+//!   already meets its constraints, by the same measure a solve's answer is checked with.
 //!
 //! Promises: the same sketch gives the same bytes on every run and every machine (no clocks, no
 //! random starts, no hash-map order; IEEE `+ - * /` and `sqrt` only); work is counted in steps,
@@ -62,6 +63,21 @@ pub use sketch::{
 /// out of work, refused at rounding, degenerate as drawn, rank too close to call, out of range.
 pub fn solve(sketch: &Sketch, budget: Budget) -> Result<Solved, SolveError> {
     engine::solve(sketch, budget)
+}
+
+/// Checks a sketch as drawn, without solving it: whether its stored points and radii already
+/// meet every arc and every constraint within [`MODEL_TOLERANCE_MM`], measured exactly as
+/// [`solve`] measures its rounded answer. A family recipe evaluated with its sketches as stored
+/// asks this; solving a recipe's sketch is a later job's.
+///
+/// # Errors
+///
+/// The first miss, as [`solve`]'s check after rounding reports it:
+/// [`SolveError::ArcEndRefused`] or [`SolveError::DegenerateCurve`] for an arc, then
+/// [`SolveError::RoundingRefused`] (here: not met as drawn) or [`SolveError::Degenerate`] for the
+/// first constraint, in authoring order, that does not hold.
+pub fn check_drawn(sketch: &Sketch) -> Result<(), SolveError> {
+    engine::check_drawn(sketch)
 }
 
 /// Drags one point of a solved sketch towards a target, keeping every constraint (chapter 15.9,

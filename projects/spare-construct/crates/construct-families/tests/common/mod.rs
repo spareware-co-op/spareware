@@ -27,6 +27,24 @@ pub const EXAMPLES: [(&str, &str); 3] = [
     ("simple-table", TABLE),
 ];
 
+/// The door's type table, as JSON: a 620 by 2040 mm row, a 920 by 2100 mm row, and a row with
+/// the 820 by 2040 mm built-in type's values under another key and name.
+pub fn door_table() -> Value {
+    json!({
+        "columns": ["width", "height"],
+        "rows": [
+            {"key": "d620", "name": "620 x 2040", "values": ["length:q0:3968000", "length:q0:13056000"]},
+            {"key": "d921", "name": "920 x 2100", "values": ["length:q0:5888000", "length:q0:13440000"]},
+            {"key": "d820t", "name": "820 x 2040, from the table", "values": ["length:q0:5248000", "length:q0:13056000"]}
+        ]
+    })
+}
+
+/// The single-swing door with [`door_table`], as text.
+pub fn door_with_table() -> String {
+    edit(DOOR, |v| v["type_table"] = door_table())
+}
+
 /// The built-in categories and the default metric materials.
 pub struct Fixture {
     pub categories: CategoryTable,
@@ -86,8 +104,8 @@ pub fn assert_has(problems: &[Problem], at: &str, want: impl Fn(&ProblemKind) ->
 }
 
 /// A recipe in format 1's shape with one of every form the shape has: both kinds of parameter
-/// value, a choice, every constraint, every step, a symbol with and without a condition, and a
-/// wall opening. It is for the schema and the reader to agree on; it need not mean anything.
+/// value, a choice, every constraint, every step, a symbol with and without a condition, a wall
+/// opening, and a type table. It is for the schema and the reader to agree on; it need not mean anything.
 #[allow(clippy::too_many_lines, reason = "one document, written out whole")]
 pub fn every_shape() -> Value {
     let key2 = |kind: &str| json!({"kind": kind, "a": "p", "b": "q"});
@@ -192,6 +210,10 @@ pub fn every_shape() -> Value {
         "hosting": {"host": "wall", "opening": {"sketch": "s", "profile": ["l"]}},
         "types": [
             {"key": "small", "name": "Small", "values": [{"parameter": "size", "value": "length:q0:320000"}]}
-        ]
+        ],
+        "type_table": {
+            "columns": ["size"],
+            "rows": [{"key": "large", "name": "Large", "values": ["length:q0:1280000"]}]
+        }
     })
 }

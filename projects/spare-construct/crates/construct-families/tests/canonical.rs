@@ -73,6 +73,35 @@ fn an_absent_condition_is_not_written() {
     assert!(read(DOOR).to_json().contains("\"when\": {"));
 }
 
+/// A type table is written only when the recipe has one, last, columns then rows; a recipe
+/// without one keeps its bytes (and so its content id), and one with an empty table keeps it.
+#[test]
+fn a_type_table_is_written_last_and_only_when_present() {
+    assert!(!read(DOOR).to_json().contains("type_table"));
+    let with = read(&common::door_with_table());
+    let text = with.to_json();
+    assert!(text.ends_with(
+        "\"values\": [\n          \"length:q0:5248000\",\n          \"length:q0:13056000\"\n        \
+         ]\n      }\n    ]\n  }\n}\n"
+    ));
+    let at = text
+        .find("\n  \"type_table\": {\n    \"columns\": [\n      \"width\",")
+        .unwrap();
+    let before = text.get(..at).unwrap();
+    assert!(before.ends_with("\n  ],") && before.contains("\n  \"types\": ["));
+    assert_eq!(read(&text), with);
+    assert_eq!(read(&text).to_json(), text);
+    assert_ne!(with.content_id(), read(DOOR).content_id());
+    let empty = read(&edit(DOOR, |v| {
+        v["type_table"] = json!({"columns": [], "rows": []});
+    }));
+    let written = empty.to_json();
+    assert!(
+        written.ends_with("  \"type_table\": {\n    \"columns\": [],\n    \"rows\": []\n  }\n}\n")
+    );
+    assert_eq!(read(&written), empty);
+}
+
 /// Text that needs escaping is written escaped the one way, and reads back.
 #[test]
 fn strings_are_escaped_one_way() {

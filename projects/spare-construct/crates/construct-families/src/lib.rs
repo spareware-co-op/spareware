@@ -3,7 +3,7 @@
 //! A family is the template a door, window, piece of furniture or fitting is made from: its
 //! parameters, the sketches and solid steps that build its shape from them, its 2D symbols for
 //! plans and elevations, what shows at which detail level, its materials, what it is hosted on
-//! and its built-in types. A recipe is one JSON document with a published schema. This crate is
+//! and its built-in types and type table. A recipe is one JSON document with a published schema. This crate is
 //! its reader, checker and writer. Map: projects/spare-construct/ARCHITECTURE.md, "Families";
 //! the stored form is FORMAT.md beside this crate, the schema `schema/family-recipe-1.schema.json`
 //! ([`SCHEMA`]), and the decisions behind it note CON-A7-F1-P1-recipe-format.
@@ -16,8 +16,16 @@
 //!   [`Library`] (categories and materials). Every [`Problem`] names its place.
 //! - [`Recipe::to_json`] and [`Recipe::content_id`]: the one canonical written form, and the
 //!   [`ContentId`] (SHA-256 of those bytes) that names a recipe version.
-//! - [`family_type()`], [`parameters`], [`family_of`] and [`FamilyRef`]: a built-in type as a
+//! - [`Recipe::named_types`] and [`Recipe::named_type`]: every type a recipe names, its built-in
+//!   types and its type table's rows ([`TypeTable`], [`NamedType`]; CON-A7-F1-P3).
+//! - [`family_type()`], [`parameters`], [`family_of`] and [`FamilyRef`]: a named type as a
 //!   construct-types type carrying a `@system.family` block that names the family and version.
+//! - [`evaluate`](mod@evaluate): a recipe and one type's values made into the family's solids
+//!   through the kernel's `Engine` interface, its sketches solved at the type's values
+//!   ([`evaluate()`], [`evaluate_within()`], [`Evaluator`] keeping each type it builds by
+//!   [`CacheKey`] and evaluating a recipe's named types one by one), within [`Limits`], with
+//!   refusals as [`EvalError`] values (CON-A7-F1-P2, P3 and P6; FORMAT.md, "Evaluation"); and
+//!   [`symbols()`], a recipe's 2D symbols drawn at one type's values.
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -33,30 +41,31 @@
 //! (lengths are construct-params' stored text, checked through it, or formulas); no clock, no
 //! random number, no hash-map order; nothing panics. Depends on kit-core, construct-params,
 //! construct-types, construct-categories, construct-materials, construct-formulas,
-//! construct-solver, `serde_json`, sha2 and hex. Nothing here is interim. Putting a recipe through
-//! the edit log and loading it into a project are later jobs (7.6).
+//! construct-solver, engine-geometry (the kernel's interface, for evaluation only), `serde_json`,
+//! sha2 and hex. Nothing here is interim. Putting a recipe through the edit log and loading it
+//! into a project are later jobs (7.6).
 //!
-//! Not built here, with its place kept:
-//! - Evaluation (job 4.4, this crate): a module `evaluate` will take a checked recipe and a
-//!   type's values, work out every formula with construct-formulas, solve each sketch with
-//!   construct-solver (each point, line, arc, circle and constraint maps one to one onto the
-//!   solver's own, its lengths the formulas' values in `construct_params::Length`), and build
-//!   each step's solid through engine-geometry's `Engine` only (`extrude` along the plane's
-//!   normal, `subtract`; `unite` needs a method the trait does not have yet), cached per type.
-//!   Nothing in the format needs to change for it.
+//! Not built here, with its place kept: a hosted family's opening cut in its host (job 6.4).
 
 pub mod check;
+pub mod evaluate;
 pub mod family_type;
 pub mod model;
 pub mod read;
 pub mod write;
 
 pub use check::{Library, Problem, ProblemKind, Sort};
+pub use evaluate::{
+    Built, CacheKey, DrawnSymbol, DrawnSymbols, Edge, EvalError, Evaluated, Evaluator, Limit,
+    Limits, Place, Point2, Reason, TypeResult, TypeValues, Used, evaluate, evaluate_within,
+    symbols, symbols_within,
+};
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
 pub use model::{
     Base, BuiltInType, Condition, Constraint, DefinitionRow, FORMAT_VERSION, Hosting, Key,
-    MaterialRef, Opening, Operation, Parameter, ParameterValue, Plane, Recipe, Sketch, SketchArc,
-    SketchCircle, SketchLine, SketchPoint, Step, Symbol, TypeValue, View, Visibility,
+    MaterialRef, NamedType, Opening, Operation, Parameter, ParameterValue, Plane, Recipe, Sketch,
+    SketchArc, SketchCircle, SketchLine, SketchPoint, Step, Symbol, TableRow, TypeTable, TypeValue,
+    View, Visibility,
 };
 pub use read::ReadError;
 pub use write::ContentId;
