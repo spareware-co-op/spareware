@@ -19,6 +19,9 @@ construct-materials = { path = "../construct-materials" }
 construct-formulas = { path = "../construct-formulas" }
 # A sketch is the solver's: its sides of a line and its ways two curves touch.
 construct-solver = { path = "../construct-solver" }
+# The kernel's interface, the only geometry a recipe is evaluated through: its `Engine` trait and
+# grid points. This repository's own, Apache-2.0. No engine is linked here.
+engine-geometry = { path = "../../../engines/crates/engine-geometry" }
 # A recipe is JSON, read through serde_json's value. MIT OR Apache-2.0.
 serde_json = "1.0.154"
 # SHA-256 for content ids: the RustCrypto implementation, as kit-ops uses it. MIT OR Apache-2.0.

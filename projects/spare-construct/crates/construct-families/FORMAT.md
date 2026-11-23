@@ -11,7 +11,7 @@ A family is the template a door, window, piece of furniture or fitting is made f
 
 ## The document
 
-An object with exactly these members, written in this order:
+An object with these members, written in this order (all but `type_table` always there):
 
 | Member | Value |
 | --- | --- |
@@ -26,8 +26,9 @@ An object with exactly these members, written in this order:
 | `symbols` | Its 2D symbols |
 | `hosting` | What it is placed on |
 | `types` | Its built-in types |
+| `type_table` | Only if it has one: its type table, more types as rows of values |
 
-Everything a recipe names is named by a **key**: a lowercase letter, then up to 63 lowercase letters, digits and `_`. Keys are unique within each list (parameters, planes, sketches, steps, symbols, types), and within one sketch its points, lines, arcs and circles share one set. A parameter's key is its name in formulas.
+Everything a recipe names is named by a **key**: a lowercase letter, then up to 63 lowercase letters, digits and `_`. Keys are unique within each list (parameters, planes, sketches, steps, symbols, types; the built-in types and the type table's rows are one list), and within one sketch its points, lines, arcs and circles share one set. A parameter's key is its name in formulas.
 
 Lengths are never JSON numbers. A **stored** value is construct-params' stored text (`length:q0:5248000`, `material:glass-plate`, `choice:left`), in its one spelling. A **formula** is construct-formulas' language: `width / 2 - frame`, `45 mm`, `frame_depth / 2`; a bare number is in millimetres.
 
@@ -106,6 +107,21 @@ These are the operations the kernel's `Engine` interface names, and no others. A
 
 `{"key":..,"name":..,"values":[{"parameter":<key>,"value":<stored>}]}`: a built-in type sets values of parameters the type holds; any other reads its default.
 
+### Type table
+
+`{"columns":[<key>..],"rows":[{"key":..,"name":..,"values":[<stored>..]}]}`: many types written the way a catalogue of sizes is, one column per parameter they set and one row per type. A row sets, column by column, one value for each column, in column order; any other parameter reads its default. Each row is a type of the family exactly as a built-in type is: its key and name are unique among the built-in types and the rows together, and it becomes a family type the same way. The recipe's **named types** are its built-in types in order, then its rows in order.
+
+```json
+"type_table": {
+  "columns": ["width", "height"],
+  "rows": [
+    {"key": "d620", "name": "620 x 2040", "values": ["length:q0:3968000", "length:q0:13056000"]}
+  ]
+}
+```
+
+The member was added to format 1 by piece A59 as an additive change: it is optional and written only when present, so every recipe that read before reads the same, writes the same bytes and keeps its content id.
+
 ## Rules a checker keeps
 
 A recipe that breaks one is refused, never repaired:
@@ -117,14 +133,14 @@ A recipe that breaks one is refused, never repaired:
 - Every point, line, curve, plane, sketch, step and parameter a key names exists and is of the sort wanted; a step's inputs come earlier than it.
 - Profiles, holes and openings are closed loops of lines; symbols and openings are on the plane their view needs.
 - The category, every subcategory and every material is the project's; every subcategory is the family's category or one of its subcategories.
-- A type sets only parameters the type holds that are not worked out.
+- A type sets only parameters the type holds that are not worked out; a type table's columns are such parameters, each once, and each row has exactly one value per column, each one its column's.
 
 ## The written form
 
 One spelling, so the same recipe is always the same bytes and reading then writing gives the same bytes:
 
 - JSON, indented two spaces, one member or item to a line, `": "` after a member's name, `[]` for an empty list, one newline at the end.
-- Members in the order given above; `when` written only when present.
+- Members in the order given above; `when` and `type_table` written only when present.
 - Integers in plain decimal (a reader takes any integral JSON number, so `1.0` reads as `1`).
 - Strings escaped only where JSON must: `\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`, other control characters as `\u00XX` in lowercase; everything else as it is, in UTF-8.
 
@@ -132,11 +148,40 @@ A recipe version is named by its **content id**: `sha256:` and the SHA-256 of th
 
 ## A family's types
 
-Each built-in type becomes a construct-types type (version 2, with a system block) in the family's category, listing every parameter of the family and holding the values the type sets. Its block's owner tag is `family`, so its record's `props` hold `@system.family` with compact JSON in exactly this form:
+Each named type (a built-in type or a type table row) becomes a construct-types type (version 2, with a system block) in the family's category, listing every parameter of the family and holding the values the type sets. Its block's owner tag is `family`, so its record's `props` hold `@system.family` with compact JSON in exactly this form:
 
 ```json
 {"version":1,"family":"01KAXF3M1Y0D00R5W1NG000001","recipe":"sha256:<64 hex digits>","type":"d820"}
 ```
+
+## Evaluation
+
+What a recipe gives when it is built for one type ([`src/evaluate.rs`](src/evaluate.rs): CON-A7-F1-P2, with named types and type tables, P3, and limits, P6; the choices are in [the recipe evaluation note](../../notes/CON-A7-F1-P2-recipe-evaluation.md)). Nothing here changes the format: it is how the format already reads.
+
+1. **Values.** A type's values are stored text by parameter key: a named type's (a built-in type's as written, or a type table row's, column by column), or values a caller gives. Each must be for a parameter that exists, that the type holds, and that has no formula, in its one stored spelling of that parameter's kind and units. Every other parameter reads its default. A named type's refusal names the type and the parameter: a row with no value for a column, a value of another kind or units, a parameter set twice. Every formula is then worked out over the lengths, angles, numbers and whole numbers; a formula that fails, or gives the wrong units, is refused at its parameter.
+2. **Sketches.** Only the sketches a step uses are read. Each becomes the sketch solver's own sketch, every constraint length its formula's value at these values, and is **solved from where it is stored**: its stored points and radii are the solver's start, and the solver's least-change steps find the answer nearest what was drawn. A part of the sketch no constraint holds stays where it is drawn (an under-constrained sketch evaluates); the answer is on the grid by the solver's own rounding rule, checked against every constraint within the model tolerance (0.01 mm) after rounding, and the same on every machine and every run. A sketch the solver refuses (its constraints conflict at these values, no answer is found from the stored start, rounding breaks a constraint, or the solver cannot tell) is refused naming the sketch and the first constraint the solver names. The single-swing door's 720, 820 and 920 mm types all evaluate, each to its own frame and panel.
+3. **Steps**, in the order written. A step a later step uses is not drawn on its own; every other step is one of the family's solids, with its subcategory, its material (fixed, or the material parameter's value) and its visibility.
+
+| `op` | What it builds |
+| --- | --- |
+| `extrude` | The profile less its holes, its corners where the sketch's points lie on the sketch's plane, swept along the plane's normal from the lower of `start` and `end` to the higher (written either way round; equal heights are refused). Heights are measured from the plane: a corner lies at the plane's `offset` plus the lower height |
+| `subtract` | The target less the tool. An extrusion used as a tool is a **void**: it cuts the one target its `subtract` names, and nothing else |
+| `unite` | The two as one solid |
+
+The result for a type is kept by its **cache key**: the recipe's content id, then every parameter without a formula in recipe order with its type value or default in stored text, then any other value given. The same recipe and the same values are built once; a changed value is a new key, so only that type is built again. Named types with the same values (a row repeating a built-in type) share one result, and a recipe's named types are evaluated one by one through the same cache; one type's refusal does not stop the rest.
+
+**Limits.** One evaluation is held to four counts, never to a clock, so a limit is reached at the same place on every machine and every run, and is refused there, never with a partial result:
+
+| Limit | What it counts | Default |
+| --- | --- | --- |
+| Solver steps | The sketch solver's own work count, all sketches of the evaluation together | 4,000 |
+| Solid steps | Steps run, each one engine call | 1,000 |
+| Formula work | Bytes of formula text worked out: each parameter's formula and value, and every plane, constraint and extrusion formula | 256 KiB |
+| Result size | Profile corners handed to the engine, holes included | 100,000 |
+
+The single-swing door uses under a hundredth of each. What an evaluation used is given with its result.
+
+A refusal names the step being built, the place (type, a type's value, parameter, plane, sketch, sketch item, constraint or step) and the reason.
 
 ## Versions
 

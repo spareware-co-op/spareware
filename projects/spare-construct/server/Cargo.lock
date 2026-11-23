@@ -711,6 +711,7 @@ dependencies = [
  "construct-params",
  "construct-solver",
  "construct-types",
+ "engine-geometry",
  "hex",
  "kit-core",
  "serde_json",
