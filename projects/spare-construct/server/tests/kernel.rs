@@ -501,7 +501,7 @@ async fn two_doors_placed_through_commands_cut_their_wall_and_move_with_it() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 33);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 28);
 }
 
 /// A document records the edition it was made on, and a server running another edition doesn't

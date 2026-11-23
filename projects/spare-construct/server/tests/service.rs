@@ -249,7 +249,7 @@ async fn grids_and_planes_are_elements_made_by_their_own_commands_and_found_by_k
         .await
         .unwrap();
     assert_eq!(planes.pieces.len(), 1);
-    let area = s.area(&ben, &project, &model, &VIEW).await.unwrap();
+    let area = s.area(&ben, &project, &model, &view()).await.unwrap();
     assert!(!area.pieces.contains_key("G-1"), "a grid is on no level");
 
     // A wrong value is turned back with the data crate's words, and the element commands leave
@@ -261,6 +261,11 @@ async fn grids_and_planes_are_elements_made_by_their_own_commands_and_found_by_k
     let set = json!({ "element": "G-1", "name": "X" });
     let by_hand = s.edit(&anna, &project, &model, "element.set", set).await;
     assert!(matches!(by_hand, Err(Refusal::Refused(why)) if why.contains("their own commands")));
+    let delete = json!({ "element": "G-1" });
+    let gone = s
+        .edit(&anna, &project, &model, "element.delete", delete)
+        .await;
+    assert!(matches!(gone, Err(Refusal::Refused(why)) if why.contains("grid.delete")));
     // Someone with no access to the model is refused, like any edit.
     let line = json!({ "grid": "G-3", "name": "Q", "x0": "0", "y0": "0", "x1": "1 m", "y1": "0" });
     assert!(refused(
