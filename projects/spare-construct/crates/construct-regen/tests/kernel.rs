@@ -800,6 +800,38 @@ fn a_flat_roof_is_its_layers() {
     kernel_suite::a_flat_roof_is_its_layers(|| Lofts);
 }
 
+/// A solved roof (job 6.2) on a test engine that keeps each extruded piece: each layer's pieces
+/// are extruded and united in the recipe's order, the body lists them, and the pieces hold the
+/// layer's plan area (24 m2) by its upright height. An engine that cannot unite them says so.
+#[test]
+fn a_solved_roof_unites_its_pieces_on_the_engine() {
+    use construct_model::geometry::Geometry;
+    let roof = kernel_suite::hip_roof(&[300, 250, 0]);
+    let k = construct_regen::kernel::Kernel::new(Pieces).unwrap();
+    let b = k.build(&roof).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(
+        body["layers"][0]["unite"],
+        roof.args["layers"][0]["solid"]["unite"]
+    );
+    assert_eq!(
+        body["layers"][0]["by"],
+        serde_json::json!([0, 0, 50 * 6400])
+    );
+    for (at, upright) in [(0, 50_i128), (1, 250)] {
+        let six = kernel_suite::pieces_six_volume(&kernel_suite::part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * 24_000_000 * upright, "layer {at}");
+    }
+    let l = k.build(&kernel_suite::l_roof(&[300, 250, 0])).unwrap();
+    let six = kernel_suite::pieces_six_volume(&kernel_suite::part_mesh(&l.displays[0], 1));
+    assert_eq!(six, 6 * 48_000_000 * 250);
+    let refused = construct_regen::kernel::Kernel::new(Lofts)
+        .unwrap()
+        .build(&roof)
+        .unwrap_err();
+    assert!(refused.code.starts_with("Engine"), "{refused:?}");
+}
+
 /// A roof on an engine that does not loft says so, in the engine's words, and builds nothing.
 #[test]
 fn a_sloped_roof_on_an_engine_that_cannot_loft_is_refused() {
@@ -813,7 +845,8 @@ fn a_sloped_roof_on_an_engine_that_cannot_loft_is_refused() {
     assert!(k.build(&kernel_suite::roof_of("flat", &[200, 0])).is_ok());
 }
 
-/// A test engine for placed families: it extrudes any flat polygon with holes along any vector,
+/// A test engine for placed families and solved roofs: it extrudes any flat polygon with holes
+/// along any vector, unites solids that only share sides by keeping their pieces together,
 /// keeping it as a piece, and takes an upright box from a solid whose every piece is an upright
 /// box, keeping the box each piece shares with it as a piece taken away (so a wall's layers less
 /// their openings are signed boxes). Its mesh draws every piece, a piece taken away turned inside
@@ -981,8 +1014,11 @@ impl Engine for Pieces {
         Err(unsupported("loft"))
     }
 
-    fn unite(&mut self, _: &Signed, _: &Signed) -> Result<Signed, EngineError> {
-        Err(unsupported("unite"))
+    fn unite(&mut self, a: &Signed, b: &Signed) -> Result<Signed, EngineError> {
+        // Pieces that only share sides: kept side by side, as a solved roof's are.
+        Ok(Signed {
+            pieces: a.pieces.iter().chain(&b.pieces).cloned().collect(),
+        })
     }
 
     fn volume(&mut self, _: &Signed) -> Result<Volume, EngineError> {

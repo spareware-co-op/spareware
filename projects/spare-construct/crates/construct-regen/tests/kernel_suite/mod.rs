@@ -168,6 +168,27 @@ pub fn closed_mesh_six_volume(mesh: &Mesh) -> i128 {
     six
 }
 
+/// Six times the volume a mesh of closed pieces holds, in cubic millimetres, each piece's
+/// triangles facing out: the signed sum over its triangles, with no check that pieces are joined
+/// (pieces drawn one by one share their sides).
+pub fn pieces_six_volume(mesh: &Mesh) -> i128 {
+    let point = |i: u32| -> [i128; 3] {
+        let i = usize::try_from(i).unwrap() * 3;
+        [0, 1, 2].map(|k| i128::from(mesh.positions[i + k]))
+    };
+    let mut six = 0_i128;
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let [p, q, r] = [point(t[0]), point(t[1]), point(t[2])];
+        let cross = [
+            q[1] * r[2] - q[2] * r[1],
+            q[2] * r[0] - q[0] * r[2],
+            q[0] * r[1] - q[1] * r[0],
+        ];
+        six += p[0] * cross[0] + p[1] * cross[1] + p[2] * cross[2];
+    }
+    six
+}
+
 /// The engine's largest length tolerance, in millimetres, from the edition the builder recorded.
 fn tolerance_mm<E: Engine + Send + 'static>(k: &Kernel<E>) -> f64 {
     let report = k.edition().report.expect("the engine's report");
@@ -1607,6 +1628,203 @@ pub fn a_flat_roof_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> 
     assert_eq!(
         body["layers"][1]["extrude"][0],
         json!([-300 * 6400, -500 * 6400, 0])
+    );
+}
+
+/// A filled solved roof recipe (construct-roofs' `filled` form, `solved`, job 6.2): rising from
+/// every edge of `outline` (corners in whole millimetres, anticlockwise), its bottom face the flat
+/// `pieces` (corners in whole millimetres, each anticlockwise from above, in the order they are
+/// united), and `faces` the upright heights of its layer faces above the bottom face, top first and
+/// 0 last, each layer every piece moved up to its lower face and extruded to its upper face.
+pub fn solved_of(outline: &[(&str, [i64; 2])], pieces: &[Vec<[i64; 3]>], faces: &[i64]) -> Recipe {
+    let steps = |mm: i64| mm * 6400;
+    let corners: Vec<Value> = outline
+        .iter()
+        .map(|(id, [x, y])| json!({ "id": id, "at": [steps(*x), steps(*y)] }))
+        .collect();
+    let slopes: Vec<&str> = outline.iter().map(|(id, _)| *id).collect();
+    let functions = ["finish", "substrate", "structure"];
+    let mut layers = Vec::new();
+    for (at, pair) in faces.windows(2).enumerate() {
+        let (high, low) = (pair[0], pair[1]);
+        let profiles: Vec<Vec<[i64; 3]>> = pieces
+            .iter()
+            .map(|piece| {
+                piece
+                    .iter()
+                    .map(|[x, y, z]| [steps(*x), steps(*y), steps(z + low)])
+                    .collect()
+            })
+            .collect();
+        layers.push(json!({
+            "function": functions[at % 3], "material": "concrete-regular",
+            "thickness": steps(high - low),
+            "solid": { "unite": profiles, "by": [0, 0, steps(high - low)] },
+        }));
+    }
+    recipe(
+        "roof",
+        json!({ "form": "solved", "slopes": slopes, "outline": corners, "layers": layers }),
+    )
+}
+
+/// The 6 m by 4 m hip roof at 3 in 4 with no overhang, as construct-roofs solves it: its bottom
+/// face's four pieces, the ridge along y = 2 m from x = 2 m to 4 m, 1,500 mm up.
+pub fn hip_roof(faces: &[i64]) -> Recipe {
+    solved_of(
+        &[
+            ("o0", [0, 0]),
+            ("o1", [6000, 0]),
+            ("o2", [6000, 4000]),
+            ("o3", [0, 4000]),
+        ],
+        &[
+            vec![
+                [0, 0, 0],
+                [6000, 0, 0],
+                [4000, 2000, 1500],
+                [2000, 2000, 1500],
+            ],
+            vec![[6000, 0, 0], [6000, 4000, 0], [4000, 2000, 1500]],
+            vec![
+                [6000, 4000, 0],
+                [0, 4000, 0],
+                [2000, 2000, 1500],
+                [4000, 2000, 1500],
+            ],
+            vec![[0, 4000, 0], [0, 0, 0], [2000, 2000, 1500]],
+        ],
+        faces,
+    )
+}
+
+/// The L (8 m by 4 m, and 4 m by 4 m above its left half) hipped at 3 in 4, as construct-roofs
+/// solves it: two ridges meeting at (2, 2) m, 1,500 mm up, and the valley from the inside corner
+/// (4, 4) m down to them.
+pub fn l_roof(faces: &[i64]) -> Recipe {
+    solved_of(
+        &[
+            ("o0", [0, 0]),
+            ("o1", [8000, 0]),
+            ("o2", [8000, 4000]),
+            ("o3", [4000, 4000]),
+            ("o4", [4000, 8000]),
+            ("o5", [0, 8000]),
+        ],
+        &[
+            vec![
+                [0, 0, 0],
+                [8000, 0, 0],
+                [6000, 2000, 1500],
+                [2000, 2000, 1500],
+            ],
+            vec![[8000, 0, 0], [8000, 4000, 0], [6000, 2000, 1500]],
+            vec![
+                [8000, 4000, 0],
+                [4000, 4000, 0],
+                [2000, 2000, 1500],
+                [6000, 2000, 1500],
+            ],
+            vec![
+                [4000, 4000, 0],
+                [4000, 8000, 0],
+                [2000, 6000, 1500],
+                [2000, 2000, 1500],
+            ],
+            vec![[4000, 8000, 0], [0, 8000, 0], [2000, 6000, 1500]],
+            vec![
+                [0, 8000, 0],
+                [0, 0, 0],
+                [2000, 2000, 1500],
+                [2000, 6000, 1500],
+            ],
+        ],
+        faces,
+    )
+}
+
+/// A solved roof's layers on the engine and on the stand-in: each layer is one closed solid, the
+/// union of its pieces, holding exactly its plan area times its upright thickness; the two
+/// builders' bounds agree; each slope is named by its edge, with a side for every edge; the body
+/// lists each layer's pieces exactly in steps.
+fn a_solved_roof_is_its_pieces_united<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+    roof: &Recipe,
+    area_mm2: i128,
+    max: [i64; 3],
+) {
+    let k = kernel(make());
+    let b = built(&k, roof);
+    assert_eq!(b.bounds.min, [0, 0, 0]);
+    assert_eq!(b.bounds.max, max);
+    let stand_in = construct_regen::geometry().build(roof).unwrap();
+    assert_eq!(b.bounds, stand_in.bounds);
+    let parts = &b.displays[0].parts;
+    let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+    assert_eq!(functions, ["finish", "substrate"]);
+    for (at, upright) in [(0, 50_i128), (1, 250)] {
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * area_mm2 * upright, "layer {at}");
+        let drawn = pieces_six_volume(&part_mesh(&stand_in.displays[0], at));
+        assert_eq!(
+            drawn, six,
+            "the stand-in draws layer {at}'s pieces as they are"
+        );
+    }
+    let names = by_role(&b);
+    let edges: Vec<String> = roof.args["slopes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e.as_str().unwrap().to_owned())
+        .collect();
+    for edge in &edges {
+        for role in [
+            format!("top.{edge}"),
+            format!("bottom.{edge}"),
+            format!("face.1.{edge}"),
+            format!("side.{edge}"),
+        ] {
+            assert!(names.contains_key(&role), "{role}");
+        }
+    }
+    assert_eq!(names.len(), edges.len() * 4);
+    let mut sorted = b.names.clone();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(construct_regen::kernel::names(roof).unwrap(), sorted);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(
+        body["layers"][1]["unite"],
+        roof.args["layers"][1]["solid"]["unite"]
+    );
+    assert_eq!(
+        body["layers"][1]["by"],
+        roof.args["layers"][1]["solid"]["by"]
+    );
+}
+
+/// A hip roof on a 6 m by 4 m rectangle (job 6.2): two layers, 50 mm and 250 mm upright at 3 in
+/// 4 (40 mm and 200 mm square to the slope), each the union of its four pieces, 24 m2 by its
+/// height; the ridge 1,800 mm up on the top face.
+pub fn a_hip_roof_is_its_pieces_united<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    a_solved_roof_is_its_pieces_united(
+        make,
+        &hip_roof(&[300, 250, 0]),
+        24_000_000,
+        [6000, 4000, 1800],
+    );
+}
+
+/// An L hipped all round (job 6.2), its valley where its two wings meet: two layers, each the
+/// union of its six pieces, 48 m2 by its height.
+pub fn an_l_roof_with_its_valley_is_its_pieces_united<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    a_solved_roof_is_its_pieces_united(
+        make,
+        &l_roof(&[300, 250, 0]),
+        48_000_000,
+        [8000, 8000, 1800],
     );
 }
 

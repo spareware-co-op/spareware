@@ -139,6 +139,16 @@ fn a_flat_roof_is_its_layers() {
 }
 
 #[test]
+fn a_hip_roof_is_its_pieces_united() {
+    kernel_suite::a_hip_roof_is_its_pieces_united(engine);
+}
+
+#[test]
+fn an_l_roof_with_its_valley_is_its_pieces_united() {
+    kernel_suite::an_l_roof_with_its_valley_is_its_pieces_united(engine);
+}
+
+#[test]
 fn a_layered_wall_is_one_solid_per_layer() {
     kernel_suite::a_layered_wall_is_one_solid_per_layer(engine);
 }

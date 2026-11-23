@@ -8,7 +8,10 @@
 //!   extruded straight up from its lower face to its upper face ([`Engine::extrude`]); a sloped
 //!   roof's layer is its section across the roof at one verge lofted to the same section at the
 //!   other ([`Engine::loft`]: every wall of such a loft is flat, each joining two corners of one
-//!   section to the same two of the other). A layer of no thickness (a membrane) is a face between
+//!   section to the same two of the other); a solved roof's layer (job 6.2) is each of its flat
+//!   pieces extruded straight up ([`Engine::extrude`]) and united in the order the recipe gives
+//!   ([`Engine::unite`]), each piece sharing a side with one before it, so the union stays one
+//!   solid. A layer of no thickness (a membrane) is a face between
 //!   its neighbours and has no solid. Each solid is the engine's, so the kernel's checker has
 //!   passed it, as the seam's contract says.
 //! - Names (chapter 20.2), under the recipe's operation as every shape's are, so a rebuilt or
@@ -57,6 +60,8 @@ struct AskedLayer {
     by: Option<[i64; 3]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     loft: Vec<Vec<[i64; 3]>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unite: Vec<Vec<[i64; 3]>>,
 }
 
 /// The names of a roof's faces, sorted by name.
@@ -88,6 +93,10 @@ impl<E: Engine> Kernel<E> {
     /// [`RoofPlan::of`]'s refusals; `NotAHost` when anything is hosted on it (nothing is, yet);
     /// `NotOnTheGrid` for a point that is not a whole number of the engine's steps; and the
     /// engine's own.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "each kind of layer asked of the engine in one place, as the module header lists them"
+    )]
     pub(super) fn build_roof(
         &self,
         recipe: &Recipe,
@@ -132,6 +141,7 @@ impl<E: Engine> Kernel<E> {
                     extrude: Vec::new(),
                     by: None,
                     loft: Vec::new(),
+                    unite: Vec::new(),
                 };
                 let made = match solid {
                     PlanSolid::Extrude { profile, by } => {
@@ -156,6 +166,35 @@ impl<E: Engine> Kernel<E> {
                             .collect::<Result<Vec<_>, _>>()?;
                         entry.loft = sections.iter().map(|s| as_steps(&s.corners)).collect();
                         engine.loft(&sections).map_err(from_engine)?
+                    }
+                    PlanSolid::Unite { profiles, by } => {
+                        let by = [
+                            units.from_q0(by[0])?,
+                            units.from_q0(by[1])?,
+                            units.from_q0(by[2])?,
+                        ];
+                        entry.by = Some(by);
+                        let mut united = None;
+                        for profile in profiles {
+                            let outer = on_engine(profile, units)?;
+                            entry.unite.push(as_steps(&outer));
+                            let piece = engine
+                                .extrude(
+                                    &Profile {
+                                        outer,
+                                        holes: Vec::new(),
+                                    },
+                                    by,
+                                )
+                                .map_err(from_engine)?;
+                            united = Some(match united {
+                                None => piece,
+                                Some(so_far) => {
+                                    engine.unite(&so_far, &piece).map_err(from_engine)?
+                                }
+                            });
+                        }
+                        united.ok_or_else(|| fault("EmptyShape", "a solved layer has no piece"))?
                     }
                 };
                 asked.layers.push(entry);
