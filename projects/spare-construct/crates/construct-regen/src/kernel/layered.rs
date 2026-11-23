@@ -334,10 +334,19 @@ fn cuts(
     band: i64,
     families: &dyn FamilySource,
 ) -> Result<Option<(WallFrame, Vec<Cut>)>, GeometryError> {
-    let Some(first) = hosted.iter().map(|h| h.key).min() else {
+    let Some(first) = hosted.iter().min_by(|a, b| a.key.cmp(b.key)) else {
         return Ok(None);
     };
-    let frame = WallFrame::of(wall, units, first)?;
+    if wall.plan.axis().is_none() && families::is_instance(first.recipe) {
+        return Err(fault(
+            "NotAHost",
+            format!(
+                "family {}: a family is hosted only on a wall along x or y; this wall runs at an                  angle",
+                first.key
+            ),
+        ));
+    }
+    let frame = WallFrame::of(wall, units, first.key)?;
     let (placed, doors): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) =
         hosted.iter().partition(|h| families::is_instance(h.recipe));
     let framed = doors

@@ -1710,7 +1710,8 @@ pub fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening<E: Engine + S
 /// A family that does not fit is refused before the engine is asked, naming the family and why,
 /// and `fits` says the same word for word: one wider than its wall, one off its end, one touching
 /// it, one as tall as the wall, two whose openings overlap, one turned across its wall, one on
-/// the old box wall, one whose recipe is not loaded and one whose type its recipe does not name.
+/// the old box wall, one on a wall at an angle, one whose recipe is not loaded and one whose type
+/// its recipe does not name.
 #[allow(
     clippy::too_many_lines,
     reason = "one case per refusal, each asked of the builder and of fits"
@@ -1725,6 +1726,7 @@ pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 's
     let wall = layered_wall([0, 0], [4000, 0], 2700, &THREE);
     let short = layered_wall([0, 0], [900, 0], 2700, &THREE);
     let low = layered_wall([0, 0], [4000, 0], 2400, &THREE);
+    let angled = layered_wall([0, 0], [2400, 3200], 2700, &THREE);
     let door = placed(DOOR_FAMILY, "d900x2100", Turn::Half);
     let wide = placed(DOOR_FAMILY, "d1000x2100", Turn::Half);
     let tall = placed(DOOR_FAMILY, "d900x2400", Turn::Half);
@@ -1782,6 +1784,12 @@ pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 's
             "on the box wall",
             &boxed,
             one("F-1", &door, at(&k, [1500, 100, 0])),
+            "NotAHost",
+        ),
+        (
+            "on a wall at an angle",
+            &angled,
+            one("F-1", &door, mm(1500, 0)),
             "NotAHost",
         ),
         (
