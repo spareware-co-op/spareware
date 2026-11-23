@@ -29,10 +29,14 @@
 //! note `projects/spare-construct/notes/CON-A4-F3-P1-hosting.md`.
 //!
 //! Depends on construct-model (records), construct-params (lengths and their stored text) and
-//! this crate's builders' face names ([`crate::face_names`]). Interim: only a `wall.straight`
-//! hosts, only on its two sides, and a hosted element sits flush with its side; a family that
-//! declares its host and the void it cuts (job 6.4, CON-A7-F3-P2) replaces these fixed rules.
+//! this crate's builders' face names ([`crate::face_names`]). A layered wall (`wall.layered`,
+//! job 4.1) hosts as the box does: along its line from its start, the way it runs, flush with the
+//! side its element is on, each to the nearest millimetre where a layer face is not on one
+//! ([`crate::wall_plan`]). Interim: only a wall hosts, only on its two sides, only a wall along x
+//! or y when it is layered, and a hosted element sits flush with its side; a family that declares
+//! its host and the void it cuts (job 6.4, CON-A7-F3-P2) replaces these fixed rules.
 
+use crate::wall_plan::{self, Layered};
 use construct_model::element::{Element, Placement, Reference, Want};
 use construct_model::geometry::{Edition, FaceName, GeometryError, Recipe};
 use construct_params::{Length, Value};
@@ -44,8 +48,10 @@ pub const ALONG_KEY: &str = "@host.along";
 pub const UP_KEY: &str = "@host.up";
 /// The kind of reference a hosted element names its host's face by.
 pub const FACE_KIND: &str = "face";
-/// The one operation that hosts: a straight wall.
+/// The old box wall's operation, which hosts.
 pub const HOST_OP: &str = "wall.straight";
+/// Every operation that hosts: the old box wall and the layered wall.
+pub const HOST_OPS: [&str; 2] = [HOST_OP, wall_plan::OP];
 /// The faces of a host an element may sit on, by role.
 pub const SIDES: [&str; 2] = ["exterior", "interior"];
 /// The operation of an older record that is hosted by position.
@@ -139,6 +145,12 @@ pub fn read(element: &Element) -> Result<Option<Hosting>, String> {
     }))
 }
 
+/// Whether an element of `recipe` hosts: a wall, old box or layered ([`HOST_OPS`]).
+#[must_use]
+pub fn is_host(recipe: &Recipe) -> bool {
+    recipe.owner == OWN && HOST_OPS.contains(&recipe.op.as_str())
+}
+
 /// The element `element` is hosted on, if its record reads as hosted.
 #[must_use]
 pub fn host_of(element: &Element) -> Option<Id> {
@@ -226,16 +238,19 @@ pub fn at(
             along, up, face, ..
         } => (*along, *up, face),
     };
-    if host_recipe.owner != OWN || host_recipe.op != HOST_OP {
+    if !is_host(host_recipe) {
         return Err(refuse(
             "NotAHost",
             format!(
-                "{} is a {}, not a wall: only a {HOST_OP} hosts",
-                host.name, host_recipe.op
+                "{} is a {}, not a wall: only a {} or a {} hosts",
+                host.name, host_recipe.op, HOST_OPS[0], HOST_OPS[1]
             ),
         ));
     }
     let role = side(edition, host_recipe, face).map_err(|why| refuse("NotASide", why))?;
+    if wall_plan::is_layered(host_recipe) {
+        return on_layered(host, host_recipe, hosted_recipe, &role, along, up, &refuse);
+    }
     let whole = |recipe: &Recipe, arg: &str| {
         recipe
             .args
@@ -290,6 +305,102 @@ pub fn at(
     })
 }
 
+/// Where an element sits on the side `role` of a layered wall (its filled recipe `wall`), `along`
+/// its line from its start and `up` from its base: its box's lowest corner in the wall's frame,
+/// in whole millimetres. Along the line it starts `along` from the wall's start the way the wall
+/// runs (so on a wall running toward -x its box ends there); across, it is flush with that side
+/// and reaches toward the other; each to the nearest millimetre, as a placement holds it, since a
+/// layer face need not lie on one (the opening it cuts reaches 100 mm past both sides, so this
+/// moves no face of the opening across the wall). Only a wall along x or y hosts: a door is a box
+/// along an axis until doors are families (job 6.4).
+fn on_layered(
+    host: &Element,
+    host_recipe: &Recipe,
+    hosted_recipe: &Recipe,
+    role: &FaceName,
+    along: Length,
+    up: Length,
+    refuse: &impl Fn(&str, String) -> GeometryError,
+) -> Result<Placement, GeometryError> {
+    let wall = Layered::of(host_recipe).map_err(|e| refuse(&e.code, e.message))?;
+    let axis = wall.plan.axis().ok_or_else(|| {
+        refuse(
+            "NotAHost",
+            format!(
+                "{} runs at an angle: a door is hosted only on a wall along x or y until doors \
+                 are families",
+                host.name
+            ),
+        )
+    })?;
+    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
+    let steps = |recipe: &Recipe, arg: &str| {
+        recipe
+            .args
+            .get(arg)
+            .and_then(serde_json::Value::as_i64)
+            .and_then(Length::checked_from_mm)
+            .map(Length::steps)
+            .ok_or_else(|| {
+                refuse(
+                    "MissingArgument",
+                    format!("{arg} must be a whole number of millimetres"),
+                )
+            })
+    };
+    let (width, own) = (
+        steps(hosted_recipe, "width")?,
+        steps(hosted_recipe, "thickness")?,
+    );
+    let whole = |what: &str, length: Length| {
+        length.whole_mm().ok_or_else(|| {
+            refuse(
+                "NotWholeMillimetres",
+                format!(
+                    "its offset {what} its host's face, {length}, is not a whole number of \
+                     millimetres, as every placement is"
+                ),
+            )
+        })
+    };
+    let up = whole("up", up)?;
+    whole("along", along)?;
+    let (exterior, interior) = wall.outer();
+    let (on, other) = if role.role == "interior" {
+        (interior, exterior)
+    } else {
+        (exterior, interior)
+    };
+    let (a, c) = (axis.index(), usize::from(axis.index() == 0));
+    let pick = |v: [i64; 2], i: usize| v.get(i).copied().unwrap_or_default();
+    let start = wall.plan.start();
+    let [ux, uy] = axis.unit();
+    // The right of the line, across it: (uy, -ux); its component on the across axis.
+    let right = pick([uy, ux.checked_neg().unwrap_or_default()], c);
+    let add = |p: i64, q: i64| p.checked_add(q).ok_or_else(too_big);
+    let times = |p: i64, q: i64| p.checked_mul(q).ok_or_else(too_big);
+    let low_along = if pick(axis.unit(), a) > 0 {
+        add(pick(start, a), along.steps())?
+    } else {
+        add(pick(start, a), times(add(along.steps(), width)?, -1)?)?
+    };
+    let face = add(pick(start, c), times(on, right)?)?;
+    let back = add(pick(start, c), times(other, right)?)?;
+    let low_across = if back > face {
+        face
+    } else {
+        face.checked_sub(own).ok_or_else(too_big)?
+    };
+    let mut plan = [0_i64; 2];
+    for (axis, value) in [(a, low_along), (c, low_across)] {
+        if let Some(slot) = plan.get_mut(axis) {
+            *slot = wall_plan::nearest_mm(value).0;
+        }
+    }
+    let [x, y] = plan;
+    Ok(Placement { x, y, z: up })
+}
+
 /// Where an element at `at` in the frame of a host placed at `host` sits in the model.
 ///
 /// # Errors
@@ -311,7 +422,11 @@ pub fn in_model(host: Placement, at: Placement) -> Result<Placement, GeometryErr
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::arithmetic_side_effects,
+        reason = "test code"
+    )]
 
     use super::*;
     use crate::stand_in::Boxes;
@@ -468,6 +583,133 @@ mod tests {
         };
         let got = at(&edition, &host, &host.recipe, &old, &old.recipe, &hosting).unwrap();
         assert_eq!([got.x, got.y, got.z], [1500, -50, 0]);
+    }
+
+    fn q0(steps: i64) -> String {
+        Value::Length(Length::from_steps(steps)).stored()
+    }
+
+    /// The default partition (12.5, 90, 12.5 mm), its line from `start` to `end` in whole
+    /// millimetres, its exterior face `exterior` steps right of the line and its others `side`
+    /// times 80,000, 656,000 and 736,000 steps less (a flipped wall's `side` is -1).
+    fn layered(start: [i64; 2], end: [i64; 2], exterior: i64, side: i64) -> Element {
+        let mm = |v: i64| q0(v * 6400);
+        let face = [0, 80_000, 656_000, 736_000].map(|d| exterior - side * d);
+        let layer = |f: &str, a: i64, b: i64| json!({ "function": f, "material": "m", "exterior": q0(a), "interior": q0(b) });
+        let args = json!({
+            "start": [mm(start[0]), mm(start[1])],
+            "end": [mm(end[0]), mm(end[1])],
+            "height": mm(2700),
+            "layers": [
+                layer("finish", face[0], face[1]),
+                layer("structure", face[1], face[2]),
+                layer("finish", face[2], face[3]),
+            ],
+        });
+        element("W-1", "wall.layered", args, [1000, 2000, 0])
+    }
+
+    /// On a layered wall a door sits along its line from its start the way the wall runs, flush
+    /// with its side to the nearest millimetre (57.5 mm rounds away from zero), up from its base,
+    /// on all four axes and on a flipped wall (its exterior on the line's left); a wall at an
+    /// angle hosts nothing yet.
+    #[test]
+    fn a_door_on_a_layered_wall_sits_flush_with_its_side() {
+        let edition = Boxes.edition();
+        let (along, up) = (Length::from_mm(1200), Length::from_mm(300));
+        // The door is 900 wide and 100 thick.
+        for (start, end, (exterior, side), role, expected) in [
+            (
+                [0, 0],
+                [4000, 0],
+                (368_000, 1),
+                "exterior",
+                [1200, -58, 300],
+            ),
+            (
+                [0, 0],
+                [4000, 0],
+                (368_000, 1),
+                "interior",
+                [1200, -43, 300],
+            ),
+            (
+                [4000, 0],
+                [0, 0],
+                (368_000, 1),
+                "exterior",
+                [1900, -43, 300],
+            ),
+            (
+                [0, 0],
+                [0, 4000],
+                (368_000, 1),
+                "exterior",
+                [-43, 1200, 300],
+            ),
+            (
+                [0, 0],
+                [0, 4000],
+                (368_000, 1),
+                "interior",
+                [-58, 1200, 300],
+            ),
+            (
+                [0, 4000],
+                [0, 0],
+                (368_000, 1),
+                "interior",
+                [-43, 1900, 300],
+            ),
+            (
+                [0, 0],
+                [4000, 0],
+                (-368_000, -1),
+                "exterior",
+                [1200, -43, 300],
+            ),
+            ([0, 0], [4000, 0], (0, 1), "exterior", [1200, 0, 300]),
+        ] {
+            let host = layered(start, end, exterior, side);
+            let mut d = door();
+            let face = crate::stand_in::names(&host.recipe)
+                .unwrap()
+                .into_iter()
+                .find(|n| n.role == role)
+                .unwrap();
+            write(&mut d, &host.id, &face, along, up);
+            let hosting = read(&d).unwrap().unwrap();
+            let got = at(&edition, &host, &host.recipe, &d, &d.recipe, &hosting).unwrap();
+            assert_eq!(
+                [got.x, got.y, got.z],
+                expected,
+                "{start:?} {end:?} {exterior} {side} {role}"
+            );
+        }
+        let angled = layered([0, 0], [3000, 4000], 368_000, 1);
+        let mut d = door();
+        write(&mut d, &angled.id, &face("exterior"), along, up);
+        let hosting = read(&d).unwrap().unwrap();
+        let refused = at(&edition, &angled, &angled.recipe, &d, &d.recipe, &hosting).unwrap_err();
+        assert_eq!(refused.code, "NotAHost");
+        assert!(
+            refused.message.contains("at an angle"),
+            "{}",
+            refused.message
+        );
+        let host = layered([0, 0], [4000, 0], 368_000, 1);
+        write(
+            &mut d,
+            &host.id,
+            &face("exterior"),
+            Length::from_steps(80_000),
+            up,
+        );
+        let hosting = read(&d).unwrap().unwrap();
+        let fine = at(&edition, &host, &host.recipe, &d, &d.recipe, &hosting).unwrap_err();
+        assert_eq!(fine.code, "NotWholeMillimetres");
+        assert!(is_host(&host.recipe) && is_host(&wall("x").recipe));
+        assert!(!is_host(&door().recipe));
     }
 
     /// Each case where an offset puts nothing anywhere is a failure naming the door and why.

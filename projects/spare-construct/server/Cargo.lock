@@ -657,13 +657,16 @@ dependencies = [
  "construct-formulas",
  "construct-interop",
  "construct-levels",
+ "construct-materials",
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-slabs",
  "construct-transport",
  "construct-types",
  "construct-versions",
  "construct-views",
+ "construct-walls",
  "engine-sim",
  "kit-core",
  "kit-mcp",
@@ -793,15 +796,34 @@ dependencies = [
  "construct-categories",
  "construct-formulas",
  "construct-levels",
+ "construct-materials",
  "construct-model",
  "construct-params",
+ "construct-slabs",
  "construct-types",
+ "construct-walls",
  "engine-geometry",
  "hex",
  "kit-core",
  "kit-ops",
  "kit-store",
  "kit-sync",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
  "serde",
  "serde_json",
 ]
@@ -862,6 +884,19 @@ dependencies = [
  "engine-draw2d",
  "engine-pdf",
  "engine-text",
+]
+
+[[package]]
+name = "construct-walls"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-materials",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4195,6 +4230,7 @@ dependencies = [
  "clap",
  "construct-api",
  "construct-model",
+ "construct-params",
  "construct-regen",
  "engine-geometry",
  "flate2",

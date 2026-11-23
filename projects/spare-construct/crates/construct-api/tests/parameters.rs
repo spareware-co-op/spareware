@@ -14,7 +14,7 @@
 )]
 
 use construct_api::cloud::{Access, ProjectCommands};
-use construct_categories::{CategoryTable, DOORS, GENERIC_MODELS, WALLS};
+use construct_categories::{COLUMNS, CategoryTable, DOORS, GENERIC_MODELS, WALLS};
 use construct_model::element::Element;
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Mesh, Recipe,
@@ -97,6 +97,7 @@ impl Geometry for Wedges {
                 deviation: 0,
                 mesh,
                 outline: vec![[0, 0], [long, 0], [0, long]],
+                parts: Vec::new(),
             }],
         })
     }
@@ -598,7 +599,7 @@ async fn commands_are_refused_with_the_data_crates_own_reasons() {
     stack
         .edit(
             "type.create",
-            json!({ "type": "T-wall", "name": "Basic", "category": 100 }),
+            json!({ "type": "T-column", "name": "Basic", "category": 1100 }),
         )
         .await
         .unwrap();
@@ -606,12 +607,12 @@ async fn commands_are_refused_with_the_data_crates_own_reasons() {
         stack
             .edit(
                 "element.type",
-                json!({ "element": "D-1", "type": "T-wall" })
+                json!({ "element": "D-1", "type": "T-column" })
             )
             .await,
         Err(TypeError::OtherCategory {
             from: DOORS,
-            to: WALLS
+            to: COLUMNS
         }
         .to_string())
     );
@@ -644,7 +645,7 @@ async fn commands_are_refused_with_the_data_crates_own_reasons() {
         stack
             .edit(
                 "element.set",
-                json!({ "element": "W-1", "props": { "@type": "T-wall" } }),
+                json!({ "element": "W-1", "props": { "@type": "T-column" } }),
             )
             .await
             .is_err()

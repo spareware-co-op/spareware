@@ -517,13 +517,16 @@ dependencies = [
  "construct-formulas",
  "construct-interop",
  "construct-levels",
+ "construct-materials",
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-slabs",
  "construct-transport",
  "construct-types",
  "construct-versions",
  "construct-views",
+ "construct-walls",
  "engine-sim",
  "kit-core",
  "kit-mcp",
@@ -698,10 +701,13 @@ dependencies = [
  "construct-categories",
  "construct-formulas",
  "construct-levels",
+ "construct-materials",
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-slabs",
  "construct-types",
+ "construct-walls",
  "engine-geometry",
  "hex",
  "kit-core",
@@ -722,6 +728,24 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "construct-slabs"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-solver",
+ "construct-types",
+ "construct-walls",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

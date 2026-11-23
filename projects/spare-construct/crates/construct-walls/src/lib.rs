@@ -20,26 +20,28 @@
 //!   type's system block under [`OWNER`].
 //! - [`wall_type`]: a wall type as a construct-types [`construct_types::ElementType`] of the
 //!   walls category ([`new_wall_type`], [`with_assembly`], [`assembly_of`]); the instance
-//!   parameters [`LOCATION_LINE`] and [`FLIPPED`] ([`add_parameters`], [`placement`],
-//!   [`offsets_of`]).
+//!   parameters [`LOCATION_LINE`] and [`FLIPPED`] ([`parameter_definitions`],
+//!   [`add_parameters`], [`placement`], [`offsets_of`]).
 //! - [`defaults`]: a small default metric set ([`default_walls`], [`default_wall_types`]).
 //! - [`error`]: [`WallError`], every refusal as a value, naming the layer where there is one.
 //!
 //! Promises: every [`Assembly`] passes every check, and every edit returns one that does or a
 //! refusal; every length is exact in construct-params' unit, a centreline the unit cannot hold
 //! is refused (never rounded), and no float is stored or computed; the same type gives the same
-//! bytes; reading refuses anything writing would not give; nothing panics. Depends on construct-types (the type, its system block, parameters
-//! and instances), construct-params (the parameter definitions), construct-categories (the walls
-//! category), construct-materials (`MaterialId`, and the library a type's materials are checked
-//! against) and kit-core (permanent IDs). Nothing here is interim. Putting an edit through the
-//! edit log is a later job (2.6 and the command table).
+//! bytes; reading refuses anything writing would not give; nothing panics. Depends on
+//! construct-types (the type, its system block, parameters and instances), construct-params (the
+//! parameter definitions), construct-categories (the walls category), construct-materials
+//! (`MaterialId`, and the library a type's materials are checked against) and kit-core
+//! (permanent IDs). Nothing here is interim, and nothing here builds a shape.
 //!
-//! Not built here, with their places kept:
-//! - The wall's shape (job 4.1, this crate): a module `shape` will take a wall instance's
-//!   [`Offsets`] (its layer faces from the reference line), the reference line's two points and
-//!   the base and top constraints, and build one extrusion per layer of nonzero thickness through
-//!   engine-geometry only, naming each layer's faces by role (exterior, interior, top, base,
-//!   ends). It needs nothing new from the data here: [`Assembly::offsets`] is its input.
+//! Elsewhere, with what they take from here:
+//! - The wall's shape (job 4.1) is built by construct-regen, not here: its `walls` module fills a
+//!   `wall.layered` recipe with a wall instance's layers and their faces from [`offsets_of`], its
+//!   `wall_plan` module lays them out on the kernel's grid, and its kernel builder makes one solid
+//!   per layer through the kernel's interface only. This crate stays data, so it never depends on
+//!   geometry.
+//! - The commands that make and change wall types and draw walls through the edit log are
+//!   construct-api's (`cloud::walls`): they check every edit with the functions here.
 //! - Joins (jobs 5.1 and 6.1): solved in plan from the location lines and [`Offsets`], each pair
 //!   of meeting layers settled by [`join`].
 //! - Wrapping geometry (job 6.1): which layers wrap is [`Layer::wraps`], with the rule written on
@@ -62,5 +64,5 @@ pub use offsets::{LocationLine, Offsets};
 pub use stored::{FORMAT_VERSION, OWNER};
 pub use wall_type::{
     FLIPPED, LOCATION_LINE, add_parameters, assembly_of, location_line_value, new_wall_type,
-    offsets_of, placement, with_assembly,
+    offsets_of, parameter_definitions, placement, with_assembly,
 };
