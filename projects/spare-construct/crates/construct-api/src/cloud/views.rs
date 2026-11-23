@@ -60,7 +60,7 @@
 //! [`options`] with the document's own, and no caller changes.
 
 use crate::cloud::elements::write_record;
-use construct_categories::{CategoryId, CategoryTable, VIEWS};
+use construct_categories::{CategoryId, CategoryKind, CategoryTable, VIEWS};
 use construct_levels::{Level, Levels, parse_length};
 use construct_model::element::Element;
 use construct_model::geometry::{Bounds, Recipe};
@@ -1205,14 +1205,75 @@ pub struct RuleSummary {
     pub projection: Option<RuleStyle>,
 }
 
-/// A view's graphics rules as a page lists them: the rules the view holds, by category. A category
-/// with no rule is as the project's object styles say.
+/// How one edge of one category looks in a view now, as [`construct_views::resolve`] answers.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct LookOf {
+    /// The style.
+    pub style: RuleStyle,
+    /// The pen's printed width at the view's scale, in micrometres.
+    pub width: u32,
+    /// Which level gave it: `subcategory`, `category` or `project`.
+    pub origin: &'static str,
+}
+
+/// How a category looks in a view now, each edge as it resolves: what an editor starts from.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct LookSummary {
+    /// The category's number (a subcategory's included).
+    pub category: u32,
+    /// The category's name.
+    pub name: String,
+    /// The category it is a subcategory of, if it is one.
+    pub parent: Option<u32>,
+    /// Whether the view can cut it.
+    pub cuttable: bool,
+    /// Whether it takes the annotation pens (the others take the model pens).
+    pub annotation: bool,
+    /// How it looks where the view cuts it; none for what cannot be cut.
+    pub cut: Option<LookOf>,
+    /// How it looks where the view sees it beyond the cut plane.
+    pub projection: Option<LookOf>,
+}
+
+/// A pen a rule may name, with its printed width.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PenSummary {
+    /// Its number.
+    pub number: u16,
+    /// Its name.
+    pub name: String,
+    /// Its printed width at the view's scale, in micrometres.
+    pub width: u32,
+}
+
+/// A line pattern a rule may name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PatternSummary {
+    /// Its number.
+    pub id: u32,
+    /// Its name.
+    pub name: String,
+}
+
+/// A view's graphics rules as a page lists them: the rules the view holds, by category, how every
+/// category looks in the view now, and what a rule may name. A category with no rule is as the
+/// project's object styles say.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct GraphicsListing {
     /// The view.
     pub view: ViewSummary,
     /// Its rules, in ascending category.
     pub rules: Vec<RuleSummary>,
+    /// Every category the view can say anything about, a category before its subcategories.
+    pub looks: Vec<LookSummary>,
+    /// The model pens, at the view's scale.
+    pub pens: Vec<PenSummary>,
+    /// The annotation pens.
+    pub annotation_pens: Vec<PenSummary>,
+    /// The line patterns.
+    pub line_patterns: Vec<PatternSummary>,
+    /// The fill patterns a cut may be given.
+    pub fill_patterns: Vec<&'static str>,
 }
 
 /// The graphics rules of the view `id`: `None` when the document has no such view.
@@ -1233,10 +1294,123 @@ pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
             })
         })
         .collect();
+    let scale = view.scale();
+    let looked = |category: CategoryId, edge: Edge| {
+        look_in(world, id, category, edge).ok().map(|found| LookOf {
+            width: found.width.get(),
+            origin: found.origin.key(),
+            style: found.style,
+        })
+    };
+    let mut all = world.categories.all();
+    all.retain(|found| found.id != VIEWS && found.parent != Some(VIEWS));
+    all.sort_by_key(|found| {
+        (
+            found.parent.unwrap_or(found.id),
+            found.parent.is_some(),
+            found.id,
+        )
+    });
+    let looks = all
+        .into_iter()
+        .filter_map(|found| {
+            let projection = looked(found.id, Edge::Projected)?;
+            Some(LookSummary {
+                category: found.id.0,
+                name: found.name,
+                parent: found.parent.map(|parent| parent.0),
+                cuttable: found.cuttable,
+                annotation: matches!(found.kind, CategoryKind::Annotation | CategoryKind::View),
+                cut: if found.cuttable {
+                    looked(found.id, Edge::Cut)
+                } else {
+                    None
+                },
+                projection: Some(projection),
+            })
+        })
+        .collect();
+    let pens = world
+        .lines
+        .model_pens
+        .pens()
+        .iter()
+        .filter_map(|pen| {
+            let width = world.lines.model_pens.width(pen.number, scale).ok()?;
+            Some(PenSummary {
+                number: pen.number,
+                name: pen.name.clone(),
+                width: width.get(),
+            })
+        })
+        .collect();
+    let annotation_pens = world
+        .lines
+        .annotation_pens
+        .pens()
+        .iter()
+        .map(|pen| PenSummary {
+            number: pen.number,
+            name: pen.name.clone(),
+            width: pen.width.get(),
+        })
+        .collect();
+    let line_patterns = world
+        .lines
+        .patterns
+        .patterns()
+        .iter()
+        .map(|pattern| PatternSummary {
+            id: pattern.id.0,
+            name: pattern.name.clone(),
+        })
+        .collect();
     Some(GraphicsListing {
         view: summary(view, &world.levels),
         rules,
+        looks,
+        pens,
+        annotation_pens,
+        line_patterns,
+        fill_patterns: construct_views::FILL_PATTERNS.to_vec(),
     })
+}
+
+/// How an element of `category` looks on `edge` in the view `id`, by the one rule
+/// ([`construct_views::resolve`]): what a drawing of the view asks for each line and fill. A
+/// subcategory is resolved as itself under its category.
+///
+/// # Errors
+/// In words, when the document has no such view or the category cannot be resolved there (an
+/// unknown one, or the cut of what cannot be cut).
+pub fn look_in(
+    world: &World,
+    id: &Id,
+    category: CategoryId,
+    edge: Edge,
+) -> Result<construct_views::Resolved, String> {
+    let view = world
+        .views
+        .get(id)
+        .ok_or_else(|| format!("There is no view {id}."))?;
+    let parent = world
+        .categories
+        .get(category)
+        .and_then(|found| found.parent);
+    let (top, sub) = match parent {
+        Some(parent) => (parent, Some(category)),
+        None => (category, None),
+    };
+    construct_views::resolve(
+        view,
+        &world.categories,
+        &world.objects,
+        &world.lines,
+        top,
+        sub,
+        edge,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// The part of a generic command the rules below read.

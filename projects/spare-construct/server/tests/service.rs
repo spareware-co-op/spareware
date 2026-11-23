@@ -1586,10 +1586,31 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
                           "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium" });
 
     let none = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
-    assert_eq!(
-        serde_json::to_value(&none).unwrap(),
-        json!({ "view": summary, "rules": [] })
+    let none = serde_json::to_value(&none).unwrap();
+    assert_eq!(none["view"], summary);
+    assert_eq!(none["rules"], json!([]));
+    // What the page edits from: every category as it looks now, a category before its
+    // subcategories, each edge with where it came from; the pens, patterns and fills a rule may
+    // name. The views category is not there, and what cannot be cut has no cut.
+    let looks = none["looks"].as_array().unwrap();
+    let walls = looks.iter().find(|l| l["category"] == 100).unwrap();
+    assert_eq!(walls["name"], "Walls");
+    assert_eq!(walls["cut"]["origin"], "project");
+    assert_eq!(walls["projection"]["style"]["shown"], true);
+    assert!(
+        walls["cut"]["width"].as_u64().unwrap() > walls["projection"]["width"].as_u64().unwrap()
     );
+    let sub = looks.iter().position(|l| l["parent"] == 100).unwrap();
+    assert!(looks.iter().position(|l| l["category"] == 100).unwrap() < sub);
+    assert!(
+        looks
+            .iter()
+            .all(|l| l["cut"].is_null() != l["cuttable"].as_bool().unwrap())
+    );
+    assert!(none["pens"].as_array().unwrap().len() > 1);
+    assert!(none["annotation_pens"].as_array().unwrap().len() > 1);
+    assert!(none["line_patterns"].as_array().unwrap().len() > 1);
+    assert_eq!(none["fill_patterns"].as_array().unwrap().len(), 9);
 
     let hide = json!({ "shown": false, "transparency": 30 });
     let set = |view: &str, category: u32, edge: &str, style: Value| json!({ "view": view, "category": category, "edge": edge, "style": style });
@@ -1696,7 +1717,13 @@ struct Recording {
 }
 
 impl Drawer for Recording {
-    fn draw(&self, cut: Length, scale: Scale, elements: &[ToDraw]) -> Result<Drawn, String> {
+    fn draw(
+        &self,
+        cut: Length,
+        scale: Scale,
+        elements: &[ToDraw],
+        _looks: Option<&dyn construct_drawing::look::Looks>,
+    ) -> Result<Drawn, String> {
         self.asked
             .lock()
             .unwrap()

@@ -1,6 +1,6 @@
 # CON-A8-F3-P2: Graphics rules say how a category looks in one view
 
-**Status, 2026-11-24:** Decided for the build (piece A71). The data and the commands are in `construct-views` and construct-api's `cloud::views`; the stored form is in the crate's [FORMAT.md](../crates/construct-views/FORMAT.md). The plan drawing applying the rules, the page and the two-browser test are later jobs.
+**Status, 2026-11-24:** Decided for the build (piece A71). The data and the commands are in `construct-views` and construct-api's `cloud::views`; the stored form is in the crate's [FORMAT.md](../crates/construct-views/FORMAT.md). The plan drawing applies the rules and the page shows and edits them (second half of A71, below).
 
 ## The question
 
@@ -16,7 +16,14 @@ A drawing shows walls heavier than furniture, grey for what is not the subject, 
 - **Stored on the view record** under one key, `@view.graphics`, as JSON text in the one spelling, written only when there is a rule. A view without the key has no rules, so every old view reads. The reader refuses anything the writer would not give, as every other key of the record.
 - **Which categories.** Any but the views category, which no view draws. Annotation categories take the annotation pens, as the object styles do; a cut rule only for a category that can be cut.
 - **Commands.** `view.graphics.set` and `view.graphics.clear`, each one record written, one undo step, the claim taken, refusals in words. Setting or clearing what is already so writes nothing and is no step. The other view commands refuse a category, edge or style; `view.duplicate` copies the rules. The generic element commands already refuse a view, so they are no way round the checks.
-- **Read-only in the server:** `GET .../views/<view>/graphics`, the rules a view holds with the category's name and parent. It does not list categories the view says nothing about, and it does not resolve: resolving is the drawing's call.
+- **Read-only in the server:** `GET .../views/<view>/graphics`: the rules a view holds with the category's name and parent (`rules`), and, for the page's editor, `looks` (every category the view can say anything about, each edge as `resolve` answers it, with its origin), the pens, line patterns and fill patterns a rule may name. The page resolves nothing: it shows what the server answers.
+
+## How the drawing and the page use it (second half of A71)
+
+- construct-drawing stays below construct-views. It holds a trait, `look::Looks`, that answers for a category and an edge the whole look (shown, pen width, colour, pattern, fill, halftone, transparency), and `Styles` carries an optional `&dyn Looks`. The server's `ViewLooks` answers it by calling `construct_views::resolve` (through construct-api's `look_in`), so the one rule stays in one place. With no `Looks` the drawing is as before; with a view that has no rules `resolve` gives the project's object styles, and a test pins that both write the same bytes.
+- Hidden is left out before the regions are merged, so a hidden category's cut hatches go with its lines. A cut fill rule replaces the pattern and colour of a region that has a material; a region with no material draws no fill, as before.
+- Halftone is half strength ([`look::HALFTONE_PERCENT`]) and transparency takes its percentage off; the product is one `opacity` attribute in whole percent, written only below full strength. Line patterns are still drawn solid (the SVG writer's old limit, not this piece's).
+- The page's Graphics dialog is reached from the open view's line in the project browser. A control sends only the part it holds (`view.graphics.set` starts from how the element looks now, per the rule above) and Clear is `view.graphics.clear`; refusals are the server's words beside the controls, undo and redo are the log's, and the plan the server draws follows in every browser because every `view.graphics.*` entry reloads the view's plan.
 
 ## Interim
 
@@ -30,6 +37,6 @@ The project stores no pens, line patterns or object styles yet, so the commands 
 
 ## Not decided here
 
-- The plan drawing applying the rules, a section's, an elevation's and a three-dimensional view's drawing, and the page showing and editing them.
+- A section's, an elevation's and a three-dimensional view's drawing applying the rules (only the floor plan is drawn today).
 - View templates (8.5), element overrides (8.5), view filters (A8-F3-P3), phase graphics (9.5) and design option visibility: each adds to this and reads through the same `resolve`.
 - Storing a project's pens, line patterns, object styles and fill patterns, so that a rule's pen and pattern are checked against the project's own.
