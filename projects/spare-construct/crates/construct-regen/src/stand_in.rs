@@ -14,7 +14,8 @@
 //!
 //! A roof (`roof`) is one box too: the box around every layer's solid ([`crate::roof_plan`]),
 //! rounded outward to whole millimetres, named `box.<role>` for its outer faces. Its displays draw
-//! each layer as a part: a flat roof's as the box's slice between that layer's faces, as a floor's,
+//! each layer as a part (a solved roof's as each of its pieces drawn as the prism it is): a flat
+//! roof's as the box's slice between that layer's faces, as a floor's,
 //! a sloped roof's as the layer itself, its section cut into quadrilaterals lofted from verge to
 //! verge, each point the nearest millimetre, so a page shows the slopes on either edition.
 //! Interim, as every stand-in shape: its layers as solids are the kernel's to build (the interim
@@ -304,6 +305,31 @@ fn sloped_layers(
     };
     let corner = |list: &[[i64; 3]], k: usize| list.get(k).copied().unwrap_or_default();
     for layer in &plan.layers {
+        if let Some(PlanSolid::Unite { profiles, by }) = &layer.solid {
+            let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+            let mut triangles = 0_usize;
+            for profile in profiles {
+                let low: Vec<[i64; 3]> = profile.iter().map(|p| near(*p)).collect();
+                let high: Vec<[i64; 3]> = profile
+                    .iter()
+                    .map(|p| {
+                        near([
+                            p[0].saturating_add(by[0]),
+                            p[1].saturating_add(by[1]),
+                            p[2].saturating_add(by[2]),
+                        ])
+                    })
+                    .collect();
+                triangles = triangles.saturating_add(prism(&mut mesh, &low, &high)?);
+            }
+            parts.push(Part {
+                material: layer.material.clone(),
+                function: layer.function.clone(),
+                triangles: [start, part_count(triangles)?],
+                outline: outline.to_vec(),
+            });
+            continue;
+        }
         let Some(PlanSolid::Loft {
             sections: [first, second],
         }) = &layer.solid
@@ -367,6 +393,36 @@ fn sloped_layers(
         });
     }
     Ok((mesh, parts))
+}
+
+/// A prism between two rings of one count, `low` anticlockwise from above and `high` the same
+/// ring moved up, appended to `mesh` with every face outward: its two caps fanned from their first
+/// corner and each wall two triangles. The count of its triangles.
+fn prism(mesh: &mut Mesh, low: &[[i64; 3]], high: &[[i64; 3]]) -> Result<usize, GeometryError> {
+    let n = low.len();
+    let at = part_count(mesh.positions.len().checked_div(3).unwrap_or(0))?;
+    for p in low.iter().chain(high) {
+        mesh.positions.extend(*p);
+    }
+    let mut corners: Vec<[usize; 3]> = Vec::new();
+    for k in 1..n.saturating_sub(1) {
+        let next = k.saturating_add(1);
+        corners.push([0, next, k]);
+        corners.push([n, n.saturating_add(k), n.saturating_add(next)]);
+    }
+    for k in 0..n {
+        let next = k.saturating_add(1).checked_rem(n).unwrap_or(0);
+        let (top, top_next) = (n.saturating_add(k), n.saturating_add(next));
+        corners.push([k, next, top_next]);
+        corners.push([k, top_next, top]);
+    }
+    for triangle in &corners {
+        for &k in triangle {
+            mesh.indices
+                .push(at.checked_add(part_count(k)?).ok_or_else(too_many)?);
+        }
+    }
+    Ok(corners.len())
 }
 
 /// The normal of a flat polygon by Newell's sum, its length twice the polygon's area, pointing to

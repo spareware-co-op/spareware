@@ -902,6 +902,8 @@ dependencies = [
  "kit-core",
  "libm",
  "num-bigint",
+ "num-rational",
+ "num-traits",
  "serde",
  "serde_json",
 ]

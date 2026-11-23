@@ -617,6 +617,56 @@ async fn a_roof_is_made_flat_mono_or_gable_on_a_rectangle() {
 
 /// Every refusal of a roof's making is in words and writes nothing: the command's own, and
 /// construct-roofs' in its words, naming the edges and the job that lifts it.
+/// A hip roof (job 6.2) is made with form `hip`: every edge by default, or the edges `eaves`
+/// names; construct-roofs stores it as solved, or as mono or gable where it is one; slopes of two
+/// pitches meeting at a hip are refused in its words.
+#[tokio::test]
+async fn a_hip_roof_is_made_with_the_same_commands() {
+    let stack = Stack::new().await;
+    two_levels(&stack).await;
+    stack.edit("roof.defaults", json!({})).await.unwrap();
+    let args = create("R-1", STEEL, &rectangle(8000, 6000), "hip", Some("1:2"));
+    stack.edit("roof.create", args).await.unwrap();
+    let rows = edges(&stack.record("R-1").await.unwrap());
+    assert!(
+        rows.iter()
+            .all(|(_, _, pitch)| pitch.as_deref() == Some("slope:1/2"))
+    );
+    stack
+        .edit(
+            "roof.form",
+            json!({ "element": "R-1", "form": "hip", "eaves": ["r0", "r1"] }),
+        )
+        .await
+        .unwrap();
+    let rows = edges(&stack.record("R-1").await.unwrap());
+    let rising: Vec<&str> = rows
+        .iter()
+        .filter(|(_, _, pitch)| pitch.is_some())
+        .map(|(id, _, _)| id.as_str())
+        .collect();
+    assert_eq!(rising, ["r0", "r1"]);
+    let refused = stack
+        .edit(
+            "roof.pitch",
+            json!({ "element": "R-1", "pitch": "1:3", "edge": "r1" }),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        refused.starts_with("R-1: edges r0 and r1 slope at different pitches"),
+        "{refused}"
+    );
+    let refused = stack
+        .edit(
+            "roof.form",
+            json!({ "element": "R-1", "form": "hip", "eaves": [] }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(refused, "A hip roof rises from one edge or more.");
+}
+
 #[tokio::test]
 async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
     let stack = Stack::new().await;
@@ -694,17 +744,18 @@ async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
         ),
         (
             with(&[("footprint", slanted)]),
-            "R-9: edges s0 and s2 slope, and a sloped roof's footprint is a rectangle along the \
-             plan's axes for now: other footprints come with job 6.2",
+            "R-9: edges s0 and s2 slope, and a sloped roof's footprint has right angles at \
+             every corner (90 or 270 degrees): the planes of other footprints are not solved",
         ),
         (
             with(&[("footprint", triangle), ("eaves", json!(["t0", "t1"]))]),
-            "R-9: edges t0 and t1 slope, and a sloped roof's footprint is a rectangle along the \
-             plan's axes for now: other footprints come with job 6.2",
+            "R-9: edges t0 and t1 slope, and a sloped roof's footprint has right angles at \
+             every corner (90 or 270 degrees): the planes of other footprints are not solved",
         ),
         (
             with(&[("eaves", json!(["r0", "r1"]))]),
-            "R-9: edges r0 and r1 slope and meet at a corner: hips come with job 6.2",
+            "A gable rises from two opposite edges: two that meet at a corner make a hip roof \
+             (form hip).",
         ),
         (
             with(&[("eaves", json!(["r0"]))]),
@@ -719,12 +770,12 @@ async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
             "A mono-pitch roof rises from one edge.",
         ),
         (
-            with(&[("form", json!("hip"))]),
-            "A roof's form is flat, mono or gable.",
+            with(&[("form", json!("dome"))]),
+            "A roof's form is flat, mono, gable or hip.",
         ),
         (
             with(&[("form", json!("flat"))]),
-            "A flat roof does not slope: leave the pitch out, or choose mono or gable.",
+            "A flat roof does not slope: leave the pitch out, or choose mono, gable or hip.",
         ),
         (
             with(&[("pitch", Value::Null)]),
@@ -770,7 +821,7 @@ async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
         .unwrap_err();
     assert_eq!(
         refused,
-        "A flat roof rises from no edge: leave eaves out, or choose mono or gable."
+        "A flat roof rises from no edge: leave eaves out, or choose mono, gable or hip."
     );
     // A flat roof's overhang needs every edge along an axis.
     let off = json!({ "outer": [at("s0", 0, 0), at("s1", 4000, 0), at("s2", 4000, 3000),
@@ -780,8 +831,8 @@ async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
     let refused = stack.edit("roof.create", overhang).await.unwrap_err();
     assert_eq!(
         refused,
-        "R-8: edge s3 runs off the plan's axes, so this footprint's overhangs have no exact eaves \
-         outline yet: they come with job 6.2"
+        "R-8: an overhang on a footprint off the plan's axes (at edge s3) has no eaves outline \
+         with exact corners: an overhang needs a footprint along the axes"
     );
     // A flat roof on a footprint off the axes is fine without an overhang.
     let flat = json!({ "element": "R-8", "type": STEEL, "level": "L-1", "footprint": off });
@@ -790,8 +841,8 @@ async fn roofs_refuse_what_the_data_crate_refuses_in_its_words() {
 }
 
 /// A roof's footprint, form, pitch and overhang are changed by their own commands, each built
-/// again, each refusal in words; an uneven gable is refused in construct-roofs' words; another
-/// person's claim turns it back.
+/// again, each refusal in words; one edge's pitch makes an uneven gable; another person's claim
+/// turns it back.
 #[tokio::test]
 async fn a_roof_is_changed_by_its_own_commands() {
     let stack = with_gable().await;
@@ -806,18 +857,24 @@ async fn a_roof_is_changed_by_its_own_commands() {
     assert_eq!(rows[0].2.as_deref(), Some("slope:3/10"));
     assert_eq!(rows[2].2.as_deref(), Some("slope:3/10"));
     assert!(rows[1].2.is_none());
-    let refused = stack
+    // One edge's pitch: an uneven gable (job 6.2), then even again.
+    stack
         .edit(
             "roof.pitch",
             json!({ "element": "R-1", "pitch": "1:3", "edge": "r0" }),
         )
         .await
-        .unwrap_err();
-    assert_eq!(
-        refused,
-        "R-1: edges r0 and r2 slope at different pitches: an uneven gable's ridge is solved with \
-         job 6.2"
-    );
+        .unwrap();
+    let rows = edges(&stack.record("R-1").await.unwrap());
+    assert_eq!(rows[0].2.as_deref(), Some("slope:1/3"));
+    assert_eq!(rows[2].2.as_deref(), Some("slope:3/10"));
+    stack
+        .edit(
+            "roof.pitch",
+            json!({ "element": "R-1", "pitch": "30%", "edge": "r0" }),
+        )
+        .await
+        .unwrap();
     for (args, words) in [
         (
             json!({ "element": "R-1", "pitch": "1:3", "edge": "r1" }),
@@ -970,7 +1027,7 @@ async fn a_roof_is_changed_by_its_own_commands() {
         .unwrap_err();
     assert!(
         refused.starts_with(
-            "R-1: edges r0 and r2 slope, and a sloped roof's footprint is a rectangle"
+            "R-1: edges r0 and r2 slope, and a sloped roof's footprint has right angles"
         ),
         "{refused}"
     );

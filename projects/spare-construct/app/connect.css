@@ -39,10 +39,13 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .floor { fill: var(--sink); fill-opacity: .6; fill-rule: evenodd; stroke: var(--ink-3); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .dw .floor.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
 .dw .floor-sketch { pointer-events: none; }
-/* A roof: its eaves outline in its outer layer's colour seen from above, and the line its outer face rises to. */
+/* A roof: its eaves outline in its outer layer's colour seen from above, and the lines of its top face as the server gave them: ridge dashed, hips solid, valleys dotted, verges thin. */
 .dw .roof { fill: var(--sink); fill-opacity: .5; stroke: var(--ink-3); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .dw .roof.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
-.dw .roof-ridge { stroke: var(--ink-3); stroke-width: 1.5px; stroke-dasharray: 8 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .roof-line { stroke: var(--ink-3); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .roof-ridge { stroke-dasharray: 8 4; }
+.dw .roof-valley { stroke-dasharray: 2 3; }
+.dw .roof-verge { stroke-width: 1px; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
