@@ -4,14 +4,29 @@
 //! of detail.
 //!
 //! The operations are Spare Construct's, named for what they make: `wall.straight`, not "box".
+//! A floor (`floor`) is one box: the box around its outer loop in plan, each side rounded outward
+//! to a whole millimetre, from its bottom face to its top face at `z = 0` ([`crate::floor_plan`]);
+//! its outline is its outer loop, each corner the nearest millimetre, and its deviation is 0 only
+//! when the box is the floor. Its displays draw each layer with a thickness as a part, the box's
+//! slice from that layer's bottom face to its top, so a view colours the layers by material on
+//! either edition. Interim, as every stand-in shape: its layers as solids and its holes are the
+//! kernel's to build (the interim register's row).
+//!
+//! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
+//! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
+//! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
+//! view shows the layers and their materials on either edition.
 //!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::floor_plan::{self, FloorPlan};
+use crate::wall_plan::{self, Layered};
 use construct_model::geometry::{
-    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Recipe,
+    Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
+use construct_params::Length;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -104,6 +119,162 @@ fn mesh(size: [i64; 3]) -> Mesh {
     }
 }
 
+/// A floor's body, as the stand-in stores it: the box it is, in whole millimetres.
+#[derive(Serialize)]
+struct FloorBody {
+    kind: &'static str,
+    min: [i64; 3],
+    max: [i64; 3],
+}
+
+/// The corners of the box from `lo` to `hi`, in [`TRIANGLES`]' order.
+fn box_corners(lo: [i64; 3], hi: [i64; 3]) -> [[i64; 3]; 8] {
+    let [lx, ly, lz] = lo;
+    let [hx, hy, hz] = hi;
+    [
+        [lx, ly, lz],
+        [hx, ly, lz],
+        [hx, hy, lz],
+        [lx, hy, lz],
+        [lx, ly, hz],
+        [hx, ly, hz],
+        [hx, hy, hz],
+        [lx, hy, hz],
+    ]
+}
+
+/// A floor's displayed mesh and its parts: for each layer with a thickness, top first, the slice of
+/// the box from `min` to `max` between that layer's faces (each the nearest millimetre, the
+/// lowest the box's bottom), a part with the outline `outline`.
+fn floor_layers(
+    plan: &FloorPlan,
+    min: [i64; 3],
+    max: [i64; 3],
+    outline: &[[i64; 2]],
+) -> Result<(Mesh, Vec<Part>), GeometryError> {
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let slabs = plan.slabs();
+    let last = slabs.len().saturating_sub(1);
+    for (n, (_, layer, bottom, top)) in slabs.iter().enumerate() {
+        let low = if n == last {
+            min[2]
+        } else {
+            floor_plan::nearest_mm(*bottom).0
+        };
+        let high = floor_plan::nearest_mm(*top).0.min(max[2]);
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        let corners = box_corners([min[0], min[1], low], [max[0], max[1], high]);
+        mesh.positions.extend(corners.concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: outline.to_vec(),
+        });
+    }
+    Ok((mesh, parts))
+}
+
+/// A floor as one box ([`crate::floor_plan`]): the box around its outer loop, its sides rounded
+/// outward to whole millimetres, from its bottom face (rounded down) to its top face at 0. Named
+/// `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each loop, in loop order. Its
+/// displays draw each layer as a part ([`floor_layers`]); its body is the one box.
+fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = FloorPlan::of(recipe)?;
+    let total = plan.total().unwrap_or_default();
+    let ([x0, y0], [x1, y1]) = plan.extent();
+    let min = [
+        floor_plan::floor_mm(x0),
+        floor_plan::floor_mm(y0),
+        floor_plan::floor_mm(total.saturating_neg()),
+    ];
+    let max = [floor_plan::ceil_mm(x1), floor_plan::ceil_mm(y1), 0];
+    let mut rounded = false;
+    let mut outline = Vec::with_capacity(plan.outer().len());
+    for corner in plan.outer() {
+        let [x, y] = corner.at;
+        let ((x, a), (y, b)) = (floor_plan::nearest_mm(x), floor_plan::nearest_mm(y));
+        rounded |= !(a && b);
+        outline.push([x, y]);
+    }
+    rounded |= !floor_plan::nearest_mm(total).1;
+    // The box strays from the floor by nothing when it is the floor; otherwise by at most its
+    // plan's diagonal (every point of one is within that of every point of the other), and by
+    // one millimetre more where a corner or the thickness was rounded.
+    let deviation = if plan.is_box() {
+        i64::from(rounded)
+    } else {
+        let [w, d] = [
+            i128::from(max[0].saturating_sub(min[0])),
+            i128::from(max[1].saturating_sub(min[1])),
+        ];
+        let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+        let mut root = square.isqrt();
+        if root.saturating_mul(root) < square {
+            root = root.saturating_add(1);
+        }
+        i64::try_from(root)
+            .unwrap_or(i64::MAX)
+            .saturating_add(i64::from(rounded))
+    };
+    let (mesh, parts) = floor_layers(&plan, min, max, &outline)?;
+    let names = floor_names(&plan);
+    let body = FloorBody {
+        kind: "floor",
+        min,
+        max,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names,
+        displays,
+    })
+}
+
+/// A floor's face names: `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each
+/// loop, in loop order.
+fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
+    let mut names = vec![
+        FaceName {
+            name: "box.top".to_owned(),
+            role: "top".to_owned(),
+        },
+        FaceName {
+            name: "box.bottom".to_owned(),
+            role: "bottom".to_owned(),
+        },
+    ];
+    for corner in plan.loops.iter().flatten() {
+        let role = format!("side.{}", corner.id);
+        names.push(FaceName {
+            name: format!("box.{role}"),
+            role,
+        });
+    }
+    names
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -122,8 +293,122 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
-    size_of(recipe)?;
+    if floor_plan::is_floor(recipe) {
+        return Ok(floor_names(&FloorPlan::of(recipe)?));
+    }
+    if wall_plan::is_layered(recipe) {
+        Layered::of(recipe)?;
+    } else {
+        size_of(recipe)?;
+    }
     Ok(box_names())
+}
+
+fn too_many() -> GeometryError {
+    GeometryError {
+        code: "TooBig".to_owned(),
+        message: "a wall with more layers than a display can count".to_owned(),
+    }
+}
+
+/// A count of a display's corners or triangles, as its mesh numbers them.
+fn part_count(n: usize) -> Result<u32, GeometryError> {
+    u32::try_from(n).map_err(|_| too_many())
+}
+
+/// A layered wall's body, as the stand-in stores it: its outer outline and its height, in whole
+/// millimetres.
+#[derive(Serialize)]
+struct WallBody {
+    kind: &'static str,
+    outline: Vec<[i64; 2]>,
+    height: i64,
+}
+
+/// A layered wall as one box of its whole thickness: the prism on its outer outline, the strip
+/// from its exterior face to its interior face ([`crate::wall_plan`]), each corner the nearest
+/// whole millimetre, from its base to its top. Its bounds are rounded outward. Its displays draw
+/// each layer with a thickness as a part of its own, the prism on that layer's strip, so a view
+/// shows the layers and their materials as the kernel's displays do; its body is the one box.
+fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let wall = Layered::of(recipe)?;
+    let (exterior, interior) = wall.outer();
+    let (corners, _) = wall.plan.strip(exterior, interior)?;
+    let mut rounded = false;
+    let mut near = |steps: i64| {
+        let (mm, exact) = wall_plan::nearest_mm(steps);
+        rounded |= !exact;
+        mm
+    };
+    let outline: Vec<[i64; 2]> = corners.iter().map(|&[x, y]| [near(x), near(y)]).collect();
+    let height = near(wall.height);
+    let mut positions = Vec::new();
+    let mut indices = Vec::new();
+    let mut parts = Vec::new();
+    for layer in wall.layers.iter().filter(|layer| layer.thickness() > 0) {
+        let (strip, _) = wall.plan.strip(layer.exterior, layer.interior)?;
+        let shape: Vec<[i64; 2]> = strip.iter().map(|&[x, y]| [near(x), near(y)]).collect();
+        let (first, base) = (
+            part_count(indices.len() / 3)?,
+            part_count(positions.len() / 3)?,
+        );
+        for z in [0, height] {
+            for &[x, y] in &shape {
+                positions.extend([x, y, z]);
+            }
+        }
+        for index in TRIANGLES {
+            indices.push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: shape,
+        });
+    }
+    let deviation = i64::from(rounded);
+    let (mut min, mut max) = ([0, 0, 0], [0, 0, wall.height]);
+    for axis in 0..2 {
+        let values = corners.iter().filter_map(|c| c.get(axis).copied());
+        if let (Some(lo), Some(hi)) = (values.clone().min(), values.max())
+            && let (Some(l), Some(h)) = (min.get_mut(axis), max.get_mut(axis))
+        {
+            (*l, *h) = (lo, hi);
+        }
+    }
+    let per = Length::STEPS_PER_MM;
+    let floor = |s: i64| s.checked_div_euclid(per).unwrap_or(0);
+    let ceil = |s: i64| match s.checked_rem_euclid(per) {
+        Some(0) => floor(s),
+        _ => floor(s).saturating_add(1),
+    };
+    let body = WallBody {
+        kind: "wall",
+        outline: outline.clone(),
+        height,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: Mesh {
+                positions: positions.clone(),
+                indices: indices.clone(),
+            },
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds {
+            min: min.map(floor),
+            max: max.map(ceil),
+        },
+        names: box_names(),
+        displays,
+    })
 }
 
 impl Geometry for Boxes {
@@ -137,6 +422,12 @@ impl Geometry for Boxes {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if floor_plan::is_floor(recipe) {
+            return floor(recipe);
+        }
+        if wall_plan::is_layered(recipe) {
+            return layered(recipe);
+        }
         let size = size_of(recipe)?;
         let [w, d, _] = size;
         let body = serde_json::to_vec(&BoxBody { kind: "box", size }).unwrap_or_default();
@@ -150,6 +441,7 @@ impl Geometry for Boxes {
                 deviation: 0,
                 mesh: mesh(size),
                 outline: outline.clone(),
+                parts: Vec::new(),
             })
             .collect();
         Ok(Built {
@@ -251,6 +543,190 @@ mod tests {
             names(&recipe("stair.spiral", json!({}))).unwrap_err().code,
             "UnknownOperation"
         );
+    }
+
+    fn q0(steps: i64) -> String {
+        construct_params::Value::Length(Length::from_steps(steps)).stored()
+    }
+
+    /// The default partition (12.5, 90, 12.5 mm) on a line from `start` to `end` in steps, 2700
+    /// mm high, centred on its line.
+    fn partition(start: [i64; 2], end: [i64; 2]) -> Recipe {
+        let layer = |f: &str, a: i64, b: i64| json!({ "function": f, "material": "m", "exterior": q0(a), "interior": q0(b) });
+        recipe(
+            "wall.layered",
+            json!({
+                "start": [q0(start[0]), q0(start[1])],
+                "end": [q0(end[0]), q0(end[1])],
+                "height": q0(17_280_000),
+                "layers": [
+                    layer("finish", 368_000, 288_000),
+                    layer("structure", 288_000, -288_000),
+                    layer("finish", -288_000, -368_000),
+                ],
+            }),
+        )
+    }
+
+    /// A layered wall is one box of its whole thickness: the prism on its outer outline, each
+    /// corner the nearest millimetre (57.5 mm rounds away from zero), its bounds rounded outward,
+    /// named as a box is; a layered wall at an angle is its outer parallelogram. Its recorded
+    /// bytes never change within an edition.
+    #[test]
+    fn a_layered_wall_is_one_box_of_its_whole_thickness() {
+        let wall = partition([0, 0], [25_600_000, 0]);
+        let built = Boxes.build(&wall).unwrap();
+        let outline = vec![[0, -58], [4000, -58], [4000, 58], [0, 58]];
+        assert_eq!(built.displays[0].outline, outline);
+        assert_eq!(built.displays[0].deviation, 1);
+        assert_eq!(built.bounds.min, [0, -58, 0]);
+        assert_eq!(built.bounds.max, [4000, 58, 2700]);
+        assert_eq!(built.names, box_names());
+        assert_eq!(names(&wall).unwrap(), built.names);
+        assert_eq!(
+            built.body,
+            br#"{"kind":"wall","outline":[[0,-58],[4000,-58],[4000,58],[0,58]],"height":2700}"#
+        );
+        // Each layer is a part of the displays: its strip's prism, its material and function.
+        let parts = &built.displays[0].parts;
+        let outlines: Vec<&Vec<[i64; 2]>> = parts.iter().map(|part| &part.outline).collect();
+        assert_eq!(
+            outlines,
+            [
+                &vec![[0, -58], [4000, -58], [4000, -45], [0, -45]],
+                &vec![[0, -45], [4000, -45], [4000, 45], [0, 45]],
+                &vec![[0, 45], [4000, 45], [4000, 58], [0, 58]],
+            ]
+        );
+        let triangles: Vec<[u32; 2]> = parts.iter().map(|part| part.triangles).collect();
+        assert_eq!(triangles, [[0, 12], [12, 12], [24, 12]]);
+        let functions: Vec<&str> = parts.iter().map(|part| part.function.as_str()).collect();
+        assert_eq!(functions, ["finish", "structure", "finish"]);
+        assert!(parts.iter().all(|part| part.material == "m"));
+        assert_eq!(built.displays[0].mesh.positions.len(), 72);
+        assert_eq!(built.displays[0].mesh.indices.len(), 108);
+        assert_eq!(built.displays[0].mesh.indices[36], 8);
+        assert_eq!(built.displays[1].mesh, built.displays[0].mesh);
+        assert_eq!(built.displays[1].parts, built.displays[0].parts);
+        // A 3-4-5 wall from the origin: its exterior face is (46, -34.5) mm off its line.
+        let angled = Boxes
+            .build(&partition([0, 0], [15_360_000, 20_480_000]))
+            .unwrap();
+        assert_eq!(
+            angled.displays[0].outline,
+            vec![[46, -35], [2446, 3166], [2354, 3235], [-46, 35]]
+        );
+        assert_eq!(angled.bounds.min, [-46, -35, 0]);
+        assert_eq!(angled.bounds.max, [2446, 3235, 2700]);
+        let mut unfilled = wall;
+        unfilled
+            .args
+            .insert("layers".to_owned(), json!({ "wall": "type" }));
+        assert_eq!(Boxes.build(&unfilled).unwrap_err().code, "Unfilled");
+        assert_eq!(names(&unfilled).unwrap_err().code, "Unfilled");
+    }
+
+    /// A filled floor: the L-shaped floor of 8 m by 8 m less its notch, with a 2 m square hole,
+    /// its two layers 200 mm in all; or, with `rectangle`, a 4 m by 3 m rectangle.
+    #[allow(clippy::arithmetic_side_effects, reason = "test code")]
+    fn floor_of(rectangle: bool) -> Recipe {
+        let mm = |v: i64| v * 6400;
+        let corner = |id: &str, x: i64, y: i64| json!({ "id": id, "at": [mm(x), mm(y)] });
+        let loops = if rectangle {
+            json!([[
+                corner("e0", 0, 0),
+                corner("e1", 4000, 0),
+                corner("e2", 4000, 3000),
+                corner("e3", 0, 3000)
+            ]])
+        } else {
+            json!([
+                [
+                    corner("e0", 0, 0),
+                    corner("e1", 8000, 0),
+                    corner("e2", 8000, 4000),
+                    corner("e3", 4000, 4000),
+                    corner("e4", 4000, 8000),
+                    corner("e5", 0, 8000)
+                ],
+                [
+                    corner("h3", 1000, 1000),
+                    corner("h2", 1000, 3000),
+                    corner("h1", 3000, 3000),
+                    corner("h0", 3000, 1000)
+                ]
+            ])
+        };
+        let layer = |f: &str, t: i64| json!({ "function": f, "material": "m", "thickness": mm(t) });
+        recipe(
+            "floor",
+            json!({ "loops": loops, "layers": [layer("finish", 50), layer("structure", 150)] }),
+        )
+    }
+
+    /// A floor is one box: the box around its outer loop from its bottom face to its top face at
+    /// 0, its outline its outer loop, named top, bottom and a side per edge; it strays by nothing
+    /// when it is a rectangle, and by the box's plan diagonal otherwise. Its bytes are pinned, and
+    /// a floor whose layers are not filled in does not build.
+    #[test]
+    fn a_floor_is_the_box_around_its_outer_loop() {
+        let rectangle = Boxes.build(&floor_of(true)).unwrap();
+        assert_eq!(rectangle.bounds.min, [0, 0, -200]);
+        assert_eq!(rectangle.bounds.max, [4000, 3000, 0]);
+        assert_eq!(rectangle.displays[0].deviation, 0);
+        assert_eq!(
+            rectangle.body,
+            br#"{"kind":"floor","min":[0,0,-200],"max":[4000,3000,0]}"#
+        );
+        let l = Boxes.build(&floor_of(false)).unwrap();
+        assert_eq!(l.bounds.min, [0, 0, -200]);
+        assert_eq!(l.bounds.max, [8000, 8000, 0]);
+        assert_eq!(
+            l.displays[0].outline,
+            vec![
+                [0, 0],
+                [8000, 0],
+                [8000, 4000],
+                [4000, 4000],
+                [4000, 8000],
+                [0, 8000]
+            ]
+        );
+        // The diagonal of 8 m by 8 m is 11,313.7 mm.
+        assert_eq!(l.displays[0].deviation, 11_314);
+        // Each layer is a part: the box's slice between its faces, top first, in its material.
+        let parts = &l.displays[0].parts;
+        let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+        assert_eq!(functions, ["finish", "structure"]);
+        let triangles: Vec<[u32; 2]> = parts.iter().map(|p| p.triangles).collect();
+        assert_eq!(triangles, [[0, 12], [12, 12]]);
+        assert!(parts.iter().all(|p| p.outline == l.displays[0].outline));
+        assert!(parts.iter().all(|p| p.material == "m"));
+        let heights: Vec<i64> = l.displays[0]
+            .mesh
+            .positions
+            .iter()
+            .skip(2)
+            .step_by(3)
+            .copied()
+            .collect();
+        let (a, b, c) = (-50, 0, -200);
+        assert_eq!(
+            heights,
+            [a, a, a, a, b, b, b, b, c, c, c, c, a, a, a, a],
+            "finish from -50 to 0, structure from -200 to -50"
+        );
+        assert_eq!(l.displays[1].parts, *parts);
+        let roles: Vec<&str> = l.names.iter().map(|n| n.role.as_str()).collect();
+        assert_eq!(roles.len(), 2 + 6 + 4);
+        assert_eq!(&roles[..3], ["top", "bottom", "side.e0"]);
+        assert_eq!(l.names[2].name, "box.side.e0");
+        assert_eq!(names(&floor_of(false)).unwrap(), l.names);
+        let mut unfilled = floor_of(true);
+        unfilled
+            .args
+            .insert("layers".to_owned(), json!({ "type": "layers" }));
+        assert_eq!(Boxes.build(&unfilled).unwrap_err().code, "Unfilled");
     }
 
     /// Recorded: a document's stored shapes must keep their meaning. A change here is a new

@@ -35,11 +35,14 @@ pub fn location_line_value(line: LocationLine) -> Value {
     Value::Choice(line.key().to_owned())
 }
 
-/// Adds the two wall instance parameters, with their defaults, to a caller's parameters.
+/// The two wall instance parameters, each with its default: [`LOCATION_LINE`] (the wall
+/// centreline) and [`FLIPPED`] (no). A document defines them in its parameter table and binds
+/// them to the walls category with these defaults, held by each instance, before a wall type of
+/// it reads; the server's command that makes a wall type does that when they are missing.
 ///
 /// # Errors
-/// [`WallError::Type`] if either ID is already defined.
-pub fn add_parameters(params: &mut Parameters) -> Result<(), WallError> {
+/// None for this fixed data; the type is a `Result` because each definition is checked.
+pub fn parameter_definitions() -> Result<[(Definition, Value); 2], WallError> {
     let choices = LocationLine::ALL
         .iter()
         .map(|line| Choice::new(line.key(), line.label()))
@@ -53,8 +56,20 @@ pub fn add_parameters(params: &mut Parameters) -> Result<(), WallError> {
     .map_err(TypeError::from)?;
     let flipped = Definition::new(fixed_id(FLIPPED)?, "Flipped", Kind::YesNo, Holder::Instance)
         .map_err(TypeError::from)?;
-    params.add(line, Some(location_line_value(LocationLine::WallCentre)))?;
-    params.add(flipped, Some(Value::YesNo(false)))?;
+    Ok([
+        (line, location_line_value(LocationLine::WallCentre)),
+        (flipped, Value::YesNo(false)),
+    ])
+}
+
+/// Adds the two wall instance parameters, with their defaults, to a caller's parameters.
+///
+/// # Errors
+/// [`WallError::Type`] if either ID is already defined.
+pub fn add_parameters(params: &mut Parameters) -> Result<(), WallError> {
+    for (definition, default) in parameter_definitions()? {
+        params.add(definition, Some(default))?;
+    }
     Ok(())
 }
 
