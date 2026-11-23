@@ -88,3 +88,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .room-tag text { pointer-events: none; fill: var(--ink-2); }
 .dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
 .dw .room-tag .room-state { fill: var(--danger); }
+.stack-sched h3 { margin: 4px 0; font-size: 13px; }
+.stack-sched .grow { flex: 1; min-width: 120px; }
+.stack-sched .sched-scroll { max-height: 40vh; overflow: auto; margin: 6px 0; border: 1px solid var(--hairline); }
+.sched-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sched-table th, .sched-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+.sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
+.sched-table tr.click { cursor: pointer; }
+.sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }

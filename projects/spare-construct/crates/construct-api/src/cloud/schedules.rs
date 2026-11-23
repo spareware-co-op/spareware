@@ -247,11 +247,36 @@ pub struct RowView {
     pub cells: Vec<CellView>,
 }
 
+/// A field the schedule's category has, which the schedule may list, filter or sort by.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OfferedView {
+    /// The field's key.
+    pub field: String,
+    /// Its name.
+    pub name: String,
+    /// The kind of value it holds, as construct-params tags it.
+    pub kind: &'static str,
+    /// The comparisons a filter on it may use, by key, in the order they are listed to a person.
+    pub comparisons: Vec<&'static str>,
+}
+
+/// A category a schedule may list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ListableView {
+    /// Its number.
+    pub id: u32,
+    /// Its name.
+    pub name: String,
+}
+
 /// A schedule with its rows, worked out from the document as it is now.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ScheduleTable {
     /// The schedule.
     pub schedule: ScheduleSummary,
+    /// Every field its category has, in a fixed order: what the page offers to add, filter and
+    /// sort by.
+    pub offered: Vec<OfferedView>,
     /// Its columns, in the order of its fields.
     pub columns: Vec<ColumnView>,
     /// Its rows, filtered and sorted.
@@ -301,6 +326,23 @@ pub fn summaries(world: &World) -> Vec<ScheduleSummary> {
         .ordered()
         .into_iter()
         .map(|schedule| summary(schedule, world))
+        .collect()
+}
+
+/// The top-level categories a schedule may list, in the category table's order: what a person
+/// chooses from when making one.
+#[must_use]
+pub fn listable(world: &World) -> Vec<ListableView> {
+    let basis = world.basis();
+    basis
+        .categories
+        .all()
+        .into_iter()
+        .filter(|category| category.parent.is_none() && basis.listable(category.id).is_ok())
+        .map(|category| ListableView {
+            id: category.id.0,
+            name: category.name,
+        })
         .collect()
 }
 
@@ -463,6 +505,20 @@ pub async fn read_table<R: Reader>(
     let basis = world.basis();
     let table = ScheduleTable {
         schedule: summary(schedule, &world),
+        offered: basis
+            .fields_of(schedule.lists())
+            .into_iter()
+            .map(|(field, definition)| OfferedView {
+                field: field.key(),
+                name: definition.name().to_owned(),
+                kind: definition.kind().tag(),
+                comparisons: Comparison::ALL
+                    .into_iter()
+                    .filter(|comparison| comparison.fits(definition.kind()))
+                    .map(Comparison::key)
+                    .collect(),
+            })
+            .collect(),
         columns: columns(schedule, &basis)
             .into_iter()
             .map(|column| ColumnView {

@@ -232,6 +232,22 @@ fn schedule_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/schedules/{schedule}",
             get(schedule),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/schedule-categories",
+            get(schedule_categories),
+        )
+}
+
+async fn schedule_categories(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedule_categories(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
 }
 
 async fn schedules(

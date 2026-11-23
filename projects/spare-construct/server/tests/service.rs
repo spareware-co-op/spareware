@@ -2037,6 +2037,24 @@ async fn the_page_lists_schedules_and_their_live_rows() {
         .await
         .unwrap();
     assert_eq!(table.rows.len(), 7, "the seeded building's doors");
+    // The fields the category offers come with their kinds and the comparisons that fit them.
+    let offered = |key: &str| table.offered.iter().find(|field| field.field == key);
+    let name = offered("name").expect("a door's name is offered");
+    assert_eq!((name.name.as_str(), name.kind), ("Name", "text"));
+    assert!(name.comparisons.contains(&"contains"));
+    assert!(offered("type").is_some());
+    // The categories a schedule may list include the doors, and leave out the views.
+    let listable = s
+        .schedule_categories(&anna, &project, &model)
+        .await
+        .unwrap();
+    assert!(
+        listable
+            .iter()
+            .any(|c| (c.id, c.name.as_str()) == (300, "Doors"))
+    );
+    assert!(listable.iter().all(|c| c.name != "Views"));
+    assert!(refused(s.schedule_categories(&dan, &project, &model).await));
     let names: Vec<String> = table
         .rows
         .iter()
@@ -2101,6 +2119,8 @@ async fn the_page_lists_schedules_and_their_live_rows() {
         .await
         .unwrap();
     assert_eq!(item.name, "Arch package v12");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
     let stack = seeded().await;
