@@ -312,6 +312,8 @@ The element, parameter, type, hosting, family, level, wall, grid and reference p
 | `view.set` | `view`, and any of `scale`, `detail`, `level` and `range` (a plan), `from`, `to`, `look` and `depth` (a section or elevation), `staging`, `phasing` (or `null`) | The view; nothing at all if it already is so. A kind never changes, and an argument the kind has no use for is refused |
 | `view.duplicate` | `view`, `new`, `name` (default `<name> copy`, then `copy 2`...) | A copy under the new ID |
 | `view.delete` | `view` | Its pointer goes |
+| `view.graphics.set` | `view`, `category` (a category's or subcategory's number), `edge` (`cut` or `projection`), `style`: any of `pen` (a pen's number), `pattern` (a line pattern's number), `colour` (`[r, g, b]`, each 0 to 255), `fill` (`{"pattern": <name>, "colour": [r, g, b]}` or `null`; a cut only), `halftone`, `transparency` (a whole percentage, 0 to 100), `shown` | One graphics rule of the view ([construct-views' format](../construct-views/FORMAT.md)). A part not named keeps what the element looks like in that view now. Refused: an unknown category, the views category, a cut rule for a category that cannot be cut, a pen, pattern or fill pattern there is not, a value out of range, a fill on a projection, and a view that cannot hold one (a drafting view or a legend; a cut rule in a three-dimensional view) |
+| `view.graphics.clear` | `view`, `category`, `edge` (default both) | The rule, or both of the category's rules; nothing at all, and no step, when there is none |
 | `edit.undo` | none (`{}`) | Every piece the person's last step changed, put back as it was before it (below) |
 | `edit.redo` | none (`{}`) | Every piece the person's last undo changed, put back: the undo of that undo |
 

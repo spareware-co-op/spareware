@@ -2049,5 +2049,150 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the room's included, matches the server's`);
 }
 
+
+console.log('\n   Graphics rules, in a view');
+// Anna opens Level 1's plan and its Graphics from the view's line in the browser. She gives what
+// walls cut a heavier pen, a colour, another fill in another colour and halftone: Ben's page and
+// hers both read the rule, and on a server with the geometry kernel both draw the plan with it. A
+// value the server refuses (transparency over 100) is turned back in its words beside the
+// controls. She hides what walls cut and the drawing goes in both; she clears the rule and it
+// comes back as it was; her undo puts the hiding back, then the rule; her redo clears it again.
+const gfxView = 'VP-1';
+const gfxWall = '#pv-canvas g.drawn line[data-element="W-101"]';
+const gfxHatch = '#pv-canvas g.drawn path[data-material]';
+const gfxDialog = '#stack-manage';
+const gfxControl = (key) => `${gfxDialog} [data-key="${key}"]`;
+const gfxRow = `${gfxDialog} [data-gfx-rule="100"]`;
+const gfxCut = (page) =>
+  page.evaluate(
+    (url) => fetch(url).then((r) => r.json()).then((l) => l.rules.find((r) => r.category === 100)?.cut ?? null),
+    `${model}/views/${gfxView}/graphics`,
+  );
+// Waits until the server's list of rules says what the call names: 'none' (no rule for walls), 'hidden'
+// or 'ruled' (shown, in the colour set below).
+const gfxWait = (page, what) =>
+  page.waitForFunction(
+    async ([url, want]) => {
+      const list = await fetch(url).then((r) => r.json());
+      const cut = list.rules.find((r) => r.category === 100)?.cut ?? null;
+      if (want === 'none') return cut === null;
+      if (want === 'hidden') return cut !== null && cut.shown === false;
+      return cut !== null && cut.shown === true && cut.colour.join() === '200,16,32';
+    },
+    [`${model}/views/${gfxView}/graphics`, what],
+    { polling: 250 },
+  );
+await anna.click(viewLeaf('Level 1 plan'));
+await ben.click(viewLeaf('Level 1 plan'));
+let gfxPlain = null;
+let gfxHatches = 0;
+if (withKernel) {
+  await anna.waitForSelector(gfxWall, { state: 'attached' });
+  await ben.waitForSelector(gfxWall, { state: 'attached' });
+  gfxPlain = await anna.locator(gfxWall).first().getAttribute('stroke-width');
+  await anna.waitForSelector(gfxHatch, { state: 'attached' });
+  gfxHatches = await anna.locator(gfxHatch).count();
+}
+await anna.click('#browser [data-act="stackviewgraphics"]');
+await anna.waitForSelector(gfxControl('gfx-category'));
+check(
+  (await anna.locator(`${gfxDialog} [data-gfx-none]`).count()) === 1,
+  'a view with no rules lists none, and says every category looks as the project says',
+);
+await anna.locator(gfxControl('gfx-category')).selectOption('100');
+await anna.waitForSelector(`${gfxDialog} [data-gfx-origin="project"]`);
+const gfxHeaviest = await anna.locator(`${gfxControl('gfx-pen')} option`).last().getAttribute('value');
+await anna.locator(gfxControl('gfx-pen')).selectOption(gfxHeaviest);
+await anna.waitForSelector(`${gfxRow}:has-text("pen ${gfxHeaviest}")`);
+await anna.waitForSelector(`${gfxDialog} [data-gfx-origin="category"]`);
+await anna.locator(gfxControl('gfx-colour')).fill('#c81020');
+await anna.waitForSelector(`${gfxRow}:has-text("#c81020")`);
+await anna.locator(gfxControl('gfx-fill')).selectOption('earth');
+await anna.waitForSelector(`${gfxRow}:has-text("earth fill")`);
+await anna.locator(gfxControl('gfx-fill-colour')).fill('#0a5a14');
+await anna.waitForSelector(`${gfxRow}:has-text("#0a5a14")`);
+await anna.locator(gfxControl('gfx-halftone')).check();
+await anna.waitForSelector(`${gfxRow}:has-text("halftone")`);
+await gfxWait(ben, 'ruled');
+check(
+  (await gfxCut(ben)).pen === Number(gfxHeaviest) && (await gfxCut(ben)).fill.pattern === 'earth',
+  "walls cut in the heaviest pen with another fill: Ben's page reads the rule Anna set",
+);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(`${gfxWall}[stroke="#c81020"][opacity="0.5"]`, { state: 'attached' });
+    await page.waitForSelector(`${gfxHatch}[stroke="#0a5a14"][opacity="0.5"]`, { state: 'attached' });
+  }
+  const heavy = await ben.locator(gfxWall).first().getAttribute('stroke-width');
+  check(Number(heavy) > Number(gfxPlain), "the plan is drawn in both browsers with the heavier pen, the colour, the fill and halftone");
+}
+await shot(anna, 'anna-graphics-rule');
+
+// A value the server refuses is turned back in its words, and the rule stays as it was.
+await anna.locator(gfxControl('gfx-transparency')).fill('150');
+await anna.locator(gfxControl('gfx-transparency')).press('Enter');
+await anna.waitForSelector(`${gfxDialog} [data-problem="graphics:100:cut"]`);
+const gfxWords = await anna.locator(`${gfxDialog} [data-problem="graphics:100:cut"]`).textContent();
+check(/Transparency is a percentage from 0 to 100, not 150/.test(gfxWords), `the refusal reads: ${gfxWords}`);
+check((await gfxCut(ben)).transparency === 0, 'and the rule is as it was');
+
+// Hiding what walls cut takes the drawing away in both browsers.
+await anna.locator(gfxControl('gfx-shown')).uncheck();
+await anna.waitForSelector(`${gfxRow}:has-text("hidden")`);
+await gfxWait(ben, 'hidden');
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(gfxWall, { state: 'detached' });
+    await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length < n, [gfxHatch, gfxHatches]);
+  }
+  pass('walls hidden: no cut edge and no hatch of them is drawn, in either browser (the doors still are)');
+} else {
+  pass("walls hidden: Ben's page reads the rule");
+}
+
+// Clearing the rule gives the first drawing back.
+await anna.click(gfxControl('gfx-clear'));
+await anna.waitForSelector(`${gfxDialog} [data-gfx-none]`);
+await gfxWait(ben, 'none');
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(`${gfxWall}:not([stroke="#c81020"])`, { state: 'attached' });
+    await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length === n, [gfxHatch, gfxHatches]);
+    check(
+      (await page.locator(gfxWall).first().getAttribute('stroke-width')) === gfxPlain &&
+        (await page.locator(`${gfxWall}[stroke="#c81020"]`).count()) === 0,
+      'the rule cleared, the plan is drawn as it was before it',
+    );
+  }
+} else {
+  pass("the rule cleared, Ben's page lists none");
+}
+
+// Her undo is her own: first the clear (the hiding is back), then the hiding (the rule is shown).
+await anna.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+await anna.waitForSelector('#dlg', { state: 'hidden' });
+await anna.click('#qat [data-act="stackundo"]');
+await gfxWait(ben, 'hidden');
+if (withKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(gfxWall, { state: 'detached' });
+}
+pass('her undo puts the hiding back, and Ben follows');
+await anna.click('#qat [data-act="stackundo"]');
+await gfxWait(ben, 'ruled');
+if (withKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(`${gfxWall}[stroke="#c81020"]`, { state: 'attached' });
+}
+pass('her next undo shows the walls again in the rule, and Ben follows');
+await anna.click('#qat [data-act="stackredo"]');
+await gfxWait(ben, 'hidden');
+await anna.click('#qat [data-act="stackredo"]');
+await gfxWait(ben, 'none');
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(`${gfxWall}:not([stroke="#c81020"])`, { state: 'attached' });
+  }
+}
+pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
+
 await browser.close();
 console.log('\nThe browser checks passed.');

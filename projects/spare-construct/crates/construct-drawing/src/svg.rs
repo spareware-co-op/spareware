@@ -259,6 +259,18 @@ fn pen(colour: Colour, width: Micrometres, n: i128) -> Result<String, DrawingErr
     ))
 }
 
+/// The ` opacity="..."` attribute of a fraction of full strength given in whole percent: nothing at
+/// 100, so a drawing with no halftone or transparency is written as it always was.
+fn tone(percent: u8) -> Result<String, DrawingError> {
+    if percent >= 100 {
+        return Ok(String::new());
+    }
+    Ok(format!(
+        " opacity=\"{}\"",
+        decimal(i128::from(percent), 100)?
+    ))
+}
+
 /// The SVG output.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Svg;
@@ -284,15 +296,17 @@ impl Svg {
             }
             let _ = writeln!(
                 out,
-                "<path d=\"{d}\" fill=\"none\" {} stroke-linecap=\"butt\" data-material=\"{}\"/>",
+                "<path d=\"{d}\" fill=\"none\" {} stroke-linecap=\"butt\"{} data-material=\"{}\"/>",
                 pen(hatch.colour, hatch.width, n)?,
+                tone(hatch.opacity)?,
                 hatch.material.as_str()
             );
         }
         for line in &picture.strokes {
             let stroke = format!(
-                "{} stroke-linecap=\"round\"",
-                pen(line.colour, line.width, n)?
+                "{} stroke-linecap=\"round\"{}",
+                pen(line.colour, line.width, n)?,
+                tone(line.opacity)?
             );
             let data = format!(
                 "data-element=\"{}\" data-role=\"{}\"",

@@ -27,6 +27,8 @@
 //!   merged regions hatched in their material's cut pattern and outlined at their category's cut
 //!   weight for the scale, a line two regions share drawn once; [`picture::Output`], the writer
 //!   of a picture.
+//! - [`look`]: [`look::Looks`], what answers for a view how a category looks on each edge (the
+//!   server asks construct-views' `resolve`); with none the drawing is as it was.
 //! - [`svg`]: [`svg::Svg`], the SVG output, and [`svg::to_svg`], so a person can see a drawing.
 //!
 //! Promises: everything is exact (whole grid steps of the kernel, `Q0`, and exact fractions of
@@ -56,6 +58,7 @@
 pub mod drawing;
 pub mod error;
 pub mod hatch;
+pub mod look;
 pub mod merge;
 mod overlay;
 pub mod pens;
