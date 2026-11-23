@@ -5,7 +5,10 @@
 //! owner in front (`workshop.part`). This crate does not depend on the crates that define the
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
-use crate::{CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, LEVELS, WALLS};
+use crate::{
+    CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, REFERENCE_PLANES,
+    VIEWS, WALLS,
+};
 
 /// Every element kind that exists, with its category, sorted by kind name.
 ///
@@ -18,7 +21,12 @@ const KINDS: &[(&str, CategoryId)] = &[
     // its kind alone it is a generic model.
     ("family.instance", GENERIC_MODELS),
     ("floor", FLOORS),
+    ("grid.arc", GRIDS),
+    ("grid.line", GRIDS),
     ("level", LEVELS),
+    ("refplane.horizontal", REFERENCE_PLANES),
+    ("refplane.vertical", REFERENCE_PLANES),
+    ("view", VIEWS),
     ("wall.layered", WALLS),
     ("wall.straight", WALLS),
     ("workshop.assembly", GENERIC_MODELS),

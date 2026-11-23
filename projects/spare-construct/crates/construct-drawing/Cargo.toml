@@ -24,6 +24,15 @@ engine-geometry = { path = "../../../engines/crates/engine-geometry" }
 # The stored form is JSON. MIT OR Apache-2.0.
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Exact fractions of any size for the interim 2D overlay (src/overlay.rs): where cut edges cross,
+# the crossing's fraction can pass 128 bits, and region merge and hatch clipping are exact or they
+# are wrong. num-rational's ratio of num-bigint's integers, with num-integer and num-traits for
+# their traits. All MIT OR Apache-2.0 (the choice is recorded in engine-geometry's
+# tests/scaffold/licence.rs); already in this workspace's lock at these versions.
+num-bigint = "=0.4.8"
+num-integer = "=0.1.47"
+num-rational = "=0.4.2"
+num-traits = "=0.2.19"
 
 [lints.rust]
 unsafe_code = "forbid"

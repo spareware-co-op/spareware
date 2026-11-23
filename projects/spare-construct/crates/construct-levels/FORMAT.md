@@ -45,6 +45,8 @@ An element is tied to a level by the level's ID and an offset, in its own record
 
 Each pair is written together or not at all. An element's base sits at its level's elevation plus its offset (`height_of`, the one function); a wall's height, when its recipe reads it (construct-model's FORMAT.md, `{"tie":"top"}`), is its top's height less its base's. Moving a level writes nothing but the level's record: what is tied to it is built again from its own unchanged record.
 
+A plan view's range is four more ties, under `@view.range.top`, `@view.range.cut`, `@view.range.bottom` and `@view.range.depth`, each with its `.offset` after the key, written together as the pairs above ([`RANGE_TIES`](src/tie.rs); construct-views' FORMAT.md gives them their meaning). A level one of them names is tied to as much as one an element's base is: `tied_to` counts a view once however many of its ties name the level, and a level it counts is not deleted.
+
 ## The old integer
 
 Every element record carries the integer field `level`, which before this version was all a level was. It is read so, for ever:

@@ -123,6 +123,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-grids"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "libm",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-materials"
 version = "0.0.0"
 dependencies = [
@@ -165,6 +177,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-families",
+ "construct-grids",
  "construct-model",
  "construct-params",
  "engine-geometry",

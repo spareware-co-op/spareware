@@ -25,6 +25,16 @@ pub const TOP_OFFSET_KEY: &str = "@top.offset";
 /// Every `props` key a tie is written under.
 pub const TIE_KEYS: [&str; 4] = [LEVEL_KEY, LEVEL_OFFSET_KEY, TOP_KEY, TOP_OFFSET_KEY];
 
+/// A plan view's range: the level and the offset keys of its top, cut plane, bottom and view depth,
+/// each a tie to a level. construct-views writes them (it reads this list as its own), and a
+/// level a view's range is tied to is not deleted behind the view's back ([`crate::tied_to`]).
+pub const RANGE_TIES: [(&str, &str); 4] = [
+    ("@view.range.top", "@view.range.top.offset"),
+    ("@view.range.cut", "@view.range.cut.offset"),
+    ("@view.range.bottom", "@view.range.bottom.offset"),
+    ("@view.range.depth", "@view.range.depth.offset"),
+];
+
 /// Whether a `props` key is one a tie is written under.
 #[must_use]
 pub fn is_tie_key(key: &str) -> bool {
@@ -99,6 +109,20 @@ pub fn base_of(element: &Element) -> Result<Option<Tie>, LevelError> {
 /// [`LevelError::Malformed`] for a tie that is not as written.
 pub fn top_of(element: &Element) -> Result<Option<Tie>, LevelError> {
     read(&element.props, TOP_KEY, TOP_OFFSET_KEY)
+}
+
+/// Whether any of an element's range ties ([`RANGE_TIES`]), the ones a plan view has, is to the level
+/// `id`.
+///
+/// # Errors
+/// [`LevelError::Malformed`] for a tie that is not as written.
+pub fn range_tied_to(element: &Element, id: &Id) -> Result<bool, LevelError> {
+    for (key, offset_key) in RANGE_TIES {
+        if read(&element.props, key, offset_key)?.is_some_and(|tie| tie.level == *id) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Ties an element's base in its `props`, or unties it with `None`.

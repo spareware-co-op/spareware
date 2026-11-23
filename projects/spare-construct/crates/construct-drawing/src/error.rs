@@ -10,7 +10,8 @@ pub enum DrawingError {
     /// A point whose denominator is not positive or which is not in lowest terms.
     BadPoint,
     /// A line or region that is not one a drawing holds: a segment of no length, an arc whose ends
-    /// are not equally far from its centre, a loop of fewer than three points.
+    /// are not equally far from its centre, a loop of fewer than three points, a region's edge
+    /// with no cut line of its element, a hatch family with no direction.
     BadShape(String),
     /// The stored bytes are not a drawing of this version, or not in their one canonical form.
     Format(String),
@@ -25,6 +26,21 @@ pub enum DrawingError {
     UnnamedFace(String),
     /// The object styles refused a lookup: its words.
     Style(String),
+    /// A region's material is not in the materials given: its id.
+    NoMaterial(String),
+    /// A material's cut fill names no fill pattern in the table given: the name.
+    NoFillPattern(String),
+    /// A hatch would draw more lines than its budget: the count, made before any line, and the
+    /// most allowed (chapter 14.6 of the geometry architecture: no silent caps).
+    Budget {
+        /// The lines the hatch would draw.
+        lines: u64,
+        /// The most it may draw.
+        most: u64,
+    },
+    /// The interim 2D overlay found its own rule broken (a boundary that does not close, a hole in
+    /// no outline): its words. A bug to report, never an answer.
+    Overlay(String),
 }
 
 impl fmt::Display for DrawingError {
@@ -37,6 +53,12 @@ impl fmt::Display for DrawingError {
             Self::Geometry { code, message } => write!(f, "{code}: {message}"),
             Self::UnnamedFace(what) => write!(f, "a cut edge on no named face: {what}"),
             Self::Style(what) => write!(f, "the styles refused: {what}"),
+            Self::NoMaterial(id) => write!(f, "no material {id} in the materials given"),
+            Self::NoFillPattern(name) => write!(f, "no fill pattern named {name}"),
+            Self::Budget { lines, most } => {
+                write!(f, "a hatch of {lines} lines, past the most allowed, {most}")
+            }
+            Self::Overlay(what) => write!(f, "the 2D overlay broke its own rule: {what}"),
         }
     }
 }

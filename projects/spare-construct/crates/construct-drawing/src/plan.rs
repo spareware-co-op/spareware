@@ -11,7 +11,9 @@
 //! An element the plane misses or only touches draws nothing.
 //!
 //! Not yet (note A12's build order): edges seen below the plane (step 5), hidden lines (step 6),
-//! joins and merged regions of one material (steps 4 and 7), fills (step 4).
+//! joins (step 7). Regions of one material are merged and filled when the drawing is printed
+//! ([`crate::merge`], [`crate::hatch`], [`crate::picture`]), not here: the drawing keeps each
+//! element's own region.
 //!
 //! Interim: the kernel's `draw` (geom-draw, pieces G387, G389 and G394) replaces this function
 //! under the same tests; the cut is the seam's `section`, whose answer the interim register names.
