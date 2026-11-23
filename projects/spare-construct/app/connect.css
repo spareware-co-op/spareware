@@ -33,6 +33,13 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .part { fill: var(--rule); stroke: var(--ink-2); stroke-width: .6px; vector-effect: non-scaling-stroke; }
 .dw .layered { fill: none; stroke: var(--ink); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .dw .layered.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+/* A floor: its edge and holes, in its top layer's colour seen from above (set on it, from the
+   server's materials), a quiet fill for a material not listed, under the walls; its sketch while it
+   is drawn, and a boundary the server turned back. */
+.dw .floor { fill: var(--sink); fill-opacity: .6; fill-rule: evenodd; stroke: var(--ink-3); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .floor.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .floor-sketch { pointer-events: none; }
+.dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
 .dw .datum.linked { pointer-events: none; }

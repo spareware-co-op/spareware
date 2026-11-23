@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, grids, hosting, levels, params, undo, walls};
+use crate::cloud::{elements, floors, grids, hosting, levels, params, undo, walls};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -112,6 +112,28 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
     }
 }
 
+impl<K: Kv, D: Decider> ProjectCommands<K, D> {
+    /// An `element.*` command, after the hosting, floor and wall rules of the generic commands.
+    async fn element<T: kit_store::Txn>(
+        &self,
+        staged: &mut T,
+        project: &Id,
+        context: &Context<'_>,
+        edit: &Edit,
+    ) -> Result<Outcome, StoreError> {
+        if let Err(refused) = hosting::element_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = floors::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = walls::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        elements::apply(staged, project, context, edit, self.claim_ms).await
+    }
+}
+
 fn read<T: DeserializeOwned>(edit: &Edit) -> Result<T, String> {
     serde_json::from_value(edit.args.clone()).map_err(|e| format!("That edit isn't valid: {e}"))
 }
@@ -137,7 +159,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || grids::is_command(cmd)
                 || hosting::is_command(cmd)
                 || levels::is_command(cmd)
-                || walls::is_command(cmd) =>
+                || walls::is_command(cmd)
+                || floors::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -186,7 +209,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter, type, level and wall edit of a model, and every undo and redo,
+    /// Every element, parameter, type, level, wall and floor edit of a model, and every undo and redo,
     /// has the same answer, so a batch asks Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
         if edit.cmd.starts_with("element.")
@@ -196,6 +219,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || hosting::is_command(&edit.cmd)
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
+            || floors::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -214,7 +238,15 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         };
         let mut staged = Staged::new(txn);
         let outcome = if params::is_command(&edit.cmd) {
-            params::apply(&mut staged, project, context, edit, self.claim_ms).await?
+            match floors::generic_rules(&mut staged, project, edit).await? {
+                Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
+                    Ok(()) => {
+                        params::apply(&mut staged, project, context, edit, self.claim_ms).await?
+                    }
+                    Err(refused) => Err(refused),
+                },
+                Err(refused) => Err(refused),
+            }
         } else if grids::is_command(&edit.cmd) {
             grids::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if hosting::is_command(&edit.cmd) {
@@ -225,13 +257,10 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if walls::is_command(&edit.cmd) {
             walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if floors::is_command(&edit.cmd) {
+            floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
-            match hosting::element_rules(&mut staged, project, edit).await? {
-                Ok(()) => {
-                    elements::apply(&mut staged, project, context, edit, self.claim_ms).await?
-                }
-                Err(refused) => Err(refused),
-            }
+            self.element(&mut staged, project, context, edit).await?
         } else if edit.cmd == "document.checkpoint" {
             elements::checkpoint(edit)
         } else {

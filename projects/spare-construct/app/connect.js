@@ -209,6 +209,7 @@
     set('arch', 'Views', [
       { stack: [planButton('l1'), planButton('l2'), { label: 'Default 3D', icon: 'cube', act: 'go', a: '3d', pressed: S.screen === '3d' }] },
     ]);
+    floorRibbon(config); // the floor tool beside the wall tool
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -1184,7 +1185,7 @@
   }
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
-  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type)\./;
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type)\.|^floor\.defaults$/;
 
   const WORDS = {
     'element.create': 'added',
@@ -1371,7 +1372,7 @@
   function parametersTable(view) {
     const editable = !C.readOnly && !C.viewing;
     let html = '<span class="lbl">Parameters</span><table class="props">';
-    for (const p of view.parameters) {
+    for (const p of view.parameters.filter((row) => row.from !== READ_ONLY)) {
       const value = p.shown ?? '';
       const field = p.formula
         ? worked(p)
@@ -1965,6 +1966,342 @@
     C.wallTool.height = input.value;
   };
 
+  // --- The floor tool, and a floor in the plan and the properties palette ---
+  // A floor is drawn from a boundary sketched by clicks in the plan: its edge, a closed loop of
+  // corners, then any holes, each closed on its first corner or with Enter; Enter on no open loop,
+  // or Make floor, sends one `floor.create` edit of the floor type chosen in the properties palette,
+  // its top on the plan's level the offset typed there above it (construct-model's FORMAT.md,
+  // "Floors"). The page checks nothing and works out no geometry: the floor types, their layers and
+  // the materials' colours come from the server (`/floor-types`); where a model has none the page
+  // has the server make its default ones through the log (`floor.defaults`); a refusal is the
+  // server's reason, under the tool's options, with the boundary it turned back drawn in the plan.
+  // In the plan a floor is its edge and holes, from its recipe as the server filled it
+  // (`/filled/<element>`), in its top layer's colour seen from above; a selected floor shows its
+  // type, its level and offset, its parameters, and apart from them what the server works out of
+  // its boundary and its type (`from: "read-only"` in `/parameters/<element>`), which nobody sets.
+
+  const FLOOR_OP = 'floor';
+  const READ_ONLY = 'read-only';
+  const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
+  const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
+  /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
+  const drawOrder = (el) => (isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
+
+  DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
+  TOOLNAME.floor = 'floor';
+  Object.assign(WORDS, {
+    'floor.create': 'drew a floor',
+    'floor.boundary': 'changed the boundary of',
+    'floor.defaults': 'made the default floor types',
+    'floor.type.create': 'made a floor type',
+    'floor.type.layers': 'changed the layers of a floor type',
+    'floor.type.rename': 'renamed a floor type',
+    'floor.type.duplicate': 'copied a floor type',
+    'floor.type.delete': 'deleted a floor type',
+  });
+  Object.assign(STEP_WORDS, {
+    'floor.create': 'drawing a floor',
+    'floor.boundary': 'a floor’s boundary',
+    'floor.defaults': 'making the default floor types',
+    'floor.type.create': 'making a floor type',
+    'floor.type.layers': 'the layers of a floor type',
+    'floor.type.rename': 'renaming a floor type',
+    'floor.type.duplicate': 'copying a floor type',
+    'floor.type.delete': 'deleting a floor type',
+  });
+
+  C.floorTypes = null; // { key, view } of the open model
+  C.floorTool = { type: null, offset: '0 mm' };
+  C.madeFloorDefaults = null; // the model the default floor types were asked for
+  // The sketch, in the model's millimetres: closed loops (the edge first, then holes), the loop
+  // being drawn, the point under the pointer, and the boundary last sent while it may be turned back.
+  const FLOOR = { loops: [], current: [], at: null, sent: null };
+
+  /** The open model's floor types and materials; null until they have come. */
+  function floorTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.floorTypes?.key !== key && C.floorTypesLoading !== key) {
+      C.floorTypesLoading = key;
+      api(`${modelUrl(model)}/floor-types`)
+        .then((view) => {
+          C.floorTypes = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.floorTypes?.key.startsWith(`${model}/`) ? C.floorTypes.view : null;
+  }
+
+  /** The open model's floor types, read now if they have not come yet. */
+  async function floorTypesNow() {
+    const view = floorTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/floor-types`);
+    C.floorTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  const chosenFloorType = (view) => view.types.find((t) => t.id === C.floorTool.type) ?? view.types[0] ?? null;
+
+  /** Has the server make its default floor types, once for a model, where it has none. */
+  function makeDefaultFloors() {
+    if (!canEdit() || C.madeFloorDefaults === C.model.id) return;
+    C.madeFloorDefaults = C.model.id;
+    manage('floor.defaults', {}, 'floor-draw');
+  }
+
+  /** What the sketch holds, and the button that sends it. */
+  function sketchHtml() {
+    const [outer, ...holes] = FLOOR.loops;
+    let state = 'empty';
+    let text = 'Click the corners of the floor’s edge in the plan. Close it on its first corner or with Enter.';
+    if (FLOOR.current.length) {
+      state = 'open';
+      const which = outer ? `Hole ${holes.length + 1}` : 'Edge';
+      text = `${which}: ${plural(FLOOR.current.length, 'corner')}. Close it on its first corner or with Enter.`;
+    } else if (outer) {
+      state = 'closed';
+      const holeText = holes.length ? `, ${plural(holes.length, 'hole')}` : '';
+      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the floor.`;
+    }
+    const ready = state === 'closed' ? '' : ' disabled';
+    return `<p class="pad small muted" data-floor-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stackfloormake" data-key="floor-make"${ready}>Make floor</button></div>`;
+  }
+
+  function floorToolHtml() {
+    let html = typeSel('layers', 'Floor', '<b>New floor</b>');
+    const view = floorTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the floor types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(makeDefaultFloors);
+      return `${html}<p class="pad small faint" data-floor-tool="making">This model has no floor types yet, so the default ones are being made.</p>${problem('floor-draw')}`;
+    }
+    const chosen = chosenFloorType(view);
+    const here = levelOf();
+    const level = (modelLevels() || []).find((l) => l.id === here)?.name ?? here;
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackfloortype" data-key="floor-type" aria-label="Floor type">${types.join('')}</select>`);
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Level', esc(level));
+    html += prow('Offset', `<input class="inp" data-chg="stackflooroffset" data-key="floor-offset" value="${esc(C.floorTool.offset)}" aria-label="Offset of the floor’s top above its level">`);
+    html += '</table>';
+    html += `<span class="lbl">Layers, top first</span><table class="props" data-floor-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    return html + sketchHtml() + problem('floor-draw');
+  }
+
+  CHG.stackfloortype = (select) => {
+    C.floorTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackflooroffset = (input) => {
+    C.floorTool.offset = input.value;
+  };
+  ACT.stackfloormake = () => makeFloor();
+
+  function floorHint() {
+    if (FLOOR.current.length) return '<b>Floor:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
+    if (FLOOR.loops.length) return '<b>Floor:</b> click to start a hole, or press Enter to make the floor. Esc to stop.';
+    return '<b>Floor:</b> click the corners of its edge. Choose its type in the properties palette.';
+  }
+
+  function sketchChanged() {
+    $('#hint').innerHTML = hint();
+    refreshSide();
+    queueDraw();
+  }
+
+  function clearSketch() {
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent: null });
+  }
+
+  /** Whether a click at `at` (the model's millimetres) is within reach of `point` on screen. */
+  function nearOnScreen(point, at) {
+    const scale = $('#pv-canvas svg')?.getScreenCTM()?.a || 1;
+    return Math.hypot(point[0] - at.x, point[1] - at.y) * scale <= CLOSE_PX;
+  }
+
+  function closeLoop() {
+    if (!FLOOR.current.length) return;
+    FLOOR.loops.push(FLOOR.current);
+    FLOOR.current = [];
+    FLOOR.at = null;
+    sketchChanged();
+  }
+
+  function floorClick(event) {
+    const at = toModel(event);
+    const point = [snap(at.x), snap(at.y)];
+    FLOOR.sent = null;
+    if (FLOOR.current.length > 1 && nearOnScreen(FLOOR.current[0], at)) {
+      closeLoop();
+      return;
+    }
+    const last = FLOOR.current.at(-1);
+    if (!last || last[0] !== point[0] || last[1] !== point[1]) FLOOR.current.push(point);
+    sketchChanged();
+  }
+
+  /** Sends the sketch as it is: what the server makes of it, or why it refuses, comes back through the log. */
+  async function makeFloor() {
+    if (!FLOOR.loops.length || FLOOR.current.length || !canEdit()) return;
+    let view;
+    try {
+      view = await floorTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const corners = (loop) => loop.map(([x, y]) => ({ at: [`${x} mm`, `${y} mm`] }));
+    const [outer, ...holes] = FLOOR.loops;
+    const args = { element: newId('F'), level: levelOf(), boundary: { outer: corners(outer), holes: holes.map(corners) } };
+    const type = chosenFloorType(view);
+    if (type) args.type = type.id;
+    if (C.floorTool.offset.trim() !== '') args.offset = C.floorTool.offset;
+    const sent = { loops: FLOOR.loops };
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent });
+    manage('floor.create', args, 'floor-draw', () => {
+      if (FLOOR.sent === sent) FLOOR.sent = null;
+      queueDraw();
+    });
+    sketchChanged();
+  }
+
+  // In the plan, before the elements' own handlers: the floor tool's corners.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (S.tool !== 'floor' || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      event.stopPropagation();
+      if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
+      else floorClick(event);
+    },
+    true,
+  );
+  window.addEventListener('pointermove', (event) => {
+    if (S.tool !== 'floor' || !FLOOR.current.length || !$('#pv-canvas svg')) return;
+    const at = toModel(event);
+    FLOOR.at = [snap(at.x), snap(at.y)];
+    queueDraw();
+  });
+  // Escape leaves the tool (the demo's own key) and drops the sketch; Enter closes the loop being
+  // drawn, or makes the floor when none is open.
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      clearSketch();
+      return;
+    }
+    if (S.tool !== 'floor' || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
+    event.preventDefault();
+    if (FLOOR.current.length) closeLoop();
+    else makeFloor();
+  });
+  const toolBeforeFloors = ACT.tool;
+  ACT.tool = (button) => {
+    clearSketch();
+    toolBeforeFloors(button);
+  };
+
+  /** The ribbon: the floor tool beside the wall tool, in the Build panel. */
+  function floorRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:floor')) return;
+    const wall = build.items.findIndex((item) => item.a === 'architecture:wall');
+    build.items.splice(wall + 1, 0, DT_('architecture', 'floor'));
+  }
+
+  const ringPath = (points) => `M${points.map(([x, y]) => `${x},${y}`).join('L')}Z`;
+
+  /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
+  function floorSketch() {
+    if (S.tool !== 'floor') return '';
+    let svg = '';
+    if (FLOOR.sent && C.problems.has('floor-draw')) {
+      svg += `<path class="floor-refused" data-floor-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
+    }
+    for (const loop of FLOOR.loops) svg += `<path class="ln ap floor-sketch" d="${ringPath(loop)}"/>`;
+    const open = FLOOR.at && FLOOR.current.length ? [...FLOOR.current, FLOOR.at] : FLOOR.current;
+    if (open.length > 1) svg += `<polyline class="ln ap dd floor-sketch" points="${open.map((p) => p.join(',')).join(' ')}"/>`;
+    for (const [x, y] of FLOOR.current) svg += `<circle class="apf floor-sketch" cx="${x}" cy="${y}" r="60"/>`;
+    return svg;
+  }
+
+  /**
+   * A floor in the plan: its edge and holes, from its recipe as the server filled it (the outline of
+   * its display, which has no holes, until that has come), in its top layer's colour seen from above.
+   */
+  function floorInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const { x, y } = placementOf(e);
+    const loops = piece.fill?.recipe?.args?.loops;
+    const rings = Array.isArray(loops) && loops.length
+      ? loops.map((loop) => loop.map((corner) => [nearestMm(corner.at[0]), nearestMm(corner.at[1])]))
+      : [piece.shape.displays[0].outline];
+    const placed = rings.map((ring) => ring.map(([px, py]) => [x + px, y + py]));
+    const top = piece.shape.displays[0]?.parts?.[0];
+    const colour = top && colourOf(top.material, 'surface');
+    const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+    const box = around(piece);
+    const chosen = S.sel === e.id;
+    let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
+    group += `<path class="body floor${chosen ? ' sel' : ''}" data-material="${esc(top?.material ?? '')}" data-holes="${placed.length - 1}"${fill} d="${placed.map(ringPath).join('')}"/>`;
+    const claim = heldClaim(e.id);
+    if (claim) {
+      const theirs = claim.person !== C.me.person.id;
+      group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
+      if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
+    }
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** What the server works out of a floor, apart from what a person sets, and set by nobody. */
+  function readOnlyTable(view) {
+    const rows = view.parameters.filter((p) => p.from === READ_ONLY);
+    if (!rows.length) return '';
+    let html = '<span class="lbl">Worked out, read-only</span><table class="props" data-read-only-rows>';
+    for (const p of rows) html += prow(esc(p.name), `<span class="mono" data-read-only="${esc(p.id)}">${esc(p.shown ?? '')}</span>`);
+    return `${html}</table>`;
+  }
+
+  /** A floor's offset above its level, as stored. */
+  function floorOffset(e) {
+    const stored = e.props?.['@level.offset'];
+    return `${stored === undefined ? 0 : storedMm(stored)} mm`;
+  }
+
+  /** What the properties palette shows of a selected floor. */
+  function floorProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const claim = heldClaim(e.id);
+    let html = typeSel('layers', 'Floor', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-floor-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None')) + prow('Type', typeCell(view));
+    html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-floor-offset>${esc(floorOffset(e))}</span>`);
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
+    if (view) {
+      html += readOnlyTable(view);
+      html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    }
+    return html;
+  }
+
+  /** The properties palette's floor part: the floor tool's options, or a selected floor; '' for anything else. */
+  function floorPalette(piece) {
+    if (S.tool === 'floor' && canEdit()) return floorToolHtml();
+    if (piece && isFloor(piece.el) && !(S.tool === 'wall' && canEdit())) return floorProperties(piece);
+    return '';
+  }
+
   // --- Workshop's elements ---
   // Workshop, a page of its own in a frame, keeps its parts and its assembly as elements of the open
   // model, through the same edit log as walls and doors (construct-model's FORMAT.md, "Workshop's
@@ -2440,6 +2777,7 @@
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
     if (S.tool === 'grid') return gridHint();
+    if (S.tool === 'floor') return floorHint();
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
@@ -2458,7 +2796,10 @@
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    if (S.tool === 'wall' && canEdit()) {
+    const floor = floorPalette(piece);
+    if (floor) {
+      html += floor;
+    } else if (S.tool === 'wall' && canEdit()) {
       html += wallToolHtml();
     } else if (piece) {
       const { el: e, shape, failed } = piece;
@@ -2533,10 +2874,8 @@
     for (const pieces of C.linked.values()) for (const piece of pieces.values()) ghost(piece);
     for (const pieces of C.fixed.values()) for (const piece of pieces) ghost(packaged(piece));
 
-    // Walls first, so a door in a wall stays on top and can be picked.
-    const inOrder = [...C.elements.values()].sort(
-      (a, b) => Number(b.el.kind === 'wall') - Number(a.el.kind === 'wall'),
-    );
+    // Floors first, then walls, so a door in a wall stays on top and can be picked.
+    const inOrder = [...C.elements.values()].sort((a, b) => drawOrder(a.el) - drawOrder(b.el));
     for (const piece of inOrder) {
       const { el: e } = piece;
       const { x, y } = placementOf(e);
@@ -2544,6 +2883,10 @@
       if (!piece.shape) {
         // Nothing to draw yet, or a recipe that can't build: a mark, so it can still be found.
         shapes += `<g ${data}>${RC(x - 200, y - 200, 400, 400, 'ln fn dsh')}</g>`;
+        continue;
+      }
+      if (isFloor(e)) {
+        shapes += floorInPlan(piece, data, scale);
         continue;
       }
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';
@@ -2564,6 +2907,7 @@
       }
       shapes += `<g ${data}>${group}</g>`;
     }
+    shapes += floorSketch();
     canvas.innerHTML = `<svg class="dw pan${S.tool !== 'select' ? ' press' : ''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(view?.name || '')}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${shapes}</svg>`;
     for (const entry of C.arriving.splice(0)) {
       const now = Date.now();

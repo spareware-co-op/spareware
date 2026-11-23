@@ -13,6 +13,9 @@
 //!   [`Units::from_q0`] hands to the engine, and its displays are rounded to the nearest
 //!   millimetre ([`Units::nearest_mm`]) where a face is not on one.
 //! - `block`: its plan rectangle, width by depth, extruded the same way.
+//! - `floor`: one solid per layer of its floor type, each its boundary with its holes extruded
+//!   from the layer's bottom face up to its top, the floor's top face at `z = 0`, in the child
+//!   module `floor` (job 4.3); its lengths are construct-params' steps ([`crate::floor_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
 //!   a door's shape is decided.
@@ -77,6 +80,7 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod floor;
 mod layered;
 pub mod opening;
 
@@ -632,6 +636,10 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if crate::floor_plan::is_floor(recipe) {
+        let plan = crate::floor_plan::FloorPlan::of(recipe)?;
+        return floor::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
@@ -749,6 +757,9 @@ impl<E: Engine> Kernel<E> {
         host: &Recipe,
         hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
+        if crate::floor_plan::is_floor(host) {
+            return self.build_floor(host, hosted.len());
+        }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;
             let mut engine = self

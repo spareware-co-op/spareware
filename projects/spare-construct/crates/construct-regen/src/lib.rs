@@ -18,6 +18,10 @@
 //!   tied to the level above), and a document's levels as a page shows them.
 //! - [`catalog`]: what a page shows to manage them: the parameter kinds, the categories, the
 //!   project's parameters with where they are bound, and the types with their values in units.
+//! - [`floor_plan`]: a floor (`floor`) as both builders read it: its filled recipe's loops and
+//!   layers in grid steps (job 4.3). The kernel builds one solid per layer, the stand-in one box.
+//! - [`slabs`]: how a floor's recipe reads its layers from its floor type and has its boundary
+//!   checked (construct-slabs), filled with the parameters by [`parameters::recipe_at`].
 //!
 //! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
 //!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1). Both builders
@@ -37,6 +41,7 @@
 #[cfg(feature = "server")]
 pub mod catalog;
 pub mod datum;
+pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;
 pub mod kernel;
@@ -46,6 +51,8 @@ pub mod levels;
 pub mod parameters;
 #[cfg(feature = "server")]
 pub mod regenerator;
+#[cfg(feature = "server")]
+pub mod slabs;
 pub mod stand_in;
 pub mod wall_plan;
 #[cfg(feature = "server")]

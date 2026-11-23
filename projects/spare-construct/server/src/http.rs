@@ -145,6 +145,10 @@ pub fn routes(app: Shared) -> Router {
             get(wall_types),
         )
         .route(
+            "/api/projects/{project}/models/{model}/floor-types",
+            get(floor_types),
+        )
+        .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
             get(filled),
         )
@@ -544,6 +548,18 @@ async fn wall_types(
     Ok(Json(
         app.service
             .wall_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn floor_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .floor_types(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

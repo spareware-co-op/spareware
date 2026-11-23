@@ -372,7 +372,8 @@ impl Context {
     }
 
     /// What a page shows of an element: its category, its type, and every parameter its category
-    /// has with the value it reads, where that came from, and the value shown in units.
+    /// has with the value it reads, where that came from, and the value shown in units; then, for
+    /// a floor, its read-only quantities ([`crate::slabs::read_only_view`]).
     ///
     /// # Errors
     /// The refusal of a stored value or of the element's type, in words.
@@ -433,6 +434,8 @@ impl Context {
                 reason,
             });
         }
+        // A floor's area, perimeter, volume and mass, worked out and never stored.
+        parameters.extend(crate::slabs::read_only_view(element, ty, &self.units));
         Ok(ElementView {
             element: element.id.to_string(),
             category: category.and_then(|id| {
@@ -498,7 +501,8 @@ pub struct ParameterView {
     /// The same value shown in the document's units, such as `820 mm`.
     pub shown: Option<String>,
     /// Where the value came from: `instance`, `type`, `default` or `unset`; `formula` when its
-    /// formula gives it, which a person can't set.
+    /// formula gives it, which a person can't set; `read-only` for what a floor reads back from
+    /// its boundary and its type ([`crate::slabs::read_only_view`]), which nobody sets.
     pub from: &'static str,
     /// Its formula, in its one spelling, when it has one.
     pub formula: Option<String>,
@@ -784,14 +788,15 @@ pub async fn read_document<R: Reader>(
 }
 
 /// The recipe `element` is built from, as the document is `at` that state: its own, with every
-/// argument that names a parameter filled ([`filled`]), and every argument that reads its wall
-/// type's layers ([`crate::walls::filled`]). A recipe that reads neither needs no read. The
-/// regenerator builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
+/// argument that names a parameter filled ([`filled`]), every argument that reads its wall type's
+/// layers ([`crate::walls::filled`]), and a floor's layers and loops from its floor type
+/// ([`crate::slabs::filled`]). A recipe that reads none of them needs no read. The regenerator
+/// builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
 ///
 /// # Errors
 /// A [`StoreError`] when the store fails. The inner error is the build failure: `BadParameter`
 /// when the document's parameters or the element's type cannot be read, or [`filled`]'s own, or
-/// [`crate::walls::filled`]'s.
+/// [`crate::walls::filled`]'s or [`crate::slabs::filled`]'s.
 pub async fn recipe_at<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -819,14 +824,15 @@ pub async fn recipe_at<R: Reader>(
     Ok(filled(&element.recipe, |id| {
         context.value_of(element, ty.as_ref(), id)
     })
-    .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref())))
+    .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
+    .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref())))
 }
 
 /// Whether a recipe reads the document's parameter table and the element's type: it names a
-/// parameter ([`reads_parameters`]) or reads its wall type's layers
-/// ([`crate::walls::reads_type`]). Its `reads` row lists both, so a change to either builds it
-/// again.
+/// parameter ([`reads_parameters`]), reads its wall type's layers ([`crate::walls::reads_type`])
+/// or its floor type's ([`crate::slabs::reads_type`]). Its `reads` row lists both, so a change to
+/// either builds it again.
 #[must_use]
 pub fn reads_records(recipe: &Recipe) -> bool {
-    reads_parameters(recipe) || crate::walls::reads_type(recipe)
+    reads_parameters(recipe) || crate::walls::reads_type(recipe) || crate::slabs::reads_type(recipe)
 }

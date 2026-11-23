@@ -31,6 +31,7 @@ use serde_json::{Value, json};
 use spare_server::backup;
 use spare_server::seed::seed;
 use spare_server::service::{Refusal, Service, View};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 fn i(text: &str) -> Id {
@@ -1223,6 +1224,147 @@ async fn a_layered_wall_drawn_by_command_is_built_from_its_type() {
         construct_regen::geometry(),
     );
     assert_eq!(regen.verify(&project).await.unwrap(), 33);
+}
+
+/// A corner of a floor's boundary as `floor.create` takes it, in millimetres as typed text.
+fn corner(id: &str, x: i64, y: i64) -> Value {
+    json!({ "id": id, "at": [x.to_string(), y.to_string()] })
+}
+
+/// The L-shaped floor, 8 m by 8 m less its notch, with a 2 m square hole, from `x0` mm along x.
+fn l_floor(x0: i64) -> Value {
+    json!({
+        "outer": [corner("e0", x0, 0), corner("e1", x0 + 8000, 0), corner("e2", x0 + 8000, 4000),
+                  corner("e3", x0 + 4000, 4000), corner("e4", x0 + 4000, 8000),
+                  corner("e5", x0, 8000)],
+        "holes": [[corner("h0", x0 + 1000, 1000), corner("h1", x0 + 3000, 1000),
+                   corner("h2", x0 + 3000, 3000), corner("h3", x0 + 1000, 3000)]],
+    })
+}
+
+/// A floor's read-only parameters as the page reads them: each one's stored value and its text in
+/// units, by ID.
+async fn quantities(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+    floor: &str,
+) -> BTreeMap<String, (Option<String>, Option<String>)> {
+    let view = s
+        .parameters(&i("anna"), project, model, &i(floor))
+        .await
+        .unwrap();
+    view.parameters
+        .into_iter()
+        .filter(|p| p.from == "read-only")
+        .map(|p| (p.id, (p.value, p.shown)))
+        .collect()
+}
+
+/// Through the server's commands on the stand-in: the default floor types made, an L-shaped
+/// floor with a hole drawn on level 1 of the 200 mm concrete type, built as the box around it;
+/// its parameters view lists its area, perimeter, thickness, volume and mass, and each layer's
+/// volume and mass, in units and read-only; its boundary changed, then undone, changes them; a
+/// person off the team can't draw one.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_floor_drawn_by_command_shows_its_quantities_in_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    // The page's floor tool reads the floor types: none until it sends the defaults.
+    let none = s.floor_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert!(none.materials.iter().any(|m| m.id == "concrete-regular"));
+    assert!(refused(s.floor_types(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "floor.defaults", json!({}))
+        .await
+        .unwrap();
+    let types = s.floor_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids.len(), 3);
+    let concrete = types
+        .types
+        .iter()
+        .find(|t| t.id == "floor-concrete-200")
+        .unwrap();
+    assert_eq!(concrete.thickness, "200 mm");
+    assert_eq!(
+        concrete.layers,
+        json!([{ "function": "structure", "thickness": "200 mm", "material": "concrete-regular" }])
+    );
+    let floor = json!({ "element": "F-900", "type": "floor-concrete-200", "level": "1",
+                        "boundary": l_floor(60_000) });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "floor.create", floor.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "floor.create", floor)
+        .await
+        .unwrap();
+    assert_eq!(
+        wall_bounds(s, &project, &model, "F-900").await,
+        ([60_000, 0, -200], [68_000, 8000, 0])
+    );
+    let view = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("F-900"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(view["category"], json!({ "id": 500, "name": "Floors" }));
+    assert_eq!(
+        view["type"],
+        json!({ "id": "floor-concrete-200", "name": "Concrete 200" })
+    );
+
+    let read = quantities(s, &project, &model, "F-900").await;
+    let ids: Vec<&str> = read.keys().map(String::as_str).collect();
+    assert_eq!(
+        ids,
+        [
+            "floor.area",
+            "floor.layer-1.mass",
+            "floor.layer-1.volume",
+            "floor.mass",
+            "floor.perimeter",
+            "floor.thickness",
+            "floor.volume"
+        ]
+    );
+    let area = construct_params::Value::Area(construct_params::Area::from_mm2(44_000_000));
+    assert_eq!(
+        read["floor.area"],
+        (Some(area.stored()), Some("44.00 m²".to_owned()))
+    );
+    assert_eq!(read["floor.perimeter"].1.as_deref(), Some("40000 mm"));
+    assert_eq!(read["floor.thickness"].1.as_deref(), Some("200 mm"));
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("8.80 m³"));
+    assert_eq!(read["floor.layer-1.volume"], read["floor.volume"]);
+    assert!(read["floor.mass"].0.is_some(), "concrete is in the library");
+    assert_eq!(read["floor.layer-1.mass"], read["floor.mass"]);
+
+    let rectangle = json!({ "outer": [corner("r0", 60_000, 0), corner("r1", 64_000, 0),
+                                      corner("r2", 64_000, 3000), corner("r3", 60_000, 3000)] });
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.boundary",
+        json!({ "element": "F-900", "boundary": rectangle }),
+    )
+    .await
+    .unwrap();
+    let smaller = quantities(s, &project, &model, "F-900").await;
+    assert_eq!(smaller["floor.area"].1.as_deref(), Some("12.00 m²"));
+    assert_eq!(smaller["floor.volume"].1.as_deref(), Some("2.40 m³"));
+    assert_eq!(
+        wall_bounds(s, &project, &model, "F-900").await,
+        ([60_000, 0, -200], [64_000, 3000, 0])
+    );
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(quantities(s, &project, &model, "F-900").await, read);
 }
 
 /// The seed draws its walls as a person does, layered walls of construct-walls' default types made

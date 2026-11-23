@@ -231,6 +231,48 @@
       },
       "known_faults": ["time grows with the square of the edges of one material group (every edge is compared with every other)", "straight edges only: a cut region's loops are points, so a curved cut waits for the kernel's arrangement of lines and arcs"],
       "replaced_by": "the kernel's 2D arrangement, booleans and hatches through engine-geometry (geom-2d, chapter 14.4 to 14.6: pieces G196, G199, G200, G202 and G210), under the same tests (tests/merge.rs and tests/hatch.rs)"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a floor",
+      "operation": "floor (a filled floor recipe: its loops and layers)",
+      "answered_by": "one box around the floor's outer loop, its sides rounded outward to whole millimetres, from its bottom face to its top face at 0, by Spare Construct's own code with no engine; its outline is the outer loop and its deviation the box's plan diagonal, 0 when the floor is an upright rectangle",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/src/stand_in.rs",
+        "test": "a_floor_is_the_box_around_its_outer_loop"
+      },
+      "known_faults": [
+        "a floor's holes, notches and layers are not in its shape on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's floor builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::floor, a floor's layers",
+      "operation": "floor (Kernel: one Engine::extrude of the boundary with its holes for each layer with a thickness)",
+      "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), each layer a solid of its own; the layers' meshes put one after another in whole millimetres, each point the nearest millimetre, the floor's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "an_l_shaped_floor_with_a_hole_is_its_layers"
+      },
+      "known_faults": [
+        "a corner or a layer face not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-slabs' Boundary, an arc edge",
+      "operation": "floor with an arc in its boundary",
+      "answered_by": "refused before any engine is asked (SlabError::Arc, naming the loop and the edge): the engine seam's extrusion takes polygons only; the arc is held in the stored boundary",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-slabs/tests/boundary.rs",
+        "test": "an_arc_is_refused_for_now"
+      },
+      "known_faults": [
+        "a floor with a curved edge cannot be made"
+      ],
+      "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge"
     }
   ]
 }

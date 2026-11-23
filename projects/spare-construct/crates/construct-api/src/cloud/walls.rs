@@ -44,6 +44,15 @@
 //! own. Later, with its place: changing a drawn wall's ends, its location line and its side (a
 //! command beside `wall.draw`).
 //!
+//! The generic commands do not go behind these ([`generic_rules`]), as they do not behind the
+//! floor commands: `element.create` of a layered wall, `element.set` of a layered wall's recipe
+//! (or of a recipe that would make one), `type.create` of a walls type, and `type.rename`,
+//! `type.duplicate` or `type.delete` of a wall type (a walls type holding its layers) are refused,
+//! naming the command to use. A walls type without layers, which only a document made before this
+//! rule can hold and which the wall commands refuse, is renamed, copied and deleted by the type
+//! commands as before; a straight wall (`construct/wall.straight`) is no layered wall and is made
+//! and changed by the element commands as before.
+//!
 //! For the page and the seed, without the log: [`default_type_args`], the `wall.type.create`
 //! arguments of construct-walls' default wall types, which the page sends where a document has no
 //! wall types and the seed sends for its models; and [`read_wall_types`], a document's wall types
@@ -51,7 +60,7 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{levels, params};
-use construct_categories::WALLS;
+use construct_categories::{CategoryId, WALLS};
 use construct_levels::{Length, Tie, parse_length, write_base, write_top};
 use construct_materials::{MaterialId, Materials};
 use construct_model::element::{Element, Placement};
@@ -61,7 +70,7 @@ use construct_regen::levels as placing;
 use construct_regen::parameters::{self as records, At, CATEGORY_KEY, Context, TYPE_KIND};
 use construct_regen::wall_plan::{self, Layered};
 use construct_regen::walls::type_arg;
-use construct_types::{ElementType, Instance, TypeError, Types};
+use construct_types::{ElementType, Instance, SYSTEM_KEY_PREFIX, TypeError, Types};
 use construct_walls::{
     Assembly, FLIPPED, Function, LOCATION_LINE, Layer, LocationLine, Side, WallError, assembly_of,
     default_walls, location_line_value, new_wall_type, parameter_definitions, with_assembly,
@@ -786,6 +795,29 @@ fn hex(red: u8, green: u8, blue: u8) -> String {
     format!("#{red:02x}{green:02x}{blue:02x}")
 }
 
+/// The materials a layer may be made of, each with the colours a view draws it in:
+/// construct-materials' default library until a project keeps its own. The wall types' and the
+/// floor types' views both list them.
+#[must_use]
+pub fn materials_view() -> Vec<MaterialView> {
+    Materials::default_metric()
+        .materials()
+        .iter()
+        .map(|material| {
+            let (surface, cut) = (
+                &material.drawing.surface.colour,
+                &material.drawing.cut.colour,
+            );
+            MaterialView {
+                id: material.id.as_str().to_owned(),
+                name: material.name.clone(),
+                surface: hex(surface.0, surface.1, surface.2),
+                cut: hex(cut.0, cut.1, cut.2),
+            }
+        })
+        .collect()
+}
+
 /// A document's wall types as they are now, and the materials: construct-materials' default
 /// library until a project keeps its own. The inner error is a record the document's rules can't
 /// read, in their words.
@@ -825,22 +857,7 @@ pub async fn read_wall_types<R: Reader>(
         })
         .collect();
     listed.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
-    let materials = Materials::default_metric()
-        .materials()
-        .iter()
-        .map(|material| {
-            let (surface, cut) = (
-                &material.drawing.surface.colour,
-                &material.drawing.cut.colour,
-            );
-            MaterialView {
-                id: material.id.as_str().to_owned(),
-                name: material.name.clone(),
-                surface: hex(surface.0, surface.1, surface.2),
-                cut: hex(cut.0, cut.1, cut.2),
-            }
-        })
-        .collect();
+    let materials = materials_view();
     let defaults = match default_type_args() {
         Ok(defaults) => defaults,
         Err(refusal) => return Ok(Err(refusal)),
@@ -850,4 +867,94 @@ pub async fn read_wall_types<R: Reader>(
         materials,
         defaults,
     }))
+}
+
+/// The words for a wall command that should have been used.
+fn use_instead(what: &str, command: &str) -> String {
+    format!("{what} with {command}, which checks it as a wall.")
+}
+
+/// The part of a generic command's arguments these rules read.
+#[derive(Deserialize, Default)]
+struct GenericArgs {
+    #[serde(default, with = "kit_ops::id::option")]
+    element: Option<Id>,
+    recipe: Option<Recipe>,
+    #[serde(default, rename = "type", with = "kit_ops::id::option")]
+    type_id: Option<Id>,
+    category: Option<CategoryId>,
+}
+
+/// Whether a record is a wall type the wall commands take: a type of the walls category holding
+/// its layers in its wall block.
+fn is_layered_type(record: &Element) -> bool {
+    record.kind == TYPE_KIND
+        && records::stored_category(record) == Some(WALLS)
+        && record
+            .props
+            .contains_key(&format!("{SYSTEM_KEY_PREFIX}{}", construct_walls::OWNER))
+}
+
+/// The wall rules of the generic commands, asked before one runs, as the floor rules are
+/// ([`crate::cloud::floors::generic_rules`]): a layered wall is drawn by `wall.draw`, not made by
+/// `element.create` nor changed by `element.set` of its recipe; a wall type is made by
+/// `wall.type.create`, not `type.create`, and renamed, copied and deleted by `wall.type.rename`,
+/// `wall.type.duplicate` and `wall.type.delete`. The inner error is the refusal, naming the
+/// command to use. An edit these rules have nothing to say of (another command, arguments that do
+/// not read, an element that is not there, a straight wall, a walls type without layers) is left
+/// to the command, which answers it as it always has.
+///
+/// # Errors
+///
+/// A [`StoreError`] when the store fails.
+pub async fn generic_rules<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    edit: &Edit,
+) -> Result<Result<(), String>, StoreError> {
+    let Ok(args) = serde_json::from_value::<GenericArgs>(edit.args.clone()) else {
+        return Ok(Ok(()));
+    };
+    let document = &edit.target;
+    let a_layered_recipe = args.recipe.as_ref().is_some_and(wall_plan::is_layered);
+    Ok(match edit.cmd.as_str() {
+        "element.create" if a_layered_recipe => {
+            Err(use_instead("A layered wall is drawn", "wall.draw"))
+        }
+        "element.set" if args.recipe.is_some() => {
+            let Some(id) = &args.element else {
+                return Ok(Ok(()));
+            };
+            match records::read_element(txn, project, document, id).await? {
+                Some((_, record)) if wall_plan::is_layered(&record.recipe) => Err(use_instead(
+                    &format!("{} is a layered wall, drawn", record.name),
+                    "wall.draw",
+                )),
+                Some(_) if a_layered_recipe => {
+                    Err(use_instead("A layered wall is drawn", "wall.draw"))
+                }
+                _ => Ok(()),
+            }
+        }
+        "type.create" if args.category == Some(WALLS) => {
+            Err(use_instead("A wall type is made", "wall.type.create"))
+        }
+        cmd @ ("type.rename" | "type.duplicate" | "type.delete") => {
+            let Some(id) = &args.type_id else {
+                return Ok(Ok(()));
+            };
+            match records::read_element(txn, project, document, id).await? {
+                Some((_, record)) if is_layered_type(&record) => {
+                    let what = match cmd {
+                        "type.rename" => "A wall type is renamed",
+                        "type.duplicate" => "A wall type is copied",
+                        _ => "A wall type is deleted",
+                    };
+                    Err(use_instead(what, &format!("wall.{cmd}")))
+                }
+                _ => Ok(()),
+            }
+        }
+        _ => Ok(()),
+    })
 }
