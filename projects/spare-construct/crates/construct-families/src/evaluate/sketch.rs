@@ -20,12 +20,13 @@
 
 use super::error::{EvalError, Place, Reason};
 use super::limits::Meter;
+use super::symbols::{Edge, Point2};
 use super::values::Worked;
 use crate::check::Sort;
 use crate::model::{Base, Constraint as Written, Key, Recipe, Sketch as RecipeSketch};
 use construct_params::{Length, Value};
 use construct_solver::{
-    Constraint, ConstraintId, CurveId, LineId, PointId, Sketch, SolveError, solve,
+    Constraint, ConstraintId, Curve, CurveId, LineId, PointId, Sketch, SolveError, solve,
 };
 use engine_geometry::value::grid::P3;
 use std::collections::BTreeMap;
@@ -430,6 +431,52 @@ impl Drawn {
                 P3::new(x, y, z).map_err(|_| Reason::OutOfRange)
             })
             .collect()
+    }
+
+    /// A point of the solved sketch, in the sketch's two coordinates.
+    fn at(&self, id: PointId) -> Result<Point2, Reason> {
+        let p = self.sketch.point(id).ok_or(Reason::OutOfRange)?;
+        Ok([Length::from_steps(p.x), Length::from_steps(p.y)])
+    }
+
+    /// The solved line, arc or circle `key` names, for a symbol.
+    pub(crate) fn edge(&self, key: &Key) -> Result<Edge, Reason> {
+        let Some(item) = self.items.get(key.as_str()).copied() else {
+            return Err(Reason::Missing {
+                sort: Sort::Line,
+                key: key.as_str().to_owned(),
+            });
+        };
+        match item {
+            Item::Line(id) => {
+                let line = self.sketch.line(id).ok_or(Reason::OutOfRange)?;
+                Ok(Edge::Line {
+                    key: key.clone(),
+                    start: self.at(line.start)?,
+                    end: self.at(line.end)?,
+                })
+            }
+            Item::Curve(id) => match self.sketch.curve(id).ok_or(Reason::OutOfRange)? {
+                Curve::Arc {
+                    centre,
+                    radius,
+                    start,
+                    end,
+                } => Ok(Edge::Arc {
+                    key: key.clone(),
+                    centre: self.at(centre)?,
+                    start: self.at(start)?,
+                    end: self.at(end)?,
+                    radius: Length::from_steps(radius),
+                }),
+                Curve::Circle { centre, radius } => Ok(Edge::Circle {
+                    key: key.clone(),
+                    centre: self.at(centre)?,
+                    radius: Length::from_steps(radius),
+                }),
+            },
+            Item::Point(_) => Err(wrong(key, Sort::Line, item)),
+        }
     }
 
     /// `depth` along the plane's normal, as the engine's vector.

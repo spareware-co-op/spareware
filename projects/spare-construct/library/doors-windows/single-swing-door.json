@@ -1,0 +1,986 @@
+{
+  "format": 1,
+  "id": "library.doors-windows.single-swing-door",
+  "name": "Single swing door",
+  "category": 300,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:13440000"
+    },
+    {
+      "key": "frame",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.frame",
+        "name": "Frame width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:256000"
+    },
+    {
+      "key": "frame_depth",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.frame_depth",
+        "name": "Frame depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:640000"
+    },
+    {
+      "key": "leaf",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.leaf",
+        "name": "Leaf thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:256000"
+    },
+    {
+      "key": "frame_material",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.frame_material",
+        "name": "Frame material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-douglas-fir"
+    },
+    {
+      "key": "leaf_material",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.leaf_material",
+        "name": "Leaf material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-white-oak"
+    },
+    {
+      "key": "swing",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.swing",
+        "name": "Swing",
+        "kind": "choice",
+        "holder": "instance",
+        "choices": [
+          {
+            "key": "left",
+            "label": "Hinged on the left"
+          },
+          {
+            "key": "right",
+            "label": "Hinged on the right"
+          }
+        ]
+      },
+      "default": "choice:left"
+    },
+    {
+      "key": "leaf_width",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.leaf_width",
+        "name": "Leaf width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "width - 2 * frame"
+    },
+    {
+      "key": "leaf_height",
+      "definition": {
+        "id": "library.doors-windows.single-swing-door.leaf_height",
+        "name": "Leaf height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "height - frame"
+    }
+  ],
+  "planes": [
+    {
+      "key": "centre",
+      "base": "xz",
+      "offset": "0 mm"
+    },
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "elevation",
+      "plane": "centre",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "a1",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "a2",
+          "x": "length:q0:2880000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "a3",
+          "x": "length:q0:2880000",
+          "y": "length:q0:13440000"
+        },
+        {
+          "key": "a4",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:13440000"
+        },
+        {
+          "key": "b1",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "b2",
+          "x": "length:q0:2624000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "b3",
+          "x": "length:q0:2624000",
+          "y": "length:q0:13184000"
+        },
+        {
+          "key": "b4",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:13184000"
+        },
+        {
+          "key": "ml",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:6592000"
+        },
+        {
+          "key": "mr",
+          "x": "length:q0:2624000",
+          "y": "length:q0:6592000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "foot_left",
+          "start": "a1",
+          "end": "b1"
+        },
+        {
+          "key": "inner_left",
+          "start": "b1",
+          "end": "b4"
+        },
+        {
+          "key": "inner_head",
+          "start": "b4",
+          "end": "b3"
+        },
+        {
+          "key": "inner_right",
+          "start": "b3",
+          "end": "b2"
+        },
+        {
+          "key": "foot_right",
+          "start": "b2",
+          "end": "a2"
+        },
+        {
+          "key": "outer_right",
+          "start": "a2",
+          "end": "a3"
+        },
+        {
+          "key": "outer_head",
+          "start": "a3",
+          "end": "a4"
+        },
+        {
+          "key": "outer_left",
+          "start": "a4",
+          "end": "a1"
+        },
+        {
+          "key": "threshold",
+          "start": "a1",
+          "end": "a2"
+        },
+        {
+          "key": "leaf_foot",
+          "start": "b1",
+          "end": "b2"
+        },
+        {
+          "key": "mark_left_low",
+          "start": "b2",
+          "end": "ml"
+        },
+        {
+          "key": "mark_left_high",
+          "start": "ml",
+          "end": "b3"
+        },
+        {
+          "key": "mark_right_low",
+          "start": "b1",
+          "end": "mr"
+        },
+        {
+          "key": "mark_right_high",
+          "start": "mr",
+          "end": "b4"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "a1",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "a2",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a3",
+          "line": "base",
+          "length": "height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "a4",
+          "line": "base",
+          "length": "height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b1",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "b1",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b2",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "b2",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b3",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b3",
+          "line": "base",
+          "length": "leaf_height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b4",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "b4",
+          "line": "base",
+          "length": "leaf_height",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "ml",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "ml",
+          "line": "base",
+          "length": "leaf_height / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mr",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mr",
+          "line": "base",
+          "length": "leaf_height / 2",
+          "side": "left"
+        }
+      ]
+    },
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "j1",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "j2",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "j3",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "j4",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "k1",
+          "x": "length:q0:2624000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "k2",
+          "x": "length:q0:2880000",
+          "y": "length:q0:-320000"
+        },
+        {
+          "key": "k3",
+          "x": "length:q0:2880000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "k4",
+          "x": "length:q0:2624000",
+          "y": "length:q0:320000"
+        },
+        {
+          "key": "ll",
+          "x": "length:q0:-2624000",
+          "y": "length:q0:5568000"
+        },
+        {
+          "key": "lr",
+          "x": "length:q0:2624000",
+          "y": "length:q0:5568000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "jamb_left_out",
+          "start": "j1",
+          "end": "j2"
+        },
+        {
+          "key": "jamb_left_in",
+          "start": "j2",
+          "end": "j3"
+        },
+        {
+          "key": "jamb_left_face",
+          "start": "j3",
+          "end": "j4"
+        },
+        {
+          "key": "jamb_left_end",
+          "start": "j4",
+          "end": "j1"
+        },
+        {
+          "key": "jamb_right_out",
+          "start": "k1",
+          "end": "k2"
+        },
+        {
+          "key": "jamb_right_end",
+          "start": "k2",
+          "end": "k3"
+        },
+        {
+          "key": "jamb_right_face",
+          "start": "k3",
+          "end": "k4"
+        },
+        {
+          "key": "jamb_right_in",
+          "start": "k4",
+          "end": "k1"
+        },
+        {
+          "key": "leaf_left",
+          "start": "j3",
+          "end": "ll"
+        },
+        {
+          "key": "leaf_right",
+          "start": "k4",
+          "end": "lr"
+        }
+      ],
+      "arcs": [
+        {
+          "key": "arc_left",
+          "centre": "j3",
+          "start": "k4",
+          "end": "ll",
+          "radius": "length:q0:5248000"
+        },
+        {
+          "key": "arc_right",
+          "centre": "k4",
+          "start": "lr",
+          "end": "j3",
+          "radius": "length:q0:5248000"
+        }
+      ],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j1",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j2",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j2",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j3",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j3",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "j4",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k1",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k1",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k2",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k3",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k4",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "k4",
+          "line": "base",
+          "length": "frame_depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "ll",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "ll",
+          "line": "base",
+          "length": "frame_depth / 2 + leaf_width",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "lr",
+          "line": "axis",
+          "length": "width / 2 - frame",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "lr",
+          "line": "base",
+          "length": "frame_depth / 2 + leaf_width",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "frame",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "foot_left",
+        "inner_left",
+        "inner_head",
+        "inner_right",
+        "foot_right",
+        "outer_right",
+        "outer_head",
+        "outer_left"
+      ],
+      "holes": [],
+      "start": "-frame_depth / 2",
+      "end": "frame_depth / 2",
+      "subcategory": 302,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leaf",
+      "op": "extrude",
+      "sketch": "elevation",
+      "profile": [
+        "leaf_foot",
+        "inner_right",
+        "inner_head",
+        "inner_left"
+      ],
+      "holes": [],
+      "start": "frame_depth / 2 - leaf",
+      "end": "frame_depth / 2",
+      "subcategory": 301,
+      "material": {
+        "parameter": "leaf_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "swing_left",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "leaf_left",
+        "arc_left"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:left"
+      }
+    },
+    {
+      "key": "swing_right",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "leaf_right",
+        "arc_right"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:right"
+      }
+    },
+    {
+      "key": "jambs",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "jamb_left_out",
+        "jamb_left_in",
+        "jamb_left_face",
+        "jamb_left_end",
+        "jamb_right_out",
+        "jamb_right_end",
+        "jamb_right_face",
+        "jamb_right_in"
+      ],
+      "subcategory": 302,
+      "visibility": {
+        "coarse": true,
+        "medium": false,
+        "fine": false
+      }
+    },
+    {
+      "key": "mark_left",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "mark_left_low",
+        "mark_left_high"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:left"
+      }
+    },
+    {
+      "key": "mark_right",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "mark_right_low",
+        "mark_right_high"
+      ],
+      "subcategory": 304,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      },
+      "when": {
+        "parameter": "swing",
+        "is": "choice:right"
+      }
+    },
+    {
+      "key": "outline",
+      "view": "elevation",
+      "sketch": "elevation",
+      "edges": [
+        "threshold",
+        "outer_right",
+        "outer_head",
+        "outer_left",
+        "inner_left",
+        "inner_head",
+        "inner_right"
+      ],
+      "subcategory": 302,
+      "visibility": {
+        "coarse": true,
+        "medium": false,
+        "fine": false
+      }
+    }
+  ],
+  "hosting": {
+    "host": "wall",
+    "opening": {
+      "sketch": "elevation",
+      "profile": [
+        "threshold",
+        "outer_right",
+        "outer_head",
+        "outer_left"
+      ]
+    }
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "height"
+    ],
+    "rows": [
+      {
+        "key": "d700x2100",
+        "name": "700 x 2100",
+        "values": [
+          "length:q0:4480000",
+          "length:q0:13440000"
+        ]
+      },
+      {
+        "key": "d800x2100",
+        "name": "800 x 2100",
+        "values": [
+          "length:q0:5120000",
+          "length:q0:13440000"
+        ]
+      },
+      {
+        "key": "d900x2100",
+        "name": "900 x 2100",
+        "values": [
+          "length:q0:5760000",
+          "length:q0:13440000"
+        ]
+      },
+      {
+        "key": "d1000x2100",
+        "name": "1000 x 2100",
+        "values": [
+          "length:q0:6400000",
+          "length:q0:13440000"
+        ]
+      },
+      {
+        "key": "d900x2400",
+        "name": "900 x 2400",
+        "values": [
+          "length:q0:5760000",
+          "length:q0:15360000"
+        ]
+      },
+      {
+        "key": "d1000x2400",
+        "name": "1000 x 2400",
+        "values": [
+          "length:q0:6400000",
+          "length:q0:15360000"
+        ]
+      }
+    ]
+  }
+}
