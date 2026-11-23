@@ -2,7 +2,9 @@
 //! knows what a shape is made of: an element holds a [`Recipe`], and everything drawn, stored or
 //! compared comes back as a [`Built`]. Two implementations are in `construct-regen`: a stand-in
 //! that makes boxes, and a builder over the geometry kernel's engine seam, whose [`Edition`] carries
-//! the engine's own [`EngineReport`]. Swapping them changes one line where a program picks its
+//! the engine's own [`EngineReport`]. A host is built together with what is hosted in it
+//! ([`Geometry::build_hosting`], [`Hosted`]): the kernel's builder cuts a wall's doors from it,
+//! the stand-in builds the wall alone. Swapping them changes one line where a program picks its
 //! builder, not the data layout, the edit log or the app; the server's `tests/swap.rs` proves that.
 //!
 //! This follows the kernel's own contract (architecture chapters 10, 20 and 24):
@@ -202,6 +204,21 @@ impl fmt::Display for GeometryError {
 
 impl std::error::Error for GeometryError {}
 
+/// An element hosted in another, which may cut it: a door in a wall. The host is built with each of
+/// these ([`Geometry::build_hosting`]); where one sits is decided by whoever hands it over, from
+/// the hosted element's record (its host's face and its offsets along and up it).
+#[derive(Clone, Copy, Debug)]
+pub struct Hosted<'a> {
+    /// The hosted element's permanent ID: the order the host takes them in, and the key the faces
+    /// a cut makes are named by.
+    pub key: &'a str,
+    /// How to build it.
+    pub recipe: &'a Recipe,
+    /// Where its shape's origin sits in its host's shape's own frame, in whole millimetres, as a
+    /// [`Placement`](crate::element::Placement) is.
+    pub at: crate::element::Placement,
+}
+
 /// Builds shapes. The only way shapes come into being, on the server and in the browser.
 pub trait Geometry: Send + Sync + 'static {
     /// What this implementation is. A document records it, and only this edition edits it.
@@ -213,11 +230,65 @@ pub trait Geometry: Send + Sync + 'static {
     ///
     /// A [`GeometryError`] when the recipe can't be built, the same on every machine.
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError>;
+
+    /// Builds `host` with the elements hosted in it, which may cut it: a wall with its doors. The
+    /// same `host` and `hosted` give the same bytes in whatever order `hosted` comes, so an
+    /// implementation takes them in the order of their keys. With nothing hosted it is
+    /// [`Geometry::build`]. Pure, as `build` is.
+    ///
+    /// A builder that cuts nothing builds the host alone, and that is what this does unless an
+    /// implementation says otherwise.
+    ///
+    /// # Errors
+    ///
+    /// As [`Geometry::build`], and a [`GeometryError`] naming the hosted element when one cannot
+    /// be cut from its host, the same on every machine.
+    fn build_hosting(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        let _ = hosted;
+        self.build(host)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::element::Placement;
+
+    /// A builder that says nothing of hosting: the same unit box for every recipe.
+    struct Plain;
+
+    impl Geometry for Plain {
+        fn edition(&self) -> Edition {
+            plain()
+        }
+
+        fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+            Ok(Built {
+                body: recipe.op.clone().into_bytes(),
+                bounds: Bounds {
+                    min: [0; 3],
+                    max: [1; 3],
+                },
+                names: Vec::new(),
+                displays: Vec::new(),
+            })
+        }
+    }
+
+    /// A builder that cuts nothing builds a host alone, whatever is hosted in it.
+    #[test]
+    fn a_builder_that_cuts_nothing_builds_the_host_alone() {
+        let wall = Recipe::construct("wall.straight", BTreeMap::new());
+        let door = Recipe::construct("door.single", BTreeMap::new());
+        let at = Placement { x: 1, y: 2, z: 3 };
+        let hosted = [Hosted {
+            key: "D-1",
+            recipe: &door,
+            at,
+        }];
+        assert_eq!(Plain.build_hosting(&wall, &hosted), Plain.build(&wall));
+        assert_eq!(Plain.build_hosting(&wall, &[]), Plain.build(&wall));
+    }
 
     fn plain() -> Edition {
         Edition {

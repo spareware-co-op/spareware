@@ -82,13 +82,15 @@ fn refused<T: std::fmt::Debug>(answer: Result<T, Refusal>) -> bool {
         .is_some_and(|refusal| matches!(refusal, Refusal::Refused(_)))
 }
 
-const VIEW: View = View {
-    level: 1,
-    x0: 0,
-    y0: 0,
-    x1: 9000,
-    y1: 9000,
-};
+fn view() -> View {
+    View {
+        level: i("1"),
+        x0: 0,
+        y0: 0,
+        x1: 9000,
+        y1: 9000,
+    }
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn every_log_replays_after_the_seed() {
@@ -123,10 +125,10 @@ async fn a_teams_wip_is_shut_to_everyone_else() {
     let (dan, project, model) = (i("dan"), i("example-1"), i("arch-model"));
     let hash = {
         let anna = i("anna");
-        let area = s.area(&anna, &project, &model, &VIEW).await.unwrap();
+        let area = s.area(&anna, &project, &model, &view()).await.unwrap();
         i(area.pieces.values().next().unwrap())
     };
-    assert!(refused(s.area(&dan, &project, &model, &VIEW).await));
+    assert!(refused(s.area(&dan, &project, &model, &view()).await));
     assert!(refused(s.kind(&dan, &project, &model, &i("wall")).await));
     assert!(refused(s.claims(&dan, &project, &model).await));
     assert!(refused(s.record(&dan, &project, &model, &hash).await));
@@ -180,7 +182,15 @@ async fn workshop_parts_are_elements_listed_by_kind() {
     assert_eq!(record.recipe.owner, "workshop");
     assert_eq!(record.name, "Bracket");
     let area = s
-        .area(&ben, &project, &model, &View { level: 0, ..VIEW })
+        .area(
+            &ben,
+            &project,
+            &model,
+            &View {
+                level: i("0"),
+                ..view()
+            },
+        )
         .await
         .unwrap();
     assert!(!area.pieces.contains_key("WP-1"));
@@ -271,6 +281,70 @@ async fn parameters_go_through_the_log_and_are_read_with_units() {
         s.edit(&dan, &project, &model, "element.param", set("1"))
             .await
     ));
+}
+
+/// A parameter given by a formula is defined through the log, worked out on the server wherever
+/// it is read, and shown with its formula; a value for it is refused with the server's reason.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_formula_parameter_is_worked_out_on_the_server_and_shown_with_its_formula() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    for (definition, default) in [
+        (
+            json!({ "id": "P-sill", "name": "Sill", "kind": "length", "holder": "instance",
+                    "choices": [] }),
+            json!("150"),
+        ),
+        (
+            json!({ "id": "P-head", "name": "Head", "kind": "length", "holder": "instance",
+                    "choices": [], "formula": "Sill+2100mm" }),
+            Value::Null,
+        ),
+    ] {
+        let id = definition["id"].clone();
+        let define = json!({ "definition": definition });
+        s.edit(&anna, &project, &model, "parameter.define", define)
+            .await
+            .unwrap();
+        let bind = json!({ "parameter": id, "categories": [300], "default": default });
+        s.edit(&anna, &project, &model, "parameter.bind", bind)
+            .await
+            .unwrap();
+    }
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let head = view.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.from, "formula");
+    assert_eq!(head.formula.as_deref(), Some("Sill + 2100 mm"));
+    assert_eq!(head.shown.as_deref(), Some("2250 mm"));
+
+    let set = json!({ "element": "D-101", "parameter": "P-head", "value": "2000" });
+    let Err(Refusal::Refused(reason)) = s.edit(&anna, &project, &model, "element.param", set).await
+    else {
+        panic!("the formula gives the head height");
+    };
+    assert!(
+        reason.starts_with("Head is given by its formula"),
+        "{reason}"
+    );
+
+    // The sill follows into the head; the project's parameters list the formula.
+    let set = json!({ "element": "D-101", "parameter": "P-sill", "value": "0.9 m" });
+    s.edit(&anna, &project, &model, "element.param", set)
+        .await
+        .unwrap();
+    let view = s
+        .parameters(&anna, &project, &model, &i("D-101"))
+        .await
+        .unwrap();
+    let head = view.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.shown.as_deref(), Some("3000 mm"));
+    let table = s.project_parameters(&anna, &project, &model).await.unwrap();
+    let head = table.parameters.iter().find(|p| p.name == "Head").unwrap();
+    assert_eq!(head.formula.as_deref(), Some("Sill + 2100 mm"));
 }
 
 /// What the page needs to manage parameters and types is read from the server, so the page holds
@@ -396,6 +470,115 @@ async fn placed(
         .placement
 }
 
+/// The page's levels: the levels the seed's integers imply, then levels made, renamed and moved
+/// through the log, shown as the server formats them; a plan at a level by its ID; a delete
+/// refused with how many elements are tied to the level.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, dan, project, model) = (
+        i("anna"),
+        i("ben"),
+        i("dan"),
+        i("example-1"),
+        i("arch-model"),
+    );
+    let listed = |levels: Vec<construct_regen::levels::LevelView>| {
+        levels
+            .into_iter()
+            .map(|l| (l.id, l.name, l.shown, l.implied, l.tied))
+            .collect::<Vec<_>>()
+    };
+    let seeded = listed(s.levels(&anna, &project, &model).await.unwrap());
+    assert_eq!(
+        seeded,
+        [
+            (
+                "1".to_owned(),
+                "Level 1".to_owned(),
+                "0 mm".to_owned(),
+                true,
+                8
+            ),
+            (
+                "2".to_owned(),
+                "Level 2".to_owned(),
+                "3000 mm".to_owned(),
+                true,
+                9
+            ),
+        ]
+    );
+    assert!(refused(s.levels(&dan, &project, &model).await));
+
+    let roof = json!({ "level": "L-roof", "name": "Roof", "elevation": "6.2 m" });
+    s.edit(&anna, &project, &model, "level.create", roof)
+        .await
+        .unwrap();
+    let rename = json!({ "level": "2", "name": "First floor" });
+    s.edit(&ben, &project, &model, "level.rename", rename)
+        .await
+        .unwrap();
+    let levels = listed(s.levels(&anna, &project, &model).await.unwrap());
+    assert_eq!(
+        levels[1..],
+        [
+            (
+                "2".to_owned(),
+                "First floor".to_owned(),
+                "3000 mm".to_owned(),
+                false,
+                9
+            ),
+            (
+                "L-roof".to_owned(),
+                "Roof".to_owned(),
+                "6200 mm".to_owned(),
+                false,
+                0
+            ),
+        ]
+    );
+
+    // A plan asks for a level by its ID; the seed's walls are on the level their integer names.
+    let wall = json!({ "element": "W-roof", "kind": "wall", "level": "L-roof",
+                       "placement": { "x": 100, "y": 100, "z": 0 },
+                       "recipe": { "owner": "construct", "schema": 1, "op": "wall.straight",
+                                   "op_version": 1,
+                                   "args": { "length": 3000, "thickness": 200, "height": 1000 } } });
+    s.edit(&anna, &project, &model, "element.create", wall)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+    let at = |level: &str| View {
+        level: i(level),
+        ..view()
+    };
+    let roof = s
+        .area(&anna, &project, &model, &at("L-roof"))
+        .await
+        .unwrap();
+    assert_eq!(roof.pieces.keys().collect::<Vec<_>>(), ["W-roof"]);
+    let first = s.area(&anna, &project, &model, &at("2")).await.unwrap();
+    assert!(first.pieces.contains_key("W-201") && !first.pieces.contains_key("W-roof"));
+
+    let refused_delete = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "level.delete",
+            json!({ "level": "1" }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        refused_delete.to_string(),
+        "Level 1 can't be deleted: 8 elements are tied to it."
+    );
+}
+
 /// Undo is an edit like any other: through the log, behind the same access, and each person's
 /// own. What each person can undo is read back from the log alone.
 #[tokio::test(flavor = "multi_thread")]
@@ -458,7 +641,7 @@ async fn a_record_cant_be_reached_through_another_model() {
     let s = &stack.service;
     let (anna, project) = (i("anna"), i("example-1"));
     let arch = s
-        .area(&anna, &project, &i("arch-model"), &VIEW)
+        .area(&anna, &project, &i("arch-model"), &view())
         .await
         .unwrap();
     let hash = i(arch.pieces.values().next().unwrap());
@@ -718,7 +901,7 @@ async fn a_view_says_how_far_regeneration_has_got() {
     let stack = seeded().await;
     let s = &stack.service;
     let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
-    let before = s.area(&anna, &project, &model, &VIEW).await.unwrap();
+    let before = s.area(&anna, &project, &model, &view()).await.unwrap();
     assert!(before.through > 0);
     let seq = s
         .edit(
@@ -731,7 +914,7 @@ async fn a_view_says_how_far_regeneration_has_got() {
         .await
         .unwrap();
     s.regenerate(&project).await.unwrap();
-    let after = s.area(&anna, &project, &model, &VIEW).await.unwrap();
+    let after = s.area(&anna, &project, &model, &view()).await.unwrap();
     assert!(after.through >= seq);
     assert_ne!(after.pieces["D-101"], before.pieces["D-101"]);
 }

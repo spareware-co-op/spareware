@@ -7,9 +7,12 @@
 //! - [`Catalog`]: every parameter kind and every category of the document, read from the data
 //!   crates, so a page lists them and never holds a list of its own.
 //! - [`TableView`]: every parameter of the document, bound or not, with its kind, whether an
-//!   instance or its type holds it, its choices, its default and the categories it is bound to.
+//!   instance or its type holds it, its choices, its default, its formula and the categories it is
+//!   bound to.
 //! - [`TypesView`]: the types of a document (or of one category), each with the parameters it
 //!   lists and the values it holds, shown in the document's units, and how many elements are of it.
+//!   A type parameter with a formula shows the value the formula gives the type, worked out by
+//!   [`Context::type_worked`], or why it gives none.
 //! - Values are shown as the document's units format them
 //!   ([`construct_params::Definition::format`]): the page never does unit arithmetic. The order is
 //!   the same every time: by name (case ignored), then ID.
@@ -43,6 +46,8 @@ pub struct KindView {
     pub tag: &'static str,
     /// What people read, such as `a length`.
     pub label: String,
+    /// Whether a formula can give a value of it (construct-params' `Kind::takes_formula`).
+    pub takes_formula: bool,
 }
 
 /// A category as a list shows it.
@@ -81,6 +86,8 @@ pub struct DefinitionView {
     pub choices: Vec<ChoiceView>,
     /// The default its binding gives, shown in the document's units; `None` when it has none.
     pub default: Option<String>,
+    /// The formula that gives its value, in its one spelling; `None` when a person sets it.
+    pub formula: Option<String>,
     /// The categories it is bound to; empty while it is bound nowhere.
     pub categories: Vec<CategoryView>,
 }
@@ -134,8 +141,13 @@ pub struct TypeParameter {
     /// The same, shown in the document's units.
     pub shown: Option<String>,
     /// `type` when the type holds one, `default` when its elements read the default, `unset`
-    /// when there is none, `instance` when each element holds its own.
+    /// when there is none, `instance` when each element holds its own, `formula` when its formula
+    /// gives the type's value.
     pub from: &'static str,
+    /// Its formula, in its one spelling, when it has one.
+    pub formula: Option<String>,
+    /// Why a type parameter's formula gives the type no value, in construct-formulas' words.
+    pub reason: Option<String>,
 }
 
 const fn holder_word(holder: Holder) -> &'static str {
@@ -155,6 +167,7 @@ impl Context {
                 .map(|kind| KindView {
                     tag: kind.tag(),
                     label: kind.to_string(),
+                    takes_formula: kind.takes_formula(),
                 })
                 .collect(),
             categories: self
@@ -207,6 +220,7 @@ impl Context {
                     })
                     .collect(),
                 default,
+                formula: def.formula().map(str::to_owned),
                 categories: bound
                     .into_iter()
                     .filter_map(|id| self.category_view(id))
@@ -244,14 +258,21 @@ impl Context {
 
     fn type_entry(&self, ty: &ElementType, elements: usize) -> Result<TypeEntry, String> {
         let mut parameters = Vec::new();
+        let worked = self.type_worked(ty)?;
         for id in ty.params() {
             let Some(def) = self.params.definition(id) else {
                 return Err(format!("no parameter has id {id}"));
             };
-            let (value, from) = match (def.holder(), ty.value(id)) {
-                (Holder::Instance, _) => (None, "instance"),
-                (Holder::Type, Some(own)) => (Some(own), "type"),
-                (Holder::Type, None) => match self.params.default_of(id) {
+            let mut reason = None;
+            let (value, from) = match (def.holder(), worked.get(id), ty.value(id)) {
+                (Holder::Instance, ..) => (None, "instance"),
+                (Holder::Type, Some(Ok(value)), _) => (Some(value), "formula"),
+                (Holder::Type, Some(Err(why)), _) => {
+                    reason = Some(why.message.clone());
+                    (None, "formula")
+                }
+                (Holder::Type, None, Some(own)) => (Some(own), "type"),
+                (Holder::Type, None, None) => match self.params.default_of(id) {
                     Some(default) => (Some(default), "default"),
                     None => (None, "unset"),
                 },
@@ -268,6 +289,8 @@ impl Context {
                 value: value.map(construct_params::Value::stored),
                 shown,
                 from,
+                formula: def.formula().map(str::to_owned),
+                reason,
             });
         }
         parameters.sort_by_cached_key(|p| (p.name.to_lowercase(), p.id.clone()));

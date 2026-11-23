@@ -1,0 +1,47 @@
+{
+  "about": "The recipes the browser's kernel package is held to: each is built natively (examples/answers.rs) and by the package in Node (tests/browser/same_bytes.mjs), and every answer must be the same bytes. A case with `build` is one recipe, as the page builds it; a case with `host` and `hosted` is a wall with its doors cut (build_hosting). The wall, doors and block are the kernel builder's suite's (construct-regen tests/kernel_suite), the doors centred on the wall's thickness as the seed places them.",
+  "cases": [
+    {
+      "name": "a wall",
+      "build": {
+        "owner": "construct", "schema": 1, "op": "wall.straight", "op_version": 1,
+        "args": { "length": 4000, "thickness": 200, "height": 2700, "axis": "x" }
+      }
+    },
+    {
+      "name": "a wall with two doors",
+      "host": {
+        "recipe": {
+          "owner": "construct", "schema": 1, "op": "wall.straight", "op_version": 1,
+          "args": { "length": 4000, "thickness": 200, "height": 2700, "axis": "x" }
+        },
+        "placement": { "x": 0, "y": 0, "z": 0 }
+      },
+      "hosted": [
+        {
+          "key": "D-1",
+          "recipe": {
+            "owner": "construct", "schema": 1, "op": "door.single", "op_version": 1,
+            "args": { "width": 900, "thickness": 300, "height": 2100 }
+          },
+          "placement": { "x": 500, "y": -50, "z": 0 }
+        },
+        {
+          "key": "D-2",
+          "recipe": {
+            "owner": "construct", "schema": 1, "op": "door.single", "op_version": 1,
+            "args": { "width": 900, "thickness": 300, "height": 2100 }
+          },
+          "placement": { "x": 2500, "y": -50, "z": 0 }
+        }
+      ]
+    },
+    {
+      "name": "a block",
+      "build": {
+        "owner": "construct", "schema": 1, "op": "block", "op_version": 1,
+        "args": { "width": 600, "depth": 400, "height": 900 }
+      }
+    }
+  ]
+}

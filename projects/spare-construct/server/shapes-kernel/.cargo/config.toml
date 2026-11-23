@@ -1,0 +1,8 @@
+# solidcore's own README asks for an 8 MiB stack: some of its methods recurse. As geom-solidcore's
+# .cargo/config.toml sets it: for every test thread of this workspace natively (cargo's [env]
+# table), and in the browser's build, where the module's one stack is set when it is linked.
+[env]
+RUST_MIN_STACK = "8388608"
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=8388608"]
