@@ -287,6 +287,9 @@ const compared = await ben.evaluate(() => ({
   mismatches: window.spare.mismatches,
 }));
 console.log(`      Ben's page compared ${compared.checked} bodies with the server's`);
+if (compared.mismatches.length > 0) {
+  console.log(`      bodies that differ: ${JSON.stringify(compared.mismatches).slice(0, 4000)}`);
+}
 check(compared.mismatches.length === 0, "every body built in the browser matches the server's");
 const building = await ben.evaluate(() => ({
   viewing: window.spare.viewing,
