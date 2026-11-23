@@ -339,7 +339,7 @@ async fn every_command_that_changes_a_model_is_undone_and_redone() {
         ),
         (
             "type.create",
-            json!({ "type": "T-wall", "name": "Basic", "category": 100 }),
+            json!({ "type": "T-column", "name": "Basic", "category": 1100 }),
         ),
         (
             "type.create",
@@ -380,7 +380,7 @@ async fn every_command_that_changes_a_model_is_undone_and_redone() {
             "element.type",
             json!({ "element": "D-1", "type": "T-door2" }),
         ),
-        ("type.delete", json!({ "type": "T-wall" })),
+        ("type.delete", json!({ "type": "T-column" })),
         ("element.delete", json!({ "element": "W-1" })),
         // Workshop's parts are elements, changed by the same three commands.
         (
@@ -412,7 +412,7 @@ async fn one_step_is_one_change_as_a_person_thinks_of_it() {
         )
         .await
         .unwrap();
-    for (ty, category) in [("T-a", 300), ("T-b", 300), ("T-w", 100)] {
+    for (ty, category) in [("T-a", 300), ("T-b", 300), ("T-c", 1100)] {
         stack
             .edit(
                 "type.create",
@@ -426,7 +426,7 @@ async fn one_step_is_one_change_as_a_person_thinks_of_it() {
     let bind = stack
         .edit(
             "parameter.bind",
-            json!({ "parameter": "P-fire", "categories": [100, 300] }),
+            json!({ "parameter": "P-fire", "categories": [1100, 300] }),
         )
         .await
         .unwrap();
@@ -534,7 +534,7 @@ async fn a_value_changed_since_by_someone_else_turns_the_whole_undo_back() {
             .await
             .unwrap();
     }
-    for (ty, category) in [("T-door", 300), ("T-wall", 100)] {
+    for (ty, category) in [("T-door", 300), ("T-column", 1100)] {
         stack
             .edit(
                 "type.create",
@@ -546,13 +546,13 @@ async fn a_value_changed_since_by_someone_else_turns_the_whole_undo_back() {
     stack
         .edit(
             "parameter.bind",
-            json!({ "parameter": "P-fire", "categories": [100, 300] }),
+            json!({ "parameter": "P-fire", "categories": [1100, 300] }),
         )
         .await
         .unwrap();
     stack.later();
     // Ben binds another parameter to doors: the table and the door type's list of parameters,
-    // both of which Anna's bind wrote, now hold his values. The wall type is not his.
+    // both of which Anna's bind wrote, now hold his values. The column type is not his.
     stack
         .edit_as(
             "ben",
@@ -567,9 +567,9 @@ async fn a_value_changed_since_by_someone_else_turns_the_whole_undo_back() {
     assert_eq!(refused, "ben has changed Parameters since.");
     assert_eq!(stack.pieces().await, before, "nothing of it was written");
     assert_eq!(
-        stack.record("T-wall").await.props["@params"],
+        stack.record("T-column").await.props["@params"],
         "P-fire",
-        "not even the wall type, which nobody else changed"
+        "not even the column type, which nobody else changed"
     );
     // The refusal is in the log as turned back, and it is no step: her bind is still hers to
     // undo once Ben's is undone.
@@ -579,7 +579,7 @@ async fn a_value_changed_since_by_someone_else_turns_the_whole_undo_back() {
     stack.undo("ben").await.unwrap();
     stack.later();
     stack.undo("anna").await.unwrap();
-    assert_eq!(stack.record("T-wall").await.props["@params"], "");
+    assert_eq!(stack.record("T-column").await.props["@params"], "");
 
     // A column nobody else changed is put back even when others changed other columns.
     stack.edit("element.create", wall("W-1")).await.unwrap();

@@ -57,10 +57,15 @@ impl Geometry for Prisms {
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
         let arg = |name: &str| recipe.args.get(name).and_then(Value::as_i64);
-        let side = arg("length").or(arg("width")).ok_or(GeometryError {
-            code: "NoSide".to_owned(),
-            message: "a prism needs a side".to_owned(),
-        })?;
+        // A layered wall holds its line as stored lengths, so it is a prism of a metre's side.
+        let line = recipe.args.contains_key("start").then_some(1000);
+        let side = arg("length")
+            .or(arg("width"))
+            .or(line)
+            .ok_or(GeometryError {
+                code: "NoSide".to_owned(),
+                message: "a prism needs a side".to_owned(),
+            })?;
         let height = arg("height").unwrap_or(1);
         let mesh = Mesh {
             positions: vec![0, 0, 0, side, 0, 0, 0, side, 0, 0, 0, height],
@@ -71,6 +76,7 @@ impl Geometry for Prisms {
             deviation: i64::from(lod),
             mesh: mesh.clone(),
             outline: vec![[0, 0], [side, 0], [0, side]],
+            parts: Vec::new(),
         };
         Ok(Built {
             body: format!("prism/{side}/{height}").into_bytes(),
@@ -178,7 +184,7 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
     assert_eq!(shown.built.edition, prisms.edition());
 
     let regen = Regenerator::new(store.clone(), files.clone(), prisms);
-    assert_eq!(regen.verify(&project).await.unwrap(), 31);
+    assert_eq!(regen.verify(&project).await.unwrap(), 26);
 
     for project in [
         "example-1",

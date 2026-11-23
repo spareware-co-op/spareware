@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:spareware:spare-construct:family-recipe:1",
   "title": "Spare Construct family recipe, format 1",
-  "description": "A family: its parameters, planes, sketches, solid steps, 2D symbols, visibility by detail level, hosting and built-in types. This schema gives the document's shape; what the shape means (formulas that work out, references that exist, ids that are known) is checked by the reader library, construct-families. See FORMAT.md beside this file's crate.",
+  "description": "A family: its parameters, planes, sketches, solid steps, 2D symbols, visibility by detail level, hosting, built-in types and, if it has one, a type table. This schema gives the document's shape; what the shape means (formulas that work out, references that exist, ids that are known) is checked by the reader library, construct-families. See FORMAT.md beside this file's crate.",
   "type": "object",
   "properties": {
     "format": {
@@ -60,6 +60,9 @@
       "items": {
         "$ref": "#/$defs/type"
       }
+    },
+    "type_table": {
+      "$ref": "#/$defs/typeTable"
     }
   },
   "required": [
@@ -928,6 +931,46 @@
         "key",
         "name",
         "values"
+      ],
+      "additionalProperties": false
+    },
+    "typeTable": {
+      "description": "A type table: more types, written as rows of values with one column per parameter the types hold. Each row is a type of the family, its key unique among the built-in types and the rows; it has one stored value per column, in column order (the reader library checks that count, which a schema cannot).",
+      "type": "object",
+      "properties": {
+        "columns": {
+          "$ref": "#/$defs/keys"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/key"
+              },
+              "name": {
+                "$ref": "#/$defs/name"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/stored"
+                }
+              }
+            },
+            "required": [
+              "key",
+              "name",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "columns",
+        "rows"
       ],
       "additionalProperties": false
     }

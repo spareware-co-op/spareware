@@ -7,7 +7,15 @@
 //! - `wall.straight`: the wall's plan, a rectangle as long and as thick as the recipe says along
 //!   its axis (x, or y when `axis` is `y`), extruded straight up by its height through
 //!   [`Engine::extrude`]. Its bounds are the stand-in's box, so placement means the same.
+//! - `wall.layered`: one solid per layer of its type, each its strip in plan
+//!   ([`crate::wall_plan`]) extruded straight up, with each opening cut through every layer, in
+//!   the child module `layered` (job 4.1); its lengths are construct-params' stored steps, which
+//!   [`Units::from_q0`] hands to the engine, and its displays are rounded to the nearest
+//!   millimetre ([`Units::nearest_mm`]) where a face is not on one.
 //! - `block`: its plan rectangle, width by depth, extruded the same way.
+//! - `floor`: one solid per layer of its floor type, each its boundary with its holes extruded
+//!   from the layer's bottom face up to its top, the floor's top face at `z = 0`, in the child
+//!   module `floor` (job 4.3); its lengths are construct-params' steps ([`crate::floor_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, until families give doors their real shape. [`Extrusion::door`] is the one place
 //!   a door's shape is decided.
@@ -72,9 +80,13 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod floor;
+mod layered;
 pub mod opening;
 
 pub use opening::Hosted;
+
+use crate::wall_plan::{self, Layered};
 
 use construct_model::element::Placement;
 use construct_model::geometry::{
@@ -299,6 +311,16 @@ impl Units {
 
     /// A mesh coordinate, in steps as the engine gives it, in whole millimetres.
     fn coordinate(self, steps: f64) -> Result<i64, GeometryError> {
+        self.millimetres(Units::whole_steps(steps)?)
+    }
+
+    /// A mesh coordinate as the engine gives it, a whole number of steps held in an f64, as an
+    /// integer.
+    ///
+    /// # Errors
+    ///
+    /// `NotOnTheGrid` for a coordinate that is not a whole number of steps.
+    fn whole_steps(steps: f64) -> Result<i64, GeometryError> {
         if steps.fract() != 0.0 || steps.abs() >= EXACT_F64 {
             return Err(fault(
                 "NotOnTheGrid",
@@ -310,7 +332,65 @@ impl Units {
             reason = "a whole number under 2^53, checked above, which an i64 holds exactly"
         )]
         let steps = steps as i64;
-        self.millimetres(steps)
+        Ok(steps)
+    }
+
+    /// A length Spare Construct stores (construct-params' `Length`: steps of the building grid,
+    /// [`STEP`], 6,400 to the millimetre) in this engine's steps, exactly: unchanged on `Q0`.
+    ///
+    /// # Errors
+    ///
+    /// `NotOnTheGrid` when it is not a whole number of this engine's steps; `TooBig` beyond a
+    /// 64-bit integer.
+    pub fn from_q0(self, q0: i64) -> Result<i64, GeometryError> {
+        let per = i128::from(construct_params::Length::STEPS_PER_MM);
+        let product = i128::from(q0)
+            .checked_mul(i128::from(self.per_mm))
+            .ok_or_else(too_big)?;
+        match (product.checked_rem(per), product.checked_div(per)) {
+            (Some(0), Some(steps)) => i64::try_from(steps).map_err(|_| too_big()),
+            _ => Err(fault(
+                "NotOnTheGrid",
+                format!(
+                    "a length of {q0} building-grid steps is not a whole number of this engine's steps"
+                ),
+            )),
+        }
+    }
+
+    /// `steps` to the nearest whole millimetre, a half away from zero, and whether that is
+    /// exact: how a display in whole millimetres holds a point that is not on one.
+    #[must_use]
+    pub fn nearest_mm(self, steps: i64) -> (i64, bool) {
+        let (floor, rest) = self.split(steps);
+        // 0 <= rest < per_mm, so twice it is well within an i64.
+        let twice = rest.saturating_mul(2);
+        let up = twice > self.per_mm || (twice == self.per_mm && floor >= 0);
+        (if up { floor.saturating_add(1) } else { floor }, rest == 0)
+    }
+
+    /// `steps` in whole millimetres, rounded down: a bound's low corner.
+    #[must_use]
+    pub fn floor_mm(self, steps: i64) -> i64 {
+        self.split(steps).0
+    }
+
+    /// `steps` in whole millimetres, rounded up: a bound's high corner.
+    #[must_use]
+    pub fn ceil_mm(self, steps: i64) -> i64 {
+        match self.split(steps) {
+            (floor, 0) => floor,
+            (floor, _) => floor.saturating_add(1),
+        }
+    }
+
+    /// `steps` as whole millimetres rounded down and the steps left over, at or above zero.
+    fn split(self, steps: i64) -> (i64, i64) {
+        // per_mm is above zero (`Units::on`, `Units::of_steps_per_mm`), so neither is `None`.
+        (
+            steps.checked_div_euclid(self.per_mm).unwrap_or(0),
+            steps.checked_rem_euclid(self.per_mm).unwrap_or(0),
+        )
     }
 }
 
@@ -556,6 +636,13 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
+    if crate::floor_plan::is_floor(recipe) {
+        let plan = crate::floor_plan::FloorPlan::of(recipe)?;
+        return floor::names(op_id(recipe)?, &plan);
+    }
+    if wall_plan::is_layered(recipe) {
+        return layered::names(recipe, &Layered::of(recipe)?);
+    }
     let shape = Extrusion::of(recipe)?;
     let op = op_id(recipe)?;
     let mut names = shape
@@ -610,6 +697,9 @@ pub fn fits(
         let units = Units::on(STEP)?;
         (units, units.band_over(std::iter::empty()))
     };
+    if wall_plan::is_layered(host) {
+        return layered::fits(&Layered::of(host)?, &on_grid(units, hosted)?, units, band);
+    }
     let shape = Extrusion::of(host)?;
     opening::plan(host, &shape, &on_grid(units, hosted)?, units, band).map(|_| ())
 }
@@ -667,6 +757,17 @@ impl<E: Engine> Kernel<E> {
         host: &Recipe,
         hosted: &[Hosted<'_>],
     ) -> Result<Built, GeometryError> {
+        if crate::floor_plan::is_floor(host) {
+            return self.build_floor(host, hosted.len());
+        }
+        if wall_plan::is_layered(host) {
+            let wall = Layered::of(host)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return layered::build(&mut *engine, host, &wall, hosted, self.units, self.band);
+        }
         let shape = Extrusion::of(host)?;
         let units = self.units;
         let op = op_id(host)?;
@@ -737,12 +838,14 @@ impl<E: Engine> Kernel<E> {
                 deviation: 0,
                 mesh: fine,
                 outline: outline.clone(),
+                parts: Vec::new(),
             },
             Display {
                 lod: 1,
                 deviation: opening::deviation(&cuts, units),
                 mesh: coarse,
                 outline,
+                parts: Vec::new(),
             },
         ];
         Ok(Built {
@@ -886,6 +989,9 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
     }
 
     fn build(&self, recipe: &Recipe) -> Result<Built, GeometryError> {
+        if let Some(datum) = crate::datum::build(recipe) {
+            return datum;
+        }
         self.build_hosting(recipe, &[])
     }
 
@@ -942,6 +1048,36 @@ mod tests {
         assert_eq!(q1.steps_per_mm(), 160_000);
         assert_eq!(q1.millimetres(q1.steps(3).unwrap()).unwrap(), 3);
         assert_eq!(Units::on(STEP).unwrap(), q0);
+    }
+
+    /// A stored length goes to the engine's steps exactly (unchanged on `Q0`, 25 times on `Q1`);
+    /// a point not on a millimetre goes to its nearest, a half away from zero, saying it was
+    /// rounded; a bound rounds outward.
+    #[test]
+    fn stored_lengths_reach_the_engine_and_come_back_to_the_nearest_millimetre() {
+        let q0 = Units::on(GridStep::Q0).unwrap();
+        let q1 = Units::on(GridStep::Q1).unwrap();
+        assert_eq!(q0.from_q0(80_000).unwrap(), 80_000);
+        assert_eq!(q1.from_q0(80_000).unwrap(), 2_000_000);
+        assert_eq!(q1.from_q0(-1).unwrap(), -25);
+        assert_eq!(q0.from_q0(i64::MAX).unwrap(), i64::MAX);
+        assert_eq!(q1.from_q0(i64::MAX).unwrap_err().code, "TooBig");
+        let coarse = Units::of_steps_per_mm(100).unwrap();
+        assert_eq!(coarse.from_q0(64).unwrap(), 1);
+        assert_eq!(coarse.from_q0(1).unwrap_err().code, "NotOnTheGrid");
+        assert_eq!(q0.nearest_mm(368_000), (58, false));
+        assert_eq!(q0.nearest_mm(-368_000), (-58, false));
+        assert_eq!(q0.nearest_mm(288_000), (45, true));
+        assert_eq!(q0.nearest_mm(3199), (0, false));
+        assert_eq!(q0.nearest_mm(-3199), (0, false));
+        assert_eq!(q0.nearest_mm(-3201), (-1, false));
+        assert_eq!(q0.floor_mm(-368_000), -58);
+        assert_eq!(q0.ceil_mm(-368_000), -57);
+        assert_eq!(q0.floor_mm(368_000), 57);
+        assert_eq!(q0.ceil_mm(368_000), 58);
+        assert_eq!(q0.ceil_mm(6400), 1);
+        assert_eq!(Units::whole_steps(6400.0).unwrap(), 6400);
+        assert_eq!(Units::whole_steps(0.5).unwrap_err().code, "NotOnTheGrid");
     }
 
     /// A hosted element's place in its host is the difference of their placements, on the grid;

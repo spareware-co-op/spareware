@@ -21,6 +21,7 @@ A wall is read from the outside in: a finish that meets the weather or the room,
 - **Wrapping**: one yes or no per layer, the same at free ends and at opening sides. Only a shell layer may wrap; a wrapping layer turns the corner and runs across the end of the core to its far face, and a layer that does not wrap stops flush.
 - **Edits** are pure and give a valid type or a refusal. A layer inserted at a boundary goes into the shell beside it; a moved layer takes the zone of the place it lands in; removing a layer closes the boundaries round it.
 - **Stored**: the layers and core as canonical JSON in the type's system block (owner `wall`) in construct-types; the location line and the flip are instance parameters `wall.location-line` and `wall.flipped`, so changing a wall's type keeps both and the chosen line stays on the reference line.
+- **Only the wall commands make and change them** (main's ruling, as for floors in [CON-A4-F4-P1](CON-A4-F4-P1-floor-from-boundary.md)): `element.create` of a layered wall, `element.set` of a layered wall's recipe or of a recipe that would make one, `type.create` of a walls type, and `type.rename`, `type.duplicate` and `type.delete` of a wall type holding its layers are refused, naming the wall command, so every layered wall and wall type is checked as one. A straight wall, and a walls type without layers that only a document made before this rule holds (the wall commands refuse it), stay the generic commands'.
 
 ## Why
 

@@ -148,6 +148,25 @@ pub struct Display {
     pub mesh: Mesh,
     /// The shape's outline seen from above, as the plan draws it.
     pub outline: Vec<[i64; 2]>,
+    /// The solids a shape is made of, when it is made of more than one (a layered wall's layers):
+    /// which of `mesh`'s triangles each is, what it is made of and does, and its own outline. Empty
+    /// for a shape of one solid, and then not written, so a record written before parts reads and
+    /// writes the same bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<Part>,
+}
+
+/// One solid of a shape made of several, as a [`Display`] draws it: a layer of a wall.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Part {
+    /// What it is made of: a material's ID (construct-materials).
+    pub material: String,
+    /// What it does: a layer's function, such as `structure` or `finish` (construct-walls).
+    pub function: String,
+    /// Its triangles in the display's mesh: the first, counted in triangles, and how many.
+    pub triangles: [u32; 2],
+    /// Its outline seen from above, as the plan draws it.
+    pub outline: Vec<[i64; 2]>,
 }
 
 impl Display {
@@ -343,5 +362,44 @@ mod tests {
                 ..plain()
             }
         );
+    }
+
+    /// A display of one solid writes no parts, so its bytes are those written before parts; a
+    /// display of several lists each, and reads back as written.
+    #[test]
+    fn a_display_lists_its_parts_only_when_it_has_several() {
+        let one = Display {
+            lod: 0,
+            deviation: 0,
+            mesh: Mesh {
+                positions: vec![0, 0, 0],
+                indices: vec![],
+            },
+            outline: vec![[0, 0]],
+            parts: Vec::new(),
+        };
+        assert_eq!(
+            one.bytes(),
+            br#"{"lod":0,"deviation":0,"mesh":{"positions":[0,0,0],"indices":[]},"outline":[[0,0]]}"#
+        );
+        assert_eq!(
+            serde_json::from_slice::<Display>(&one.bytes()).unwrap(),
+            one
+        );
+        let layered = Display {
+            parts: vec![Part {
+                material: "concrete-regular".to_owned(),
+                function: "structure".to_owned(),
+                triangles: [0, 12],
+                outline: vec![[0, 0], [1, 0], [1, 1]],
+            }],
+            ..one.clone()
+        };
+        let bytes = layered.bytes();
+        assert!(String::from_utf8_lossy(&bytes).contains(
+            r#""parts":[{"material":"concrete-regular","function":"structure","triangles":[0,12]"#
+        ));
+        assert_eq!(serde_json::from_slice::<Display>(&bytes).unwrap(), layered);
+        assert_ne!(layered.id(), one.id());
     }
 }

@@ -328,6 +328,40 @@ pub fn a_recipe_that_cant_build_says_why<E: Engine + Send + 'static>(make: impl 
     assert_eq!(k.build(&huge).unwrap_err().code, "TooBig");
 }
 
+/// A grid line and a reference plane are datums, with no solid: the kernel's builder hands them to
+/// the one datum builder, so each is built the same as by the stand-in, bytes included, and an
+/// engine is never asked for one.
+pub fn a_datum_is_built_as_the_stand_in_builds_it<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let stand_in = construct_regen::geometry();
+    let text = |x: &str| json!(format!("length:q0:{x}"));
+    for datum in [
+        recipe(
+            "grid.line",
+            json!({ "x0": text("0"), "y0": text("0"), "x1": text("38400000"), "y1": text("0") }),
+        ),
+        recipe(
+            "grid.arc",
+            json!({ "cx": text("0"), "cy": text("0"), "radius": text("6400000"),
+                    "from": "angle:0", "to": "angle:810000000" }),
+        ),
+        recipe("refplane.horizontal", json!({ "z": text("-1920000") })),
+    ] {
+        let here = k
+            .build(&datum)
+            .unwrap_or_else(|e| panic!("{}: {e}", datum.op));
+        let there = stand_in.build(&datum).unwrap();
+        assert_eq!(here, there, "{}", datum.op);
+        assert_eq!(here.body_id(), there.body_id());
+    }
+    // One that is not as written is a failure, with the same code from both.
+    let bad = recipe("grid.line", json!({ "x0": text("0") }));
+    assert_eq!(k.build(&bad).unwrap_err().code, "BadDatum");
+    assert_eq!(stand_in.build(&bad).unwrap_err().code, "BadDatum");
+}
+
 /// The persistent names of the faces door `D-1`'s opening makes in a straight wall, by role, under
 /// `NameScheme v1`: `Created { op: the wall's, role: tool(D-1), from: [the opening's own face] }`.
 /// Recorded: a reference to a reveal lands only while these stay, so a change here is a new name
@@ -847,4 +881,549 @@ pub fn the_engine_keeps_a_sliver_within_its_tolerance<E: Engine>(mut e: E) {
         6 * (l * t * h - w * t * head),
         "the sliver is kept exactly"
     );
+}
+
+/// A filled floor recipe (construct-slabs' `filled` form): `loops` of corners `(edge ID, x, y)` in
+/// whole millimetres, the outer loop anticlockwise and each hole clockwise, written in grid steps;
+/// and `layers` from the top down, `(function, thickness in mm)`, each of one material.
+pub fn floor_of(loops: &[&[(&str, i64, i64)]], layers: &[(&str, i64)]) -> Recipe {
+    let steps = |mm: i64| mm * 6400;
+    let loops: Vec<Value> = loops
+        .iter()
+        .map(|ring| {
+            Value::Array(
+                ring.iter()
+                    .map(|&(id, x, y)| json!({ "id": id, "at": [steps(x), steps(y)] }))
+                    .collect(),
+            )
+        })
+        .collect();
+    let layers: Vec<Value> = layers
+        .iter()
+        .map(|&(function, mm)| {
+            json!({ "function": function, "material": "concrete-regular", "thickness": steps(mm) })
+        })
+        .collect();
+    recipe("floor", json!({ "loops": loops, "layers": layers }))
+}
+
+/// A 4 m by 3 m rectangle, its edges `e0` to `e3` anticlockwise from the origin.
+pub const RECTANGLE: [(&str, i64, i64); 4] = [
+    ("e0", 0, 0),
+    ("e1", 4000, 0),
+    ("e2", 4000, 3000),
+    ("e3", 0, 3000),
+];
+
+/// The L-shaped floor of construct-slabs' tests: 8 m along x by 4 m, and 4 m by 4 m more above
+/// its left half, 48 m2, its edges `e0` to `e5`.
+pub const L_OUTER: [(&str, i64, i64); 6] = [
+    ("e0", 0, 0),
+    ("e1", 8000, 0),
+    ("e2", 8000, 4000),
+    ("e3", 4000, 4000),
+    ("e4", 4000, 8000),
+    ("e5", 0, 8000),
+];
+
+/// Its 2 m square hole at (1 m, 1 m), clockwise as the builder takes it (construct-slabs'
+/// `Boundary::profile`), its edges `h0` to `h3` as drawn, so 44 m2 of floor in all.
+pub const L_HOLE: [(&str, i64, i64); 4] = [
+    ("h3", 1000, 1000),
+    ("h2", 1000, 3000),
+    ("h1", 3000, 3000),
+    ("h0", 3000, 1000),
+];
+
+/// Six times the signed volume a mesh holds, in cubic millimetres, closed or not: the sum over
+/// its triangles, which adds up shell by shell.
+pub fn signed_six_volume(mesh: &Mesh) -> i128 {
+    let point = |i: u32| -> [i128; 3] {
+        let i = usize::try_from(i).unwrap() * 3;
+        [
+            i128::from(mesh.positions[i]),
+            i128::from(mesh.positions[i + 1]),
+            i128::from(mesh.positions[i + 2]),
+        ]
+    };
+    let mut six = 0_i128;
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let [p, q, r] = [point(t[0]), point(t[1]), point(t[2])];
+        let cross = [
+            q[1] * r[2] - q[2] * r[1],
+            q[2] * r[0] - q[0] * r[2],
+            q[0] * r[1] - q[1] * r[0],
+        ];
+        six += p[0] * cross[0] + p[1] * cross[1] + p[2] * cross[2];
+    }
+    six
+}
+
+/// The heights a mesh's points stand at, lowest first.
+fn heights(mesh: &Mesh) -> BTreeSet<i64> {
+    mesh.positions
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|p| p[2])
+        .collect()
+}
+
+/// A rectangle floor is its plan extruded from its bottom face up to its top at 0: one layer is
+/// one closed solid of its volume, its bounds the stand-in's box; its faces are named `top`,
+/// `bottom` and a side per edge, the same names however long its edges; two layers are two
+/// solids one under the other, `face.1` between them, the body listing each.
+pub fn a_rectangle_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let one = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let b = built(&k, &one);
+    assert_eq!(b.bounds.min, [0, 0, -200]);
+    assert_eq!(b.bounds.max, [4000, 3000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&one).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+    );
+    let (six, surface) = box_of([4000, 3000, 200]);
+    holds(&k, &b.displays[0].mesh, six, surface);
+    assert_eq!(b.displays[0].mesh, b.displays[1].mesh);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from(["top", "bottom", "side.e0", "side.e1", "side.e2", "side.e3"])
+    );
+    let wider = [
+        ("e0", 0, 0),
+        ("e1", 5000, 0),
+        ("e2", 5000, 3000),
+        ("e3", 0, 3000),
+    ];
+    assert_eq!(
+        by_role(&built(&k, &floor_of(&[&wider], &[("structure", 150)]))),
+        names,
+        "a floor keeps its faces' names when its edges and its thickness change"
+    );
+    let wall = by_role(&built(&k, &wall(4000, "x")));
+    assert!(names.values().all(|n| !wall.values().any(|w| w == n)));
+
+    let two = built(
+        &k,
+        &floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(two.bounds.min, [0, 0, -200]);
+    assert_eq!(
+        heights(&two.displays[0].mesh),
+        BTreeSet::from([-200, -50, 0])
+    );
+    assert_eq!(
+        signed_six_volume(&two.displays[0].mesh),
+        6 * 4000 * 3000 * 200
+    );
+    // Each layer is a part, top first, in its material: its own triangles of the mesh, between
+    // its faces, the outer loop seen from above.
+    let parts = &two.displays[0].parts;
+    let functions: Vec<&str> = parts.iter().map(|p| p.function.as_str()).collect();
+    assert_eq!(functions, ["finish", "structure"]);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    assert!(parts.iter().all(|p| p.outline == two.displays[0].outline));
+    let mesh = &two.displays[0].mesh;
+    let mut next = 0;
+    for (part, faces) in parts.iter().zip([[-50, 0], [-200, -50]]) {
+        let [first, count] = part.triangles;
+        assert_eq!(first, next, "{}", part.function);
+        next = first + count;
+        let from = usize::try_from(first).unwrap() * 3;
+        let to = usize::try_from(next).unwrap() * 3;
+        let at: BTreeSet<i64> = mesh.indices[from..to]
+            .iter()
+            .map(|&i| mesh.positions[usize::try_from(i).unwrap() * 3 + 2])
+            .collect();
+        assert_eq!(at, BTreeSet::from(faces), "{}", part.function);
+    }
+    assert_eq!(usize::try_from(next).unwrap() * 3, mesh.indices.len());
+    assert_eq!(two.displays[1].parts, *parts);
+    let names = by_role(&two);
+    assert!(
+        names.contains_key("face.1") && names.len() == 7,
+        "{names:?}"
+    );
+    let body: Value = serde_json::from_slice(&two.body).unwrap();
+    let layers = body["layers"].as_array().unwrap();
+    assert_eq!(layers.len(), 2);
+    assert_eq!(layers[0]["function"], "finish");
+    assert_eq!(layers[0]["by"], json!([0, 0, 50 * 6400]));
+    assert_eq!(layers[1]["extrude"][0], json!([0, 0, -200 * 6400]));
+    assert!(layers[0].get("holes").is_none());
+    let again = built(
+        &kernel(make()),
+        &floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(again.body_id(), two.body_id());
+    assert_eq!(again.displays[0].bytes(), two.displays[0].bytes());
+}
+
+/// The L-shaped floor with a hole, on an engine that extrudes a profile with holes: one layer is
+/// one closed solid of 44 m2 by its thickness, within the engine's tolerance, its outline the
+/// outer loop and its bounds the box around it; its sides are named by the edges of both loops;
+/// two layers hold the volume of both, `face.1` between them.
+pub fn an_l_shaped_floor_with_a_hole_is_its_layers<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let one = floor_of(&[&L_OUTER, &L_HOLE], &[("structure", 200)]);
+    let b = built(&k, &one);
+    assert_eq!(b.bounds.min, [0, 0, -200]);
+    assert_eq!(b.bounds.max, [8000, 8000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&one).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        L_OUTER.iter().map(|&(_, x, y)| [x, y]).collect::<Vec<_>>()
+    );
+    let area = 44_000_000_i128;
+    let perimeter = 40_000_i128;
+    holds(
+        &k,
+        &b.displays[0].mesh,
+        6 * area * 200,
+        2 * area + perimeter * 200,
+    );
+    let names = by_role(&b);
+    assert_eq!(names.len(), 2 + 6 + 4, "{names:?}");
+    for edge in ["e0", "e5", "h0", "h3"] {
+        assert!(names.contains_key(&format!("side.{edge}")), "{edge}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["holes"][0].as_array().unwrap().len(), 4);
+
+    let two = built(
+        &k,
+        &floor_of(&[&L_OUTER, &L_HOLE], &[("finish", 50), ("structure", 150)]),
+    );
+    assert_eq!(
+        heights(&two.displays[0].mesh),
+        BTreeSet::from([-200, -50, 0])
+    );
+    assert_eq!(signed_six_volume(&two.displays[0].mesh), 6 * area * 200);
+    assert!(by_role(&two).contains_key("face.1"));
+}
+
+/// The default partition's layers (construct-walls' `wall-partition-stud-90`), from the exterior:
+/// function, material and thickness in grid steps (12.5 mm, 90 mm, 12.5 mm; 115 mm in all).
+pub const PARTITION: [(&str, &str, i64); 3] = [
+    ("finish", "plasterboard-gypsum", 80_000),
+    ("structure", "timber-douglas-fir", 576_000),
+    ("finish", "plasterboard-gypsum", 80_000),
+];
+
+/// A stored length of `steps` grid steps, as a filled recipe holds it.
+pub fn q0(steps: i64) -> String {
+    construct_params::Value::Length(construct_params::Length::from_steps(steps)).stored()
+}
+
+/// A filled `wall.layered` recipe: its line from `start` to `end` and its height in whole
+/// millimetres, and `layers` (function, material, thickness in steps) laid out from the exterior
+/// face, centred on the line (the wall centreline as its location line).
+pub fn layered_wall(
+    start: [i64; 2],
+    end: [i64; 2],
+    height: i64,
+    layers: &[(&str, &str, i64)],
+) -> Recipe {
+    let total: i64 = layers.iter().map(|l| l.2).sum();
+    let mut face = total / 2;
+    let mut listed = Vec::new();
+    for &(function, material, thickness) in layers {
+        listed.push(json!({
+            "function": function, "material": material,
+            "exterior": q0(face), "interior": q0(face - thickness),
+        }));
+        face -= thickness;
+    }
+    let mm = |v: i64| q0(v * 6400);
+    recipe(
+        "wall.layered",
+        json!({
+            "start": [mm(start[0]), mm(start[1])],
+            "end": [mm(end[0]), mm(end[1])],
+            "height": mm(height),
+            "layers": listed,
+        }),
+    )
+}
+
+/// The default partition, 4000 mm long from the origin along x (or y), 2700 mm high.
+pub fn partition(axis: &str) -> Recipe {
+    let end = if axis == "y" { [0, 4000] } else { [4000, 0] };
+    layered_wall([0, 0], end, 2700, &PARTITION)
+}
+
+/// One part's triangles of a display, as a mesh of their own.
+pub fn part_mesh(display: &construct_model::geometry::Display, at: usize) -> Mesh {
+    let [first, count] = display.parts[at].triangles;
+    let (first, count) = (first as usize * 3, count as usize * 3);
+    Mesh {
+        positions: display.mesh.positions.clone(),
+        indices: display.mesh.indices[first..first + count].to_vec(),
+    }
+}
+
+/// A layered wall is one solid per layer: each layer's part of the finest display is a closed
+/// mesh holding its layer's box, its faces each the nearest millimetre (12.5 mm lies 0.5 mm from
+/// one, so the level strays by 1 mm), and the parts are listed from the exterior with their
+/// materials and functions. Along x the exterior is on the right, at y below zero; along y at x
+/// above zero. Its bounds are rounded outward, the stand-in's for the same recipe, and the body
+/// lists what each layer asked of the engine, exactly in steps. Its names are the six roles and
+/// the two faces between its layers, the same however long the wall is, and as
+/// `construct_regen::kernel::names` gives them without building.
+pub fn a_layered_wall_is_one_solid_per_layer<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let stand_in = construct_regen::geometry();
+    for (axis, min, max) in [
+        ("x", [0, -58, 0], [4000, 58, 2700]),
+        ("y", [-58, 0, 0], [58, 4000, 2700]),
+    ] {
+        let wall = partition(axis);
+        let b = built(&k, &wall);
+        assert_eq!(b.bounds.min, min, "{axis}");
+        assert_eq!(b.bounds.max, max, "{axis}");
+        assert_eq!(b.bounds, stand_in.build(&wall).unwrap().bounds, "{axis}");
+        let fine = &b.displays[0];
+        assert_eq!(fine.deviation, 1, "{axis}: 12.5 mm is not on a millimetre");
+        assert_eq!(fine.parts.len(), 3);
+        let held: Vec<(&str, &str)> = fine
+            .parts
+            .iter()
+            .map(|p| (p.function.as_str(), p.material.as_str()))
+            .collect();
+        let layers: Vec<(&str, &str)> = PARTITION.iter().map(|l| (l.0, l.1)).collect();
+        assert_eq!(held, layers);
+        // The faces at 57.5 and 45 mm from the line, each to its nearest millimetre: 13, 90 and
+        // 13 mm thick.
+        for (at, thick) in [(0, 13), (1, 90), (2, 13)] {
+            let (whole, surface) = box_of([4000, thick, 2700]);
+            holds(&k, &part_mesh(fine, at), whole, surface);
+        }
+        let parts: u32 = fine.parts.iter().map(|p| p.triangles[1]).sum();
+        assert_eq!(
+            parts as usize * 3,
+            fine.mesh.indices.len(),
+            "every triangle is a layer's"
+        );
+        assert_eq!(
+            b.displays[1].mesh, fine.mesh,
+            "no openings: one mesh at both levels"
+        );
+        let body: Value = serde_json::from_slice(&b.body).unwrap();
+        let asked = body["layers"].as_array().unwrap();
+        assert_eq!(asked.len(), 3);
+        assert_eq!(asked[1]["material"], "timber-douglas-fir");
+        assert_eq!(asked[1]["by"], json!([0, 0, 2700 * 6400]));
+        assert!(body.get("subtract").is_none());
+        let named = by_role(&b);
+        let roles: Vec<&str> = named.keys().map(String::as_str).collect();
+        assert_eq!(
+            roles,
+            [
+                "base", "end0", "end1", "exterior", "face.1", "face.2", "interior", "top"
+            ]
+        );
+        assert_eq!(construct_regen::kernel::names(&wall).unwrap(), b.names);
+        let longer = layered_wall([0, 0], [6000, 0], 3000, &PARTITION);
+        assert_eq!(
+            by_role(&built(&k, &longer)),
+            named,
+            "names stay when it is lengthened"
+        );
+    }
+    // Along x the exterior plasterboard is the layer at y below zero.
+    let b = built(&k, &partition("x"));
+    let exterior = part_mesh(&b.displays[0], 0);
+    let ys: BTreeSet<i64> = exterior
+        .indices
+        .iter()
+        .map(|&i| exterior.positions[i as usize * 3 + 1])
+        .collect();
+    assert_eq!(ys, BTreeSet::from([-58, -45]));
+}
+
+/// A door hosted in a layered wall cuts its opening through every layer: each layer's part of the
+/// finest display is closed and holds its layer less the opening's width and height through its
+/// thickness; the coarse level is the wall before its openings, straying by half the opening's
+/// width and the rounding; the opening's faces are named by its door as in the old box; the body
+/// records its cutter once, by the door's key. Along x and along y.
+pub fn a_door_cuts_every_layer_of_a_layered_wall<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    for axis in ["x", "y"] {
+        let wall = partition(axis);
+        let plain = built(&k, &wall);
+        let door = door_of(900, 2100, axis);
+        // A door 300 mm thick from 150 mm outside the exterior face: the opening goes through the
+        // whole wall whatever the door's own thickness.
+        let place = if axis == "y" {
+            [-150, 1000, 0]
+        } else {
+            [1000, -150, 0]
+        };
+        let cut = hosting(&k, &wall, &[hosted("D-1", &door, at(&k, place))]);
+        assert_eq!(cut.bounds, plain.bounds, "{axis}");
+        let fine = &cut.displays[0];
+        assert_eq!(fine.parts.len(), 3);
+        for (at, thick) in [(0, 13), (1, 90), (2, 13)] {
+            let (whole, surface) = box_of([4000, thick, 2700]);
+            holds(
+                &k,
+                &part_mesh(fine, at),
+                whole - 6 * 900 * thick * 2100,
+                surface + 2 * thick * (2100 + 900),
+            );
+        }
+        assert_eq!(
+            cut.displays[1].mesh, plain.displays[1].mesh,
+            "{axis}: the coarse level"
+        );
+        assert_eq!(cut.displays[1].deviation, 450 + 1, "{axis}");
+        let named = by_role(&cut);
+        for role in [
+            "tool(D-1).jamb.start",
+            "tool(D-1).jamb.end",
+            "tool(D-1).head",
+        ] {
+            assert!(named.contains_key(role), "{axis}: {role}");
+        }
+        assert!(!named.contains_key("tool(D-1).sill"));
+        let body: Value = serde_json::from_slice(&cut.body).unwrap();
+        let keys: Vec<&str> = body["subtract"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["key"].as_str().unwrap())
+            .collect();
+        assert_eq!(keys, ["D-1"]);
+    }
+}
+
+/// A door is refused in a layered wall as in the old box, before the engine is asked, and
+/// `fits` says the same, word for word: an opening touching or crossing an end, as tall as the
+/// wall, two openings that overlap, an element that is not a door, one beside its wall. A wall at
+/// an angle hosts no door yet: a door is a box along an axis until doors are families.
+pub fn a_door_in_a_layered_wall_is_refused_as_in_the_box<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    type Case<'a> = (&'a str, &'a Recipe, Vec<Hosted<'a>>, &'a str);
+    let k = kernel(make());
+    let wall = partition("x");
+    let door = door();
+    let full = door_of(900, 2700, "x");
+    let block = block();
+    let mm = |x: i64, z: i64| at(&k, [x, -150, z]);
+    let one = |key, recipe, at| vec![hosted(key, recipe, at)];
+    let angled = layered_wall([0, 0], [2400, 3200], 2700, &PARTITION);
+    let cases: Vec<Case<'_>> = vec![
+        (
+            "touching end0",
+            &wall,
+            one("D-1", &door, mm(0, 0)),
+            "OpeningAtEnd",
+        ),
+        (
+            "crossing end1",
+            &wall,
+            one("D-1", &door, mm(3500, 0)),
+            "OpeningPastEnd",
+        ),
+        (
+            "as tall as the wall",
+            &wall,
+            one("D-1", &full, mm(1000, 0)),
+            "OpeningTooTall",
+        ),
+        (
+            "overlapping",
+            &wall,
+            vec![
+                hosted("D-2", &door, mm(1500, 0)),
+                hosted("D-1", &door, mm(1000, 0)),
+            ],
+            "OpeningsOverlap",
+        ),
+        (
+            "a block hosted",
+            &wall,
+            one("B-1", &block, mm(1000, 0)),
+            "NotAnOpening",
+        ),
+        (
+            "beside its wall",
+            &wall,
+            one("D-1", &door, at(&k, [1000, 500, 0])),
+            "OpeningNotInWall",
+        ),
+        (
+            "at an angle",
+            &angled,
+            one("D-1", &door, mm(1000, 0)),
+            "NotAHost",
+        ),
+    ];
+    let edition = k.edition();
+    for (case, host, doors, code) in &cases {
+        let error = k.build_hosting(host, doors).expect_err(case);
+        assert_eq!(&error.code, code, "{case}: {}", error.message);
+        assert!(
+            error.message.starts_with("door "),
+            "{case}: {}",
+            error.message
+        );
+        let placed: Vec<construct_model::geometry::Hosted<'_>> = doors
+            .iter()
+            .map(|h| construct_model::geometry::Hosted {
+                key: h.key,
+                recipe: h.recipe,
+                at: construct_model::element::Placement {
+                    x: k.units().millimetres(h.at.x.get()).unwrap(),
+                    y: k.units().millimetres(h.at.y.get()).unwrap(),
+                    z: k.units().millimetres(h.at.z.get()).unwrap(),
+                },
+            })
+            .collect();
+        let said = construct_regen::kernel::fits(&edition, host, &placed).expect_err(case);
+        assert_eq!(said, error, "{case}: fits says what building says");
+    }
+}
+
+/// A layered wall at an angle: each layer is the parallelogram the plan gives
+/// (`construct_regen::wall_plan::Plan::strip`), asked of the engine exactly, corner for corner;
+/// its display is each corner's nearest millimetre, each layer's part closed, and its bounds hold
+/// every corner, rounded outward. A 3-4-5 wall's faces fall on whole steps.
+pub fn a_layered_wall_at_an_angle_is_its_strips_extruded<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let wall = layered_wall([0, 0], [2400, 3200], 2700, &PARTITION);
+    let b = built(&k, &wall);
+    let plan = construct_regen::wall_plan::Layered::of(&wall).unwrap();
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let asked = body["layers"].as_array().unwrap();
+    assert_eq!(asked.len(), plan.layers.len());
+    for (layer, asked) in plan.layers.iter().zip(asked) {
+        let (corners, _) = plan.plan.strip(layer.exterior, layer.interior).unwrap();
+        let expected: Vec<[i64; 3]> = corners.iter().map(|&[x, y]| [x, y, 0]).collect();
+        assert_eq!(asked["extrude"], json!(expected));
+    }
+    // The exterior face is 57.5 mm to the right of (3, 4) / 5: (46, -34.5) mm from the line.
+    assert_eq!(b.bounds.min, [-46, -35, 0]);
+    assert_eq!(b.bounds.max, [2446, 3235, 2700]);
+    assert_eq!(b.displays[0].parts.len(), 3);
+    assert_eq!(b.displays[0].deviation, 1);
+    for at in 0..3 {
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert!(six > 0, "layer {at} holds a volume");
+    }
 }

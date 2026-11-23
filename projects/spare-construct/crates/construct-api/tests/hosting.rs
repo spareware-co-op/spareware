@@ -20,7 +20,7 @@
     reason = "test code; the rules are for the crate's own code"
 )]
 
-use construct_api::cloud::{Access, ProjectCommands};
+use construct_api::cloud::{Access, ProjectCommands, walls};
 use construct_model::element::Element;
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
 use construct_model::keys::Place;
@@ -682,4 +682,58 @@ async fn on_the_stand_in_a_wall_with_doors_is_the_wall_alone() {
     assert_eq!(body.as_str(), alone.body_id());
     let row = stack.built("D-2").await;
     assert_eq!(row.cells, [(0, 0)]);
+}
+
+/// A layered wall along x from 0 to 4000 mm in its own frame, at x 1000 and y 2000 of level 1,
+/// 2700 mm high, its layers (12.5, 90 and 12.5 mm) listed as a filled recipe lists them, its
+/// exterior face 57.5 mm to the right of its line.
+/// A layered wall `id` of the default partition, 4 m along x from (1000, 2000), 2.7 m high on
+/// level 1, drawn as a person draws one (`wall.draw`, after the partition's `wall.type.create`):
+/// the generic `element.create` does not make a layered wall.
+async fn a_layered_wall(stack: &Stack, id: &str) {
+    let partition = walls::default_type_args().unwrap().remove(0);
+    let ty = partition["type"].clone();
+    stack.edit("wall.type.create", partition).await.unwrap();
+    let draw = json!({ "element": id, "type": ty, "start": ["1000 mm", "2000 mm"],
+                       "end": ["5000 mm", "2000 mm"], "level": 1, "height": "2700 mm" });
+    stack.edit("wall.draw", draw).await.unwrap();
+}
+
+/// A layered wall hosts as the box does: a door placed on its exterior sits flush with that side,
+/// to the nearest millimetre (57.5 mm from the line), along it from its start, and the wall is
+/// built with it; one that would cross its end is refused in the kernel builder's words; moved
+/// along it, it is built where it now is.
+#[tokio::test]
+async fn a_door_is_placed_on_a_layered_wall() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    stack
+        .edit("hosted.place", place("D-1", "W-1", "exterior", "1200 mm"))
+        .await
+        .unwrap();
+    let (_, door) = stack.record("D-1").await.unwrap();
+    assert_eq!(
+        [door.placement.x, door.placement.y, door.placement.z],
+        [2200, 1943, 0]
+    );
+    assert_eq!(
+        stack.cuts("W-1").await,
+        [("D-1".to_owned(), [2200, 1943, 0], 900)]
+    );
+    let refused = stack
+        .edit("hosted.place", place("D-2", "W-1", "interior", "3500 mm"))
+        .await
+        .unwrap_err();
+    assert_eq!(refused, "door D-2: it crosses the wall's end");
+    stack
+        .edit(
+            "hosted.move",
+            json!({ "element": "D-1", "along": "2000 mm" }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        stack.cuts("W-1").await,
+        [("D-1".to_owned(), [3000, 1943, 0], 900)]
+    );
 }
