@@ -17,6 +17,8 @@
 //! - [`Tie`], [`base_of`], [`top_of`], [`write_base`], [`write_top`]: how an element names the
 //!   level it stands on and, for a wall, the level its top is tied to, each with an offset, in
 //!   its record's `props`.
+//! - [`RANGE_TIES`], [`range_tied_to`]: the ties of a plan view's range, which [`tied_to`] counts
+//!   with the base and the top, so a level a view stands on is not deleted.
 //! - [`height_of`]: the one function that says how high something tied to a level sits;
 //!   [`span`]: the height between two ties, through it.
 //! - [`implied_id`], [`implied`]: the level an old record's integer `level` names. A document

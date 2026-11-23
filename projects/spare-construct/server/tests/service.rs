@@ -1097,7 +1097,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         ]
     );
     assert_eq!(level_2.seen, ["W-101", "W-102", "W-103", "W-104", "W-105"]);
-    assert!(level_2.beyond.is_empty());
+    assert_eq!(level_2.beyond, Vec::<String>::new());
 
     // A range moved through the log changes what is shown, and the views are read again: a
     // bottom at 200 mm over Level 2 is above Level 1's wall tops, so those are now beyond it.
@@ -1113,7 +1113,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
     .unwrap();
     let level_2 = s.view(&anna, &project, &model, &i("VP-2")).await.unwrap();
     assert_eq!(level_2.cut.len(), 9);
-    assert!(level_2.seen.is_empty());
+    assert_eq!(level_2.seen, Vec::<String>::new());
     assert_eq!(
         level_2.beyond,
         ["W-101", "W-102", "W-103", "W-104", "W-105"]
