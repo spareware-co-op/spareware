@@ -140,6 +140,11 @@ pub fn routes(app: Shared) -> Router {
         )
         .route("/api/projects/{project}/models/{model}/types", get(types))
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
+        .route("/api/projects/{project}/models/{model}/views", get(views))
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}",
+            get(view),
+        )
         .route(
             "/api/projects/{project}/models/{model}/links",
             get(links).post(add_link),
@@ -524,6 +529,30 @@ async fn levels(
     Ok(Json(
         app.service
             .levels(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn views(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .views(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn view(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .view(&person, &id(&project)?, &id(&model)?, &id(&view)?)
             .await?,
     ))
 }

@@ -106,7 +106,9 @@ async fn every_log_replays_after_the_seed() {
     let check = verify_log(&mut snapshot, &Scope::Project(i("example-1")))
         .await
         .unwrap();
-    assert_eq!(check.pieces, 31);
+    // The arch model's 17 elements, the interiors' 4 and the setout's 10, and a floor plan for each
+    // of the two levels in each of those three models: 31 + 6.
+    assert_eq!(check.pieces, 37);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -490,6 +492,8 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
             .map(|l| (l.id, l.name, l.shown, l.implied, l.tied))
             .collect::<Vec<_>>()
     };
+    // Level 1 holds 5 walls and 3 doors and the floor plan of it: 9. Level 2 holds 5 walls, 4 doors
+    // and its floor plan: 10.
     let seeded = listed(s.levels(&anna, &project, &model).await.unwrap());
     assert_eq!(
         seeded,
@@ -499,14 +503,14 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
                 "Level 1".to_owned(),
                 "0 mm".to_owned(),
                 true,
-                8
+                9
             ),
             (
                 "2".to_owned(),
                 "Level 2".to_owned(),
                 "3000 mm".to_owned(),
                 true,
-                9
+                10
             ),
         ]
     );
@@ -529,7 +533,7 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
                 "First floor".to_owned(),
                 "3000 mm".to_owned(),
                 false,
-                9
+                10
             ),
             (
                 "L-roof".to_owned(),
@@ -575,7 +579,7 @@ async fn the_page_lists_levels_and_a_plan_is_at_a_level_by_its_id() {
         .unwrap_err();
     assert_eq!(
         refused_delete.to_string(),
-        "Level 1 can't be deleted: 8 elements are tied to it."
+        "Level 1 can't be deleted: 9 elements are tied to it."
     );
 }
 
@@ -594,11 +598,11 @@ async fn undo_and_redo_go_through_the_log_and_are_each_persons_own() {
     );
     let start = placed(s, &project, &model, "W-101").await;
 
-    // Ben has made no change to this model, so he has nothing to undo; Anna's last is the seed's.
+    // Ben has made no change to this model, so he has nothing to undo; Anna's last is the seed's, the floor plan of Level 2.
     let state = s.undo(&ben, &project, &model).await.unwrap();
     assert_eq!((state.undo, state.redo), (None, None));
     let state = s.undo(&anna, &project, &model).await.unwrap();
-    assert_eq!(state.undo.unwrap().cmd, "element.create");
+    assert_eq!(state.undo.unwrap().cmd, "view.create");
 
     let seq = s
         .edit(
@@ -1039,4 +1043,93 @@ async fn every_stored_shape_matches_its_recipe_after_the_seed() {
         construct_regen::geometry(),
     );
     assert_eq!(regen.verify(&i("example-1")).await.unwrap(), 31);
+}
+
+/// The page's views: the seed made one floor plan for each level of a model, and a view shows what
+/// construct-views says over the stored shapes: what its cut plane crosses is cut, what lies below
+/// is seen. Both are read behind the same access as the levels.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_views_and_what_a_plan_shows() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+
+    let listed = s.views(&anna, &project, &model).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&listed).unwrap(),
+        json!([
+            { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
+              "level_name": "Level 1", "scale": 100, "detail": "medium" },
+            { "id": "VP-2", "name": "Level 2 plan", "kind": "floor_plan", "level": "2",
+              "level_name": "Level 2", "scale": 100, "detail": "medium" },
+        ])
+    );
+    // Each model has the plans of its own levels: the riverside model stands on one.
+    let riverside = s
+        .views(&i("cara"), &i("riverside"), &i("riverside-model"))
+        .await
+        .unwrap();
+    assert_eq!(riverside.len(), 1);
+    assert_eq!(riverside[0].name, "Level 1 plan");
+    assert!(refused(s.views(&dan, &project, &model).await));
+
+    // Level 1 stands at 0 and Level 2 at 3000 mm, and a plan's cut plane is 1200 mm above its
+    // level: Level 1's plan cuts the five walls and three doors there and sees nothing above its
+    // top at 2300 mm; Level 2's cuts its five walls and four doors and sees Level 1's five walls,
+    // whose tops (3000 mm) are not below its bottom. Level 1's doors are 2100 mm high, below its
+    // view depth (2500 mm), so it does not show them.
+    let level_1 = s.view(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&level_1).unwrap(),
+        json!({
+            "view": { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
+                      "level_name": "Level 1", "scale": 100, "detail": "medium" },
+            "cut": ["D-101", "D-102", "D-103", "W-101", "W-102", "W-103", "W-104", "W-105"],
+            "seen": [],
+            "beyond": [],
+        })
+    );
+    let level_2 = s.view(&anna, &project, &model, &i("VP-2")).await.unwrap();
+    assert_eq!(
+        level_2.cut,
+        [
+            "D-104", "D-201", "D-202", "D-203", "W-201", "W-202", "W-203", "W-204", "W-205"
+        ]
+    );
+    assert_eq!(level_2.seen, ["W-101", "W-102", "W-103", "W-104", "W-105"]);
+    assert!(level_2.beyond.is_empty());
+
+    // A range moved through the log changes what is shown, and the views are read again: a
+    // bottom at 200 mm over Level 2 is above Level 1's wall tops, so those are now beyond it.
+    let range = json!({ "bottom": { "offset": "200" } });
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.set",
+        json!({ "view": "VP-2", "range": range }),
+    )
+    .await
+    .unwrap();
+    let level_2 = s.view(&anna, &project, &model, &i("VP-2")).await.unwrap();
+    assert_eq!(level_2.cut.len(), 9);
+    assert!(level_2.seen.is_empty());
+    assert_eq!(
+        level_2.beyond,
+        ["W-101", "W-102", "W-103", "W-104", "W-105"]
+    );
+
+    // A view that is not there, and a person who may not read the model.
+    let none = s.view(&anna, &project, &model, &i("VP-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    let wall = s.view(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(s.view(&dan, &project, &model, &i("VP-1")).await));
+
+    // The plans are views, not shapes: the model still publishes.
+    let item = s
+        .publish(&anna, &project, &i("arch"), &model)
+        .await
+        .unwrap();
+    assert_eq!(item.name, "Arch package v12");
 }

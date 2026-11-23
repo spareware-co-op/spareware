@@ -48,14 +48,14 @@ use crate::cloud::elements::write_record;
 use construct_categories::{CategoryTable, VIEWS};
 use construct_levels::{Level, Levels, parse_length};
 use construct_model::element::Element;
-use construct_model::geometry::Recipe;
-use construct_params::{Length, Units};
+use construct_model::geometry::{Bounds, Recipe};
+use construct_params::{Length, Units, Value};
 use construct_phases::{DesignOptions, ElementStaging, PhaseList, ViewSettings};
 use construct_regen::levels::read_levels;
 use construct_regen::parameters as records;
 use construct_views::{
-    CutLine, DetailLevel, Model, PlanSetup, Point, Scale, Side, Tie, VIEW_KIND, View, ViewKind,
-    ViewRange, Views,
+    CutLine, DetailLevel, Model, PlanSetup, Point, Scale, Side, Tie, VIEW_KIND, View, ViewElement,
+    ViewKind, ViewRange, Views, list,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -311,6 +311,107 @@ pub fn summaries(world: &World) -> Vec<ViewSummary> {
         .into_iter()
         .map(|view| summary(view, &world.levels))
         .collect()
+}
+
+/// What a view shows, as a page lists it: the IDs of the elements the view's cut plane or line
+/// crosses, the ones seen in it, and the ones seen below a plan's bottom, each sorted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ViewListing {
+    /// The view.
+    pub view: ViewSummary,
+    /// The elements cut.
+    pub cut: Vec<String>,
+    /// The elements seen.
+    pub seen: Vec<String>,
+    /// The elements of a plan seen below its bottom, to the view depth.
+    pub beyond: Vec<String>,
+}
+
+/// An element and the box its shape took, as regeneration keeps them.
+#[derive(Clone, Debug)]
+pub struct Shaped {
+    /// The element's record.
+    pub record: Element,
+    /// The box of its shape, whole millimetres, from the shape's own base.
+    pub bounds: Bounds,
+    /// How high its base sits above the project's zero, in construct-params' stored length text,
+    /// as the built row holds it: `None` on no level.
+    pub elevation: Option<String>,
+}
+
+/// The box lifted to where the element stands: the shape's own box with its base's elevation added
+/// to both heights, the low one rounded down and the high one up to whole millimetres, so the box
+/// still holds the shape.
+fn lifted(shaped: &Shaped) -> Result<Bounds, String> {
+    let mut bounds = shaped.bounds;
+    let Some(text) = &shaped.elevation else {
+        return Ok(bounds);
+    };
+    let Some(Value::Length(elevation)) = Value::from_stored(text) else {
+        return Err(format!("{}'s elevation {text:?} is not a length.", shaped.record.name));
+    };
+    let too_high = || format!("{} stands too high to be tested.", shaped.record.name);
+    let per = Length::STEPS_PER_MM;
+    let down = elevation.steps().div_euclid(per);
+    let up = if elevation.steps().rem_euclid(per) == 0 {
+        down
+    } else {
+        down.checked_add(1).ok_or_else(too_high)?
+    };
+    let [low, high] = [(bounds.min[2], down), (bounds.max[2], up)].map(|(at, by)| at.checked_add(by));
+    bounds.min[2] = low.ok_or_else(too_high)?;
+    bounds.max[2] = high.ok_or_else(too_high)?;
+    Ok(bounds)
+}
+
+/// What the view `id` shows of the elements given, each as its record, the box its shape took and
+/// the height of its base: construct-views' [`construct_views::list`]. An element of no known
+/// category is not drawn. `None` when the document has no such view.
+///
+/// Interim: elements carry no phase or design option in their records yet, so each is read as
+/// created in [`NEW_PHASE`], in no option, until the job that stores staging on every element
+/// replaces this one function ([`new_staging`]).
+///
+/// # Errors
+/// The crate's words for a view that does not stand in the document or a box it cannot test.
+pub fn listing_of(
+    world: &World,
+    id: &Id,
+    shaped: &[Shaped],
+) -> Result<Option<ViewListing>, String> {
+    let Some(view) = world.views.get(id) else {
+        return Ok(None);
+    };
+    let staging = new_staging(world)?;
+    let mut elements = Vec::new();
+    for one in shaped {
+        let record = &one.record;
+        let category = records::stored_category(record)
+            .or_else(|| records::category_of(&record.recipe).ok());
+        if let Some(category) = category {
+            elements.push(ViewElement {
+                id: record.id.clone(),
+                category,
+                bounds: lifted(one)?,
+                staging: staging.clone(),
+            });
+        }
+    }
+    let listing = list(view, &world.model(), &elements).map_err(|e| e.to_string())?;
+    let ids = |found: Vec<&Id>| found.into_iter().map(ToString::to_string).collect();
+    Ok(Some(ViewListing {
+        view: summary(view, &world.levels),
+        cut: ids(listing.cut()),
+        seen: ids(listing.seen()),
+        beyond: ids(listing.beyond()),
+    }))
+}
+
+/// The staging of what is made today: created in the new phase, in no design option.
+fn new_staging(world: &World) -> Result<ElementStaging, String> {
+    let created = Id::parse(NEW_PHASE).map_err(|e| e.to_string())?;
+    ElementStaging::new(&world.phases, &world.options, created, None, None)
+        .map_err(|e| e.to_string())
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
@@ -612,9 +713,7 @@ fn staging_of(args: &Args, world: &World) -> Result<ElementStaging, String> {
     if let Some(staging) = &args.staging {
         return Ok(staging.clone());
     }
-    let created = Id::parse(NEW_PHASE).map_err(|e| e.to_string())?;
-    ElementStaging::new(&world.phases, &world.options, created, None, None)
-        .map_err(|e| e.to_string())
+    new_staging(world)
 }
 
 /// The view a `view.create` asks for, before it is checked against the document.

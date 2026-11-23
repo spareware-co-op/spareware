@@ -11,6 +11,7 @@ use kit_accounts::sign_in::email_hash;
 use kit_core::Id;
 use kit_store::{FileStore, Kv, Reader, StoreError};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn id(text: &str) -> Id {
     // Every ID in this file is a constant, and valid.
@@ -316,6 +317,7 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
         ("cara", "riverside", "riverside-model", riverside),
         ("eve", "riverside-bridged", "landscape-model", planter),
     ] {
+        let levels = levels_of(&elements);
         for args in elements {
             service
                 .edit(
@@ -327,8 +329,24 @@ async fn elements<K: Kv, F: FileStore>(service: &Service<K, F>) -> Result<(), Re
                 )
                 .await?;
         }
+        // One floor plan for each level the model's elements stand on, with the commands' defaults.
+        for level in levels {
+            let args = json!({ "view": format!("VP-{level}"), "kind": "floor_plan",
+                               "name": format!("Level {level} plan"), "level": level.to_string() });
+            service
+                .edit(&id(person), &id(project), &id(model), "view.create", args)
+                .await?;
+        }
     }
     Ok(())
+}
+
+/// The levels a model's elements stand on, lowest first, each once.
+fn levels_of(elements: &[Value]) -> BTreeSet<i64> {
+    elements
+        .iter()
+        .filter_map(|element| element.get("level").and_then(Value::as_i64))
+        .collect()
 }
 
 /// The packages published, bridged and taken in, the links between models, and every project's
