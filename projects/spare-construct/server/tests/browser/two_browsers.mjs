@@ -1177,7 +1177,7 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
 }
 
 console.log('\n   Placed families');
-// Anna draws a wall of her own in clear ground south of the others, and puts a window of the
+// Anna draws a wall of her own in clear ground above the building, where the floor was, and puts a window of the
 // library on it from the family tool; Ben sees the window, and the wall cut for it where this run's
 // geometry cuts. Ben changes its type after Anna lets go of it, and Anna sees the new size. Anna
 // deletes it and undoes the delete; a position past the wall's end is refused in words under the
@@ -1188,8 +1188,8 @@ await anna.keyboard.press('Escape');
 await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
 await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
-const famWallFrom = await onPlan(anna, 6000, 10000);
-const famWallTo = await onPlan(anna, 11000, 10000);
+const famWallFrom = await onPlan(anna, 6500, -1200);
+const famWallTo = await onPlan(anna, 11000, -1200);
 await anna.mouse.click(famWallFrom.x, famWallFrom.y);
 await anna.mouse.click(famWallTo.x, famWallTo.y);
 const famWallOf = (known) =>
