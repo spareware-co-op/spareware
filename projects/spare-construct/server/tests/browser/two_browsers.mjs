@@ -296,6 +296,20 @@ if (process.env.STACK_GEOMETRY === 'kernel') {
 }
 
 console.log('\n   Parameters, through the edit log');
+// The seed made the Arch model's wall types as Anna, and that wrote its parameters record (the
+// walls' location line and flip). A claim lasts 30 s after a person's last edit, and nobody can let
+// go of a parameters record, so Ben waits until hers has run out, as a person told "Anna is working
+// on this" would, before he changes the record.
+for (let tries = 0; ; tries += 1) {
+  const left = await ben.evaluate(() =>
+    fetch('/api/projects/example-1/models/arch-model/claims')
+      .then((r) => r.json())
+      .then((claims) => (claims.parameters ? claims.parameters.until_ms - Date.now() : 0)),
+  );
+  if (left <= 0) break;
+  if (tries > 80) throw new Error("FAILED: Anna's claim on the parameters record never ran out");
+  await ben.waitForTimeout(Math.min(left + 100, 1000));
+}
 // No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
 await ben.evaluate(() => {
   const definition = { id: 'P-sill', name: 'Sill height', kind: 'length', holder: 'instance', choices: [] };
