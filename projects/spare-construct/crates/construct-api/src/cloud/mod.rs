@@ -22,6 +22,8 @@
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
+//! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
+//!   and worked out each time from the document.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -46,6 +48,7 @@ pub mod transaction;
 pub mod undo;
 pub mod views;
 pub mod walls;
+pub mod warnings;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;

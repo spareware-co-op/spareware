@@ -824,6 +824,24 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(cloud::rooms::read_rooms(&mut snapshot, project, model).await?)
     }
 
+    /// The problems a model holds now (a room not enclosed, two walls overlapping), worked out
+    /// from the document as it stands, never stored: by kind, then by the elements involved.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn warnings(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::warnings::WarningsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::warnings::read_warnings(&mut snapshot, project, model).await?)
+    }
+
     /// The recipe an element is built from now, each argument that reads a record filled (its
     /// parameters, its wall type's layers, its top tie), as the regenerator fills it
     /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an

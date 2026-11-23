@@ -2001,3 +2001,107 @@ async fn a_room_in_the_seeded_building_reports_its_state_and_measures() {
         .unwrap();
     assert_eq!(back.room.unwrap().area, Some(area));
 }
+
+/// The identities of a model's warnings now, in the order the server gives them.
+async fn warning_identities(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+) -> Vec<String> {
+    s.warnings(&i("anna"), project, model)
+        .await
+        .unwrap()
+        .warnings
+        .into_iter()
+        .map(|w| w.identity)
+        .collect()
+}
+
+/// The server's list of a model's problems is worked out from the document each time it is read:
+/// a person off the team cannot read it; a room whose wall is deleted is listed not enclosed, with
+/// its words, and is gone again when the wall is back (by undo); a wall drawn far away leaves it
+/// as it was; a second wall drawn along the first is listed as an overlap, both walls named, and
+/// leaves when it is deleted; the same list comes back for the same document.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    assert!(refused(s.warnings(&dan, &project, &model).await));
+    let edit = |cmd: &'static str, args: Value| {
+        let (s, anna, project, model) = (s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let base = warning_identities(s, &project, &model).await;
+    assert!(
+        base.iter().all(|w| !w.starts_with("room.")),
+        "the seeded building has no rooms: {base:?}"
+    );
+    edit(
+        "room.place",
+        json!({ "element": "R-900", "name": "Studio", "number": "101", "level": "1",
+                "at": ["3 m", "4 m"], "top": "2" }),
+    )
+    .await;
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+
+    edit("element.delete", json!({ "element": "W-103" })).await;
+    let open = s.warnings(&anna, &project, &model).await.unwrap();
+    let room: Vec<_> = open
+        .warnings
+        .iter()
+        .filter(|w| w.kind == "room.not_enclosed")
+        .collect();
+    assert_eq!(room.len(), 1, "{open:?}");
+    assert_eq!(room[0].identity, "room.not_enclosed|R-900");
+    assert_eq!(room[0].elements, ["R-900"]);
+    assert_eq!(room[0].severity, "warning");
+    assert_eq!(
+        room[0].words,
+        "Room 101 Studio is not enclosed: the walls round its point do not close"
+    );
+    let open_list = warning_identities(s, &project, &model).await;
+    assert_eq!(open_list.len(), base.len() + 1);
+
+    // An unrelated edit: two walls far away, one along the other.
+    for ty in wall_types() {
+        edit("wall.type.create", ty).await;
+    }
+    let draw = |element: &str, from: &str, to: &str| {
+        json!({ "element": element, "type": "wall-partition", "start": [from, "0"],
+                "end": [to, "0"], "level": "1", "top": "2" })
+    };
+    edit("wall.draw", draw("W-900", "50 m", "54 m")).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("wall.draw", draw("W-901", "52 m", "56 m")).await;
+    let both = warning_identities(s, &project, &model).await;
+    assert_eq!(both.len(), open_list.len() + 1);
+    assert!(both.contains(&"room.not_enclosed|R-900".to_owned()));
+    assert!(
+        both.contains(&"wall.overlap|W-900|W-901".to_owned()),
+        "{both:?}"
+    );
+    let mut sorted = both.clone();
+    sorted.sort();
+    assert_eq!(both, sorted, "by kind, then by elements");
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+
+    // The cause fixed: the second wall is deleted, then the first wall of the room comes back.
+    edit("element.delete", json!({ "element": "W-901" })).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+    edit("edit.redo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    // Undone step by step, the wall comes back last and the room is enclosed again.
+    for _ in 0..8 {
+        edit("edit.undo", json!({})).await;
+        if !warning_identities(s, &project, &model)
+            .await
+            .contains(&"room.not_enclosed|R-900".to_owned())
+        {
+            break;
+        }
+    }
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+}
