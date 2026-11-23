@@ -523,6 +523,7 @@ dependencies = [
  "construct-params",
  "construct-phases",
  "construct-regen",
+ "construct-roofs",
  "construct-slabs",
  "construct-transport",
  "construct-types",

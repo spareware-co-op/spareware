@@ -37,8 +37,9 @@
 //! Not here, each refused in words naming the job that brings it: hips, valleys, an uneven gable
 //! and a sloped roof on any footprint but a rectangle along the plan's axes (job 6.2, roof
 //! solving), an overhang on a flat footprint with an edge off the axes (job 6.2), and an opening
-//! through a roof (job 4.2). The commands that make roofs, the server's view of them and the
-//! page's roof tool are later jobs. Nothing here is interim.
+//! through a roof (job 4.2). The commands that make roofs are construct-api's
+//! `cloud::roofs`, the server's view of them reads this crate's quantities, and the page's roof
+//! tool is the app's. Nothing here is interim.
 
 pub mod defaults;
 pub mod error;
