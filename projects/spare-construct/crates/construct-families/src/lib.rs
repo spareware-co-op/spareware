@@ -18,6 +18,10 @@
 //!   [`ContentId`] (SHA-256 of those bytes) that names a recipe version.
 //! - [`family_type()`], [`parameters`], [`family_of`] and [`FamilyRef`]: a built-in type as a
 //!   construct-types type carrying a `@system.family` block that names the family and version.
+//! - [`evaluate`](mod@evaluate): a recipe and one type's values made into the family's solids
+//!   through the kernel's `Engine` interface ([`evaluate()`], [`Evaluator`] keeping each type it
+//!   builds by [`CacheKey`]), with refusals as [`EvalError`] values (CON-A7-F1-P2, first half;
+//!   FORMAT.md, "Evaluation").
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -33,25 +37,27 @@
 //! (lengths are construct-params' stored text, checked through it, or formulas); no clock, no
 //! random number, no hash-map order; nothing panics. Depends on kit-core, construct-params,
 //! construct-types, construct-categories, construct-materials, construct-formulas,
-//! construct-solver, `serde_json`, sha2 and hex. Nothing here is interim. Putting a recipe through
-//! the edit log and loading it into a project are later jobs (7.6).
+//! construct-solver, engine-geometry (the kernel's interface, for evaluation only), `serde_json`,
+//! sha2 and hex. Nothing here is interim. Putting a recipe through the edit log and loading it
+//! into a project are later jobs (7.6).
 //!
 //! Not built here, with its place kept:
-//! - Evaluation (job 4.4, this crate): a module `evaluate` will take a checked recipe and a
-//!   type's values, work out every formula with construct-formulas, solve each sketch with
-//!   construct-solver (each point, line, arc, circle and constraint maps one to one onto the
-//!   solver's own, its lengths the formulas' values in `construct_params::Length`), and build
-//!   each step's solid through engine-geometry's `Engine` only (`extrude` along the plane's
-//!   normal, `subtract`; `unite` needs a method the trait does not have yet), cached per type.
-//!   Nothing in the format needs to change for it.
+//! - The second half of evaluation (job 5.5, module `evaluate`): constrained sketches solved
+//!   inside a recipe (the solver's sketch is already built there; `construct_solver::solve` takes
+//!   the place of the check as stored), type tables, and the limits in `evaluate::Limits`.
+//! - A hosted family's opening cut in its host (job 6.4).
 
 pub mod check;
+pub mod evaluate;
 pub mod family_type;
 pub mod model;
 pub mod read;
 pub mod write;
 
 pub use check::{Library, Problem, ProblemKind, Sort};
+pub use evaluate::{
+    Built, CacheKey, EvalError, Evaluated, Evaluator, Limits, Place, Reason, TypeValues, evaluate,
+};
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
 pub use model::{
     Base, BuiltInType, Condition, Constraint, DefinitionRow, FORMAT_VERSION, Hosting, Key,

@@ -138,6 +138,22 @@ Each built-in type becomes a construct-types type (version 2, with a system bloc
 {"version":1,"family":"01KAXF3M1Y0D00R5W1NG000001","recipe":"sha256:<64 hex digits>","type":"d820"}
 ```
 
+## Evaluation
+
+What a recipe gives when it is built for one type ([`src/evaluate.rs`](src/evaluate.rs), first half: CON-A7-F1-P2; the choices are in [the recipe evaluation note](../../notes/CON-A7-F1-P2-recipe-evaluation.md)). Nothing here changes the format: it is how the format already reads.
+
+1. **Values.** A type's values are stored text by parameter key. Each must be for a parameter that exists, that the type holds, and that has no formula, in its one stored spelling. Every other parameter reads its default. Every formula is then worked out over the lengths, angles, numbers and whole numbers; a formula that fails, or gives the wrong units, is refused at its parameter.
+2. **Sketches.** Only the sketches a step uses are read. Each becomes the sketch solver's own sketch: its points and radii as stored, every constraint length its formula's value. In this first half the sketch is not solved: its stored geometry must already meet every constraint at these values, within the model tolerance (0.01 mm), measured as the solver measures its own answers. A type whose values would move a sketch is refused, naming the first constraint not met. The single-swing door example is drawn for its 820 by 2040 mm type, so that type and any type changing only depths evaluate; its 720 and 920 mm types wait for solving (job 5.5).
+3. **Steps**, in the order written. A step a later step uses is not drawn on its own; every other step is one of the family's solids, with its subcategory, its material (fixed, or the material parameter's value) and its visibility.
+
+| `op` | What it builds |
+| --- | --- |
+| `extrude` | The profile less its holes, its corners where the sketch's points lie on the sketch's plane, swept along the plane's normal from the lower of `start` and `end` to the higher (written either way round; equal heights are refused). Heights are measured from the plane: a corner lies at the plane's `offset` plus the lower height |
+| `subtract` | The target less the tool. An extrusion used as a tool is a **void**: it cuts the one target its `subtract` names, and nothing else |
+| `unite` | The two as one solid |
+
+The result for a type is kept by its **cache key**: the recipe's content id, then every parameter without a formula in recipe order with its type value or default in stored text, then any other value given. The same recipe and the same values are built once; a changed value is a new key, so only that type is built again. A refusal names the step being built, the place (type, parameter, plane, sketch, sketch item, constraint or step) and the reason.
+
 ## Versions
 
 A later format is `format` 2 with its own schema file beside this one; format 1 is read for ever. What counts as a breaking change, and what does not, is in [the recipe format note](../../notes/CON-A7-F1-P1-recipe-format.md).
