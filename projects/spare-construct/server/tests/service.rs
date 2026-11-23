@@ -1683,3 +1683,132 @@ async fn a_server_without_a_drawer_says_it_cannot_draw_plans() {
         "This server was built without the geometry kernel, so it cannot draw plans."
     );
 }
+
+/// Through the server's commands on the stand-in: the default roof types made, a gable roof over a
+/// rectangle drawn on level 1 of the steel type, built as the box around its eaves; its parameters
+/// view lists its area, slope area, pitch, ridge height, thickness, volume and mass, and each
+/// layer's volume and mass, in units and read-only; its pitch changed, then undone, changes them;
+/// a person off the team can't draw one; a flat roof the form's change makes has no pitch to
+/// list; and it is deleted by its own command.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roof_drawn_by_command_shows_its_quantities_in_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    // The page's roof tool reads the roof types: none until it sends the defaults.
+    let none = s.roof_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert!(none.materials.iter().any(|m| m.id == "concrete-regular"));
+    assert!(refused(s.roof_types(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "roof.defaults", json!({}))
+        .await
+        .unwrap();
+    let types = s.roof_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["roof-concrete-200-insulated", "roof-steel-rafter-150"]
+    );
+    let steel = types
+        .types
+        .iter()
+        .find(|t| t.id == "roof-steel-rafter-150")
+        .unwrap();
+    assert_eq!(steel.layers.as_array().map(Vec::len), Some(3));
+    let roof = json!({ "element": "R-900", "type": "roof-concrete-200-insulated",
+                       "level": "1", "form": "gable", "pitch": "1:4",
+                       "footprint": { "outer": [corner("r0", 60_000, 0), corner("r1", 68_000, 0),
+                                                corner("r2", 68_000, 6000),
+                                                corner("r3", 60_000, 6000)] } });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "roof.create", roof.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "roof.create", roof)
+        .await
+        .unwrap();
+    let view = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("R-900"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(view["category"], json!({ "id": 600, "name": "Roofs" }));
+
+    let read = quantities(s, &project, &model, "R-900").await;
+    let ids: Vec<&str> = read.keys().map(String::as_str).collect();
+    assert_eq!(
+        ids,
+        [
+            "roof.area",
+            "roof.layer-1.mass",
+            "roof.layer-1.volume",
+            "roof.layer-2.mass",
+            "roof.layer-2.volume",
+            "roof.mass",
+            "roof.pitch",
+            "roof.ridge-height",
+            "roof.slope-area",
+            "roof.thickness",
+            "roof.volume"
+        ]
+    );
+    assert_eq!(read["roof.area"].1.as_deref(), Some("48.00 m²"));
+    assert_eq!(read["roof.ridge-height"].1.as_deref(), Some("1059 mm"));
+    assert_eq!(read["roof.thickness"].1.as_deref(), Some("300 mm"));
+    assert!(
+        read["roof.mass"].0.is_some(),
+        "both materials are in the library"
+    );
+    let flatter = read["roof.slope-area"].1.clone();
+
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "roof.pitch",
+        json!({ "element": "R-900", "pitch": "1:2" }),
+    )
+    .await
+    .unwrap();
+    let steeper = quantities(s, &project, &model, "R-900").await;
+    assert_eq!(
+        steeper["roof.area"], read["roof.area"],
+        "the plan does not change"
+    );
+    assert_ne!(steeper["roof.ridge-height"], read["roof.ridge-height"]);
+    assert_ne!(steeper["roof.slope-area"].1, flatter);
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(quantities(s, &project, &model, "R-900").await, read);
+
+    // Flat: no pitch and no ridge to list.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "roof.form",
+        json!({ "element": "R-900", "form": "flat" }),
+    )
+    .await
+    .unwrap();
+    let flat = quantities(s, &project, &model, "R-900").await;
+    assert!(!flat.contains_key("roof.pitch") && !flat.contains_key("roof.ridge-height"));
+    assert_eq!(flat["roof.area"], read["roof.area"]);
+
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "roof.delete",
+        json!({ "element": "R-900" }),
+    )
+    .await
+    .unwrap();
+    assert!(
+        s.parameters(&anna, &project, &model, &i("R-900"))
+            .await
+            .is_err()
+    );
+}

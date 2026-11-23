@@ -35,6 +35,13 @@
 //! row listed before and lists now are built again too, one step deep: so drawing, moving,
 //! retyping or deleting a wall builds every wall it meets or met again, and the joints are the
 //! same however the log was reached.
+//!
+//! A placed family (`family.instance`, job 6.4) is hosted the same way and rides the same rows:
+//! it is seated in its wall ([`crate::hosting::seat`]: its place and its turn, read from the wall
+//! each time, never stored), both in its own build and in the wall's, so the solids it is built
+//! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
+//! it again with the wall; a change to its own record (its type, or the recipe version it names)
+//! builds its wall again; nothing else is.
 
 use crate::hosting::{self, Hosting};
 use crate::joins;
@@ -56,9 +63,8 @@ use std::sync::Arc;
 
 /// Entries taken in one transaction.
 const BATCH: u64 = 256;
-/// Rows cleared in one transaction by a rebuild.
-const CLEAR_BATCH: usize = 512;
-/// The most tries at reaching the end of a log others keep adding to.
+/// The most tries at reaching the end of a log others keep adding to, and at clearing a project's
+/// derived rows while another writer keeps changing them.
 const CATCH_UP_TRIES: usize = 8;
 /// The most cells one element may index under. One request must not be able to ask for millions.
 const MOST_CELLS: i64 = 4096;
@@ -131,30 +137,38 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
 
     /// Throws a project's derived rows away and makes them again from its log, which is only safe
     /// because nothing here is the truth. Files stay: they are named by their hash, so the same
-    /// bytes come back to the same place. An operator's tool, for a project nobody is editing.
+    /// bytes come back to the same place. An operator's tool, for a project nobody is editing;
+    /// a server's own regeneration may still run meanwhile (its checkpoints add to the log), and
+    /// the two settle as two servers do.
+    ///
+    /// The rows and the cursor go in one transaction that reads what it deletes. A server's pass
+    /// writes the same cursor, so the store lets only one of the two win: if the pass wins, the
+    /// clear finds a conflict and runs again on what the pass left; if the clear wins, the pass
+    /// finds a conflict and starts again from nothing. Cleared in parts, as this once was, a
+    /// conflict on a later part failed the rebuild, and a pass between two parts could leave a
+    /// cursor over rows a later part then deleted.
     ///
     /// # Errors
     ///
-    /// A [`StoreError`] when the store fails or holds a record it can't read.
+    /// A [`StoreError`] when the store fails or holds a record it can't read, or when another
+    /// writer kept changing the project through every try at clearing it.
     pub async fn rebuild(&self, project: &Id) -> Result<Pass, StoreError> {
-        let mut snapshot = self.kv.snapshot().await?;
-        let mut keys = vec![
-            Place::Regenerated {
-                project: project.clone(),
-            }
-            .key(),
-        ];
-        for table in list::derived(project) {
-            keys.extend(snapshot.scan(&table).await?.into_iter().map(|(key, _)| key));
-        }
-        for chunk in keys.chunks(CLEAR_BATCH) {
+        for _ in 0..CATCH_UP_TRIES {
             let mut txn = self.kv.begin().await?;
-            for key in chunk {
-                txn.delete(key.clone()).await?;
+            if let Err(e) = clear(&mut txn, project).await {
+                let _ = txn.rollback().await;
+                return Err(e);
             }
-            txn.commit().await?;
+            match txn.commit().await {
+                Ok(()) => return self.catch_up(project).await,
+                // Another writer changed a row this was clearing: clear what it left.
+                Err(StoreError::Conflict) => {}
+                Err(e) => return Err(e),
+            }
         }
-        self.catch_up(project).await
+        Err(StoreError::Unavailable(
+            "this project is being regenerated too often to clear".to_owned(),
+        ))
     }
 
     /// Builds each element's recipe again and compares it with what is stored, bytes included.
@@ -339,39 +353,27 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 
     /// One batch of the log, in one transaction. True when there's nothing more to do.
+    ///
+    /// The cursor is read in the transaction that moves it. The store sees a conflict only
+    /// between two writers of one key, so a cursor read beforehand, from a snapshot, could be
+    /// older than one another writer (a server, or a rebuild's clear) committed in between, and
+    /// this would write it back without a conflict: entries applied twice, or a cursor over rows
+    /// that had just been cleared.
     async fn step(&self, project: &Id, pass: &mut Pass) -> Result<bool, StoreError> {
-        let scope = Scope::Project(project.clone());
-        let cursor = Place::Regenerated {
-            project: project.clone(),
-        }
-        .key();
-        let mut snapshot = self.kv.snapshot().await?;
-        let through: u64 = read_row(&mut snapshot, &cursor).await?.unwrap_or(0);
-        pass.through = through;
-        let head: u64 = read_row(&mut snapshot, &scope.head()).await?.unwrap_or(0);
-        if through >= head {
-            return Ok(true);
-        }
-        let to = head.min(through.saturating_add(BATCH));
-        let entries = read_log(&mut snapshot, &scope, through, to).await?;
-
         let mut txn = self.kv.begin().await?;
         let mut built = Vec::new();
-        for entry in &entries {
-            for change in &entry.changes {
-                let result = self
-                    .regenerate_with_readers(&mut txn, project, &entry.target, change, &mut built)
-                    .await;
-                if let Err(e) = result {
-                    let _ = txn.rollback().await;
-                    return Err(e);
-                }
+        let moved = self.step_in(&mut txn, project, pass, &mut built).await;
+        let (to, head) = match moved {
+            Ok(Some(moved)) => moved,
+            Ok(None) => {
+                let _ = txn.rollback().await;
+                return Ok(true);
             }
-        }
-        if let Err(e) = txn.put(cursor, to_row(&to)?).await {
-            let _ = txn.rollback().await;
-            return Err(e);
-        }
+            Err(e) => {
+                let _ = txn.rollback().await;
+                return Err(e);
+            }
+        };
         match txn.commit().await {
             Ok(()) => {
                 pass.through = to;
@@ -388,6 +390,38 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             Err(StoreError::Conflict) => Ok(false),
             Err(e) => Err(e),
         }
+    }
+
+    /// Reads where regeneration stands and regenerates the next batch in `txn`, moving the cursor
+    /// on: how far it moved it, and the head it read. Nothing when the log is all regenerated.
+    async fn step_in(
+        &self,
+        txn: &mut K::Txn,
+        project: &Id,
+        pass: &mut Pass,
+        built: &mut Vec<(Id, Id, Option<Id>)>,
+    ) -> Result<Option<(u64, u64)>, StoreError> {
+        let scope = Scope::Project(project.clone());
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        }
+        .key();
+        let through: u64 = read_row(txn, &cursor).await?.unwrap_or(0);
+        pass.through = through;
+        let head: u64 = read_row(txn, &scope.head()).await?.unwrap_or(0);
+        if through >= head {
+            return Ok(None);
+        }
+        let to = head.min(through.saturating_add(BATCH));
+        let entries = read_log(txn, &scope, through, to).await?;
+        for entry in &entries {
+            for change in &entry.changes {
+                self.regenerate_with_readers(txn, project, &entry.target, change, built)
+                    .await?;
+            }
+        }
+        txn.put(cursor, to_row(&to)?).await?;
+        Ok(Some((to, head)))
     }
 
     /// Rebuilds the element a change names, and then what reads it: if it is a record with no
@@ -755,6 +789,24 @@ enum Fed {
     },
 }
 
+/// Deletes every derived row of a project, and its cursor, in `txn`, reading them there. Every
+/// pass writes the cursor, so a pass that commits before `txn` does makes `txn` conflict.
+async fn clear<T: Txn>(txn: &mut T, project: &Id) -> Result<(), StoreError> {
+    let mut keys = vec![
+        Place::Regenerated {
+            project: project.clone(),
+        }
+        .key(),
+    ];
+    for table in list::derived(project) {
+        keys.extend(txn.scan(&table).await?.into_iter().map(|(key, _)| key));
+    }
+    for key in keys {
+        txn.delete(key).await?;
+    }
+    Ok(())
+}
+
 /// IDs as a reads row lists them.
 fn ids(listed: &[String]) -> Result<Vec<Id>, StoreError> {
     listed.iter().map(|key| id(key)).collect()
@@ -831,7 +883,7 @@ async fn inputs<R: Reader>(
     hosted: &[String],
 ) -> Result<Inputs, StoreError> {
     let (recipe, placed) = input_of(reader, project, document, element).await?;
-    let (recipe, joins) = match recipe {
+    let (mut recipe, joins) = match recipe {
         Ok(recipe) if wall_plan::is_layered(&recipe) => {
             let elevation = placed.elevation.as_deref().and_then(stored_length);
             let at = At::Regenerated;
@@ -846,7 +898,17 @@ async fn inputs<R: Reader>(
             placement_of(reader, project, document, edition, element, own).await?,
             hosted_in(reader, project, document, edition, element, own, hosted).await?,
         ),
-        Err(_) => (Ok(element.placement), Ok(Vec::new())),
+        Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
+    };
+    // A placed family is built as it is seated in its wall: turned as it stands there.
+    let placement = match placement {
+        Ok((at, seated)) => {
+            if let Some(seated) = seated {
+                recipe = Ok(seated);
+            }
+            Ok(at)
+        }
+        Err(e) => Err(e),
     };
     Ok(Inputs {
         recipe,
@@ -883,7 +945,8 @@ async fn built_record<R: Reader>(
 }
 
 /// Where `element`, of the filled recipe `own`, sits: its own placement, or, hosted on a face,
-/// its host's placement and its offsets ([`hosting::at`]).
+/// its host's placement and its offsets ([`hosting::seat`]), with its recipe as seated there
+/// when that differs (a placed family's turn).
 async fn placement_of<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -891,10 +954,11 @@ async fn placement_of<R: Reader>(
     edition: &Edition,
     element: &Element,
     own: &Recipe,
-) -> Result<Result<Placement, GeometryError>, StoreError> {
+) -> Result<Result<(Placement, Option<Recipe>), GeometryError>, StoreError> {
+    let what = hosting::noun(own);
     let hosting = match hosting::read(element) {
         Ok(Some(hosting @ Hosting::OnFace { .. })) => hosting,
-        Ok(_) => return Ok(Ok(element.placement)),
+        Ok(_) => return Ok(Ok((element.placement, None))),
         Err(why) => {
             return Ok(Err(GeometryError {
                 code: "BadHost".to_owned(),
@@ -906,7 +970,7 @@ async fn placement_of<R: Reader>(
         return Ok(Err(GeometryError {
             code: "HostMissing".to_owned(),
             message: format!(
-                "door {}: its host {} is not in the model",
+                "{what} {}: its host {} is not in the model",
                 element.id,
                 hosting.host()
             ),
@@ -917,13 +981,20 @@ async fn placement_of<R: Reader>(
         Err(e) => {
             return Ok(Err(GeometryError {
                 code: e.code,
-                message: format!("door {}: its host {}: {}", element.id, host.name, e.message),
+                message: format!(
+                    "{what} {}: its host {}: {}",
+                    element.id, host.name, e.message
+                ),
             }));
         }
     };
     Ok(
-        hosting::at(edition, &host, &host_recipe, element, own, &hosting)
-            .and_then(|at| hosting::in_model(host.placement, at)),
+        hosting::seat(edition, &host, &host_recipe, element, own, &hosting).and_then(
+            |(at, seated)| {
+                let seated = (seated != *own).then_some(seated);
+                Ok((hosting::in_model(host.placement, at)?, seated))
+            },
+        ),
     )
 }
 
@@ -953,12 +1024,12 @@ async fn hosted_in<R: Reader>(
             Err(e) => {
                 return Ok(Err(GeometryError {
                     code: e.code,
-                    message: format!("door {key}: {}", e.message),
+                    message: format!("{} {key}: {}", hosting::noun(&record.recipe), e.message),
                 }));
             }
         };
-        match hosting::at(edition, host, own, &record, &recipe, &hosting) {
-            Ok(at) => found.push(HostedInput {
+        match hosting::seat(edition, host, own, &record, &recipe, &hosting) {
+            Ok((at, recipe)) => found.push(HostedInput {
                 key: key.clone(),
                 recipe,
                 at,

@@ -24,8 +24,14 @@
 //!   through the kernel's `Engine` interface, its sketches solved at the type's values
 //!   ([`evaluate()`], [`evaluate_within()`], [`Evaluator`] keeping each type it builds by
 //!   [`CacheKey`] and evaluating a recipe's named types one by one), within [`Limits`], with
-//!   refusals as [`EvalError`] values (CON-A7-F1-P2, P3 and P6; FORMAT.md, "Evaluation"); and
-//!   [`symbols()`], a recipe's 2D symbols drawn at one type's values.
+//!   refusals as [`EvalError`] values (CON-A7-F1-P2, P3 and P6; FORMAT.md, "Evaluation");
+//!   [`symbols()`], a recipe's 2D symbols drawn at one type's values; and, for a hosted family
+//!   (CON-A7-F3-P2, piece A64), [`opening()`], the opening it cuts in its host solved at a type's
+//!   values, [`evaluate_turned()`], its solids built turned by quarter turns ([`Turn`]) to stand
+//!   in a host along any axis way, and [`extents()`], the box each solid lies in, without an
+//!   engine. A placed instance holds its own values for the parameters each instance holds
+//!   ([`Recipe::instance_parameters`], [`Recipe::instance_value`], [`instance`], and
+//!   [`TypeValues::set_instance`]; job 7.1).
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -45,22 +51,26 @@
 //! sha2 and hex. Nothing here is interim. Putting a recipe through the edit log and loading it
 //! into a project are later jobs (7.6).
 //!
-//! Not built here, with its place kept: a hosted family's opening cut in its host (job 6.4).
+//! Not built here, with its place: cutting a hosted family's opening in its host, and placing its
+//! solids there, are construct-regen's (job 6.4, the element kind `family.instance`).
 
 pub mod check;
 pub mod evaluate;
 pub mod family_type;
+pub mod instance;
 pub mod model;
 pub mod read;
 pub mod write;
 
 pub use check::{Library, Problem, ProblemKind, Sort};
 pub use evaluate::{
-    Built, CacheKey, DrawnSymbol, DrawnSymbols, Edge, EvalError, Evaluated, Evaluator, Limit,
-    Limits, Place, Point2, Reason, TypeResult, TypeValues, Used, evaluate, evaluate_within,
+    Built, CacheKey, Depth, DrawnSymbol, DrawnSymbols, Edge, EvalError, Evaluated, Evaluator,
+    Extent, Host, Limit, Limits, Place, Point2, Reason, SolvedOpening, Turn, TypeResult,
+    TypeValues, Used, evaluate, evaluate_turned, evaluate_within, extents, opening, opening_within,
     symbols, symbols_within,
 };
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
+pub use instance::InstanceParameter;
 pub use model::{
     Base, BuiltInType, Condition, Constraint, DefinitionRow, FORMAT_VERSION, Hosting, Key,
     MaterialRef, NamedType, Opening, Operation, Parameter, ParameterValue, Plane, Recipe, Sketch,

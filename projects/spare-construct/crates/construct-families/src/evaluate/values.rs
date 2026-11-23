@@ -25,6 +25,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeValues {
     values: BTreeMap<Key, String>,
+    /// The values one placed instance holds, for the parameters each instance holds (piece A64,
+    /// job 7.1): a window's sill height, a door's swing.
+    instance: BTreeMap<Key, String>,
 }
 
 impl TypeValues {
@@ -104,18 +107,42 @@ impl TypeValues {
         self
     }
 
-    /// The value set for a parameter, if one is.
+    /// Sets the value one placed instance holds for a parameter each instance holds (its sill
+    /// height, its swing), in stored text, in place of any it had. Evaluation refuses it for a
+    /// parameter the type holds ([`Reason::HeldByType`]), as it refuses a type's value for one
+    /// each instance holds.
+    pub fn set_instance(&mut self, parameter: Key, stored: impl Into<String>) {
+        self.instance.insert(parameter, stored.into());
+    }
+
+    /// These values with one instance value more, in place of any it had.
+    #[must_use]
+    pub fn with_instance(mut self, parameter: Key, stored: impl Into<String>) -> Self {
+        self.set_instance(parameter, stored);
+        self
+    }
+
+    /// The value set for a parameter, if one is: the type's, else the instance's.
     #[must_use]
     pub fn get(&self, parameter: &str) -> Option<&str> {
         self.values
             .iter()
+            .chain(&self.instance)
             .find(|(key, _)| key.as_str() == parameter)
             .map(|(_, text)| text.as_str())
     }
 
-    /// Every value set, in key order.
+    /// Every value set, the type's in key order, then the instance's in key order.
     pub fn iter(&self) -> impl Iterator<Item = (&Key, &str)> {
-        self.values.iter().map(|(key, text)| (key, text.as_str()))
+        self.values
+            .iter()
+            .chain(&self.instance)
+            .map(|(key, text)| (key, text.as_str()))
+    }
+
+    /// The values the instance sets, in key order.
+    pub fn instance_values(&self) -> impl Iterator<Item = (&Key, &str)> {
+        self.instance.iter().map(|(key, text)| (key, text.as_str()))
     }
 }
 
@@ -200,6 +227,37 @@ fn settable(
         .map_err(Reason::BadValue)
 }
 
+/// Checks that an instance may set `key` to `text`: the parameter exists, each instance holds it,
+/// it is not worked out, and the text is one of its values in its one spelling.
+fn settable_by_instance(
+    recipe: &Recipe,
+    defs: &[(Key, Definition)],
+    key: &Key,
+    text: &str,
+) -> Result<(), Reason> {
+    let Some((row, def)) = recipe
+        .parameters
+        .iter()
+        .zip(defs)
+        .find(|(row, _)| row.key == *key)
+        .map(|(row, (_, def))| (row, def))
+    else {
+        return Err(Reason::Missing {
+            sort: Sort::Parameter,
+            key: key.as_str().to_owned(),
+        });
+    };
+    if def.holder() != Holder::Instance {
+        return Err(Reason::HeldByType);
+    }
+    if matches!(row.value, ParameterValue::Formula(_)) {
+        return Err(Reason::SetsFormula);
+    }
+    stored_value(def, text)
+        .map(|_| ())
+        .map_err(Reason::BadValue)
+}
+
 /// Works out every parameter of `recipe` for the type whose values are `given`, counting the
 /// formula text against `meter`.
 pub(crate) fn work_out(
@@ -208,8 +266,11 @@ pub(crate) fn work_out(
     meter: &mut Meter,
 ) -> Result<Worked, EvalError> {
     let defs = definitions(recipe)?;
-    for (key, text) in given.iter() {
+    for (key, text) in &given.values {
         settable(recipe, &defs, key, text).or_else(|reason| refuse(key, reason))?;
+    }
+    for (key, text) in &given.instance {
+        settable_by_instance(recipe, &defs, key, text).or_else(|reason| refuse(key, reason))?;
     }
     // Every parameter that is not worked out: the type's value, or its default.
     let mut stored: BTreeMap<&str, Value> = BTreeMap::new();

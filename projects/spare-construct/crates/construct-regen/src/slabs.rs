@@ -105,8 +105,8 @@ pub fn read_only_view(
     )
 }
 
-/// One read-only parameter as a page shows it.
-fn shown(def: &Definition, value: Option<Value>, units: &Units) -> ParameterView {
+/// One read-only parameter as a page shows it: a floor's, and a roof's ([`crate::roofs`]).
+pub(crate) fn shown(def: &Definition, value: Option<Value>, units: &Units) -> ParameterView {
     ParameterView {
         id: def.id().to_string(),
         name: def.name().to_owned(),

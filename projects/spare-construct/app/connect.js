@@ -215,6 +215,8 @@
       { stack: [planButton('l1'), planButton('l2'), { label: 'Default 3D', icon: 'cube', act: 'go', a: '3d', pressed: S.screen === '3d' }] },
     ]);
     floorRibbon(config); // the floor tool beside the wall tool
+    roofRibbon(config); // and the roof tool beside the floor tool
+    familyRibbon(config); // the family tool beside the door tool
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -246,7 +248,7 @@
 
     const piece = C.elements.get(S.sel);
     if (piece && !C.readOnly && S.screen === 'plan') {
-      const kind = piece.el.kind === 'wall' ? 'Walls' : piece.el.kind === 'door' ? 'Doors' : 'Element';
+      const kind = piece.el.kind === 'wall' ? 'Walls' : piece.el.kind === 'door' ? 'Doors' : piece.el.kind === 'window' ? 'Windows' : 'Element';
       config.contextual.push({
         id: 'sel',
         key: `sel:${S.sel}`,
@@ -794,7 +796,9 @@
       const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
       const at = placedOn(piece.el, face, drawn);
       const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
-      guests.push({ key: id, recipe: piece.el.recipe, placement });
+      // A placed family is handed to the builder turned to stand in its wall, as the server hands it.
+      const seat = isFamily(piece.el) ? seatOfPiece(piece, drawn) : null;
+      guests.push({ key: id, recipe: seat ? turnedRecipe(piece.el.recipe, seat.turn) : piece.el.recipe, placement });
     }
     return guests;
   }
@@ -816,6 +820,7 @@
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    if (el.recipe.op === FAMILY_OP) return onFamily(role, host, along, up)?.at ?? el.placement;
     if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
     const own = el.recipe.args.thickness;
@@ -896,7 +901,7 @@
     const a = line.axis;
     const at = [x - wall.placement.x, y - wall.placement.y][a];
     const start = Math.round(line.start[a] / STEPS_PER_MM);
-    return line.unit[a] > 0 ? at - start : start - at - el.recipe.args.width;
+    return line.unit[a] > 0 ? at - start : start - at - (el.recipe.args.width ?? 0);
   }
 
   /** The box around a piece in the model. */
@@ -988,7 +993,9 @@
     if (isDatum(record)) return keepDatum(model, id, record, hash, seq, mine); // grids and planes: their own block
     const fill = await fillOf(model, record);
     const answer = await shapeFor(model, record, into, fill);
-    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill });
+    // A placed family is built turned to stand in its wall once the wall is here (`seatFamilies`).
+    const unseated = isFamily(record) && into === C.elements;
+    if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill, ...(unseated ? { stale: true } : {}) });
     // What it is hosted in is built again with it, as the server builds a host with its guests.
     if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
   }
@@ -1148,7 +1155,8 @@
       // A host is built with what is hosted in it: while what it hosts changes here, it is not
       // compared with the server's, and once that is in hand it is built again.
       const cuts = cutsIn(entry.target, into);
-      const hosts = new Set([piece && hostIdOf(piece.el), entry.cmd === 'hosted.place' && entry.args.host]);
+      const placing = ['hosted.place', 'family.place', 'family.move'].includes(entry.cmd);
+      const hosts = new Set([piece && hostIdOf(piece.el), placing && entry.args.host]);
       if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
       const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
@@ -1186,7 +1194,7 @@
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (reads || /^element\.(type|create|delete)$|^wall\.draw$/.test(entry.cmd)) {
+    if (reads || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$/.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
     if (entry.target === C.model?.id) {
@@ -1203,7 +1211,7 @@
   const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
-  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type)\.|^floor\.defaults$/;
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type)\.|^(floor|roof)\.defaults$/;
 
   const WORDS = {
     'element.create': 'added',
@@ -1224,6 +1232,12 @@
     'type.set': 'set a value of a type',
     'hosted.place': 'placed on a wall',
     'hosted.move': 'moved along its wall',
+    'family.place': 'placed a family on a wall:',
+    'family.retype': 'changed the type of',
+    'family.move': 'moved along its wall:',
+    'family.flip': 'flipped to the other side of its wall:',
+    'family.set': 'set a value of',
+    'family.delete': 'deleted',
     'level.create': 'made a level',
     'level.rename': 'renamed a level',
     'level.elevation': 'moved a level',
@@ -1295,6 +1309,12 @@
     'type.duplicate': 'copying a type',
     'type.delete': 'deleting a type',
     'type.set': 'a value of a type',
+    'family.place': 'placing a family',
+    'family.retype': 'a change of a family’s type',
+    'family.move': 'moving a family',
+    'family.flip': 'flipping a family',
+    'family.set': 'a value of a family',
+    'family.delete': 'deleting a family',
     'level.create': 'making a level',
     'level.rename': 'renaming a level',
     'level.elevation': 'moving a level',
@@ -1420,7 +1440,7 @@
 
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
-      edit('element.delete', { element: S.sel });
+      edit(C.elements.get(S.sel)?.el.kind === 'roof' ? 'roof.delete' : 'element.delete', { element: S.sel });
       S.sel = null;
       refresh();
     }
@@ -2202,7 +2222,7 @@
   const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
   const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
   /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
-  const drawOrder = (el) => (isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
+  const drawOrder = (el) => (isFloor(el) || el.kind === 'roof' ? 0 : el.kind === 'wall' ? 1 : 2);
 
   DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
   TOOLNAME.floor = 'floor';
@@ -2271,10 +2291,12 @@
   }
 
   /** What the sketch holds, and the button that sends it. */
+  const sketching = () => S.tool === 'floor' || S.tool === 'roof';
   function sketchHtml() {
+    const noun = S.tool === 'roof' ? 'roof' : 'floor';
     const [outer, ...holes] = FLOOR.loops;
     let state = 'empty';
-    let text = 'Click the corners of the floor’s edge in the plan. Close it on its first corner or with Enter.';
+    let text = `Click the corners of the ${noun}’s ${noun === 'roof' ? 'footprint' : 'edge'} in the plan. Close it on its first corner or with Enter.`;
     if (FLOOR.current.length) {
       state = 'open';
       const which = outer ? `Hole ${holes.length + 1}` : 'Edge';
@@ -2282,10 +2304,10 @@
     } else if (outer) {
       state = 'closed';
       const holeText = holes.length ? `, ${plural(holes.length, 'hole')}` : '';
-      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the floor.`;
+      text = `Edge: ${plural(outer.length, 'corner')}${holeText}. Click to start a hole, or press Enter to make the ${noun}.`;
     }
     const ready = state === 'closed' ? '' : ' disabled';
-    return `<p class="pad small muted" data-floor-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stackfloormake" data-key="floor-make"${ready}>Make floor</button></div>`;
+    return `<p class="pad small muted" data-${noun}-sketch="${state}">${esc(text)}</p><div class="pad"><button class="btn pri sm" data-act="stack${noun}make" data-key="${noun}-make"${ready}>Make ${noun}</button></div>`;
   }
 
   function floorToolHtml() {
@@ -2324,6 +2346,7 @@
   ACT.stackfloormake = () => makeFloor();
 
   function floorHint() {
+    if (S.tool === 'roof') return roofHint();
     if (FLOOR.current.length) return '<b>Floor:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
     if (FLOOR.loops.length) return '<b>Floor:</b> click to start a hole, or press Enter to make the floor. Esc to stop.';
     return '<b>Floor:</b> click the corners of its edge. Choose its type in the properties palette.';
@@ -2395,7 +2418,7 @@
   document.addEventListener(
     'pointerdown',
     (event) => {
-      if (S.tool !== 'floor' || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (!sketching() || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
       event.stopPropagation();
       if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
       else floorClick(event);
@@ -2403,7 +2426,7 @@
     true,
   );
   window.addEventListener('pointermove', (event) => {
-    if (S.tool !== 'floor' || !FLOOR.current.length || !$('#pv-canvas svg')) return;
+    if (!sketching() || !FLOOR.current.length || !$('#pv-canvas svg')) return;
     const at = toModel(event);
     FLOOR.at = [snap(at.x), snap(at.y)];
     queueDraw();
@@ -2415,9 +2438,10 @@
       clearSketch();
       return;
     }
-    if (S.tool !== 'floor' || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
+    if (!sketching() || event.key !== 'Enter' || event.target.closest?.('input,textarea,button')) return;
     event.preventDefault();
     if (FLOOR.current.length) closeLoop();
+    else if (S.tool === 'roof') makeRoof();
     else makeFloor();
   });
   const toolBeforeFloors = ACT.tool;
@@ -2438,10 +2462,11 @@
 
   /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
   function floorSketch() {
-    if (S.tool !== 'floor') return '';
+    if (!sketching()) return '';
     let svg = '';
-    if (FLOOR.sent && C.problems.has('floor-draw')) {
-      svg += `<path class="floor-refused" data-floor-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
+    const where = S.tool === 'roof' ? 'roof-draw' : 'floor-draw';
+    if (FLOOR.sent && C.problems.has(where)) {
+      svg += `<path class="floor-refused" data-${S.tool}-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
     }
     for (const loop of FLOOR.loops) svg += `<path class="ln ap floor-sketch" d="${ringPath(loop)}"/>`;
     const open = FLOOR.at && FLOOR.current.length ? [...FLOOR.current, FLOOR.at] : FLOOR.current;
@@ -2516,6 +2541,323 @@
   function floorPalette(piece) {
     if (S.tool === 'floor' && canEdit()) return floorToolHtml();
     if (piece && isFloor(piece.el) && !(S.tool === 'wall' && canEdit())) return floorProperties(piece);
+    return '';
+  }
+
+  // --- The roof tool, and a roof in the plan and the properties palette ---
+  // A roof is made over a footprint sketched by clicks in the plan, as a floor's edge is: one loop
+  // of corners closed on its first corner or with Enter; Enter on no open loop, or Make roof,
+  // sends one `roof.create` of the roof type, form, pitch and overhang chosen in the properties
+  // palette, its base on the plan's level the offset typed there above it (construct-model's
+  // FORMAT.md, "Roofs"). The page checks nothing and works out no geometry: the roof types, their
+  // layers and the materials come from the server (`/roof-types`); where a model has none the page
+  // has the server make its default ones through the log (`roof.defaults`); a refusal (hips, an
+  // uneven gable, a pitch on a footprint off the axes, a hole) is the server's reason in the
+  // server's words, under the tool's options, with the footprint it turned back drawn in the plan.
+  // In the plan a roof is its eaves outline from its recipe as the server filled it
+  // (`/filled/<element>`) and, where it slopes, the line its top face rises to; a selected roof
+  // shows its type, level, form, pitch and overhang, which are changed there (`roof.retype`,
+  // `roof.form`, `roof.pitch`, `roof.overhang`), what the server works out of it, and Delete
+  // removes it (`roof.delete`).
+
+  const ROOF_OP = 'roof';
+  const isRoof = (record) => record?.kind === 'roof' && record?.recipe?.op === ROOF_OP;
+
+  DTOOLS.architecture.push(['roof', 'Roof', 'family', 'Click the corners of its footprint. Close the loop on its first corner or with Enter.']);
+  TOOLNAME.roof = 'roof';
+  Object.assign(WORDS, {
+    'roof.create': 'made a roof',
+    'roof.footprint': 'changed the footprint of',
+    'roof.form': 'changed the form of',
+    'roof.pitch': 'changed the pitch of',
+    'roof.overhang': 'changed the overhang of',
+    'roof.level': 'tied to a level',
+    'roof.retype': 'changed the type of',
+    'roof.delete': 'deleted',
+    'roof.defaults': 'made the default roof types',
+    'roof.type.create': 'made a roof type',
+    'roof.type.layers': 'changed the layers of a roof type',
+    'roof.type.rename': 'renamed a roof type',
+    'roof.type.duplicate': 'copied a roof type',
+    'roof.type.delete': 'deleted a roof type',
+  });
+  Object.assign(STEP_WORDS, {
+    'roof.create': 'making a roof',
+    'roof.footprint': 'a roof’s footprint',
+    'roof.form': 'a roof’s form',
+    'roof.pitch': 'a roof’s pitch',
+    'roof.overhang': 'a roof’s overhang',
+    'roof.level': 'a roof’s level',
+    'roof.retype': 'a change of a roof’s type',
+    'roof.delete': 'deleting a roof',
+    'roof.defaults': 'making the default roof types',
+    'roof.type.create': 'making a roof type',
+    'roof.type.layers': 'the layers of a roof type',
+    'roof.type.rename': 'renaming a roof type',
+    'roof.type.duplicate': 'copying a roof type',
+    'roof.type.delete': 'deleting a roof type',
+  });
+
+  C.roofTypes = null; // { key, view } of the open model
+  C.roofTool = { type: null, form: 'gable', pitch: '1:4', overhang: '300 mm', offset: '0 mm', eaves: '' };
+  C.madeRoofDefaults = null; // the model the default roof types were asked for
+
+  /** The open model's roof types and materials; null until they have come. */
+  function roofTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.roofTypes?.key !== key && C.roofTypesLoading !== key) {
+      C.roofTypesLoading = key;
+      api(`${modelUrl(model)}/roof-types`)
+        .then((view) => {
+          C.roofTypes = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.roofTypes?.key.startsWith(`${model}/`) ? C.roofTypes.view : null;
+  }
+
+  /** The open model's roof types, read now if they have not come yet. */
+  async function roofTypesNow() {
+    const view = roofTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/roof-types`);
+    C.roofTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  const chosenRoofType = (view) => view.types.find((t) => t.id === C.roofTool.type) ?? view.types[0] ?? null;
+
+  /** Has the server make its default roof types, once for a model, where it has none. */
+  function makeDefaultRoofs() {
+    if (!canEdit() || C.madeRoofDefaults === C.model.id) return;
+    C.madeRoofDefaults = C.model.id;
+    manage('roof.defaults', {}, 'roof-draw');
+  }
+
+  const ROOF_FORMS = [['flat', 'Flat'], ['mono', 'Mono-pitch'], ['gable', 'Gable']];
+
+  function roofToolHtml() {
+    let html = typeSel('family', 'Roof', '<b>New roof</b>');
+    const view = roofTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the roof types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(makeDefaultRoofs);
+      return `${html}<p class="pad small faint" data-roof-tool="making">This model has no roof types yet, so the default ones are being made.</p>${problem('roof-draw')}`;
+    }
+    const chosen = chosenRoofType(view);
+    const here = levelOf();
+    const level = (modelLevels() || []).find((l) => l.id === here)?.name ?? here;
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const forms = ROOF_FORMS.map(([id, name]) => `<option value="${id}"${id === C.roofTool.form ? ' selected' : ''}>${name}</option>`);
+    const field = (key, label, value, extra = '') => `<input class="inp" data-chg="stackroof${key}" data-key="roof-${key}" value="${esc(value)}" aria-label="${esc(label)}"${extra}>`;
+    html += '<table class="props">';
+    html += prow('Type', `<select class="inp" data-chg="stackrooftool" data-key="roof-type" aria-label="Roof type">${types.join('')}</select>`);
+    html += prow('Form', `<select class="inp" data-chg="stackroofformtool" data-key="roof-form" aria-label="Roof form">${forms.join('')}</select>`);
+    if (C.roofTool.form !== 'flat') html += prow('Pitch', field('pitch', 'Pitch, as 1:4, 25% or 30°', C.roofTool.pitch));
+    if (C.roofTool.form !== 'flat') html += prow('Rises from', field('eaves', 'Edge numbers it rises from, blank for automatic', C.roofTool.eaves, ' placeholder="automatic"'));
+    html += prow('Overhang', field('overhang', 'Overhang past its edges', C.roofTool.overhang));
+    html += prow('Thickness', esc(chosen.thickness));
+    html += prow('Level', esc(level));
+    html += prow('Offset', field('offset', 'Offset of the roof’s base above its level', C.roofTool.offset));
+    html += '</table>';
+    html += `<span class="lbl">Layers, outside first</span><table class="props" data-roof-layers="${esc(chosen.id)}">`;
+    for (const layer of chosen.layers) {
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+    }
+    html += '</table>';
+    return html + sketchHtml() + problem('roof-draw');
+  }
+
+  CHG.stackrooftool = (select) => {
+    C.roofTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackroofformtool = (select) => {
+    C.roofTool.form = select.value;
+    refreshSide();
+  };
+  for (const key of ['pitch', 'eaves', 'overhang', 'offset']) {
+    CHG[`stackroof${key}`] = (input) => {
+      C.roofTool[key] = input.value;
+    };
+  }
+  ACT.stackroofmake = () => makeRoof();
+
+  function roofHint() {
+    if (FLOOR.current.length) return '<b>Roof:</b> click the next corner, or its first corner or Enter to close the loop. Esc to stop.';
+    if (FLOOR.loops.length) return '<b>Roof:</b> press Enter to make the roof. Esc to stop.';
+    return '<b>Roof:</b> click the corners of its footprint. Choose its type, form and pitch in the properties palette.';
+  }
+
+  /** Sends the sketch as it is: what the server makes of it, or why it refuses, comes back through the log. */
+  async function makeRoof() {
+    if (!FLOOR.loops.length || FLOOR.current.length || !canEdit()) return;
+    let view;
+    try {
+      view = await roofTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const corners = (loop) => loop.map(([x, y]) => ({ at: [`${x} mm`, `${y} mm`] }));
+    const [outer, ...holes] = FLOOR.loops;
+    const tool = C.roofTool;
+    const args = { element: newId('R'), level: levelOf(), form: tool.form, footprint: { outer: corners(outer), holes: holes.map(corners) } };
+    const type = chosenRoofType(view);
+    if (type) args.type = type.id;
+    if (tool.form !== 'flat' && tool.pitch.trim() !== '') args.pitch = tool.pitch;
+    if (tool.overhang.trim() !== '') args.overhang = tool.overhang;
+    if (tool.offset.trim() !== '') args.offset = tool.offset;
+    // Edges are numbered from 1 in the order the corners were clicked; the server names them o0, o1, ...
+    const numbers = tool.eaves.split(/[\s,]+/).filter((n) => n !== '');
+    if (tool.form !== 'flat' && numbers.length) args.eaves = numbers.map((n) => `o${Number(n) - 1}`);
+    const sent = { loops: FLOOR.loops };
+    Object.assign(FLOOR, { loops: [], current: [], at: null, sent });
+    manage('roof.create', args, 'roof-draw', () => {
+      if (FLOOR.sent === sent) FLOOR.sent = null;
+      queueDraw();
+    });
+    sketchChanged();
+  }
+
+  /** The ribbon: the roof tool beside the floor tool, in the Build panel. */
+  function roofRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:roof')) return;
+    const floor = build.items.findIndex((item) => item.a === 'architecture:floor');
+    build.items.splice(floor + 1, 0, DT_('architecture', 'roof'));
+  }
+
+  /** The point `[x, y, z]` of a solid, in whole millimetres in plan. */
+  const planPoint = (p) => [nearestMm(p[0]), nearestMm(p[1])];
+
+  /**
+   * A roof in the plan: its eaves outline from its recipe as the server filled it (the outline of
+   * its display until that has come), in its outer layer's colour seen from above, and, where it
+   * slopes, the line its outer face rises to: the highest points of its outer layer's two end
+   * sections, as the server worked them out.
+   */
+  function roofInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const { x, y } = placementOf(e);
+    const args = piece.fill?.recipe?.args;
+    const outline = Array.isArray(args?.outline) && args.outline.length
+      ? args.outline.map((corner) => planPoint(corner.at))
+      : piece.shape.displays[0].outline;
+    const ring = outline.map(([px, py]) => [x + px, y + py]);
+    const outer = args?.layers?.[0];
+    const colour = outer && colourOf(outer.material, 'surface');
+    const fill = colour ? ` style="fill:${esc(colour)}"` : '';
+    const box = around(piece);
+    const chosen = S.sel === e.id;
+    let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
+    group += `<path class="body roof${chosen ? ' sel' : ''}" data-form="${esc(args?.form ?? '')}" data-material="${esc(outer?.material ?? '')}"${fill} d="${ringPath(ring)}"/>`;
+    const sections = outer?.solid?.loft;
+    if (Array.isArray(sections) && sections.length === 2) {
+      const high = (section) => section.reduce((best, p) => (p[2] > best[2] ? p : best), section[0]);
+      const [a, b] = sections.map((section) => planPoint(high(section)));
+      group += `<line class="roof-ridge" data-roof-ridge x1="${x + a[0]}" y1="${y + a[1]}" x2="${x + b[0]}" y2="${y + b[1]}"/>`;
+    }
+    const claim = heldClaim(e.id);
+    if (claim) {
+      const theirs = claim.person !== C.me.person.id;
+      group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
+      if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
+    }
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** A stored pitch typed as a person would: `slope:1/4` as 1:4, `angle:270000000` as 30°. */
+  function typedPitch(stored) {
+    if (stored.startsWith('slope:')) return stored.slice(6).replace('/', ':');
+    if (stored.startsWith('angle:')) return `${Number(stored.slice(6)) / 9000000}°`;
+    return stored;
+  }
+
+  /** What the properties palette reads of a selected roof's record: its form, pitch and overhangs. */
+  function roofSpecs(e) {
+    const edges = Array.isArray(e.recipe.args.edges) ? e.recipe.args.edges : [];
+    const sloping = edges.filter((edge) => edge.pitch);
+    const form = ['flat', 'mono', 'gable'][Math.min(sloping.length, 2)] ?? 'flat';
+    const overhangs = [...new Set(edges.map((edge) => `${storedMm(edge.overhang)} mm`))];
+    return {
+      form: sloping.length > 2 ? 'hip' : form,
+      pitch: sloping[0] ? typedPitch(sloping[0].pitch) : '',
+      overhang: overhangs.length === 1 ? overhangs[0] : '',
+    };
+  }
+
+  /** The base's offset above its level, as stored. */
+  function roofOffset(e) {
+    const stored = e.props?.['@level.offset'];
+    return `${stored === undefined ? 0 : storedMm(stored)} mm`;
+  }
+
+  /** What the properties palette shows of a selected roof. */
+  function roofProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const types = roofTypes();
+    const claim = heldClaim(e.id);
+    const specs = roofSpecs(e);
+    const editable = canEdit();
+    let html = typeSel('family', 'Roof', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-roof-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None'));
+    if (types && editable) {
+      const options = types.types.map((t) => `<option value="${esc(t.id)}"${t.id === view?.type?.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+      html += prow('Type', `<select class="inp" data-chg="stackrooftype" data-key="roof-own-type" aria-label="Roof type">${options.join('')}</select>`);
+    } else if (view) {
+      html += prow('Type', esc(view.type?.name || 'None'));
+    }
+    html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-roof-offset>${esc(roofOffset(e))}</span>`);
+    if (editable) {
+      const forms = ROOF_FORMS.map(([id, name]) => `<option value="${id}"${id === specs.form ? ' selected' : ''}>${name}</option>`);
+      html += prow('Form', `<select class="inp" data-chg="stackroofshape" data-key="roof-own-form" aria-label="Roof form">${forms.join('')}</select>`);
+      if (specs.form !== 'flat') html += prow('Pitch', `<input class="inp" data-chg="stackroofown" data-a="pitch" data-key="roof-own-pitch" value="${esc(specs.pitch)}" aria-label="Pitch, as 1:4, 25% or 30°">`);
+      html += prow('Overhang', `<input class="inp" data-chg="stackroofown" data-a="overhang" data-key="roof-own-overhang" value="${esc(specs.overhang)}" placeholder="varies" aria-label="Overhang past its edges">`);
+    } else {
+      html += prow('Form', esc(specs.form));
+      if (specs.pitch) html += prow('Pitch', esc(specs.pitch));
+    }
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    html += problem('roof-edit');
+    if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
+    if (view) {
+      html += readOnlyTable(view);
+      html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    }
+    if (editable) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="roof-delete">Delete roof</button></div>';
+    return html;
+  }
+
+  CHG.stackrooftype = (select) => {
+    if (S.sel) manage('roof.retype', { element: S.sel, type: select.value }, 'roof-edit');
+  };
+  CHG.stackroofshape = (select) => {
+    const piece = C.elements.get(S.sel);
+    if (!piece) return;
+    const args = { element: S.sel, form: select.value };
+    // Going from flat to a form that slopes needs a pitch: the tool's.
+    if (select.value !== 'flat' && !roofSpecs(piece.el).pitch) args.pitch = C.roofTool.pitch;
+    manage('roof.form', args, 'roof-edit');
+  };
+  CHG.stackroofown = (input) => {
+    if (!S.sel) return;
+    const cmd = input.dataset.a === 'pitch' ? 'roof.pitch' : 'roof.overhang';
+    manage(cmd, { element: S.sel, [input.dataset.a]: input.value }, 'roof-edit');
+    input.blur();
+  };
+
+  /** The properties palette's roof part: the roof tool's options, or a selected roof; '' for anything else. */
+  function roofPalette(piece) {
+    if (S.tool === 'roof' && canEdit()) return roofToolHtml();
+    if (piece && isRoof(piece.el) && !(S.tool === 'wall' && canEdit())) return roofProperties(piece);
     return '';
   }
 
@@ -2994,9 +3336,10 @@
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
     if (S.tool === 'grid') return gridHint();
-    if (S.tool === 'floor') return floorHint();
+    if (S.tool === 'floor' || S.tool === 'roof') return floorHint();
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
+    if (S.tool === 'family') return '<b>Family:</b> choose a family and a type in the properties palette, then click on a wall to place it.';
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
   }
 
@@ -3013,15 +3356,17 @@
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    const floor = floorPalette(piece);
+    const floor = floorPalette(piece) || roofPalette(piece);
     if (floor) {
       html += floor;
     } else if (S.tool === 'wall' && canEdit()) {
       html += wallToolHtml();
+    } else if (S.tool === 'family' && canEdit()) {
+      html += familyToolHtml();
     } else if (piece) {
       const { el: e, shape, failed } = piece;
       const claim = heldClaim(e.id);
-      const icon = e.kind === 'wall' || e.kind === 'door' ? e.kind : 'family';
+      const icon = ['wall', 'door', 'window'].includes(e.kind) ? e.kind : 'family';
       html += typeSel(icon, esc(e.kind), `<b>${esc(e.name)}</b>`);
       const view = paramsFor(piece);
       html += `<table class="props">${whereRow(e)}${prow('Level', esc(levelName(e)))}${prow('Recipe', `<span class="mono">${esc(e.recipe.op)}</span>`)}`;
@@ -3040,6 +3385,7 @@
       }
       html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
       html += '</table>';
+      if (isFamily(e)) html += familyProperties(piece);
       if (view?.parameters.length) html += parametersTable(view);
       if (view) html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
     } else if (ownDatum(S.sel)) {
@@ -3083,6 +3429,7 @@
     }
     const view = VIEWS[S.view];
     const scale = AS[S.scale] || 1;
+    seatFamilies();
     let shapes = '';
     shapes += drawnPlan(); // the server's picture of the open view, under everything live
     shapes += datumsSvg(scale); // grids and planes, under the elements
@@ -3107,7 +3454,11 @@
         shapes += floorInPlan(piece, data, scale);
         continue;
       }
-      const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' ? 'ln ap af' : 'ln sf';
+      if (isRoof(e)) {
+        shapes += roofInPlan(piece, data, scale);
+        continue;
+      }
+      const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' || e.kind === 'window' ? 'ln ap af' : 'ln sf';
       const box = around(piece);
       let group = S.sel === e.id ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
       // A shape of several parts (a layered wall's layers) draws each in its material's cut colour,
@@ -3120,7 +3471,7 @@
         const theirs = claim.person !== C.me.person.id;
         group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
         if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
-      } else if (e.kind === 'door') {
+      } else if (e.kind === 'door' || e.kind === 'window') {
         group += TX(box.x + box.w / 2, box.y - 200, scale, e.name, 'tf', 220);
       }
       shapes += `<g ${data}>${group}</g>`;
@@ -3282,6 +3633,7 @@
         if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
         else if (S.tool === 'wall') placeWall(at);
         else if (S.tool === 'door') placeDoor(at);
+        else if (S.tool === 'family') placeFamily(at);
         else say(NOT_YET);
         return;
       }
@@ -3339,7 +3691,10 @@
       if (!drag) return;
       const piece = C.elements.get(drag.id);
       if (piece && drag.hosted) {
-        if (drag.along !== undefined) edit('hosted.move', { element: drag.id, along: `${drag.along} mm` });
+        if (drag.along !== undefined) {
+          const move = isFamily(piece.el) ? 'family.move' : 'hosted.move';
+          edit(move, { element: drag.id, along: `${drag.along} mm` });
+        }
       } else if (piece) {
         edit('element.move', { element: drag.id, placement: piece.el.placement });
       }
@@ -3402,6 +3757,7 @@
     scene.add(meshes.group);
     C.three = {
       update() {
+        seatFamilies();
         // Each where it sits: a hosted door on its wall (placementOf).
         const placed = [...C.elements.values()].map((piece) => ({
           ...piece,
@@ -3416,6 +3772,272 @@
       renderer.render(scene, camera);
     });
   }
+
+
+  // --- Placed families: a door or a window of the library, in a wall ---
+  // The family tool lists the library's families and their types (`/families`), and a click on a wall
+  // sends one `family.place` edit: the family, its type, the wall, the side clicked and how far along
+  // the wall (construct-model's FORMAT.md, "Placed families"). A selected family shows its type and
+  // the values each placed one holds in the properties palette: another type is `family.retype`, a
+  // value `family.set`, a position `family.move` (a drag along its wall sends it too), the other side
+  // `family.flip`, and Delete is `family.delete`. The page checks nothing: a refusal is the server's
+  // words, under the options. In the plan and in 3D a family is what the browser's geometry builds
+  // from its record, standing where its wall puts it, turned to face out of its side; where the wall
+  // is cut (the kernel's package) the wall is built with it. Interim, as the library is (job 7.6): the
+  // families are the library's baked in, and the old box door tool stays beside this one until it is
+  // retired.
+
+  const FAMILY_OP = 'family.instance';
+  const isFamily = (record) => record?.recipe?.op === FAMILY_OP && record?.recipe?.owner === 'construct';
+  C.library = null; // { model, list } of the open model
+  C.familyTool = { family: null, type: null, values: {} }; // the tool's choices: a family's permanent ID, a type's key
+
+  DTOOLS.architecture.push(['family', 'Family', 'family', 'Choose a family and a type in the properties palette, then click on a wall to place it.']);
+  TOOLNAME.family = 'family';
+
+  /** The ribbon: the family tool beside the door tool, in the Build panel. */
+  function familyRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:family')) return;
+    const door = build.items.findIndex((item) => item.a === 'architecture:door');
+    build.items.splice(door + 1, 0, DT_('architecture', 'family'));
+  }
+
+  /** The library's families, with their types and the values each placed one holds; null until they have come. */
+  function library() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    if (C.library?.model !== model && C.libraryLoading !== model) {
+      C.libraryLoading = model;
+      api(`${modelUrl(model)}/families`)
+        .then((list) => {
+          C.library = { model, list };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.library?.model === model ? C.library.list : null;
+  }
+
+  function chosenFamily(list) {
+    return list.find((family) => family.id === C.familyTool.family) ?? list[0] ?? null;
+  }
+
+  function chosenFamilyType(family) {
+    return family.types.find((type) => type.key === C.familyTool.type) ?? family.types[0] ?? null;
+  }
+
+  /** A stored value as a person reads it: a length in millimetres, a choice by its label. */
+  function shownValue(value, stored) {
+    if (stored === undefined) return value.shown;
+    if (value.kind === 'length') return `${storedMm(stored)} mm`;
+    if (value.kind === 'choice') return value.choices.find((choice) => `choice:${choice.key}` === stored)?.label ?? stored;
+    return stored;
+  }
+
+  /** A value's input: a choice is a list of its labels, anything else typed text. */
+  function valueInput(value, shown, key, chg = 'stackfamilyvalue') {
+    if (value.kind === 'choice') {
+      const options = value.choices.map((choice) => `<option${choice.label === shown ? ' selected' : ''}>${esc(choice.label)}</option>`);
+      return `<select class="inp" data-chg="${chg}" data-key="${key}" data-a="${esc(value.key)}" aria-label="${esc(value.name)}">${options.join('')}</select>`;
+    }
+    return `<input class="inp" data-chg="${chg}" data-key="${key}" data-a="${esc(value.key)}" value="${esc(shown)}" aria-label="${esc(value.name)}">`;
+  }
+
+  function familyToolHtml() {
+    let html = typeSel('family', 'Family', '<b>New door or window</b>');
+    const list = library();
+    if (!list) return `${html}<p class="pad small faint">Loading the library.</p>`;
+    const family = chosenFamily(list);
+    if (!family) return `${html}<p class="pad small faint">The library has no families.</p>`;
+    const type = chosenFamilyType(family);
+    const families = list.map((f) => `<option value="${esc(f.id)}"${f.id === family.id ? ' selected' : ''}>${esc(f.name)}</option>`);
+    const types = family.types.map((t) => `<option value="${esc(t.key)}"${t.key === type.key ? ' selected' : ''}>${esc(t.name)}</option>`);
+    html += '<table class="props">';
+    html += prow('Family', `<select class="inp" data-chg="stackfamilychoice" data-key="family-choice" aria-label="Family">${families.join('')}</select>`);
+    html += prow('Category', esc(family.category_name));
+    html += prow('Family type', `<select class="inp" data-chg="stackfamilytype" data-key="family-type" aria-label="Type of the family">${types.join('')}</select>`);
+    for (const value of family.values) {
+      const typed = C.familyTool.values[value.key] ?? value.shown;
+      html += prow(esc(value.name), valueInput(value, typed, `family-tool-value:${value.key}`, 'stackfamilytoolvalue'));
+    }
+    html += '</table>';
+    html += '<p class="pad small muted">Click on a wall. The side you click is the side it goes on, and the click is the middle of its opening.</p>';
+    return html + problem('family-place');
+  }
+
+  CHG.stackfamilychoice = (select) => {
+    C.familyTool = { family: select.value, type: null, values: {} };
+    refreshSide();
+  };
+  CHG.stackfamilytype = (select) => {
+    C.familyTool.type = select.value;
+  };
+
+  /** The library's family a placed one's record names, by its recipe's content id. */
+  function familyOf(record) {
+    return library()?.find((family) => family.content === record.recipe.args.family) ?? null;
+  }
+
+  /** What the properties palette shows of a selected family: its type, its values, its place, its side. */
+  function familyProperties(piece) {
+    const { el } = piece;
+    const family = familyOf(el);
+    if (!family) return '<p class="pad small faint">Reading its family from the library.</p>';
+    const mine = !C.readOnly && canEdit();
+    const types = family.types.map((t) => `<option value="${esc(t.key)}"${t.key === el.recipe.args.type ? ' selected' : ''}>${esc(t.name)}</option>`);
+    let html = '<table class="props" data-family-properties="' + esc(el.id) + '">';
+    html += prow('Family', esc(family.name));
+    html += prow('Family type', mine ? `<select class="inp" data-chg="stackfamilyretype" data-key="family-retype" aria-label="Type of the family">${types.join('')}</select>` : esc(family.types.find((t) => t.key === el.recipe.args.type)?.name ?? el.recipe.args.type));
+    for (const value of family.values) {
+      const shown = shownValue(value, el.recipe.args[`value.${value.key}`]);
+      html += prow(esc(value.name), mine ? valueInput(value, shown, `family-value:${value.key}`) : esc(shown));
+    }
+    const along = el.props?.['@host.along'];
+    const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+    if (along !== undefined) {
+      html += prow('Along its wall', mine ? `<input class="inp" data-chg="stackfamilyalong" data-key="family-along" value="${storedMm(along)} mm" aria-label="Along its wall">` : `${storedMm(along)} mm`);
+    }
+    if (face) html += prow('Side', `${esc(face.signature ?? '')}${mine ? ' <button class="btn sm" data-act="stackfamilyflip">Flip</button>' : ''}`);
+    html += '</table>';
+    return html + problem(`family:${el.id}`);
+  }
+
+  CHG.stackfamilyretype = (select) => {
+    if (S.sel && canEdit()) manage('family.retype', { element: S.sel, type: select.value }, `family:${S.sel}`);
+  };
+  CHG.stackfamilyvalue = (input) => {
+    if (!S.sel || !canEdit()) return;
+    const typed = input.value.trim();
+    manage('family.set', { element: S.sel, values: { [input.dataset.a]: typed === '' ? null : typed } }, `family:${S.sel}`);
+    input.blur();
+  };
+  CHG.stackfamilyalong = (input) => {
+    if (S.sel && canEdit()) manage('family.move', { element: S.sel, along: input.value }, `family:${S.sel}`);
+    input.blur();
+  };
+  ACT.stackfamilyflip = () => {
+    if (S.sel && canEdit()) manage('family.flip', { element: S.sel }, `family:${S.sel}`);
+  };
+
+  // The tool's own values, kept as typed until a family is placed.
+  CHG.stackfamilytoolvalue = (input) => {
+    C.familyTool.values[input.dataset.a] = input.value;
+  };
+
+  /**
+   * A click on a wall with the family tool: the family goes on the side clicked, its opening's
+   * middle where the click is, as far along the wall from its start (the server checks that it fits).
+   */
+  function placeFamily(at) {
+    const list = library();
+    const family = list && chosenFamily(list);
+    if (!family) {
+      say('The library has not come yet.');
+      return;
+    }
+    const wall = [...C.elements.values()].find((piece) => {
+      if (piece.el.kind !== 'wall' || !piece.shape) return false;
+      const box = around(piece);
+      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
+    });
+    if (!wall) {
+      say('Click on a wall to place it.');
+      return;
+    }
+    const spot = onWall(wall, at, 0);
+    if (!spot) {
+      say('That wall has no side to place it on.');
+      return;
+    }
+    const values = {};
+    for (const [key, typed] of Object.entries(C.familyTool.values)) {
+      if (family.values.some((value) => value.key === key) && typed !== '') values[key] = typed;
+    }
+    const args = {
+      element: newId('F'),
+      family: family.id,
+      type: chosenFamilyType(family).key,
+      host: wall.el.id,
+      side: spot.exterior ? 'exterior' : 'interior',
+      along: `${spot.offset} mm`,
+    };
+    if (Object.keys(values).length) args.values = values;
+    manage('family.place', args, 'family-place');
+  }
+
+  /**
+   * How a placed family sits on side `role` of a layered wall, as construct-regen's `hosting::seat`
+   * works it out: its origin on the wall's centre plane, `along` the line from its start, `up` from
+   * the wall's base, each to the nearest millimetre, and the turn (0 to 3 quarter turns about z) that
+   * points its front out of that side. Null until the wall is filled, and for a wall at an angle.
+   */
+  function onFamily(role, host, along, up) {
+    const line = lineOf(host);
+    if (!line || line.axis === null || host.el.recipe.op !== LAYERED) return null;
+    const centre = Math.floor((line.exterior + line.interior) / 2);
+    const [ux, uy] = line.unit;
+    const right = [uy, -ux];
+    const outwardOfExterior = line.exterior > line.interior ? 1 : -1;
+    const outward = role === 'interior' ? -outwardOfExterior : outwardOfExterior;
+    const [nx, ny] = right.map((c) => c * outward);
+    const turn = { '1,0': 0, '0,1': 1, '-1,0': 2, '0,-1': 3 }[`${ny},${-nx}`];
+    if (turn === undefined) return null;
+    const origin = [0, 1].map((i) => nearestMm(line.start[i] + steps(along) * line.unit[i] + centre * right[i]));
+    const base = host.el.placement;
+    return { at: { x: base.x + origin[0], y: base.y + origin[1], z: base.z + storedMm(up) }, turn };
+  }
+
+  const turnedRecipe = (recipe, turn) => ({ ...recipe, args: { ...recipe.args, turn } });
+
+  /** Where a placed family sits and how it is turned, on its wall (`host`, or the one it names, if it is here). */
+  function seatOfPiece(piece, host) {
+    const hosted = hostOf(piece.el);
+    const wall = host ?? hosted?.host;
+    const face = hosted?.face ?? (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
+    const along = piece.el.props?.['@host.along'];
+    const up = piece.el.props?.['@host.up'];
+    if (!wall || !face || along === undefined || up === undefined) return null;
+    const role = wall.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    return onFamily(role, wall, along, up);
+  }
+
+  /** Builds each placed family again, turned as its wall seats it, where it is not built so yet. */
+  function seatFamilies() {
+    if (!C.model || C.viewing) return;
+    for (const piece of C.elements.values()) {
+      if (!isFamily(piece.el) || piece.turning || piece.failed) continue;
+      const seat = seatOfPiece(piece);
+      if (seat && piece.seatedTurn !== seat.turn) reseat(piece, seat.turn);
+    }
+  }
+
+  async function reseat(piece, turn) {
+    piece.turning = true;
+    try {
+      const row = C.models.get(C.model.id);
+      const builder = row && (await builderFor(row));
+      if (!builder) return;
+      const answer = buildOn(builder, { ...piece.el, recipe: turnedRecipe(piece.el.recipe, turn) }, null, null);
+      Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedTurn: turn, stale: false });
+      queueDraw();
+    } finally {
+      piece.turning = false;
+    }
+  }
+
+  const deleteOther = ACT.stackdelete;
+  ACT.stackdelete = () => {
+    const piece = C.elements.get(S.sel);
+    if (!piece || !isFamily(piece.el)) {
+      deleteOther();
+      return;
+    }
+    if (!canEdit()) return;
+    manage('family.delete', { element: S.sel }, `family:${S.sel}`);
+    S.sel = null;
+    refresh();
+  };
 
   boot();
 })();

@@ -523,6 +523,7 @@ dependencies = [
  "construct-params",
  "construct-phases",
  "construct-regen",
+ "construct-roofs",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -718,6 +719,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-families",
  "construct-formulas",
  "construct-grids",
  "construct-levels",
@@ -725,6 +727,7 @@ dependencies = [
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-roofs",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -738,6 +741,26 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "construct-roofs"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-slabs",
+ "construct-solver",
+ "construct-types",
+ "kit-core",
+ "libm",
+ "num-bigint",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
