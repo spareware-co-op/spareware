@@ -40,10 +40,11 @@ pub enum RoofError {
         /// The edge.
         edge: Id,
     },
-    /// A flat roof's edge has an overhang while an edge of its footprint runs off the plan's
-    /// axes: the eaves outline of such a footprint is solved with job 6.2.
+    /// A roof's edge has an overhang while an edge of its footprint runs off the plan's axes: such
+    /// an edge moved out square to itself has no corner on the grid, so its eaves outline has no
+    /// exact place.
     OverhangOffAxis {
-        /// The edge off the axes.
+        /// The edge with the overhang, or the first edge off the axes (a flat roof's).
         edge: Id,
     },
     /// The overhangs fold the eaves outline back over itself at this edge, or two edges on one
@@ -52,27 +53,39 @@ pub enum RoofError {
         /// The edge.
         edge: Id,
     },
-    /// Edges slope on a footprint that is not a rectangle along the plan's axes: other footprints
-    /// come with job 6.2.
-    NotARectangle {
+    /// Edges slope on a footprint whose corners are not all right angles (90 or 270 degrees):
+    /// the planes of such a footprint meet at points this crate cannot hold exactly.
+    NotRightAngled {
         /// The sloping edges, in the footprint's order.
         edges: Vec<Id>,
     },
-    /// Sloping edges that meet at a corner: hips come with job 6.2.
-    Hips {
-        /// The sloping edges, in the footprint's order.
-        edges: Vec<Id>,
-        /// Whether every edge slopes.
-        every: bool,
-    },
-    /// The two sloping edges of a gable slope at different pitches: an uneven gable's ridge is
-    /// solved with job 6.2.
-    UnevenGable {
+    /// Two sloping edges whose planes meet (at a hip or a valley, or across a turned gable) slope
+    /// at different pitches: a layer's thickness, square to each slope, stands its faces at
+    /// different heights above each, so the line where they meet moves from face to face. Only
+    /// an uneven gable on a rectangle along the plan's axes is solved with two pitches.
+    UnevenPitches {
         /// The first sloping edge, in the footprint's order.
         first: Id,
-        /// The second.
+        /// The first after it at another pitch.
         second: Id,
     },
+    /// An edge does not slope on a footprint with a corner of 270 degrees: such a footprint is
+    /// solved with every edge sloping, and gable ends on it are not solved.
+    VergeOnReflex {
+        /// The edge.
+        edge: Id,
+    },
+    /// Two edges of a footprint with a corner of 270 degrees have different overhangs: its eaves
+    /// outline is solved with one overhang all round.
+    OverhangsDiffer {
+        /// The first edge.
+        first: Id,
+        /// The first with another overhang.
+        second: Id,
+    },
+    /// The roof's planes could not be solved into pieces that meet side to side (a case the
+    /// method does not reach); nothing is built.
+    NotSolved,
     /// The roof rising from this edge does not rise a whole grid step to its ridge or its high
     /// side, or is too narrow to have a ridge between its eaves.
     TooShallow {
@@ -164,42 +177,40 @@ impl fmt::Display for RoofError {
             ),
             Self::OverhangOffAxis { edge } => write!(
                 f,
-                "edge {edge} runs off the plan's axes, so this footprint's overhangs have no exact \
-                 eaves outline yet: they come with job 6.2"
+                "an overhang on a footprint off the plan's axes (at edge {edge}) has no eaves \
+                 outline with exact corners: an overhang needs a footprint along the axes"
             ),
             Self::OverhangFolds { edge } => write!(
                 f,
                 "the overhangs fold the eaves outline over itself at edge {edge}"
             ),
-            Self::NotARectangle { edges } => write!(
+            Self::NotRightAngled { edges } => write!(
                 f,
-                "{} {}, and a sloped roof's footprint is a rectangle along the plan's axes for \
-                 now: other footprints come with job 6.2",
+                "{} {}, and a sloped roof's footprint has right angles at every corner (90 or 270 \
+                 degrees): the planes of other footprints are not solved",
                 if edges.len() == 1 { "edge" } else { "edges" },
                 slope_words(edges)
             ),
-            Self::Hips { edges, every: true } => write!(
+            Self::UnevenPitches { first, second } => write!(
                 f,
-                "every edge slopes: hips come with job 6.2 (edges {})",
-                listed(edges)
+                "edges {first} and {second} slope at different pitches where their planes meet: \
+                 a layer square to each slope stands at a different height on each, so the line \
+                 they meet on moves from face to face (only an uneven gable on a rectangle along \
+                 the plan's axes takes two pitches)"
             ),
-            Self::Hips {
-                edges,
-                every: false,
-            } if edges.len() == 2 => write!(
+            Self::VergeOnReflex { edge } => write!(
                 f,
-                "edges {} slope and meet at a corner: hips come with job 6.2",
-                listed(edges)
+                "edge {edge} does not slope on a footprint with an inside corner: such a roof is \
+                 solved with every edge sloping, and gable ends on it are not solved"
             ),
-            Self::Hips { edges, .. } => write!(
+            Self::OverhangsDiffer { first, second } => write!(
                 f,
-                "edges {} slope, and two of them meet at a corner: hips come with job 6.2",
-                listed(edges)
+                "edges {first} and {second} have different overhangs on a footprint with an \
+                 inside corner: its eaves are solved with one overhang all round"
             ),
-            Self::UnevenGable { first, second } => write!(
+            Self::NotSolved => write!(
                 f,
-                "edges {first} and {second} slope at different pitches: an uneven gable's ridge is \
-                 solved with job 6.2"
+                "the roof's planes could not be solved into pieces that meet side to side"
             ),
             Self::TooShallow { edge } => write!(
                 f,

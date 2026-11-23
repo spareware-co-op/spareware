@@ -158,16 +158,18 @@ fn a_roofs_record() {
 }
 
 /// Filled from its type, the recipe the builder takes holds its form, the edges it rises from,
-/// its eaves outline and each layer with its solid, and nothing else; a membrane has no solid.
+/// its eaves outline, the lines of its top face and each layer with its solid, and nothing else; a membrane has no solid.
 #[test]
 fn the_builders_recipe_is_the_shape() {
     let steel = default_roofs().unwrap().remove(0).layers;
     let recipe = filled(&roof_recipe(&gable(slope(1, 4))), &steel).unwrap();
     let keys: Vec<&str> = recipe.args.keys().map(String::as_str).collect();
-    assert_eq!(keys, ["form", "layers", "outline", "slopes"]);
+    assert_eq!(keys, ["form", "layers", "lines", "outline", "slopes"]);
     assert!(!reads_layers(&recipe));
     assert_eq!(recipe.args["form"], json!("gable"));
     assert_eq!(recipe.args["slopes"], json!(["o0", "o2"]));
+    let lines = recipe.args["lines"].as_array().unwrap();
+    assert!(lines.iter().any(|line| line["kind"] == json!("ridge")));
     assert_eq!(
         recipe.args["outline"][0],
         json!({ "id": "o0", "at": [-300 * MM, -500 * MM] })

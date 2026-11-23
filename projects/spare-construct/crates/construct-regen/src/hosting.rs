@@ -32,8 +32,12 @@
 //! this crate's builders' face names ([`crate::face_names`]). A layered wall (`wall.layered`,
 //! job 4.1) hosts as the box does: along its line from its start, the way it runs, flush with the
 //! side its element is on, each to the nearest millimetre where a layer face is not on one
-//! ([`crate::wall_plan`]). Interim: only a wall hosts, only on its two sides, only a wall along x
-//! or y when it is layered, and a box door sits flush with its side.
+//! ([`crate::wall_plan`]). A plain opening through a wall (construct-openings' `opening.wall`, job
+//! 4.2) is hosted as a door is, as thick as its wall. A floor opening (`opening.floor`) is hosted
+//! in its floor's plan ([`Hosting::InPlan`]): a face reference to the floor's top and no offsets,
+//! its outline in the floor's own frame, so it sits where its floor does. Interim: only a wall
+//! hosts on a face, only on its two sides, only a wall along x or y when it is layered, and a box
+//! door sits flush with its side.
 //!
 //! A placed family (`family.instance`, [`crate::families`], job 6.4) is hosted the same way, on a
 //! layered wall along x or y, and is seated in it by [`seat`]: its insertion point (the middle of
@@ -91,6 +95,15 @@ pub enum Hosting {
         /// The host's face, by its persistent name.
         face: String,
     },
+    /// An opening through a floor (construct-openings' `opening.floor`): a reference to its
+    /// floor's top face and no offsets. Its outline is drawn in its floor's own frame, so it sits
+    /// where its floor does and moves with it.
+    InPlan {
+        /// The floor.
+        host: Id,
+        /// The floor's top face, by its persistent name.
+        face: String,
+    },
 }
 
 impl Hosting {
@@ -98,7 +111,9 @@ impl Hosting {
     #[must_use]
     pub fn host(&self) -> &Id {
         match self {
-            Hosting::OnFace { host, .. } | Hosting::ByPosition { host, .. } => host,
+            Hosting::OnFace { host, .. }
+            | Hosting::ByPosition { host, .. }
+            | Hosting::InPlan { host, .. } => host,
         }
     }
 
@@ -106,7 +121,9 @@ impl Hosting {
     #[must_use]
     pub fn face(&self) -> &str {
         match self {
-            Hosting::OnFace { face, .. } | Hosting::ByPosition { face, .. } => face,
+            Hosting::OnFace { face, .. }
+            | Hosting::ByPosition { face, .. }
+            | Hosting::InPlan { face, .. } => face,
         }
     }
 }
@@ -126,9 +143,15 @@ pub fn read(element: &Element) -> Result<Option<Hosting>, String> {
     let name = &element.name;
     let (along, up) = (element.props.get(ALONG_KEY), element.props.get(UP_KEY));
     if along.is_none() && up.is_none() {
-        let opening = element.recipe.owner == OWN && element.recipe.op == OPENING_OP;
+        let own = element.recipe.owner == OWN;
+        let opening = own && element.recipe.op == OPENING_OP;
+        let in_plan = own && element.recipe.op == construct_openings::FLOOR_OP;
         return Ok(match faces.first() {
             Some(face) if opening => Some(Hosting::ByPosition {
+                host: face.element.clone(),
+                face: face.name.clone(),
+            }),
+            Some(face) if in_plan => Some(Hosting::InPlan {
                 host: face.element.clone(),
                 face: face.name.clone(),
             }),
@@ -193,6 +216,24 @@ pub fn write(element: &mut Element, host: &Id, face: &FaceName, along: Length, u
         .insert(UP_KEY.to_owned(), Value::Length(up).stored());
 }
 
+/// Writes `element`, a floor opening, as in the plan of the floor `host`, on its top face `face`:
+/// its one face reference, and no offsets. Its other references and `props` stay.
+pub fn write_in_plan(element: &mut Element, host: &Id, face: &FaceName) {
+    element
+        .references
+        .retain(|r| !(r.kind == FACE_KIND && r.doc.is_none()));
+    element.props.remove(ALONG_KEY);
+    element.props.remove(UP_KEY);
+    element.references.push(Reference {
+        doc: None,
+        element: host.clone(),
+        name: face.name.clone(),
+        kind: FACE_KIND.to_owned(),
+        want: Want::Carrier,
+        signature: Some(face.role.clone()),
+    });
+}
+
 /// The face of `host` named `face`, under `edition`, if it is a side an element may sit on.
 ///
 /// # Errors
@@ -250,11 +291,14 @@ pub fn at(
     seat(edition, host, host_recipe, hosted, hosted_recipe, hosting).map(|(at, _)| at)
 }
 
-/// What a hosted element is called in a refusal: a placed family, or a door.
+/// What a hosted element is called in a refusal: a placed family, a plain or floor opening, or a
+/// door.
 #[must_use]
 pub fn noun(recipe: &Recipe) -> &'static str {
     if families::is_instance(recipe) {
         "family"
+    } else if construct_openings::is_void(recipe) {
+        "opening"
     } else {
         "door"
     }
@@ -297,6 +341,18 @@ pub fn seat(
             };
             return Ok((at, hosted_recipe.clone()));
         }
+        Hosting::InPlan { .. } => {
+            if !crate::floor_plan::is_floor(host_recipe) {
+                return Err(refuse(
+                    "NotAHost",
+                    format!(
+                        "{} is a {}, not a floor: an opening drawn in plan is hosted on a floor",
+                        host.name, host_recipe.op
+                    ),
+                ));
+            }
+            return Ok((Placement { x: 0, y: 0, z: 0 }, hosted_recipe.clone()));
+        }
         Hosting::OnFace {
             along, up, face, ..
         } => (*along, *up, face),
@@ -327,7 +383,16 @@ pub fn seat(
         return Ok((at, families::turned(hosted_recipe, turn)));
     }
     if wall_plan::is_layered(host_recipe) {
-        let at = on_layered(host, host_recipe, hosted_recipe, &role, along, up, &refuse)?;
+        let at = on_layered(
+            host,
+            host_recipe,
+            hosted,
+            hosted_recipe,
+            &role,
+            along,
+            up,
+            &refuse,
+        )?;
         return Ok((at, hosted_recipe.clone()));
     }
     let whole = |recipe: &Recipe, arg: &str| {
@@ -342,10 +407,13 @@ pub fn seat(
                 )
             })
     };
-    let (thickness, own) = (
-        whole(host_recipe, "thickness")?,
-        whole(hosted_recipe, "thickness")?,
-    );
+    let thickness = whole(host_recipe, "thickness")?;
+    // A plain opening goes through the whole wall, so it is as thick as its wall.
+    let own = if construct_openings::is_wall_opening(hosted_recipe) {
+        thickness
+    } else {
+        whole(hosted_recipe, "thickness")?
+    };
     let mm = |what: &str, length: Length| {
         length.whole_mm().ok_or_else(|| {
             refuse(
@@ -464,9 +532,14 @@ fn family_on_layered(
 /// layer face need not lie on one (the opening it cuts reaches 100 mm past both sides, so this
 /// moves no face of the opening across the wall). Only a wall along x or y hosts: a door is a box
 /// along an axis until doors are families (job 6.4).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the host and the hosted element, each with its filled recipe, and where it sits"
+)]
 fn on_layered(
     host: &Element,
     host_recipe: &Recipe,
+    hosted: &Element,
     hosted_recipe: &Recipe,
     role: &FaceName,
     along: Length,
@@ -499,10 +572,20 @@ fn on_layered(
                 )
             })
     };
-    let (width, own) = (
-        steps(hosted_recipe, "width")?,
-        steps(hosted_recipe, "thickness")?,
-    );
+    let (width, own) = if construct_openings::is_wall_opening(hosted_recipe) {
+        let opening = construct_openings::WallOpening::of(hosted.id.as_str(), hosted_recipe)
+            .map_err(|e| GeometryError {
+                code: e.code().to_owned(),
+                message: e.to_string(),
+            })?;
+        let thickness = i64::try_from(wall.thickness()).map_err(|_| too_big())?;
+        (opening.width.steps(), thickness)
+    } else {
+        (
+            steps(hosted_recipe, "width")?,
+            steps(hosted_recipe, "thickness")?,
+        )
+    };
     let whole = |what: &str, length: Length| {
         length.whole_mm().ok_or_else(|| {
             refuse(

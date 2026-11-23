@@ -8,20 +8,21 @@
 //! its offset. Each edge has an [`EdgeSpec`]: its overhang, how far the roof runs on past the edge
 //! in plan (0 or more), and its pitch, if the roof rises from it ([`Pitch`]).
 //!
-//! The form ([`Form`]) is worked out from which edges have a pitch, and nothing else is a roof
-//! here, each refusal naming the edges and the job that lifts it:
+//! The form ([`Form`]) is worked out from which edges have a pitch:
 //! - none: **flat**, on any footprint construct-slabs takes; an overhang only on a footprint
-//!   whose every edge runs along the plan's x or y axis ([`RoofError::OverhangOffAxis`], job 6.2),
-//!   the eaves outline then each edge moved out by its overhang;
-//! - one: **mono-pitch**, rising from that edge across to the opposite one;
-//! - two opposite edges at one slope: **gable**, rising from both to a ridge midway between them;
-//!   at different slopes, refused ([`RoofError::UnevenGable`], job 6.2);
-//! - two edges that meet at a corner, three, or all four: hips, refused ([`RoofError::Hips`], job
-//!   6.2: "every edge slopes: hips come with job 6.2").
+//!   whose every edge runs along the plan's x or y axis ([`RoofError::OverhangOffAxis`]), the
+//!   eaves outline then each edge moved out by its overhang;
+//! - on a rectangle along the plan's axes, one edge: **mono-pitch**, rising from that edge across
+//!   to the opposite one; two opposite edges: **gable**, rising from both to a ridge (midway at
+//!   one slope; at two, where the slopes meet, an uneven gable);
+//! - anything else that slopes is **solved** (job 6.2): every sloped edge's plane rises from it,
+//!   and the planes meet in ridges, hips and valleys ([`crate::solve`]): hips on a rectangle, a
+//!   hip at one end and a verge at the other, a rectangle turned off the axes, an L or any other
+//!   right-angled footprint with its valleys. Its sloped edges rise at one pitch
+//!   ([`RoofError::UnevenPitches`]); its footprint has a right angle at every corner
+//!   ([`RoofError::NotRightAngled`]); [`crate::solve`]'s header lists the rest it refuses.
 //!
-//! A sloped roof's footprint is a rectangle whose edges run along the plan's x and y axes
-//! ([`RoofError::NotARectangle`], job 6.2 for the rest), so every corner it makes is exact on the
-//! kernel's grid; [`crate::shape`] says where each is.
+//! Every corner a roof makes is on the kernel's grid; [`crate::shape`] says where each is.
 
 use crate::error::RoofError;
 use crate::pitch::Pitch;
@@ -66,31 +67,40 @@ pub enum Form {
         /// The edge it rises from: its eaves.
         eaves: Id,
     },
-    /// Two opposite edges slope alike: the roof rises from both to a ridge midway.
+    /// Two opposite edges of a rectangle along the axes slope: the roof rises from both to a
+    /// ridge, midway when they slope alike.
     Gable {
         /// The two edges it rises from, in the footprint's order.
         eaves: [Id; 2],
     },
+    /// Any other sloped roof: each sloped edge's plane rises from it and the planes meet in
+    /// ridges, hips and valleys ([`crate::solve`]).
+    Solved {
+        /// The edges it rises from, in the footprint's order.
+        eaves: Vec<Id>,
+    },
 }
 
 impl Form {
-    /// The form's stored name: `flat`, `mono` or `gable`.
+    /// The form's stored name: `flat`, `mono`, `gable` or `solved`.
     #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Flat => "flat",
             Self::Mono { .. } => "mono",
             Self::Gable { .. } => "gable",
+            Self::Solved { .. } => "solved",
         }
     }
 
-    /// The edges the roof rises from, in the footprint's order: none, one or two.
+    /// The edges the roof rises from, in the footprint's order.
     #[must_use]
     pub fn eaves(&self) -> Vec<Id> {
         match self {
             Self::Flat => Vec::new(),
             Self::Mono { eaves } => vec![eaves.clone()],
             Self::Gable { eaves } => eaves.to_vec(),
+            Self::Solved { eaves } => eaves.clone(),
         }
     }
 }
@@ -112,10 +122,10 @@ impl Roof {
     /// In this order: [`RoofError::Holes`]; [`RoofError::UnknownEdge`] for the first edge (by ID)
     /// the footprint lacks; then edge by edge in the footprint's order,
     /// [`RoofError::NegativeOverhang`] and the pitch's refusals ([`Pitch::checked`]); then the
-    /// form's refusals ([`RoofError::NotARectangle`], [`RoofError::Hips`],
-    /// [`RoofError::UnevenGable`]); then the shape's ([`RoofError::OverhangOffAxis`],
-    /// [`RoofError::OverhangFolds`], [`RoofError::TooShallow`], [`RoofError::OutOfRange`],
-    /// [`RoofError::NotExact`]).
+    /// form's ([`RoofError::UnevenPitches`]); then the shape's ([`RoofError::NotRightAngled`],
+    /// [`RoofError::OverhangOffAxis`], [`RoofError::OverhangFolds`],
+    /// [`RoofError::VergeOnReflex`], [`RoofError::OverhangsDiffer`], [`RoofError::TooShallow`],
+    /// [`RoofError::OutOfRange`], [`RoofError::NotExact`], [`RoofError::NotSolved`]).
     pub fn new(footprint: Boundary, edges: &BTreeMap<Id, EdgeSpec>) -> Result<Self, RoofError> {
         if !footprint.holes().is_empty() {
             return Err(RoofError::Holes {
@@ -366,44 +376,42 @@ fn form_of(footprint: &Boundary, edges: &[(Id, EdgeSpec)]) -> Result<Form, RoofE
         .into_iter()
         .map(|(_, at)| at)
         .collect();
-    if !is_axis_rectangle(&corners) {
-        return Err(RoofError::NotARectangle { edges: sloping });
-    }
     let index = |id: &Id| edges.iter().position(|(edge, _)| edge == id);
-    match sloping.as_slice() {
-        [eaves] => Ok(Form::Mono {
-            eaves: eaves.clone(),
-        }),
-        [first, second] => {
-            let apart = index(second)
-                .zip(index(first))
-                .map(|(b, a)| b.saturating_sub(a));
-            if apart != Some(2) {
-                return Err(RoofError::Hips {
-                    edges: sloping,
-                    every: false,
+    if is_axis_rectangle(&corners) {
+        match sloping.as_slice() {
+            [eaves] => {
+                return Ok(Form::Mono {
+                    eaves: eaves.clone(),
                 });
             }
-            let slope = |id: &Id| {
-                edges
-                    .iter()
-                    .find(|(edge, _)| edge == id)
-                    .and_then(|(_, spec)| spec.pitch)
-                    .and_then(Pitch::slope)
-            };
-            if slope(first) != slope(second) {
-                return Err(RoofError::UnevenGable {
-                    first: first.clone(),
-                    second: second.clone(),
+            [first, second]
+                if index(second)
+                    .zip(index(first))
+                    .map(|(b, a)| b.saturating_sub(a))
+                    == Some(2) =>
+            {
+                return Ok(Form::Gable {
+                    eaves: [first.clone(), second.clone()],
                 });
             }
-            Ok(Form::Gable {
-                eaves: [first.clone(), second.clone()],
-            })
+            _ => {}
         }
-        _ => Err(RoofError::Hips {
-            every: sloping.len() == edges.len(),
-            edges: sloping,
-        }),
     }
+    // Every other sloped roof is solved at one pitch.
+    let slope = |id: &Id| {
+        edges
+            .iter()
+            .find(|(edge, _)| edge == id)
+            .and_then(|(_, spec)| spec.pitch)
+            .and_then(Pitch::slope)
+    };
+    if let Some(first) = sloping.first()
+        && let Some(second) = sloping.iter().find(|id| slope(id) != slope(first))
+    {
+        return Err(RoofError::UnevenPitches {
+            first: first.clone(),
+            second: second.clone(),
+        });
+    }
+    Ok(Form::Solved { eaves: sloping })
 }

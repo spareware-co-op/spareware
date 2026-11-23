@@ -58,6 +58,12 @@ tracing-subscriber = { version = "=0.3.20", features = ["env-filter"] }  # MIT
 
 [dev-dependencies]
 kit-store = { path = "../../kit/crates/kit-store", features = ["memory"] }
+# The kernel's facade, for the kernel builder's suite (construct-regen's tests/kernel_suite), which
+# tests/kernel.rs runs on solidcore's engine. This repository's own, Apache-2.0.
+engine-geometry = { path = "../../engines/crates/engine-geometry" }
+# Stored lengths, for the suite's layered walls (a filled recipe holds its lengths in their stored
+# spelling). This repository's own, Apache-2.0.
+construct-params = { path = "../crates/construct-params" }
 # Family recipes, for the suite's placed families (their types, turns and the evaluator the suite
 # asks the engine through). This repository's own, Apache-2.0.
 construct-families = { path = "../crates/construct-families" }

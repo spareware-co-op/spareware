@@ -4,17 +4,21 @@
 //! nothing more.
 //!
 //! What it reads: the recipe construct-roofs' `filled` writes, which the regenerator builds from
-//! ([`crate::roofs`]): `form` (`flat`, `mono` or `gable`); `slopes`, the edges the roof rises from;
+//! ([`crate::roofs`]): `form` (`flat`, `mono`, `gable` or `solved`); `slopes`, the edges the roof
+//! rises from;
 //! `outline`, the eaves outline anticlockwise from above, each corner `{"id":<edge ID>,"at":[x,y]}`;
 //! and `layers`, from the top face down, each `{"function","material","thickness"}` and, for a
-//! layer with a thickness, `solid`: `{"extrude":[[x,y,z], ...],"by":[x,y,z]}` or
-//! `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}`. The roof's base is `z = 0` in its own frame (its
-//! level's elevation plus its offset, the height its built row holds).
+//! layer with a thickness, `solid`: `{"extrude":[[x,y,z], ...],"by":[x,y,z]}`,
+//! `{"loft":[[[x,y,z], ...],[[x,y,z], ...]]}` or, for a solved roof (job 6.2),
+//! `{"unite":[[[x,y,z], ...], ...],"by":[x,y,z]}`, its pieces each extruded by the vector and
+//! united in order. The roof's base is `z = 0` in its own frame (its level's elevation plus its
+//! offset, the height its built row holds).
 //!
 //! What it promises: a recipe it reads has an outline of at least three corners, every edge ID
 //! once, every point on the kernel's grid (within 2^40 - 1 steps of the origin), at least one
-//! layer with a solid, every loft two sections of one count of at least three corners, and a
-//! sloping edge only among the outline's edges and only on a sloped form. A recipe whose layers are
+//! layer with a solid, every loft two sections of one count of at least three corners, every
+//! union at least one piece of at least three corners, and a sloping edge only among the outline's
+//! edges and only on a sloped form (one for mono, two for gable, one or more for solved). A recipe whose layers are
 //! not filled yet is `Unfilled`. Where each corner is, and that it is right, is construct-roofs'
 //! (its `shape`), and the engine's checker judges every solid it returns.
 //!
@@ -68,6 +72,13 @@ pub enum PlanSolid {
         /// The two sections.
         sections: [Vec<[i64; 3]>; 2],
     },
+    /// Flat pieces, each extruded by one vector, united in their order.
+    Unite {
+        /// The pieces.
+        profiles: Vec<Vec<[i64; 3]>>,
+        /// The vector.
+        by: [i64; 3],
+    },
 }
 
 impl PlanSolid {
@@ -87,6 +98,16 @@ impl PlanSolid {
                 out
             }
             Self::Loft { sections } => sections.concat(),
+            Self::Unite { profiles, by } => profiles
+                .iter()
+                .flat_map(|profile| {
+                    Self::Extrude {
+                        profile: profile.clone(),
+                        by: *by,
+                    }
+                    .points()
+                })
+                .collect(),
         }
     }
 }
@@ -107,7 +128,7 @@ pub struct RoofLayer {
 /// A roof read from its filled recipe ([`RoofPlan::of`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RoofPlan {
-    /// `flat`, `mono` or `gable`.
+    /// `flat`, `mono`, `gable` or `solved`.
     pub form: String,
     /// The edges it rises from, in the footprint's order.
     pub slopes: Vec<String>,
@@ -151,8 +172,8 @@ impl RoofPlan {
         let form = args
             .get("form")
             .and_then(Value::as_str)
-            .filter(|f| ["flat", "mono", "gable"].contains(f))
-            .ok_or_else(|| missing("form is flat, mono or gable"))?;
+            .filter(|f| ["flat", "mono", "gable", "solved"].contains(f))
+            .ok_or_else(|| missing("form is flat, mono, gable or solved"))?;
         let outline = read_outline(args.get("outline"))?;
         let ids: BTreeSet<&str> = outline.iter().map(|c| c.id.as_str()).collect();
         let slopes: Vec<String> = args
@@ -164,11 +185,12 @@ impl RoofPlan {
             .collect::<Option<_>>()
             .ok_or_else(|| missing("slopes are edges of its outline"))?;
         let expected = match form {
-            "flat" => 0,
-            "mono" => 1,
-            _ => 2,
+            "flat" => 0..=0,
+            "mono" => 1..=1,
+            "gable" => 2..=2,
+            _ => 1..=outline.len(),
         };
-        if slopes.len() != expected {
+        if !expected.contains(&slopes.len()) {
             return Err(missing("slopes are as many as its form has"));
         }
         let layers = layers
@@ -371,6 +393,30 @@ fn read_solid(solid: &Value, at: usize) -> Result<PlanSolid, GeometryError> {
         }
         return Ok(PlanSolid::Extrude { profile, by });
     }
+    if let Some(pieces) = solid.get("unite") {
+        let pieces = pieces.as_array().filter(|p| !p.is_empty()).ok_or_else(|| {
+            fault(
+                "MissingArgument",
+                format!("{what} is a list of pieces to unite"),
+            )
+        })?;
+        let profiles = pieces
+            .iter()
+            .map(|piece| read_points(piece, &what))
+            .collect::<Result<Vec<_>, _>>()?;
+        if profiles.iter().any(|p| p.len() < 3) {
+            return Err(fault(
+                "EmptyShape",
+                format!("{what} has a piece of fewer than three corners"),
+            ));
+        }
+        let by = solid.get("by").cloned().unwrap_or_default();
+        let by = read_points(&Value::Array(vec![by]), &what)?;
+        let [by] = by.as_slice() else {
+            return Err(fault("MissingArgument", format!("{what} has a vector")));
+        };
+        return Ok(PlanSolid::Unite { profiles, by: *by });
+    }
     let sections = solid
         .get("loft")
         .and_then(Value::as_array)
@@ -378,7 +424,7 @@ fn read_solid(solid: &Value, at: usize) -> Result<PlanSolid, GeometryError> {
         .ok_or_else(|| {
             fault(
                 "MissingArgument",
-                format!("{what} is an extrusion or a loft of two sections"),
+                format!("{what} is an extrusion, a loft of two sections or a union of pieces"),
             )
         })?;
     let mut read = sections.iter().map(|s| read_points(s, &what));
@@ -457,6 +503,16 @@ mod tests {
         .unwrap();
         assert_eq!(plan.roles()[..2], ["top", "bottom"]);
         assert_eq!(plan.extent().1, [6400, 6400, 6400]);
+        let united = json!({ "function": "structure", "material": "m", "thickness": 640,
+                             "solid": { "unite": [[[0, 0, 0], [6400, 0, 0], [3200, 3200, 3200]],
+                                                  [[6400, 0, 0], [6400, 6400, 0], [3200, 3200, 3200]]],
+                                        "by": [0, 0, 800] } });
+        let plan = RoofPlan::of(&roof(json!({
+            "form": "solved", "slopes": ["a", "b"], "outline": outline(), "layers": [united],
+        })))
+        .unwrap();
+        assert_eq!(plan.roles()[..3], ["top.a", "bottom.a", "top.b"]);
+        assert_eq!(plan.extent(), ([0, 0, 0], [6400, 6400, 4000]));
     }
 
     /// What is not a filled roof is refused, each with its code.
@@ -476,6 +532,26 @@ mod tests {
         assert_eq!(code(with("form", json!("hip"))), "MissingArgument");
         assert_eq!(code(with("slopes", json!(["z"]))), "MissingArgument");
         assert_eq!(code(with("slopes", json!([]))), "MissingArgument");
+        let solved = |solid: Value| {
+            let mut args = with("form", json!("solved"));
+            args["layers"] = json!([{ "function": "structure", "material": "m", "thickness": 10,
+                                      "solid": solid }]);
+            args
+        };
+        assert_eq!(
+            code(solved(json!({ "unite": [], "by": [0, 0, 1] }))),
+            "MissingArgument"
+        );
+        assert_eq!(
+            code(solved(
+                json!({ "unite": [[[0, 0, 0], [1, 0, 0]]], "by": [0, 0, 1] })
+            )),
+            "EmptyShape"
+        );
+        let mut none =
+            solved(json!({ "unite": [[[0, 0, 0], [1, 0, 0], [0, 1, 0]]], "by": [0, 0, 1] }));
+        none["slopes"] = json!([]);
+        assert_eq!(code(none), "MissingArgument");
         assert_eq!(
             code(with("outline", json!([{ "id": "a", "at": [0, 0] }]))),
             "EmptyShape"

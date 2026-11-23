@@ -45,7 +45,7 @@ A pitched roof bears on the walls along its eaves: its rafters (or a slab) sit o
 
 ## Not decided here
 
-- Hips, valleys, uneven gables and sloped roofs on any footprint (job 6.2, roof solving, CON-A4-F4-P4); dormers (CON-A4-F3-P4); soffits, fascias and gutters (CON-A4-F4-P3, its later half).
+- Hips, valleys, uneven gables and sloped roofs on other footprints: now solved, as [the roof solving note](CON-A4-F4-P4-roof-solving.md) decides (job 6.2, CON-A4-F4-P4), which lifts this note's refusals of them; dormers (CON-A4-F3-P4); soffits, fascias and gutters (CON-A4-F4-P3, its later half).
 - Openings through a roof (job 4.2).
 - The commands, now written (construct-api `cloud::roofs`, listed in construct-model's FORMAT.md): `roof.create`, `roof.footprint`, `roof.form`, `roof.pitch`, `roof.overhang`, `roof.level`, `roof.retype`, `roof.delete`, `roof.defaults` and the five `roof.type.*`, each one entry and one undo step, with the generic commands refused behind them as the floor's are. A roof's form is chosen by `form` (flat, mono, gable) with `pitch`, `overhang` and `eaves`, and what construct-roofs refuses is refused in its words. The layer stack and the footprint stay in construct-slabs for now (main's decision).
 - Per-edge pitches and overhangs beyond `roof.pitch` and `roof.overhang` with `edge`, and the page choosing them edge by edge: later.
