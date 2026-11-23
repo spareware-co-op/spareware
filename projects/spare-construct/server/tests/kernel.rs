@@ -780,7 +780,8 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
-    assert_eq!(fresh.verify(&project).await.unwrap(), 34);
+    // The seed's shapes (the site setout's five grids among them) and what this test drew.
+    assert_eq!(fresh.verify(&project).await.unwrap(), 29);
 }
 
 /// A corner of a floor's boundary as `floor.create` takes it, in millimetres as typed text.

@@ -1225,7 +1225,8 @@ async fn a_layered_wall_drawn_by_command_is_built_from_its_type() {
         stack.files.clone(),
         construct_regen::geometry(),
     );
-    assert_eq!(regen.verify(&project).await.unwrap(), 33);
+    // The seed's shapes (the site setout's five grids among them) and what this test drew.
+    assert_eq!(regen.verify(&project).await.unwrap(), 28);
 }
 
 /// A corner of a floor's boundary as `floor.create` takes it, in millimetres as typed text.
