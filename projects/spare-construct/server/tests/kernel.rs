@@ -992,3 +992,29 @@ async fn walls_drawn_to_meet_through_commands_are_joined_on_the_kernel() {
     assert_eq!(derived(&store, &project).await, before);
     assert_eq!(fresh.verify(&project).await.unwrap(), 29);
 }
+
+/// A level's plan drawn on solidcore, as the page asks for it: every wall of the level has its
+/// cut edges, each layer's section is hatched in its material, the same model draws the same bytes
+/// twice, and an element the drawer cannot draw is named with its reason and does not blank the
+/// plan.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_server_draws_a_levels_plan_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let plan = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+    assert!(plan.svg.starts_with("<svg"));
+    for wall in ["W-101", "W-102", "W-103", "W-104", "W-105"] {
+        let lines = format!("data-element=\"{wall}\"");
+        assert!(plan.svg.contains(&lines), "{wall} has cut edges");
+    }
+    assert!(
+        plan.svg.contains("data-material="),
+        "the layers are hatched"
+    );
+    let again = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert_eq!(plan.svg, again.svg);
+}

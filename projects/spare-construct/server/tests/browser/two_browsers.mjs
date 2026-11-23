@@ -1241,5 +1241,103 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the floor's included, matches the server's`);
 }
+console.log('\n   Views, in the project browser');
+// Anna opens Level 1's plan from the browser's list of the model's views and the server draws it;
+// Ben draws a wall, and the open plan shows it; Anna makes a plan view and renames it, and Ben's
+// list follows each step; a fresh load agrees. A server on the geometry kernel draws the plan (the
+// stand-in's has no cut), so a server without it says so in the plan pane instead, in its words.
+const withKernel = process.env.STACK_GEOMETRY === 'kernel';
+const viewLeaf = (name) => `#browser [data-act="stackview"]:has(span:text-is("${name}"))`;
+await toArchitecture(anna);
+await toArchitecture(ben);
+await ben.click('#browser [data-act="view"][data-a="l1"]');
+await anna.waitForSelector(viewLeaf('Level 1 plan'));
+await ben.waitForSelector(viewLeaf('Level 1 plan'));
+check(
+  (await anna.locator('#browser [data-act="stackview"]').allTextContents()).join('|').includes('Level 2 plan'),
+  "the browser lists the model's views, one plan for each level",
+);
+await anna.click(viewLeaf('Level 1 plan'));
+if (withKernel) {
+  await anna.waitForSelector('#pv-canvas g.drawn path[data-material]', { state: 'attached' });
+  await anna.waitForSelector('#pv-canvas g.drawn line[data-element="W-101"]', { state: 'attached' });
+  check(
+    (await anna.locator('#pv-canvas g.drawn line[data-role]').count()) > 8,
+    "Anna opens Level 1's plan and the server's drawing shows cut lines and hatches",
+  );
+} else {
+  await anna.waitForSelector('#pv-canvas .stack-plan-note.bad');
+  check(
+    /without the geometry kernel/.test(await anna.locator('#pv-canvas .stack-plan-note').textContent()),
+    'a server without the kernel says in the plan pane that it cannot draw the plan',
+  );
+}
+await shot(anna, 'anna-open-view');
+
+// Ben draws a wall on Level 1 at a place nothing stands; it appears in Anna's open plan.
+const wallsOf = (page) =>
+  page.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered').map((p) => p.el.id));
+const wallsBefore = await wallsOf(ben);
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+const viewWallStart = await onPlan(ben, 2000, 10000);
+const viewWallEnd = await onPlan(ben, 4500, 10000);
+await ben.mouse.click(viewWallStart.x, viewWallStart.y);
+await ben.mouse.click(viewWallEnd.x, viewWallEnd.y);
+await ben.keyboard.press('Escape');
+const viewsNewWall = async (page) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = (await wallsOf(page)).find((id) => !wallsBefore.includes(id));
+    if (found) return found;
+    await page.waitForTimeout(100);
+  }
+  throw new Error("FAILED: Ben's new wall never reached the page");
+};
+const viewWallId = await viewsNewWall(anna);
+if (withKernel) {
+  await anna.waitForSelector(`#pv-canvas g.drawn line[data-element="${viewWallId}"]`, { state: 'attached' });
+  pass("Ben draws a wall and Anna's open plan shows it, as the server draws it");
+} else {
+  pass("Ben draws a wall and it reaches Anna's plan");
+}
+await shot(anna, 'anna-view-with-ben-wall');
+
+// Anna makes a plan view; Ben's list shows it.
+await anna.locator('#browser [data-key="new-view-name"]').fill('Ground floor plan');
+await anna.locator('#browser [data-act="stacknewview"]').click();
+await ben.waitForSelector(viewLeaf('Ground floor plan')).catch(async (error) => {
+  const said = await anna.locator('#browser').innerText();
+  throw new Error(`${error.message}
+Anna's browser: ${said}
+views: ${JSON.stringify(await ben.evaluate(() => window.spare.views))}`);
+});
+await anna.waitForSelector(viewLeaf('Ground floor plan'));
+pass("Anna makes a plan view in the browser and Ben's list shows it");
+const madeView = await ben.evaluate(() => window.spare.views.find((v) => v.name === 'Ground floor plan'));
+check(madeView.kind === 'floor_plan' && madeView.level === '1', 'a floor plan of Level 1, made by the view command');
+
+// Anna opens it and renames it by typing the new name and pressing Enter.
+await anna.click(viewLeaf('Ground floor plan'));
+const renameField = `#browser input[data-key="view-name:${madeView.id}"]`;
+await anna.waitForSelector(renameField);
+await anna.locator(renameField).fill('Level 1 working plan');
+await anna.locator(renameField).press('Enter');
+await ben.waitForSelector(viewLeaf('Level 1 working plan'));
+await anna.waitForSelector(viewLeaf('Level 1 working plan'));
+check(
+  (await ben.locator(viewLeaf('Ground floor plan')).count()) === 0,
+  "Anna renames it and Ben sees the new name, not the old",
+);
+
+// A fresh load agrees with both.
+const fresh = await signIn('anna');
+await fresh.waitForSelector(viewLeaf('Level 1 working plan'));
+const freshNames = await fresh.evaluate((url) => fetch(url).then((r) => r.json()).then((list) => list.map((v) => v.name)), `${model}/views`);
+check(
+  freshNames.join('|') === 'Level 1 plan|Level 1 working plan|Level 2 plan',
+  'a fresh load lists the same views, by name',
+);
+await fresh.context().close();
+
 await browser.close();
 console.log('\nThe browser checks passed.');
