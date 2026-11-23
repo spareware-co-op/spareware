@@ -392,6 +392,7 @@ fn the_two_wall_plan_is_stored_as_pinned() {
 }
 
 /// The default styles, materials and fill patterns, kept for a test to borrow.
+#[derive(Debug)]
 struct Defaults {
     categories: CategoryTable,
     lines: LineStyles,
@@ -413,6 +414,7 @@ impl Defaults {
 
     fn styles(&self) -> Styles<'_> {
         Styles {
+            looks: None,
             categories: &self.categories,
             lines: &self.lines,
             objects: &self.objects,
@@ -538,4 +540,147 @@ fn two_walls_and_one_as_svg_is_pinned() {
         svg.as_bytes(),
         include_bytes!("two_walls_and_one.svg"),
     );
+}
+
+/// A view's rules for the tests below, standing in for the server's answer from construct-views'
+/// `resolve`: the project's object styles, except for the categories it names.
+#[derive(Debug)]
+struct Rules {
+    base: Defaults,
+    scale: Scale,
+    /// A category the view hides, if any.
+    hidden: Option<construct_categories::CategoryId>,
+    /// A cut rule for walls, if any: pen, fill, halftone, transparency.
+    walls: Option<(u16, construct_drawing::look::FillLook, bool, u8)>,
+}
+
+impl construct_drawing::look::Looks for Rules {
+    fn look(
+        &self,
+        category: construct_categories::CategoryId,
+        kind: LineKind,
+    ) -> Result<construct_drawing::look::Look, String> {
+        let edge = match kind {
+            LineKind::Cut => construct_styles::Edge::Cut,
+            LineKind::Projected => construct_styles::Edge::Projected,
+        };
+        let mut look = construct_drawing::look::Look {
+            shown: self.hidden != Some(category),
+            edge: self
+                .base
+                .objects
+                .lookup(
+                    &self.base.categories,
+                    &self.base.lines,
+                    category,
+                    edge,
+                    self.scale,
+                )
+                .map_err(|e| format!("{e:?}"))?,
+            fill: None,
+            halftone: false,
+            transparency: 0,
+        };
+        if let (Some((pen, fill, halftone, transparency)), WALLS, LineKind::Cut) =
+            (&self.walls, category, kind)
+        {
+            look.edge.width = self
+                .base
+                .lines
+                .model_pens
+                .width(*pen, self.scale)
+                .map_err(|e| format!("{e:?}"))?;
+            look.fill = Some(fill.clone());
+            look.halftone = *halftone;
+            look.transparency = *transparency;
+        }
+        Ok(look)
+    }
+}
+
+fn with_looks<'a>(
+    defaults: &'a Defaults,
+    looks: &'a dyn construct_drawing::look::Looks,
+) -> Styles<'a> {
+    Styles {
+        looks: Some(looks),
+        ..defaults.styles()
+    }
+}
+
+/// A view with no rules looks as the project's object styles say, so what is drawn is the bytes it
+/// was drawn as before rules.
+#[test]
+fn a_view_with_no_rules_draws_as_it_did() {
+    let drawing = two_walls_and_one();
+    let scale = Scale::new(100).unwrap();
+    let none = to_svg(&drawing, Defaults::new().styles(), scale).unwrap();
+    let rules = Rules {
+        base: Defaults::new(),
+        scale,
+        hidden: None,
+        walls: None,
+    };
+    let defaults = Defaults::new();
+    let same = to_svg(&drawing, with_looks(&defaults, &rules), scale).unwrap();
+    assert_eq!(none, same);
+    assert!(!same.contains("opacity"));
+}
+
+/// A rule for what walls cut: a heavier pen, another fill in another colour, halftone and
+/// transparency. The outline prints at the rule's pen, the hatch at the rule's fill and colour,
+/// both at the opacity the two make, and the same rule twice gives the same bytes.
+#[test]
+fn a_rule_changes_the_pen_the_fill_and_the_tone_of_what_it_cuts() {
+    let drawing = two_walls_and_one();
+    let scale = Scale::new(100).unwrap();
+    let rules = Rules {
+        base: Defaults::new(),
+        scale,
+        hidden: None,
+        walls: Some((
+            5,
+            construct_drawing::look::FillLook {
+                pattern: "earth".to_owned(),
+                colour: construct_styles::Colour(200, 16, 32),
+            },
+            true,
+            20,
+        )),
+    };
+    let defaults = Defaults::new();
+    let styles = with_looks(&defaults, &rules);
+    let pic = picture(&drawing, styles, scale).unwrap();
+    let heavy = defaults.lines.model_pens.width(5, scale).unwrap();
+    assert_ne!(heavy.get(), 500);
+    assert!(pic.strokes.iter().all(|s| s.width == heavy));
+    // Halftone is half strength and 20 per cent transparency takes a fifth off that: 40.
+    assert!(pic.strokes.iter().all(|s| s.opacity == 40));
+    assert_eq!(pic.hatches.len(), 2);
+    for hatch in &pic.hatches {
+        assert_eq!(hatch.colour, construct_styles::Colour(200, 16, 32));
+        assert_eq!(hatch.opacity, 40);
+    }
+    let svg = to_svg(&drawing, styles, scale).unwrap();
+    assert!(svg.contains("opacity=\"0.4\""));
+    assert!(svg.contains("stroke=\"#c81020\""));
+    assert_eq!(svg, to_svg(&drawing, styles, scale).unwrap());
+    assert_ne!(svg, to_svg(&drawing, defaults.styles(), scale).unwrap());
+}
+
+/// A hidden category leaves out its lines and its regions, so nothing of it is hatched either.
+#[test]
+fn a_hidden_category_is_left_out_of_the_drawing() {
+    let drawing = two_walls_and_one();
+    let scale = Scale::new(100).unwrap();
+    let rules = Rules {
+        base: Defaults::new(),
+        scale,
+        hidden: Some(WALLS),
+        walls: None,
+    };
+    let defaults = Defaults::new();
+    let pic = picture(&drawing, with_looks(&defaults, &rules), scale).unwrap();
+    assert_eq!(pic.strokes.len(), 0);
+    assert_eq!(pic.hatches.len(), 0);
 }

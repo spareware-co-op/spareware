@@ -26,6 +26,7 @@ cloud = [
     "dep:construct-rooms",
     "dep:construct-phases",
     "dep:construct-doorgen",
+    "dep:construct-styles",
 ]
 
 [dependencies]
@@ -64,9 +65,12 @@ construct-rooms = { path = "../construct-rooms", optional = true }
 construct-phases = { path = "../construct-phases", optional = true }
 # The generated door and window types: construct-doorgen makes and verifies each before it is stored.
 construct-doorgen = { path = "../construct-doorgen", optional = true }
+# The view graphics commands: the pens, line patterns and object styles a rule is checked against.
+construct-styles = { path = "../construct-styles", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
+construct-sheets = { path = "../construct-sheets" }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }

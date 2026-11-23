@@ -81,8 +81,8 @@ pub fn category_of(recipe: &Recipe) -> Result<CategoryId, CategoryError> {
     category_of_kind(&kind_name(recipe))
 }
 
-/// Whether a record is an element with a shape: type records, parameter tables, levels, views and
-/// a document's families are not.
+/// Whether a record is an element with a shape: type records, parameter tables, levels, views,
+/// sheets and viewports, and a document's families are not.
 #[must_use]
 pub fn has_shape(element: &Element) -> bool {
     element.kind != TYPE_KIND
@@ -90,6 +90,8 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_levels::LEVEL_KIND
         && element.kind != construct_views::VIEW_KIND
         && !crate::families::is_record(element)
+        && element.kind != construct_sheets::SHEET_KIND
+        && element.kind != construct_sheets::VIEWPORT_KIND
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).

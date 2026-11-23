@@ -673,7 +673,9 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-sheets",
  "construct-slabs",
+ "construct-styles",
  "construct-transport",
  "construct-types",
  "construct-versions",
@@ -884,6 +886,7 @@ dependencies = [
  "construct-params",
  "construct-roofs",
  "construct-rooms",
+ "construct-sheets",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -932,6 +935,17 @@ dependencies = [
  "dashu-ratio",
  "kit-core",
  "serde_json",
+]
+
+[[package]]
+name = "construct-sheets"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-styles",
+ "kit-core",
 ]
 
 [[package]]
@@ -1018,6 +1032,7 @@ dependencies = [
  "construct-spatial",
  "construct-styles",
  "kit-core",
+ "serde",
  "serde_json",
 ]
 

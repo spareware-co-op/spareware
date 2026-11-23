@@ -998,6 +998,73 @@ async fn the_server_draws_a_levels_plan_on_the_kernel() {
     assert_eq!(plan.svg, again.svg);
 }
 
+/// A view's graphics rules reach the drawing on the kernel: with no rule the plan is the bytes it
+/// was; a heavier pen, another fill and colour, and halftone for what walls cut change those lines
+/// and hatches and nothing else; a hidden category leaves its edges and hatches out (the walls', not
+/// the doors'); clearing the
+/// rule gives the first bytes back, and undo and redo each go there and back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_graphics_rules_change_the_plan_it_draws() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = || async {
+        s.plan(&anna, &project, &model, &i("VP-1"))
+            .await
+            .unwrap()
+            .svg
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let set = |style: serde_json::Value| json!({ "view": "VP-1", "category": 100, "edge": "cut", "style": style });
+    let plain = draw().await;
+    assert!(plain.contains("data-material="));
+    assert!(!plain.contains("opacity"));
+
+    let heavy = json!({ "pen": 6, "colour": [200, 16, 32],
+                        "fill": { "pattern": "earth", "colour": [10, 90, 20] },
+                        "halftone": true });
+    edit("view.graphics.set", set(heavy)).await;
+    let ruled = draw().await;
+    assert_ne!(ruled, plain);
+    assert!(ruled.contains("stroke=\"#c81020\""), "the rule's colour");
+    assert!(
+        ruled.contains("stroke=\"#0a5a14\""),
+        "the rule's fill colour"
+    );
+    assert!(ruled.contains("opacity=\"0.5\""), "halftone");
+    assert_eq!(ruled, draw().await, "the same rule draws the same bytes");
+
+    edit("view.graphics.set", set(json!({ "shown": false }))).await;
+    let hidden = draw().await;
+    for wall in ["W-101", "W-102", "W-103", "W-104", "W-105"] {
+        assert!(
+            !hidden.contains(&format!("data-element=\"{wall}\"")),
+            "{wall}"
+        );
+    }
+    assert!(hidden.contains("data-element=\"D-101\""), "the doors stay");
+    assert!(hidden.matches("data-material=").count() < plain.matches("data-material=").count());
+
+    edit(
+        "view.graphics.clear",
+        json!({ "view": "VP-1", "category": 100 }),
+    )
+    .await;
+    assert_eq!(draw().await, plain, "clearing gives the first drawing back");
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, hidden);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, ruled);
+    edit("edit.redo", json!({})).await;
+    edit("edit.redo", json!({})).await;
+    assert_eq!(draw().await, plain);
+}
+
 /// Through the server's commands on the kernel: the default roof types made and a gable roof over
 /// a rectangle drawn of the insulated concrete type, built one solid per layer; its parameters
 /// view lists its area, ridge height and each layer's volume in units, read-only, the same as on
