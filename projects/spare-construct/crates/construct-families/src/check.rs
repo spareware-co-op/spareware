@@ -286,7 +286,7 @@ pub(crate) fn stored_value(def: &Definition, text: &str) -> Result<Value, ParamE
 }
 
 /// The formula kind of a parameter kind, if formulas can use it.
-fn formula_kind(kind: Kind) -> Option<Kind> {
+pub(crate) fn formula_kind(kind: Kind) -> Option<Kind> {
     match kind {
         Kind::Length | Kind::Angle | Kind::Number | Kind::Whole => Some(kind),
         _ => None,
@@ -295,7 +295,7 @@ fn formula_kind(kind: Kind) -> Option<Kind> {
 
 /// A value as formula text that reads back to it exactly: a length in exact millimetres (its own
 /// text, whatever its step count), an angle as a ratio of degrees, numbers as they are.
-fn formula_text(def: &Definition, value: &Value) -> Option<String> {
+pub(crate) fn formula_text(def: &Definition, value: &Value) -> Option<String> {
     match value {
         Value::Length(length) => {
             def.check(value).ok()?;
@@ -312,7 +312,7 @@ fn formula_text(def: &Definition, value: &Value) -> Option<String> {
 }
 
 /// Every parameter name a formula reads.
-fn names(expr: &Expr, out: &mut Vec<String>) {
+pub(crate) fn names(expr: &Expr, out: &mut Vec<String>) {
     match expr {
         Expr::Name(name) => out.push(name.clone()),
         Expr::Neg(inner) | Expr::Not(inner) => names(inner, out),
