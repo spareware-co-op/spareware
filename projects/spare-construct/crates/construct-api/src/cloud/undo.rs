@@ -40,7 +40,8 @@
 //! without its host: one it writes whose host is gone, or one hosted on a piece it deletes
 //! ([`crate::cloud::hosting::undo_rules`]). Every tie of what it wrote must name a level still
 //! in the model, and when it wrote or took away a level, every element of the document is
-//! checked so (`levels::ties_hold`).
+//! checked so (`levels::ties_hold`), and a view it wrote must still stand on its levels, phases
+//! and options ([`crate::cloud::views::undo_rules`]).
 //!
 //! **All or nothing** (CON-A2-F5-P2, A05 "that command is turned back"): an undo is one command,
 //! so any of those refusals turns the whole undo back and none of its pieces is written
@@ -52,7 +53,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
-use crate::cloud::{hosting, levels, params};
+use crate::cloud::{hosting, levels, params, views};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -101,6 +102,7 @@ pub fn is_step(cmd: &str) -> bool {
         || params::is_command(cmd)
         || hosting::is_command(cmd)
         || levels::is_command(cmd)
+        || views::is_command(cmd)
         || is_command(cmd)
 }
 
@@ -492,6 +494,10 @@ pub async fn apply<T: Txn>(
     }
     // An undo may not leave an element tied to a level that is no longer in the model.
     if let Err(why) = levels::ties_hold(txn, project, document, &written, whole).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a view without the levels, phases or options it stands on.
+    if let Err(why) = views::undo_rules(txn, project, document, &written, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {

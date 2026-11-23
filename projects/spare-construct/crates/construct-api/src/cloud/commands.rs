@@ -6,7 +6,7 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, hosting, levels, params, undo};
+use crate::cloud::{elements, hosting, levels, params, undo, views};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -135,7 +135,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             cmd if params::is_command(cmd)
                 || undo::is_command(cmd)
                 || hosting::is_command(cmd)
-                || levels::is_command(cmd) =>
+                || levels::is_command(cmd)
+                || views::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -192,6 +193,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || undo::is_command(&edit.cmd)
             || hosting::is_command(&edit.cmd)
             || levels::is_command(&edit.cmd)
+            || views::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -217,8 +219,14 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if levels::is_command(&edit.cmd) {
             levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if views::is_command(&edit.cmd) {
+            views::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
-            match hosting::element_rules(&mut staged, project, edit).await? {
+            let rules = match views::generic_rules(&mut staged, project, edit).await? {
+                Ok(()) => hosting::element_rules(&mut staged, project, edit).await?,
+                Err(refused) => Err(refused),
+            };
+            match rules {
                 Ok(()) => {
                     elements::apply(&mut staged, project, context, edit, self.claim_ms).await?
                 }

@@ -18,6 +18,7 @@ server = [
     "dep:construct-params",
     "dep:construct-types",
     "dep:construct-levels",
+    "dep:construct-views",
 ]
 
 [dependencies]
@@ -33,6 +34,8 @@ construct-params = { path = "../construct-params", optional = true }
 construct-types = { path = "../construct-types", optional = true }
 # An element's place and a top-tied wall's height read its levels.
 construct-levels = { path = "../construct-levels", optional = true }
+# A view is a record with no shape, so the regenerator passes it over.
+construct-views = { path = "../construct-views", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

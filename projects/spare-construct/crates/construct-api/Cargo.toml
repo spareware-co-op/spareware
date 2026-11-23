@@ -17,6 +17,7 @@ cloud = [
     "dep:construct-regen",
     "dep:construct-types",
     "dep:construct-levels",
+    "dep:construct-phases",
 ]
 
 [dependencies]
@@ -37,6 +38,8 @@ construct-regen = { path = "../construct-regen", features = ["server"], optional
 construct-types = { path = "../construct-types", optional = true }
 # The level commands: construct-levels checks every change.
 construct-levels = { path = "../construct-levels", optional = true }
+# The view commands: a view's staging and phase settings are the phases crate's values.
+construct-phases = { path = "../construct-phases", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
