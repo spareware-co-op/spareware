@@ -375,6 +375,15 @@ pass('her next undo puts the door back on its wall');
 const newDoor = await ben.evaluate(() =>
   [...window.spare.elements.keys()].find((id) => /^D-[0-9a-f]{8}$/.test(id)),
 );
+// The undo that put the door back was Anna's edit, so the door is hers for 30 s and the server
+// would turn Ben away. She lets go of it the way a person does: back in the plan she picks it,
+// then clicks off it.
+await anna.click('#browser [data-act="view"][data-a="l1"]');
+const restored = await box(anna, newDoor);
+await anna.mouse.click(restored.x + restored.width / 2, restored.y + restored.height / 2);
+await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', newDoor);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), newDoor);
 const claimedBox = await box(ben, newDoor);
 await ben.mouse.click(claimedBox.x + claimedBox.width / 2, claimedBox.y + claimedBox.height / 2);
 await anna.waitForFunction((id) => window.spare.claims.get(id)?.person === 'ben', newDoor);
