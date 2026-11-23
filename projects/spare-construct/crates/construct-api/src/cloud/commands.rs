@@ -6,7 +6,9 @@
 use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{elements, floors, grids, hosting, levels, params, roofs, undo, views, walls};
+use crate::cloud::{
+    elements, families, floors, grids, hosting, levels, params, roofs, undo, views, walls,
+};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -125,6 +127,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = views::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = families::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = hosting::element_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -165,6 +170,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || undo::is_command(cmd)
                 || grids::is_command(cmd)
                 || hosting::is_command(cmd)
+                || families::is_command(cmd)
                 || levels::is_command(cmd)
                 || walls::is_command(cmd)
                 || floors::is_command(cmd)
@@ -226,6 +232,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || undo::is_command(&edit.cmd)
             || grids::is_command(&edit.cmd)
             || hosting::is_command(&edit.cmd)
+            || families::is_command(&edit.cmd)
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
@@ -265,7 +272,14 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         } else if grids::is_command(&edit.cmd) {
             grids::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if hosting::is_command(&edit.cmd) {
-            hosting::apply(&mut staged, project, context, edit, self.claim_ms).await?
+            match families::generic_rules(&mut staged, project, edit).await? {
+                Ok(()) => {
+                    hosting::apply(&mut staged, project, context, edit, self.claim_ms).await?
+                }
+                Err(refused) => Err(refused),
+            }
+        } else if families::is_command(&edit.cmd) {
+            families::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if undo::is_command(&edit.cmd) {
             undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if levels::is_command(&edit.cmd) {

@@ -185,6 +185,12 @@ A refusal names the step being built, the place (type, a type's value, parameter
 
 **Symbols** at a type's values (`symbols()`, added by piece A62): each symbol's sketch is solved exactly as a step's sketch is, within the same limits, and each edge it names is read back as its solved line, arc or circle, in the sketch's two coordinates. Every symbol is given with its condition as written; whether it is drawn (a door's swing, set per placed door) is the view's question.
 
+**The opening** at a type's values (`opening()`, added by piece A64): a wall-hosted recipe's opening sketch is solved exactly as a step's sketch is, within the same limits, and its loop read back as its corners in loop order, in the family's frame (along x, up z); its depth is the format's one rule for a wall, through the wall's whole thickness. A recipe that is not hosted, one hosted on a floor or a face (no opening), an opening that is not a loop or not on an `xz` plane, and a sketch that does not solve are refused at the place `hosting` or the sketch's own. A placed family's builder cuts it from its wall (construct-model's FORMAT.md, "Placed families").
+
+**Instance values** (`TypeValues::set_instance`, `Recipe::instance_parameters`, `Recipe::instance_value`; piece A64, job 7.1): a placed instance holds its own value for each parameter the recipe marks as held by each instance. Evaluation, the opening and the extents take them with the type's values; a parameter the type holds given as an instance's value is refused (`HeldByType`), as a type's value for an instance's parameter is (`HeldByInstance`). An instance value is part of the cache key, so a changed value is built again and the others are found as they were. A typed value (`1.1 m`) is read as the parameter's definition reads it; an instance may not set a worked-out parameter.
+
+**Turned** (`evaluate_turned()`, piece A64): a recipe evaluated with every corner and every extrusion's vector turned about the family's z axis by whole quarter turns, anticlockwise seen from above, before the engine is asked; exact on the grid, and kept apart per turn by an evaluator. **Extents** (`extents()`, piece A64): the box each solid lies in at a type's values, turned, worked out without an engine (an extrusion's box, a subtraction its target's, a union both).
+
 ## Versions
 
 A later format is `format` 2 with its own schema file beside this one; format 1 is read for ever. What counts as a breaking change, and what does not, is in [the recipe format note](../../notes/CON-A7-F1-P1-recipe-format.md).

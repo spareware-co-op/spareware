@@ -5,7 +5,8 @@
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
 //! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
-//! solid per layer (each sloped layer lofted), and a document of one edition reported,
+//! solid per layer (each sloped layer lofted), a door and a window placed from the family library
+//! cutting a three-layer wall (job 6.4), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -155,6 +156,21 @@ fn a_door_in_a_layered_wall_is_refused_as_in_the_box() {
 #[test]
 fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
     kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(engine);
+}
+
+#[test]
+fn a_family_cuts_every_layer_and_stands_in_its_opening() {
+    kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
+}
+
+#[test]
+fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
+    kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(engine);
+}
+
+#[test]
+fn a_family_that_does_not_fit_is_refused_with_a_reason() {
+    kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(engine);
 }
 
 #[test]
@@ -995,6 +1011,120 @@ async fn a_roof_drawn_through_commands_is_built_one_solid_per_layer() {
     assert_ne!(
         quantities(&s, &project, &model, "R-900").await["roof.ridge-height"],
         read["roof.ridge-height"]
+    );
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+}
+
+/// Through the server's commands on the kernel (job 7.1): a window of the library placed on a
+/// partition cuts its opening from every layer and stands in it, built from its record (a closed
+/// mesh per solid, the glass apart); a window set to a higher sill and changed to a wider type
+/// cuts a different opening and is built again, each undone and redone; one past the wall's end is
+/// refused in the builder's words with the family named; and the log replayed from empty gives the
+/// same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "wall.draw",
+        json!({ "element": "W-950", "type": "wall-partition", "start": ["50 m", "20 m"],
+                "end": ["54 m", "20 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await
+    .unwrap();
+    let place = json!({ "element": "F-1", "family": "library.doors-windows.fixed-window",
+                        "type": "w1200x1200", "host": "W-950", "side": "exterior",
+                        "along": "1500 mm" });
+    edit("family.place", place).await.unwrap();
+    let (plain, names) = stored_wall(&s, &project, &model, "W-950").await;
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(F-1).head",
+            "tool(F-1).jamb.end",
+            "tool(F-1).jamb.start",
+            "tool(F-1).sill"
+        ],
+        "a window's opening has a sill as well as a head and two jambs"
+    );
+    let window = s
+        .shape(&anna, &project, &model, &i("F-1"), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { bounds, .. } = &window.built.result else {
+        panic!("F-1 builds: {:?}", window.built.result);
+    };
+    assert_eq!(
+        bounds.max[2] - bounds.min[2],
+        1200,
+        "its frame is its type's height"
+    );
+    let parts = &window.display.as_ref().unwrap().parts;
+    assert!(
+        parts.iter().any(|p| p.material == "glass-plate") && parts.len() >= 2,
+        "the glass is its own part, apart from the frame: {parts:?}"
+    );
+
+    edit(
+        "family.set",
+        json!({ "element": "F-1", "values": { "sill_height": "1.2 m" } }),
+    )
+    .await
+    .unwrap();
+    let (raised, _) = stored_wall(&s, &project, &model, "W-950").await;
+    assert_ne!(
+        raised.built.result, plain.built.result,
+        "the opening rose with the sill"
+    );
+    edit(
+        "family.retype",
+        json!({ "element": "F-1", "type": "w1800x1200" }),
+    )
+    .await
+    .unwrap();
+    let (wide, _) = stored_wall(&s, &project, &model, "W-950").await;
+    assert_ne!(
+        wide.built.result, raised.built.result,
+        "and widened with its type"
+    );
+    edit("edit.undo", json!({})).await.unwrap();
+    let (back, _) = stored_wall(&s, &project, &model, "W-950").await;
+    assert_eq!(back.built.result, raised.built.result);
+    edit("edit.redo", json!({})).await.unwrap();
+    let (again, _) = stored_wall(&s, &project, &model, "W-950").await;
+    assert_eq!(again.built.result, wide.built.result);
+
+    let refused = edit("family.move", json!({ "element": "F-1", "along": "3.5 m" }))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.to_string(), "family F-1: it crosses the wall's end");
+    edit("family.flip", json!({ "element": "F-1" }))
+        .await
+        .unwrap();
+    edit("family.delete", json!({ "element": "F-1" }))
+        .await
+        .unwrap();
+    let (_, names) = stored_wall(&s, &project, &model, "W-950").await;
+    assert!(
+        cut_roles(&names).is_empty(),
+        "the window's opening goes with it"
     );
 
     let before = derived(&store, &project).await;

@@ -11,6 +11,12 @@
 //! alone, each door's place already in that frame: a layered wall's openings are asked so (the
 //! parent's `layered` module), through every layer at once.
 //!
+//! A placed family's opening (job 6.4, [`crate::families`]) is cut on the same path: its outline,
+//! solved at its type's values and placed in the wall's frame where the family stands, is a
+//! [`Span`] along the wall and up it, and every rule below is asked of it in the same words, the
+//! same cutter made (through the wall's whole thickness, the format's depth rule for a wall),
+//! the same names given. A box door and a family differ only in how their span is found.
+//!
 //! What it builds, in the wall's frame (along its axis from `end0` to `end1`, up from its base):
 //!
 //! - an opening wholly inside the wall, its foot above the base: four new faces, its jambs, its
@@ -73,6 +79,8 @@ pub struct Hosted<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Cut {
     key: String,
+    /// What the hosted element is called in a refusal.
+    noun: &'static str,
     door: OpId,
     /// The cutter's lowest and highest corners.
     lo: [i64; 3],
@@ -86,9 +94,14 @@ pub(super) struct Cut {
     stray: i64,
 }
 
-/// A refusal of the hosted element `key`.
+/// A refusal of the hosted door `key`.
 fn refuse(key: &str, code: &str, why: impl std::fmt::Display) -> GeometryError {
-    fault(code, format!("door {key}: {why}"))
+    refuse_as("door", key, code, why)
+}
+
+/// A refusal of the hosted element `key`, called `noun` (a door, a family).
+fn refuse_as(noun: &str, key: &str, code: &str, why: impl std::fmt::Display) -> GeometryError {
+    fault(code, format!("{noun} {key}: {why}"))
 }
 
 /// The first 16 bytes of the SHA-256 of `text`.
@@ -142,6 +155,21 @@ pub(super) fn plan(
     let Some(first) = order.first() else {
         return Ok(Vec::new());
     };
+    if let Some(family) = order
+        .iter()
+        .find(|h| crate::families::is_instance(h.recipe))
+    {
+        return Err(refuse_as(
+            "family",
+            family.key,
+            "NotAHost",
+            format!(
+                "a family is hosted only on a {}; this is a {}",
+                crate::wall_plan::OP,
+                host.op
+            ),
+        ));
+    }
     if host.op != "wall.straight" {
         return Err(refuse(
             first.key,
@@ -161,7 +189,7 @@ pub(super) fn plan(
             units.steps(wall.height)?,
         ],
     };
-    let cuts = plan_in(frame, hosted, units, band)?;
+    let cuts = plan_in(frame, hosted, &[], units, band)?;
     // Last, so a face near another is refused as that, not as a fraction of a millimetre.
     for c in &cuts {
         for corner in [c.start, c.end, c.foot, c.head] {
@@ -184,32 +212,75 @@ pub(super) struct Frame {
     pub(super) size: [i64; 3],
 }
 
-/// The cutters of the openings `hosted` cuts from a wall in `frame`, each door's place given in
-/// that frame (along the frame's along axis from `end0`, across from the exterior, up from the
-/// base), sorted by key; none when nothing is hosted. The host is a wall: the caller has said so.
+/// Where one opening lies in its wall's frame, in grid steps: along from `end0`, from `start` to
+/// `end`, and up from the base, from `foot` to `head`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Span {
+    pub(super) start: i64,
+    pub(super) end: i64,
+    pub(super) foot: i64,
+    pub(super) head: i64,
+}
+
+/// The opening of a hosted element that is not a box door, already placed in its wall's frame:
+/// a placed family's.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Placed<'a> {
+    /// The hosted element's permanent ID.
+    pub(super) key: &'a str,
+    /// What it is called in a refusal.
+    pub(super) noun: &'static str,
+    /// The operation that names the opening's own faces.
+    pub(super) op: OpId,
+    /// Where its opening lies.
+    pub(super) span: Span,
+}
+
+/// The cutters of the openings `hosted` (box doors) and `placed` (openings already placed, a
+/// family's) cut from a wall in `frame`, each door's place given in that frame (along the frame's
+/// along axis from `end0`, across from the exterior, up from the base), sorted by key; none when
+/// nothing is hosted. The host is a wall: the caller has said so.
 ///
 /// # Errors
 ///
 /// The refusals of this module's header but `NotAHost` and `NotWholeMillimetres`, each naming the
-/// door and why.
+/// door or family and why.
 pub(super) fn plan_in(
     frame: Frame,
     hosted: &[Hosted<'_>],
+    placed: &[Placed<'_>],
     units: Units,
     band: i64,
 ) -> Result<Vec<Cut>, GeometryError> {
-    let mut order: Vec<&Hosted<'_>> = hosted.iter().collect();
-    order.sort_by(|a, b| a.key.cmp(b.key));
-    if let Some(pair) = order
-        .windows(2)
-        .find(|w| matches!(w, [a, b] if a.key == b.key))
-    {
-        let key = pair.first().map_or("", |h| h.key);
-        return Err(refuse(key, "DuplicateOpening", "hosted twice in one wall"));
+    let mut keys: Vec<(&str, &str)> = hosted
+        .iter()
+        .map(|h| (h.key, "door"))
+        .chain(placed.iter().map(|p| (p.key, p.noun)))
+        .collect();
+    keys.sort_unstable();
+    if let Some(pair) = keys.windows(2).find(|w| matches!(w, [a, b] if a.0 == b.0)) {
+        let (key, noun) = pair.first().copied().unwrap_or(("", "door"));
+        return Err(refuse_as(
+            noun,
+            key,
+            "DuplicateOpening",
+            "hosted twice in one wall",
+        ));
     }
+    // Each opening in the order of its key, so the first refused is the same whatever order
+    // they come in.
+    let mut order: Vec<(&str, Result<&Hosted<'_>, &Placed<'_>>)> = hosted
+        .iter()
+        .map(|h| (h.key, Ok(h)))
+        .chain(placed.iter().map(|p| (p.key, Err(p))))
+        .collect();
+    order.sort_by(|a, b| a.0.cmp(b.0));
     let mut cuts = Vec::with_capacity(order.len());
-    for h in order {
-        cuts.push(cut(h, frame.along, frame.size, units, band)?);
+    for (_, opening) in order {
+        cuts.push(match opening {
+            Ok(h) => cut(h, frame.along, frame.size, units, band)?,
+            Err(p) => cut_span(p, frame.along, frame.size, units, band)?,
+        });
     }
     for (i, a) in cuts.iter().enumerate() {
         for b in cuts.iter().skip(i.saturating_add(1)) {
@@ -262,6 +333,39 @@ fn cut(
             "its plan misses the wall's thickness",
         ));
     }
+    let placed = Placed {
+        key,
+        noun: "door",
+        op: op_id(h.recipe)?,
+        span: Span {
+            start,
+            end,
+            foot,
+            head,
+        },
+    };
+    cut_span(&placed, along, [length, thickness, height], units, band)
+}
+
+/// The cutter of one opening placed in a wall along `along` of `[length, thickness, height]`
+/// steps, by the rules
+/// of this module's header: through the wall's whole thickness.
+fn cut_span(
+    placed: &Placed<'_>,
+    along: usize,
+    [length, thickness, height]: [i64; 3],
+    units: Units,
+    band: i64,
+) -> Result<Cut, GeometryError> {
+    let (key, noun) = (placed.key, placed.noun);
+    let refuse = |key: &str, code: &str, why: String| refuse_as(noun, key, code, why);
+    let Span {
+        start,
+        end,
+        foot,
+        head,
+    } = placed.span;
+    let width = less(end, start)?;
     for (face, at, wall_face, wall_at) in [
         ("jamb.start", start, "end0", 0),
         ("jamb.end", end, "end1", length),
@@ -280,26 +384,35 @@ fn cut(
         }
     }
     if start < 0 || end > length {
-        return Err(refuse(key, "OpeningPastEnd", "it crosses the wall's end"));
+        return Err(refuse(
+            key,
+            "OpeningPastEnd",
+            "it crosses the wall's end".to_owned(),
+        ));
     }
     if start == 0 || end == length {
-        return Err(refuse(key, "OpeningAtEnd", "it touches the wall's end"));
+        return Err(refuse(
+            key,
+            "OpeningAtEnd",
+            "it touches the wall's end".to_owned(),
+        ));
     }
     if foot < 0 {
         return Err(refuse(
             key,
             "OpeningBelowBase",
-            "it reaches below the wall's base",
+            "it reaches below the wall's base".to_owned(),
         ));
     }
     if head >= height {
         return Err(refuse(
             key,
             "OpeningTooTall",
-            "its head is at or above the wall's top, which leaves no wall over it",
+            "its head is at or above the wall's top, which leaves no wall over it".to_owned(),
         ));
     }
     let past = units.steps(PAST_MM)?;
+    let (a, c) = if along == 1 { (1, 0) } else { (0, 1) };
     let mut lo = [0; 3];
     let mut hi = [0; 3];
     for (axis, (l, u)) in [
@@ -313,7 +426,8 @@ fn cut(
     }
     Ok(Cut {
         key: key.to_owned(),
-        door: op_id(h.recipe)?,
+        noun,
+        door: placed.op,
         lo,
         hi,
         foot,
@@ -329,21 +443,23 @@ fn apart(a: &Cut, b: &Cut, band: i64) -> Result<(), GeometryError> {
     let gap = |p: i64, q: i64| i128::from(p).saturating_sub(i128::from(q));
     let along = gap(b.start, a.end).max(gap(a.start, b.end));
     let up = gap(b.foot, a.head).max(gap(a.foot, b.head));
-    let both = format!("{} and door {}", a.key, b.key);
+    let both = format!("{} and {} {}", a.key, b.noun, b.key);
     if along <= 0 && up <= 0 {
         let how = if along == 0 || up == 0 {
             "touch"
         } else {
             "overlap"
         };
-        return Err(refuse(
+        return Err(refuse_as(
+            a.noun,
             &both,
             "OpeningsOverlap",
             format!("their openings {how}"),
         ));
     }
     if along.max(up) <= i128::from(band) {
-        return Err(refuse(
+        return Err(refuse_as(
+            a.noun,
             &both,
             "OpeningNearFace",
             format!(
@@ -384,7 +500,7 @@ impl Cut {
 
     /// The engine's error on this door's opening, with the door's key in front.
     pub(super) fn engine_error(&self, error: GeometryError) -> GeometryError {
-        refuse(&self.key, &error.code, error.message)
+        refuse_as(self.noun, &self.key, &error.code, error.message)
     }
 
     /// The roles of the faces this opening makes in its wall: no sill for a door to the floor.
@@ -397,7 +513,8 @@ impl Cut {
 
     /// The persistent names of the faces this opening makes in the wall made by `wall`.
     pub(super) fn names(&self, wall: OpId) -> Result<Vec<FaceName>, GeometryError> {
-        let naming = |e: &dyn std::fmt::Debug| refuse(&self.key, "Naming", format!("{e:?}"));
+        let naming =
+            |e: &dyn std::fmt::Debug| refuse_as(self.noun, &self.key, "Naming", format!("{e:?}"));
         let key = NameId::from_bytes(sixteen(&self.key)?);
         let tool = Role::new("tool", [RoleArg::Name(key)]).map_err(|e| naming(&e))?;
         self.roles()
