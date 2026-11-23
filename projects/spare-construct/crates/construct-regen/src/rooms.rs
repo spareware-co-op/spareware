@@ -507,7 +507,14 @@ pub async fn worked_at<R: Reader>(
         Ok(recipe) => recipe,
         Err(e) => return Ok(Err(e)),
     };
-    Ok(Ok(
-        filled_at(reader, project, document, room, recipe, placed.level.as_ref(), at).await?,
-    ))
+    Ok(Ok(filled_at(
+        reader,
+        project,
+        document,
+        room,
+        recipe,
+        placed.level.as_ref(),
+        at,
+    )
+    .await?))
 }

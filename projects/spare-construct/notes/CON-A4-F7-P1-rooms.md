@@ -1,6 +1,6 @@
 # CON-A4-F7-P1: Rooms found from a closed loop of walls
 
-**Status, 2026-11-23:** Decided for the build (piece A67, job 5.4, the shape half). The crate `construct-rooms` follows it and its [FORMAT.md](../crates/construct-rooms/FORMAT.md) is the stored form; construct-regen's `rooms` finds a room's loop from the walls of its level and says which rooms a change builds again, its `room_plan` reads the filled recipe for both builders, and its `kernel` module's child `room` builds the room's volume through the engine seam. The commands, the page and room tags are the next jobs'.
+**Status, 2026-11-23:** Decided for the build (piece A67, job 5.4, the shape half). The crate `construct-rooms` follows it and its [FORMAT.md](../crates/construct-rooms/FORMAT.md) is the stored form; construct-regen's `rooms` finds a room's loop from the walls of its level and says which rooms a change builds again, its `room_plan` reads the filled recipe for both builders, and its `kernel` module's child `room` builds the room's volume through the engine seam. The commands (`room.place`, `room.rename`, `room.number`, `room.move`, `room.upper`, `room.delete`, in construct-api's `cloud/rooms.rs`), the server's read-only view and the page's Room tool and tags are the second half (piece A67, second lane).
 
 ## The question
 
@@ -32,7 +32,14 @@ A room is placed by a point inside it on a level. Its boundary is where the wall
 
 ## Not decided here
 
-- The commands (place, rename, number, move, delete through the log), room tags and the page's room tool.
+- Rooms bounded by floors, ceilings and roofs, and room separation lines (job 6.3).
 - Room separation lines, and rooms bounded by floors, ceilings and roofs (job 6.3).
 - How wall joins (piece A60) change a room's faces: they change the outlines the regenerator hands the search, not the search.
 - Area schemes and national measurement rules (A4-F7-P2, P3).
+
+## The commands and the page (second half)
+
+- **One entry, one undo step each**, claims as the floor commands. A room's number is unique in its document: a number another room has is refused, naming that room. The next free number is one more than the largest number made only of digits (as wide as that one), or 1; the page is offered it from `/rooms` and may send another.
+- **The search's refusals are the commands'**: every refusal of `found_at` (a point in a wall, a curved wall, a corner off the grid, an inexact area) turns the command back in the search's own words; not enclosed and redundant are what became of the room, never refusals.
+- **The generic commands refuse a room** and name the command to use; a room whose walls change is built again by regeneration, never by a command.
+- **The page finds no boundary and works out no area.** The server's `/filled/<room>` carries the loops and the room's state and measures in the document's units; the page draws a light fill with a tag at the room's point (name, number, then area, or its state in words) and refills every room when an entry changes anything but rooms. A room is picked, not dragged: its point moves by `room.move`.

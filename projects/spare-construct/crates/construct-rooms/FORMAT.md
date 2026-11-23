@@ -57,3 +57,5 @@ Its `reads` row lists its levels and the walls its loop runs along. A wall that 
 ## What it measures
 
 Worked out whenever it is read, never stored, all exact: its **area** in square grid steps (the outer loop's less each hole's, by the shoelace sum; an odd twice-area is refused), its **perimeter** (every edge of every loop, each to the nearest grid step: exact along an axis), and its **volume** in cubic grid steps (area times height). A person reads them in their units, rounded only there.
+
+**Written by commands.** `room.place`, `room.rename`, `room.number`, `room.move`, `room.upper` and `room.delete` (construct-model's FORMAT.md, "Commands") write this record and no other; a number is unique in its document (the commands refuse one another room has), and the next free number is one more than the largest number made only of digits, or 1 (`next_number`).
