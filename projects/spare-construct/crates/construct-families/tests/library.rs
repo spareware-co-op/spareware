@@ -23,7 +23,8 @@ use construct_families::{
 };
 use construct_params::{Length, Value};
 use engine_geometry::value::engine::{
-    Answer, DisplayMesh, Edition, Engine, EngineError, Profile, Section, Tolerance, Volume,
+    Answer, Cut, DisplayMesh, Edition, Engine, EngineError, GridPlane, Profile, Section, Tolerance,
+    Volume,
 };
 use engine_geometry::value::grid::GridStep;
 use std::collections::BTreeMap;
@@ -125,6 +126,10 @@ impl Engine for Boxes {
 
     fn mesh(&mut self, _: &Bounds) -> Result<DisplayMesh, EngineError> {
         Err(unsupported("mesh"))
+    }
+
+    fn section(&mut self, _: &Bounds, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
     }
 }
 
