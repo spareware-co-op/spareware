@@ -21,6 +21,11 @@
 //! - [`Views`]: a document's views by ID, names unique without regard to case.
 //! - [`list`], [`Listing`], [`Shown`], [`How`], [`ViewElement`], [`Model`]: which elements a view
 //!   shows and, for a plan, which the cut plane crosses and which are seen below it.
+//! - [`Graphics`], [`Rule`], [`RuleStyle`], [`Fill`]: a view's graphics rules (CON-A8-F3-P2), the
+//!   style of what is cut and of what is seen beyond, per category and subcategory; held by
+//!   [`View::graphics`] and stored under [`GRAPHICS_KEY`].
+//! - [`resolve`], [`Resolved`], [`Origin`]: the one rule for how an element looks in a view:
+//!   the subcategory's rule, else the category's, else the project's object style.
 //! - [`ViewError`]: every refusal, as a value.
 //!
 //! Promises: records are the truth (main's ruling 7), and this crate is the types and pure
@@ -36,8 +41,9 @@
 //! Not built here, with their places kept:
 //! - Drawing a plan or a section from a view (jobs 7.2, 8.1): this crate says what a view shows,
 //!   not how it is drawn. A section's height range is not held; it is every height.
-//! - Per-view graphics rules, crop regions, view templates and overrides (jobs 5.6, 7.7, 8.5):
-//!   more fields on the view record under their own reserved keys, read in [`View::from_record`].
+//! - Crop regions, view templates and overrides (jobs 7.7, 8.5): more fields on the view record
+//!   under their own reserved keys, read in [`View::from_record`]. The plan drawing applying the
+//!   graphics rules, and the page showing them, are later jobs: [`resolve`] is what they call.
 //! - Commands through the edit log: construct-api's `cloud::views` (a view's entry in
 //!   `construct_categories::category_of_kind` and the level-deletion guard for the levels a range
 //!   is tied to are done: construct-levels counts [`RANGE_KEYS`]).
@@ -45,9 +51,11 @@
 
 mod cut;
 mod error;
+mod graphics;
 mod kind;
 mod listing;
 mod range;
+mod resolve;
 mod shape;
 mod view;
 mod views;
@@ -55,11 +63,17 @@ mod views;
 pub use construct_levels::Tie;
 pub use construct_params::Length;
 pub use construct_styles::Scale;
+pub use construct_styles::{Colour, Edge, PatternId};
 pub use cut::{CutLine, Point, Side};
 pub use error::ViewError;
+pub use graphics::{
+    FILL_PATTERNS, Fill, GRAPHICS_FORMAT_VERSION, GRAPHICS_KEY, Graphics, MOST_TRANSPARENCY, Rule,
+    RuleStyle, check_style, edge_from_key, edge_key,
+};
 pub use kind::{DetailLevel, PlanSetup, ViewKind};
 pub use listing::{How, Listing, Model, Shown, ViewElement, list};
 pub use range::{Heights, ViewRange};
+pub use resolve::{Origin, Resolved, resolve};
 pub use view::{
     CATEGORY_KEY, DETAIL_KEY, FAR_KEY, KIND_KEY, LINE_KEYS, LOOK_KEY, PHASING_KEY, PLAN_LEVEL_KEYS,
     RANGE_KEYS, SCALE_KEY, STAGING_KEY, VIEW_KIND, View, view_recipe,
