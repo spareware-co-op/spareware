@@ -6,13 +6,13 @@
     reason = "test code; the rules are for the crate's own code"
 )]
 
-use construct_levels::tied_to;
+use construct_levels::{Tie, tied_to};
 use construct_model::element::{Element, Placement, Reference, Want};
 use construct_params::Length;
 use construct_phases::{DesignOptions, ElementStaging, PhaseFilter, PhaseList, ViewSettings};
 use construct_views::{
-    CATEGORY_KEY, CutLine, DetailLevel, PlanSetup, Point, Scale, Side, VIEW_KIND, View, ViewError,
-    ViewKind, ViewRange, Views,
+    CATEGORY_KEY, CutLine, DetailLevel, PlanSetup, Point, RANGE_KEYS, Scale, Side, VIEW_KIND, View,
+    ViewError, ViewKind, ViewRange, Views,
 };
 use kit_core::Id;
 
@@ -300,6 +300,37 @@ fn a_plan_stands_on_its_level_as_an_element_does() {
     assert_eq!(tied_to(&id("L-2"), [&record]).unwrap(), 0);
     let record = section().to_record(&id("DOC-1"));
     assert_eq!(tied_to(&id("L-1"), [&record]).unwrap(), 0);
+}
+
+/// A level a view's range is tied to is counted, so it is not deleted behind the view's back; a
+/// plan tied to a level twice (its own and its range) counts once.
+#[test]
+fn a_level_a_views_range_is_tied_to_counts_as_tied() {
+    let top = Tie {
+        level: id("L-2"),
+        offset: mm(0),
+    };
+    let on_two = View::new(
+        id("V-3"),
+        "Ground floor, seen from the roof",
+        Scale::new(100).unwrap(),
+        DetailLevel::Medium,
+        ViewKind::FloorPlan(PlanSetup {
+            level: id("L-1"),
+            range: ViewRange {
+                top,
+                ..ViewRange::on_level(&id("L-1"), mm(2300), mm(1200), mm(0), mm(-500))
+            },
+        }),
+        staging(),
+    )
+    .unwrap()
+    .to_record(&id("DOC-1"));
+    assert_eq!(tied_to(&id("L-2"), [&on_two]).unwrap(), 1);
+    assert_eq!(tied_to(&id("L-1"), [&on_two]).unwrap(), 1);
+    assert_eq!(tied_to(&id("L-3"), [&on_two]).unwrap(), 0);
+    // The keys are construct-levels' own list: one list, so the two cannot drift.
+    assert_eq!(RANGE_KEYS, construct_levels::RANGE_TIES);
 }
 
 #[test]

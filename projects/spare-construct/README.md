@@ -20,8 +20,8 @@ Traffic and public transport is the furthest along. Its calculation core is the 
 ## What the code is
 
 - `crates/`: one Rust library per part of the map.
-  - Real: `construct-model` (the geometry interface, elements, rows and the stored format), `construct-regen` (the stand-in that makes boxes, and the regenerator that rebuilds shapes after each edit), `construct-shapes` (the same geometry for the browser), `construct-api` (the commands: elements, folders, packages, bridges, links, hubs, projects, teams, access rules; and the transport commands), `construct-cli` (command line and MCP server), `construct-wasm` and `construct-transport` (transport).
-  - Short placeholders, no code yet: `construct-elements`, `construct-families`, `construct-clash`, `construct-interop`, `construct-solver`, `construct-versions`, `construct-views`.
+  - Real: `construct-model` (the geometry interface, elements, rows and the stored format), `construct-regen` (the stand-in that makes boxes, and the regenerator that rebuilds shapes after each edit), `construct-shapes` (the same geometry for the browser), `construct-api` (the commands: elements, folders, packages, bridges, links, hubs, projects, teams, access rules; and the transport commands), `construct-cli` (command line and MCP server), `construct-wasm` and `construct-transport` (transport), and `construct-views` (views as elements: the kinds, the range, what a view shows).
+  - Short placeholders, no code yet: `construct-elements`, `construct-families`, `construct-clash`, `construct-interop`, `construct-solver`, `construct-versions`.
 - `server/`: the Rust web server on the shared kit crates, with TiKV as the database, PD as its coordinator, RustFS for large files, Caddy for https, and Cedar for access rules. See [server/README.md](server/README.md).
 - `app/`: the browser page, on the demo's layout, with live data from the server. See [app/README.md](app/README.md).
 - `demo/`: the full interface mock-up, and the transport and workshop prototypes.

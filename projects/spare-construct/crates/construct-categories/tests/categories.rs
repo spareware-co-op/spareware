@@ -244,6 +244,7 @@ fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("block"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("workshop.part"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("workshop.assembly"), Ok(GENERIC_MODELS));
+    assert_eq!(category_of_kind("view"), Ok(construct_categories::VIEWS));
     assert!(category_of_kind("part").is_err());
     assert_eq!(
         category_of_kind("teapot"),

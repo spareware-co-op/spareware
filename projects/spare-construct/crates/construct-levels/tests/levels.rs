@@ -9,12 +9,12 @@
 )]
 
 use construct_levels::{
-    Level, LevelError, Levels, Tie, base_of, height_of, implied, implied_id, implied_number,
-    parse_length, show, span, tied_to, top_of, write_base, write_top,
+    Level, LevelError, Levels, RANGE_TIES, Tie, base_of, height_of, implied, implied_id,
+    implied_number, parse_length, show, span, tied_to, top_of, write_base, write_top,
 };
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
-use construct_params::{Length, Units};
+use construct_params::{Length, Units, Value};
 use kit_core::Id;
 use std::collections::BTreeMap;
 
@@ -291,6 +291,41 @@ fn how_high_a_tied_thing_sits_is_one_function() {
         span((&ground, mm(0)), (&moved, mm(-300))).unwrap(),
         mm(3300)
     );
+}
+
+/// A view's range ties, as a plan view writes them: four levels with offsets.
+fn view_with_range(key: &str, top: &str, rest: &str) -> Element {
+    let mut view = old_wall(key, 0);
+    "view".clone_into(&mut view.kind);
+    for (index, (level_key, offset_key)) in RANGE_TIES.iter().enumerate() {
+        let level = if index == 0 { top } else { rest };
+        view.props.insert((*level_key).to_owned(), level.to_owned());
+        view.props
+            .insert((*offset_key).to_owned(), Value::Length(mm(100)).stored());
+    }
+    view
+}
+
+#[test]
+fn a_level_a_views_range_is_tied_to_is_counted_so_it_is_not_deleted() {
+    let view = view_with_range("V-1", "2", "1");
+    // The top of the range is on level 2, the other three heights on level 1; each counts once.
+    assert_eq!(tied_to(&id("2"), [&view]).unwrap(), 1);
+    assert_eq!(tied_to(&id("1"), [&view]).unwrap(), 1);
+    assert_eq!(tied_to(&id("3"), [&view]).unwrap(), 0);
+    assert_eq!(
+        tied_to(&id("1"), [&view, &tied_wall("W-1", "1", 0)]).unwrap(),
+        2
+    );
+    let mut levels = Levels::from_records(&[old_wall("W-9", 1), old_wall("W-8", 2)]).unwrap();
+    assert_eq!(
+        levels.remove(&id("2"), 1).unwrap_err().to_string(),
+        "Level 2 can't be deleted: 1 element is tied to it."
+    );
+    // A range tie with its level and not its offset is a malformed record, as for any tie.
+    let mut broken = view_with_range("V-2", "2", "1");
+    broken.props.remove("@view.range.cut.offset");
+    assert!(tied_to(&id("3"), [&broken]).is_err());
 }
 
 #[test]

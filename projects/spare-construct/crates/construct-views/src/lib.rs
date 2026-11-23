@@ -38,9 +38,9 @@
 //!   not how it is drawn. A section's height range is not held; it is every height.
 //! - Per-view graphics rules, crop regions, view templates and overrides (jobs 5.6, 7.7, 8.5):
 //!   more fields on the view record under their own reserved keys, read in [`View::from_record`].
-//! - Commands through the edit log, a view's entry in `construct_categories::category_of_kind`,
-//!   and the level-deletion guard for the levels a range is tied to (a plan's own level is
-//!   already guarded, as it is an ordinary tie).
+//! - Commands through the edit log: construct-api's `cloud::views` (a view's entry in
+//!   `construct_categories::category_of_kind` and the level-deletion guard for the levels a range
+//!   is tied to are done: construct-levels counts [`RANGE_KEYS`]).
 //! - Datum extents per view, annotation owned by a view, and three-dimensional camera settings.
 
 mod cut;

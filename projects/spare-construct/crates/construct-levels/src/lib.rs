@@ -56,6 +56,6 @@ pub use level::{
 };
 pub use levels::{Levels, tied_to};
 pub use tie::{
-    LEVEL_KEY, LEVEL_OFFSET_KEY, TIE_KEYS, TOP_KEY, TOP_OFFSET_KEY, Tie, base_of, height_of,
-    is_tie_key, span, top_of, write_base, write_top,
+    LEVEL_KEY, LEVEL_OFFSET_KEY, RANGE_TIES, TIE_KEYS, TOP_KEY, TOP_OFFSET_KEY, Tie, base_of,
+    height_of, is_tie_key, range_tied_to, span, top_of, write_base, write_top,
 };
