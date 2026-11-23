@@ -75,3 +75,13 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 #pv-canvas { position: relative; }
 .stack-plan-note { position: absolute; left: 8px; top: 8px; z-index: 1; padding: 2px 8px; font-size: 12px; color: var(--ink-2); background: var(--page); border: 1px solid var(--hairline); pointer-events: none; }
 .stack-plan-note.bad { color: var(--danger); border-color: var(--danger); }
+
+/* A room: its loop as a light fill under the floors and walls, holes left out, and a tag at its
+   point (name, number, then area or in words what became of it); a room with no loop is a point. */
+.dw .room-fill { fill: var(--app-tint); fill-opacity: .7; fill-rule: evenodd; stroke: none; }
+.dw .room-fill.sel { stroke: var(--app-strong); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.dw .room-point { fill: var(--danger-tint); stroke: var(--danger); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .room-point.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .room-tag text { pointer-events: none; fill: var(--ink-2); }
+.dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
+.dw .room-tag .room-state { fill: var(--danger); }

@@ -20,6 +20,11 @@
 //! Interim, as every stand-in shape: its layers as solids are the kernel's to build (the interim
 //! register's row).
 //!
+//! A room (`room`) is one box too: the box around its outer loop from its base up to its height
+//! ([`crate::room_plan`]), outlined by its outer loop, its deviation 0 only when the box is the
+//! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
+//! to build (the interim register's row).
+//!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
@@ -42,6 +47,7 @@
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
+use crate::room_plan::{self, RoomPlan};
 use crate::wall_plan::{self, Layered};
 use construct_families::{Limits, extents};
 use construct_model::geometry::{
@@ -651,6 +657,83 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A room as one box ([`crate::room_plan`]): the box around its outer loop, its sides rounded
+/// outward to whole millimetres, from its base at 0 up to its height (rounded up). Named
+/// `box.bottom`, `box.top` and `box.side.<k>` for each edge of each loop, in loop order. Its
+/// outline is its outer loop, each corner the nearest millimetre; its deviation is 0 only when the
+/// box is the room, as a floor's; it has no parts (a room is space, of no material).
+fn room(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = RoomPlan::of(recipe)?;
+    let ([x0, y0], [x1, y1]) = plan.extent();
+    let min = [floor_plan::floor_mm(x0), floor_plan::floor_mm(y0), 0];
+    let max = [
+        floor_plan::ceil_mm(x1),
+        floor_plan::ceil_mm(y1),
+        floor_plan::ceil_mm(plan.height),
+    ];
+    let mut rounded = !floor_plan::nearest_mm(plan.height).1;
+    let mut outline = Vec::with_capacity(plan.outer().len());
+    for corner in plan.outer() {
+        let [x, y] = corner.at;
+        let ((x, a), (y, b)) = (floor_plan::nearest_mm(x), floor_plan::nearest_mm(y));
+        rounded |= !(a && b);
+        outline.push([x, y]);
+    }
+    // As a floor's box: it strays by nothing when it is the room, else by at most its plan's
+    // diagonal, and by one millimetre more where a corner or the height was rounded.
+    let deviation = if plan.is_box() {
+        i64::from(rounded)
+    } else {
+        let [w, d] = [
+            i128::from(max[0].saturating_sub(min[0])),
+            i128::from(max[1].saturating_sub(min[1])),
+        ];
+        let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+        let mut root = square.isqrt();
+        if root.saturating_mul(root) < square {
+            root = root.saturating_add(1);
+        }
+        i64::try_from(root)
+            .unwrap_or(i64::MAX)
+            .saturating_add(i64::from(rounded))
+    };
+    let body = FloorBody {
+        kind: "room",
+        min,
+        max,
+    };
+    let mesh = Mesh {
+        positions: box_corners(min, max).concat(),
+        indices: TRIANGLES.to_vec(),
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: Vec::new(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: room_names(&plan),
+        displays,
+    })
+}
+
+/// A room's face names: `box.<role>` for each of [`RoomPlan::roles`].
+fn room_names(plan: &RoomPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -681,6 +764,9 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     }
     if roof_plan::is_roof(recipe) {
         return Ok(roof_names(&RoofPlan::of(recipe)?));
+    }
+    if room_plan::is_room(recipe) {
+        return Ok(room_names(&RoomPlan::of(recipe)?));
     }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
@@ -822,6 +908,9 @@ impl Geometry for Boxes {
         }
         if families::is_instance(recipe) {
             return family(recipe);
+        }
+        if room_plan::is_room(recipe) {
+            return room(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);

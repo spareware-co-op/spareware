@@ -23,6 +23,9 @@
 //! - `roof`: one solid per layer of its roof type, each the solid construct-roofs worked out for
 //!   it (a flat layer extruded straight up, a sloped layer lofted from verge to verge), in the
 //!   child module `roof` (job 5.3); its points are construct-params' steps ([`crate::roof_plan`]).
+//! - `room`: one solid, its loop with its holes extruded from its base up to its upper limit, in
+//!   the child module `room` (job 5.4); its lengths are construct-params' steps
+//!   ([`crate::room_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
@@ -101,6 +104,7 @@ mod floor;
 mod layered;
 pub mod opening;
 mod roof;
+mod room;
 
 pub use opening::Hosted;
 
@@ -672,6 +676,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
         let plan = crate::roof_plan::RoofPlan::of(recipe)?;
         return roof::names(op_id(recipe)?, &plan);
     }
+    if crate::room_plan::is_room(recipe) {
+        let plan = crate::room_plan::RoomPlan::of(recipe)?;
+        return room::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
@@ -893,6 +901,9 @@ impl<E: Engine> Kernel<E> {
     ) -> Result<Built, GeometryError> {
         if let Some(built) = self.build_other_kind(host, hosted) {
             return built;
+        }
+        if crate::room_plan::is_room(host) {
+            return self.build_room(host, hosted.len());
         }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;

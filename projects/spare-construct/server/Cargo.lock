@@ -671,6 +671,7 @@ dependencies = [
  "construct-phases",
  "construct-regen",
  "construct-roofs",
+ "construct-rooms",
  "construct-slabs",
  "construct-transport",
  "construct-types",
@@ -871,6 +872,7 @@ dependencies = [
  "construct-openings",
  "construct-params",
  "construct-roofs",
+ "construct-rooms",
  "construct-slabs",
  "construct-types",
  "construct-views",
@@ -901,6 +903,21 @@ dependencies = [
  "libm",
  "num-bigint",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-rooms"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "dashu-int",
+ "dashu-ratio",
+ "kit-core",
  "serde_json",
 ]
 

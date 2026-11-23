@@ -2390,3 +2390,62 @@ pub fn an_opening_in_a_floor_is_refused_by_name<E: Engine + Send + 'static>(make
         assert_eq!(said, error, "{case}: fits says what building says");
     }
 }
+
+/// A room's filled recipe (construct-rooms' `filled`), as the regenerator writes it: the 3800 by
+/// 2800 mm room inside a box of 200 mm walls drawn to their centre lines, 2700 mm high, and with
+/// `island` the 2000 by 200 mm island wall in it as a hole, clockwise.
+pub fn room_of(island: bool) -> Recipe {
+    let corner = |x: i64, y: i64, wall: &str| json!({ "at": [x * 6400, y * 6400], "wall": wall });
+    let mut loops = vec![json!([
+        corner(100, 100, "w-s"),
+        corner(3900, 100, "w-e"),
+        corner(3900, 2900, "w-n"),
+        corner(100, 2900, "w-w"),
+    ])];
+    if island {
+        loops.push(json!([
+            corner(1000, 1400, "w-island"),
+            corner(1000, 1600, "w-island"),
+            corner(3000, 1600, "w-island"),
+            corner(3000, 1400, "w-island"),
+        ]));
+    }
+    recipe("room", json!({ "height": q0(2700 * 6400), "loops": loops }))
+}
+
+/// A room is its loop, holes and all, extruded from its base up to its height: one closed solid
+/// of its area by its height, its bounds the stand-in's box, its outline its outer loop, its faces
+/// named `bottom`, `top` and a side per edge of each loop; with nothing hosted on it.
+pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -> E, island: bool) {
+    let k = kernel(make());
+    let room = room_of(island);
+    let b = built(&k, &room);
+    assert_eq!(b.bounds.min, [100, 100, 0]);
+    assert_eq!(b.bounds.max, [3900, 2900, 2700]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&room).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        [[100, 100], [3900, 100], [3900, 2900], [100, 2900]]
+    );
+    let area: i128 = if island {
+        10_640_000 - 400_000
+    } else {
+        10_640_000
+    };
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * area * 2700);
+    let names = by_role(&b);
+    let sides = if island { 8 } else { 4 };
+    assert_eq!(names.len(), 2 + sides, "{names:?}");
+    for role in ["bottom", "top", "side.0", "side.3"] {
+        assert!(names.contains_key(role), "{role}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["by"], json!([0, 0, 2700 * 6400]));
+    assert_eq!(
+        body["holes"].as_array().map_or(0, Vec::len),
+        usize::from(island)
+    );
+}

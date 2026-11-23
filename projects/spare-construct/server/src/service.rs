@@ -15,7 +15,7 @@ use construct_model::rows::{
     BuiltElement, BuiltResult, Hub, HubRole, Incoming, Item, Link, LinkKind, Model, Project,
     Stored, Team,
 };
-use construct_params::{Length, Value as StoredValue};
+use construct_params::{Length, Units, Value as StoredValue};
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
 use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
@@ -109,6 +109,9 @@ pub struct FilledView {
     /// builder is handed them ([`cloud::openings::FloorCuts`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cut_by: Option<cloud::openings::FloorCuts>,
+    /// For a room, what became of it and what it measures, in the document's units.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room: Option<construct_regen::rooms::RoomView>,
 }
 
 const NO_DRAWER: &str =
@@ -613,15 +616,29 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     .map_err(Refusal::Bad)?,
             ),
         };
-        // A floor reads back its area, volume and mass after the openings and shafts that cut it.
         let cuts = if construct_regen::floor_plan::is_floor(&record.recipe) {
             cloud::openings::floor_cuts(&mut snapshot, project, model, &record).await?
         } else {
             Vec::new()
         };
-        context
+        let mut view = context
             .view_cut(&record, ty.as_ref(), &cuts)
-            .map_err(Refusal::Bad)
+            .map_err(Refusal::Bad)?;
+        if construct_regen::rooms::is_room(&record) {
+            let worked = construct_regen::rooms::worked_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                records::At::Now,
+            )
+            .await?;
+            if let Ok(worked) = worked {
+                let room = construct_regen::rooms::RoomView::of(&worked, &context.units);
+                view.parameters.extend(room.rows());
+            }
+        }
+        Ok(view)
     }
 
     /// The kinds of parameter and the categories of a model, for the page's lists: read from the
@@ -790,6 +807,23 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
+    /// A model's rooms as the page's room tool needs them: the next free number.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn rooms(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::rooms::RoomsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::rooms::read_rooms(&mut snapshot, project, model).await?)
+    }
+
     /// The recipe an element is built from now, each argument that reads a record filled (its
     /// parameters, its wall type's layers, its top tie), as the regenerator fills it
     /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an
@@ -821,6 +855,39 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             return Err(Refusal::NotFound);
         };
         let at = records::At::Now;
+        if construct_regen::rooms::is_room(&record) {
+            let worked =
+                construct_regen::rooms::worked_at(&mut snapshot, project, model, &record, at)
+                    .await?;
+            return Ok(match worked {
+                Ok(worked) => {
+                    let room = construct_regen::rooms::RoomView::of(&worked, &Units::default());
+                    match worked.0 {
+                        Ok(recipe) => FilledView {
+                            head,
+                            recipe: Some(recipe),
+                            failed: None,
+                            cut_by: None,
+                            room: Some(room),
+                        },
+                        Err(failed) => FilledView {
+                            head,
+                            recipe: None,
+                            failed: Some(json!({ "code": failed.code, "message": failed.message })),
+                            cut_by: None,
+                            room: Some(room),
+                        },
+                    }
+                }
+                Err(failed) => FilledView {
+                    head,
+                    recipe: None,
+                    failed: Some(json!({ "code": failed.code, "message": failed.message })),
+                    cut_by: None,
+                    room: None,
+                },
+            });
+        }
         Ok(
             match levels::recipe_at(&mut snapshot, project, model, &record, at).await? {
                 Ok(recipe) => {
@@ -837,6 +904,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                         recipe: Some(recipe),
                         failed: None,
                         cut_by,
+                        room: None,
                     }
                 }
                 Err(failed) => FilledView {
@@ -844,6 +912,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     recipe: None,
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
                     cut_by: None,
+                    room: None,
                 },
             },
         )

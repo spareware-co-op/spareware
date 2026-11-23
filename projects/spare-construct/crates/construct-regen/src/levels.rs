@@ -9,8 +9,8 @@
 //!   function, and is written in its built row with the level it is indexed under ([`Placed`]).
 //! - A recipe argument written `{"tie":"top"}` is filled, before the shape is built, with the
 //!   height from the element's base to its top tie (construct-levels' [`span`]), as the whole
-//!   millimetres the stand-in's recipes take, or, for a layered wall (`wall.layered`), as a
-//!   construct-params stored length, exactly. A wall whose top is tied to the level above so
+//!   millimetres the stand-in's recipes take, or, for a layered wall (`wall.layered`) and a room
+//!   (`room`), as a construct-params stored length, exactly. A wall whose top is tied to the level above so
 //!   follows that level when it moves, and its record never changes.
 //! - The levels a shape reads are [`levels_read`]: its base level, and its top level when its
 //!   recipe reads it. The regenerator lists them in its `reads` table, so a change to one of them
@@ -232,9 +232,12 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
         };
         let height =
             span((base, *from), (top, *to)).map_err(|e| failure("BadLevel", e.to_string()))?;
-        // A layered wall and a shaft hold their lengths as stored lengths, exactly; the
+        // A layered wall, a shaft and a room hold their lengths as stored lengths, exactly; the
         // stand-in's old box takes whole millimetres.
-        *arg = if wall_plan::is_layered(recipe) || construct_openings::is_shaft(recipe) {
+        *arg = if wall_plan::is_layered(recipe)
+            || construct_openings::is_shaft(recipe)
+            || crate::room_plan::is_room(recipe)
+        {
             serde_json::Value::from(Value::Length(height).stored())
         } else {
             serde_json::Value::from(whole_mm(height, name)?)

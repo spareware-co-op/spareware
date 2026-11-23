@@ -7,7 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    elements, families, floors, grids, hosting, levels, openings, params, roofs, undo, views, walls,
+    elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms, undo, views,
+    walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -136,6 +137,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = hosting::element_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = rooms::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = floors::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -179,6 +183,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || walls::is_command(cmd)
                 || floors::is_command(cmd)
                 || roofs::is_command(cmd)
+                || rooms::is_command(cmd)
                 || views::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
@@ -242,6 +247,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
             || roofs::is_command(&edit.cmd)
+            || rooms::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
@@ -296,6 +302,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if walls::is_command(&edit.cmd) {
             walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if rooms::is_command(&edit.cmd) {
+            rooms::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if floors::is_command(&edit.cmd) {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if roofs::is_command(&edit.cmd) {

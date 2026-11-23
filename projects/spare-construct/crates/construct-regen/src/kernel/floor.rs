@@ -292,7 +292,7 @@ pub(super) fn append(
 }
 
 /// One loop's corners as grid points of the engine at height `z` (engine steps).
-fn ring(corners: &[PlanCorner], units: Units, z: i64) -> Result<Vec<P3>, GeometryError> {
+pub(super) fn ring(corners: &[PlanCorner], units: Units, z: i64) -> Result<Vec<P3>, GeometryError> {
     corners
         .iter()
         .map(|corner| {

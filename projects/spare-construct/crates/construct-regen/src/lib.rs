@@ -28,6 +28,12 @@
 //! - [`roofs`]: how a roof's recipe reads its layers from its roof type and has its shape worked
 //!   out (construct-roofs), filled with the parameters by [`parameters::recipe_at`].
 //!
+//! - [`room_plan`]: a room (`room`) as both builders read it: its filled recipe's loops and
+//!   height in grid steps (job 5.4). The kernel builds its volume as one solid, the stand-in one
+//!   box.
+//! - [`rooms`]: how a room's recipe finds its loop from the walls of its level (construct-rooms)
+//!   as regeneration has reached them, and which rooms a changed wall or room builds again.
+//!
 //! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
 //!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1). Both builders
 //!   build it: the kernel one solid per layer, the stand-in one box of its whole thickness.
@@ -69,6 +75,9 @@ pub mod regenerator;
 pub mod roof_plan;
 #[cfg(feature = "server")]
 pub mod roofs;
+pub mod room_plan;
+#[cfg(feature = "server")]
+pub mod rooms;
 #[cfg(feature = "server")]
 pub mod slabs;
 pub mod stand_in;

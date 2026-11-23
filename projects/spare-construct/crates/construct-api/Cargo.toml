@@ -23,6 +23,7 @@ cloud = [
     "dep:construct-slabs",
     "dep:construct-openings",
     "dep:construct-roofs",
+    "dep:construct-rooms",
     "dep:construct-phases",
 ]
 
@@ -56,6 +57,8 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 construct-openings = { path = "../construct-openings", optional = true }
 # The roof type and roof commands: construct-roofs checks every footprint, form, pitch and overhang.
 construct-roofs = { path = "../construct-roofs", optional = true }
+# The room commands: construct-rooms checks every room.
+construct-rooms = { path = "../construct-rooms", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
 construct-elements = { path = "../construct-elements" }

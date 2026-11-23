@@ -19,6 +19,8 @@
 //!   log.
 //! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
 //!   through the same log.
+//! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
+//!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
@@ -38,6 +40,7 @@ pub mod levels;
 pub mod openings;
 pub mod params;
 pub mod roofs;
+pub mod rooms;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;

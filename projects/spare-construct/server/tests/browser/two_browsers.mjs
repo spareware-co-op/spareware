@@ -1807,5 +1807,133 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', opF
   check(mismatched.length === 0, `every body ${name}'s page built, the opening's and the shaft's included, matches the server's`);
 }
 
+console.log('\n   Rooms, found from the walls round a point');
+// Anna places a room by a click inside the seed building's west half; Ben sees its tag and its area.
+// After Anna lets go, Ben moves the wall on its west side and both see the area the server gives
+// for the new loop; Ben deletes that wall and both see the room not enclosed, with no area; his undo
+// puts the wall back and the room is enclosed again. Anna renames the room, picked in the plan, and
+// a fresh load agrees. Anna touches only the room and Ben only the wall.
+await toArchitecture(anna);
+await toArchitecture(ben);
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room"]');
+const roomNameField = '#pv-side input[data-key="room-tool-name"]';
+const roomNumberField = '#pv-side input[data-key="room-tool-number"]';
+await anna.waitForSelector(`${roomNumberField}[value="1"]`);
+pass('the Room tool offers the next free number, 1, from the server');
+await anna.locator(roomNameField).fill('Studio');
+await anna.locator(roomNameField).press('Enter');
+const roomClick = await onPlan(anna, 3000, 4000);
+await anna.mouse.click(roomClick.x, roomClick.y);
+const roomOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'room')?.el.id;
+await ben.waitForFunction(roomOf);
+const roomId = await ben.evaluate(roomOf);
+const roomTag = (id, part) => `#pv-canvas g.room-tag[data-room-tag="${id}"] text.${part}`;
+const roomTagIs = (page, part, text) =>
+  page.waitForFunction(([selector, want]) => document.querySelector(selector)?.textContent === want, [roomTag(roomId, part), text]);
+const roomArea = async (before) =>
+  (
+    await until(
+      () => asAnna(`parameters/${roomId}`),
+      (view) => {
+        const shown = view.parameters?.find((p) => p.id === 'room.area')?.shown;
+        return shown !== undefined && shown !== before;
+      },
+      'the server works out the room area',
+    )
+  ).parameters.find((p) => p.id === 'room.area').shown;
+const roomFirst = await roomArea(null);
+check(/^[0-9.]+ m²$/.test(roomFirst), `the server gives the room's area in the document's units, ${roomFirst}`);
+await roomTagIs(ben, 'room-area', roomFirst);
+await roomTagIs(ben, 'room-name', 'Studio');
+await roomTagIs(ben, 'room-number', '1');
+pass("Anna places a room with a click inside a loop of walls, and Ben's browser tags it with its name, number and area");
+await roomTagIs(anna, 'room-area', roomFirst);
+await ben.waitForSelector(`#pv-canvas g.element[data-id="${roomId}"] path.room-fill`);
+await shot(ben, 'ben-room');
+
+// Anna leaves the tool, picks the room she placed and lets go of it by clicking off.
+await anna.keyboard.press('Escape');
+const roomFirstPick = await onPlan(anna, 2000, 6000);
+await anna.mouse.click(roomFirstPick.x, roomFirstPick.y);
+await anna.waitForSelector('#pv-side input[data-key="room-name"]');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), roomId);
+pass('Anna lets go of the room, and Ben sees it free');
+
+// Ben drags the wall on the room's west side east; the loop is smaller.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await drag(ben, 'W-103', 25, 0);
+await ben.mouse.up();
+const roomMoved = await roomArea(roomFirst);
+check(roomMoved !== roomFirst, `a wall of the room moved: the server gives a new area, ${roomMoved}`);
+await roomTagIs(ben, 'room-area', roomMoved);
+await roomTagIs(anna, 'room-area', roomMoved);
+pass("Ben moves a wall of the room, and both browsers tag it with the server's new area");
+
+// Ben deletes that wall: the loop is open, the room stays, with its state in words and no area.
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await roomTagIs(page, 'room-state', 'Not enclosed');
+  check((await page.locator(`#pv-canvas g.room-tag[data-room-tag="${roomId}"] text.room-area`).count()) === 0, 'and shows no area');
+}
+const roomOpen = await until(
+  () => asAnna(`filled/${roomId}`),
+  (view) => view.room?.state === 'not enclosed',
+  'the server says the room is not enclosed',
+);
+check(
+  roomOpen.room.area === null || roomOpen.room.area === undefined,
+  `Ben deletes the wall: the server says "${roomOpen.room.words}", and gives no area`,
+);
+await shot(anna, 'anna-room-not-enclosed');
+
+// His undo puts the wall back, and the loop closes on the same area.
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'element.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await roomTagIs(ben, 'room-area', roomMoved);
+await roomTagIs(anna, 'room-area', roomMoved);
+pass("Ben's undo puts the wall back, and both browsers show the room enclosed again, as it was");
+
+// Anna picks the room in the plan and renames it in the properties palette.
+const roomPick = await onPlan(anna, 2000, 6000);
+await anna.mouse.click(roomPick.x, roomPick.y);
+const roomRename = '#pv-side input[data-key="room-name"]';
+await anna.waitForSelector(roomRename);
+await anna.waitForFunction(
+  (want) => document.querySelector('#pv-side [data-read-only="room.area"]')?.textContent === want,
+  roomMoved,
+);
+pass("Anna's palette shows its area read-only, the same as the server's");
+await anna.locator(roomRename).fill('Studio A');
+await anna.locator(roomRename).press('Enter');
+await roomTagIs(ben, 'room-name', 'Studio A');
+await roomTagIs(anna, 'room-name', 'Studio A');
+pass("Anna renames the room, and Ben's browser tags it with the new name");
+
+// A fresh load agrees.
+const roomsFresh = await signIn('anna');
+await roomsFresh.waitForFunction(
+  ([selector, want]) => document.querySelector(selector)?.textContent === want,
+  [roomTag(roomId, 'room-name'), 'Studio A'],
+);
+await roomsFresh.waitForFunction(
+  ([selector, want]) => document.querySelector(selector)?.textContent === want,
+  [roomTag(roomId, 'room-area'), roomMoved],
+);
+check(
+  (await roomsFresh.locator(roomTag(roomId, 'room-number')).textContent()) === '1',
+  'a fresh load tags the room with the same name, number and area',
+);
+await roomsFresh.context().close();
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the room's included, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');
