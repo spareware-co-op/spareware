@@ -15,8 +15,9 @@
 //! that touch are taken as joined. Merged regions are derived when a drawing is printed, like its
 //! hatch lines; the stored drawing keeps each element's own region and lines.
 //!
-//! Interim: the union is the crate's own exact overlay ([`crate::overlay`]), which the kernel's
-//! 2D booleans (`geom-2d`, pieces G196, G199, G200 and G202) replace with the same answers.
+//! Interim: the union is the crate's own exact overlay (its private module `overlay`,
+//! `src/overlay.rs`), which the kernel's 2D booleans (`geom-2d`, pieces G196, G199, G200 and G202)
+//! replace with the same answers.
 
 use std::collections::{BTreeMap, BTreeSet};
 

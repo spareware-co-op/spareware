@@ -244,7 +244,8 @@ fn arc(
 }
 
 /// A pen's printed `width` at 1:`n` as the stroke attributes of `colour`: printed micrometres at
-/// 1:n are n micrometres of the model each, so the width is `micrometres x n / 1000` model millimetres.
+/// 1:n are n micrometres of the model each, so the width is micrometres times n over 1000, in
+/// model millimetres.
 fn pen(colour: Colour, width: Micrometres, n: i128) -> Result<String, DrawingError> {
     let width = i128::from(width.get())
         .checked_mul(n)

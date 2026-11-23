@@ -29,8 +29,9 @@
 //! fills, model patterns at true size (chapter 18.8), and the island rule (every hole is left
 //! unhatched).
 //!
-//! Interim: the clipping is the crate's own exact overlay ([`crate::overlay`]); the kernel's
-//! hatches (`geom-2d`, piece G210, with its pattern library G211) replace it with the same lines.
+//! Interim: the clipping is the crate's own exact overlay (its private module `overlay`,
+//! `src/overlay.rs`); the kernel's hatches (`geom-2d`, piece G210, with its pattern library G211)
+//! replace it with the same lines.
 
 use construct_params::Length;
 use construct_styles::{Micrometres, Scale};
