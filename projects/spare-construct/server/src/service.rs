@@ -939,6 +939,58 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(cloud::views::summaries(&world))
     }
 
+    /// A model's sheets: each with its number, name, paper and how many viewports it holds, by
+    /// number.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn sheets(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::sheets::SheetSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::sheets::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::sheets::summaries(&world))
+    }
+
+    /// One sheet with its viewports as they lie on the paper: each view's scale from the view, each
+    /// outline from the view's extent (a plan's is the box of what it shows, as of the log's head)
+    /// and every alignment worked out.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// sheet; [`Refusal::Bad`] when a record cannot be read or placed, saying why.
+    pub async fn sheet(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        sheet: &Id,
+    ) -> Result<cloud::sheets::SheetListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::sheets::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let views = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
+        cloud::sheets::listing_of_sheet(&world, &views, sheet, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// What one view shows: the elements it cuts and the ones it sees, from construct-views' own
     /// rule over the model's stored shapes, as of the log's head.
     ///

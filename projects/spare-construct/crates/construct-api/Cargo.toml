@@ -67,6 +67,7 @@ construct-styles = { path = "../construct-styles", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
+construct-sheets = { path = "../construct-sheets" }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }

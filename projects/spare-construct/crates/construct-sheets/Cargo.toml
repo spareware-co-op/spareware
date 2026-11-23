@@ -1,0 +1,46 @@
+[package]
+name = "construct-sheets"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# A sheet and a viewport are element records, unchanged.
+construct-model = { path = "../construct-model" }
+# A sheet is of the sheets category and a viewport of the viewports category.
+construct-categories = { path = "../construct-categories" }
+# Paper lengths and positions are construct-params' Length, stored as its values are; the sheet
+# parameters (drawn by, checked by...) are its definitions bound to the sheets category.
+construct-params = { path = "../construct-params" }
+# A view's scale is construct-styles' Scale; it is what turns a view's extent into paper.
+construct-styles = { path = "../construct-styles" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+
+[dev-dependencies]
+# Tests read and write records as JSON text. MIT OR Apache-2.0.
+serde_json = "1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+float_cmp = "deny"
