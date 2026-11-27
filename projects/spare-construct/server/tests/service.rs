@@ -2251,3 +2251,83 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         Err(Refusal::NotFound)
     ));
 }
+
+/// Through the server's commands on the stand-in: the page's curtain wall tool reads the types
+/// (none, then the three defaults once it sends them), a person off the team can read none; a 6 m
+/// by 3 m curtain wall of the 1.5 m by 1 m type drawn on level 1 is built as the box round its
+/// mullions, and its parameters view lists its length, height, area, panels and their area, glazed
+/// area, and mullions and their length, in units and read-only; a grid line added changes them,
+/// and undone puts them back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_curtain_wall_drawn_by_command_shows_its_quantities_in_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.curtain_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert_eq!(none.defaults.len(), 3);
+    assert!(none.materials.iter().any(|m| m.id == "glass-plate"));
+    assert!(refused(s.curtain_types(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "curtain.defaults", json!({}))
+        .await
+        .unwrap();
+    let types = s.curtain_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["curtain-1500x1000", "curtain-glazing", "curtain-storefront"]
+    );
+    let wall = json!({ "element": "CW-900", "type": "curtain-1500x1000", "level": "1",
+                       "start": ["60 m", "0"], "end": ["66 m", "0"], "height": "3 m" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "curtain.draw", wall.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "curtain.draw", wall)
+        .await
+        .unwrap();
+    let view = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("CW-900"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        view["category"],
+        json!({ "id": 200, "name": "Curtain walls" })
+    );
+    let read = quantities(s, &project, &model, "CW-900").await;
+    let ids: Vec<&str> = read.keys().map(String::as_str).collect();
+    assert_eq!(
+        ids,
+        [
+            "curtain.area",
+            "curtain.glazed-area",
+            "curtain.height",
+            "curtain.length",
+            "curtain.mullion-length",
+            "curtain.mullions",
+            "curtain.panel-area",
+            "curtain.panels",
+        ]
+    );
+    assert_eq!(read["curtain.panels"].0.as_deref(), Some("number:12"));
+    assert_eq!(read["curtain.mullions"].0.as_deref(), Some("number:31"));
+    assert_eq!(read["curtain.panel-area"].1.as_deref(), Some("16.10 m²"));
+    assert_eq!(read["curtain.area"].1.as_deref(), Some("18.00 m²"));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "curtain.grid.add",
+        json!({ "element": "CW-900", "direction": "vertical", "at": "750 mm" }),
+    )
+    .await
+    .unwrap();
+    let more = quantities(s, &project, &model, "CW-900").await;
+    assert_eq!(more["curtain.panels"].0.as_deref(), Some("number:15"));
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(quantities(s, &project, &model, "CW-900").await, read);
+}

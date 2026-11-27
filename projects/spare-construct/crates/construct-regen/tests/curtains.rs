@@ -9,13 +9,16 @@
 // The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
 // reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
 #![allow(
-    clippy::unwrap_used,
-    clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     clippy::indexing_slicing,
-    reason = "test code; the rules are for the crate's own code"
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test code, and the kernel suite it shares; the rules are for the crate's own code"
 )]
 
 mod kernel_suite;

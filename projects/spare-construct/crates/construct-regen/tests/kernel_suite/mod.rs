@@ -2812,7 +2812,7 @@ pub fn a_door_panel_is_its_familys_solids<E: Engine + Send + 'static>(make: impl
         .iter()
         .filter(|p| p.function.starts_with("door."))
         .collect();
-    assert!(!doors.is_empty());
+    assert_ne!(doors.len(), 0);
     for door in &doors {
         for [x, _] in &door.outline {
             assert!((1000..=2000).contains(x), "{door:?}");

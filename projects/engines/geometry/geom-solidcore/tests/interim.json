@@ -457,6 +457,49 @@
         "the volume of a room under a roof is not its true volume until it is bounded by the roof (job 6.3)"
       ],
       "replaced_by": "the room's volume as its prism less what lies above a sloped plane, through the engine seam's boolean, once rooms are bounded by floors, ceilings and roofs (job 6.3)"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a curtain wall",
+      "operation": "wall.curtain (a filled curtain wall recipe: its panels, mullions and door panels, construct-curtain's layout)",
+      "answered_by": "one box round everything it holds, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw each glazed or solid panel and each mullion as the prism on its quadrilateral, every point the nearest millimetre, and each door panel as its family's boxes (construct_families::extents) at its panel's size, moved to where it stands",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/curtains.rs",
+        "test": "the_stand_in_draws_every_part_and_both_editions_name_its_faces"
+      },
+      "known_faults": [
+        "a curtain wall's panels and mullions are not solids on the stand-in's edition, and a door panel is its family's boxes, not its solids"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's curtain builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::curtain, a curtain wall's solids",
+      "operation": "wall.curtain (Kernel: one Engine::extrude of each panel's and mullion's quadrilateral straight up between its two heights, and each door panel's family through construct-families' evaluate_turned)",
+      "answered_by": "the engine behind the Engine trait: on the server's kernel setting solidcore's engine, each extrusion by the kernel's make.prism (every quadrilateral is a strictly convex parallelogram on grid points); a door panel's solids by the evaluator's own steps at its family's origin, their meshes moved by whole grid steps to where it stands; the meshes put one after another in whole millimetres, each point the nearest millimetre, the names written from the recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_curtain_wall_is_its_panels_and_mullions"
+      },
+      "known_faults": [
+        "a door panel's solids stand at its family's origin and only their meshes are moved, since the engine seam has no move of a solid",
+        "a corner of a curtain wall at an angle, or a face not on a whole millimetre, is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion, and a move of a solid by a grid vector behind the same trait (chapter 25's facade), so a door panel's solids stand where it does"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's hosting::cut_of and kernel::layered, a wall with a curtain wall embedded in it",
+      "operation": "wall.layered hosting an embedded wall.curtain (Kernel: the curtain wall's length by its height as a plain opening through the wall's whole thickness, Engine::subtract from every layer)",
+      "answered_by": "the engine behind the Engine trait (solidcore's boolean difference on the server's kernel setting, decision 32.70), on the same path and by the same rules as a plain opening's (opening.wall)",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_curtain_wall_embedded_through_commands_cuts_its_wall"
+      },
+      "known_faults": [
+        "a curtain wall as high as its wall, or reaching its end, which would cut the wall in two, is refused as such an opening is, since Engine::subtract gives one solid"
+      ],
+      "replaced_by": "the kernel's own exact boolean difference (geom-bool) behind the same trait, and a wall built from every piece Engine::subtract_pieces leaves"
     }
   ]
 }

@@ -624,6 +624,24 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let mut view = context
             .view_cut(&record, ty.as_ref(), &cuts)
             .map_err(Refusal::Bad)?;
+        // A curtain wall's quantities, from its recipe as it is built now: its type's grid read in
+        // and its top tie read.
+        if construct_regen::curtain_plan::is_curtain(&record.recipe)
+            && let Ok(filled) = construct_regen::levels::recipe_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                records::At::Now,
+            )
+            .await?
+        {
+            view.parameters
+                .extend(construct_regen::curtains::read_only_view(
+                    &filled,
+                    &context.units,
+                ));
+        }
         if construct_regen::rooms::is_room(&record) {
             let worked = construct_regen::rooms::worked_at(
                 &mut snapshot,
@@ -803,6 +821,29 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await?;
         let mut snapshot = self.kv.snapshot().await?;
         cloud::roofs::read_roof_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's curtain wall types with their grid and parts, the materials those are drawn in
+    /// and the default types, for the page's curtain wall tool
+    /// ([`cloud::curtains::read_curtain_types`]); where it has none, the page sends
+    /// `curtain.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn curtain_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::curtains::CurtainTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::curtains::read_curtain_types(&mut snapshot, project, model)
             .await?
             .map_err(Refusal::Bad)
     }

@@ -151,8 +151,6 @@ struct Args {
     /// A grid line's place, or a panel's corner (`[along, up]`).
     at: Option<Json>,
     from: Option<String>,
-    /// A panel, or `null` for the type's: read as [`PanelArgs`] once it is known not to be null.
-    panel: Option<Json>,
 }
 
 /// A type's grid and parts as a person sends them.
@@ -1009,7 +1007,11 @@ async fn change_grid<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
                     length_arg(pair.first(), "along")?,
                     length_arg(pair.get(1), "up")?,
                 ];
-                let sent = need(args.panel, "a panel, or null for its type's")?;
+                // Read from the edit itself, where a panel left out and one written null differ.
+                let sent = need(
+                    run.edit.args.get("panel").cloned(),
+                    "a panel, or null for its type's",
+                )?;
                 let panel = if sent.is_null() {
                     None
                 } else {

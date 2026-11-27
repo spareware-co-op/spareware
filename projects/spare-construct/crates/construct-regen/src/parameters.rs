@@ -538,13 +538,19 @@ pub struct ParameterView {
     pub reason: Option<String>,
 }
 
-/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`] and its level
-/// ties (construct-levels), which are the element record's own and not the type format's.
+/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`], its level ties
+/// (construct-levels) and its hosting's offsets ([`crate::hosting`], an embedded curtain wall's),
+/// which are the element record's own and not the type format's.
 #[must_use]
 pub fn instance_props(props: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let hosting = [crate::hosting::ALONG_KEY, crate::hosting::UP_KEY];
     props
         .iter()
-        .filter(|(key, _)| key.as_str() != CATEGORY_KEY && !construct_levels::is_tie_key(key))
+        .filter(|(key, _)| {
+            key.as_str() != CATEGORY_KEY
+                && !construct_levels::is_tie_key(key)
+                && !hosting.contains(&key.as_str())
+        })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
 }

@@ -101,6 +101,10 @@ fn type_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/roof-types",
             get(roof_types),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/curtain-types",
+            get(curtain_types),
+        )
 }
 
 /// Every page and API route, each a handler over the app.
@@ -684,6 +688,18 @@ async fn roof_types(
     Ok(Json(
         app.service
             .roof_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn curtain_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .curtain_types(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

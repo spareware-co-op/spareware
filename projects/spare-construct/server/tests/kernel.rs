@@ -1235,3 +1235,66 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
+
+#[test]
+fn a_curtain_wall_is_its_panels_and_mullions() {
+    kernel_suite::a_curtain_wall_is_its_panels_and_mullions(engine);
+}
+
+#[test]
+fn a_door_panel_is_its_familys_solids() {
+    kernel_suite::a_door_panel_is_its_familys_solids(engine);
+}
+
+/// Through the server's commands on the kernel: a curtain wall of the default 1.5 m by 1 m type,
+/// 4 m long and 2.4 m high, embedded 1 m along a 6 m partition 3 m high, cuts its own opening
+/// through every layer of the partition, named by the curtain wall as a plain opening's faces are
+/// named: the stud layer, whose faces are on whole millimetres, keeps exactly its volume less the
+/// opening's. The curtain wall itself stands on the partition's line there, one solid per panel and
+/// per mullion (12 and 31).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_curtain_wall_embedded_through_commands_cuts_its_wall() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-950", "type": "wall-partition", "start": ["70 m", "0"],
+                "end": ["76 m", "0"], "level": "1", "height": "3 m" }),
+    )
+    .await;
+    edit("curtain.defaults", json!({})).await;
+    edit(
+        "curtain.embed",
+        json!({ "element": "CW-950", "type": "curtain-1500x1000", "host": "W-950",
+                "along": "1 m", "length": "4 m", "height": "2.4 m" }),
+    )
+    .await;
+    let (shown, names, bounds) = layered(&s, &project, &model, "W-950").await;
+    assert_eq!(bounds, ([70_000, -58, 0], [76_000, 58, 3000]));
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(CW-950).head",
+            "tool(CW-950).jamb.end",
+            "tool(CW-950).jamb.start"
+        ]
+    );
+    let display = shown.display.as_ref().unwrap();
+    let stud = kernel_suite::closed_mesh_six_volume(&kernel_suite::part_mesh(display, 1));
+    assert_eq!(stud, 6 * (6000 * 90 * 3000 - 4000 * 90 * 2400));
+    let (curtain, _, bounds) = layered(&s, &project, &model, "CW-950").await;
+    assert_eq!(bounds, ([71_000, -75, 0], [75_000, 75, 2400]));
+    assert_eq!(curtain.display.as_ref().unwrap().parts.len(), 12 + 31);
+}
