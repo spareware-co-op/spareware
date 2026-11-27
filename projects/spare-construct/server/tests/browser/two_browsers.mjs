@@ -2292,7 +2292,7 @@ await ben.click(viewLeaf('Level 1 plan'));
 if (withKernel) {
   for (const page of [anna, ben]) {
     await cropDoorIs(page, 'attached');
-    await cropBeyond(page, cropWide);
+    await cropBeyond(page, 6000);
     check((await cropFrame(page).count()) === 0, 'a view with no crop draws no outline');
   }
 }
