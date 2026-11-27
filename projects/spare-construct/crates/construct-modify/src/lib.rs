@@ -21,6 +21,9 @@
 //!   turns and mirrors with its wall, and a floor opening with its floor; one moved alone slides
 //!   along its host or is refused by name. Copies get new IDs from the key their command names,
 //!   keep their types and parameters, and a copy's hosted elements are hosted on the copy.
+//! - **Arrays** ([`array`]): the motions of a linear array (by a spacing or a span) and a radial
+//!   one (by an angle or a sweep), each copy a plain element; an associated array, kept together
+//!   and edited as one, is a later part of CON-A3-F4.
 //!
 //! What it does not do: build or check a shape. The server's command checks every record it
 //! writes through the regeneration the model already uses (the builders' own readers and their
