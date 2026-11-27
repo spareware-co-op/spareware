@@ -4407,6 +4407,7 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-styles",
+ "construct-views",
  "engine-geometry",
  "flate2",
  "futures",

@@ -19,6 +19,21 @@
 //! | `view.delete` | `view` | Its pointer goes; refused while the view is placed on a sheet |
 //! | `view.graphics.set` | `view`, `category`, `edge` (`cut` or `projection`), `style` | One graphics rule of the view |
 //! | `view.graphics.clear` | `view`, `category`, optional `edge` | The rule, or both of the category's rules; nothing at all when there is none |
+//! | `view.crop.set` | `view`, and any of `region`, `annotation` (`null` for none), `on` | The view's crop: made from `region` when the view has none, else the named parts change |
+//! | `view.crop.clear` | `view` | The crop goes; nothing at all when there is none |
+//! | `view.crop.show` | `view`, `shown` (true or false) | Whether the crop's outline is shown in the view |
+//!
+//! A crop (CON-A8-F1-P3) is a plan's, section's or elevation's window onto the model: a `region`
+//! is `{"rectangle": {"min": {"x", "y"}, "max": {"x", "y"}}}` or `{"outline": [{"x", "y"}, ...]}`
+//! (corners in order, typed lengths in the view's own coordinates), and the same for the
+//! `annotation` region. A new crop is on and shown. It is refused for a view that holds none (a
+//! three-dimensional view, a drafting view, a legend), for a rectangle whose minimum is not below
+//! its maximum, and for an outline with fewer than three corners, a corner twice in a row, edges
+//! that cross, touch or lie along each other, or no area (all checked exactly, in construct-views'
+//! words); `view.crop.show` is refused for a view with no crop. The generic commands do not go
+//! behind these, and no command takes the crop's parts but these. The server's listing gives the
+//! crop and a plan's range with each view; a viewport's size on its sheet is the crop's when it is
+//! on.
 //!
 //! The values: `kind` is one of `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`,
 //! `drafting`, `legend`. `scale` is the `n` of 1:n, a whole number from 1 to 1,000,000 (default
@@ -70,8 +85,9 @@ use construct_regen::levels::read_levels;
 use construct_regen::parameters as records;
 use construct_styles::{Colour, Edge, LineStyles, ObjectStyles, PatternId};
 use construct_views::{
-    CutLine, DetailLevel, Fill, Model, PlanSetup, Point, RuleStyle, Scale, Side, Tie, VIEW_KIND,
-    View, ViewElement, ViewKind, ViewRange, Views, edge_from_key, list, resolve,
+    Crop, CutLine, DetailLevel, Fill, Model, PlanSetup, Point, Region, RuleStyle, Scale, Side, Tie,
+    VIEW_KIND, View, ViewElement, ViewError, ViewKind, ViewRange, Views, edge_from_key, list,
+    resolve,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -80,7 +96,7 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 7] = [
+pub const COMMANDS: [&str; 10] = [
     "view.create",
     "view.rename",
     "view.set",
@@ -88,6 +104,9 @@ pub const COMMANDS: [&str; 7] = [
     "view.delete",
     "view.graphics.set",
     "view.graphics.clear",
+    "view.crop.set",
+    "view.crop.clear",
+    "view.crop.show",
 ];
 
 /// The scale of a view made without one: 1:100.
@@ -140,6 +159,25 @@ struct Args {
     edge: Option<String>,
     /// A graphics rule's style.
     style: Option<StyleArgs>,
+    /// A crop's region.
+    region: Option<RegionArgs>,
+    /// A crop's annotation region; `null` takes it away, so `null` is kept apart from none.
+    #[serde(default, deserialize_with = "present")]
+    annotation: Option<serde_json::Value>,
+    /// Whether a crop is on.
+    on: Option<bool>,
+    /// Whether a crop's outline is shown.
+    shown: Option<bool>,
+}
+
+/// A crop region as a person names it.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+enum RegionArgs {
+    /// The lower left and the upper right corner.
+    Rectangle { min: PointArgs, max: PointArgs },
+    /// The corners of a closed outline in order.
+    Outline(Vec<PointArgs>),
 }
 
 /// The parts of a graphics rule's style a person names; the rest keep what they were.
@@ -353,6 +391,101 @@ pub struct ViewSummary {
     pub scale: u32,
     /// `coarse`, `medium` or `fine`.
     pub detail: String,
+    /// A plan's view range, or `None` for any other view.
+    pub range: Option<RangeSummary>,
+    /// The view's crop, or `None` when it has none.
+    pub crop: Option<CropSummary>,
+}
+
+/// One height of a view range as a page lists it: the level and the offset from it, in the text
+/// a person reads (`1200 mm`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct TieSummary {
+    /// The level's ID.
+    pub level: String,
+    /// The offset from the level.
+    pub offset: String,
+}
+
+/// The four heights of a view range above the project's zero, each as text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct HeightsSummary {
+    /// The top.
+    pub top: String,
+    /// The cut plane.
+    pub cut: String,
+    /// The bottom.
+    pub bottom: String,
+    /// The view depth.
+    pub depth: String,
+}
+
+/// A plan's view range as a page lists it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RangeSummary {
+    /// The top.
+    pub top: TieSummary,
+    /// The cut plane.
+    pub cut: TieSummary,
+    /// The bottom.
+    pub bottom: TieSummary,
+    /// The view depth.
+    pub depth: TieSummary,
+    /// The heights the levels give them, or `None` when they do not resolve.
+    pub heights: Option<HeightsSummary>,
+}
+
+/// A corner of a crop as text, in the view's own coordinates.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct CornerSummary {
+    /// Along the view's first axis.
+    pub x: String,
+    /// Along its second.
+    pub y: String,
+}
+
+/// A crop region as a page lists it: `rectangle` or `outline`, and its corners in order (a
+/// rectangle's four run counter-clockwise from the lower left).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RegionSummary {
+    /// `rectangle` or `outline`.
+    pub shape: String,
+    /// The corners.
+    pub corners: Vec<CornerSummary>,
+}
+
+/// A view's crop as a page lists it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct CropSummary {
+    /// The region the model is cropped to.
+    pub region: RegionSummary,
+    /// The annotation region, if the crop has its own.
+    pub annotation: Option<RegionSummary>,
+    /// Whether the crop applies.
+    pub on: bool,
+    /// Whether its outline is shown.
+    pub shown: bool,
+}
+
+fn tie_summary(tie: &Tie) -> TieSummary {
+    TieSummary {
+        level: tie.level.to_string(),
+        offset: tie.offset.to_string(),
+    }
+}
+
+fn region_summary(region: &Region) -> RegionSummary {
+    RegionSummary {
+        shape: region.key().to_owned(),
+        corners: region
+            .corners()
+            .iter()
+            .map(|p| CornerSummary {
+                x: p.x.to_string(),
+                y: p.y.to_string(),
+            })
+            .collect(),
+    }
 }
 
 /// The summary of one view.
@@ -360,6 +493,28 @@ pub struct ViewSummary {
 pub fn summary(view: &View, levels: &Levels) -> ViewSummary {
     let level = view.kind().plan().map(|plan| plan.level.clone());
     ViewSummary {
+        range: view.kind().plan().map(|plan| RangeSummary {
+            top: tie_summary(&plan.range.top),
+            cut: tie_summary(&plan.range.cut),
+            bottom: tie_summary(&plan.range.bottom),
+            depth: tie_summary(&plan.range.depth),
+            heights: plan
+                .range
+                .resolve(levels)
+                .ok()
+                .map(|heights| HeightsSummary {
+                    top: heights.top.to_string(),
+                    cut: heights.cut.to_string(),
+                    bottom: heights.bottom.to_string(),
+                    depth: heights.depth.to_string(),
+                }),
+        }),
+        crop: view.crop().map(|crop| CropSummary {
+            region: region_summary(crop.region()),
+            annotation: crop.annotation().map(region_summary),
+            on: crop.is_on(),
+            shown: crop.is_shown(),
+        }),
         id: view.id().to_string(),
         name: view.name().to_owned(),
         kind: view.kind().key().to_owned(),
@@ -630,6 +785,17 @@ pub async fn apply<T: Txn>(
             edit.cmd
         )));
     }
+    if !edit.cmd.starts_with("view.crop.")
+        && (args.region.is_some()
+            || args.annotation.is_some()
+            || args.on.is_some()
+            || args.shown.is_some())
+    {
+        return Ok(Err(format!(
+            "{} has no region, annotation, on or shown: a crop is set with view.crop.set.",
+            edit.cmd
+        )));
+    }
     let mut run = Run {
         txn,
         project,
@@ -639,6 +805,9 @@ pub async fn apply<T: Txn>(
         claim_ms,
     };
     match edit.cmd.as_str() {
+        "view.crop.set" => set_crop(&mut run, args).await,
+        "view.crop.clear" => clear_crop(&mut run, args).await,
+        "view.crop.show" => show_crop(&mut run, args).await,
         "view.create" => create(&mut run, args).await,
         "view.rename" => rename(&mut run, args).await,
         "view.set" => set(&mut run, args).await,
@@ -1000,6 +1169,7 @@ async fn duplicate<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         .map(|copy| {
             copy.with_phasing(view.phasing().cloned())
                 .with_graphics(view.graphics().clone())
+                .with_crop(view.crop().cloned())
         })
         .map_err(|e| e.to_string())
     });
@@ -1147,6 +1317,146 @@ fn style_over(base: RuleStyle, args: &StyleArgs) -> Result<RuleStyle, String> {
         style.shown = on;
     }
     Ok(style)
+}
+
+fn crop_point(args: &PointArgs) -> Result<Point, String> {
+    Ok(Point {
+        x: length(&args.x)?,
+        y: length(&args.y)?,
+    })
+}
+
+/// A crop region from the arguments, checked exactly by construct-views.
+fn region_of(args: &RegionArgs) -> Result<Region, String> {
+    match args {
+        RegionArgs::Rectangle { min, max } => {
+            Region::rectangle(crop_point(min)?, crop_point(max)?).map_err(|e| e.to_string())
+        }
+        RegionArgs::Outline(corners) => Region::outline(
+            corners
+                .iter()
+                .map(crop_point)
+                .collect::<Result<Vec<_>, String>>()?,
+        )
+        .map_err(|e| e.to_string()),
+    }
+}
+
+/// What a crop command takes that is not a crop's: refused, so nothing is silently dropped.
+fn crop_alone(args: &Args, cmd: &str) -> Result<(), String> {
+    let others = args.category.is_some()
+        || args.edge.is_some()
+        || args.style.is_some()
+        || args.name.is_some()
+        || args.kind.is_some()
+        || args.scale.is_some()
+        || args.detail.is_some()
+        || args.level.is_some()
+        || args.range.is_some()
+        || args.from.is_some()
+        || args.to.is_some()
+        || args.look.is_some()
+        || args.depth.is_some()
+        || args.staging.is_some()
+        || args.phasing.is_some()
+        || args.copy.is_some();
+    if others {
+        return Err(format!("{cmd} takes only a view and the crop's own parts."));
+    }
+    Ok(())
+}
+
+/// The view after a `view.crop.set`, or why it cannot be.
+fn crop_set(args: &Args, view: &View) -> Result<View, String> {
+    crop_alone(args, "view.crop.set")?;
+    if args.shown.is_some() {
+        return Err(
+            "view.crop.set does not show or hide the outline: use view.crop.show.".to_owned(),
+        );
+    }
+    Crop::check_kind(view.kind()).map_err(|e| e.to_string())?;
+    let region = args.region.as_ref().map(region_of).transpose()?;
+    let mut crop = match (view.crop(), region) {
+        (Some(crop), Some(region)) => crop.clone().with_region(region),
+        (Some(crop), None) => crop.clone(),
+        (None, Some(region)) => Crop::new(region),
+        (None, None) => {
+            return Err("This view has no crop yet: view.crop.set needs a region.".to_owned());
+        }
+    };
+    if let Some(value) = &args.annotation {
+        let annotation = if value.is_null() {
+            None
+        } else {
+            let named: RegionArgs = serde_json::from_value(value.clone())
+                .map_err(|e| format!("That annotation region isn't valid: {e}"))?;
+            Some(region_of(&named)?)
+        };
+        crop = crop.with_annotation(annotation);
+    }
+    if let Some(on) = args.on {
+        crop = crop.with_on(on);
+    }
+    Ok(view.clone().with_crop(Some(crop)))
+}
+
+async fn set_crop<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match crop_set(&args, &view) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// The view after a `view.crop.clear`.
+fn crop_cleared(args: &Args, view: &View) -> Result<View, String> {
+    crop_alone(args, "view.crop.clear")?;
+    if args.region.is_some()
+        || args.annotation.is_some()
+        || args.on.is_some()
+        || args.shown.is_some()
+    {
+        return Err("view.crop.clear takes no part of a crop.".to_owned());
+    }
+    Ok(view.clone().with_crop(None))
+}
+
+async fn clear_crop<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match crop_cleared(&args, &view) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// The view after a `view.crop.show`.
+fn crop_shown(args: &Args, view: &View) -> Result<View, String> {
+    crop_alone(args, "view.crop.show")?;
+    if args.region.is_some() || args.annotation.is_some() || args.on.is_some() {
+        return Err("view.crop.show takes only shown.".to_owned());
+    }
+    let shown = need(args.shown, "shown (true or false)")?;
+    let crop = view
+        .crop()
+        .ok_or_else(|| ViewError::NoCrop(view.id().clone()).to_string())?;
+    Ok(view.clone().with_crop(Some(crop.clone().with_shown(shown))))
+}
+
+async fn show_crop<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match crop_shown(&args, &view) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
 }
 
 /// The view after a `view.graphics.set`, or why it cannot be.

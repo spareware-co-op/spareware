@@ -81,6 +81,20 @@ async fn seeded() -> Stack {
     }
 }
 
+/// Level 1's plan as the views are listed: 1:100, medium, the default range on its own level
+/// (it stands at 0), no crop.
+fn level_1_summary() -> Value {
+    json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
+            "level_name": "Level 1", "scale": 100, "detail": "medium",
+            "range": { "top": { "level": "1", "offset": "2300 mm" },
+                       "cut": { "level": "1", "offset": "1200 mm" },
+                       "bottom": { "level": "1", "offset": "0 mm" },
+                       "depth": { "level": "1", "offset": "-500 mm" },
+                       "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
+                                    "depth": "-500 mm" } },
+            "crop": null })
+}
+
 fn refused<T: std::fmt::Debug>(answer: Result<T, Refusal>) -> bool {
     answer
         .err()
@@ -1712,11 +1726,82 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         serde_json::to_value(&listed).unwrap(),
         json!([
             { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-              "level_name": "Level 1", "scale": 100, "detail": "medium" },
+              "level_name": "Level 1", "scale": 100, "detail": "medium",
+              "range": { "top": { "level": "1", "offset": "2300 mm" },
+                         "cut": { "level": "1", "offset": "1200 mm" },
+                         "bottom": { "level": "1", "offset": "0 mm" },
+                         "depth": { "level": "1", "offset": "-500 mm" },
+                         "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
+                                      "depth": "-500 mm" } },
+              "crop": null },
             { "id": "VP-2", "name": "Level 2 plan", "kind": "floor_plan", "level": "2",
-              "level_name": "Level 2", "scale": 100, "detail": "medium" },
+              "level_name": "Level 2", "scale": 100, "detail": "medium",
+              "range": { "top": { "level": "2", "offset": "2300 mm" },
+                         "cut": { "level": "2", "offset": "1200 mm" },
+                         "bottom": { "level": "2", "offset": "0 mm" },
+                         "depth": { "level": "2", "offset": "-500 mm" },
+                         "heights": { "top": "5300 mm", "cut": "4200 mm", "bottom": "3000 mm",
+                                      "depth": "2500 mm" } },
+              "crop": null },
         ])
     );
+    // A crop and a new range are read back with the view, as text a person reads.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "outline": [
+            { "x": "0", "y": "0" }, { "x": "4 m", "y": "0" }, { "x": "4 m", "y": "3 m" }] },
+            "annotation": { "rectangle": { "min": { "x": "-1 m", "y": "-1 m" },
+                                           "max": { "x": "5 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.show",
+        json!({ "view": "VP-1", "shown": false }),
+    )
+    .await
+    .unwrap();
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.set",
+        json!({ "view": "VP-1", "range": { "cut": { "offset": "1.5 m" } } }),
+    )
+    .await
+    .unwrap();
+    let listed = serde_json::to_value(s.views(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(
+        listed[0]["crop"],
+        json!({ "region": { "shape": "outline", "corners": [
+                    { "x": "0 mm", "y": "0 mm" }, { "x": "4000 mm", "y": "0 mm" },
+                    { "x": "4000 mm", "y": "3000 mm" }] },
+                "annotation": { "shape": "rectangle", "corners": [
+                    { "x": "-1000 mm", "y": "-1000 mm" }, { "x": "5000 mm", "y": "-1000 mm" },
+                    { "x": "5000 mm", "y": "4000 mm" }, { "x": "-1000 mm", "y": "4000 mm" }] },
+                "on": true, "shown": false })
+    );
+    assert_eq!(listed[0]["range"]["cut"]["offset"], "1500 mm");
+    assert_eq!(listed[0]["range"]["heights"]["cut"], "1500 mm");
+    assert_eq!(listed[1]["crop"], json!(null));
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    let listed = serde_json::to_value(s.views(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(listed[0]["crop"], json!(null));
+    assert_eq!(listed[0]["range"]["heights"]["cut"], "1200 mm");
     // Each model has the plans of its own levels: the riverside model stands on one.
     let riverside = s
         .views(&i("cara"), &i("riverside"), &i("riverside-model"))
@@ -1735,8 +1820,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
     assert_eq!(
         serde_json::to_value(&level_1).unwrap(),
         json!({
-            "view": { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-                      "level_name": "Level 1", "scale": 100, "detail": "medium" },
+            "view": level_1_summary(),
             "cut": ["D-101", "D-102", "D-103", "W-101", "W-102", "W-103", "W-104", "W-105"],
             "seen": [],
             "beyond": [],
@@ -1796,8 +1880,7 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     let s = &stack.service;
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
     let (plan_1, plan_2) = (i("VP-1"), i("VP-2"));
-    let summary = json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan",
-                          "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium" });
+    let summary = level_1_summary();
 
     let none = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
     let none = serde_json::to_value(&none).unwrap();
@@ -1922,12 +2005,17 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     );
 }
 
+/// A crop as the drawer was given it: the view, on, shown and the corners in grid steps.
+type AskedCrop = (String, bool, bool, Vec<(i64, i64)>);
+
 /// A drawer that only records what the server asks of it, so the read path is tested without an
 /// engine: the cut height and scale of the view, and the elements the plan cuts as the model
 /// holds them.
 #[derive(Default)]
 struct Recording {
     asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
+    /// Each request's crop: the view it is of and the crop's on, shown and corners, as text.
+    crops: std::sync::Mutex<Vec<Option<AskedCrop>>>,
 }
 
 impl Drawer for Recording {
@@ -1937,7 +2025,21 @@ impl Drawer for Recording {
         scale: Scale,
         elements: &[ToDraw],
         _looks: Option<&dyn construct_drawing::look::Looks>,
+        crop: Option<spare_server::plan::PlanCrop<'_>>,
     ) -> Result<Drawn, String> {
+        self.crops.lock().unwrap().push(crop.map(|c| {
+            (
+                c.view.to_string(),
+                c.crop.is_on(),
+                c.crop.is_shown(),
+                c.crop
+                    .region()
+                    .corners()
+                    .iter()
+                    .map(|p| (p.x.steps(), p.y.steps()))
+                    .collect(),
+            )
+        }));
         self.asked
             .lock()
             .unwrap()
@@ -1998,6 +2100,30 @@ async fn a_plan_is_the_drawers_picture_of_what_the_views_plane_cuts() {
         let wall = elements.iter().find(|e| e.id.as_str() == "W-201").unwrap();
         assert_eq!(wall.placement.z, 3000);
     }
+
+    // A view with no crop passes none; a crop is passed with its view, switches and corners.
+    assert_eq!(*recording.crops.lock().unwrap(), [None, None]);
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    let (right, top) = (6000 * 6400, 4000 * 6400);
+    assert_eq!(
+        recording.crops.lock().unwrap().last().cloned().unwrap(),
+        Some((
+            "VP-1".to_owned(),
+            true,
+            true,
+            vec![(0, 0), (right, 0), (right, top), (0, top)]
+        ))
+    );
 
     // Only floor plans are drawn yet: a three-dimensional view says so.
     s.edit(
@@ -2578,4 +2704,66 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         s.sheet(&anna, &project, &model, &i("VP-1")).await,
         Err(Refusal::NotFound)
     ));
+}
+
+/// A viewport on a sheet reads its view's crop for its size: while the crop is on, the outline is
+/// the crop's box at the view's scale (exact, not rounded out to whole millimetres), whether or not
+/// the crop is shown; switched off or cleared, it is what the plan shows again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_viewports_outline_is_its_views_crop_while_the_crop_is_on() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    edit(
+        "sheet.create",
+        json!({ "sheet": "SH-1", "number": "A101", "name": "Ground floor plan" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "viewport.create",
+        json!({ "viewport": "PT-1", "sheet": "SH-1", "view": "VP-1", "x": "300 mm", "y": "300 mm" }),
+    )
+    .await
+    .unwrap();
+    let outline = || async {
+        let sheet = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+        serde_json::to_value(&sheet).unwrap()["viewports"][0]["outline"].clone()
+    };
+    let plain = outline().await;
+    assert_eq!(plain["min_x"], "length:q0:1534400");
+
+    // A crop of 6 m by 4 m at 1:100 is 60 by 40 mm on the paper, about the viewport's centre.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    let cropped = json!({ "min_x": "length:q0:1728000", "min_y": "length:q0:1792000",
+                          "max_x": "length:q0:2112000", "max_y": "length:q0:2048000" });
+    assert_eq!(outline().await, cropped);
+    // A shaped crop's box, and hiding the outline, change nothing about the size.
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": false }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, cropped);
+    // Off, and cleared, the plan's own extent is back.
+    edit("view.crop.set", json!({ "view": "VP-1", "on": false }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, plain);
+    edit("view.crop.set", json!({ "view": "VP-1", "on": true }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, cropped);
+    edit("view.crop.clear", json!({ "view": "VP-1" }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, plain);
 }
