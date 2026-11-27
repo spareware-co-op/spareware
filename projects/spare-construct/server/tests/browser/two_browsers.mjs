@@ -1620,18 +1620,29 @@ check(
   'and nothing is made, for Ben or on the server',
 );
 
-// Ben moves the level up to 3 m by typing its elevation and pressing Enter.
+// Ben moves the level by typing its elevation and pressing Enter, once the dialog shows the level as it
+// stands. A dialog that was drawn again between the typing and the Enter (a log entry reached it) has
+// the old value back, so he types it again, as a person would.
 const moveStairTop = async (typed) => {
+  const want = `${Math.round(Number.parseFloat(typed) * 1000)} mm`;
+  const topAt = async () => (await stairLevels()).find((l) => l.id === stairTop.id);
   await stairLevelDialog();
   const field = ben.locator(`${manager} [data-key="level-elevation:${stairTop.id}"]`);
-  await field.fill(typed);
-  await field.press('Enter');
-  await until(
-    async () => (await stairLevels()).find((l) => l.id === stairTop.id),
-    (found) => found.shown === `${Math.round(Number.parseFloat(typed) * 1000)} mm`,
-    `the stair's top level moves to ${typed}`,
-  );
-  await stairLevelClose();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const now = (await topAt()).shown;
+    await ben.waitForFunction(([key, shown]) => document.querySelector(key)?.value === shown, [`${manager} [data-key="level-elevation:${stairTop.id}"]`, now]);
+    await field.fill(typed);
+    await field.press('Enter');
+    for (let tries = 0; tries < 30; tries += 1) {
+      if ((await topAt()).shown === want) {
+        await stairLevelClose();
+        return;
+      }
+      await ben.waitForTimeout(100);
+    }
+  }
+  const problems = await ben.evaluate(() => [...document.querySelectorAll('#stack-manage [data-problem]')].map((n) => n.textContent).join(' | '));
+  throw new Error(`FAILED: the stair's top level moves to ${typed} (levels now ${JSON.stringify(await stairLevels())}; the dialog says: ${problems}; the field: ${await field.inputValue()})`);
 };
 await moveStairTop(`${(stairBase + 3000) / 1000} m`);
 await anna.locator(stairField('category')).selectOption('main-private');
