@@ -1983,6 +1983,9 @@ pass('Anna lets go of the room, and Ben sees it free');
 await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await drag(ben, 'W-103', 25, 0);
 await ben.mouse.up();
+// The drag is many moves, each its own edit, and each gives the room a new area. The area the test
+// reads is the last one, once the server has taken every move; read earlier it is one on the way.
+await ben.waitForFunction(() => window.spare.pending.length === 0);
 const roomMoved = await roomArea(roomFirst);
 check(roomMoved !== roomFirst, `a wall of the room moved: the server gives a new area, ${roomMoved}`);
 await roomTagIs(ben, 'room-area', roomMoved);
