@@ -107,6 +107,7 @@ dependencies = [
  "engine-geometry",
  "hex",
  "kit-core",
+ "num-bigint",
  "serde_json",
  "sha2",
 ]

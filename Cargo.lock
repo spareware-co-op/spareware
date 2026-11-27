@@ -632,6 +632,7 @@ dependencies = [
  "hex",
  "jsonschema",
  "kit-core",
+ "num-bigint",
  "serde_json",
  "sha2",
 ]

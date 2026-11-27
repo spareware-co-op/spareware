@@ -6,7 +6,8 @@
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
 //! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
-//! cutting a three-layer wall (job 6.4), and a document of one edition reported,
+//! cutting a three-layer wall (job 6.4), doors, windows and openings in walls at any angle (piece
+//! A83), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -197,6 +198,14 @@ fn an_opening_in_a_floor_is_refused_by_name() {
 #[test]
 fn a_family_cuts_every_layer_and_stands_in_its_opening() {
     kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
+}
+
+/// Piece A83: a door, a window, a plain opening and a placed door in walls at 30, 45 and 60
+/// degrees and at a 3:4:5 slope, every wall, opening and family solid made by solidcore's engine
+/// and passed by the kernel's checker.
+#[test]
+fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
+    kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(engine);
 }
 
 #[test]

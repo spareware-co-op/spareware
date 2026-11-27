@@ -243,7 +243,9 @@ impl fmt::Display for Reason {
                 "the opening's sketch is not on an xz plane, parallel to the wall it is cut in",
             ),
             Self::UprightNotSquare => f.write_str(
-                "the profile is on an upright plane and has an edge along neither of its                  sketch's axes, and such a profile is built only turned by quarter turns, not                  seated at another angle",
+                "the profile is on an upright plane and has an edge along neither of its \
+                 sketch's axes, and such a profile is built only turned by quarter turns, not \
+                 seated at another angle",
             ),
         }
     }

@@ -35,7 +35,8 @@
 
 #![allow(
     clippy::arithmetic_side_effects,
-    reason = "whole numbers of any size cannot overflow, and the one divisor, a way's square               length, is above zero"
+    reason = "whole numbers of any size cannot overflow, and the one divisor, a way's square \
+              length, is above zero"
 )]
 
 use super::error::Reason;

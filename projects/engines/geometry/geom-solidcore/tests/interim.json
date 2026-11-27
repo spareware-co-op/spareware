@@ -361,7 +361,7 @@
     {
       "program": "spare-construct",
       "place": "construct-regen's kernel::family, a placed family's solids",
-      "operation": "family.instance (Kernel: the family recipe evaluated through construct-families' evaluate_turned, every step an Engine::extrude, subtract or unite of its own)",
+      "operation": "family.instance (Kernel: the family recipe evaluated through construct-families' evaluate_turned, or evaluate_seated in a wall at an angle, every step an Engine::extrude, subtract or unite of its own)",
       "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), each solid meshed by the engine and drawn as a part with its material, every point the nearest millimetre; what each type builds to, turned as it stands, is kept by the evaluator's key",
       "pinned_by": {
         "file": "projects/spare-construct/server/tests/kernel.rs",
@@ -369,9 +369,9 @@
       },
       "known_faults": [
         "a point not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
-        "a family is turned only by quarter turns, so it stands only in a wall along x or y"
+        "seated in a wall at an angle (piece A83) each corner is rounded once to the grid, so a profile on an upright plane is built as upright boxes (its box less a cutter for each rectangle its outline leaves out and for each hole), and one with a sloped edge is refused (UprightNotSquare, construct-families' tests/seated.rs)"
       ],
-      "replaced_by": "the kernel's own exact extrusion and booleans behind the same trait, and a turn by any angle once the seam can place a solid"
+      "replaced_by": "the kernel's own exact extrusion and booleans behind the same trait, and every profile built turned as it is once the seam can turn or place a solid"
     },
     {
       "program": "spare-construct",
