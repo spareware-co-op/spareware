@@ -69,8 +69,8 @@
 
 use super::opening::{self, Cut, Frame, Hosted, Long, OPENING_OP, PLAIN_OP, Placed, Span};
 use super::{
-    AskedCut, Extrusion, KernelSolid, LayerSolid, NamedFace, Units, WALL_ROLES, as_steps, carrier,
-    fault, from_engine, name, op_id,
+    AskedCut, Extrusion, KernelSolid, LayerSolid, NamedFace, Opened, Units, WALL_ROLES, as_steps,
+    carrier, fault, from_engine, name, op_id,
 };
 use crate::families::{self, FamilySource};
 use crate::seating;
@@ -635,6 +635,47 @@ pub(super) fn fits(
     families: &dyn FamilySource,
 ) -> Result<(), GeometryError> {
     cuts(wall, hosted, units, band, families).map(|_| ())
+}
+
+/// Where each opening the doors and placed families `hosted` make lies in `wall`, in plan and up
+/// the wall, in the building's grid steps ([`Opened`]), asked without the engine and by the same
+/// rules ([`cuts`]); none when nothing is hosted. Plan numbers are relative to the wall's
+/// placement, as its line is.
+///
+/// # Errors
+///
+/// The openings' refusals, each naming the door and why; `NotAHost` for a wall at an angle.
+pub(super) fn opened(
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+    families: &dyn FamilySource,
+) -> Result<Vec<Opened>, GeometryError> {
+    let Some((frame, cuts)) = cuts(wall, hosted, units, band, families)? else {
+        return Ok(Vec::new());
+    };
+    let axis = frame.frame.along;
+    let sign = frame.unit.get(axis).copied().unwrap_or(1);
+    let origin = frame.start.get(axis).copied().unwrap_or_default();
+    cuts.iter()
+        .map(|cut| {
+            let ([from, to], [foot, head]) = cut.stretch();
+            // The line's unit vector along the axis is +1 or -1: along grows toward the wall's end,
+            // which is the lower plan number when the wall runs the negative way.
+            let at = |along: i64| add(origin, times(sign, along)?);
+            let (a, b) = (at(from)?, at(to)?);
+            Ok(Opened {
+                key: cut.key().to_owned(),
+                noun: cut.noun(),
+                axis,
+                low: units.to_q0(a.min(b), false)?,
+                high: units.to_q0(a.max(b), true)?,
+                foot: units.to_q0(foot, false)?,
+                head: units.to_q0(head, true)?,
+            })
+        })
+        .collect()
 }
 
 /// The engine's mesh in whole millimetres, each coordinate the nearest millimetre, and whether
