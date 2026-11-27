@@ -1540,12 +1540,12 @@ await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${
 await ben.click('#browser [data-act="view"][data-a="l1"]');
 pass('both walls are deleted, and the plan is as it was before the dimension');
 console.log('\n   Dimensions: angles, an aligned dimension and equal segments');
-// Both people have Level 1's working plan open. Anna draws grid lines south of the building (the
+// Both people have Level 1's working plan open. Anna draws grid lines south of the building, above the view bar (the
 // wall tool draws along x or y; a grid goes any way): one running east, one at 3:4 off it, one
-// square to that (a 3:4:5 corner, off the axes) and one parallel to the 3:4 grid, 1000 mm across
+// square to that (a 3:4:5 corner, off the axes) and one parallel to the 3:4 grid, 500 mm across
 // it. With the dimension tool she measures the angle between the first two (36.87°, the nearest
 // unit, not exact) and the corner (90.00°, exact), each by picking the two grids and clicking
-// inside the angle she means, and the aligned distance across the parallel pair (1000 mm). Ben's
+// inside the angle she means, and the aligned distance across the parallel pair (500 mm). Ben's
 // browser draws each as the server worked it out, and Ben reads the angle in his palette. Then she
 // draws four walls across a run and dimensions them as a string; Ben is working on one of them when
 // she makes the segments equal, and the server says so by name; once he lets go she makes them
@@ -1557,6 +1557,22 @@ for (const page of [anna, ben]) {
 }
 await anna.waitForSelector('#pv-canvas svg');
 await ben.waitForSelector('#pv-canvas svg');
+// A click on the plan where a person would click: once nothing covers that spot (a note, a
+// toast, the edge of the window), and if something does, it is said what.
+const clickPlan = async (page, x, y) => {
+  const [sx, sy] = await onScreen(page, x, y);
+  await page
+    .waitForFunction(([px, py]) => document.elementFromPoint(px, py)?.closest('#pv-canvas svg'), [sx, sy])
+    .catch(async (error) => {
+      const over = await page.evaluate(([px, py]) => {
+        const e = document.elementFromPoint(px, py);
+        return e ? `${e.tagName} ${e.id} ${e.getAttribute('class')} ${e.textContent?.slice(0, 80)}` : `nothing (the window is ${innerWidth} by ${innerHeight})`;
+      }, [sx, sy]);
+      console.log(`   (${x}, ${y}) in ${page === anna ? 'Anna' : 'Ben'}'s plan, at ${Math.round(sx)}, ${Math.round(sy)} on screen, is under ${over}`);
+      throw error;
+    });
+  await page.mouse.click(sx, sy);
+};
 const angText = (id) => `#pv-canvas g.dim[data-dim="${id}"] text.dimt[data-segment]`;
 const ownGridIds = (page) => page.locator(ownGrids).evaluateAll((gs) => gs.map((g) => g.dataset.datum));
 // Anna draws a grid from one point to another; both browsers have it before she draws the next.
@@ -1565,30 +1581,45 @@ const angGrid = async (from, to) => {
   await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
   await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
   await anna.click('#ribbon [data-act="dtool"][data-a="architecture:grid"]');
-  await clickModel(anna, ...from);
-  await clickModel(anna, ...to);
-  await anna.keyboard.press('Escape');
+  await anna.waitForSelector('#pv-canvas svg');
+  await clickPlan(anna, ...from);
+  await anna.waitForFunction(() => document.querySelector('#hint')?.textContent.includes('other end'));
+  await clickPlan(anna, ...to);
+  await anna.waitForFunction(() => !document.querySelector('#hint')?.textContent.includes('other end'));
   for (const page of [anna, ben]) {
-    await page.waitForFunction(
-      ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.datum)),
-      [ownGrids, before],
-    );
+    await page
+      .waitForFunction(
+        ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.datum)),
+        [ownGrids, before],
+      )
+      .catch(async (error) => {
+        // Say what the page had in hand, so a miss is read to its cause.
+        const state = await page.evaluate(() => ({
+          hint: document.querySelector('#hint')?.textContent,
+          problems: [...window.spare.problems.entries()],
+          pending: window.spare.pending.length,
+          view: window.spare.openView,
+        }));
+        console.log(`   the grid from ${from} to ${to} is not drawn in ${page === anna ? 'Anna' : 'Ben'}'s browser: ${JSON.stringify(state)}`);
+        throw error;
+      });
   }
+  await anna.keyboard.press('Escape');
   return (await ownGridIds(anna)).find((id) => !before.includes(id));
 };
-// East; 3:4 off it; square to that; parallel to the 3:4 grid, 1000 mm across.
+// East; 3:4 off it; square to that; parallel to the 3:4 grid, 500 mm across.
 const angGrids = [];
 for (const [from, to] of [
-  [[7000, 8700], [9400, 8700]],
-  [[7400, 9000], [8600, 9900]],
-  [[9600, 9000], [9000, 9800]],
-  [[6800, 9800], [8000, 10700]],
+  [[7000, 8500], [9400, 8500]],
+  [[7400, 8800], [8600, 9700]],
+  [[9600, 8800], [9000, 9600]],
+  [[7100, 9200], [8300, 10100]],
 ]) {
   angGrids.push(await angGrid(from, to));
 }
 check(
   (await anna.locator(gridGroup(angGrids[1])).getAttribute('data-x1')) === '8600' &&
-    (await ben.locator(gridGroup(angGrids[3])).getAttribute('data-y1')) === '10700',
+    (await ben.locator(gridGroup(angGrids[3])).getAttribute('data-y1')) === '10100',
   'Anna draws four grids, one east, one at 3:4, one square to it and one parallel to it, and both browsers have them where she drew them',
 );
 // Anna draws walls, one at a time: each is there before she draws the next.
@@ -1603,8 +1634,9 @@ const drawWalls = async (page, walls) => {
   const before = await wallsOf(page);
   for (const [n, [x0, y0, x1, y1]] of walls.entries()) {
     await page.waitForSelector('#pv-canvas svg');
-    await clickModel(page, x0, y0);
-    await clickModel(page, x1, y1);
+    await clickPlan(page, x0, y0);
+    await page.waitForFunction(() => document.querySelector('#hint')?.textContent.includes('end point'));
+    await clickPlan(page, x1, y1);
     await page.waitForFunction(
       ([seen, count]) => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !seen.includes(p.el.id)).length === count,
       [before, n + 1],
@@ -1635,11 +1667,11 @@ const makeDimension = async (kind, picks, place) => {
   await anna.locator(kindSelect).selectOption(kind);
   await anna.waitForFunction(([at, k]) => document.querySelector(at)?.value === k, [kindSelect, kind]);
   for (const [i, [x, y]] of picks.entries()) {
-    await clickModel(anna, x, y);
+    await clickPlan(anna, x, y);
     await anna.waitForSelector(`#pv-canvas g.dim-pick[data-pick="${i}"]`);
   }
   const before = (await dimListing()).map((d) => d.id);
-  await clickModel(anna, place[0], place[1]);
+  await clickPlan(anna, place[0], place[1]);
   await anna.waitForFunction(
     ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.dim)),
     ['#pv-canvas g.dim[data-kind="dimension"]', before],
@@ -1647,7 +1679,7 @@ const makeDimension = async (kind, picks, place) => {
   const made = (await dimListing()).find((d) => !before.includes(d.id));
   return made;
 };
-const acute = await makeDimension('angular', [[8200, 8700], [8000, 9450]], [8000, 8950]);
+const acute = await makeDimension('angular', [[8200, 8500], [8000, 9250]], [8000, 8750]);
 check(acute.kind === 'angular' && acute.figure.kind === 'arc', 'Anna picks the east grid and the 3:4 grid and clicks inside the angle: the server makes an angle drawn as an arc');
 for (const page of [anna, ben]) {
   await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(acute.id), '36.87°']);
@@ -1657,16 +1689,16 @@ check(
   'both browsers show 36.87°: the nearest unit to 36.8699°, marked not exact',
 );
 check((await ben.locator(`#pv-canvas g.dim[data-dim="${acute.id}"] path.dim-arc`).count()) === 1, "and Ben's browser draws its arc");
-const corner = await makeDimension('angular', [[8000, 9450], [9300, 9400]], [8500, 9600]);
+const corner = await makeDimension('angular', [[8000, 9250], [9300, 9200]], [8500, 9400]);
 for (const page of [anna, ben]) {
   await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(corner.id), '90.00°']);
 }
 check(corner.segments[0].exact === true, 'the 3:4:5 corner off the axes is exactly 90.00° in both browsers');
-const across = await makeDimension('aligned', [[8000, 9450], [7400, 10250]], [7600, 10000]);
+const across = await makeDimension('aligned', [[8000, 9250], [7700, 9650]], [7850, 9450]);
 for (const page of [anna, ben]) {
-  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(across.id), '1000 mm']);
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(across.id), '500 mm']);
 }
-check(across.layout.kind === 'aligned' && across.segments[0].exact, 'an aligned dimension across the parallel grids reads 1000 mm, exactly, in both browsers');
+check(across.layout.kind === 'aligned' && across.segments[0].exact, 'an aligned dimension across the parallel grids reads 500 mm, exactly, in both browsers');
 await shot(anna, 'anna-angles');
 await shot(ben, 'ben-angles');
 
@@ -1677,7 +1709,7 @@ const [arcX, arcY] = await ben.evaluate((id) => {
   const d = window.spare.dimensions.list.find((x) => x.id === id);
   return [Number(d.figure.middle.x.split(':').pop()) / 6400, Number(d.figure.middle.y.split(':').pop()) / 6400];
 }, acute.id);
-await clickModel(ben, arcX, arcY);
+await clickPlan(ben, arcX, arcY);
 await ben.waitForSelector(`#pv-canvas g.dim[data-dim="${acute.id}"][data-picked="yes"]`);
 check((await ben.locator('#pv-side [data-dim-kind]').textContent()) === 'Angle', "Ben picks the angle by its arc and his palette says it is an angle");
 check((await ben.locator('#pv-side [data-dim-segment="0"]').textContent()) === '36.87°', 'with its value');
@@ -1687,17 +1719,17 @@ await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await anna.keyboard.press('Escape');
 const eqWallsBefore = await wallsOf(anna);
 await drawWalls(anna, [
-  [11000, 8700, 11000, 9900],
-  [11600, 8700, 11600, 9900],
-  [13500, 8700, 13500, 9900],
-  [14000, 8700, 14000, 9900],
+  [11000, 8500, 11000, 9700],
+  [11600, 8500, 11600, 9700],
+  [13500, 8500, 13500, 9700],
+  [14000, 8500, 14000, 9700],
 ]);
 await bothHave(eqWallsBefore, 4);
 const eqWalls = (await anna.evaluate(newLayered, eqWallsBefore)).sort((a, b) => a[1][0] - b[1][0]).map((w) => w[0]);
 await anna.locator('#ribbon [role="tab"]', { hasText: 'Annotate' }).click();
 await anna.locator('#ribbon [data-act="dtool"][data-a="architecture:dim"]').first().click();
 await anna.waitForSelector(kindSelect);
-const eqRun = await makeDimension('horizontal', [[11000, 9300], [11600, 9300], [13500, 9300], [14000, 9300]], [12500, 10400]);
+const eqRun = await makeDimension('horizontal', [[11000, 9100], [11600, 9100], [13500, 9100], [14000, 9100]], [12500, 10000]);
 const runTexts = (page) => page.locator(`#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`).allTextContents();
 for (const page of [anna, ben]) {
   await page.waitForFunction((at) => document.querySelectorAll(at).length === 3, `#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`);
@@ -1707,17 +1739,17 @@ check(JSON.stringify(await runTexts(ben)) === JSON.stringify(['600 mm', '1900 mm
 // Anna lets go of the third wall; Ben takes it.
 await anna.keyboard.press('Escape');
 await anna.waitForFunction(() => !document.querySelector('#pv-side select[data-key="dim-layout"]'));
-await clickModel(anna, 13500, 9300);
+await clickPlan(anna, 13500, 9100);
 await anna.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`) && window.spare.claims?.get?.(id)?.person, eqWalls[2]);
 await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await anna.waitForFunction((id) => !window.spare.claims?.get?.(id), eqWalls[2]);
 await ben.waitForFunction((id) => !window.spare.claims?.get?.(id), eqWalls[2]);
-await clickModel(ben, 13500, 9300);
+await clickPlan(ben, 13500, 9100);
 await anna.waitForSelector(`g.element[data-id="${eqWalls[2]}"] text.claimt`);
 pass('Anna lets go of the third wall and Ben takes it: Anna sees him working on it');
 
 // Anna picks the string and makes its segments equal: the server names the wall in Ben's hands.
-await clickModel(anna, 12500, 10400);
+await clickPlan(anna, 12500, 10000);
 await anna.waitForSelector(`#pv-canvas g.dim[data-dim="${eqRun.id}"][data-picked="yes"]`);
 await anna.click('#pv-side [data-act="stackdimequal"]');
 const eqRefusal = `#pv-side [data-problem="dim:${eqRun.id}"]`;
@@ -1774,7 +1806,7 @@ for (const made of [eqRun, acute, corner, across]) {
     return [Number(at.x.split(':').pop()) / 6400, Number(at.y.split(':').pop()) / 6400];
   }, made.id);
   // The band along a line or an arc is picked; the text on it is not, so the click is just off it.
-  await clickModel(anna, mx, my);
+  await clickPlan(anna, mx, my);
   await anna.waitForSelector(`#pv-canvas g.dim[data-dim="${made.id}"][data-picked="yes"]`);
   await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
   await anna.keyboard.press('Delete');
