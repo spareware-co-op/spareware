@@ -267,11 +267,12 @@ impl Dimension {
         &self.overrides
     }
 
-    /// The dimension in the style `style` (`None`: the first built-in style). Whether the style
-    /// is there is the caller's to check against the document's styles.
+    /// The dimension in the style `style` (`None`, or the first built-in style's ID: the first
+    /// built-in style, which is held as none so that a dimension has one spelling). Whether the
+    /// style is there is the caller's to check against the document's styles.
     #[must_use]
     pub fn with_style(mut self, style: Option<Id>) -> Self {
-        self.style = style;
+        self.style = style.filter(|id| id.as_str() != crate::style::TICKS_ID);
         self
     }
 

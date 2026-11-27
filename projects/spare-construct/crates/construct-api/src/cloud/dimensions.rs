@@ -1697,11 +1697,7 @@ async fn set_style<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> A
     if let Err(refusal) = style_refusal(world, args.style.as_ref()) {
         return Ok(Err(refusal));
     }
-    // The first built-in style is named by naming none, so each dimension has one spelling.
-    let style = args
-        .style
-        .filter(|id| id.as_str() != construct_dimensions::TICKS_ID);
-    put(run, hash, old, old.clone().with_style(style)).await
+    put(run, hash, old, old.clone().with_style(args.style)).await
 }
 
 async fn set_overrides<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answer {
