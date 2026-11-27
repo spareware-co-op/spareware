@@ -68,9 +68,10 @@
 //! y hosts as it always has, byte for byte; no seat is written for it.
 
 use crate::families;
-pub use crate::seating::{SEAT_ARG, seat_of, unseated, with_seat};
+pub use crate::seating::{SEAT_ARG, noun, seat_of, unseated, with_seat};
+use crate::seating;
 use crate::wall_plan::{self, Axis, Layered};
-use construct_families::{Seat, Turn};
+use construct_families::Turn;
 use construct_model::element::{Element, Placement, Reference, Want};
 use construct_model::geometry::{Edition, FaceName, GeometryError, Recipe};
 use construct_params::{Length, Value};
@@ -310,19 +311,6 @@ pub fn at(
     seat(edition, host, host_recipe, hosted, hosted_recipe, hosting).map(|(at, _)| at)
 }
 
-/// What a hosted element is called in a refusal: a placed family, a plain or floor opening, or a
-/// door.
-#[must_use]
-pub fn noun(recipe: &Recipe) -> &'static str {
-    if families::is_instance(recipe) {
-        "family"
-    } else if construct_openings::is_void(recipe) {
-        "opening"
-    } else {
-        "door"
-    }
-}
-
 /// Where `hosted` sits in `host`'s frame ([`at`]), and its recipe as its host's builder is handed
 /// it: a placed family's with its turn ([`families::TURN_ARG`]), anything else's as it is.
 ///
@@ -408,7 +396,7 @@ pub fn seat(
         }
         let wall = Layered::of(host_recipe).map_err(|e| refuse(&e.code, e.message))?;
         let Some(axis) = wall.plan.axis() else {
-            return family_at_angle(&wall, &role, along, up, hosted_recipe, &refuse);
+            return seating::seat_at_angle(&wall, key, hosted_recipe, &role.role, along, up);
         };
         let (at, turn) = family_on_layered(&wall, axis, &role, along, up, &refuse)?;
         return Ok((at, families::turned(hosted_recipe, turn)));
@@ -416,8 +404,7 @@ pub fn seat(
     if wall_plan::is_layered(host_recipe) {
         let wall = Layered::of(host_recipe).map_err(|e| refuse(&e.code, e.message))?;
         let Some(axis) = wall.plan.axis() else {
-            let place = (&role, along, up);
-            return at_angle(&wall, hosted, hosted_recipe, place, &refuse);
+            return seating::seat_at_angle(&wall, key, hosted_recipe, &role.role, along, up);
         };
         let at = on_layered(
             &wall,
@@ -556,7 +543,7 @@ fn family_on_layered(
 /// runs (so on a wall running toward -x its box ends there); across, it is flush with that side
 /// and reaches toward the other; each to the nearest millimetre, as a placement holds it, since a
 /// layer face need not lie on one (the opening it cuts reaches 100 mm past both sides, so this
-/// moves no face of the opening across the wall). A wall at an angle hosts through [`at_angle`].
+/// moves no face of the opening across the wall). A wall at an angle hosts through [`seating::seat_at_angle`].
 #[allow(
     clippy::too_many_arguments,
     reason = "the host and the hosted element with its filled recipe, and where it sits"
@@ -572,7 +559,7 @@ fn on_layered(
     refuse: &impl Fn(&str, String) -> GeometryError,
 ) -> Result<Placement, GeometryError> {
     let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
-    let (width, own) = size_in(wall, hosted, hosted_recipe, refuse)?;
+    let (width, own) = seating::size_in(wall, hosted.id.as_str(), hosted_recipe, refuse)?;
     let whole = |what: &str, length: Length| {
         length.whole_mm().ok_or_else(|| {
             refuse(
@@ -620,166 +607,6 @@ fn on_layered(
     }
     let [x, y] = plan;
     Ok(Placement { x, y, z: up })
-}
-
-/// A box hosted on a layered wall `wall`, `hosted` of the filled recipe `hosted_recipe`: its width
-/// along the wall and how thick it is across it, in steps (a plain opening as thick as its wall).
-fn size_in(
-    wall: &Layered,
-    hosted: &Element,
-    hosted_recipe: &Recipe,
-    refuse: &impl Fn(&str, String) -> GeometryError,
-) -> Result<(i64, i64), GeometryError> {
-    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
-    let steps = |recipe: &Recipe, arg: &str| {
-        recipe
-            .args
-            .get(arg)
-            .and_then(serde_json::Value::as_i64)
-            .and_then(Length::checked_from_mm)
-            .map(Length::steps)
-            .ok_or_else(|| {
-                refuse(
-                    "MissingArgument",
-                    format!("{arg} must be a whole number of millimetres"),
-                )
-            })
-    };
-    if construct_openings::is_wall_opening(hosted_recipe) {
-        let opening = construct_openings::WallOpening::of(hosted.id.as_str(), hosted_recipe)
-            .map_err(|e| GeometryError {
-                code: e.code().to_owned(),
-                message: e.to_string(),
-            })?;
-        let thickness = i64::try_from(wall.thickness()).map_err(|_| too_big())?;
-        Ok((opening.width.steps(), thickness))
-    } else {
-        Ok((
-            steps(hosted_recipe, "width")?,
-            steps(hosted_recipe, "thickness")?,
-        ))
-    }
-}
-
-/// An offset along or up a host's face, as whole millimetres, or the refusal that names it.
-fn whole_offset(
-    what: &str,
-    length: Length,
-    refuse: &impl Fn(&str, String) -> GeometryError,
-) -> Result<i64, GeometryError> {
-    length.whole_mm().ok_or_else(|| {
-        refuse(
-            "NotWholeMillimetres",
-            format!(
-                "its offset {what} its host's face, {length}, is not a whole number of \
-                 millimetres, as every placement is"
-            ),
-        )
-    })
-}
-
-/// Where an element hosted on the layered wall `wall` at an angle sits and the recipe its builder
-/// is handed (this module's header): its origin `[a, s]` in the wall's frame, steps along the line
-/// from its start and to its left; its own x running the way the line runs (`sign` 1) or against
-/// it (-1); `up` whole millimetres up. Placed at the nearest whole millimetre to its origin, as a
-/// placement holds it, and seated ([`SEAT_ARG`]) so that every point of it is worked out from the
-/// wall's frame and rounded once.
-fn seated_in(
-    wall: &Layered,
-    [a, s]: [i64; 2],
-    sign: i64,
-    up: i64,
-    recipe: &Recipe,
-    refuse: &impl Fn(&str, String) -> GeometryError,
-) -> Result<(Placement, Recipe), GeometryError> {
-    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
-    let start = wall.plan.start();
-    let line = Seat::new(wall.plan.direction(), start, [0, 0]).ok_or_else(too_big)?;
-    let origin = line.plan([a, s]).ok_or_else(too_big)?;
-    let [x, y] = origin.map(|c| wall_plan::nearest_mm(c).0);
-    let less = |at: i64, mm: i64| {
-        mm.checked_mul(Length::STEPS_PER_MM)
-            .and_then(|steps| at.checked_sub(steps))
-            .ok_or_else(too_big)
-    };
-    let times = |v: i64| v.checked_mul(sign).ok_or_else(too_big);
-    let [dx, dy] = wall.plan.direction();
-    let seat = Seat::new(
-        [times(dx)?, times(dy)?],
-        [less(start[0], x)?, less(start[1], y)?],
-        [times(a)?, times(s)?],
-    )
-    .ok_or_else(too_big)?;
-    Ok((Placement { x, y, z: up }, with_seat(recipe, &seat)))
-}
-
-/// Where a box door, a plain opening or any other box sits on the side `role` of a layered wall
-/// `wall` at an angle, `along` its line from its start and `up` from its base, and the recipe its
-/// builder is handed: its origin at its box's corner on the face of that side at `along`, the box
-/// reaching `along` the line by its width and across from that face toward the other side by its
-/// own thickness (a plain opening by the wall's), seated there ([`seated_in`]).
-fn at_angle(
-    wall: &Layered,
-    hosted: &Element,
-    hosted_recipe: &Recipe,
-    (role, along, up): (&FaceName, Length, Length),
-    refuse: &impl Fn(&str, String) -> GeometryError,
-) -> Result<(Placement, Recipe), GeometryError> {
-    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
-    let (_, own) = size_in(wall, hosted, hosted_recipe, refuse)?;
-    let up = whole_offset("up", up, refuse)?;
-    whole_offset("along", along, refuse)?;
-    let (exterior, interior) = wall.outer();
-    let (on, other) = if role.role == "interior" {
-        (interior, exterior)
-    } else {
-        (exterior, interior)
-    };
-    // To the left of the line is the negative of to its right.
-    let neg = |v: i64| v.checked_neg().ok_or_else(too_big);
-    let (face, back) = (neg(on)?, neg(other)?);
-    let low = if back > face {
-        face
-    } else {
-        face.checked_sub(own).ok_or_else(too_big)?
-    };
-    seated_in(wall, [along.steps(), low], 1, up, hosted_recipe, refuse)
-}
-
-/// Where a placed family sits on the side `role` of a layered wall `wall` at an angle, `along` its
-/// line from its start to its insertion point and `up` from its base, and the recipe its builder
-/// is handed: its origin on the wall's centre plane (to a whole step, as along an axis), its `+y`
-/// out of that side and its `+x` a quarter turn clockwise from that, so it is turned, never
-/// mirrored: against the line when it faces the line's right, along it when it faces its left.
-/// Seated there ([`seated_in`]) in place of a turn.
-fn family_at_angle(
-    wall: &Layered,
-    role: &FaceName,
-    along: Length,
-    up: Length,
-    recipe: &Recipe,
-    refuse: &impl Fn(&str, String) -> GeometryError,
-) -> Result<(Placement, Recipe), GeometryError> {
-    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
-    let up = whole_offset("up", up, refuse)?;
-    whole_offset("along", along, refuse)?;
-    let (exterior, interior) = wall.outer();
-    let centre = exterior
-        .checked_add(interior)
-        .map(|twice| twice.div_euclid(2))
-        .ok_or_else(too_big)?;
-    // 1 when the family faces the line's right, -1 its left.
-    let right_of_exterior: i64 = if exterior > interior { 1 } else { -1 };
-    let right = if role.role == "interior" {
-        right_of_exterior.checked_neg().ok_or_else(too_big)?
-    } else {
-        right_of_exterior
-    };
-    let mut unturned = recipe.clone();
-    unturned.args.remove(families::TURN_ARG);
-    let left = centre.checked_neg().ok_or_else(too_big)?;
-    let sign = right.checked_neg().ok_or_else(too_big)?;
-    seated_in(wall, [along.steps(), left], sign, up, &unturned, refuse)
 }
 
 /// Where an element at `at` in the frame of a host placed at `host` sits in the model.
@@ -1108,6 +935,43 @@ mod tests {
         let (stored, held) = unseated(&seated).unwrap();
         assert_eq!(stored, d.recipe);
         assert_eq!(held.unwrap().plan([0, 0]), Some([0, -3200]));
+    }
+
+    /// The browser's package seats what it is handed as the server does ([`seating::seat_json`]):
+    /// the same placement in the wall's frame and the same seated recipe, for a door and for a
+    /// placed family, and a wall along an axis is no business of it.
+    #[test]
+    fn the_package_seats_as_the_server_does() {
+        let edition = Boxes.edition();
+        let (along, up) = (Length::from_mm(1200), Length::from_mm(300));
+        let angled = layered([0, 0], [3000, 4000], 368_000, 1);
+        let mut d = door();
+        write(&mut d, &angled.id, &face("interior"), along, up);
+        let hosting = read(&d).unwrap().unwrap();
+        let (got, seated) =
+            seat(&edition, &angled, &angled.recipe, &d, &d.recipe, &hosting).unwrap();
+        let text = |recipe: &Recipe| serde_json::to_string(recipe).unwrap();
+        let answer: serde_json::Value = serde_json::from_str(&seating::seat_json(
+            &text(&angled.recipe),
+            &text(&d.recipe),
+            d.id.as_str(),
+            "interior",
+            &Value::Length(along).stored(),
+            &Value::Length(up).stored(),
+        ))
+        .unwrap();
+        assert_eq!(answer["seat"]["placement"], json!(got));
+        assert_eq!(answer["seat"]["recipe"], json!(seated));
+        let along_x = layered([0, 0], [4000, 0], 368_000, 1);
+        let answer = seating::seat_json(
+            &text(&along_x.recipe),
+            &text(&d.recipe),
+            "D-1",
+            "exterior",
+            &Value::Length(along).stored(),
+            &Value::Length(up).stored(),
+        );
+        assert!(answer.contains("NotAtAnAngle"), "{answer}");
     }
 
     /// Each case where an offset puts nothing anywhere is a failure naming the door and why.

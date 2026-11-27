@@ -24,11 +24,14 @@ An architect draws walls at any angle and puts doors and windows in them. The bu
 - A family's profile on an upright plane with a sloped edge (an arched or angled head) is refused seated off the quarter turns (`UprightNotSquare`): the kernel's `Engine` interface cannot turn a solid once it is made, and only upright boxes keep their faces flat at such an angle. Replaced when the kernel's engine can turn or place a solid (a later kernel piece with the exact kernel): every profile is then built turned as it is, and decision 6 goes. The interim register's row for the kernel's family solids says so.
 - The stand-in cuts no opening, as before.
 
+## The page and the plan
+
+11. **The page asks the package for a seat.** The browser's packages (`construct-shapes` and the kernel's `shapes-kernel`) each export `seat`, construct-regen's `seating::seat_json`: the wall's filled recipe, the element's recipe and ID, the side's role and the two offsets as stored text in, `{seat: {placement, recipe}}` out, worked out by the very functions `hosting::seat` calls (`seating::seat_at_angle`), so the page never rounds a point itself. `app/connect.js` (`seatAtAngle`, `seatOfPiece`) hands the builder each element hosted on a wall at an angle with that recipe, builds the element itself from it (`seatFamilies`, which now seats every hosted piece, not a family only) and draws it where the placement says; a wall along an axis seats as it did. Until its wall is here and filled a hosted piece is held back from the checkpoint comparison, as a placed family was. A drag along a wall at an angle projects the pointer onto the line (`alongOn`); a click finds a wall at an angle by its line and thickness, not by the box round it (`wallAt`).
+12. **A plan draws what is seated.** The server's plan (`server/src/plan.rs`, `service.rs`) hands the drawer each hosted element with its host (`HostedOn`) and draws it from the recipe `hosting::seat` gives it when that carries a seat; everything else, a placed family along an axis included, is drawn from its recipe as it was. The page's plan draws a wall opening at an angle as the parallelogram its seated line and the wall's thickness make.
+
 ## Not done here, in order
 
-1. The page: connect.js seats a hosted element in its JS (`onLayered`, `onFamily`, `seatOfPiece`) for walls along an axis only; it must hand the browser's builder the same seat (or ask the package for it), and the package (app/pkg) be rebuilt, or a wall at an angle with a door in it builds differently in the browser and its checkpoint does not match. A two-browser section placing a door in a wall at an angle.
-2. A plan view draws a hosted element from its record and its stored recipe (the server's `plan.rs`), not seated: a door in a wall at an angle is drawn along its own axis there, and a placed family not at all, as along an axis today. The views' job: draw a hosted element seated.
-3. Moving a wall from an axis to an angle (piece A80's rotate) refused while it hosts something; once both are on main, that refusal goes and nothing in the modify tools changes.
+1. Moving a wall from an axis to an angle (piece A80's rotate) refused while it hosts something; once both are on main, that refusal goes and nothing in the modify tools changes.
 
 ## Risks
 
