@@ -1,0 +1,71 @@
+[package]
+name = "construct-railings"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# The railings category. Same workspace.
+construct-categories = { path = "../construct-categories" }
+# A railing stands on its base level, by construct-levels' tie in its record's props; typed lengths
+# in the rule data are read by its one reader. Same workspace.
+construct-levels = { path = "../construct-levels" }
+# The material a railing is made of is one of the default library's. Same workspace.
+construct-materials = { path = "../construct-materials" }
+# A railing's record and its recipe are construct-model's, unchanged. Same workspace.
+construct-model = { path = "../construct-model" }
+# Lengths, their stored spelling, and the read-only parameters. Same workspace.
+construct-params = { path = "../construct-params" }
+# A railing on a stair follows the stair's runs and landings as construct-stairs lays them out.
+# Same workspace.
+construct-stairs = { path = "../construct-stairs" }
+# The category key a record names its category under. Same workspace.
+construct-types = { path = "../construct-types" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# Whole numbers of any size, so every point along a path at any angle is worked out exactly from
+# square roots before it is rounded once (src/exact.rs). MIT OR Apache-2.0; 0.4.8, as the
+# workspace already locks it.
+num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
+# Floor division of those numbers. MIT OR Apache-2.0; 0.1.47, as the workspace already locks it.
+num-integer = { version = "0.1.47", default-features = false, features = ["std"] }
+# Their traits (zero, sign, conversion). MIT OR Apache-2.0; 0.2.19, as the workspace already
+# locks it.
+num-traits = { version = "0.2.19", default-features = false, features = ["std"] }
+# The rule data and the stored text are JSON. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# Reader fuzz targets, as in construct-model's tests. MIT.
+bolero = "0.13.7"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# The kernel's chapter 21 bans live in its own clippy.toml and are not Spare Construct's; these two
+# stay denied so a ban added to projects/spare-construct/clippy.toml is an error at once.
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name.
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
+# may use native arithmetic and casts: each test file allows these four.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# No float is stored, compared or computed here; a float comparison is an error.
+float_cmp = "deny"
