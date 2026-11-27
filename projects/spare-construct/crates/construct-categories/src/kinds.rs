@@ -6,8 +6,9 @@
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
 use crate::{
-    CategoryError, CategoryId, DIMENSIONS, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
-    REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, STAIRS, VIEWPORTS, VIEWS, WALLS,
+    CURTAIN_WALLS, CategoryError, CategoryId, DIMENSIONS, DOORS, FLOORS, GENERIC_MODELS, GRIDS,
+    LEVELS, OPENINGS, REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, STAIRS, VIEWPORTS, VIEWS,
+    WALLS,
 };
 
 /// Every element kind that exists, with its category, sorted by kind name.
@@ -37,6 +38,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("stair", STAIRS),
     ("view", VIEWS),
     ("viewport", VIEWPORTS),
+    ("wall.curtain", CURTAIN_WALLS),
     ("wall.layered", WALLS),
     ("wall.straight", WALLS),
     ("workshop.assembly", GENERIC_MODELS),

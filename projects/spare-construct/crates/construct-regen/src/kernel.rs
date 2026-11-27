@@ -32,6 +32,11 @@
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
+//! - `wall.curtain` (job 14.1, CON-A4-F6-P1): a curtain wall, one solid per glazed or solid
+//!   panel and per mullion, each its quadrilateral in plan ([`crate::curtain_plan`]) extruded
+//!   straight up, and each door panel its family's solids through the recipe evaluator, in the
+//!   child module `curtain`; it hosts nothing, and a wall it is embedded in cuts its opening as a
+//!   plain opening's ([`crate::hosting::cut_of`]).
 //! - `family.instance` (job 6.4, CON-A7-F3-P2): a placed family, its solids made by the recipe
 //!   evaluator (`construct_families::evaluate_turned`) through this builder's engine, turned as
 //!   the family stands, each meshed and drawn as a part with its material, in the child module
@@ -102,6 +107,7 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod curtain;
 mod family;
 mod floor;
 mod layered;
@@ -691,6 +697,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
+    if crate::curtain_plan::is_curtain(recipe) {
+        crate::curtain_plan::CurtainPlan::of(recipe)?;
+        return curtain::names(recipe);
+    }
     let shape = Extrusion::of(recipe)?;
     let op = op_id(recipe)?;
     let mut names = shape
@@ -894,7 +904,26 @@ impl<E: Engine> Kernel<E> {
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));
         }
+        if crate::curtain_plan::is_curtain(host) {
+            return Some(self.build_curtain(host, hosted));
+        }
         None
+    }
+
+    /// A curtain wall ([`curtain::build`]); it hosts nothing.
+    fn build_curtain(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        if let Some(first) = hosted.first() {
+            return Err(fault(
+                "NotAHost",
+                format!("{}: a curtain wall hosts nothing", first.key),
+            ));
+        }
+        let plan = crate::curtain_plan::CurtainPlan::of(host)?;
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+        curtain::build(&mut *engine, host, &plan, self.units, &*self.families)
     }
 
     /// Builds `host` with an opening cut through it for each element in `hosted`: the host's
@@ -1088,7 +1117,8 @@ impl<E: Engine> Kernel<E> {
     }
 
     /// The solids of `recipe` for a drawing to cut: one for each layer of a layered wall (a layer
-    /// of no thickness has none), each with its material and the plane of each named face, and
+    /// of no thickness has none), one for each panel with a slab and each mullion of a curtain wall
+    /// ([`curtain::solids`]), each with its material and the plane of each named face, and
     /// for any other recipe the one [`Kernel::solid`] makes, with no material. A wall's openings
     /// are not cut in them.
     ///
@@ -1103,6 +1133,14 @@ impl<E: Engine> Kernel<E> {
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
             return layered::solids(&mut *engine, recipe, &wall, self.units);
+        }
+        if crate::curtain_plan::is_curtain(recipe) {
+            let plan = crate::curtain_plan::CurtainPlan::of(recipe)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return curtain::solids(&mut *engine, recipe, &plan, self.units);
         }
         Ok(vec![LayerSolid {
             function: String::new(),

@@ -246,6 +246,19 @@ async fn frame_at<T: Txn>(
             )));
         }
     };
+    // An embedded curtain wall is fitted as the plain opening it cuts in its host.
+    match hosting::cut_of(
+        &host.edition,
+        &host.record,
+        &host.recipe,
+        element,
+        &recipe,
+        hosting,
+    ) {
+        Ok(Some((at, cut))) => return Ok(Ok((cut, at))),
+        Ok(None) => {}
+        Err(e) => return Ok(Err(e.message)),
+    }
     let at = hosting::at(
         &host.edition,
         &host.record,

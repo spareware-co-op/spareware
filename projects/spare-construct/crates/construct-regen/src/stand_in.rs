@@ -47,6 +47,15 @@
 //! the frame on either edition. Its recipe comes from the library baked in at build time, the
 //! source the browser has too (interim until job 7.6). Its body is the box around them all.
 //!
+//! A curtain wall (`wall.curtain`, job 14.1, [`crate::curtain_plan`]) is one box round everything
+//! it holds: its plan's outline, each corner the nearest whole millimetre, from its base to its
+//! top, named as a box is. Its displays draw each glazed or solid panel and each mullion as a part
+//! of its own, the prism on its quadrilateral between its two heights, each point the nearest
+//! millimetre, so a view shows the grid, the glass and the mullions on either edition; each door
+//! panel is its family's boxes (`construct_families::extents`) at its size, turned and moved to
+//! where it stands, each side rounded outward to a whole millimetre. Interim, as every stand-in
+//! shape: its solids are the kernel's to build (the interim register's row).
+//!
 //! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
 //! the kernel's edition, with no solid and no face.
 //!
@@ -54,6 +63,7 @@
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::curtain_plan::{self, CurtainPlan, DOOR_HEIGHT, DOOR_WIDTH};
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
@@ -64,7 +74,7 @@ use construct_families::{Limits, extents};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
-use construct_params::Length;
+use construct_params::{Length, Value as ParamValue};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -1089,6 +1099,8 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
+    } else if curtain_plan::is_curtain(recipe) {
+        CurtainPlan::of(recipe)?;
     } else {
         size_of(recipe)?;
     }
@@ -1202,6 +1214,196 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A curtain wall's body, as the stand-in stores it: its outline and height in whole millimetres,
+/// and how many solids and door panels its displays draw.
+#[derive(Serialize)]
+struct CurtainBody {
+    kind: &'static str,
+    outline: Vec<[i64; 2]>,
+    height: i64,
+    solids: usize,
+    doors: usize,
+}
+
+/// A box in whole millimetres: its lowest and highest corners.
+type Span = ([i64; 3], [i64; 3]);
+
+/// The box from `lo` to `hi` and the one `reach` holds, as one.
+fn widened(reach: Option<Span>, lo: [i64; 3], hi: [i64; 3]) -> Span {
+    match reach {
+        None => (lo, hi),
+        Some((mut min, mut max)) => {
+            for (m, l) in min.iter_mut().zip(lo) {
+                *m = (*m).min(l);
+            }
+            for (m, h) in max.iter_mut().zip(hi) {
+                *m = (*m).max(h);
+            }
+            (min, max)
+        }
+    }
+}
+
+/// A door panel's family as its boxes, each moved to where the door stands and rounded outward
+/// to whole millimetres, appended to `mesh` as parts named `door.<step>`; the box round them.
+fn curtain_door(
+    door: &curtain_plan::PlanDoor,
+    mesh: &mut Mesh,
+    parts: &mut Vec<Part>,
+) -> Result<Option<Span>, GeometryError> {
+    let library = families::baked();
+    let instance = Instance {
+        family: door.door.family().clone(),
+        ty: door.door.ty().clone(),
+        turn: door.turn,
+        values: BTreeMap::new(),
+    };
+    let named = |e: GeometryError| GeometryError {
+        code: e.code,
+        message: format!("door panel {}: {}", door.key, e.message),
+    };
+    let mut resolved = families::resolve(&*library, &instance).map_err(named)?;
+    for (key, length) in [(DOOR_WIDTH, door.width), (DOOR_HEIGHT, door.height)] {
+        let key = construct_families::Key::parse(key).ok_or_else(|| GeometryError {
+            code: "BadInstance".to_owned(),
+            message: "a parameter's key".to_owned(),
+        })?;
+        resolved
+            .values
+            .set(key, ParamValue::Length(length).stored());
+    }
+    let boxes = extents(
+        &resolved.recipe,
+        &resolved.values,
+        Limits::DEFAULT,
+        door.turn,
+    )
+    .map_err(|e| named(families::evaluation_refused(&resolved.recipe, &e)))?;
+    let mut reach = None;
+    for solid in &boxes {
+        let mut lo = [0_i64; 3];
+        let mut hi = [0_i64; 3];
+        for (axis, (l, h)) in lo.iter_mut().zip(hi.iter_mut()).enumerate() {
+            let at = door.origin.get(axis).copied().unwrap_or(0);
+            let low = solid.low.get(axis).map_or(0, |v| v.steps());
+            let high = solid.high.get(axis).map_or(0, |v| v.steps());
+            *l = floor_plan::floor_mm(low.checked_add(at).ok_or_else(too_many)?);
+            *h = floor_plan::ceil_mm(high.checked_add(at).ok_or_else(too_many)?);
+        }
+        reach = Some(widened(reach, lo, hi));
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        mesh.positions.extend(box_corners(lo, hi).concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: solid.material.as_str().to_owned(),
+            function: format!("door.{}", solid.step.as_str()),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: vec![
+                [lo[0], lo[1]],
+                [hi[0], lo[1]],
+                [hi[0], hi[1]],
+                [lo[0], hi[1]],
+            ],
+        });
+    }
+    Ok(reach)
+}
+
+/// A curtain wall as one box round everything it holds, as the module header says: its displays
+/// draw each panel with a slab and each mullion as the prism it is, and each door panel as its
+/// family's boxes.
+fn curtain(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = CurtainPlan::of(recipe)?;
+    let mut rounded = false;
+    let mut near = |steps: i64| {
+        let (mm, exact) = wall_plan::nearest_mm(steps);
+        rounded |= !exact;
+        mm
+    };
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut reach: Option<Span> = None;
+    for solid in &plan.solids {
+        let shape: Vec<[i64; 2]> = solid
+            .corners
+            .iter()
+            .map(|&[x, y]| [near(x), near(y)])
+            .collect();
+        let [z0, z1] = [near(solid.z[0]), near(solid.z[1])];
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        for z in [z0, z1] {
+            for &[x, y] in &shape {
+                mesh.positions.extend([x, y, z]);
+            }
+        }
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        for &[x, y] in &solid.corners {
+            let lo = [x, y, solid.z[0]].map(floor_plan::floor_mm);
+            let hi = [x, y, solid.z[1]].map(floor_plan::ceil_mm);
+            reach = Some(widened(reach, lo, hi));
+        }
+        parts.push(Part {
+            material: solid.material.clone(),
+            function: solid.function.to_owned(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: shape,
+        });
+    }
+    for door in &plan.doors {
+        if let Some((lo, hi)) = curtain_door(door, &mut mesh, &mut parts)? {
+            reach = Some(widened(reach, lo, hi));
+        }
+    }
+    let (min, max) = reach.ok_or_else(|| GeometryError {
+        code: "EmptyShape".to_owned(),
+        message: "a curtain wall with every panel empty and no mullion has nothing to build"
+            .to_owned(),
+    })?;
+    let outline: Vec<[i64; 2]> = plan
+        .outline
+        .iter()
+        .map(|&[x, y]| [near(x), near(y)])
+        .collect();
+    let body = CurtainBody {
+        kind: "curtain",
+        outline: outline.clone(),
+        height: near(plan.height),
+        solids: plan.solids.len(),
+        doors: plan.doors.len(),
+    };
+    let deviation = i64::from(rounded);
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: box_names(),
+        displays,
+    })
+}
+
 impl Geometry for Boxes {
     fn edition(&self) -> Edition {
         Edition {
@@ -1236,6 +1438,9 @@ impl Geometry for Boxes {
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
+        }
+        if curtain_plan::is_curtain(recipe) {
+            return curtain(recipe);
         }
         let size = size_of(recipe)?;
         let [w, d, _] = size;
