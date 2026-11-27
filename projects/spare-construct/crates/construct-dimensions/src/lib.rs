@@ -24,9 +24,9 @@
 //!   data. It is not enforced here: nothing moves a reference or an element to make them so (that
 //!   needs the solver on elements, a later job). [`Measured::equalities`] says whether each holds
 //!   now, to the exact value.
-//! - [`display`], [`labels`], [`Label`], [`TextSize`], [`Unmeasured`]: the value as the person's
+//! - [`display`], [`labels`], [`Label`], [`TextSize`], [`PlainText`], [`Unmeasured`]: the value as the person's
 //!   units show it (construct-params), and the label's place. Drawing the text waits for job 7.4's
-//!   text (piece A78): the size of a piece of text is asked behind [`TextSize`], and [`Unmeasured`]
+//!   text (piece A78): the size of a piece of text is asked behind [`TextSize`], and [`PlainText`]
 //!   answers until then (interim; the piece that adds the text engine replaces it).
 //! - [`Dimensions`]: a document's dimensions, with the lookups a command needs.
 //!
@@ -47,7 +47,6 @@
 //! - Enforcing equality (above), and dimensions in sections and elevations: a level is a place in
 //!   those views only, whose frame (the cut line's) is job 8.1's. The locator is the one place
 //!   that learns it.
-//! - The page tool, the drawing in the plan and the two-browser section: the second half.
 
 mod dimension;
 mod dimensions;
@@ -71,7 +70,7 @@ pub use layout::{Direction, Layout};
 pub use locate::{Located, Locator, Locus, Missing, Why};
 pub use measure::{EqualState, Measured, Segment, Witness, measure};
 pub use reference::{Edge, Feature, REFERENCE_KIND, Reference, Side};
-pub use text::{Label, TextSize, Unmeasured, display, labels};
+pub use text::{Label, PlainText, TextSize, Unmeasured, display, labels};
 pub use warning::{
     DimensionWarning, OUT_OF_RANGE, REFERENCE_MISSING, REFERENCE_PARALLEL, Severity,
 };

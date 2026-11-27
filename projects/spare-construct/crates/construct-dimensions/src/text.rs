@@ -5,8 +5,9 @@
 //! Drawing the text (its font, its size at the view's scale, avoiding the witness lines) waits for
 //! the text of job 7.4 (piece A78, not on main yet): what the drawing needs from it is behind the
 //! trait [`TextSize`], which says how big a piece of text is. Interim: until A78's text can answer,
-//! [`Unmeasured`] is what a caller passes, and every label's `fits` is `None` (not known). The
-//! piece that replaces it implements [`TextSize`] over the text engine and changes no caller.
+//! [`PlainText`] is what the plan drawing passes: one default height and a plain width for each
+//! character; [`Unmeasured`] says nothing is known (every label's `fits` is then `None`). The piece
+//! that replaces them implements [`TextSize`] over the text engine and changes no caller.
 
 use crate::error::DimensionError;
 use crate::measure::Measured;
@@ -43,6 +44,47 @@ impl TextSize for Unmeasured {
     }
 }
 
+/// Interim: the plan's plain default text, until the text of job 7.4 (piece A78) answers in its place
+/// behind [`TextSize`]: every piece of text is one fixed height (`DEFAULT_HEIGHT_MM`, as drawn at
+/// 1:100) and each character is three fifths of that wide. It is a size to lay a label out by, not
+/// a measure of any font.
+#[derive(Clone, Copy, Debug)]
+pub struct PlainText {
+    height: Length,
+}
+
+impl PlainText {
+    /// The default height of dimension text, in millimetres, in a view at 1:100.
+    pub const DEFAULT_HEIGHT_MM: i32 = 250;
+
+    /// The default text.
+    #[must_use]
+    pub const fn standard() -> Self {
+        Self {
+            height: Length::from_mm(Self::DEFAULT_HEIGHT_MM),
+        }
+    }
+}
+
+impl Default for PlainText {
+    fn default() -> Self {
+        Self::standard()
+    }
+}
+
+impl TextSize for PlainText {
+    fn size(&self, text: &str) -> Option<(Length, Length)> {
+        let characters = i64::try_from(text.chars().count()).ok()?;
+        let width = self
+            .height
+            .steps()
+            .checked_mul(3)?
+            .checked_mul(characters)?
+            .checked_div(5)?;
+        Some((Length::from_steps(width), self.height))
+    }
+}
+
 /// The text of one segment and where it is centred.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Label {
@@ -52,6 +94,8 @@ pub struct Label {
     pub text: String,
     /// The middle of the segment on the offset line.
     pub at: Point,
+    /// How wide and how high the text is, when its size is known.
+    pub size: Option<(Length, Length)>,
     /// Whether the text is no wider than the segment, when its size is known.
     pub fits: Option<bool>,
 }
@@ -71,11 +115,13 @@ pub fn labels(
             continue;
         };
         let shown = display(value, units)?;
-        let fits = text.size(&shown).map(|(width, _)| width <= value);
+        let size = text.size(&shown);
+        let fits = size.map(|(width, _)| width <= value);
         found.push(Label {
             segment: segment.from,
             text: shown,
             at,
+            size,
             fits,
         });
     }

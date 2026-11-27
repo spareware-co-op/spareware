@@ -11,7 +11,7 @@
 )]
 
 use construct_dimensions::{
-    Dimension, Direction, Feature, Layout, Located, Locus, Missing, OUT_OF_RANGE,
+    Dimension, Direction, Feature, Layout, Located, Locus, Missing, OUT_OF_RANGE, PlainText,
     REFERENCE_MISSING, REFERENCE_PARALLEL, Reference, Side, TextSize, Unmeasured, Why, display,
     labels, measure,
 };
@@ -440,4 +440,27 @@ impl TextSize for HundredPerCharacter {
         let wide = i32::try_from(text.len()).ok()?.checked_mul(100)?;
         Some((Length::from_mm(wide), Length::from_mm(250)))
     }
+}
+
+#[test]
+fn the_plain_default_text_has_one_height_and_a_width_for_each_character() {
+    let text = PlainText::standard();
+    let (width, height) = text.size("400 mm").unwrap();
+    assert_eq!(height, mm(250));
+    // six characters, each three fifths of the height
+    assert_eq!(width, mm(900));
+    assert_eq!(text.size("").unwrap().0, mm(0));
+
+    let located = Located::new()
+        .with(wall_face("W-1"), Ok(vertical_at(0)))
+        .with(wall_face("W-2"), Ok(vertical_at(400)))
+        .with(wall_face("W-3"), Ok(vertical_at(5400)));
+    let dimension = horizontal(vec![wall_face("W-1"), wall_face("W-2"), wall_face("W-3")]);
+    let measured = measure(&dimension, &located);
+    let shown = labels(&measured, &Units::default(), &text).unwrap();
+    assert_eq!(shown.len(), 2);
+    // 400 mm is narrower than its own text: it says so; 5000 mm is not
+    assert_eq!(shown[0].size, Some((mm(900), mm(250))));
+    assert_eq!(shown[0].fits, Some(false));
+    assert_eq!(shown[1].fits, Some(true));
 }

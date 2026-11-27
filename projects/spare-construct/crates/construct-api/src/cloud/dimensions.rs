@@ -48,7 +48,7 @@ use crate::cloud::elements::write_record;
 use construct_categories::DIMENSIONS;
 use construct_dimensions::{
     DIMENSION_KIND, Dimension, DimensionError, DimensionWarning, Dimensions, Direction, Edge,
-    Feature, Layout, Located, Locus, Measured, Missing, Reference, Side, Unmeasured, display,
+    Feature, Layout, Located, Locus, Measured, Missing, PlainText, Reference, Side, display,
     labels, measure,
 };
 use construct_grids::{Datum, Point, Shape, datum_of_recipe};
@@ -720,8 +720,10 @@ pub struct SegmentView {
     pub exact: bool,
     /// Where its text is centred, on the offset line.
     pub middle: Option<PointView>,
-    /// Whether its text is no wider than the segment, once the text engine can say (always
-    /// `None` until job 7.4's text exists).
+    /// How high its text is, in stored length text, as drawn in a view at 1:100 (the page scales it
+    /// to the view's scale). Interim: the plain default text, until job 7.4's text answers.
+    pub text_height: Option<String>,
+    /// Whether its text is no wider than the segment, by that text's size.
     pub fits: Option<bool>,
 }
 
@@ -809,7 +811,7 @@ fn view_of_dimension(
     measured: &Measured,
     units: &Units,
 ) -> Result<DimensionView, String> {
-    let shown = labels(measured, units, &Unmeasured).map_err(|e| e.to_string())?;
+    let shown = labels(measured, units, &PlainText::standard()).map_err(|e| e.to_string())?;
     let segments = measured
         .segments
         .iter()
@@ -822,6 +824,9 @@ fn view_of_dimension(
                 text: label.map(|label| label.text.clone()),
                 exact: segment.exact,
                 middle: segment.middle.map(point_view),
+                text_height: label
+                    .and_then(|label| label.size)
+                    .map(|(_, height)| stored(height)),
                 fits: label.and_then(|label| label.fits),
             }
         })
