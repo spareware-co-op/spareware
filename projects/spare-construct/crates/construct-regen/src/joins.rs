@@ -18,6 +18,9 @@
 //! - [`fill`] also gives the IDs of every wall it read (the walls it meets, and the walls they
 //!   meet): the regenerator lists them in the wall's `reads` row, so a change to any of them
 //!   builds it again.
+//! - [`on_level`] fills every wall of a level at once, each recipe the one [`fill`] gives it: a
+//!   room's walls are read so (construct-regen's `rooms`), each by its outline as its joints
+//!   shape it, so a room's faces are the walls' faces as they are built.
 //!
 //! The search reads the level's walls in full: the regenerator's area index is made from built
 //! shapes, which joints change, so a search through it would depend on what was built first. A
@@ -340,20 +343,58 @@ pub async fn recipe_at<R: Reader>(
 #[must_use]
 pub fn among(walls: &[(&str, &Recipe)]) -> Vec<Recipe> {
     let origin = Placement { x: 0, y: 0, z: 0 };
+    let level: Vec<OnLevel<'_>> = walls
+        .iter()
+        .map(|&(id, recipe)| OnLevel {
+            id,
+            placement: &origin,
+            recipe,
+            elevation: None,
+        })
+        .collect();
+    on_level(&level)
+}
+
+/// A wall of one level as [`on_level`] takes it.
+#[derive(Clone, Copy, Debug)]
+pub struct OnLevel<'a> {
+    /// Its element's ID.
+    pub id: &'a str,
+    /// Where its frame sits in the model.
+    pub placement: &'a Placement,
+    /// Its filled recipe (its layers and its height filled), as the regenerator hands [`fill`] it.
+    pub recipe: &'a Recipe,
+    /// The height of its base, from its level.
+    pub elevation: Option<Length>,
+}
+
+/// Each of `walls`, the walls of one level, with its `joins` filled among all the others: the
+/// recipe [`fill`] gives each from a store. [`fill`] hands the join rule the walls within two
+/// meetings of the wall; this hands it every wall of the level, and more do no harm
+/// (construct-walls' [`join`]); both in the order of their IDs. What a reader of a whole level
+/// takes (a room reads every wall of its level), so it reads each wall once and not once for each
+/// wall it meets. A recipe that does not read as a layered wall is returned as it is, without
+/// `joins`.
+#[must_use]
+pub fn on_level(walls: &[OnLevel<'_>]) -> Vec<Recipe> {
     let mut plans: BTreeMap<String, PlanWall> = BTreeMap::new();
-    for (id, recipe) in walls {
-        if let Some(wall) = plan_wall_at((*id).to_owned(), &origin, &without_joins(recipe), None) {
-            plans.insert((*id).to_owned(), wall);
+    for wall in walls {
+        let recipe = without_joins(wall.recipe);
+        if let Some(plan) =
+            plan_wall_at(wall.id.to_owned(), wall.placement, &recipe, wall.elevation)
+        {
+            plans.insert(wall.id.to_owned(), plan);
         }
     }
     let ids: Vec<String> = plans.keys().cloned().collect();
     let plans: Vec<PlanWall> = plans.into_values().collect();
     walls
         .iter()
-        .map(|(id, recipe)| {
-            let mut out = without_joins(recipe);
-            if let Some(me) = ids.iter().position(|known| known == id)
-                && let Some(arg) = joins_arg(&join(&plans, me), [0, 0])
+        .map(|wall| {
+            let mut out = without_joins(wall.recipe);
+            if let Some(me) = ids.iter().position(|known| known == wall.id)
+                && let Some(origin) = placed_at(wall.placement)
+                && let Some(arg) = joins_arg(&join(&plans, me), origin)
             {
                 out.args.insert(JOINS.to_owned(), arg);
             }
