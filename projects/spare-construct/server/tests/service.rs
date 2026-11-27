@@ -3038,7 +3038,7 @@ async fn a_dimensions_lost_reference_is_in_the_warnings_view() {
     )
     .await
     .unwrap();
-    assert!(ours().await.is_empty());
+    assert_eq!(ours().await, Vec::new());
     edit("element.delete", json!({ "element": "W-104" }))
         .await
         .unwrap();
@@ -3052,7 +3052,7 @@ async fn a_dimensions_lost_reference_is_in_the_warnings_view() {
         .unwrap();
     assert_eq!(listed.dimensions[0].warnings[0].words, lost[0].words);
     edit("edit.undo", json!({})).await.unwrap();
-    assert!(ours().await.is_empty());
+    assert_eq!(ours().await, Vec::new());
 }
 
 /// A model's families (job 7.6): a recipe loaded as text is listed first for the page, with where

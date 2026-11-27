@@ -205,6 +205,7 @@ async fn to_draw<R: Reader>(
         };
     // A curtain wall embedded in a wall is drawn where it is seated there.
     let mut placement = record.placement;
+    let mut curtain_seated = false;
     if let Some(seat) =
         match cloud::curtains::read_seat(reader, project, model, record, &recipe).await? {
             Ok(seat) => seat,
@@ -213,6 +214,7 @@ async fn to_draw<R: Reader>(
     {
         recipe = seat.recipe;
         placement = seat.placement;
+        curtain_seated = true;
     }
     let base = match one.elevation.as_deref().map(StoredValue::from_stored) {
         None => 0,
@@ -231,9 +233,15 @@ async fn to_draw<R: Reader>(
         return Ok(Err("it stands too high to be drawn".to_owned()));
     };
     placement.z = z;
-    let hosted_on = match hosted_on(reader, project, model, record, shaped).await? {
-        Ok(hosted_on) => hosted_on,
-        Err(why) => return Ok(Err(why)),
+    // An embedded curtain wall is seated by its own commands' rule above: the plan's seat in an
+    // angled wall (piece A83) is for doors, windows and openings.
+    let hosted_on = if curtain_seated {
+        None
+    } else {
+        match hosted_on(reader, project, model, record, shaped).await? {
+            Ok(hosted_on) => hosted_on,
+            Err(why) => return Ok(Err(why)),
+        }
     };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
