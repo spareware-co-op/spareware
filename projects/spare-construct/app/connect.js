@@ -5316,12 +5316,10 @@
 
   /** Embeds a curtain wall in the layered wall under the click: the side clicked, its middle at the click. */
   async function embedCurtain(at) {
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.recipe.op !== LAYERED || !piece.shape) return false;
-      const box = around(piece);
-      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
-    });
-    if (!wall) {
+    // The wall under the click as the door tool finds it: a wall at an angle is its line and its
+    // thickness, not the box round it (piece A83), so a neighbour's box never takes the click.
+    const wall = wallAt(at);
+    if (!wall || wall.el.recipe.op !== LAYERED) {
       say('Click on a wall to embed a curtain wall in it.');
       return;
     }
