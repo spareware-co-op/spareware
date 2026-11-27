@@ -223,7 +223,7 @@ impl Stack {
 
 /// `stair.create`'s arguments: stair `id` from Ground to First, a common stairway from (0, 0)
 /// towards +x, with `more` added.
-fn create(id: &str, more: Value) -> Value {
+fn create(id: &str, more: &Value) -> Value {
     let mut args = json!({ "element": id, "level": "L-g", "top": "L-1", "start": ["0", "0"] });
     if let (Some(args), Some(more)) = (args.as_object_mut(), more.as_object()) {
         for (key, value) in more {
@@ -242,7 +242,7 @@ fn create(id: &str, more: Value) -> Value {
 async fn a_stair_is_made_changed_and_deleted_by_its_own_commands() {
     let stack = Stack::new().await;
     let refused = stack
-        .edit("stair.create", create("S-1", json!({})))
+        .edit("stair.create", create("S-1", &json!({})))
         .await
         .unwrap_err();
     assert_eq!(
@@ -256,7 +256,7 @@ async fn a_stair_is_made_changed_and_deleted_by_its_own_commands() {
         "landings": [{ "length": "1000 mm", "turn": "straight" }],
     });
     stack
-        .edit("stair.create", create("S-1", two_runs))
+        .edit("stair.create", create("S-1", &two_runs))
         .await
         .unwrap();
     let record = stack.record("S-1").await.unwrap();
@@ -379,7 +379,7 @@ async fn a_stair_is_refused_in_words() {
     let args = json!({ "level": "L-2", "name": "Low", "elevation": "400 mm" });
     stack.edit("level.create", args).await.unwrap();
     let low = stack
-        .edit("stair.create", create("S-1", json!({ "top": "L-2" })))
+        .edit("stair.create", create("S-1", &json!({ "top": "L-2" })))
         .await
         .unwrap_err();
     assert_eq!(
@@ -389,13 +389,13 @@ async fn a_stair_is_refused_in_words() {
     let down = stack
         .edit(
             "stair.create",
-            create("S-1", json!({ "level": "L-1", "top": "L-g" })),
+            create("S-1", &json!({ "level": "L-1", "top": "L-g" })),
         )
         .await
         .unwrap_err();
     assert!(down.contains("a top is above its base"), "{down}");
     let missing = stack
-        .edit("stair.create", create("S-1", json!({ "top": "L-9" })))
+        .edit("stair.create", create("S-1", &json!({ "top": "L-9" })))
         .await
         .unwrap_err();
     assert!(missing.contains("L-9"), "{missing}");
@@ -404,7 +404,7 @@ async fn a_stair_is_refused_in_words() {
             "stair.create",
             create(
                 "S-1",
-                json!({ "category": "grand", "runs": [{}, {}],
+                &json!({ "category": "grand", "runs": [{}, {}],
                                   "landings": [{ "length": "1 m", "turn": "straight" }] }),
             ),
         )
@@ -417,7 +417,7 @@ async fn a_stair_is_refused_in_words() {
     let one = stack
         .edit(
             "stair.create",
-            create("S-1", json!({ "runs": [{ "risers": 1 }] })),
+            create("S-1", &json!({ "runs": [{ "risers": 1 }] })),
         )
         .await
         .unwrap_err();
@@ -436,7 +436,7 @@ async fn a_moved_level_lays_the_stair_out_again() {
     let stack = Stack::new().await;
     let args = create(
         "S-1",
-        json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "back-left" }] }),
+        &json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "back-left" }] }),
     );
     stack.edit("stair.create", args).await.unwrap();
     let record = stack.record("S-1").await.unwrap();
@@ -482,7 +482,7 @@ async fn the_generic_commands_are_refused_for_a_stair() {
     let stack = Stack::new().await;
     let args = create(
         "S-1",
-        json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "straight" }] }),
+        &json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "straight" }] }),
     );
     stack.edit("stair.create", args).await.unwrap();
     let record = stack.record("S-1").await.unwrap();
@@ -559,7 +559,7 @@ async fn every_stair_command_is_undone_and_redone() {
             "stair.create",
             create(
                 "S-1",
-                json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "straight" }] }),
+                &json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "straight" }] }),
             ),
         ),
         (
@@ -603,10 +603,10 @@ async fn the_view_lists_the_categories_and_every_stair() {
             "service"
         ]
     );
-    assert!(view.stairs.is_empty());
+    assert_eq!(view.stairs.len(), 0);
     let args = create(
         "S-1",
-        json!({ "category": "main-private", "name": "Back stair" }),
+        &json!({ "category": "main-private", "name": "Back stair" }),
     );
     stack.edit("stair.create", args).await.unwrap();
     let view = stack.view().await;
@@ -633,10 +633,10 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
             "stair.create",
             create(
                 "S-1",
-                json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "left" }] }),
+                &json!({ "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "left" }] }),
             ),
         ),
-        ("stair.create", create("S-2", json!({}))),
+        ("stair.create", create("S-2", &json!({}))),
         (
             "stair.width",
             json!({ "element": "S-1", "width": "1200 mm" }),

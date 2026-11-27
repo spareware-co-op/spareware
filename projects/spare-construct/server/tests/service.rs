@@ -2154,7 +2154,7 @@ async fn a_stair_made_by_command_is_laid_out_and_read_back() {
     let s = &stack.service;
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
     let none = s.stairs(&anna, &project, &model).await.unwrap();
-    assert!(none.stairs.is_empty());
+    assert_eq!(none.stairs.len(), 0);
     assert!(none.categories.iter().any(|c| c.id == "common"));
     assert!(refused(s.stairs(&dan, &project, &model).await));
     let create = json!({ "element": "S-900", "name": "Stair", "level": "1", "top": "2",
@@ -2193,12 +2193,13 @@ async fn a_stair_made_by_command_is_laid_out_and_read_back() {
     )
     .await
     .unwrap();
-    assert!(
+    assert_eq!(
         s.stairs(&anna, &project, &model)
             .await
             .unwrap()
             .stairs
-            .is_empty()
+            .len(),
+        0
     );
 }
 
