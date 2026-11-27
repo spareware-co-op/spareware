@@ -71,6 +71,15 @@ fn refused(refusal: Refusal) -> StoreError {
     }
 }
 
+/// Milliseconds since the Unix epoch, the clock the orderer stamps entries with.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
 impl Live {
     async fn run(mut self, socket: WebSocket) -> Result<(), StoreError> {
         let (mut sink, mut stream) = socket.split();
@@ -102,7 +111,13 @@ impl Live {
                 }
                 _ = recheck.tick() => self.recheck(&mut out).await?,
             }
-            for message in out {
+            for mut message in out {
+                // When this stream wrote the entry, to set against the orderer's stamp and the page's.
+                if message.get("t").and_then(Value::as_str) == Some("entry")
+                    && let Some(fields) = message.as_object_mut()
+                {
+                    fields.insert("sent_ms".to_owned(), json!(now_ms()));
+                }
                 sink.send(Message::Text(message.to_string().into()))
                     .await
                     .map_err(gone)?;

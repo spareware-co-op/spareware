@@ -25,8 +25,14 @@
 //!   recipe comes from is the caller's [`FamilySource`].
 //! - Wrapping: not built. A layer that wraps at an opening (construct-walls' `Layer::wraps`) is
 //!   cut flush with the opening as every other layer is; turning it round the opening's sides is
-//!   job 6.1 (CON-A4-F2-P4), and its place is [`build`]'s loop over the cutters.
-//! - Joins and clean-ups where walls meet (jobs 5.1 and 6.1): not here; a wall's ends are square.
+//!   job 6.1 (CON-A4-F2-P4), and its place is the loop over the cutters in `piece`.
+//! - Joins (job 5.1): a wall whose filled recipe has `joins` ([`crate::wall_plan::Joints`]) is
+//!   built of each layer's joined pieces in place of its strips, each piece extruded the same way
+//!   and listed in the body as a layer of its own, in order; each opening is cut from every piece
+//!   its cutter's plan box reaches, and the display's outline is the joined outline. The pieces
+//!   are worked out before building (construct-walls' join rule, filled by construct-regen's
+//!   `joins`), so this builder never reads another wall. X joins, mitres at any angle and
+//!   wrapping are job 6.1's.
 //! - Names (chapter 20.2): the wall's six roles, `base`, `top`, `exterior`, `interior`, `end0` and
 //!   `end1`, are named as the old box's are, under this recipe's operation, so a door hosted on
 //!   the exterior keeps its face through every rebuild. `exterior` is the first layer's outer
@@ -51,7 +57,7 @@ use super::{
     fault, from_engine, name, op_id,
 };
 use crate::families::{self, FamilySource};
-use crate::wall_plan::{Axis, Layered};
+use crate::wall_plan::{Axis, Layered, Strip};
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
@@ -460,10 +466,10 @@ pub(super) fn append(into: &mut Mesh, part: &Mesh) -> Result<[u32; 2], GeometryE
     Ok([first, thirds(part.indices.len())?])
 }
 
-/// The plan outline of a strip whose corners are in the building grid's steps, in whole
+/// The plan outline of a polygon whose corners are in the building grid's steps, in whole
 /// millimetres, each corner the nearest millimetre.
-fn outline(corners: &[[i64; 2]; 4], units: Units) -> Result<Vec<[i64; 2]>, GeometryError> {
-    let mut out = Vec::with_capacity(4);
+fn outline(corners: &[[i64; 2]], units: Units) -> Result<Vec<[i64; 2]>, GeometryError> {
+    let mut out = Vec::with_capacity(corners.len());
     for &[x, y] in corners {
         let (x, _) = units.nearest_mm(units.from_q0(x)?);
         let (y, _) = units.nearest_mm(units.from_q0(y)?);
@@ -480,15 +486,134 @@ pub(super) fn empty() -> Mesh {
     }
 }
 
-/// Builds a layered wall with the doors `hosted` in it, on `engine`.
+/// The plan pieces of layer `at` of `wall`, in the building grid's steps: its joined pieces when
+/// the wall's joints are made, else its strip.
+fn pieces_of(
+    wall: &Layered,
+    at: usize,
+    layer: &Strip,
+) -> Result<Vec<Vec<[i64; 2]>>, GeometryError> {
+    if let Some(joints) = &wall.joined {
+        return joints
+            .layers
+            .get(at)
+            .cloned()
+            .ok_or_else(|| fault("BadJoins", format!("layer {at} has no joined pieces")));
+    }
+    let (corners, _) = wall.plan.strip(layer.exterior, layer.interior)?;
+    Ok(vec![corners.to_vec()])
+}
+
+/// The low and high corners in plan of a polygon of grid points.
+fn plan_box(points: &[P3]) -> Option<([i64; 2], [i64; 2])> {
+    let mut points = points.iter().map(|p| [p.x.get(), p.y.get()]);
+    let first = points.next()?;
+    Some(points.fold((first, first), |(lo, hi), [x, y]| {
+        ([lo[0].min(x), lo[1].min(y)], [hi[0].max(x), hi[1].max(y)])
+    }))
+}
+
+/// Whether two plan boxes share an area.
+fn overlap(a: Option<([i64; 2], [i64; 2])>, b: Option<([i64; 2], [i64; 2])>) -> bool {
+    let (Some((alo, ahi)), Some((blo, bhi))) = (a, b) else {
+        return false;
+    };
+    alo[0] < bhi[0] && blo[0] < ahi[0] && alo[1] < bhi[1] && blo[1] < ahi[1]
+}
+
+/// An opening's cutter as the engine made it, with its plan box.
+struct Cutter<'c, S> {
+    cut: &'c Cut,
+    solid: S,
+    reach: Option<([i64; 2], [i64; 2])>,
+}
+
+/// One piece of a layer on the engine: its extrusion's mesh, and its mesh less every opening
+/// whose cutter reaches it, when one does.
+fn piece<E: Engine>(
+    engine: &mut E,
+    profile: &Profile,
+    by: [i64; 3],
+    cutters: &[Cutter<'_, E::Solid>],
+) -> Result<(DisplayMesh, Option<DisplayMesh>), GeometryError> {
+    let mut solid = engine.extrude(profile, by).map_err(from_engine)?;
+    let plain = engine.mesh(&solid).map_err(from_engine)?;
+    let reach = plan_box(&profile.outer);
+    let mut cut_any = false;
+    for cutter in cutters.iter().filter(|c| overlap(c.reach, reach)) {
+        let named = |e: EngineError| cutter.cut.engine_error(from_engine(e));
+        solid = engine.subtract(&solid, &cutter.solid).map_err(named)?;
+        cut_any = true;
+    }
+    let cut = if cut_any {
+        Some(engine.mesh(&solid).map_err(from_engine)?)
+    } else {
+        None
+    };
+    Ok((plain, cut))
+}
+
+/// What a layered wall's pieces make at both levels of detail, as they are added.
+struct Levels {
+    fine: Mesh,
+    coarse: Mesh,
+    fine_parts: Vec<Part>,
+    coarse_parts: Vec<Part>,
+    rounded_fine: bool,
+    rounded_coarse: bool,
+    /// Only the finest level's reach makes the bounds; the coarse level's is not kept.
+    extent: Extent,
+    coarse_extent: Extent,
+}
+
+impl Levels {
+    fn new() -> Levels {
+        Levels {
+            fine: empty(),
+            coarse: empty(),
+            fine_parts: Vec::new(),
+            coarse_parts: Vec::new(),
+            rounded_fine: false,
+            rounded_coarse: false,
+            extent: None,
+            coarse_extent: None,
+        }
+    }
+
+    /// Adds a piece of `layer`, its plan `corners` in the building grid's steps.
+    fn add(
+        &mut self,
+        layer: &Strip,
+        corners: &[[i64; 2]],
+        (plain, cut): (DisplayMesh, Option<DisplayMesh>),
+        units: Units,
+    ) -> Result<(), GeometryError> {
+        // A piece with no openings has the same mesh at both levels.
+        let (cut_mesh, r0) = millimetres(cut.as_ref().unwrap_or(&plain), units, &mut self.extent)?;
+        let (plain, r1) = millimetres(&plain, units, &mut self.coarse_extent)?;
+        self.rounded_coarse |= r1;
+        self.rounded_fine |= r0;
+        let shape = outline(corners, units)?;
+        let part = |triangles: [u32; 2]| Part {
+            material: layer.material.clone(),
+            function: layer.function.clone(),
+            triangles,
+            outline: shape.clone(),
+        };
+        self.fine_parts
+            .push(part(append(&mut self.fine, &cut_mesh)?));
+        self.coarse_parts
+            .push(part(append(&mut self.coarse, &plain)?));
+        Ok(())
+    }
+}
+
+/// Builds a layered wall with the doors `hosted` in it, on `engine`: each piece of each layer
+/// extruded, every opening cut from each piece its cutter reaches.
 ///
 /// # Errors
 ///
 /// The plan's and the openings' refusals, and the engine's own (a door's with its key in front).
-#[allow(
-    clippy::too_many_lines,
-    reason = "one wall's layers, cuts, meshes and names, in the order the record lists them"
-)]
 pub(super) fn build<E: Engine>(
     engine: &mut E,
     recipe: &Recipe,
@@ -525,63 +650,39 @@ pub(super) fn build<E: Engine>(
     let mut cutters = Vec::with_capacity(tools.len());
     for (cut, (tool, up)) in cut_list.iter().zip(&tools) {
         let named = |e: EngineError| cut.engine_error(from_engine(e));
-        cutters.push((cut, engine.extrude(tool, *up).map_err(named)?));
+        cutters.push(Cutter {
+            cut,
+            solid: engine.extrude(tool, *up).map_err(named)?,
+            reach: plan_box(&tool.outer),
+        });
     }
-    let (mut fine, mut coarse) = (empty(), empty());
-    let (mut fine_parts, mut coarse_parts) = (Vec::new(), Vec::new());
-    let (mut rounded_fine, mut rounded_coarse) = (false, false);
-    // Only the finest level's reach makes the bounds; the coarse level's is not kept.
-    let (mut extent, mut coarse_extent): (Extent, Extent) = (None, None);
-    for layer in &wall.layers {
+    let mut levels = Levels::new();
+    for (at, layer) in wall.layers.iter().enumerate() {
         if layer.thickness() == 0 {
             continue;
         }
-        let (corners, _) = wall.plan.strip(layer.exterior, layer.interior)?;
-        let outer = corners
-            .iter()
-            .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
-            .collect::<Result<Vec<P3>, _>>()?;
-        asked.layers.push(AskedLayer {
-            function: layer.function.clone(),
-            material: layer.material.clone(),
-            extrude: as_steps(&outer),
-            by,
-        });
-        let profile = Profile {
-            outer,
-            holes: Vec::new(),
-        };
-        let mut solid = engine.extrude(&profile, by).map_err(from_engine)?;
-        let plain = engine.mesh(&solid).map_err(from_engine)?;
-        for (cut, cutter) in &cutters {
-            let named = |e: EngineError| cut.engine_error(from_engine(e));
-            solid = engine.subtract(&solid, cutter).map_err(named)?;
+        for corners in pieces_of(wall, at, layer)? {
+            let outer = corners
+                .iter()
+                .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
+                .collect::<Result<Vec<P3>, _>>()?;
+            asked.layers.push(AskedLayer {
+                function: layer.function.clone(),
+                material: layer.material.clone(),
+                extrude: as_steps(&outer),
+                by,
+            });
+            let profile = Profile {
+                outer,
+                holes: Vec::new(),
+            };
+            let made = piece(engine, &profile, by, &cutters)?;
+            levels.add(layer, &corners, made, units)?;
         }
-        // A layer with no openings has the same mesh at both levels.
-        let (cut_mesh, r0) = if cutters.is_empty() {
-            millimetres(&plain, units, &mut extent)?
-        } else {
-            millimetres(
-                &engine.mesh(&solid).map_err(from_engine)?,
-                units,
-                &mut extent,
-            )?
-        };
-        let (plain, r1) = millimetres(&plain, units, &mut coarse_extent)?;
-        rounded_coarse |= r1;
-        rounded_fine |= r0;
-        let shape = outline(&corners, units)?;
-        let part = |triangles: [u32; 2]| Part {
-            material: layer.material.clone(),
-            function: layer.function.clone(),
-            triangles,
-            outline: shape.clone(),
-        };
-        fine_parts.push(part(append(&mut fine, &cut_mesh)?));
-        coarse_parts.push(part(append(&mut coarse, &plain)?));
     }
-    let (lo, hi) =
-        extent.ok_or_else(|| fault("EmptyShape", "a wall with no layer of any thickness"))?;
+    let (lo, hi) = levels
+        .extent
+        .ok_or_else(|| fault("EmptyShape", "a wall with no layer of any thickness"))?;
     let bounds = Bounds {
         min: lo.map(|s| units.floor_mm(s)),
         max: hi.map(|s| units.ceil_mm(s)),
@@ -592,23 +693,26 @@ pub(super) fn build<E: Engine>(
     }
     names.sort_by(|a, b| a.name.cmp(&b.name));
     let (exterior, interior) = wall.outer();
-    let (whole, _) = wall.plan.strip(exterior, interior)?;
-    let whole = outline(&whole, units)?;
+    let whole = if let Some(joints) = &wall.joined {
+        outline(&joints.outline, units)?
+    } else {
+        outline(&wall.plan.strip(exterior, interior)?.0, units)?
+    };
     let displays = vec![
         Display {
             lod: 0,
-            deviation: i64::from(rounded_fine),
-            mesh: fine,
+            deviation: i64::from(levels.rounded_fine),
+            mesh: levels.fine,
             outline: whole.clone(),
-            parts: fine_parts,
+            parts: levels.fine_parts,
         },
         Display {
             lod: 1,
             deviation: opening::deviation(&cut_list, units)
-                .saturating_add(i64::from(rounded_coarse)),
-            mesh: coarse,
+                .saturating_add(i64::from(levels.rounded_coarse)),
+            mesh: levels.coarse,
             outline: whole,
-            parts: coarse_parts,
+            parts: levels.coarse_parts,
         },
     ];
     Ok(Built {

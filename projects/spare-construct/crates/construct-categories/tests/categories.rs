@@ -249,6 +249,10 @@ fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("workshop.part"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("workshop.assembly"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("view"), Ok(construct_categories::VIEWS));
+    assert_eq!(
+        category_of_kind("schedule"),
+        Ok(construct_categories::SCHEDULES)
+    );
     assert_eq!(category_of_kind("sheet"), Ok(construct_categories::SHEETS));
     assert_eq!(
         category_of_kind("dimension"),

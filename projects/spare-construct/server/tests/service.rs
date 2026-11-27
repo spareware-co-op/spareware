@@ -1483,6 +1483,111 @@ async fn an_opening_and_a_shaft_cut_a_floors_quantities_and_the_page_is_told() {
     }
 }
 
+/// Through the server's commands on the stand-in: a floor sloped by `floor.slope` shows its
+/// lowest and highest points and its sloped top area (exact where its arrow is whole, as 3 in 4),
+/// built as the box between them; its slope cleared, the rows are gone; a floor given slab edges
+/// shows each edge's length and volume; both on one floor is refused in words, and the page's
+/// filled recipe of a shaped floor holds its tops and its slab edges.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sloped_floor_and_a_floor_with_slab_edges_show_their_quantities() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    s.edit(&anna, &project, &model, "floor.defaults", json!({}))
+        .await
+        .unwrap();
+    let rectangle = |x0: i64| {
+        json!({ "outer": [corner("r0", x0, 0), corner("r1", x0 + 4000, 0),
+                          corner("r2", x0 + 4000, 3000), corner("r3", x0, 3000)] })
+    };
+    for (id, x0) in [("F-901", 60_000), ("F-902", 70_000)] {
+        let floor = json!({ "element": id, "type": "floor-concrete-200", "level": "1",
+                            "boundary": rectangle(x0) });
+        s.edit(&anna, &project, &model, "floor.create", floor)
+            .await
+            .unwrap();
+    }
+    // A plain floor has none of the rows.
+    let plain = quantities(s, &project, &model, "F-901").await;
+    assert!(!plain.contains_key("floor.lowest") && !plain.contains_key("floor.top-area"));
+
+    // A 3 in 4 fall along x: 4 m along, 3 m down; the top face's true area is 5/4 of the plan's.
+    let slope = json!({ "element": "F-901", "slope": { "tail": ["60000", "0"],
+                        "head": ["64000", "0"], "at_tail": "0", "gradient": { "rise": -3, "run": 4 } } });
+    s.edit(&anna, &project, &model, "floor.slope", slope)
+        .await
+        .unwrap();
+    let read = quantities(s, &project, &model, "F-901").await;
+    assert_eq!(read["floor.top-area"].1.as_deref(), Some("15.00 m²"));
+    assert_eq!(read["floor.highest"].1.as_deref(), Some("0 mm"));
+    assert_eq!(read["floor.lowest"].1.as_deref(), Some("-3200 mm"));
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("2.40 m³"));
+    assert_eq!(
+        wall_bounds(s, &project, &model, "F-901").await,
+        ([60_000, 0, -3200], [64_000, 3000, 0])
+    );
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-901"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert!(args.contains_key("tops") && !args.contains_key("edges"));
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.edge",
+            json!({ "element": "F-901", "edge": "r0",
+                    "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.slope.clear",
+        json!({ "element": "F-901" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(quantities(s, &project, &model, "F-901").await, plain);
+
+    // A downturn 4 m long, 300 mm wide and 400 mm deep: 0.48 m3.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.edge",
+        json!({ "element": "F-902", "edge": "r0",
+                "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+    )
+    .await
+    .unwrap();
+    let read = quantities(s, &project, &model, "F-902").await;
+    assert_eq!(read["floor.edge-r0.length"].1.as_deref(), Some("4000 mm"));
+    assert_eq!(read["floor.edge-r0.volume"].1.as_deref(), Some("0.48 m³"));
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-902"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert_eq!(args["edges"].as_array().map(Vec::len), Some(1));
+    assert_eq!(args["edges"][0]["id"], "r0");
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.slope",
+            json!({ "element": "F-902", "slope": { "tail": ["70000", "0"], "head": ["74000", "0"],
+                    "at_tail": "0", "at_head": "-40 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+}
+
 /// The seed draws its walls as a person does, layered walls of construct-walls' default types made
 /// through the log, and writes no old box wall. The page reads a model's wall types with their
 /// layers, the materials and the defaults, and an element's recipe filled as it is built, with how
@@ -2141,6 +2246,229 @@ async fn a_room_in_the_seeded_building_reports_its_state_and_measures() {
         .await
         .unwrap();
     assert_eq!(back.room.unwrap().area, Some(area));
+}
+
+/// The identities of a model's warnings now, in the order the server gives them.
+async fn warning_identities(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+) -> Vec<String> {
+    s.warnings(&i("anna"), project, model)
+        .await
+        .unwrap()
+        .warnings
+        .into_iter()
+        .map(|w| w.identity)
+        .collect()
+}
+
+/// The server's list of a model's problems is worked out from the document each time it is read:
+/// a person off the team cannot read it; a room whose wall is deleted is listed not enclosed, with
+/// its words, and is gone again when the wall is back (by undo); a wall drawn far away leaves it
+/// as it was; a second wall drawn along the first is listed as an overlap, both walls named, and
+/// leaves when it is deleted; the same list comes back for the same document.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    assert!(refused(s.warnings(&dan, &project, &model).await));
+    let edit = |cmd: &'static str, args: Value| {
+        let (s, anna, project, model) = (s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let base = warning_identities(s, &project, &model).await;
+    assert!(
+        base.iter().all(|w| !w.starts_with("room.")),
+        "the seeded building has no rooms: {base:?}"
+    );
+    edit(
+        "room.place",
+        json!({ "element": "R-900", "name": "Studio", "number": "101", "level": "1",
+                "at": ["3 m", "4 m"], "top": "2" }),
+    )
+    .await;
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+
+    edit("element.delete", json!({ "element": "W-103" })).await;
+    let open = s.warnings(&anna, &project, &model).await.unwrap();
+    let room: Vec<_> = open
+        .warnings
+        .iter()
+        .filter(|w| w.kind == "room.not_enclosed")
+        .collect();
+    assert_eq!(room.len(), 1, "{open:?}");
+    assert_eq!(room[0].identity, "room.not_enclosed|R-900");
+    assert_eq!(room[0].elements, ["R-900"]);
+    assert_eq!(room[0].severity, "warning");
+    assert_eq!(
+        room[0].words,
+        "Room 101 Studio is not enclosed: the walls round its point do not close"
+    );
+    let open_list = warning_identities(s, &project, &model).await;
+    assert_eq!(open_list.len(), base.len() + 1);
+
+    // An unrelated edit: two walls far away, one along the other.
+    for ty in wall_types() {
+        edit("wall.type.create", ty).await;
+    }
+    let draw = |element: &str, from: &str, to: &str| {
+        json!({ "element": element, "type": "wall-partition", "start": [from, "0"],
+                "end": [to, "0"], "level": "1", "top": "2" })
+    };
+    edit("wall.draw", draw("W-900", "50 m", "54 m")).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("wall.draw", draw("W-901", "52 m", "56 m")).await;
+    let both = warning_identities(s, &project, &model).await;
+    assert_eq!(both.len(), open_list.len() + 1);
+    assert!(both.contains(&"room.not_enclosed|R-900".to_owned()));
+    assert!(
+        both.contains(&"wall.overlap|W-900|W-901".to_owned()),
+        "{both:?}"
+    );
+    let mut sorted = both.clone();
+    sorted.sort();
+    assert_eq!(both, sorted, "by kind, then by elements");
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+
+    // The cause fixed: the second wall is deleted, then the first wall of the room comes back.
+    edit("element.delete", json!({ "element": "W-901" })).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+    edit("edit.redo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    // Undone step by step, the wall comes back last and the room is enclosed again.
+    for _ in 0..8 {
+        edit("edit.undo", json!({})).await;
+        if !warning_identities(s, &project, &model)
+            .await
+            .contains(&"room.not_enclosed|R-900".to_owned())
+        {
+            break;
+        }
+    }
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+}
+
+/// The page's schedules: made and changed through the log by whoever may edit the model, read by
+/// whoever may read it. A schedule lists the seeded building's doors by name, and its rows are
+/// worked out from the elements on every read, so a door deleted through the log leaves them.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_schedules_and_their_live_rows() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.len(), 0);
+    assert!(refused(s.schedules(&dan, &project, &model).await));
+
+    let make = json!({ "schedule": "SC-1", "name": "Doors", "category": 300,
+                       "fields": ["name", "type"],
+                       "sorting": [{ "field": "name", "order": "descending" }] });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "schedule.create", make.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "schedule.create", make)
+        .await
+        .unwrap();
+    let listed = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&listed).unwrap(),
+        json!([{ "id": "SC-1", "name": "Doors", "category": 300, "category_name": "Doors",
+                 "fields": ["name", "type"], "filters": [],
+                 "sorting": [{ "field": "name", "order": "descending" }], "problem": null }])
+    );
+
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 7, "the seeded building's doors");
+    // The fields the category offers come with their kinds and the comparisons that fit them.
+    let offered = |key: &str| table.offered.iter().find(|field| field.field == key);
+    let name = offered("name").expect("a door's name is offered");
+    assert_eq!((name.name.as_str(), name.kind), ("Name", "text"));
+    assert!(name.comparisons.contains(&"contains"));
+    assert!(offered("type").is_some());
+    // The categories a schedule may list include the doors, and leave out the views.
+    let listable = s
+        .schedule_categories(&anna, &project, &model)
+        .await
+        .unwrap();
+    assert!(
+        listable
+            .iter()
+            .any(|c| (c.id, c.name.as_str()) == (300, "Doors"))
+    );
+    assert!(listable.iter().all(|c| c.name != "Views"));
+    assert!(refused(s.schedule_categories(&dan, &project, &model).await));
+    let names: Vec<String> = table
+        .rows
+        .iter()
+        .map(|row| row.cells[0].shown.clone().unwrap().to_lowercase())
+        .collect();
+    let mut descending = names.clone();
+    descending.sort_by(|a, b| b.cmp(a));
+    assert_eq!(names, descending);
+    assert!(table.rows.iter().any(|row| row.element == "D-101"));
+
+    // The same read after an edit through the log gives the new rows: nothing was stored.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "element.delete",
+        json!({ "element": "D-101" }),
+    )
+    .await
+    .unwrap();
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 6);
+    assert!(table.rows.iter().all(|row| row.element != "D-101"));
+
+    // A filter through the command, in typed text; the generic command is no way round it.
+    let filter = json!({ "schedule": "SC-1",
+        "filters": [{ "field": "name", "is": "begins_with", "to": "zzz" }] });
+    s.edit(&anna, &project, &model, "schedule.filters", filter)
+        .await
+        .unwrap();
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 0);
+    let hacked = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "element.set",
+            json!({ "element": "SC-1", "name": "Hacked" }),
+        )
+        .await;
+    assert!(refused(hacked));
+
+    // A schedule that is not there, an element that is not a schedule, a person who may not read.
+    let none = s.schedule(&anna, &project, &model, &i("SC-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    let wall = s.schedule(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(
+        s.schedule(&dan, &project, &model, &i("SC-1")).await
+    ));
+
+    // A schedule has no shape: the model still publishes, and replays from the log.
+    let item = s
+        .publish(&anna, &project, &i("arch"), &model)
+        .await
+        .unwrap();
+    assert_eq!(item.name, "Arch package v12");
 }
 
 #[tokio::test(flavor = "multi_thread")]

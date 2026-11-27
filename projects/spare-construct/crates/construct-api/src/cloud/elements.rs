@@ -199,7 +199,9 @@ async fn props_allowed<T: Txn>(
 /// `element.delete` does not delete a grid or a reference plane, which their own commands delete
 /// ([`grids::delete_refusal`]). A grid's move or change is refused in [`edited`].
 fn refusal(before: &Element, cmd: &str) -> Option<String> {
-    if !records::has_shape(before) {
+    // Letting go of a claim is allowed on any piece, a type or the parameter table too: the
+    // commands that make those take a claim on them, and nothing else gives it back early.
+    if cmd != "element.release" && !records::has_shape(before) {
         return Some(NOT_AN_ELEMENT.to_owned());
     }
     if cmd == "element.delete" {

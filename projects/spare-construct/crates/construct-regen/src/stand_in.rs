@@ -9,8 +9,10 @@
 //! its outline is its outer loop, each corner the nearest millimetre, and its deviation is 0 only
 //! when the box is the floor. Its displays draw each layer with a thickness as a part, the box's
 //! slice from that layer's bottom face to its top, so a view colours the layers by material on
-//! either edition. Interim, as every stand-in shape: its layers as solids and its holes are the
-//! kernel's to build (the interim register's row).
+//! either edition. A sloped floor's box reaches from its bottom face's lowest corner to its top
+//! face's highest, one with slab edges down to their deepest foot, and either strays by the box's
+//! whole diagonal (job 5.2). Interim, as every stand-in shape: its layers as solids, its slope,
+//! its slab edges and its holes are the kernel's to build (the interim register's row).
 //!
 //! A roof (`roof`) is one box too: the box around every layer's solid ([`crate::roof_plan`]),
 //! rounded outward to whole millimetres, named `box.<role>` for its outer faces. Its displays draw
@@ -187,13 +189,18 @@ fn floor_layers(
     let mut parts = Vec::new();
     let slabs = plan.slabs();
     let last = slabs.len().saturating_sub(1);
+    // A sloped floor's layer reaches from its bottom face's lowest corner to its top face's
+    // highest.
+    let (low_top, high_top) = plan.top_range();
     for (n, (_, layer, bottom, top)) in slabs.iter().enumerate() {
         let low = if n == last {
             min[2]
         } else {
-            floor_plan::nearest_mm(*bottom).0
+            floor_plan::nearest_mm(bottom.saturating_add(low_top)).0
         };
-        let high = floor_plan::nearest_mm(*top).0.min(max[2]);
+        let high = floor_plan::nearest_mm(top.saturating_add(high_top))
+            .0
+            .min(max[2]);
         let (first, base) = (
             part_count(mesh.indices.len() / 3)?,
             part_count(mesh.positions.len() / 3)?,
@@ -218,14 +225,28 @@ fn floor_layers(
 /// the shape (`exact`); otherwise by at most its plan's diagonal (every point of one is within that
 /// of every point of the other); and by one millimetre more where anything was `rounded`.
 fn straying(min: [i64; 3], max: [i64; 3], exact: bool, rounded: bool) -> i64 {
+    straying_by(min, max, exact, rounded, false)
+}
+
+/// [`straying`], or with `upright` by at most the box's whole diagonal: a sloped floor, or one
+/// with slab edges, strays from its box upright too.
+fn straying_by(min: [i64; 3], max: [i64; 3], exact: bool, rounded: bool, upright: bool) -> i64 {
     if exact {
         return i64::from(rounded);
     }
-    let [w, d] = [
+    let [w, d, h] = [
         i128::from(max[0].saturating_sub(min[0])),
         i128::from(max[1].saturating_sub(min[1])),
+        if upright {
+            i128::from(max[2].saturating_sub(min[2]))
+        } else {
+            0
+        },
     ];
-    let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+    let square = w
+        .saturating_mul(w)
+        .saturating_add(d.saturating_mul(d))
+        .saturating_add(h.saturating_mul(h));
     let mut root = square.isqrt();
     if root.saturating_mul(root) < square {
         root = root.saturating_add(1);
@@ -246,9 +267,14 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
     let min = [
         floor_plan::floor_mm(x0),
         floor_plan::floor_mm(y0),
-        floor_plan::floor_mm(total.saturating_neg()),
+        floor_plan::floor_mm(plan.lowest()),
     ];
-    let max = [floor_plan::ceil_mm(x1), floor_plan::ceil_mm(y1), 0];
+    let max = [
+        floor_plan::ceil_mm(x1),
+        floor_plan::ceil_mm(y1),
+        floor_plan::ceil_mm(plan.top_range().1),
+    ];
+    let shaped = !plan.tops.is_empty() || !plan.edges.is_empty();
     let mut rounded = false;
     let mut outline = Vec::with_capacity(plan.outer().len());
     for corner in plan.outer() {
@@ -258,7 +284,7 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         outline.push([x, y]);
     }
     rounded |= !floor_plan::nearest_mm(total).1;
-    let deviation = straying(min, max, plan.is_box(), rounded);
+    let deviation = straying_by(min, max, plan.is_box(), rounded, shaped);
     let (mesh, parts) = floor_layers(&plan, min, max, &outline)?;
     let names = floor_names(&plan);
     let body = FloorBody {
@@ -577,8 +603,13 @@ fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
             role: "bottom".to_owned(),
         },
     ];
-    for corner in plan.loops.iter().flatten() {
-        let role = format!("side.{}", corner.id);
+    let sides = plan
+        .loops
+        .iter()
+        .flatten()
+        .map(|c| format!("side.{}", c.id));
+    let edges = plan.edges.iter().map(|e| format!("edge.{}", e.id));
+    for role in sides.chain(edges) {
         names.push(FaceName {
             name: format!("box.{role}"),
             role,
@@ -1270,6 +1301,49 @@ mod tests {
             .args
             .insert("layers".to_owned(), json!({ "type": "layers" }));
         assert_eq!(Boxes.build(&unfilled).unwrap_err().code, "Unfilled");
+    }
+
+    /// A sloped floor's box reaches from its bottom face's lowest corner to its top face's
+    /// highest, and one with a slab edge down to the edge's foot; each strays by the box's whole
+    /// diagonal, and names its slab edge `box.edge.<edge ID>`.
+    #[test]
+    #[allow(clippy::arithmetic_side_effects, reason = "test code")]
+    fn a_shaped_floor_is_the_box_around_it() {
+        let mm = |v: i64| v * 6400;
+        let mut sloped = floor_of(true);
+        sloped.op_version = 2;
+        sloped
+            .args
+            .insert("tops".to_owned(), json!([[0, mm(-40), mm(-40), 0]]));
+        let b = Boxes.build(&sloped).unwrap();
+        assert_eq!(b.bounds.min, [0, 0, -240]);
+        assert_eq!(b.bounds.max, [4000, 3000, 0]);
+        // The diagonal of 4 m by 3 m by 240 mm is 5,005.8 mm.
+        assert_eq!(b.displays[0].deviation, 5006);
+        let mut edged = floor_of(true);
+        edged.op_version = 2;
+        let at = |x: i64, y: i64, z: i64| json!([mm(x), mm(y), mm(z)]);
+        edged.args.insert(
+            "edges".to_owned(),
+            json!([{
+                "id": "e0",
+                "kind": "downturn",
+                "top": [at(0, 0, -200), at(4000, 0, -200), at(4000, 300, -200), at(0, 300, -200)],
+                "foot": [at(0, 0, -600), at(4000, 0, -600), at(4000, 300, -600), at(0, 300, -600)],
+            }]),
+        );
+        let b = Boxes.build(&edged).unwrap();
+        assert_eq!(b.bounds.min, [0, 0, -600]);
+        assert!(b.names.iter().any(|n| n.name == "box.edge.e0"));
+        let heights: Vec<i64> = b.displays[0]
+            .mesh
+            .positions
+            .iter()
+            .skip(2)
+            .step_by(3)
+            .copied()
+            .collect();
+        assert_eq!(heights.iter().min(), Some(&-600));
     }
 
     /// A filled 6 m by 4 m roof (construct-roofs' `filled` form), every point in whole

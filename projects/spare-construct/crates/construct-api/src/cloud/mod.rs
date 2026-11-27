@@ -22,6 +22,10 @@
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
+//! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
+//!   and worked out each time from the document.
+//! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
+//!   read of their rows, through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
 //! - [`dimensions`]: linear dimensions bound to references, and the listing of a view's dimensions
 //!   with their values worked out, through the same log.
@@ -45,12 +49,14 @@ pub mod openings;
 pub mod params;
 pub mod roofs;
 pub mod rooms;
+pub mod schedules;
 pub mod sheets;
 pub mod spaces;
 pub mod transaction;
 pub mod undo;
 pub mod views;
 pub mod walls;
+pub mod warnings;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;
