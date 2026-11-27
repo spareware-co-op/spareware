@@ -26,6 +26,8 @@
 //! - `room`: one solid, its loop with its holes extruded from its base up to its upper limit, in
 //!   the child module `room` (job 5.4); its lengths are construct-params' steps
 //!   ([`crate::room_plan`]).
+//! - `column`: one solid, its ring extruded from its base up to its height, in the child module
+//!   `column` (job 14.7); its lengths are construct-params' steps ([`crate::column_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
@@ -99,6 +101,7 @@
 //!   geom-solidcore, and the interim register's row for it), until lengths and meshes are on the
 //!   kernel's grid and the engine is the kernel's exact one.
 
+mod column;
 mod family;
 mod floor;
 mod layered;
@@ -680,6 +683,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
         let plan = crate::room_plan::RoomPlan::of(recipe)?;
         return room::names(op_id(recipe)?, &plan);
     }
+    if crate::column_plan::is_column(recipe) {
+        let plan = crate::column_plan::ColumnPlan::of(recipe)?;
+        return column::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
@@ -867,8 +874,8 @@ impl<E: Engine> Kernel<E> {
         self.band
     }
 
-    /// A floor, a roof or a placed family, each built by its own builder; `None` for any other
-    /// recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
+    /// A floor, a roof, a placed family, a room or a column, each built by its own builder; `None`
+    /// for any other recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
     fn build_other_kind(
         &self,
         host: &Recipe,
@@ -882,6 +889,12 @@ impl<E: Engine> Kernel<E> {
         }
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));
+        }
+        if crate::room_plan::is_room(host) {
+            return Some(self.build_room(host, hosted.len()));
+        }
+        if crate::column_plan::is_column(host) {
+            return Some(self.build_column(host, hosted.len()));
         }
         None
     }
@@ -901,9 +914,6 @@ impl<E: Engine> Kernel<E> {
     ) -> Result<Built, GeometryError> {
         if let Some(built) = self.build_other_kind(host, hosted) {
             return built;
-        }
-        if crate::room_plan::is_room(host) {
-            return self.build_room(host, hosted.len());
         }
         if wall_plan::is_layered(host) {
             let wall = Layered::of(host)?;

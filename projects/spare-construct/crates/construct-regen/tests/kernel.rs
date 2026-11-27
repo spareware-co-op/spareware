@@ -224,6 +224,11 @@ fn a_room_is_its_loop_extruded() {
     kernel_suite::a_room_is_its_loop_extruded(|| Cuboids, false);
 }
 
+#[test]
+fn a_column_is_its_ring_extruded() {
+    kernel_suite::a_column_is_its_ring_extruded(|| Cuboids);
+}
+
 /// A test engine that answers as [`Cuboids`] does, and records every subtraction it is asked for
 /// by the tool's lowest corner, answering it with the target unchanged: it judges what the builder
 /// asks and names, not the shape a cut gives.

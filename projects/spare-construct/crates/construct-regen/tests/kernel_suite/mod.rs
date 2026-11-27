@@ -2667,3 +2667,90 @@ pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -
         usize::from(island)
     );
 }
+
+/// A column's filled recipe (construct-columns' `finish`), as the regenerator writes it: the ring
+/// of a 400 by 400 mm section about (1000, 2000) mm, 3000 mm tall, of concrete.
+pub fn column_of() -> Recipe {
+    let corner = |x: i64, y: i64| json!([x * 6400, y * 6400]);
+    recipe(
+        "column",
+        json!({
+            "ring": [corner(800, 1800), corner(1200, 1800), corner(1200, 2200), corner(800, 2200)],
+            "height": q0(3000 * 6400),
+            "material": "concrete-regular",
+            "grids": ["g1", "ga"],
+        }),
+    )
+}
+
+/// A column is its ring extruded from its base up to its height: one closed solid of its section
+/// by its height (160,000 mm2 by 3000 mm is 480,000,000 mm3), its bounds the stand-in's box, its
+/// outline its ring, one part of its material, its faces named `bottom`, `top` and a side per edge
+/// of the ring; with nothing hosted on it.
+pub fn a_column_is_its_ring_extruded<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let column = column_of();
+    let b = built(&k, &column);
+    assert_eq!(b.bounds.min, [800, 1800, 0]);
+    assert_eq!(b.bounds.max, [1200, 2200, 3000]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&column).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        [[800, 1800], [1200, 1800], [1200, 2200], [800, 2200]]
+    );
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * 160_000 * 3000);
+    assert_eq!(b.displays[0].parts.len(), 1);
+    assert_eq!(b.displays[0].parts[0].material, "concrete-regular");
+    assert_eq!(b.displays[0].parts[0].function, "structure");
+    let names = by_role(&b);
+    assert_eq!(names.len(), 6, "{names:?}");
+    for role in ["bottom", "top", "side.0", "side.3"] {
+        assert!(names.contains_key(role), "{role}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["by"], json!([0, 0, 3000 * 6400]));
+    let stand_in = construct_regen::geometry().build(&column).unwrap();
+    assert_eq!(stand_in.displays[0].parts.len(), 1);
+    assert_eq!(stand_in.displays[0].outline, b.displays[0].outline);
+}
+
+/// A round column's ring is a polygon of 48 corners (the interim, until the kernel's sweep takes
+/// arcs): the engine builds it as one closed solid whose volume is exactly the polygon's area by
+/// its height, within 0.3 per cent of the circle's, and every face named. Only an engine that
+/// extrudes any polygon runs this case.
+pub fn a_round_column_is_a_polygon_solid<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    // 48 corners on a circle of 450 mm across, each the nearest grid step (this file is a test
+    // and may use floats; construct-columns writes the same ring for the same section).
+    let r = 225.0 * 6400.0_f64;
+    let ring: Vec<[i64; 2]> = (0..48)
+        .map(|k| {
+            let at = f64::from(k) * core::f64::consts::TAU / 48.0;
+            [(r * at.cos()).round() as i64, (r * at.sin()).round() as i64]
+        })
+        .collect();
+    let corners: Vec<Value> = ring.iter().map(|[x, y]| json!([x, y])).collect();
+    let column = recipe(
+        "column",
+        json!({
+            "ring": corners,
+            "height": q0(3000 * 6400),
+            "material": "concrete-regular",
+            "grids": [],
+        }),
+    );
+    let b = built(&k, &column);
+    // The mesh is in whole millimetres, each corner the nearest: the volume the mesh holds is the
+    // polygon's within a corner's rounding, and the circle's within 0.3 per cent.
+    let six = signed_six_volume(&b.displays[0].mesh);
+    let circle: i128 = 6 * 159_043 * 3000;
+    let off = (six - circle).abs();
+    assert!(
+        off * 1000 < circle * 5,
+        "{six} against the circle's {circle}"
+    );
+    assert_eq!(by_role(&b).len(), 2 + 48);
+}

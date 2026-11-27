@@ -14,7 +14,7 @@
 )]
 
 use construct_api::cloud::{Access, ProjectCommands};
-use construct_categories::{COLUMNS, CategoryTable, DOORS, GENERIC_MODELS, WALLS};
+use construct_categories::{BEAMS, CategoryTable, DOORS, GENERIC_MODELS, WALLS};
 use construct_model::element::Element;
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Mesh, Recipe,
@@ -599,7 +599,7 @@ async fn commands_are_refused_with_the_data_crates_own_reasons() {
     stack
         .edit(
             "type.create",
-            json!({ "type": "T-column", "name": "Basic", "category": 1100 }),
+            json!({ "type": "T-column", "name": "Basic", "category": 1200 }),
         )
         .await
         .unwrap();
@@ -612,7 +612,7 @@ async fn commands_are_refused_with_the_data_crates_own_reasons() {
             .await,
         Err(TypeError::OtherCategory {
             from: DOORS,
-            to: COLUMNS
+            to: BEAMS
         }
         .to_string())
     );

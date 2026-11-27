@@ -24,6 +24,7 @@ cloud = [
     "dep:construct-openings",
     "dep:construct-roofs",
     "dep:construct-rooms",
+    "dep:construct-columns",
     "dep:construct-phases",
     "dep:construct-styles",
 ]
@@ -60,6 +61,8 @@ construct-openings = { path = "../construct-openings", optional = true }
 construct-roofs = { path = "../construct-roofs", optional = true }
 # The room commands: construct-rooms checks every room.
 construct-rooms = { path = "../construct-rooms", optional = true }
+# The column type and column commands: construct-columns checks every section, height and position.
+construct-columns = { path = "../construct-columns", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
 # The view graphics commands: the pens, line patterns and object styles a rule is checked against.

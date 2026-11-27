@@ -458,5 +458,64 @@
       ],
       "replaced_by": "the room's volume as its prism less what lies above a sloped plane, through the engine seam's boolean, once rooms are bounded by floors, ceilings and roofs (job 6.3)"
     }
+,
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a column",
+      "operation": "column (a filled column recipe: its ring, height and material)",
+      "answered_by": "one box around the column's ring, its sides rounded outward to whole millimetres, from its base at 0 up to its height, by Spare Construct's own code with no engine; its outline is the ring and its deviation the box's plan diagonal, 0 when the column is a rectangle along the axes; one part, of its material",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/columns.rs",
+        "test": "a_column_at_a_point_is_built_from_its_type_and_levels"
+      },
+      "known_faults": [
+        "a turned or round column is its bounding box on the stand-in's edition"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's column builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::column, a column",
+      "operation": "column (Kernel: one Engine::extrude of the ring from the base up to the height)",
+      "answered_by": "the engine behind the Engine trait (solidcore's extrusion on the server's kernel setting), one solid; its mesh in whole millimetres, each point the nearest millimetre, the column's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_column_is_its_ring_extruded"
+      },
+      "known_faults": [
+        "a corner or a height not on a whole millimetre is drawn at the nearest one, its display's deviation 1"
+      ],
+      "replaced_by": "the kernel's own exact extrusion behind the same trait, and display meshes on the kernel's grid"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-columns' Section, a round section",
+      "operation": "column with a round section",
+      "answered_by": "a regular polygon of 48 corners on the circle, each corner the nearest grid step, built as any ring: the engine seam's extrusion takes polygons only; the column's quantities are the polygon's, 0.28 per cent under the circle's area",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_round_column_is_a_polygon_solid"
+      },
+      "known_faults": [
+        "a round column's section area, volume and mass read 0.28 per cent under the true circle's",
+        "a round column's faces are 48 flat sides, not one cylinder"
+      ],
+      "replaced_by": "built once the kernel's exact sweep takes arcs (geom-sweep, chapter 13.4) and the engine seam's extrusion takes an arc edge, under the same tests"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-columns' Section::ring, a turned column",
+      "operation": "column turned by any angle",
+      "answered_by": "each corner the true turn of its offset from the centre, through libm's sine and cosine in a 64-bit float, rounded once to the grid step (half away from zero): within half a step of the true corner plus 2^-24 of a step; quarter turns exact",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-columns/tests/columns.rs",
+        "test": "a_turn_by_any_angle_rounds_each_corner_once"
+      },
+      "known_faults": [
+        "a corner whose exact turn lies within 2^-24 of a step of a half may round the other way from construct-modify's exact turn"
+      ],
+      "replaced_by": "construct-modify's exact rational turn (piece A80, exact::Turn, a bound of 2^-94 of a step), once it is on main and below the builders"
+    }
+
   ]
 }

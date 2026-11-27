@@ -854,7 +854,8 @@ pub async fn recipe_at<R: Reader>(
     })
     .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
     .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref()))
-    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref())))
+    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref()))
+    .and_then(|recipe| crate::columns::filled(&recipe, ty.as_ref())))
 }
 
 /// Whether a recipe reads the document's parameter table and the element's type: it names a
@@ -868,4 +869,5 @@ pub fn reads_records(recipe: &Recipe) -> bool {
         || crate::walls::reads_type(recipe)
         || crate::slabs::reads_type(recipe)
         || crate::roofs::reads_type(recipe)
+        || crate::columns::reads_type(recipe)
 }

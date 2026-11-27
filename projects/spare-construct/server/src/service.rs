@@ -638,6 +638,19 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 view.parameters.extend(room.rows());
             }
         }
+        // A column's height, section area, volume and mass, worked out from its type and levels.
+        view.parameters.extend(
+            construct_regen::columns::view_rows(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                ty.as_ref(),
+                &context.units,
+                records::At::Now,
+            )
+            .await?,
+        );
         Ok(view)
     }
 
@@ -781,6 +794,29 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await?;
         let mut snapshot = self.kv.snapshot().await?;
         cloud::floors::read_floor_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's column types and columns, for the page's column tool and the read-only view: each
+    /// type with its section and material, each column with where it stands, its base and top, its
+    /// turn, whether it built and what it reads back ([`cloud::columns::read_columns`]); where it
+    /// has no type, the page sends `column.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn columns(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::columns::ColumnsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::columns::read_columns(&mut snapshot, project, model)
             .await?
             .map_err(Refusal::Bad)
     }
