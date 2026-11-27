@@ -818,6 +818,12 @@ fn a_flat_roof_is_its_layers() {
 /// A solved roof (job 6.2) on a test engine that keeps each extruded piece: each layer's pieces
 /// are extruded and united in the recipe's order, the body lists them, and the pieces hold the
 /// layer's plan area (24 m2) by its upright height. An engine that cannot unite them says so.
+/// A stair's run is lofted and its landing extruded on the test engine that keeps each loft.
+#[test]
+fn a_stair_is_its_pieces() {
+    kernel_suite::a_stair_is_its_pieces(|| Lofts);
+}
+
 #[test]
 fn a_solved_roof_unites_its_pieces_on_the_engine() {
     use construct_model::geometry::Geometry;

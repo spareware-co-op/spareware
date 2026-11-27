@@ -766,6 +766,7 @@ dependencies = [
  "construct-rooms",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-types",
  "construct-views",
  "construct-walls",
