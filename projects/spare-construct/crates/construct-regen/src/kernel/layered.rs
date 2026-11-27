@@ -622,7 +622,7 @@ pub(super) fn build<E: Engine>(
 /// The plane the side of a strip stands on, from the plan edge `from` to `to` (engine steps) that
 /// sweeps it: the outside is on the right of an edge of a counter-clockwise outline, so the
 /// normal is the edge turned a quarter right (`Kernel::solid` does the same for the old box).
-fn side(from: [i64; 2], to: [i64; 2]) -> Result<GridPlane, GeometryError> {
+pub(super) fn side(from: [i64; 2], to: [i64; 2]) -> Result<GridPlane, GeometryError> {
     let less = |a: i64, b: i64| {
         i128::from(a)
             .checked_sub(i128::from(b))

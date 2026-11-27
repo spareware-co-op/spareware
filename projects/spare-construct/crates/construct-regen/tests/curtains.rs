@@ -258,3 +258,77 @@ fn an_embedded_curtain_wall_stands_on_its_hosts_line_and_cuts_its_opening() {
     assert!(!hosting::is_host(&cw.recipe));
     assert_eq!(hosting::noun(&cw.recipe), "curtain wall");
 }
+
+/// A page is told the grid it edits: every line (both borders and the interior ones, with where
+/// each stands as the exact typed text a command takes and in the document's units, and whether
+/// the wall added it) and every panel (the corner its cell starts at, its size and what it holds),
+/// worked out from the filled recipe, so the page works out no grid of its own.
+#[test]
+fn a_page_is_told_the_grid_it_edits() {
+    use construct_regen::curtains::CurtainView;
+    use serde_json::json;
+    let units = construct_params::Units::default();
+    let q0 = |mm: i64| format!("length:q0:{}", mm * 6400);
+    let (content, _) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.single-swing-door")
+        .unwrap();
+    let grid = json!({
+        "added": { "vertical": [q0(750)], "horizontal": [] },
+        "removed": { "vertical": [], "horizontal": [] },
+        "omitted": [],
+        "panels": [{ "at": [q0(750), q0(0)],
+            "panel": { "kind": "door", "family": content.as_str(), "type": "d900x2100" } }],
+    });
+    let wall = curtain([6000, 0], 3000, &curtain_spec(1500, 1000, true), Some(grid));
+    let view = CurtainView::of(&wall, &units).unwrap();
+    // Vertical: both borders and lines at 750 (added), 1500, 3000 and 4500 mm; horizontal: both
+    // borders and lines at 1 m and 2 m.
+    assert_eq!(view.lines.len(), 6 + 4);
+    let at: Vec<(&str, &str, bool, bool)> = view
+        .lines
+        .iter()
+        .map(|l| (l.direction, l.at.as_str(), l.border, l.added))
+        .collect();
+    assert_eq!(
+        at,
+        [
+            ("vertical", "0 mm", true, false),
+            ("vertical", "750 mm", false, true),
+            ("vertical", "1500 mm", false, false),
+            ("vertical", "3000 mm", false, false),
+            ("vertical", "4500 mm", false, false),
+            ("vertical", "6000 mm", true, false),
+            ("horizontal", "0 mm", true, false),
+            ("horizontal", "1000 mm", false, false),
+            ("horizontal", "2000 mm", false, false),
+            ("horizontal", "3000 mm", true, false),
+        ]
+    );
+    assert_eq!(view.lines[2].shown, "1500 mm");
+    assert_eq!(view.lines[2].segments.len(), 3);
+    assert_eq!(view.lines[2].segments[0].from, "0 mm");
+    assert!(!view.lines[2].segments[0].omitted);
+    // 5 columns by 3 rows.
+    assert_eq!(view.panels.len(), 15);
+    let door = view
+        .panels
+        .iter()
+        .find(|p| p.kind == "door")
+        .expect("the swapped panel");
+    assert_eq!(door.at, ["750 mm", "0 mm"]);
+    assert!(door.swapped);
+    assert_eq!(door.door.as_ref().unwrap()[0], content.as_str());
+    assert_eq!(
+        view.panels.iter().filter(|p| p.kind == "glazed").count(),
+        14
+    );
+    assert_eq!(view.unused, Vec::<String>::new());
+    // What is not a curtain wall has no grid.
+    assert!(
+        CurtainView::of(
+            &layered_wall([0, 0], [1000, 0], 2700, &kernel_suite::PARTITION),
+            &units
+        )
+        .is_none()
+    );
+}

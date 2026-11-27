@@ -171,7 +171,8 @@ Before it is built the recipe is filled from the roof type and its shape worked 
 
 Before it is built the recipe is filled from the curtain wall type ([`curtains`](../construct-regen/src/curtains.rs), through [`parameters::recipe_at`](../construct-regen/src/parameters.rs)) and its top tie read. An embedded one is seated on its host's reference line from `@host.along`, `@host.up` above its host's base, and its host is built with the plain opening it cuts, its length by its height through the host's whole thickness ([`hosting`](../construct-regen/src/hosting.rs)). Where every line, panel and mullion stands, every solid, and what a curtain wall reads back (its length, height, area, panels and their area, glazed area, and mullions and their length) are worked out whenever they are read, and never stored.
 
-**What the page reads for curtain walls.** A model's curtain wall types, each with its grid and parts as `curtain.type.create` takes them, the materials with the colours a view draws them in, and the default types (`/api/projects/<project>/models/<model>/curtain-types`); where it has none the page sends `curtain.defaults`.
+**What the page reads for curtain walls.** A model's curtain wall types, each with its grid and parts as `curtain.type.create` takes them, the materials with the colours a view draws them in, and the default types (`/api/projects/<project>/models/<model>/curtain-types`); where it has none the page sends `curtain.defaults`. For a curtain wall, `/filled/<element>` adds `curtain` (every grid line and every panel as it is laid out now, each place as the exact text a command takes and in the document's units; worked out whenever it is read, never stored) and, for one embedded in a wall, the recipe as seated with its line written in, `placement` (where its record stands in the model) and `cut` (the opening, `opening.wall`, its host is built with, and where it is in the host's frame).
+
 
 ### Rooms
 

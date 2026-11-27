@@ -45,7 +45,8 @@
 //!   its family stands, read from its filled recipe. The kernel builds one solid per panel and
 //!   mullion, the stand-in one box with each drawn as a part.
 //! - [`curtains`]: how a curtain wall's recipe reads its grid and parts from its curtain wall
-//!   type, filled with the parameters by [`parameters::recipe_at`], and its read-only quantities.
+//!   type, filled with the parameters by [`parameters::recipe_at`], its read-only quantities, and
+//!   [`curtains::CurtainView`], the grid a page edits by (every line and panel as laid out).
 //!
 //! - [`voids`]: the display shape of an opening and a shaft (job 4.2), which have no solid; both
 //!   builders hand a void's recipe to it first, as a datum's. What one cuts is its host's builder's.

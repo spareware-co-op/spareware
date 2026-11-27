@@ -500,6 +500,20 @@
         "a curtain wall as high as its wall, or reaching its end, which would cut the wall in two, is refused as such an opening is, since Engine::subtract gives one solid"
       ],
       "replaced_by": "the kernel's own exact boolean difference (geom-bool) behind the same trait, and a wall built from every piece Engine::subtract_pieces leaves"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::curtain::solids (Kernel::layers), a curtain wall cut by a plan",
+      "operation": "section of wall.curtain by a plan's plane (Kernel::layers: one solid for each glazed or solid panel and each mullion, each with its material and its six faces named by its key; the plan's cut by Engine::section)",
+      "answered_by": "the engine behind the Engine trait (solidcore's section on the server's kernel setting): each panel and mullion extruded by make.prism as the builder does, cut one at a time, its edges named by the faces of its own solid",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "the_plan_cuts_a_curtain_wall_and_the_page_is_told_where_it_stands"
+      },
+      "known_faults": [
+        "a door panel's family is not cut: the engine seam has no move of a solid, so its solids cannot be put where its panel stands, and its cell is empty in the plan's cut"
+      ],
+      "replaced_by": "the kernel's own exact section, and a move of a solid by a grid vector behind the same trait, so a door panel's solids are cut where it stands"
     }
   ]
 }

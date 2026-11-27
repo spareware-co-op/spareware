@@ -1,6 +1,6 @@
 # CON-A4-F6-P1: Curtain walls, grids, panels and mullions (first half)
 
-**Status, 2026-11-28:** Decided for the build (piece A84, the data and shape half of job 14.1). The crate `construct-curtain` follows it and its [FORMAT.md](../crates/construct-curtain/FORMAT.md) is the stored form; construct-regen's `curtain_plan` and `curtains` read a curtain wall for both builders, and construct-api's `cloud::curtains` holds its commands. The page's curtain wall tool, its drawing in plan and 3D and its two-browser section are the second half.
+**Status, 2026-11-28:** Decided for the build (piece A84, job 14.1). The crate `construct-curtain` follows it and its [FORMAT.md](../crates/construct-curtain/FORMAT.md) is the stored form; construct-regen's `curtain_plan` and `curtains` read a curtain wall for both builders, and construct-api's `cloud::curtains` holds its commands. The page's curtain wall tool, its drawing in plan and 3D and its two-browser section are in "The page" below.
 
 ## The question
 
@@ -25,6 +25,14 @@ A curtain wall is a light frame hung on the building: vertical and horizontal me
 - **Joins.** The main branch has no wall joins yet (L and T joins of layered walls come with job 5.1's train); a curtain wall's ends are square at its line's ends, and walls meet it as they meet each other today.
 - **What it reads back** (read-only parameters, worked out each time, never stored): its length, height and area (length by height), how many panels and their area (each its own, between the mullions' faces), the glazed panels' area, and how many mullions and their length (each its run after the crossings). Worked by hand: 6 m by 3 m at 1.5 m by 1 m is 12 panels of 1.5 by 1 m (18 m2) with no mullions; with 50 mm mullions on every line and border, the vertical ones running through, 12 panels of 16.1 m2 in all and 31 mullions of 38 m in all. (The same wall at 1.5 m by 1.5 m is 8 panels.)
 
+## The page (the second half)
+
+- **The tool and the palette.** The Curtain Wall tool, beside Roof in the Build panel, draws between two clicked points as the Wall tool does (`curtain.draw`) or, in its Embed mode, embeds a curtain wall in the layered wall that is clicked (`curtain.embed`: the side clicked, the click the middle of the curtain wall, its length, height and height up the wall typed). A selected curtain wall lists what the server works out of it (read-only), its type (`curtain.retype`), its interior grid lines with Remove (`curtain.grid.remove`) and a field to add one (`curtain.grid.add`), each line's segments to leave out or keep (`curtain.segment.omit`, `curtain.segment.restore`), and for each panel a list to swap it for glazed, solid, empty, a door of the library or the type's own (`curtain.panel`). The page works out no grid: `/filled/<element>` answers with `curtain`, every line and every panel as the server laid them out, each place both as the exact text a command takes and in the document's units.
+- **An embedded curtain wall** is filled by the server as the regenerator seats it: `/filled/<element>` answers with the recipe as seated (its line written in), `placement` (where its record stands) and `cut` (the opening its host is built with), so the page builds the curtain wall and its host as the server does and works out no wall line of its own.
+- **Drawing.** In plan and in 3D a curtain wall is each panel and mullion of its display, in its material's colour. The server's plan drawing cuts it one part at a time (`Kernel::layers` answers a solid for each glazed or solid panel and each mullion, its faces named by its key): every part's cut edges, glass hatched in its material. A door panel's family is not cut there (interim register, the plan cut's row).
+- **Joins.** Train 10's wall joins (A60) join layered walls to each other; a curtain wall's ends stay square at its line's ends and a wall meets them as it meets any other end, as decided above.
+
 ## Not decided here
 
-The page's tool and drawing (the second half); a profile other than a rectangle; a grid line's own angle or offset; curtain systems on faces and sloped glazing (CON-A4-F6-P2); rooms bounded by curtain walls (construct-rooms reads layered walls only); the drawing cuts of a curtain wall in plan and section (construct-regen's `Kernel::layers`).
+The profile of a mullion other than a rectangle; a grid line's own angle or offset; curtain systems on faces and sloped glazing (CON-A4-F6-P2); rooms bounded by curtain walls (construct-rooms reads layered walls only); a door panel's family cut in the plan; a full-height embedded curtain wall.
+

@@ -2197,5 +2197,224 @@ if (withKernel) {
 }
 pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
 
+
+console.log('\n   Curtain walls');
+// Anna draws a curtain wall of the Storefront type with the curtain wall tool, six metres along and
+// 2.2 m high; Ben sees its panels and mullions drawn from the display the server's shapes agree with.
+// She picks it, reads what the server works out of it and lets go. Ben picks it and adds a vertical
+// grid line from the palette: both browsers draw the new panel and read the new count. Ben lets go;
+// Anna swaps one panel for a door of the library and both draw the door; Ben's undo is turned back
+// because the wall has been changed since. Anna's own undo takes the door back, and then Ben's undo
+// takes the grid line away and his redo puts it back. Anna deletes the wall and undoes the delete.
+// Last she draws a wall and embeds a curtain wall in it by picking it, and both browsers draw it
+// inside that wall, where the server seats it. Nobody changes what the other touched in the last 30 s
+// without the other letting go first, and an undo or a redo claims the element it writes too.
+const cwHome = async (page) => {
+  await toArchitecture(page);
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+await cwHome(anna);
+await cwHome(ben);
+const cwKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:curtain"]');
+const cwTypeField = '#pv-side select[data-key="curtain-type"]';
+await anna.waitForSelector(`${cwTypeField} option[value="curtain-storefront"]`, { state: 'attached' });
+check(
+  (await asAnna('curtain-types')).types.length === 3 && (await anna.locator(`${cwTypeField} option`).count()) === 3,
+  'the curtain wall tool has the server make its default curtain wall types through the log, and offers them',
+);
+await anna.locator(cwTypeField).selectOption({ label: 'Storefront' });
+await anna.locator('#pv-side select[data-key="curtain-top"]').selectOption({ label: 'A height' });
+await anna.locator('#pv-side input[data-key="curtain-height"]').fill('2200 mm');
+await anna.locator('#pv-side input[data-key="curtain-height"]').press('Enter');
+const cwFrom = await onPlan(anna, 0, 10000);
+const cwTo = await onPlan(anna, 6000, 10000);
+await anna.mouse.click(cwFrom.x, cwFrom.y);
+await anna.mouse.click(cwTo.x, cwTo.y);
+const cwOf = (known) => [...window.spare.elements.values()].find((p) => p.el.kind === 'curtain' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cwOf, cwKnown);
+const cwId = await ben.evaluate(cwOf, cwKnown);
+await anna.keyboard.press('Escape');
+const cwParts = ([id, what, count]) =>
+  document.querySelectorAll(`g.element[data-id="${id}"] polygon.part[data-function${what}]`).length === count;
+const cwGlazed = (id, count) => [id, '="panel.glazed"', count];
+const cwPanels = async () => Number.parseInt((await asAnna(`parameters/${cwId}`)).parameters.find((p) => p.id === 'curtain.panels')?.shown, 10);
+await until(cwPanels, (count) => count === 5, 'the server counts five panels in the curtain wall');
+for (const page of [anna, ben]) await page.waitForFunction(cwParts, cwGlazed(cwId, 5));
+const cwRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cwId);
+check(
+  cwRecord.kind === 'curtain' &&
+    cwRecord.recipe.op === 'wall.curtain' &&
+    cwRecord.props['@type'] === 'curtain-storefront' &&
+    cwRecord.recipe.args.curtain.type === 'curtain',
+  "Anna's curtain wall is in Ben's browser: its own kind, of the Storefront type, reading its grid from its type",
+);
+pass('both browsers draw its five glazed panels, each the server\'s own, and the mullions between them');
+await shot(anna, 'anna-curtain-wall');
+
+// She picks it: the palette lists what the server works out of it, its grid lines and its panels.
+const cwPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector('#pv-side [data-curtain-element]');
+};
+const cwLetGo = (page) => page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await cwPick(anna, cwId);
+await anna.waitForSelector('#pv-side [data-read-only="curtain.panels"]');
+check(
+  (await anna.locator('#pv-side [data-read-only="curtain.panels"]').textContent()) === '5' &&
+    (await anna.locator('#pv-side [data-curtain-lines] button').count()) === 4 &&
+    (await anna.locator('#pv-side [data-curtain-panels] select').count()) === 5,
+  'the palette reads five panels from the server, lists the four lines inside the wall to remove and a swap list for each panel',
+);
+await cwLetGo(anna);
+await ben.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+
+// Ben adds a vertical line half way along the first column: one more panel, in both browsers.
+await cwPick(ben, cwId);
+await ben.locator('#pv-side select[data-key="curtain-line-direction"]').selectOption('vertical');
+await ben.locator('#pv-side input[data-key="curtain-line-at"]').fill('600 mm');
+await ben.locator('#pv-side input[data-key="curtain-line-at"]').press('Enter');
+await until(cwPanels, (count) => count === 6, 'the server counts six panels once Ben has added a line');
+for (const page of [anna, ben]) await page.waitForFunction(cwParts, cwGlazed(cwId, 6));
+await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="curtain.panels"]')?.textContent === '6');
+check(
+  (await ben.locator('#pv-side [data-curtain-lines] button').count()) === 5,
+  "Ben adds a vertical line at 600 mm: both browsers draw the new panel, and Ben's palette reads six panels and lists the new line",
+);
+await shot(ben, 'ben-curtain-line');
+await cwLetGo(ben);
+await anna.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+
+// Anna swaps the panel that starts at 1200 mm for a door of the library; both browsers draw the door.
+await cwPick(anna, cwId);
+const cwSwap = '#pv-side select[data-key="curtain-panel:1200 mm:0 mm"]';
+await anna.waitForSelector(cwSwap);
+const cwDoor = await anna.locator(cwSwap).evaluate((select) => [...select.options].find((o) => o.value.startsWith('door:'))?.value);
+check(Boolean(cwDoor), "the swap list offers the library's door types");
+await anna.locator(cwSwap).selectOption({ value: cwDoor });
+await until(
+  async () => (await asAnna(`filled/${cwId}`)).curtain?.panels.find((p) => p.at[0] === '1200 mm' && p.at[1] === '0 mm')?.kind,
+  (kind) => kind === 'door',
+  'the server holds the swapped panel as a door',
+);
+const cwDoorParts = (id) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part[data-function^="door."]`).length > 0;
+for (const page of [anna, ben]) {
+  await page.waitForFunction(cwParts, cwGlazed(cwId, 5));
+  await page.waitForFunction(cwDoorParts, cwId);
+}
+pass("Anna swaps a panel for a door: both browsers draw the door's parts in its place, and one panel fewer of glass");
+await shot(anna, 'anna-curtain-door');
+await cwLetGo(anna);
+await ben.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+
+// Ben's undo is his grid line, but Anna has changed the wall since: it is turned back in words.
+await ben.click('#qat [data-act="stackundo"]');
+await ben.waitForFunction(() => document.getElementById('toast-m').textContent.includes('Anna has changed'));
+check(
+  (await cwPanels()) === 6 && (await ben.evaluate(cwDoorParts, cwId)),
+  "Ben's undo is turned back with the server's words, because Anna changed the wall since, and changes nothing",
+);
+
+// Her own undo takes the door out; then his takes the line away, and his redo puts it back.
+await anna.click('#qat [data-act="stackundo"]');
+for (const page of [anna, ben]) {
+  await page.waitForFunction(cwParts, cwGlazed(cwId, 6));
+  await page.waitForFunction((id) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part[data-function^="door."]`).length === 0, cwId);
+}
+pass("Anna's undo takes the door out and the glass panel is back, in both browsers");
+await cwPick(anna, cwId);
+await cwLetGo(anna);
+await ben.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+await ben.click('#qat [data-act="stackundo"]');
+await until(cwPanels, (count) => count === 5, "the server counts five panels once Ben's undo has taken his line away");
+for (const page of [anna, ben]) await page.waitForFunction(cwParts, cwGlazed(cwId, 5));
+pass("Ben's undo takes his grid line away, and both browsers draw five panels");
+await ben.click('#qat [data-act="stackredo"]');
+await until(cwPanels, (count) => count === 6, "the server counts six panels once Ben's redo has put his line back");
+for (const page of [anna, ben]) await page.waitForFunction(cwParts, cwGlazed(cwId, 6));
+pass('his redo puts the line back, and both browsers draw six panels');
+await cwPick(ben, cwId);
+await cwLetGo(ben);
+await anna.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+
+// Anna deletes the curtain wall and undoes the delete.
+await cwPick(anna, cwId);
+await anna.keyboard.press('Delete');
+for (const page of [anna, ben]) await page.waitForSelector(`g.element[data-id="${cwId}"]`, { state: 'detached' });
+await anna.click('#qat [data-act="stackundo"]');
+for (const page of [anna, ben]) await page.waitForFunction(cwParts, cwGlazed(cwId, 6));
+pass('Anna deletes the curtain wall and it goes in both browsers; her undo brings it back with its six panels');
+await cwPick(anna, cwId);
+await cwLetGo(anna);
+await ben.waitForFunction((id) => !window.spare.claims.has(id), cwId);
+
+// A wall of Anna's, and a curtain wall embedded in it by picking it.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const cwWallKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+const cwWallFrom = await onPlan(anna, 7000, 10300);
+const cwWallTo = await onPlan(anna, 11000, 10300);
+await anna.mouse.click(cwWallFrom.x, cwWallFrom.y);
+await anna.mouse.click(cwWallTo.x, cwWallTo.y);
+const cwWallOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cwWallOf, cwWallKnown);
+const cwWall = await ben.evaluate(cwWallOf, cwWallKnown);
+await anna.keyboard.press('Escape');
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:curtain"]');
+await anna.locator('#pv-side select[data-key="curtain-mode"]').selectOption('embed');
+await anna.locator('#pv-side input[data-key="curtain-length"]').fill('1200');
+await anna.locator('#pv-side input[data-key="curtain-length"]').press('Enter');
+const cwWallBox = await box(anna, cwWall);
+const cwKnownNow = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.mouse.click(cwWallBox.x + cwWallBox.width / 2, cwWallBox.y + cwWallBox.height / 2);
+await ben.waitForFunction(cwOf, cwKnownNow);
+const cwEmbedded = await ben.evaluate(cwOf, cwKnownNow);
+await anna.keyboard.press('Escape');
+const cwEmbeddedRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cwEmbedded);
+check(
+  cwEmbeddedRecord.references[0]?.kind === 'face' &&
+    cwEmbeddedRecord.references[0].element === cwWall &&
+    /^length:q0:/.test(cwEmbeddedRecord.props['@host.along']) &&
+    cwEmbeddedRecord.recipe.args.length === `length:q0:${1200 * 6400}`,
+  "the curtain wall Anna embeds is in Ben's browser: hosted on a named face of her wall, 1200 mm long",
+);
+const cwEmbeddedDrawn = (id) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+for (const page of [anna, ben]) await page.waitForFunction(cwEmbeddedDrawn, cwEmbedded);
+for (const page of [anna, ben]) {
+  const inside = await box(page, cwEmbedded);
+  const host = await box(page, cwWall);
+  check(
+    inside.x >= host.x - 1 &&
+      inside.x + inside.width <= host.x + host.width + 1 &&
+      inside.y < host.y + host.height &&
+      inside.y + inside.height > host.y,
+    'it is drawn inside the wall it is embedded in, along its line, where the server seats it',
+  );
+}
+await shot(ben, 'ben-curtain-embedded');
+if (withKernel) {
+  const cwCut = (names) => names.some((n) => n.role === `tool(${cwEmbedded}).head`);
+  await until(async () => (await asAnna(`shape/${cwWall}`)).built.result.shape?.names ?? [], cwCut, 'the server cuts the wall for the curtain wall');
+  await ben.waitForFunction(
+    ([wall, id]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${id}).head`),
+    [cwWall, cwEmbedded],
+  );
+  pass("the embedded curtain wall cuts its wall, on the server and as Ben's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the wall's cut)");
+}
+const cwFresh = await signIn('anna');
+await cwFresh.waitForFunction(cwParts, cwGlazed(cwId, 6));
+await cwFresh.waitForFunction(cwEmbeddedDrawn, cwEmbedded);
+pass('a fresh load draws both curtain walls as the open pages do');
+await cwFresh.context().close();
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
+}
 await browser.close();
 console.log('\nThe browser checks passed.');

@@ -44,8 +44,8 @@
 //!
 //! Not here, each with its place: curved curtain walls (job 14.4, with curved walls); curtain
 //! systems on faces and sloped glazing (CON-A4-F6-P2); a mullion profile other than a rectangle (a
-//! new [`Profile`] shape, a new stored version); the page's curtain wall tool and its drawing in
-//! plan and 3D (the second half of piece A84).
+//! new [`Profile`] shape, a new stored version). The page's curtain wall tool and its drawing are
+//! in `app/connect.js` (the second half of piece A84).
 
 pub mod curtain_type;
 pub mod defaults;

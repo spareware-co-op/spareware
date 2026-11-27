@@ -29,8 +29,11 @@
 //! and a door panel's solids are built at the family's origin and moved only in their meshes,
 //! since the engine seam has no move (the body's bytes list where each door stands).
 
-use super::layered::{Extent, append, empty};
-use super::{Units, WALL_ROLES, as_steps, fault, from_engine, name, op_id};
+use super::layered::{Extent, append, empty, side};
+use super::{
+    KernelSolid, LayerSolid, NamedFace, Units, WALL_ROLES, as_steps, carrier, fault, from_engine,
+    name, op_id,
+};
 use crate::curtain_plan::{CurtainPlan, DOOR_HEIGHT, DOOR_WIDTH, PlanDoor};
 use crate::families::{self, FamilySource, Instance};
 use construct_families::{Key, Limits, evaluate_turned};
@@ -308,4 +311,87 @@ pub(super) fn build<E: Engine>(
         names: names(recipe)?,
         displays,
     })
+}
+
+/// The solids of a curtain wall for a drawing to cut: one for each glazed or solid panel and each
+/// mullion, each with its material and the plane of each of its six faces, named by its key
+/// (`<key>.base`, `<key>.top` and `<key>.side.<k>`, `k` the corner the side starts at). A door
+/// panel's family is not among them: the engine seam has no move, so its solids cannot be put
+/// where its panel stands (the interim register's curtain wall row), and its cell is empty in the
+/// cut. A wall's own openings are not cut in them.
+///
+/// # Errors
+///
+/// `EmptyShape` for a curtain wall with no panel with a slab and no mullion; the engine's own.
+pub(super) fn solids<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    plan: &CurtainPlan,
+    units: Units,
+) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+    let op = op_id(recipe)?;
+    let mut found = Vec::with_capacity(plan.solids.len());
+    for solid in &plan.solids {
+        let [z0, z1] = [units.from_q0(solid.z[0])?, units.from_q0(solid.z[1])?];
+        let rise = z1.checked_sub(z0).ok_or_else(super::too_big)?;
+        let mut steps = Vec::with_capacity(4);
+        for &[x, y] in &solid.corners {
+            steps.push([units.from_q0(x)?, units.from_q0(y)?]);
+        }
+        let mut outer = Vec::with_capacity(4);
+        for &[x, y] in &steps {
+            outer.push(P3::new(x, y, z0).map_err(|_| super::too_big())?);
+        }
+        let made = engine
+            .extrude(
+                &Profile {
+                    outer,
+                    holes: Vec::new(),
+                },
+                [0, 0, rise],
+            )
+            .map_err(|e| {
+                let e = from_engine(e);
+                fault(
+                    &e.code,
+                    format!("{} {}: {}", solid.function, solid.key, e.message),
+                )
+            })?;
+        let named = |role: &str| name(op, &format!("{}.{role}", solid.key));
+        let mut faces = vec![
+            NamedFace {
+                plane: carrier(
+                    [0, 0, -1],
+                    0_i128
+                        .checked_sub(i128::from(z0))
+                        .ok_or_else(super::too_big)?,
+                )?,
+                name: named("base")?,
+            },
+            NamedFace {
+                plane: carrier([0, 0, 1], i128::from(z1))?,
+                name: named("top")?,
+            },
+        ];
+        for (k, &from) in steps.iter().enumerate() {
+            let next = k.checked_add(1).and_then(|n| n.checked_rem(4)).unwrap_or(0);
+            let to = steps.get(next).copied().ok_or_else(super::too_big)?;
+            faces.push(NamedFace {
+                plane: side(from, to)?,
+                name: named(&format!("side.{k}"))?,
+            });
+        }
+        found.push(LayerSolid {
+            function: solid.function.to_owned(),
+            material: Some(solid.material.clone()),
+            solid: KernelSolid { solid: made, faces },
+        });
+    }
+    if found.is_empty() {
+        return Err(fault(
+            "EmptyShape",
+            "a curtain wall with every panel empty or holding a door, and no mullion, has nothing to cut",
+        ));
+    }
+    Ok(found)
 }

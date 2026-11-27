@@ -623,6 +623,56 @@ fn a_layered_walls_layers_are_solids_with_their_faces_named() {
     assert!(boxed[0].material.is_none());
 }
 
+/// A drawing cuts a curtain wall one part at a time: a solid for each panel with a slab and each
+/// mullion, in the order the wall's display lists them, each with its part's word and material and
+/// a plane for each of its six faces, named by its key, so no two faces of the wall are called
+/// alike. Every side's plane holds the two corners of the edge that sweeps it, and its base and
+/// top stand at the heights the part's box does. A door panel adds none.
+#[test]
+fn a_curtain_walls_parts_are_solids_with_their_faces_named() {
+    use construct_regen::kernel::Kernel;
+    use std::collections::BTreeSet;
+    let k = Kernel::new(Prisms).unwrap();
+    let wall = kernel_suite::curtain(
+        [6000, 0],
+        3000,
+        &kernel_suite::curtain_spec(1500, 1000, true),
+        None,
+    );
+    let layers = k.layers(&wall).unwrap();
+    assert_eq!(layers.len(), 12 + 31);
+    let built = construct_regen::geometry().build(&wall).unwrap();
+    let mut names = BTreeSet::new();
+    for (at, layer) in layers.iter().enumerate() {
+        let part = &built.displays[0].parts[at];
+        assert_eq!(layer.function, part.function, "part {at}");
+        assert_eq!(layer.material.as_deref(), Some(part.material.as_str()));
+        let faces = &layer.solid.faces;
+        assert_eq!(faces.len(), 6, "part {at}");
+        for face in faces {
+            assert!(
+                names.insert(face.name.name.clone()),
+                "part {at}: a name twice"
+            );
+        }
+        let corners = &layer.solid.solid.corners;
+        for face in faces.iter().filter(|f| f.plane.normal[2] == 0) {
+            let [nx, ny, _] = face.plane.normal;
+            let held = |c: &[i64; 2]| i128::from(c[0]) * nx + i128::from(c[1]) * ny;
+            let on = corners
+                .iter()
+                .filter(|c| held(c) == face.plane.offset)
+                .count();
+            let outside = corners
+                .iter()
+                .filter(|c| held(c) > face.plane.offset)
+                .count();
+            assert_eq!((on, outside), (2, 0), "part {at}, {}", face.name.role);
+        }
+    }
+    assert_eq!(names.len(), 43 * 6);
+}
+
 /// A test engine that answers an extrusion as [`Cuboids`] does, and a loft of two sections the
 /// second of which is the first moved by one vector, which it keeps as the prism it is and meshes
 /// as its two ends (each cut into triangles by clipping ears, so a section need not be convex) and

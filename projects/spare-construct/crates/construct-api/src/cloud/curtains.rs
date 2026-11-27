@@ -1217,3 +1217,78 @@ pub async fn read_curtain_types<R: Reader>(
         defaults,
     }))
 }
+
+/// Where an embedded curtain wall stands and what it cuts, as the regenerator seats it
+/// ([`construct_regen::hosting`]): what a page needs to build it and its host, and a drawing to
+/// cut it, without working out where a wall's line is itself.
+#[derive(Clone, Debug)]
+pub struct Seat {
+    /// Where its record stands in the model: its host's placement and its own height above it.
+    pub placement: Placement,
+    /// Its filled recipe with its line written in (the host's reference line, from where it
+    /// starts for its length).
+    pub recipe: Recipe,
+    /// What it cuts in its host: where the opening is in the host's frame, and its recipe
+    /// (`opening.wall`).
+    pub cut: (Placement, Recipe),
+}
+
+/// The seat of the curtain wall `record`, whose filled recipe is `filled`: none for a curtain wall
+/// that is not embedded. The inner error is why it cannot be seated, in words.
+///
+/// # Errors
+/// A store error.
+pub async fn read_seat<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    record: &Element,
+    filled: &Recipe,
+) -> Result<Result<Option<Seat>, String>, StoreError> {
+    if !construct_curtain::is_embedded(filled) {
+        return Ok(Ok(None));
+    }
+    let hosting = match placing::read(record) {
+        Ok(Some(hosting)) => hosting,
+        Ok(None) => return Ok(Err("it is hosted on no wall".to_owned())),
+        Err(e) => return Ok(Err(e)),
+    };
+    let Some((_, host)) = records::read_element(reader, project, document, hosting.host()).await?
+    else {
+        return Ok(Err(format!(
+            "its wall {} is not in this model",
+            hosting.host()
+        )));
+    };
+    let host_recipe =
+        match shape_levels::recipe_at(reader, project, document, &host, At::Now).await? {
+            Ok(recipe) => recipe,
+            Err(e) => return Ok(Err(e.message)),
+        };
+    let place = construct_model::keys::Place::Model {
+        project: project.clone(),
+        model: document.clone(),
+    };
+    let model: Option<construct_model::rows::Model> =
+        kit_store::read_row(reader, &place.key()).await?;
+    let Some(model) = model else {
+        return Ok(Err("this document has no edition".to_owned()));
+    };
+    let edition = model.edition;
+    let seated = placing::seat(&edition, &host, &host_recipe, record, filled, &hosting)
+        .and_then(|(at, recipe)| Ok((placing::in_model(host.placement, at)?, recipe)));
+    let (placement, recipe) = match seated {
+        Ok(found) => found,
+        Err(e) => return Ok(Err(e.message)),
+    };
+    let cut = match placing::cut_of(&edition, &host, &host_recipe, record, filled, &hosting) {
+        Ok(Some(cut)) => cut,
+        Ok(None) => return Ok(Err("it cuts no opening".to_owned())),
+        Err(e) => return Ok(Err(e.message)),
+    };
+    Ok(Ok(Some(Seat {
+        placement,
+        recipe,
+        cut,
+    })))
+}

@@ -112,6 +112,27 @@ pub struct FilledView {
     /// For a room, what became of it and what it measures, in the document's units.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room: Option<construct_regen::rooms::RoomView>,
+    /// For a curtain wall, its grid as it is laid out now (every line and panel, for the page to edit
+    /// by), in the document's units.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curtain: Option<construct_regen::curtains::CurtainView>,
+    /// For a curtain wall embedded in a wall, where its record stands in the model: its host's
+    /// place and its own height above it. Its `recipe` is then its recipe as seated, with its line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<construct_model::element::Placement>,
+    /// For a curtain wall embedded in a wall, what it cuts in its host: the opening's place in the
+    /// host's frame and its recipe, as the host's builder is handed it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut: Option<FilledCut>,
+}
+
+/// What an embedded curtain wall cuts in its host ([`cloud::curtains::Seat`]).
+#[derive(Serialize, Debug)]
+pub struct FilledCut {
+    /// Where the opening is, in the host's frame, in whole millimetres.
+    pub placement: construct_model::element::Placement,
+    /// The opening's recipe.
+    pub recipe: construct_model::geometry::Recipe,
 }
 
 const NO_DRAWER: &str =
@@ -175,10 +196,22 @@ async fn to_draw<R: Reader>(
     else {
         return Ok(Err("it has no category".to_owned()));
     };
-    let recipe = match levels::recipe_at(reader, project, model, record, records::At::Now).await? {
-        Ok(recipe) => recipe,
-        Err(failed) => return Ok(Err(failed.message)),
-    };
+    let mut recipe =
+        match levels::recipe_at(reader, project, model, record, records::At::Now).await? {
+            Ok(recipe) => recipe,
+            Err(failed) => return Ok(Err(failed.message)),
+        };
+    // A curtain wall embedded in a wall is drawn where it is seated there.
+    let mut placement = record.placement;
+    if let Some(seat) =
+        match cloud::curtains::read_seat(reader, project, model, record, &recipe).await? {
+            Ok(seat) => seat,
+            Err(why) => return Ok(Err(why)),
+        }
+    {
+        recipe = seat.recipe;
+        placement = seat.placement;
+    }
     let base = match one.elevation.as_deref().map(StoredValue::from_stored) {
         None => 0,
         Some(Some(StoredValue::Length(length)))
@@ -192,7 +225,6 @@ async fn to_draw<R: Reader>(
             ));
         }
     };
-    let mut placement = record.placement;
     let Some(z) = placement.z.checked_add(base) else {
         return Ok(Err("it stands too high to be drawn".to_owned()));
     };
@@ -203,6 +235,42 @@ async fn to_draw<R: Reader>(
         placement,
         recipe,
     }))
+}
+
+/// A curtain wall's part of its filled view: its grid as it is laid out, and, embedded in a wall,
+/// where it stands there (its recipe as seated, its place, and the opening it cuts), so the page
+/// builds what the regenerator builds. Nothing for any other element.
+async fn add_curtain<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    view: &mut FilledView,
+) -> Result<(), StoreError> {
+    let Some(filled) = view
+        .recipe
+        .clone()
+        .filter(construct_regen::curtain_plan::is_curtain)
+    else {
+        return Ok(());
+    };
+    view.curtain = construct_regen::curtains::CurtainView::of(&filled, &Units::default());
+    match cloud::curtains::read_seat(reader, project, model, record, &filled).await? {
+        Ok(None) => {}
+        Ok(Some(seat)) => {
+            view.recipe = Some(seat.recipe);
+            view.placement = Some(seat.placement);
+            view.cut = Some(FilledCut {
+                placement: seat.cut.0,
+                recipe: seat.cut.1,
+            });
+        }
+        Err(message) => {
+            view.recipe = None;
+            view.failed = Some(json!({ "code": "BadCurtain", "message": message }));
+        }
+    }
+    Ok(())
 }
 
 /// An area of a level.
@@ -910,6 +978,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                             failed: None,
                             cut_by: None,
                             room: Some(room),
+                            curtain: None,
+                            placement: None,
+                            cut: None,
                         },
                         Err(failed) => FilledView {
                             head,
@@ -917,6 +988,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                             failed: Some(json!({ "code": failed.code, "message": failed.message })),
                             cut_by: None,
                             room: Some(room),
+                            curtain: None,
+                            placement: None,
+                            cut: None,
                         },
                     }
                 }
@@ -926,6 +1000,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
                     cut_by: None,
                     room: None,
+                    curtain: None,
+                    placement: None,
+                    cut: None,
                 },
             });
         }
@@ -940,13 +1017,18 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     } else {
                         None
                     };
-                    FilledView {
+                    let mut view = FilledView {
                         head,
                         recipe: Some(recipe),
                         failed: None,
                         cut_by,
                         room: None,
-                    }
+                        curtain: None,
+                        placement: None,
+                        cut: None,
+                    };
+                    add_curtain(&mut snapshot, project, model, &record, &mut view).await?;
+                    view
                 }
                 Err(failed) => FilledView {
                     head,
@@ -954,6 +1036,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
                     cut_by: None,
                     room: None,
+                    curtain: None,
+                    placement: None,
+                    cut: None,
                 },
             },
         )

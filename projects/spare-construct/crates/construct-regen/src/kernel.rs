@@ -1106,7 +1106,8 @@ impl<E: Engine> Kernel<E> {
     }
 
     /// The solids of `recipe` for a drawing to cut: one for each layer of a layered wall (a layer
-    /// of no thickness has none), each with its material and the plane of each named face, and
+    /// of no thickness has none), one for each panel with a slab and each mullion of a curtain wall
+    /// ([`curtain::solids`]), each with its material and the plane of each named face, and
     /// for any other recipe the one [`Kernel::solid`] makes, with no material. A wall's openings
     /// are not cut in them.
     ///
@@ -1121,6 +1122,14 @@ impl<E: Engine> Kernel<E> {
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
             return layered::solids(&mut *engine, recipe, &wall, self.units);
+        }
+        if crate::curtain_plan::is_curtain(recipe) {
+            let plan = crate::curtain_plan::CurtainPlan::of(recipe)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return curtain::solids(&mut *engine, recipe, &plan, self.units);
         }
         Ok(vec![LayerSolid {
             function: String::new(),
