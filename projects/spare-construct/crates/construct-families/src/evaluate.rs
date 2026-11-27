@@ -45,6 +45,9 @@
 //! - [`Turn`], [`evaluate_turned()`] and [`Evaluator::evaluate_turned`]: a family built turned
 //!   about its z axis by quarter turns, exactly, so it can stand in a host along any axis way
 //!   (piece A64).
+//! - [`Seat`], [`evaluate_seated()`] and [`Evaluator::evaluate_seated`]: a family seated in a host
+//!   that runs at any angle, every corner worked out exactly and rounded once to the grid, an
+//!   upright profile made of upright boxes (piece A83; the build module's header says why).
 //! - [`extents()`]: the box each of a family's solids lies in at one type's values, worked out
 //!   without an engine ([`Extent`]; piece A64), for a builder that draws a family as boxes.
 //!
@@ -59,6 +62,7 @@ mod error;
 mod extent;
 mod hosting;
 mod limits;
+mod seat;
 mod sketch;
 mod symbols;
 mod turn;
@@ -69,6 +73,7 @@ pub use error::{EvalError, Place, Reason};
 pub use extent::{Extent, extents};
 pub use hosting::{Depth, Host, SolvedOpening, opening, opening_within};
 pub use limits::{Limit, Limits, Used};
+pub use seat::Seat;
 pub use symbols::{DrawnSymbol, DrawnSymbols, Edge, Point2, symbols, symbols_within};
 pub use turn::Turn;
 pub use values::TypeValues;
@@ -121,7 +126,13 @@ pub fn evaluate<E: Engine>(
     recipe: &Recipe,
     values: &TypeValues,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
-    build::run(engine, recipe, values, Limits::DEFAULT, Turn::None)
+    build::run(
+        engine,
+        recipe,
+        values,
+        Limits::DEFAULT,
+        build::Stand::Turned(Turn::None),
+    )
 }
 
 /// As [`evaluate()`], within `limits`.
@@ -135,7 +146,13 @@ pub fn evaluate_within<E: Engine>(
     values: &TypeValues,
     limits: Limits,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
-    build::run(engine, recipe, values, limits, Turn::None)
+    build::run(
+        engine,
+        recipe,
+        values,
+        limits,
+        build::Stand::Turned(Turn::None),
+    )
 }
 
 /// As [`evaluate_within()`], the family turned by `turn` about its z axis (piece A64): every
@@ -151,5 +168,23 @@ pub fn evaluate_turned<E: Engine>(
     limits: Limits,
     turn: Turn,
 ) -> Result<Evaluated<E::Solid>, EvalError> {
-    build::run(engine, recipe, values, limits, turn)
+    build::run(engine, recipe, values, limits, build::Stand::Turned(turn))
+}
+
+/// As [`evaluate_within()`], the family seated by `seat` in a host that runs at any angle (piece
+/// A83): every corner put through the seat, each rounded once to the grid, and a profile on an
+/// upright plane made of upright boxes when the seat is off the quarter turns.
+///
+/// # Errors
+///
+/// As [`evaluate()`]; and `UprightNotSquare` for a profile on an upright plane with an edge along
+/// neither of its sketch's axes, off the quarter turns.
+pub fn evaluate_seated<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    values: &TypeValues,
+    limits: Limits,
+    seat: &Seat,
+) -> Result<Evaluated<E::Solid>, EvalError> {
+    build::run(engine, recipe, values, limits, build::Stand::Seated(seat))
 }

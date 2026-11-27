@@ -41,16 +41,23 @@
 //! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
 //! the kernel's edition, with no solid and no face.
 //!
+//! In a wall at an angle (piece A83) what is hosted comes seated (construct-regen's `hosting`,
+//! [`crate::hosting::SEAT_ARG`]): a box door is the prism on its plan rectangle laid along its own
+//! x, and a placed family's every solid the prism on its box's plan rectangle in the family's own
+//! frame, each corner put through the seat and then the nearest whole millimetre, so each is drawn
+//! turned with its wall, as the kernel's builder builds it.
+//!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
+use crate::hosting;
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
 use crate::wall_plan::{self, Layered};
-use construct_families::{Limits, extents};
+use construct_families::{Limits, Seat, extents};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
@@ -596,8 +603,116 @@ struct FamilyBody<'a> {
     #[serde(rename = "type")]
     ty: &'a str,
     turn: u8,
+    /// Where it stands in a wall at an angle: its seat's way, base and origin, in steps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seat: Option<[[i64; 2]; 3]>,
     min: [i64; 3],
     max: [i64; 3],
+}
+
+/// A rectangle of a frame of its own put through a seat: its four plan corners, anticlockwise
+/// from above, each the nearest whole millimetre; whether any was rounded; and the lowest and
+/// highest grid steps its corners reach.
+struct Footprint {
+    outline: Vec<[i64; 2]>,
+    rounded: bool,
+    low: [i64; 2],
+    high: [i64; 2],
+}
+
+impl Footprint {
+    /// The rectangle from `lo` to `hi` (grid steps) put through `seat`.
+    fn of(seat: &Seat, lo: [i64; 2], hi: [i64; 2]) -> Result<Footprint, GeometryError> {
+        let too_far = || GeometryError {
+            code: "TooBig".to_owned(),
+            message: "a seated corner is beyond the kernel's grid".to_owned(),
+        };
+        let mut rounded = false;
+        let (mut low, mut high) = ([i64::MAX; 2], [i64::MIN; 2]);
+        let mut outline = Vec::with_capacity(4);
+        for [x, y] in [
+            [lo[0], lo[1]],
+            [hi[0], lo[1]],
+            [hi[0], hi[1]],
+            [lo[0], hi[1]],
+        ] {
+            let point = seat.plan([x, y]).ok_or_else(too_far)?;
+            for ((l, h), c) in low.iter_mut().zip(high.iter_mut()).zip(point) {
+                (*l, *h) = ((*l).min(c), (*h).max(c));
+            }
+            outline.push(point.map(|c| {
+                let (mm, exact) = wall_plan::nearest_mm(c);
+                rounded |= !exact;
+                mm
+            }));
+        }
+        Ok(Footprint {
+            outline,
+            rounded,
+            low,
+            high,
+        })
+    }
+
+    /// The box its corners reach, rounded outward to whole millimetres, from `z0` to `z1`.
+    fn reach(&self, z0: i64, z1: i64) -> ([i64; 3], [i64; 3]) {
+        (
+            [
+                floor_plan::floor_mm(self.low[0]),
+                floor_plan::floor_mm(self.low[1]),
+                z0,
+            ],
+            [
+                floor_plan::ceil_mm(self.high[0]),
+                floor_plan::ceil_mm(self.high[1]),
+                z1,
+            ],
+        )
+    }
+}
+
+/// Puts the prism on `outline` (four corners) from `z0` to `z1` into `mesh`, and gives its first
+/// triangle and how many it has.
+fn push_prism(
+    mesh: &mut Mesh,
+    outline: &[[i64; 2]],
+    z0: i64,
+    z1: i64,
+) -> Result<[u32; 2], GeometryError> {
+    let (first, base) = (
+        part_count(mesh.indices.len() / 3)?,
+        part_count(mesh.positions.len() / 3)?,
+    );
+    for z in [z0, z1] {
+        for &[x, y] in outline {
+            mesh.positions.extend([x, y, z]);
+        }
+    }
+    for index in TRIANGLES {
+        mesh.indices
+            .push(base.checked_add(index).ok_or_else(too_many)?);
+    }
+    Ok([first, part_count(TRIANGLES.len() / 3)?])
+}
+
+/// The box `reach` (if any) widened to hold the box from `lo` to `hi`.
+fn widened(
+    reach: Option<([i64; 3], [i64; 3])>,
+    lo: [i64; 3],
+    hi: [i64; 3],
+) -> ([i64; 3], [i64; 3]) {
+    match reach {
+        None => (lo, hi),
+        Some((mut min, mut max)) => {
+            for (m, l) in min.iter_mut().zip(lo) {
+                *m = (*m).min(l);
+            }
+            for (m, h) in max.iter_mut().zip(hi) {
+                *m = (*m).max(h);
+            }
+            (min, max)
+        }
+    }
 }
 
 /// The smallest whole number of millimetres at or above the diagonal of a box of `size`.
@@ -645,37 +760,34 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
             hi[2].saturating_sub(lo[2]),
         ];
         deviation = deviation.max(diagonal(size));
-        reach = Some(match reach {
-            None => (lo, hi),
-            Some((mut min, mut max)) => {
-                for (m, l) in min.iter_mut().zip(lo) {
-                    *m = (*m).min(l);
-                }
-                for (m, h) in max.iter_mut().zip(hi) {
-                    *m = (*m).max(h);
-                }
-                (min, max)
+        let (outline, lo, hi) = match &instance.seat {
+            Some(seat) => {
+                // Its box in the family's own frame, seated: the prism on its plan rectangle.
+                let plan = |l: [Length; 3]| [l[0].steps(), l[1].steps()];
+                let seated = Footprint::of(seat, plan(solid.low), plan(solid.high))?;
+                let strays = diagonal(size).saturating_add(i64::from(seated.rounded));
+                deviation = deviation.max(strays);
+                let (low, high) = seated.reach(lo[2], hi[2]);
+                (seated.outline, low, high)
             }
-        });
-        let (first, base) = (
-            part_count(mesh.indices.len() / 3)?,
-            part_count(mesh.positions.len() / 3)?,
-        );
-        mesh.positions.extend(box_corners(lo, hi).concat());
-        for index in TRIANGLES {
-            mesh.indices
-                .push(base.checked_add(index).ok_or_else(too_many)?);
-        }
+            None => (
+                vec![
+                    [lo[0], lo[1]],
+                    [hi[0], lo[1]],
+                    [hi[0], hi[1]],
+                    [lo[0], hi[1]],
+                ],
+                lo,
+                hi,
+            ),
+        };
+        reach = Some(widened(reach, lo, hi));
+        let triangles = push_prism(&mut mesh, &outline, lo[2], hi[2])?;
         parts.push(Part {
             material: solid.material.as_str().to_owned(),
             function: solid.step.as_str().to_owned(),
-            triangles: [first, part_count(TRIANGLES.len() / 3)?],
-            outline: vec![
-                [lo[0], lo[1]],
-                [hi[0], lo[1]],
-                [hi[0], hi[1]],
-                [lo[0], hi[1]],
-            ],
+            triangles,
+            outline,
         });
     }
     let (min, max) = reach.ok_or_else(|| GeometryError {
@@ -687,6 +799,10 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
         family: instance.family.as_str(),
         ty: instance.ty.as_str(),
         turn: instance.turn.quarters(),
+        seat: instance
+            .seat
+            .as_ref()
+            .map(|seat| [seat.way(), seat.base(), seat.at()]),
         min,
         max,
     };
@@ -939,6 +1055,55 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A box hosted in a wall at an angle, handed with its seat (piece A83): the prism on its plan
+/// rectangle laid along its own x (its length or width along, its thickness or depth across),
+/// each corner put through its seat and then the nearest whole millimetre, from its base to its
+/// top; named as a box is, its bounds rounded outward, a display that rounded anything straying
+/// by 1 mm. Its body is that prism.
+fn seated_box(recipe: &Recipe, seat: &Seat) -> Result<Built, GeometryError> {
+    let [a, b, height] = size_of(recipe)?;
+    let (long, across) = if runs_along_y(&recipe.args) {
+        (b, a)
+    } else {
+        (a, b)
+    };
+    let steps = |mm: i64| {
+        Length::checked_from_mm(mm)
+            .map(Length::steps)
+            .ok_or_else(|| GeometryError {
+                code: "TooBig".to_owned(),
+                message: "a box beyond the kernel's grid".to_owned(),
+            })
+    };
+    let seated = Footprint::of(seat, [0, 0], [steps(long)?, steps(across)?])?;
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    push_prism(&mut mesh, &seated.outline, 0, height)?;
+    let body = WallBody {
+        kind: "box",
+        outline: seated.outline.clone(),
+        height,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation: i64::from(seated.rounded),
+            mesh: mesh.clone(),
+            outline: seated.outline.clone(),
+            parts: Vec::new(),
+        })
+        .collect();
+    let (min, max) = seated.reach(0, height);
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: box_names(),
+        displays,
+    })
+}
+
 impl Geometry for Boxes {
     fn edition(&self) -> Edition {
         Edition {
@@ -970,6 +1135,9 @@ impl Geometry for Boxes {
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
+        }
+        if let (stored, Some(seat)) = hosting::unseated(recipe)? {
+            return seated_box(&stored, &seat);
         }
         let size = size_of(recipe)?;
         let [w, d, _] = size;

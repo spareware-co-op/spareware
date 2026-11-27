@@ -28,8 +28,9 @@
 //!   [`symbols()`], a recipe's 2D symbols drawn at one type's values; and, for a hosted family
 //!   (CON-A7-F3-P2, piece A64), [`opening()`], the opening it cuts in its host solved at a type's
 //!   values, [`evaluate_turned()`], its solids built turned by quarter turns ([`Turn`]) to stand
-//!   in a host along any axis way, and [`extents()`], the box each solid lies in, without an
-//!   engine. A placed instance holds its own values for the parameters each instance holds
+//!   in a host along any axis way, [`evaluate_seated()`], its solids built seated in a host
+//!   that runs at any angle ([`Seat`], piece A83), and [`extents()`], the box each solid lies in,
+//!   without an engine. A placed instance holds its own values for the parameters each instance holds
 //!   ([`Recipe::instance_parameters`], [`Recipe::instance_value`], [`instance`], and
 //!   [`TypeValues::set_instance`]; job 7.1).
 //!
@@ -65,9 +66,9 @@ pub mod write;
 pub use check::{Library, Problem, ProblemKind, Sort};
 pub use evaluate::{
     Built, CacheKey, Depth, DrawnSymbol, DrawnSymbols, Edge, EvalError, Evaluated, Evaluator,
-    Extent, Host, Limit, Limits, Place, Point2, Reason, SolvedOpening, Turn, TypeResult,
-    TypeValues, Used, evaluate, evaluate_turned, evaluate_within, extents, opening, opening_within,
-    symbols, symbols_within,
+    Extent, Host, Limit, Limits, Place, Point2, Reason, Seat, SolvedOpening, Turn, TypeResult,
+    TypeValues, Used, evaluate, evaluate_seated, evaluate_turned, evaluate_within, extents,
+    opening, opening_within, symbols, symbols_within,
 };
 pub use family_type::{FamilyError, FamilyRef, OWNER, family_of, family_type, parameters};
 pub use instance::InstanceParameter;

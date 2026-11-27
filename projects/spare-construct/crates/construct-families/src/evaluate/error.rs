@@ -176,6 +176,10 @@ pub enum Reason {
     },
     /// An opening's sketch is not on an `xz` plane, parallel to the wall.
     NotOnWallPlane,
+    /// A profile on an upright plane (`xz` or `yz`), built seated at an angle off the quarter
+    /// turns, has an edge along neither of its sketch's axes (piece A83: only upright boxes keep
+    /// their faces flat at such an angle; interim, the build module's header says until when).
+    UprightNotSquare,
 }
 
 impl fmt::Display for Reason {
@@ -237,6 +241,9 @@ impl fmt::Display for Reason {
             ),
             Self::NotOnWallPlane => f.write_str(
                 "the opening's sketch is not on an xz plane, parallel to the wall it is cut in",
+            ),
+            Self::UprightNotSquare => f.write_str(
+                "the profile is on an upright plane and has an edge along neither of its                  sketch's axes, and such a profile is built only turned by quarter turns, not                  seated at another angle",
             ),
         }
     }

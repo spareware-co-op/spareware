@@ -23,6 +23,12 @@
 //! along the wall and its sill height given as a door's are. It is a [`Span`] like the rest, and
 //! `cut_span` is the one cutter of all three.
 //!
+//! A wall at an angle (piece A83) is asked by the same rules in its own frame ([`Frame`]: along
+//! its line, across from its exterior, up), every element in it seated (construct-regen's
+//! `hosting`), so each runs along it whatever axis its record names, and no `OpeningAcrossWall`
+//! is asked. Its length is the root of a whole number of square steps ([`Long::Root`]), and every
+//! rule that sets an opening against its wall's end is asked of it exactly, by squaring.
+//!
 //! What it builds, in the wall's frame (along its axis from `end0` to `end1`, up from its base):
 //!
 //! - an opening wholly inside the wall, its foot above the base: four new faces, its jambs, its
@@ -62,6 +68,7 @@ use engine_geometry::value::grid::P3;
 use engine_geometry::value::name::{NameId, NameList, Role, RoleArg, TopoName};
 use engine_geometry::value::op::{OpId, OpPath};
 use kit_ops::sha256_hex;
+use std::cmp::Ordering;
 
 /// How far an opening's cutter reaches past each side of its wall, and below the base for a door
 /// to the floor, in millimetres.
@@ -207,11 +214,10 @@ pub(super) fn plan(
     let (long, across) = wall.long_and_across();
     let frame = Frame {
         along: wall.along,
-        size: [
-            units.steps(long)?,
-            units.steps(across)?,
-            units.steps(wall.height)?,
-        ],
+        length: Long::Steps(units.steps(long)?),
+        thickness: units.steps(across)?,
+        height: units.steps(wall.height)?,
+        seated: false,
     };
     let cuts = plan_in(frame, hosted, &[], units, band)?;
     // Last, so a face near another is refused as that, not as a fraction of a millimetre.
@@ -227,13 +233,77 @@ pub(super) fn plan(
 
 /// A wall's frame, as its openings are asked in it: the plan axis the frame's along runs on (0 for
 /// x, 1 for y; across is the other), and the wall's length along it from `end0`, its thickness
-/// across it from its exterior, and its height up from its base, in grid steps.
+/// across it from its exterior, and its height up from its base, in grid steps. A wall at an
+/// angle is asked in its own frame, along in the first place and across in the second, its every
+/// hosted element seated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Frame {
-    /// The plan axis along: 0 for x, 1 for y.
+    /// The plan axis along: 0 for x, 1 for y; 0 for a wall at an angle.
     pub(super) along: usize,
-    /// `[length, thickness, height]`, in steps.
-    pub(super) size: [i64; 3],
+    /// Its length along, from `end0`.
+    pub(super) length: Long,
+    /// Its thickness across, from its exterior, in steps.
+    pub(super) thickness: i64,
+    /// Its height, up from its base, in steps.
+    pub(super) height: i64,
+    /// Whether its elements are seated (a wall at an angle): each runs along it as seated.
+    pub(super) seated: bool,
+}
+
+/// A wall's length along its frame: whole steps, or, for a wall at an angle, the root of a whole
+/// number of square steps (its line's `dx^2 + dy^2`), never rounded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Long {
+    /// Whole steps.
+    Steps(i64),
+    /// The root of this many square steps.
+    Root(u128),
+}
+
+impl Long {
+    /// How `at` steps along compares with the length: `Less` short of it, `Equal` on it.
+    pub(super) fn against(self, at: i64) -> Ordering {
+        match self {
+            Long::Steps(length) => at.cmp(&length),
+            // A length is above zero, so anything at or below zero is short of it; above zero,
+            // the squares compare as the lengths do. `at` is within 2^63, so its square is a u128.
+            Long::Root(square) if at > 0 => {
+                let at = at.unsigned_abs();
+                u128::from(at).saturating_mul(u128::from(at)).cmp(&square)
+            }
+            Long::Root(_) => Ordering::Less,
+        }
+    }
+
+    /// Whether `at` lies within `band` of the length without being on it.
+    pub(super) fn near(self, at: i64, band: i64) -> bool {
+        match self {
+            Long::Steps(length) => near(at, length, band),
+            Long::Root(_) => {
+                let band = band.unsigned_abs();
+                let (low, high) = (
+                    i128::from(at).saturating_sub(i128::from(band)),
+                    i128::from(at).saturating_add(i128::from(band)),
+                );
+                let reaches = |v: i128| self.against_wide(v);
+                self.against(at) != Ordering::Equal
+                    && reaches(low) != Ordering::Greater
+                    && reaches(high) != Ordering::Less
+            }
+        }
+    }
+
+    /// As [`Long::against`], for a value of up to 2^64 in size.
+    fn against_wide(self, at: i128) -> Ordering {
+        match self {
+            Long::Steps(length) => at.cmp(&i128::from(length)),
+            Long::Root(square) if at > 0 => {
+                let at = at.unsigned_abs();
+                at.saturating_mul(at).cmp(&square)
+            }
+            Long::Root(_) => Ordering::Less,
+        }
+    }
 }
 
 /// Where one opening lies in its wall's frame, in grid steps: along from `end0`, from `start` to
@@ -302,8 +372,8 @@ pub(super) fn plan_in(
     let mut cuts = Vec::with_capacity(order.len());
     for (_, opening) in order {
         cuts.push(match opening {
-            Ok(h) => cut(h, frame.along, frame.size, units, band)?,
-            Err(p) => cut_span(p, frame.along, frame.size, units, band)?,
+            Ok(h) => cut(h, &frame, units, band)?,
+            Err(p) => cut_span(p, &frame, units, band)?,
         });
     }
     for (i, a) in cuts.iter().enumerate() {
@@ -314,15 +384,9 @@ pub(super) fn plan_in(
     Ok(cuts)
 }
 
-/// The cutter of one door or plain opening in a wall along `along` of `[length, thickness,
-/// height]` steps.
-fn cut(
-    h: &Hosted<'_>,
-    along: usize,
-    [length, thickness, height]: [i64; 3],
-    units: Units,
-    band: i64,
-) -> Result<Cut, GeometryError> {
+/// The cutter of one door or plain opening in a wall of `frame`.
+fn cut(h: &Hosted<'_>, frame: &Frame, units: Units, band: i64) -> Result<Cut, GeometryError> {
+    let along = frame.along;
     let (key, noun) = (h.key, noun_of(h.recipe));
     let refuse = |code: &str, why: &str| refuse_as(noun, key, code, why);
     // What it opens: its width along the wall, its depth across it (none for a plain opening,
@@ -354,7 +418,8 @@ fn cut(
             ),
         ));
     };
-    if runs != along {
+    // A seated element runs along its wall as it is seated, whatever axis its record names.
+    if !frame.seated && runs != along {
         return Err(refuse(
             "OpeningAcrossWall",
             "it does not run along its wall's axis",
@@ -369,14 +434,18 @@ fn cut(
     if let Some(depth) = depth {
         let side = at.get(c).copied().unwrap_or_default();
         let back = add(side, depth)?;
-        if side >= thickness || back <= 0 {
+        if side >= frame.thickness || back <= 0 {
             return Err(refuse(
                 "OpeningNotInWall",
                 "its plan misses the wall's thickness",
             ));
         }
     }
-    if end <= 0 || start >= length || head <= 0 || foot >= height {
+    if end <= 0
+        || frame.length.against(start) != Ordering::Less
+        || head <= 0
+        || foot >= frame.height
+    {
         return Err(refuse(
             "OpeningOutsideHost",
             "it lies outside its wall: an opening is cut inside the wall that hosts it",
@@ -393,19 +462,19 @@ fn cut(
             head,
         },
     };
-    cut_span(&placed, along, [length, thickness, height], units, band)
+    cut_span(&placed, frame, units, band)
 }
 
-/// The cutter of one opening placed in a wall along `along` of `[length, thickness, height]`
-/// steps, by the rules
-/// of this module's header: through the wall's whole thickness.
+/// The cutter of one opening placed in a wall of `frame`, by the rules of this module's header:
+/// through the wall's whole thickness.
 fn cut_span(
     placed: &Placed<'_>,
-    along: usize,
-    [length, thickness, height]: [i64; 3],
+    frame: &Frame,
     units: Units,
     band: i64,
 ) -> Result<Cut, GeometryError> {
+    let (along, length, thickness, height) =
+        (frame.along, frame.length, frame.thickness, frame.height);
     let (key, noun) = (placed.key, placed.noun);
     let refuse = |key: &str, code: &str, why: String| refuse_as(noun, key, code, why);
     let Span {
@@ -415,13 +484,13 @@ fn cut_span(
         head,
     } = placed.span;
     let width = less(end, start)?;
-    for (face, at, wall_face, wall_at) in [
-        ("jamb.start", start, "end0", 0),
-        ("jamb.end", end, "end1", length),
-        ("head", head, "top", height),
-        ("sill", foot, "base", 0),
+    for (face, wall_face, is_near) in [
+        ("jamb.start", "end0", near(start, 0, band)),
+        ("jamb.end", "end1", length.near(end, band)),
+        ("head", "top", near(head, height, band)),
+        ("sill", "base", near(foot, 0, band)),
     ] {
-        if near(at, wall_at, band) {
+        if is_near {
             return Err(refuse(
                 key,
                 "OpeningNearFace",
@@ -432,14 +501,14 @@ fn cut_span(
             ));
         }
     }
-    if start < 0 || end > length {
+    if start < 0 || length.against(end) == Ordering::Greater {
         return Err(refuse(
             key,
             "OpeningPastEnd",
             "it crosses the wall's end".to_owned(),
         ));
     }
-    if start == 0 || end == length {
+    if start == 0 || length.against(end) == Ordering::Equal {
         return Err(refuse(
             key,
             "OpeningAtEnd",

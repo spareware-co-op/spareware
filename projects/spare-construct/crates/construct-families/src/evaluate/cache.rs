@@ -14,12 +14,15 @@
 //! evaluator keeps only what it built within its own limits.
 //!
 //! A family built turned ([`Turn`], piece A64) is kept under its turn as well: the same type
-//! turned two ways is two sets of solids, and each is built once.
+//! turned two ways is two sets of solids, and each is built once. A family seated at any angle
+//! ([`Seat`], piece A83) is kept under its seat: its points round by where it stands, so the same
+//! type seated in two places is two sets of solids.
 
 use super::Evaluated;
-use super::build::run;
+use super::build::{Stand, run};
 use super::error::EvalError;
 use super::limits::Limits;
+use super::seat::Seat;
 use super::turn::Turn;
 use super::values::TypeValues;
 use crate::model::{Key, ParameterValue, Recipe};
@@ -35,6 +38,7 @@ pub struct CacheKey {
     recipe: ContentId,
     values: Vec<(Key, String)>,
     turn: Turn,
+    seat: Option<Seat>,
 }
 
 impl CacheKey {
@@ -42,6 +46,15 @@ impl CacheKey {
     #[must_use]
     pub fn of(recipe: &Recipe, values: &TypeValues) -> Self {
         Self::turned(recipe, values, Turn::None)
+    }
+
+    /// The key of `recipe` evaluated with `values` and seated by `seat` (piece A83).
+    #[must_use]
+    pub fn seated(recipe: &Recipe, values: &TypeValues, seat: &Seat) -> Self {
+        Self {
+            seat: Some(seat.clone()),
+            ..Self::turned(recipe, values, Turn::None)
+        }
     }
 
     /// The key of `recipe` evaluated with `values` and turned by `turn`.
@@ -67,6 +80,7 @@ impl CacheKey {
             recipe: recipe.content_id(),
             values: read,
             turn,
+            seat: None,
         }
     }
 
@@ -86,6 +100,12 @@ impl CacheKey {
     #[must_use]
     pub fn turn(&self) -> Turn {
         self.turn
+    }
+
+    /// The seat it is built with, if it is seated at an angle rather than turned.
+    #[must_use]
+    pub fn seat(&self) -> Option<&Seat> {
+        self.seat.as_ref()
     }
 }
 
@@ -147,7 +167,41 @@ impl<E: Engine> Evaluator<E> {
         match self.cache.entry(CacheKey::turned(recipe, values, turn)) {
             Entry::Occupied(kept) => Ok(Arc::clone(kept.get())),
             Entry::Vacant(slot) => {
-                let built = run(&mut self.engine, recipe, values, self.limits, turn)?;
+                let built = run(
+                    &mut self.engine,
+                    recipe,
+                    values,
+                    self.limits,
+                    Stand::Turned(turn),
+                )?;
+                self.builds = self.builds.saturating_add(1);
+                Ok(Arc::clone(slot.insert(Arc::new(built))))
+            }
+        }
+    }
+
+    /// As [`Evaluator::evaluate`], the family seated by `seat` in a host that runs at any angle
+    /// (piece A83, [`crate::evaluate_seated()`]), kept under its seat.
+    ///
+    /// # Errors
+    ///
+    /// As [`crate::evaluate_seated()`], within this evaluator's limits.
+    pub fn evaluate_seated(
+        &mut self,
+        recipe: &Recipe,
+        values: &TypeValues,
+        seat: &Seat,
+    ) -> Result<Arc<Evaluated<E::Solid>>, EvalError> {
+        match self.cache.entry(CacheKey::seated(recipe, values, seat)) {
+            Entry::Occupied(kept) => Ok(Arc::clone(kept.get())),
+            Entry::Vacant(slot) => {
+                let built = run(
+                    &mut self.engine,
+                    recipe,
+                    values,
+                    self.limits,
+                    Stand::Seated(seat),
+                )?;
                 self.builds = self.builds.saturating_add(1);
                 Ok(Arc::clone(slot.insert(Arc::new(built))))
             }

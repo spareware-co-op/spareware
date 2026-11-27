@@ -22,8 +22,9 @@
 //!   parameter's default. They are flat strings so that a recipe with them reads no record.
 //!
 //! Derived and never stored: [`TURN_ARG`], how far the family is turned about its z axis to stand
-//! in its wall ([`crate::hosting::seat`] writes it into the recipe a builder is handed), its
-//! solids, and its opening.
+//! in a wall along x or y, or [`crate::hosting::SEAT_ARG`], where it stands in a wall at any angle
+//! (piece A83; [`crate::hosting::seat`] writes one or the other into the recipe a builder is
+//! handed), its solids, and its opening.
 //!
 //! Interim, each here so that replacing it changes this file and no caller:
 //!
@@ -40,7 +41,8 @@
 //!   its outline extruded through the wall and the rules asked of a polygon.
 
 use construct_families::{
-    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Turn, TypeValues, opening_within,
+    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Seat, Turn, TypeValues,
+    opening_within,
 };
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::Length;
@@ -226,8 +228,10 @@ pub struct Instance {
     pub family: ContentId,
     /// The type, by its key in the family recipe.
     pub ty: Key,
-    /// How far it is turned about its z axis: none unless it is seated in a host.
+    /// How far it is turned about its z axis: none unless it is seated in a host along x or y.
     pub turn: Turn,
+    /// Where it stands in a host at an angle ([`crate::hosting::SEAT_ARG`]), in place of a turn.
+    pub seat: Option<Seat>,
     /// The values it holds for the parameters each instance holds, in stored text, by key.
     pub values: BTreeMap<Key, String>,
 }
@@ -238,7 +242,8 @@ impl Instance {
     /// # Errors
     ///
     /// `NotAFamily` for another operation; `BadInstance` for a family that is not a content id, a
-    /// type that is not a key, or a turn that is not 0 to 3.
+    /// type that is not a key, a turn that is not 0 to 3, or both a turn and a seat; `BadSeat` for
+    /// a seat that does not read ([`crate::hosting::seat_of`]).
     pub fn of(recipe: &Recipe) -> Result<Instance, GeometryError> {
         if !is_instance(recipe) {
             return Err(fault(
@@ -267,6 +272,16 @@ impl Instance {
                 .and_then(Turn::of_quarters)
                 .ok_or_else(|| fault("BadInstance", format!("{TURN_ARG} must be 0, 1, 2 or 3")))?,
         };
+        let seat = crate::hosting::seat_of(recipe)?;
+        if seat.is_some() && recipe.args.contains_key(TURN_ARG) {
+            return Err(fault(
+                "BadInstance",
+                format!(
+                    "a placed family is turned ({TURN_ARG}) or seated ({}), not both",
+                    crate::hosting::SEAT_ARG
+                ),
+            ));
+        }
         let mut values = BTreeMap::new();
         for (name, value) in &recipe.args {
             let Some(key) = name.strip_prefix(VALUE_PREFIX) else {
@@ -290,6 +305,7 @@ impl Instance {
             family,
             ty,
             turn,
+            seat,
             values,
         })
     }

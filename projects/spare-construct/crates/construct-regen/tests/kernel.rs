@@ -1105,3 +1105,165 @@ fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
 fn a_family_that_does_not_fit_is_refused_with_a_reason() {
     kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
 }
+
+/// What one built shape is, for a pin: its body's content id, its bounds, its names and every
+/// display.
+fn shape_of(built: &construct_model::geometry::Built) -> serde_json::Value {
+    serde_json::json!({
+        "body": built.body_id(),
+        "bounds": built.bounds,
+        "names": built.names,
+        "displays": built.displays,
+    })
+}
+
+/// Walls along x and y host as they did before hosting at any angle came (piece A83): on each of
+/// the four ways a partition runs (its faces off whole millimetres, 12.5 mm layers), a box door,
+/// a wall opening, a placed door and a placed window, each on either side, are seated where they
+/// were with the recipe they were handed, the wall built with each, each built alone on the
+/// kernel's builder and on the stand-in, all exactly the bytes they were on main before (the pin
+/// was taken there).
+#[test]
+fn walls_along_the_axes_host_byte_for_byte_as_before() {
+    use construct_families::Turn;
+    use construct_model::element::{Element, Placement};
+    use construct_model::geometry::{Geometry, Hosted as HostedAt};
+    use construct_params::Length;
+    use construct_regen::hosting;
+    use construct_regen::stand_in::Boxes;
+    use std::collections::BTreeMap;
+    let k = construct_regen::kernel::Kernel::new(Pieces).unwrap();
+    let edition = k.edition();
+    let id = |text: &str| kit_core::Id::parse(text).unwrap();
+    let element = |key: &str, recipe: &construct_model::geometry::Recipe| Element {
+        id: id(key),
+        document: id("doc"),
+        kind: "door".to_owned(),
+        name: key.to_owned(),
+        level: 0,
+        placement: Placement {
+            x: 1000,
+            y: 2000,
+            z: 0,
+        },
+        recipe: recipe.clone(),
+        props: BTreeMap::new(),
+        references: Vec::new(),
+    };
+    let mut all = Vec::new();
+    for (start, end) in [
+        ([0, 0], [4000, 0]),
+        ([4000, 0], [0, 0]),
+        ([0, 0], [0, 4000]),
+        ([0, 4000], [0, 0]),
+    ] {
+        let wall = kernel_suite::layered_wall(start, end, 2700, &kernel_suite::PARTITION);
+        let axis = if start[0] == end[0] { "y" } else { "x" };
+        let host = element("W-1", &wall);
+        let door = kernel_suite::recipe(
+            "door.single",
+            serde_json::json!({ "width": 900, "thickness": 100, "height": 2100, "axis": axis }),
+        );
+        let kinds = [
+            (door, 0),
+            (kernel_suite::plain_opening(900, 1200, axis), 900),
+            (
+                kernel_suite::placed(kernel_suite::DOOR_FAMILY, "d900x2100", Turn::None),
+                0,
+            ),
+            (
+                kernel_suite::placed(kernel_suite::WINDOW_FAMILY, "w1200x1200", Turn::None),
+                0,
+            ),
+        ];
+        for role in ["exterior", "interior"] {
+            let face = hosting::side_by_role(&edition, &wall, role).unwrap();
+            for (recipe, up) in &kinds {
+                let mut hosted = element("D-1", recipe);
+                hosting::write(
+                    &mut hosted,
+                    &host.id,
+                    &face,
+                    Length::from_mm(1500),
+                    Length::from_mm(*up),
+                );
+                let how = hosting::read(&hosted).unwrap().unwrap();
+                let (at, seated) =
+                    hosting::seat(&edition, &host, &wall, &hosted, &hosted.recipe, &how).unwrap();
+                let list = [HostedAt {
+                    key: "D-1",
+                    recipe: &seated,
+                    at,
+                }];
+                construct_regen::kernel::fits(&edition, &wall, &list).unwrap();
+                let walled = Geometry::build_hosting(&k, &wall, &list).unwrap();
+                all.push(serde_json::json!({
+                    "at": at,
+                    "seated": seated,
+                    "walled": shape_of(&walled),
+                    "kernel": shape_of(&k.build(&seated).unwrap()),
+                    "stand_in": shape_of(&Boxes.build(&seated).unwrap()),
+                }));
+            }
+        }
+    }
+    let digest = kit_ops::sha256_hex(serde_json::to_string(&all).unwrap().as_bytes());
+    // Taken on main at 93c7e8510, before this piece changed anything.
+    assert_eq!(
+        digest,
+        "ca7fc24fa7e394c05886ebea744ef0833f227d4771fcc42039b4807852e2c234"
+    );
+}
+
+/// A test engine that extrudes as [`Prisms`] does and answers a subtraction with its target
+/// unchanged: it judges what the builder asks of a wall at an angle and of what is seated in it
+/// (the cutters' corners, each element's own), not the shape a cut gives.
+struct Seated;
+
+impl Engine for Seated {
+    type Solid = Prism;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.seated".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Prism, EngineError> {
+        Prisms.extrude(profile, by)
+    }
+
+    fn subtract(&mut self, target: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Ok(target.clone())
+    }
+
+    fn subtract_pieces(&mut self, _: &Prism, _: &Prism) -> Result<Vec<Prism>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Prism, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, _: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Err(unsupported("unite"))
+    }
+
+    fn volume(&mut self, _: &Prism) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    fn mesh(&mut self, s: &Prism) -> Result<DisplayMesh, EngineError> {
+        Prisms.mesh(s)
+    }
+
+    fn section(&mut self, _: &Prism, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
+    kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(|| Seated);
+}
