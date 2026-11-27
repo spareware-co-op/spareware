@@ -191,6 +191,18 @@ A refusal names the step being built, the place (type, a type's value, parameter
 
 **Turned** (`evaluate_turned()`, piece A64): a recipe evaluated with every corner and every extrusion's vector turned about the family's z axis by whole quarter turns, anticlockwise seen from above, before the engine is asked; exact on the grid, and kept apart per turn by an evaluator. **Extents** (`extents()`, piece A64): the box each solid lies in at a type's values, turned, worked out without an engine (an extrusion's box, a subtraction its target's, a union both).
 
+## A family in a document
+
+A project document holds each family placed in it, so it opens and builds the same where the library it came from is not (piece A73, job 7.6, [note CON-A7-F2-P3](../../notes/CON-A7-F2-P3-family-load-and-reload.md)). `StoredFamily` ([`src/stored.rs`](src/stored.rs)) is what is kept: three texts, which construct-model's FORMAT.md ("A family in a document") puts in the family's record.
+
+| Text | Value |
+| --- | --- |
+| recipe | The recipe in its one written form ("The written form", above) |
+| content | That form's content id (`sha256:` and 64 lowercase hexadecimal digits) |
+| source | Where it came from: `library:<the family's permanent id>` (loaded from the library by name), `text` (recipe text given to the document) or `generated:<template stem>` (made by the door and window generator, such as `generated:fixed-window`) |
+
+Reading it back is strict: the recipe text must read and be in its one written form, the content id must be that text's, and the source one of the three. A document takes a recipe only if its written form is at most 262,144 bytes (`MOST_RECIPE_BYTES`), it reads, it passes the checker against the project's categories and materials, it names at least one type, and every type it names evaluates within the limits (its solids' extents, without an engine, and for a wall-hosted family its opening): `loadable`. Each refusal (`LoadRefusal`) says why, naming the type that fails.
+
 ## Versions
 
 A later format is `format` 2 with its own schema file beside this one; format 1 is read for ever. What counts as a breaking change, and what does not, is in [the recipe format note](../../notes/CON-A7-F1-P1-recipe-format.md).

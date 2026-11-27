@@ -32,6 +32,9 @@
 //!   engine. A placed instance holds its own values for the parameters each instance holds
 //!   ([`Recipe::instance_parameters`], [`Recipe::instance_value`], [`instance`], and
 //!   [`TypeValues::set_instance`]; job 7.1).
+//! - [`stored`]: a family as a document holds it ([`StoredFamily`]: the recipe, its content id
+//!   and its [`Source`]) and what a recipe must pass before a document takes it ([`read_text`],
+//!   [`loadable`], [`LoadRefusal`]; CON-A7-F2-P3, job 7.6).
 //!
 //! What it builds on, by name: a parameter is a construct-params definition (the same five
 //! fields as its own JSON, made by its own reader) with a default in its stored text, or a
@@ -48,8 +51,8 @@
 //! random number, no hash-map order; nothing panics. Depends on kit-core, construct-params,
 //! construct-types, construct-categories, construct-materials, construct-formulas,
 //! construct-solver, engine-geometry (the kernel's interface, for evaluation only), `serde_json`,
-//! sha2 and hex. Nothing here is interim. Putting a recipe through the edit log and loading it
-//! into a project are later jobs (7.6).
+//! sha2 and hex. Nothing here is interim. The commands that load a recipe into a document through
+//! the edit log are construct-api's, and the record it sits in is construct-regen's.
 //!
 //! Not built here, with its place: cutting a hosted family's opening in its host, and placing its
 //! solids there, are construct-regen's (job 6.4, the element kind `family.instance`).
@@ -60,6 +63,7 @@ pub mod family_type;
 pub mod instance;
 pub mod model;
 pub mod read;
+pub mod stored;
 pub mod write;
 
 pub use check::{Library, Problem, ProblemKind, Sort};
@@ -78,6 +82,7 @@ pub use model::{
     View, Visibility,
 };
 pub use read::ReadError;
+pub use stored::{LoadRefusal, MOST_RECIPE_BYTES, Source, StoredFamily, loadable, read_text};
 pub use write::ContentId;
 
 /// The published JSON Schema (draft 2020-12) of format 1, `schema/family-recipe-1.schema.json`.

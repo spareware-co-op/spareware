@@ -514,6 +514,7 @@ dependencies = [
  "construct-clash",
  "construct-curtain",
  "construct-dimensions",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",

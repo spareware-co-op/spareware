@@ -8,7 +8,8 @@
 //! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
 //! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
-//! and a document of one edition reported,
+//! a family the document holds and no library does built and reloaded (job 7.6), and a
+//! document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -1813,3 +1814,97 @@ async fn the_plan_cuts_a_curtain_wall_and_the_page_is_told_where_it_stands() {
     assert!(seated["recipe"]["args"]["start"].is_array());
     assert_eq!(seated["cut"]["recipe"]["op"], "opening.wall");
 }
+
+/// The library's fixed window under the id `office.window` with its `w1200x1200` type `width`
+/// millimetres wide: a family no library holds, as recipe text.
+fn office_window(width: i64) -> String {
+    let (_, window) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.fixed-window")
+        .unwrap();
+    let mut recipe = (*window).clone();
+    recipe.id = i("office.window");
+    "Office window".clone_into(&mut recipe.name);
+    let table = recipe.type_table.as_mut().unwrap();
+    let at = table
+        .columns
+        .iter()
+        .position(|c| c.as_str() == "width")
+        .unwrap();
+    let row = table
+        .rows
+        .iter_mut()
+        .find(|r| r.key.as_str() == "w1200x1200")
+        .unwrap();
+    row.values[at] = format!("length:q0:{}", width * 6400);
+    recipe.to_json()
+}
+
+/// Through the server's commands on the kernel (job 7.6): a family the document holds and no
+/// library does is placed, cuts its wall and is built from the document's record; a reload at a
+/// wider version cuts a wider opening, its copy kept, and is undone and redone; the log replayed
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_documents_own_family_is_built_and_reloaded_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "wall.draw",
+        json!({ "element": "W-960", "type": "wall-partition", "start": ["60 m", "20 m"],
+                "end": ["64 m", "20 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await
+    .unwrap();
+    edit("family.load", json!({ "recipe": office_window(1200) }))
+        .await
+        .unwrap();
+    let place = json!({ "element": "F-1", "family": "office.window", "type": "w1200x1200",
+                        "host": "W-960", "side": "exterior", "along": "1500 mm" });
+    edit("family.place", place).await.unwrap();
+    let (plain, names) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(cut_roles(&names).len(), 4, "the window cuts its opening");
+    let window = s
+        .shape(&anna, &project, &model, &i("F-1"), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { bounds, .. } = &window.built.result else {
+        panic!("F-1 builds from the document: {:?}", window.built.result);
+    };
+    assert_eq!(bounds.max[2] - bounds.min[2], 1200);
+
+    edit(
+        "family.reload",
+        json!({ "family": "office.window", "recipe": office_window(1500) }),
+    )
+    .await
+    .unwrap();
+    let (wide, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_ne!(
+        wide.built.result, plain.built.result,
+        "the opening widened with the new version"
+    );
+    edit("edit.undo", json!({})).await.unwrap();
+    let (back, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(back.built.result, plain.built.result);
+    edit("edit.redo", json!({})).await.unwrap();
+    let (again, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(again.built.result, wide.built.result);
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+}
+

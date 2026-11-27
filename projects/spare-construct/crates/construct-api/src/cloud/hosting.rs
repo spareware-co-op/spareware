@@ -361,7 +361,10 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         return Ok(Err("That element already exists.".to_owned()));
     }
     let kind = args.kind.unwrap_or_else(|| DOOR.to_owned());
-    if kind == records::TYPE_KIND || kind == records::TABLE_KIND || id.as_str() == records::TABLE_ID
+    if kind == records::TYPE_KIND
+        || kind == records::TABLE_KIND
+        || kind == construct_regen::families::RECORD_KIND
+        || id.as_str() == records::TABLE_ID
     {
         return Ok(Err(
             "Types and the parameter table are changed by their own commands, not as elements."

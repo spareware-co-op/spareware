@@ -21,29 +21,47 @@
 //!   text (`value.sill_height`: `length:q0:5760000`); one the instance does not set reads its
 //!   parameter's default. They are flat strings so that a recipe with them reads no record.
 //!
+//! - [`FAMILY_ID_ARG`], the family's permanent id, which is also the element id of the family's
+//!   record in the document (job 7.6, below). A record written before job 7.6 has none.
+//!
 //! Derived and never stored: [`TURN_ARG`], how far the family is turned about its z axis to stand
 //! in its wall ([`crate::hosting::seat`] writes it into the recipe a builder is handed), its
-//! solids, and its opening.
+//! solids, and its opening; and [`RECIPE_ARG`], the family's recipe text from the document's
+//! record, which the recipe a builder is handed carries ([`filled`]), so a builder needs no
+//! library to build a family the document holds.
+//!
+//! **A family in the document** (CON-A7-F2-P3, piece A73, job 7.6): a record of kind
+//! [`RECORD_KIND`] whose element id is the family's permanent id, holding construct-families'
+//! [`StoredFamily`] (the recipe in its one written form under [`RECIPE_KEY`], its content id under
+//! [`CONTENT_KEY`], where it came from under [`SOURCE_KEY`]; [`record`] writes it, [`read_record`]
+//! reads it strictly). It has no shape. A placed family that names one ([`FAMILY_ID_ARG`]) is
+//! built from it, its `reads` row naming the record, so the document opens and builds the same on
+//! a server without the library. A placed family written before job 7.6 names none: its recipe is
+//! found by its content id in the builder's [`FamilySource`] as before (the library baked in), a
+//! fallback kept so that old documents read and build unchanged; a reload or a swap of it through
+//! the log moves it onto a family in the document.
 //!
 //! Interim, each here so that replacing it changes this file and no caller:
 //!
-//! - **Where a family's recipe comes from**: the trait [`FamilySource`], given a content id, the
-//!   recipe. [`Library`] answers it from recipes passed in by the caller ([`Library::of`],
-//!   [`Library::read`]) or from the library folder's door and window templates baked in at build
-//!   time ([`Library::baked`], the source both builders use by default, so the browser and the
-//!   server build the same families). Job 7.6 (family load and reload, CON-A7-F2-P3) replaces it:
-//!   families stored in the document and read from its records, so a project's own families and
-//!   their versions are found there.
+//! - **Where an old placed family's recipe comes from**: the trait [`FamilySource`], given a
+//!   content id, the recipe. [`Library`] answers it from recipes passed in by the caller
+//!   ([`Library::of`], [`Library::read`]) or from the library folder's door and window templates
+//!   baked in at build time ([`Library::baked`], the source both builders use by default, and
+//!   what `family.load` loads by name). The project library job (CON-A7-F9) replaces the baked
+//!   templates with a library a project keeps.
 //! - **Openings are upright rectangles**: an opening outline of any other shape is refused
 //!   (`OpeningNotRectangle`), because a wall's openings are cut as boxes along its axis, by the
 //!   same rules as the old box door's (the kernel's `opening`). An arched or angled opening needs
 //!   its outline extruded through the wall and the rules asked of a polygon.
 
 use construct_families::{
-    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Turn, TypeValues, opening_within,
+    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, StoredFamily, Turn, TypeValues,
+    opening_within,
 };
+use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::Length;
+use kit_core::Id;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -60,6 +78,20 @@ pub const TURN_ARG: &str = "turn";
 /// The recipe arguments that hold an instance's own values start with this, then the parameter's
 /// key: `value.sill_height`.
 pub const VALUE_PREFIX: &str = "value.";
+/// The recipe argument naming the family in the document: its permanent id, the element id of its
+/// record.
+pub const FAMILY_ID_ARG: &str = "family_id";
+/// The argument a builder is handed with the family's recipe text, read from the document's
+/// record. Filled, never stored.
+pub const RECIPE_ARG: &str = "recipe";
+/// The kind of a family's record in a document, and its recipe's operation.
+pub const RECORD_KIND: &str = "family.recipe";
+/// The `props` key of a family record's recipe, in its one written form.
+pub const RECIPE_KEY: &str = "@family.recipe";
+/// The `props` key of a family record's content id.
+pub const CONTENT_KEY: &str = "@family.content";
+/// The `props` key of a family record's source (construct-families' `Source`, written).
+pub const SOURCE_KEY: &str = "@family.source";
 /// The owner of Spare Construct's own operations.
 const OWN: &str = "construct";
 
@@ -199,6 +231,111 @@ pub fn with_value(recipe: &Recipe, key: &Key, stored: &str) -> Recipe {
     changed
 }
 
+/// The family in the document a placed family's recipe names, by its permanent id; `None` for one
+/// written before families were held in documents, or a recipe that is not a placed family's.
+#[must_use]
+pub fn in_document(recipe: &Recipe) -> Option<Id> {
+    if !is_instance(recipe) {
+        return None;
+    }
+    recipe
+        .args
+        .get(FAMILY_ID_ARG)
+        .and_then(Value::as_str)
+        .and_then(|id| Id::parse(id).ok())
+}
+
+/// `recipe` made a placed copy of `family`, a family in the document: that version and that
+/// family named, its type and values kept.
+#[must_use]
+pub fn of_family(recipe: &Recipe, family: &StoredFamily) -> Recipe {
+    let mut changed = recipe.clone();
+    changed.args.insert(
+        FAMILY_ARG.to_owned(),
+        Value::String(family.content.as_str().to_owned()),
+    );
+    changed.args.insert(
+        FAMILY_ID_ARG.to_owned(),
+        Value::String(family.recipe.id.to_string()),
+    );
+    changed
+}
+
+/// The recipe a builder is handed for a placed family of `family`, the document's record of the
+/// family its recipe names: `recipe` with the family's recipe text ([`RECIPE_ARG`]).
+///
+/// # Errors
+/// `FamilyMissing` when the record holds another version than the one `recipe` names.
+pub fn filled(recipe: &Recipe, family: &StoredFamily) -> Result<Recipe, GeometryError> {
+    let names = recipe.args.get(FAMILY_ARG).and_then(Value::as_str);
+    if names != Some(family.content.as_str()) {
+        return Err(fault(
+            "FamilyMissing",
+            format!(
+                "family {}: the document holds version {}, not the version this copy names",
+                family.recipe.name, family.content
+            ),
+        ));
+    }
+    let mut out = recipe.clone();
+    out.args
+        .insert(RECIPE_ARG.to_owned(), Value::String(family.text()));
+    Ok(out)
+}
+
+/// The recipe of a family's record: `construct` / [`RECORD_KIND`], no arguments.
+fn record_recipe() -> Recipe {
+    Recipe::construct(RECORD_KIND, BTreeMap::new())
+}
+
+/// A document's record of `family`: kind [`RECORD_KIND`], element id the family's permanent id,
+/// at level 0 and placement `{0,0,0}` with no references, and its recipe, content id and source
+/// under [`RECIPE_KEY`], [`CONTENT_KEY`] and [`SOURCE_KEY`].
+#[must_use]
+pub fn record(document: &Id, family: &StoredFamily) -> Element {
+    let mut props = BTreeMap::new();
+    props.insert(RECIPE_KEY.to_owned(), family.text());
+    props.insert(CONTENT_KEY.to_owned(), family.content.as_str().to_owned());
+    props.insert(SOURCE_KEY.to_owned(), family.source.write());
+    Element {
+        id: family.recipe.id.clone(),
+        document: document.clone(),
+        kind: RECORD_KIND.to_owned(),
+        name: family.recipe.name.clone(),
+        level: 0,
+        placement: Placement { x: 0, y: 0, z: 0 },
+        recipe: record_recipe(),
+        props,
+        references: Vec::new(),
+    }
+}
+
+/// Whether `element` is a family's record.
+#[must_use]
+pub fn is_record(element: &Element) -> bool {
+    element.kind == RECORD_KIND
+}
+
+/// The family a document's record holds. Strict: anything [`record`] would not write is refused.
+///
+/// # Errors
+/// Why not, in words, naming the record.
+pub fn read_record(element: &Element) -> Result<StoredFamily, String> {
+    let named = |why: String| format!("the family record {}: {why}", element.id);
+    let text = |key: &str| {
+        element
+            .props
+            .get(key)
+            .ok_or_else(|| named(format!("it holds no {key}")))
+    };
+    let family = StoredFamily::read(text(RECIPE_KEY)?, text(CONTENT_KEY)?, text(SOURCE_KEY)?)
+        .map_err(named)?;
+    if record(&element.document, &family) != *element {
+        return Err(named("it is not as it is written".to_owned()));
+    }
+    Ok(family)
+}
+
 /// `recipe` with another type.
 #[must_use]
 pub fn with_type(recipe: &Recipe, ty: &Key) -> Recipe {
@@ -230,6 +367,11 @@ pub struct Instance {
     pub turn: Turn,
     /// The values it holds for the parameters each instance holds, in stored text, by key.
     pub values: BTreeMap<Key, String>,
+    /// The family in the document it names, by its permanent id ([`FAMILY_ID_ARG`]).
+    pub in_document: Option<Id>,
+    /// The family's recipe as the document holds it, when the recipe it was read from carries it
+    /// ([`RECIPE_ARG`], filled before a build); its content id is [`Instance::family`].
+    pub own: Option<Arc<FamilyRecipe>>,
 }
 
 impl Instance {
@@ -267,6 +409,38 @@ impl Instance {
                 .and_then(Turn::of_quarters)
                 .ok_or_else(|| fault("BadInstance", format!("{TURN_ARG} must be 0, 1, 2 or 3")))?,
         };
+        let in_document = match recipe.args.get(FAMILY_ID_ARG) {
+            None => None,
+            Some(value) => Some(
+                value
+                    .as_str()
+                    .and_then(|id| Id::parse(id).ok())
+                    .ok_or_else(|| {
+                        fault(
+                            "BadInstance",
+                            format!("{FAMILY_ID_ARG} must be a family's permanent id"),
+                        )
+                    })?,
+            ),
+        };
+        let own = match recipe.args.get(RECIPE_ARG) {
+            None => None,
+            Some(value) => {
+                let read = value
+                    .as_str()
+                    .and_then(|text| FamilyRecipe::from_json(text).ok())
+                    .filter(|own| own.content_id() == family)
+                    .ok_or_else(|| {
+                        fault(
+                            "BadInstance",
+                            format!(
+                                "{RECIPE_ARG} must be the recipe of the version {FAMILY_ARG} names"
+                            ),
+                        )
+                    })?;
+                Some(Arc::new(read))
+            }
+        };
         let mut values = BTreeMap::new();
         for (name, value) in &recipe.args {
             let Some(key) = name.strip_prefix(VALUE_PREFIX) else {
@@ -291,6 +465,8 @@ impl Instance {
             ty,
             turn,
             values,
+            in_document,
+            own,
         })
     }
 }
@@ -309,22 +485,34 @@ fn refused(code: &str, recipe: &FamilyRecipe, error: &EvalError) -> GeometryErro
     fault(code, format!("family {}: {error}", recipe.name))
 }
 
-/// `instance`'s recipe from `source`, and its type's values.
+/// `instance`'s recipe, and its type's values: the document's, when the recipe it was read from
+/// carries it ([`Instance::own`]); else, for a placed family written before families were held
+/// in documents, from `source` by its content id.
 ///
 /// # Errors
 ///
-/// `FamilyMissing` when the source holds no recipe of that content id; `FamilyType` when the
-/// recipe names no such type, or the type's values do not read.
+/// `FamilyMissing` when the family is in the document but its recipe was not filled in, or the
+/// source holds no recipe of that content id; `FamilyType` when the recipe names no such type,
+/// or the type's values do not read.
 pub fn resolve(source: &dyn FamilySource, instance: &Instance) -> Result<Resolved, GeometryError> {
-    let recipe = source.recipe(&instance.family).ok_or_else(|| {
-        fault(
+    let recipe = if let Some(own) = &instance.own {
+        Arc::clone(own)
+    } else if let Some(id) = &instance.in_document {
+        return Err(fault(
             "FamilyMissing",
-            format!(
-                "family {}: no family recipe with this content id is loaded",
-                instance.family
-            ),
-        )
-    })?;
+            format!("family {id}: its recipe was not read from the document"),
+        ));
+    } else {
+        source.recipe(&instance.family).ok_or_else(|| {
+            fault(
+                "FamilyMissing",
+                format!(
+                    "family {}: no family recipe with this content id is loaded",
+                    instance.family
+                ),
+            )
+        })?
+    };
     let mut values =
         TypeValues::of(&recipe, &instance.ty).map_err(|e| refused("FamilyType", &recipe, &e))?;
     for (key, stored) in &instance.values {
@@ -483,6 +671,63 @@ mod tests {
         assert_eq!(
             with_type(&plain, &Key::parse("w600x600").unwrap()).args["type"],
             "w600x600"
+        );
+    }
+
+    /// A copy of a family the document holds is built from the recipe its record fills in, with
+    /// no library; a copy written before families were held in documents reads the library by its
+    /// content id; a copy whose recipe was not filled in, or names another version, is refused;
+    /// the family's record reads back strictly.
+    #[test]
+    fn a_copy_of_a_documents_family_needs_no_library() {
+        let library = Library::baked();
+        let (old_id, window) = library
+            .family("library.doors-windows.fixed-window")
+            .unwrap();
+        let mut own = (*window).clone();
+        own.id = Id::parse("office.window").unwrap();
+        let stored = StoredFamily::new(own, construct_families::Source::Text);
+        let ty = Key::parse("w1200x1200").unwrap();
+        let placed = of_family(&recipe(&stored.content, &ty), &stored);
+        assert_eq!(
+            in_document(&placed),
+            Some(Id::parse("office.window").unwrap())
+        );
+        let none = Library::default();
+        assert_eq!(
+            opening_of(&none, &placed).unwrap_err().code,
+            "FamilyMissing"
+        );
+        let built = filled(&placed, &stored).unwrap();
+        let (_, span) = opening_of(&none, &built).unwrap();
+        assert_eq!(span.z, [Length::from_mm(900), Length::from_mm(2100)]);
+        let other = StoredFamily::new((*window).clone(), construct_families::Source::Text);
+        assert_eq!(filled(&placed, &other).unwrap_err().code, "FamilyMissing");
+        let mut tampered = built.clone();
+        tampered
+            .args
+            .insert(RECIPE_ARG.to_owned(), Value::from(window.to_json()));
+        assert_eq!(Instance::of(&tampered).unwrap_err().code, "BadInstance");
+        // an old copy names no family in the document and is read from the library
+        let old = recipe(&old_id, &ty);
+        assert_eq!(in_document(&old), None);
+        assert!(opening_of(&*library, &old).is_ok());
+        // the record
+        let document = Id::parse("doc").unwrap();
+        let written = record(&document, &stored);
+        assert!(is_record(&written));
+        assert_eq!(written.id.as_str(), "office.window");
+        assert_eq!(read_record(&written).unwrap(), stored);
+        let mut renamed = written.clone();
+        renamed.name = "Window".to_owned();
+        let e = read_record(&renamed).unwrap_err();
+        assert!(e.ends_with("it is not as it is written"), "{e}");
+        let mut emptied = written;
+        emptied.props.remove(CONTENT_KEY);
+        let e = read_record(&emptied).unwrap_err();
+        assert_eq!(
+            e,
+            "the family record office.window: it holds no @family.content"
         );
     }
 
