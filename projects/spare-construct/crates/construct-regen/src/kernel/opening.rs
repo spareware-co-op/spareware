@@ -23,10 +23,10 @@
 //! along the wall and its sill height given as a door's are. It is a [`Span`] like the rest, and
 //! `cut_span` is the one cutter of all three.
 //!
-//! A wall at an angle (piece A83) is asked by the same rules in its own frame ([`Frame`]: along
-//! its line, across from its exterior, up), every element in it seated (construct-regen's
+//! A wall at an angle (piece A83) is asked by the same rules in its own frame (`Frame`: along its
+//! line, across from its exterior, up), every element in it seated (construct-regen's
 //! `hosting`), so each runs along it whatever axis its record names, and no `OpeningAcrossWall`
-//! is asked. Its length is the root of a whole number of square steps ([`Long::Root`]), and every
+//! is asked. Its length is the root of a whole number of square steps (`Long::Root`), and every
 //! rule that sets an opening against its wall's end is asked of it exactly, by squaring.
 //!
 //! What it builds, in the wall's frame (along its axis from `end0` to `end1`, up from its base):

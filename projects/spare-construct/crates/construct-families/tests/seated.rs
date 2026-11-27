@@ -167,8 +167,8 @@ fn boxes(asked: &Asked) -> Vec<(Vec<[i64; 3]>, [i64; 3])> {
 }
 
 /// The cells of an upright profile (its outline and holes in the sketch's two coordinates), by
-/// hand: a line along each axis through every corner, each cell kept when an odd number of the
-/// loops hold its middle.
+/// hand: an upright line through every corner, and in each stretch its runs of heights inside the
+/// profile (an odd number of the loops holding the middle of each piece between corner heights).
 fn cells_of(rings: &[Vec<[i64; 2]>]) -> Vec<[i64; 4]> {
     let breaks = |k: usize| {
         let mut at: Vec<i64> = rings.iter().flatten().map(|p| p[k]).collect();
@@ -177,22 +177,30 @@ fn cells_of(rings: &[Vec<[i64; 2]>]) -> Vec<[i64; 4]> {
         at
     };
     let (us, vs) = (breaks(0), breaks(1));
-    let mut found = Vec::new();
-    for u in us.windows(2) {
-        for v in vs.windows(2) {
-            let (mu, mv) = (u[0] + u[1], v[0] + v[1]);
-            let mut odd = false;
-            for ring in rings {
-                for (i, a) in ring.iter().enumerate() {
-                    let b = ring[(i + 1) % ring.len()];
-                    if a[0] == b[0] && 2 * a[0] > mu && (2 * a[1] < mv) != (2 * b[1] < mv) {
-                        odd = !odd;
-                    }
+    let held = |mu: i64, mv: i64| {
+        let mut odd = false;
+        for ring in rings {
+            for (i, a) in ring.iter().enumerate() {
+                let b = ring[(i + 1) % ring.len()];
+                if a[0] == b[0] && 2 * a[0] > mu && (2 * a[1] < mv) != (2 * b[1] < mv) {
+                    odd = !odd;
                 }
             }
-            if odd {
-                found.push([u[0], u[1], v[0], v[1]]);
+        }
+        odd
+    };
+    let mut found = Vec::new();
+    for u in us.windows(2) {
+        let mut run: Option<(i64, i64)> = None;
+        for v in vs.windows(2) {
+            if held(u[0] + u[1], v[0] + v[1]) {
+                run = Some(run.map_or((v[0], v[1]), |(low, _)| (low, v[1])));
+            } else if let Some((low, high)) = run.take() {
+                found.push([u[0], u[1], low, high]);
             }
+        }
+        if let Some((low, high)) = run {
+            found.push([u[0], u[1], low, high]);
         }
     }
     found
@@ -201,8 +209,8 @@ fn cells_of(rings: &[Vec<[i64; 2]>]) -> Vec<[i64; 4]> {
 /// An upright profile's solid seated at an angle off the quarter turns is the union of its cells:
 /// each a level rectangle swept straight up through the profile's depth, every corner the nearest
 /// step to the exact turn of its point in the family's frame; together exactly the profile's
-/// cells, each once (a door frame's two jambs and its head in three, a window frame round its
-/// light in eight). Every template, every type, on every way; a 3:4:5 way lands exactly.
+/// cells, each once (a door frame in three, its jambs and its head; a window frame in four round
+/// its light). Every template, every type, on every way; a 3:4:5 way lands exactly.
 #[test]
 fn an_upright_profile_seated_at_an_angle_is_its_cells_united() {
     for text in [DOOR, FIXED, SLIDING] {
@@ -263,8 +271,8 @@ fn an_upright_profile_seated_at_an_angle_is_its_cells_united() {
             }
         }
     }
-    // The door's frame is its two jambs and its head; the window's frame eight cells round its
-    // light; the glass and the leaf one each.
+    // The door's frame is three cells, the window's frame four round its light, the glass and the
+    // leaf one each.
     let door = read(DOOR);
     let values = TypeValues::of(&door, &key("d900x2100")).unwrap();
     let seat = Seat::new(WAYS[0].1, [0, 0], [0, 0]).unwrap();
@@ -274,7 +282,7 @@ fn an_upright_profile_seated_at_an_angle_is_its_cells_united() {
         .iter()
         .map(|s| boxes(&s.solid).len())
         .collect();
-    assert_eq!(counts, [5, 1]);
+    assert_eq!(counts, [3, 1]);
     let window = read(FIXED);
     let values = TypeValues::of(&window, &key("w1200x1200")).unwrap();
     let seated = evaluate_seated(&mut Asks, &window, &values, Limits::DEFAULT, &seat).unwrap();
@@ -283,7 +291,7 @@ fn an_upright_profile_seated_at_an_angle_is_its_cells_united() {
         .iter()
         .map(|s| boxes(&s.solid).len())
         .collect();
-    assert_eq!(counts, [8, 1]);
+    assert_eq!(counts, [4, 1]);
 }
 
 /// A level profile seated at an angle is put through the seat corner for corner, holes and all,

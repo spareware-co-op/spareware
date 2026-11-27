@@ -2757,8 +2757,9 @@ type AtAngle<'a> = (&'a str, &'a Recipe, &'a str, i32, i32, [i64; 2], [i64; 2]);
 /// A door, a window, a plain opening and a placed door, each in a three-layer wall at 30, 45 and
 /// 60 degrees and at a 3:4:5 slope (piece A83), fit and cut it as along an axis: `fits` passes
 /// them; each opening lies in the wall's frame exactly where its offsets put it; each layer is
-/// made of its cells outside the openings (the wall cut at its ends and every jamb, and up at
-/// every sill and head: 27 cells less the 6 the openings take), every cell corner either the
+/// made of its cells outside the openings (the wall cut at its ends and every jamb: five stretches
+/// beside the openings their whole height, a piece over each door and a piece under and over the
+/// window and the opening, eleven), every cell corner either the
 /// layer's own at the wall's ends or the nearest grid step to a frame point on one of its faces
 /// at a jamb (on the 3:4:5 wall, exactly that point), swept straight up; each layer holds a
 /// volume. Each element built alone builds on this engine and on the stand-in, placed at the
@@ -2856,7 +2857,7 @@ pub fn elements_at_any_angle_cut_their_wall_and_stand_in_it<E: Engine + Send + '
         let mut exterior_corners = Vec::new();
         for (layer, asked) in plan.layers.iter().zip(body["layers"].as_array().unwrap()) {
             let cells = asked["cells"].as_array().unwrap();
-            assert_eq!(cells.len(), 21, "{name}");
+            assert_eq!(cells.len(), 11, "{name}");
             let faces = [layer.exterior, layer.interior];
             let ends: Vec<[i64; 2]> = faces
                 .iter()

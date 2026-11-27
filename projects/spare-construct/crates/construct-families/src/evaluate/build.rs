@@ -24,10 +24,11 @@
 //! three rounded corners of one upright face are in general not on one plane, and the engine takes
 //! no such profile. It is made of upright boxes instead, each a level rectangle extruded straight
 //! up, which stays a flat-faced prism whatever its corners round to ([`upright`]): the profile is
-//! cut into cells by a line along each of its axes through every corner, and the cells inside it
-//! are extruded and united, each sharing a whole side with one before it. Every corner of every
-//! cell is a seated grid point and neighbouring cells share theirs exactly, so the union's every
-//! vertex is a grid point (a subtraction would leave vertices where a rounded face meets another,
+//! cut by an upright line through every corner into stretches, each stretch's heights inside it
+//! in runs, and each run is extruded and united, each sharing part of a side with one before it
+//! and none touching the rest only along an edge (the engine's union keeps its pieces and refuses
+//! that). Every corner of every cell is a seated grid point and neighbouring cells share theirs
+//! exactly, so the union's every vertex is a grid point (a subtraction would leave vertices where a rounded face meets another,
 //! which no grid point holds, and the engine meshes none). That holds for a profile whose every
 //! edge runs along its sketch's two axes, as the library's frames, leaves, sashes and glass do; one
 //! with a sloped edge is refused off the quarter turns (`UprightNotSquare`). Interim: the kernel's
@@ -290,11 +291,13 @@ fn inside(rings: &[&[[i64; 2]]], [u2, v2]: [i128; 2]) -> bool {
 }
 
 /// The cells of the region inside `rings` (each a loop of corners, every edge along an axis; a
-/// point inside when an odd number of the rings hold it): the region cut by a line along each axis
-/// through every corner, each cell `[u0, u1, v0, v1]` kept when its middle is inside. In the order
-/// they are united: from the lowest cell, each next the least cell sharing a whole side with one
-/// already taken, so the union stays one solid; a cell no earlier cell reaches comes after, least
-/// first. The same region always gives the same cells in the same order.
+/// point inside when an odd number of the rings hold it): the region cut by an upright line
+/// through every corner into stretches, each stretch's heights inside the region in runs (a line
+/// across through every corner marks where a run may start or end), each run a cell
+/// `[u0, u1, v0, v1]`. In the order they are united: from the first, each next the least cell that
+/// shares part of a side with one already taken (a neighbouring stretch, overlapping heights), so
+/// the union stays one solid and no cell touches the rest only along an edge; a cell none reaches
+/// comes after, least first. The same region always gives the same cells in the same order.
 fn cells(rings: &[&[[i64; 2]]]) -> Vec<Rectangle> {
     let breaks = |pick: usize| {
         let mut at: Vec<i64> = rings
@@ -306,55 +309,54 @@ fn cells(rings: &[&[[i64; 2]]]) -> Vec<Rectangle> {
         at
     };
     let (us, vs) = (breaks(0), breaks(1));
-    let mut kept = BTreeSet::new();
+    let mut runs: Vec<(usize, Rectangle)> = Vec::new();
     for (i, u) in us.windows(2).enumerate() {
-        for (j, v) in vs.windows(2).enumerate() {
-            if let ([u0, u1], [v0, v1]) = (u, v) {
-                let middle = [
-                    i128::from(*u0).saturating_add(i128::from(*u1)),
-                    i128::from(*v0).saturating_add(i128::from(*v1)),
-                ];
-                if inside(rings, middle) {
-                    kept.insert((i, j));
-                }
+        let [u0, u1] = [u.first().copied(), u.get(1).copied()];
+        let (Some(u0), Some(u1)) = (u0, u1) else {
+            continue;
+        };
+        let mut run: Option<(i64, i64)> = None;
+        for v in vs.windows(2) {
+            let (Some(&v0), Some(&v1)) = (v.first(), v.get(1)) else {
+                continue;
+            };
+            let middle = [
+                i128::from(u0).saturating_add(i128::from(u1)),
+                i128::from(v0).saturating_add(i128::from(v1)),
+            ];
+            if inside(rings, middle) {
+                run = Some(run.map_or((v0, v1), |(low, _)| (low, v1)));
+            } else if let Some((low, high)) = run.take() {
+                runs.push((i, [u0, u1, low, high]));
             }
         }
+        if let Some((low, high)) = run {
+            runs.push((i, [u0, u1, low, high]));
+        }
     }
-    let mut order: Vec<(usize, usize)> = Vec::with_capacity(kept.len());
+    let shares = |a: &(usize, Rectangle), b: &(usize, Rectangle)| {
+        a.0.abs_diff(b.0) == 1 && a.1[2].max(b.1[2]) < a.1[3].min(b.1[3])
+    };
+    let mut order = Vec::with_capacity(runs.len());
     let mut taken = BTreeSet::new();
-    while let Some(&first) = kept.iter().find(|c| !taken.contains(*c)) {
+    while let Some(first) = (0..runs.len()).find(|i| !taken.contains(i)) {
         let mut reach = BTreeSet::from([first]);
         while let Some(next) = reach.pop_first() {
             if !taken.insert(next) {
                 continue;
             }
-            order.push(next);
-            let (i, j) = next;
-            let sides = [
-                i.checked_sub(1).map(|i| (i, j)),
-                i.checked_add(1).map(|i| (i, j)),
-                j.checked_sub(1).map(|j| (i, j)),
-                j.checked_add(1).map(|j| (i, j)),
-            ];
-            for side in sides.into_iter().flatten() {
-                if kept.contains(&side) && !taken.contains(&side) {
-                    reach.insert(side);
+            let Some(cell) = runs.get(next) else {
+                continue;
+            };
+            order.push(cell.1);
+            for (i, other) in runs.iter().enumerate() {
+                if !taken.contains(&i) && shares(cell, other) {
+                    reach.insert(i);
                 }
             }
         }
     }
     order
-        .into_iter()
-        .filter_map(|(i, j)| {
-            let next = |k: usize| k.checked_add(1);
-            Some([
-                *us.get(i)?,
-                *us.get(next(i)?)?,
-                *vs.get(j)?,
-                *vs.get(next(j)?)?,
-            ])
-        })
-        .collect()
 }
 
 /// An upright profile (on an `xz` plane, or a `yz` one when `side`), its corners `outer` and its
@@ -481,9 +483,10 @@ mod tests {
     /// A case: its name, its rings, and how many cells it is.
     type Case<'a> = (&'a str, Vec<&'a [[i64; 2]]>, usize);
 
-    /// The cells of a region cover exactly the region, unit square by unit square, each once, and
-    /// each after the first shares a whole side with one before it: a door's frame (its jambs and
-    /// its head), a window's frame round its light, an L, a stair and an E.
+    /// The cells of a region cover exactly the region, unit square by unit square, each once; each
+    /// after the first shares part of a side with one before it, and none touches another only at
+    /// a corner: a door's frame (its jambs and its head), a window's frame round its light, an L,
+    /// a stair and an E.
     #[test]
     fn the_cells_of_a_region_are_exactly_the_region_each_joined_to_one_before() {
         let door = [
@@ -524,11 +527,11 @@ mod tests {
             [0, 9],
         ];
         let cases: [Case<'_>; 5] = [
-            ("door frame", vec![&door], 5),
-            ("window frame", vec![&outer, &light], 8),
-            ("l", vec![&l], 3),
-            ("stair", vec![&stair], 6),
-            ("e", vec![&e], 8),
+            ("door frame", vec![&door], 3),
+            ("window frame", vec![&outer, &light], 4),
+            ("l", vec![&l], 2),
+            ("stair", vec![&stair], 3),
+            ("e", vec![&e], 4),
         ];
         for (name, rings, count) in cases {
             let found = cells(&rings);
@@ -546,25 +549,26 @@ mod tests {
                     assert_eq!(covering, wanted, "{name} at ({u}, {v})");
                 }
             }
-            for (k, c) in found.iter().enumerate().skip(1) {
+            for (k, c) in found.iter().enumerate() {
                 let shares = |d: &Rectangle| {
-                    let along = (c[0] == d[1] || c[1] == d[0]) && c[2] == d[2] && c[3] == d[3];
-                    let up = (c[2] == d[3] || c[3] == d[2]) && c[0] == d[0] && c[1] == d[1];
-                    along || up
+                    (c[0] == d[1] || c[1] == d[0]) && c[2].max(d[2]) < c[3].min(d[3])
                 };
-                assert!(found[..k].iter().any(shares), "{name}: {c:?}");
+                let corner_only = |d: &Rectangle| {
+                    (c[0] == d[1] || c[1] == d[0]) && (c[2] == d[3] || c[3] == d[2])
+                };
+                if k > 0 {
+                    assert!(found[..k].iter().any(shares), "{name}: {c:?}");
+                }
+                assert!(
+                    !found.iter().any(corner_only),
+                    "{name}: {c:?} meets one at a corner"
+                );
             }
         }
-        // The door's frame: its left jamb, then its head across, then its right jamb.
+        // The door's frame: its left jamb, its head across, its right jamb.
         assert_eq!(
             cells(&[&door]),
-            vec![
-                [0, 2, 0, 7],
-                [0, 2, 7, 9],
-                [2, 8, 7, 9],
-                [8, 10, 7, 9],
-                [8, 10, 0, 7]
-            ]
+            vec![[0, 2, 0, 9], [2, 8, 7, 9], [8, 10, 0, 9]]
         );
     }
 

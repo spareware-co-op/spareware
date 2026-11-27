@@ -19,12 +19,15 @@
 //!   (construct-regen's `hosting`, [`crate::seating::SEAT_ARG`]), its place read from its seat in
 //!   the wall's frame exactly, never from its placement, which is only the nearest millimetre to
 //!   it; the rules are asked in that frame (`opening::Long` for its length). Each layer is then
-//!   made without a subtraction: cut into cells along the wall at its ends and at every opening's
-//!   jambs and up it at every opening's sill and head, every cell outside the openings extruded
-//!   and united, each sharing a whole side with one before it. A cell's corners are the wall's
-//!   frame points on the layer's two faces at those jambs, each put through the wall's frame and
-//!   so rounded once, as the element's own corners are (a door flush with a face has its jambs'
-//!   corners there, exactly the layer's); the layer's corners at the wall's ends are its strip's.
+//!   made without a subtraction: cut along the wall at its ends and at every opening's jambs into
+//!   stretches, each stretch's heights outside the openings in runs (a stretch beside the openings
+//!   its whole height, one across an opening the pieces under and over it), each run a cell,
+//!   extruded and united, each sharing part of a side with one before it and none touching the
+//!   rest only along an edge (the engine's union keeps its pieces and refuses that). A cell's
+//!   corners are the wall's frame points on the layer's two faces at those jambs, each put through
+//!   the wall's frame and so rounded once, as the element's own corners are (a door flush with a
+//!   face has its jambs' corners there, exactly the layer's); the layer's corners at the wall's
+//!   ends are its strip's.
 //!   So every vertex of the cut layer is a grid point, as the engine meshes only those (a
 //!   subtraction of a cutter at an angle would leave vertices where a rounded jamb meets a
 //!   rounded face, which no grid point holds). The body lists each layer's cells and each
@@ -784,56 +787,81 @@ fn layer_cells(
             .iter()
             .any(|s| s.start <= a0 && a1 <= s.end && s.foot.max(0) <= z0 && z1 <= s.head)
     };
-    let mut kept = BTreeSet::new();
+    // Each stretch along the wall, its runs of heights outside the openings: a column the whole
+    // height beside every opening, the pieces under and over one in its stretch.
+    let mut pieces: Vec<(usize, i64, i64)> = Vec::new();
     for k in 0..along.len().saturating_sub(1) {
+        let mut run: Option<(i64, i64)> = None;
         for b in 0..up.len().saturating_sub(1) {
-            if !open(k, b) {
-                kept.insert((k, b));
+            let (Some(&z0), Some(&z1)) = (up.get(b), up.get(b.saturating_add(1))) else {
+                continue;
+            };
+            if open(k, b) {
+                if let Some((low, high)) = run.take() {
+                    pieces.push((k, low, high));
+                }
+            } else {
+                run = Some(run.map_or((z0, z1), |(low, _)| (low, z1)));
             }
         }
+        if let Some((low, high)) = run {
+            pieces.push((k, low, high));
+        }
     }
-    let mut cells = Vec::with_capacity(kept.len());
+    let mut cells = Vec::with_capacity(pieces.len());
+    for at in joined_order(&pieces) {
+        let Some(&(k, z0, z1)) = pieces.get(at) else {
+            continue;
+        };
+        let at = |i: usize| along.get(i).copied().ok_or_else(super::too_big);
+        let (a0, a1) = (at(k)?, at(k.saturating_add(1))?);
+        let mut ring = vec![
+            corner(a0, layer.exterior)?,
+            corner(a1, layer.exterior)?,
+            corner(a1, layer.interior)?,
+            corner(a0, layer.interior)?,
+        ];
+        if area_twice(&ring) < 0 {
+            ring.reverse();
+        }
+        let outer = ring
+            .into_iter()
+            .map(|xy| point(xy, z0))
+            .collect::<Result<Vec<_>, _>>()?;
+        let rise = z1.checked_sub(z0).ok_or_else(super::too_big)?;
+        cells.push((outer, [0, 0, rise]));
+    }
+    Ok(cells)
+}
+
+/// The order pieces of a cut layer are united in, each `(stretch, low, high)`: from the first,
+/// each next the least piece that shares part of a side with one already taken (a neighbouring
+/// stretch, overlapping heights), so the union stays one solid and no piece touches it only along
+/// an edge; a piece none reaches comes after, least first.
+fn joined_order(pieces: &[(usize, i64, i64)]) -> Vec<usize> {
+    let shares = |a: (usize, i64, i64), b: (usize, i64, i64)| {
+        a.0.abs_diff(b.0) == 1 && a.1.max(b.1) < a.2.min(b.2)
+    };
+    let mut order = Vec::with_capacity(pieces.len());
     let mut taken = BTreeSet::new();
-    while let Some(&first) = kept.iter().find(|c| !taken.contains(*c)) {
+    while let Some(first) = (0..pieces.len()).find(|i| !taken.contains(i)) {
         let mut reach = BTreeSet::from([first]);
         while let Some(next) = reach.pop_first() {
             if !taken.insert(next) {
                 continue;
             }
-            let (k, b) = next;
-            let sides = [
-                k.checked_sub(1).map(|k| (k, b)),
-                k.checked_add(1).map(|k| (k, b)),
-                b.checked_sub(1).map(|b| (k, b)),
-                b.checked_add(1).map(|b| (k, b)),
-            ];
-            for side in sides.into_iter().flatten() {
-                if kept.contains(&side) && !taken.contains(&side) {
-                    reach.insert(side);
+            order.push(next);
+            let Some(&piece) = pieces.get(next) else {
+                continue;
+            };
+            for (i, &other) in pieces.iter().enumerate() {
+                if !taken.contains(&i) && shares(piece, other) {
+                    reach.insert(i);
                 }
             }
-            let at = |i: usize| along.get(i).copied().ok_or_else(super::too_big);
-            let (a0, a1) = (at(k)?, at(k.saturating_add(1))?);
-            let z = |i: usize| up.get(i).copied().ok_or_else(super::too_big);
-            let (z0, z1) = (z(b)?, z(b.saturating_add(1))?);
-            let mut ring = vec![
-                corner(a0, layer.exterior)?,
-                corner(a1, layer.exterior)?,
-                corner(a1, layer.interior)?,
-                corner(a0, layer.interior)?,
-            ];
-            if area_twice(&ring) < 0 {
-                ring.reverse();
-            }
-            let outer = ring
-                .into_iter()
-                .map(|xy| point(xy, z0))
-                .collect::<Result<Vec<_>, _>>()?;
-            let rise = z1.checked_sub(z0).ok_or_else(super::too_big)?;
-            cells.push((outer, [0, 0, rise]));
         }
     }
-    Ok(cells)
+    order
 }
 
 /// Twice the signed area of a plan ring, positive when it runs anticlockwise from above.
