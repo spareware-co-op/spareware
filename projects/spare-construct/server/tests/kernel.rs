@@ -6,7 +6,8 @@
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
 //! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
-//! cutting a three-layer wall (job 6.4), and a document of one edition reported,
+//! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
+//! and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -136,6 +137,11 @@ fn a_mono_roof_is_its_layers() {
 #[test]
 fn a_flat_roof_is_its_layers() {
     kernel_suite::a_flat_roof_is_its_layers(engine);
+}
+
+#[test]
+fn a_stair_is_its_pieces() {
+    kernel_suite::a_stair_is_its_pieces(engine);
 }
 
 #[test]
