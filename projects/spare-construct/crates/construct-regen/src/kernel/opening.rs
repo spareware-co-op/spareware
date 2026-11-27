@@ -541,6 +541,17 @@ impl Cut {
         ))
     }
 
+    /// Where the opening lies in its wall's frame, in steps: along the wall from its start (from,
+    /// to), and up from its base (foot, head).
+    pub(super) fn stretch(&self) -> ([i64; 2], [i64; 2]) {
+        ([self.start, self.end], [self.foot, self.head])
+    }
+
+    /// What the hosted element is called in a sentence: `door`, `opening` or `family`.
+    pub(super) fn noun(&self) -> &'static str {
+        self.noun
+    }
+
     /// The cutter's lowest and highest corners in its wall's frame, in steps: along the frame's
     /// along axis and across it in their plan axes' places, and up.
     pub(super) fn frame_box(&self) -> ([i64; 3], [i64; 3]) {

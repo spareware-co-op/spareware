@@ -7,15 +7,17 @@ A published format under [EXTENDING.md](../../../../EXTENDING.md), section 3: th
 | Field | Value |
 | --- | --- |
 | `identity` | The kind and the elements, joined with `\|`: `wall.overlap\|W-1\|W-2`. The same problem has the same identity for as long as it lasts, however the rest of the model changes |
-| `kind` | A stable name: `room.not_enclosed` or `wall.overlap` |
-| `severity` | `notice`, `warning` or `error`; both kinds are `warning` |
+| `kind` | A stable name: `room.not_enclosed`, `room.redundant`, `wall.overlap` or `insert.crosses_joined_wall` |
+| `severity` | `notice`, `warning` or `error`; every kind is `warning` |
 | `elements` | The permanent IDs of the elements involved, in the order the kind states |
 | `words` | A plain sentence for people |
 
 | Kind | Elements | Found when |
 | --- | --- | --- |
 | `room.not_enclosed` | The room | The walls of its level do not close round its point (construct-rooms' `NotEnclosed`) |
+| `room.redundant` | The redundant room, then the room that keeps the space | A second room whose loop is the same as an earlier room's (construct-rooms' `Redundant`): it has no area of its own |
 | `wall.overlap` | The two walls, lower ID first | Two walls on one level have exactly parallel reference lines and outlines that share a region of positive area |
+| `insert.crosses_joined_wall` | The door, window or opening; its host wall; the joined wall | A wall on the host's level, not parallel to it, whose outline meets the host's and stands across a positive length of the stretch of the host the insert's opening takes |
 
 ## The list
 

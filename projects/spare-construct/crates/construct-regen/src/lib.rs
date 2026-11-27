@@ -49,6 +49,12 @@
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
 //!   doors through it, and the server's commands check through it, so the two cannot differ.
+//! - [`inserts`]: the doors, windows and plain openings hosted in a document's walls, and the
+//!   stretch of its wall each opening takes, as the wall's builder places it (the warnings read it
+//!   for an opening across a joined wall, a wall's quantities for the openings to take out).
+//! - [`wall_measure`]: a layered wall's length, one-face area and volume (and each layer's), the
+//!   openings taken out and the joints counted, exact, and the same as read-only parameters
+//!   (note CON-A4-F2-P3).
 //! - [`families`]: a placed family (`family.instance`, job 6.4): its record (the family recipe
 //!   version and the type), where its recipe comes from (the [`families::FamilySource`] trait;
 //!   interim, the library baked in at build time, until job 7.6 stores families in the document),
@@ -69,6 +75,8 @@ pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;
 #[cfg(feature = "server")]
+pub mod inserts;
+#[cfg(feature = "server")]
 pub mod joins;
 pub mod kernel;
 #[cfg(feature = "server")]
@@ -87,6 +95,8 @@ pub mod rooms;
 pub mod slabs;
 pub mod stand_in;
 pub mod voids;
+#[cfg(feature = "server")]
+pub mod wall_measure;
 pub mod wall_plan;
 #[cfg(feature = "server")]
 pub mod walls;

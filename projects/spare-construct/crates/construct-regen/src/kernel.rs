@@ -382,6 +382,31 @@ impl Units {
         }
     }
 
+    /// `steps` of this engine in the building's grid steps ([`construct_params::Length`]'s unit),
+    /// rounded down, or up when `up`: exact whenever the engine's step is a whole number of the
+    /// building's (the kernel's own is), and widening a stretch outward when it is not.
+    ///
+    /// # Errors
+    ///
+    /// `TooBig` beyond a 64-bit integer.
+    pub fn to_q0(self, steps: i64, up: bool) -> Result<i64, GeometryError> {
+        let per = i128::from(construct_params::Length::STEPS_PER_MM);
+        let product = i128::from(steps).checked_mul(per).ok_or_else(too_big)?;
+        let each = i128::from(self.per_mm);
+        let (Some(whole), Some(rest)) = (
+            product.checked_div_euclid(each),
+            product.checked_rem_euclid(each),
+        ) else {
+            return Err(too_big());
+        };
+        let rounded = if up && rest != 0 {
+            whole.checked_add(1).ok_or_else(too_big)?
+        } else {
+            whole
+        };
+        i64::try_from(rounded).map_err(|_| too_big())
+    }
+
     /// `steps` to the nearest whole millimetre, a half away from zero, and whether that is
     /// exact: how a display in whole millimetres holds a point that is not on one.
     #[must_use]
@@ -766,6 +791,82 @@ pub fn fits_with(
     }
     let shape = Extrusion::of(host)?;
     opening::plan(host, &shape, &on_grid(units, hosted)?, units, band).map(|_| ())
+}
+
+/// Where one opening lies in the wall that hosts it, as the builder's own rules place it
+/// ([`openings`]): in the building's grid steps, exact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Opened {
+    /// The hosted element's permanent ID.
+    pub key: String,
+    /// What it is called in a sentence: `door`, `opening` or `family`.
+    pub noun: &'static str,
+    /// The plan axis its wall's line runs along: 0 for x, 1 for y.
+    pub axis: usize,
+    /// Where the opening starts along that axis, in plan, relative to the wall's placement.
+    pub low: i64,
+    /// Where it ends.
+    pub high: i64,
+    /// Its foot, up from the wall's base.
+    pub foot: i64,
+    /// Its head, up from the wall's base.
+    pub head: i64,
+}
+
+/// Where the elements `hosted` cut openings in `host`, one [`Opened`] each, in the order of their
+/// keys, asked without the engine by the rules [`fits`] applies, so what is read here is what is
+/// built. A host that is not a wall, or nothing hosted, gives none. Positions are relative to the
+/// host's placement.
+///
+/// # Errors
+///
+/// As [`fits`]: [`opening`]'s refusals, each naming the door and why.
+pub fn openings(
+    edition: &Edition,
+    host: &Recipe,
+    hosted: &[HostedAt<'_>],
+    families: &dyn FamilySource,
+) -> Result<Vec<Opened>, GeometryError> {
+    let (units, band) = if let Some(report) = &edition.report {
+        let units = Units::of_steps_per_mm(report.steps_per_mm)?;
+        let tolerances = report
+            .tolerances
+            .iter()
+            .filter_map(|t| t.value.parse::<f64>().ok().map(|v| (t.unit.as_str(), v)));
+        (units, units.band_over(tolerances))
+    } else {
+        let units = Units::on(STEP)?;
+        (units, units.band_over(std::iter::empty()))
+    };
+    if hosted.is_empty() || crate::floor_plan::is_floor(host) {
+        return Ok(Vec::new());
+    }
+    if wall_plan::is_layered(host) {
+        return layered::opened(
+            &Layered::of(host)?,
+            &on_grid(units, hosted)?,
+            units,
+            band,
+            families,
+        );
+    }
+    let shape = Extrusion::of(host)?;
+    let axis = shape.along;
+    opening::plan(host, &shape, &on_grid(units, hosted)?, units, band)?
+        .iter()
+        .map(|cut| {
+            let ([from, to], [foot, head]) = cut.stretch();
+            Ok(Opened {
+                key: cut.key().to_owned(),
+                noun: cut.noun(),
+                axis,
+                low: units.to_q0(from, false)?,
+                high: units.to_q0(to, true)?,
+                foot: units.to_q0(foot, false)?,
+                head: units.to_q0(head, true)?,
+            })
+        })
+        .collect()
 }
 
 /// The builder over an engine: every shape is made by `E` through the kernel's engine seam.

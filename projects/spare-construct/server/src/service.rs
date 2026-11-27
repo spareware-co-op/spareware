@@ -624,6 +624,18 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let mut view = context
             .view_cut(&record, ty.as_ref(), &cuts)
             .map_err(Refusal::Bad)?;
+        // A wall's length, area and volume, openings taken out and joints made, and each layer's
+        // volume, worked out of the document as it stands and never stored.
+        view.parameters.extend(
+            construct_regen::wall_measure::read_only_view(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+            )
+            .await?,
+        );
         if construct_regen::rooms::is_room(&record) {
             let worked = construct_regen::rooms::worked_at(
                 &mut snapshot,

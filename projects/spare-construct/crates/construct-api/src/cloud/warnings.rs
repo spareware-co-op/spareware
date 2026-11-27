@@ -10,12 +10,14 @@
 //! A wall that does not build (its type missing, its recipe not as written) is not there, as in
 //! every view; a wall with no level is not on one, so it overlaps nothing. A room the search
 //! refuses is read as refused, not as a warning of this list (the refusal has its own words on
-//! the room's view).
+//! the room's view). The doors, windows and openings hosted in a wall are read as the wall's
+//! builder places them ([`construct_regen::inserts`]), each with the stretch of its host its
+//! opening takes, so an opening that crosses a wall joined to its host is a warning.
 
 use construct_regen::parameters::At;
 use construct_regen::rooms::{WALL_KIND, level_of, of_kind, wall_plan_of};
 use construct_rooms::{Outcome, ROOM_KIND};
-use construct_warnings::{Model, Room, RoomState, Wall, warnings};
+use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings};
 use kit_core::Id;
 use kit_store::{Reader, StoreError};
 use serde::Serialize;
@@ -62,6 +64,18 @@ pub async fn read_warnings<R: Reader>(
         };
         if let Ok(wall) = Wall::new(wall.id.clone(), level, plan.direction, &plan.corners) {
             model.walls.push(wall);
+        }
+    }
+    for insert in construct_regen::inserts::in_document(reader, project, document).await? {
+        if let Ok(insert) = Insert::new(
+            insert.id,
+            insert.who,
+            insert.host,
+            insert.axis,
+            insert.low,
+            insert.high,
+        ) {
+            model.inserts.push(insert);
         }
     }
     for room in of_kind(reader, project, document, ROOM_KIND, at).await? {
