@@ -8,8 +8,8 @@
 //! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
 //! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
-//! a family the document holds and no library does built and reloaded (job 7.6), and a
-//! document of one edition reported,
+//! a family the document holds and no library does built and reloaded (job 7.6), doors, windows
+//! and openings in walls at any angle (piece A83), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -230,6 +230,14 @@ fn joined_walls_meet_without_overlap_on_the_engine() {
 #[test]
 fn a_family_cuts_every_layer_and_stands_in_its_opening() {
     kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
+}
+
+/// Piece A83: a door, a window, a plain opening and a placed door in walls at 30, 45 and 60
+/// degrees and at a 3:4:5 slope, every wall, opening and family solid made by solidcore's engine
+/// and passed by the kernel's checker.
+#[test]
+fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
+    kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(engine);
 }
 
 #[test]
@@ -1108,6 +1116,72 @@ async fn the_server_draws_a_levels_plan_on_the_kernel() {
     );
     let again = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
     assert_eq!(plan.svg, again.svg);
+}
+
+/// Piece A83: a plan draws a door hosted on a wall at an angle seated in its wall, as its shape is
+/// built: its cut edges run along the wall (a 3:4:5 slope, so neither along x nor along y), and
+/// nothing is left out of the plan.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_server_draws_a_door_in_a_wall_at_an_angle_seated_in_its_wall() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-A83", "type": "wall-partition", "start": ["50 m", "0"],
+                "end": ["53 m", "4 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await;
+    let (_, names, _) = layered(&s, &project, &model, "W-A83").await;
+    let exterior = names
+        .iter()
+        .find(|n| n.role == "exterior")
+        .unwrap()
+        .name
+        .clone();
+    edit(
+        "hosted.place",
+        json!({ "element": "D-A83", "host": "W-A83", "face": exterior, "along": "1200 mm",
+                "recipe": kernel_suite::door_of(900, 2100, "x") }),
+    )
+    .await;
+    s.regenerate(&project).await.unwrap();
+    let plan = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+    let number = |line: &str, name: &str| -> f64 {
+        let at = line.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+        line[at..].split('"').next().unwrap().parse().unwrap()
+    };
+    let door: Vec<&str> = plan
+        .svg
+        .split("<line ")
+        .filter(|line| line.contains("data-element=\"D-A83\""))
+        .collect();
+    assert!(!door.is_empty(), "the door's cut edges are drawn");
+    for line in door {
+        let (dx, dy) = (
+            number(line, "x2") - number(line, "x1"),
+            number(line, "y2") - number(line, "y1"),
+        );
+        // The drawing's y runs up the sheet, so the wall runs along (3, -4) in it: an edge is along
+        // it or square to it (4, 3), each within the nearest-step rounding.
+        let (along, square) = (dx * 4.0 + dy * 3.0, dx * 3.0 - dy * 4.0);
+        assert!(
+            along.abs() < 0.1 || square.abs() < 0.1,
+            "an edge of the door runs ({dx}, {dy}), along neither the wall nor across it"
+        );
+    }
 }
 
 /// A view's graphics rules reach the drawing on the kernel: with no rule the plan is the bytes it

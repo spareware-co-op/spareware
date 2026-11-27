@@ -40,7 +40,8 @@
 //! A placed family (`family.instance`, job 6.4) is hosted the same way and rides the same rows:
 //! it is seated in its wall ([`crate::hosting::seat`]: its place and its turn, read from the wall
 //! each time, never stored), both in its own build and in the wall's, so the solids it is built
-//! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
+//! with and the opening its wall cuts are in one place. In a wall at an angle every hosted
+//! element is seated so (piece A83: its seat in place of a turn, the same in both builds). A wall moved, or its type changed, builds
 //! it again with the wall; a change to its own record (its type, or the recipe version it names)
 //! builds its wall again; nothing else is. One of a family the document holds (job 7.6) reads
 //! the family's record too: its `reads` row names it, so a family's record written again builds
@@ -1005,7 +1006,8 @@ async fn inputs<R: Reader>(
         ),
         Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
     };
-    // A placed family is built as it is seated in its wall: turned as it stands there.
+    // A hosted element is built as it is seated in its wall: a placed family turned as it stands
+    // there, and anything in a wall at an angle with its seat.
     let placement = match placement {
         Ok((at, seated)) => {
             if let Some(seated) = seated {

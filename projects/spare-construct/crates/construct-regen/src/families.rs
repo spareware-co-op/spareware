@@ -25,10 +25,11 @@
 //!   record in the document (job 7.6, below). A record written before job 7.6 has none.
 //!
 //! Derived and never stored: [`TURN_ARG`], how far the family is turned about its z axis to stand
-//! in its wall ([`crate::hosting::seat`] writes it into the recipe a builder is handed), its
-//! solids, and its opening; and [`RECIPE_ARG`], the family's recipe text from the document's
-//! record, which the recipe a builder is handed carries ([`filled`]), so a builder needs no
-//! library to build a family the document holds.
+//! in a wall along x or y, or [`crate::seating::SEAT_ARG`], where it stands in a wall at any angle
+//! (piece A83; [`crate::hosting::seat`] writes one or the other into the recipe a builder is
+//! handed), its solids, and its opening; and [`RECIPE_ARG`], the family's recipe text from the
+//! document's record, which the recipe a builder is handed carries ([`filled`]), so a builder needs
+//! no library to build a family the document holds.
 //!
 //! **A family in the document** (CON-A7-F2-P3, piece A73, job 7.6): a record of kind
 //! [`RECORD_KIND`] whose element id is the family's permanent id, holding construct-families'
@@ -55,7 +56,7 @@
 //!   its outline extruded through the wall and the rules asked of a polygon.
 
 use construct_families::{
-    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, StoredFamily, Turn, TypeValues,
+    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Seat, StoredFamily, Turn, TypeValues,
     opening_within,
 };
 use construct_model::element::{Element, Placement};
@@ -363,8 +364,10 @@ pub struct Instance {
     pub family: ContentId,
     /// The type, by its key in the family recipe.
     pub ty: Key,
-    /// How far it is turned about its z axis: none unless it is seated in a host.
+    /// How far it is turned about its z axis: none unless it is seated in a host along x or y.
     pub turn: Turn,
+    /// Where it stands in a host at an angle ([`crate::seating::SEAT_ARG`]), in place of a turn.
+    pub seat: Option<Seat>,
     /// The values it holds for the parameters each instance holds, in stored text, by key.
     pub values: BTreeMap<Key, String>,
     /// The family in the document it names, by its permanent id ([`FAMILY_ID_ARG`]).
@@ -380,7 +383,8 @@ impl Instance {
     /// # Errors
     ///
     /// `NotAFamily` for another operation; `BadInstance` for a family that is not a content id, a
-    /// type that is not a key, or a turn that is not 0 to 3.
+    /// type that is not a key, a turn that is not 0 to 3, or both a turn and a seat; `BadSeat` for
+    /// a seat that does not read ([`crate::seating::seat_of`]).
     pub fn of(recipe: &Recipe) -> Result<Instance, GeometryError> {
         if !is_instance(recipe) {
             return Err(fault(
@@ -441,6 +445,16 @@ impl Instance {
                 Some(Arc::new(read))
             }
         };
+        let seat = crate::seating::seat_of(recipe)?;
+        if seat.is_some() && recipe.args.contains_key(TURN_ARG) {
+            return Err(fault(
+                "BadInstance",
+                format!(
+                    "a placed family is turned ({TURN_ARG}) or seated ({}), not both",
+                    crate::seating::SEAT_ARG
+                ),
+            ));
+        }
         let mut values = BTreeMap::new();
         for (name, value) in &recipe.args {
             let Some(key) = name.strip_prefix(VALUE_PREFIX) else {
@@ -464,6 +478,7 @@ impl Instance {
             family,
             ty,
             turn,
+            seat,
             values,
             in_document,
             own,

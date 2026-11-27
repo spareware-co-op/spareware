@@ -2769,6 +2769,189 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
 }
 
 
+console.log('\n   Doors and windows in walls at any angle');
+// Anna draws a wall at 30 degrees in clear ground below the building and puts a door in
+// it with the door tool, and a window of the library with the family tool; Ben sees both standing
+// in the wall, and moves the door along it, once Anna has let go, and flips the window to the other
+// side of the wall. Both browsers hold the same records and every body each built, the wall's and
+// the door's and the window's, is the server's: a page seats what is hosted in a wall at an angle
+// as the server's regenerator does. Nobody changes what the other touched in the last 30 s
+// without the other letting go first.
+await roofHome(anna);
+await roofHome(ben);
+const angKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const angFromAt = await onPlan(anna, -2400, 8500);
+const angToAt = await onPlan(anna, 500, 10150);
+await anna.mouse.click(angFromAt.x, angFromAt.y);
+await anna.keyboard.down('Shift');
+await anna.mouse.click(angToAt.x, angToAt.y);
+await anna.keyboard.up('Shift');
+await shot(anna, 'anna-angled-wall-drawn');
+const angWallOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'wall.layered' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(angWallOf, angKnown);
+const angWall = await ben.evaluate(angWallOf, angKnown);
+await anna.keyboard.press('Escape');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.fill?.recipe?.args?.layers, angWall);
+const angLine = await ben.evaluate((id) => {
+  const args = window.spare.elements.get(id).fill.recipe.args;
+  const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+  const [sx, sy] = args.start.map(steps);
+  const [ex, ey] = args.end.map(steps);
+  return { sx, sy, dx: ex - sx, dy: ey - sy };
+}, angWall);
+const angDegrees = (Math.atan2(angLine.dy, angLine.dx) * 180) / Math.PI;
+check(angDegrees > 29 && angDegrees < 31, `Anna's wall runs at ${angDegrees.toFixed(1)} degrees, along neither axis, and is in Ben's browser`);
+const angLength = Math.hypot(angLine.dx, angLine.dy);
+const angPoint = (along) => [angLine.sx + (angLine.dx * along) / angLength, angLine.sy + (angLine.dy * along) / angLength];
+
+// Whether what is drawn for `id` stands in the wall's strip, as a page draws it: every corner of it
+// (or, for a family, its middle) between the wall's two faces and along its length.
+const angInside = (page, id, whole) =>
+  page.evaluate(
+    ([id, wall, whole]) => {
+      const piece = window.spare.elements.get(wall);
+      const args = piece.fill.recipe.args;
+      const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+      const [sx, sy] = args.start.map(steps);
+      const [ex, ey] = args.end.map(steps);
+      const [dx, dy] = [ex - sx, ey - sy];
+      const length = Math.hypot(dx, dy);
+      const faces = [steps(args.layers[0].exterior), steps(args.layers.at(-1).interior)];
+      const [low, high] = [Math.min(...faces), Math.max(...faces)];
+      const points = document
+        .querySelector(`g.element[data-id="${id}"] polygon.body`)
+        .getAttribute('points')
+        .trim()
+        .split(/\s+/)
+        .map((p) => p.split(',').map(Number));
+      const middle = [points.reduce((n, p) => n + p[0], 0) / points.length, points.reduce((n, p) => n + p[1], 0) / points.length];
+      return (whole ? points : [middle]).every(([x, y]) => {
+        const [px, py] = [x - piece.el.placement.x - sx, y - piece.el.placement.y - sy];
+        const along = (px * dx + py * dy) / length;
+        const right = (px * dy - py * dx) / length;
+        return along >= -2 && along <= length + 2 && right >= low - 2 && right <= high + 2;
+      });
+    },
+    [id, angWall, whole],
+  );
+
+// The door tool: the click is the middle of the door.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:door"]');
+const angDoorClick = await onPlan(anna, ...angPoint(angLength * 0.15));
+await anna.mouse.click(angDoorClick.x, angDoorClick.y);
+const angDoorOn = (wall) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'door.single' && p.el.references?.[0]?.element === wall)?.el.id;
+await ben.waitForFunction(angDoorOn, angWall);
+const angDoor = await ben.evaluate(angDoorOn, angWall);
+await anna.keyboard.press('Escape');
+const angDoorDrawn = (id) => document.querySelector(`g.element[data-id="${id}"] polygon.body`);
+await ben.waitForFunction(angDoorDrawn, angDoor);
+await anna.waitForFunction(angDoorDrawn, angDoor);
+const angAlong = (page, id) => page.evaluate((i) => window.spare.elements.get(i).el.props['@host.along'], id);
+const angAlongBefore = await angAlong(ben, angDoor);
+check(/^length:q0:/.test(angAlongBefore), "Anna's door is in Ben's browser, hosted on a named face of the angled wall at an offset along it");
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  check(await angInside(page, angDoor, true), `the door stands in its wall, every corner of it, in ${name}'s plan`);
+}
+
+// The family tool: a window of the library, clicked toward the wall's far end.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:family"]');
+await anna.waitForSelector('#pv-side select[data-key="family-choice"] option', { state: 'attached' });
+await anna.locator('#pv-side select[data-key="family-choice"]').selectOption({ label: 'Fixed window' });
+await anna.waitForSelector('#pv-side select[data-key="family-type"]');
+await anna.locator('#pv-side select[data-key="family-type"]').selectOption({ label: '1200 x 1200' });
+const angWindowClick = await onPlan(anna, ...angPoint(angLength * 0.8));
+await anna.mouse.click(angWindowClick.x, angWindowClick.y);
+const angWindowOn = (wall) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.references?.[0]?.element === wall)?.el.id;
+await ben.waitForFunction(angWindowOn, angWall);
+const angWindow = await ben.evaluate(angWindowOn, angWall);
+await anna.keyboard.press('Escape');
+const angParts = ([id]) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(angParts, [angWindow]);
+await anna.waitForFunction(angParts, [angWindow]);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  check(await angInside(page, angWindow, false), `the window stands in its wall, frame and glass, in ${name}'s plan`);
+}
+
+// The body each page built for each of the three is the server's, once the server has built it.
+const angBodiesMatch = async (label) => {
+  for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+    for (const id of [angWall, angDoor, angWindow]) {
+      await until(
+        async () => [(await asAnna(`shape/${id}`)).built?.result?.shape?.body, await page.evaluate((i) => window.spare.elements.get(i)?.shape?.body, id)],
+        ([server, here]) => Boolean(server) && server === here,
+        `${name}'s page builds ${id} as the server does ${label}`,
+      );
+    }
+  }
+  pass(`the wall's, the door's and the window's bodies are the server's in both browsers ${label}`);
+};
+await angBodiesMatch('where they were placed');
+await shot(anna, 'anna-angled-wall');
+
+// Ben moves the door along the wall, 800 mm toward its far end, once Anna holds nothing.
+await ben.waitForFunction((id) => !window.spare.claims.has(id), angDoor);
+await ben.keyboard.press('Escape');
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const angTailAt = await onPlan(ben, ...angPoint(1000));
+const angHeadAt = await onPlan(ben, ...angPoint(1800));
+await drag(ben, angDoor, angHeadAt.x - angTailAt.x, angHeadAt.y - angTailAt.y);
+await ben.mouse.up();
+await anna.waitForFunction(([id, before]) => window.spare.elements.get(id).el.props['@host.along'] !== before, [angDoor, angAlongBefore]);
+const angAlongAfter = await angAlong(anna, angDoor);
+const angMoved = (Number(angAlongAfter.split(':').pop()) - Number(angAlongBefore.split(':').pop())) / 6400;
+check(Math.abs(angMoved - 800) <= 100, `Ben moves the door ${angMoved} mm along the wall, and Anna's page holds it`);
+await ben.waitForFunction(([id, along]) => window.spare.elements.get(id).el.props['@host.along'] === along, [angDoor, angAlongAfter]);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(angDoorDrawn, angDoor);
+  check(await angInside(page, angDoor, true), `the moved door still stands in its wall, in ${name}'s plan`);
+}
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await angBodiesMatch('after the door moved');
+
+// Ben flips the window to the other side of the wall, after Anna has let go of it.
+await ben.waitForFunction((id) => !window.spare.claims.has(id), angWindow);
+await famPick(ben, angWindow);
+const angFaceBefore = await ben.evaluate((id) => window.spare.elements.get(id).el.references[0].name, angWindow);
+await ben.click('#pv-side [data-act="stackfamilyflip"]');
+await anna.waitForFunction(([id, before]) => window.spare.elements.get(id).el.references[0].name !== before, [angWindow, angFaceBefore]);
+pass("Ben flips the window to the wall's other side, and Anna's page holds it");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(angParts, [angWindow]);
+  check(await angInside(page, angWindow, false), `the flipped window still stands in its wall, in ${name}'s plan`);
+}
+await angBodiesMatch('after the window flipped');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 2000)}`);
+  check(mismatched.length === 0, `every body ${name}'s page built, the angled wall's, door's and window's included, matches the server's`);
+}
+await shot(ben, 'ben-angled-wall');
+
+// A fresh load agrees: the same door and window, seated as the server seats them.
+const angFresh = await signIn('anna');
+await angFresh.waitForFunction(angParts, [angWindow]);
+await angFresh.waitForFunction(angDoorDrawn, angDoor);
+for (const id of [angWall, angDoor, angWindow]) {
+  await until(
+    async () => [(await asAnna(`shape/${id}`)).built?.result?.shape?.body, await angFresh.evaluate((i) => window.spare.elements.get(i)?.shape?.body, id)],
+    ([server, here]) => Boolean(server) && server === here,
+    `a fresh load builds ${id} as the server does`,
+  );
+}
+await angFresh.waitForTimeout(1500);
+check((await angFresh.evaluate(() => window.spare.mismatches)).length === 0, "a fresh load's bodies, the angled wall's included, match the server's");
+pass('a fresh load builds the angled wall, its door and its window as the server does');
+
+
 console.log('\n   Graphics rules, in a view');
 // Anna opens Level 1's plan and its Graphics from the view's line in the browser. She gives what
 // walls cut a heavier pen, a colour, another fill in another colour and halftone: Ben's page and

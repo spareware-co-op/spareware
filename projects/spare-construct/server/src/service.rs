@@ -4,7 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, PlanCrop, Skipped, ToDraw, ViewLooks};
+use crate::plan::{Drawer, HostedOn, PlanCrop, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -17,6 +17,7 @@ use construct_model::rows::{
 };
 use construct_params::{Length, Units, Value as StoredValue};
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
+use construct_regen::hosting::{self, Hosting};
 use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
@@ -189,6 +190,7 @@ async fn to_draw<R: Reader>(
     project: &Id,
     model: &Id,
     one: &cloud::views::Shaped,
+    shaped: &[cloud::views::Shaped],
 ) -> Result<Result<ToDraw, String>, StoreError> {
     let record = &one.record;
     let Some(category) =
@@ -229,11 +231,16 @@ async fn to_draw<R: Reader>(
         return Ok(Err("it stands too high to be drawn".to_owned()));
     };
     placement.z = z;
+    let hosted_on = match hosted_on(reader, project, model, record, shaped).await? {
+        Ok(hosted_on) => hosted_on,
+        Err(why) => return Ok(Err(why)),
+    };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
         category,
         placement,
         recipe,
+        hosted_on,
     }))
 }
 
@@ -271,6 +278,34 @@ async fn add_curtain<R: Reader>(
         }
     }
     Ok(())
+}
+
+/// What a plan needs to seat `record` in its wall, if it is hosted on a face of one that is on
+/// the page (piece A83): the wall as the regenerator builds it. `None` for anything else.
+async fn hosted_on<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    shaped: &[cloud::views::Shaped],
+) -> Result<Result<Option<HostedOn>, String>, StoreError> {
+    let Ok(Some(hosting @ Hosting::OnFace { .. })) = hosting::read(record) else {
+        return Ok(Ok(None));
+    };
+    let Some(host) = shaped.iter().find(|s| s.record.id == *hosting.host()) else {
+        return Ok(Ok(None));
+    };
+    let host_recipe =
+        match levels::recipe_at(reader, project, model, &host.record, records::At::Now).await? {
+            Ok(recipe) => recipe,
+            Err(failed) => return Ok(Err(failed.message)),
+        };
+    Ok(Ok(Some(HostedOn {
+        record: record.clone(),
+        host: host.record.clone(),
+        host_recipe,
+        hosting,
+    })))
 }
 
 /// An area of a level.
@@ -1357,7 +1392,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&one.record.id.to_string()) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped {
                     element: one.record.id.to_string(),
