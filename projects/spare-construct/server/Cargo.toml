@@ -24,6 +24,8 @@ construct-api = { path = "../crates/construct-api", features = ["cloud"] }
 # is the engine seam it cuts through. This repository's own, Apache-2.0.
 construct-categories = { path = "../crates/construct-categories" }
 construct-drawing = { path = "../crates/construct-drawing" }
+# A view's detail items are laid over its plan (src/plan.rs).
+construct-detailing = { path = "../crates/construct-detailing" }
 construct-materials = { path = "../crates/construct-materials" }
 construct-params = { path = "../crates/construct-params" }
 construct-styles = { path = "../crates/construct-styles" }

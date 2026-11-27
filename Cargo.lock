@@ -512,6 +512,8 @@ dependencies = [
  "construct-api",
  "construct-categories",
  "construct-clash",
+ "construct-detailing",
+ "construct-drawing",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -569,6 +571,27 @@ name = "construct-cli"
 version = "0.0.0"
 dependencies = [
  "construct-api",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-detailing"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-drawing",
+ "construct-grids",
+ "construct-model",
+ "construct-modify",
+ "construct-params",
+ "construct-solver",
+ "construct-styles",
+ "jsonschema",
+ "kit-core",
+ "libm",
+ "num-bigint",
+ "num-traits",
+ "serde",
  "serde_json",
 ]
 

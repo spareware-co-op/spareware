@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "key": "blocking-cross-90x45",
+  "name": "Blocking cross 90 x 45",
+  "lines": [
+    { "from": ["-45 mm", "-22.5 mm"], "to": ["45 mm", "-22.5 mm"], "style": "standard" },
+    { "from": ["45 mm", "-22.5 mm"], "to": ["45 mm", "22.5 mm"], "style": "standard" },
+    { "from": ["45 mm", "22.5 mm"], "to": ["-45 mm", "22.5 mm"], "style": "standard" },
+    { "from": ["-45 mm", "22.5 mm"], "to": ["-45 mm", "-22.5 mm"], "style": "standard" },
+    { "from": ["-45 mm", "-22.5 mm"], "to": ["45 mm", "22.5 mm"], "style": "fine" },
+    { "from": ["-45 mm", "22.5 mm"], "to": ["45 mm", "-22.5 mm"], "style": "fine" }
+  ],
+  "fills": []
+}

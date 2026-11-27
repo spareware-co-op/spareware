@@ -1,0 +1,73 @@
+[package]
+name = "construct-detailing"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# A detail item is an element record, unchanged, and its category is its kind's.
+construct-model = { path = "../construct-model" }
+construct-categories = { path = "../construct-categories" }
+# Every length is construct-params' Length, an angle its Angle, an area its Area; typed text for a
+# recipe's lengths is its Definition::parse; the exact fraction is its Ratio (num-rational).
+construct-params = { path = "../construct-params" }
+# Points in a view's plan, as the grids' own type.
+construct-grids = { path = "../construct-grids" }
+# A line style names a model pen and a line pattern of construct-styles, and a colour.
+construct-styles = { path = "../construct-styles" }
+# A fill pattern and its exact hatching, and the over-layer a view's drawing carries.
+construct-drawing = { path = "../construct-drawing" }
+# An arc is checked as the sketch solver checks one: its ends on its circle within the model's
+# tolerance; and the kernel's grid limit.
+construct-solver = { path = "../construct-solver" }
+# A detail component turns by any angle by the one rule every modify tool uses: exact, each point
+# rounded once (main's ruling, 28 Nov 2026).
+construct-modify = { path = "../construct-modify" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# Whole numbers of any size, so the places of a repeating component along a slanted line are the
+# nearest steps to the exact ones. MIT OR Apache-2.0; 0.4.8, as the workspace already locks it.
+num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
+# Sign and zero tests on those numbers. MIT OR Apache-2.0.
+num-traits = { version = "0.2.19", default-features = false, features = ["std"] }
+# A slope's angle, from its exact rise and run: a pure Rust port of musl's libm, so every machine
+# gives the same bytes (the one float here, display only). MIT.
+libm = "0.2.16"
+# A component recipe is JSON, read by derive. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# The published schema is checked with a JSON Schema validator (draft 2020-12), with no network
+# fetching (default features off), as construct-families checks its own. MIT.
+jsonschema = { version = "0.40.0", default-features = false }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+# The kernel's chapter 21 bans live in its own clippy.toml and are not Spare Construct's; these two
+# stay denied so a ban added to projects/spare-construct/clippy.toml is an error at once.
+disallowed_methods = "deny"
+disallowed_types = "deny"
+# The panics clippy::panic does not name.
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# Every fixed-width arithmetic step is a checked method, and no cast loses a value silently. Tests
+# may use native arithmetic and casts: each test file allows these four.
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# No float is stored or compared here; a float comparison is an error.
+float_cmp = "deny"

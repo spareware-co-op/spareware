@@ -27,6 +27,8 @@ cloud = [
     "dep:construct-phases",
     "dep:construct-styles",
     "dep:construct-modify",
+    "dep:construct-detailing",
+    "dep:construct-drawing",
 ]
 
 [dependencies]
@@ -68,6 +70,12 @@ construct-styles = { path = "../construct-styles", optional = true }
 # The modify commands: construct-modify works out every record a move, copy, turn, mirror or array
 # writes, exactly.
 construct-modify = { path = "../construct-modify", optional = true }
+# Detail items in a view: construct-detailing reads, checks and draws every one, and the detail
+# commands (cloud/detailing.rs) write them; the browser's build leaves it, and its exact
+# arithmetic, out.
+construct-detailing = { path = "../construct-detailing", optional = true }
+# The fill patterns a filled region names, as the plan's drawing prints them.
+construct-drawing = { path = "../construct-drawing", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }

@@ -337,3 +337,21 @@ fn bad_bytes_are_refused() {
         read(r#"{"format":1,"subcategories":[{"id":1000000,"parent":301,"name":"x"}]}"#).is_err()
     );
 }
+
+#[test]
+fn detail_items_are_in_the_annotation_categories_of_their_kind() {
+    use construct_categories::{
+        DETAIL_COMPONENTS, DETAIL_LINES, FILLED_REGIONS, MASKING_REGIONS, SPOT_DIMENSIONS,
+    };
+    for (kind, category) in [
+        ("detail.line", DETAIL_LINES),
+        ("detail.linestyle", DETAIL_LINES),
+        ("detail.region", FILLED_REGIONS),
+        ("detail.masking", MASKING_REGIONS),
+        ("detail.component", DETAIL_COMPONENTS),
+        ("detail.repeat", DETAIL_COMPONENTS),
+        ("detail.slope", SPOT_DIMENSIONS),
+    ] {
+        assert_eq!(category_of_kind(kind), Ok(category), "{kind}");
+    }
+}

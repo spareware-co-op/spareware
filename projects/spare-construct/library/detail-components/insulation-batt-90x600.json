@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "key": "insulation-batt-90x600",
+  "name": "Insulation batt 90 x 600",
+  "lines": [
+    { "from": ["-300 mm", "-45 mm"], "to": ["300 mm", "-45 mm"], "style": "fine" },
+    { "from": ["300 mm", "-45 mm"], "to": ["300 mm", "45 mm"], "style": "fine" },
+    { "from": ["300 mm", "45 mm"], "to": ["-300 mm", "45 mm"], "style": "fine" },
+    { "from": ["-300 mm", "45 mm"], "to": ["-300 mm", "-45 mm"], "style": "fine" }
+  ],
+  "fills": [
+    {
+      "outline": [["-300 mm", "-45 mm"], ["300 mm", "-45 mm"], ["300 mm", "45 mm"], ["-300 mm", "45 mm"]],
+      "pattern": "insulation",
+      "colour": "#000000"
+    }
+  ]
+}

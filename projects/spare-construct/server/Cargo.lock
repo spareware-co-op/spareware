@@ -658,6 +658,8 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-clash",
+ "construct-detailing",
+ "construct-drawing",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -707,6 +709,26 @@ dependencies = [
  "construct-model",
  "engine-geometry",
  "kit-store",
+]
+
+[[package]]
+name = "construct-detailing"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-drawing",
+ "construct-grids",
+ "construct-model",
+ "construct-modify",
+ "construct-params",
+ "construct-solver",
+ "construct-styles",
+ "kit-core",
+ "libm",
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4399,6 +4421,7 @@ dependencies = [
  "clap",
  "construct-api",
  "construct-categories",
+ "construct-detailing",
  "construct-drawing",
  "construct-families",
  "construct-materials",

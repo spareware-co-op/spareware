@@ -1823,6 +1823,8 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
 #[derive(Default)]
 struct Recording {
     asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
+    /// How many detail items each plan was asked to draw over the model.
+    detail: std::sync::Mutex<Vec<Option<usize>>>,
 }
 
 impl Drawer for Recording {
@@ -1832,7 +1834,12 @@ impl Drawer for Recording {
         scale: Scale,
         elements: &[ToDraw],
         _looks: Option<&dyn construct_drawing::look::Looks>,
+        detail: Option<&construct_api::cloud::detailing::Prepared>,
     ) -> Result<Drawn, String> {
+        self.detail
+            .lock()
+            .unwrap()
+            .push(detail.map(|d| d.items().len()));
         self.asked
             .lock()
             .unwrap()
@@ -2250,4 +2257,66 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         s.sheet(&anna, &project, &model, &i("VP-1")).await,
         Err(Refusal::NotFound)
     ));
+}
+
+/// A view's detail items: the server lists them (lines, regions with their exact area, components,
+/// repeats, slopes) with the line styles they may use, a person off the team and a view that is not
+/// there are answered as for any read, one view lists nothing of another's, and the plan's drawer
+/// is handed exactly the view's own items to lay over the model.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_detail_items_are_listed_and_handed_to_the_plan_drawer() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let recording = Arc::new(Recording::default());
+    let drawer: Arc<dyn Drawer> = recording.clone();
+    let service = build(&store, &files).with_drawer(Some(drawer));
+    seed(&store, &service).await.unwrap();
+    let s = &service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let point = |x: &str, y: &str| json!({ "x": x, "y": y });
+    for (cmd, args) in [
+        (
+            "detail.line.create",
+            json!({ "line": "DL-1", "view": "VP-1",
+                    "curve": { "kind": "straight", "start": point("0", "0"),
+                               "end": point("3 m", "0") } }),
+        ),
+        (
+            "detail.region.create",
+            json!({ "region": "MR-1", "view": "VP-1", "kind": "masking",
+                    "outline": [point("0", "0"), point("2 m", "0"), point("2 m", "1 m"),
+                                point("0", "1 m")] }),
+        ),
+        (
+            "detail.repeat.create",
+            json!({ "repeat": "RP-1", "view": "VP-1", "recipe": "blocking-cross-90x45",
+                    "from": point("0", "0"), "to": point("3 m", "0"), "spacing": "600 mm" }),
+        ),
+    ] {
+        s.edit(&anna, &project, &model, cmd, args).await.unwrap();
+    }
+    let listed = s.detail(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert_eq!(listed.view_name, "Level 1 plan");
+    assert_eq!(listed.lines.len(), 1);
+    assert_eq!(listed.regions[0].area_text, "2.00 m²");
+    assert_eq!(listed.repeats[0].count, 6);
+    assert_eq!(listed.styles.iter().filter(|s| s.built_in).count(), 6);
+    assert_eq!(listed.library.len(), 3);
+    let other = s.detail(&anna, &project, &model, &i("VP-2")).await.unwrap();
+    assert_eq!(
+        (other.lines.len(), other.regions.len(), other.repeats.len()),
+        (0, 0, 0)
+    );
+    assert!(refused(s.detail(&dan, &project, &model, &i("VP-1")).await));
+    assert!(matches!(
+        s.detail(&anna, &project, &model, &i("VP-9")).await,
+        Err(Refusal::NotFound)
+    ));
+    assert!(matches!(
+        s.detail(&anna, &project, &model, &i("W-101")).await,
+        Err(Refusal::NotFound)
+    ));
+    // The drawer is handed each plan's own items.
+    s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    s.plan(&anna, &project, &model, &i("VP-2")).await.unwrap();
+    assert_eq!(*recording.detail.lock().unwrap(), [Some(3), Some(0)]);
 }

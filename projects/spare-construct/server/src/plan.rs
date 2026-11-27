@@ -32,15 +32,18 @@
 //! (construct-drawing's note) and the cut (the interim register) are both stand-ins for the
 //! kernel's own, behind the same types.
 
+use construct_api::cloud::detailing::Prepared;
 use construct_api::cloud::views::{World, look_in};
 use construct_categories::{CategoryId, CategoryTable};
+use construct_detailing::{Settings, render};
 use construct_drawing::drawing::Drawing;
 use construct_drawing::drawing::LineKind;
 use construct_drawing::hatch::FillPatterns;
 use construct_drawing::look::{FillLook, Look, Looks};
 use construct_drawing::pens::{Styles, widths};
+use construct_drawing::picture::picture;
 use construct_drawing::plan::{PlanElement, plan};
-use construct_drawing::svg::to_svg;
+use construct_drawing::svg::Svg;
 use construct_drawing::view::View;
 use construct_materials::{MaterialId, Materials};
 use construct_model::element::Placement;
@@ -87,7 +90,7 @@ pub struct Drawn {
 pub trait Drawer: Send + Sync {
     /// The plan cut at the height `cut` above the project's zero, of `elements`, printed at
     /// `scale`, each category looking as `looks` says (`None`: as the project's object styles
-    /// say).
+    /// say), and over it the view's own detail items (`None`: none).
     ///
     /// # Errors
     ///
@@ -99,6 +102,7 @@ pub trait Drawer: Send + Sync {
         scale: Scale,
         elements: &[ToDraw],
         looks: Option<&dyn Looks>,
+        detail: Option<&Prepared>,
     ) -> Result<Drawn, String>;
 }
 
@@ -220,6 +224,7 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
         scale: Scale,
         elements: &[ToDraw],
         looks: Option<&dyn Looks>,
+        detail: Option<&Prepared>,
     ) -> Result<Drawn, String> {
         let defaults = Defaults::new();
         let view = View::plan(cut);
@@ -237,7 +242,31 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
             }
         }
         let drawing = Drawing::new(view, lines, regions).map_err(|e| e.to_string())?;
-        let svg = to_svg(&drawing, defaults.styles(looks), scale).map_err(|e| e.to_string())?;
+        let mut printed =
+            picture(&drawing, defaults.styles(looks), scale).map_err(|e| e.to_string())?;
+        if let Some(detail) = detail {
+            let shown = |category: CategoryId| {
+                looks.is_none_or(|l| {
+                    l.look(category, LineKind::Projected)
+                        .is_ok_and(|look| look.shown)
+                })
+            };
+            let settings = Settings {
+                scale,
+                lines: &defaults.lines,
+                fills: &defaults.fills,
+                own: detail.own_styles(),
+                library: detail.library(),
+                shown: &shown,
+            };
+            let drawn = render(&detail.items(), &settings, detail.faces());
+            printed.over = drawn.over;
+            skipped.extend(drawn.skipped.into_iter().map(|s| Skipped {
+                element: s.item.to_string(),
+                why: s.why,
+            }));
+        }
+        let svg = Svg.document(&printed).map_err(|e| e.to_string())?;
         Ok(Drawn { svg, skipped })
     }
 }
