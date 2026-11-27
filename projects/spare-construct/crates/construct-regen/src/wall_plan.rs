@@ -32,13 +32,21 @@
 //! ([`Joints`], derived from construct-walls' join rule by construct-regen's `joins`, job 5.1):
 //! each layer's pieces once its joints are made, which the kernel builder extrudes in place of the
 //! layer's strip, and the whole wall's outline. Every corner there is the crossing of two layer
-//! faces of walls along the plan's axes, so it is on the grid with no rounding.
+//! faces: along the plan's axes, or on whole ratios, a grid point with no rounding; at any other
+//! angle (job 6.1) the true crossing rounded once to the grid.
 //!
-//! Depends on construct-model (recipes) and construct-params (the stored length). Nothing here is
-//! interim: the rounding rule is the kernel's grid's, and an exact kernel takes the same corners.
+//! When it wraps (job 6.1), `wrap` too ([`Wrap`], filled by construct-regen's `walls` from the
+//! wall type and the wall's own choice): its wrapping at free ends and at inserts, each layer's
+//! wraps flag and the core's two boundaries. The free ends' turned layers are among the joined
+//! pieces; the builder turns the layers at inserts.
+//!
+//! Depends on construct-model (recipes), construct-params (the stored length) and
+//! construct-walls (the wrapping choices). Nothing here is interim: the rounding rule is the
+//! kernel's grid's, and an exact kernel takes the same corners.
 
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::{Length, Value};
+use construct_walls::{AtEnds, AtInserts};
 use serde_json::Value as Json;
 
 /// The operation of a layered wall.
@@ -395,6 +403,8 @@ pub struct Layered {
     /// Its layers' shapes once its joints with the walls it meets are made, when any is
     /// ([`Joints`]); `None` builds each layer as its strip.
     pub joined: Option<Joints>,
+    /// Its wrapping, when it wraps anything ([`Wrap`]).
+    pub wrap: Option<Wrap>,
 }
 
 /// A layered wall's joints, as its filled recipe gives them (`joins`, which the regenerator fills
@@ -411,6 +421,70 @@ pub struct Joints {
 
 /// The argument a regenerator fills with a layered wall's joints. Derived, never stored.
 pub const JOINS: &str = "joins";
+
+/// The argument a regenerator fills with a layered wall's wrapping, when it wraps anything:
+/// `{"core":[e,i],"ends":<choice>,"inserts":<choice>,"layers":[<wraps>...]}`. Derived, never
+/// stored.
+pub const WRAP: &str = "wrap";
+
+/// A layered wall's wrapping, as its filled recipe gives it ([`WRAP`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Wrap {
+    /// At its free ends.
+    pub ends: AtEnds,
+    /// At its inserts.
+    pub inserts: AtInserts,
+    /// Each layer's flag: whether it wraps where its side wraps.
+    pub layers: Vec<bool>,
+    /// Its core: the layers `core.0..core.1`.
+    pub core: (usize, usize),
+}
+
+/// The wrapping a filled `wrap` argument gives, checked against the wall's `count` layers.
+fn wrap_of(value: Option<&Json>, count: usize) -> Result<Option<Wrap>, GeometryError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let bad = || {
+        fault(
+            "BadWrap",
+            "its wrapping is not as its filled recipe writes it",
+        )
+    };
+    let key = |name: &str| value.get(name).and_then(Json::as_str);
+    let ends = key("ends").and_then(AtEnds::from_key).ok_or_else(bad)?;
+    let inserts = key("inserts")
+        .and_then(AtInserts::from_key)
+        .ok_or_else(bad)?;
+    let layers = value
+        .get("layers")
+        .and_then(Json::as_array)
+        .ok_or_else(bad)?
+        .iter()
+        .map(Json::as_bool)
+        .collect::<Option<Vec<bool>>>()
+        .ok_or_else(bad)?;
+    let core = match value
+        .get("core")
+        .and_then(Json::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([a, b]) => (
+            usize::try_from(a.as_u64().ok_or_else(bad)?).map_err(|_| bad())?,
+            usize::try_from(b.as_u64().ok_or_else(bad)?).map_err(|_| bad())?,
+        ),
+        _ => return Err(bad()),
+    };
+    if layers.len() != count || core.0 >= core.1 || core.1 > count {
+        return Err(bad());
+    }
+    Ok(Some(Wrap {
+        ends,
+        inserts,
+        layers,
+        core,
+    }))
+}
 
 /// Whether every corner of `corners` turns left: a strictly convex polygon, counter-clockwise.
 fn convex(corners: &[[i64; 2]]) -> bool {
@@ -627,11 +701,13 @@ impl Layered {
             }
         }
         let joined = joints(args.get(JOINS), &layers)?;
+        let wrap = wrap_of(args.get(WRAP), layers.len())?;
         Ok(Layered {
             plan,
             height,
             layers,
             joined,
+            wrap,
         })
     }
 

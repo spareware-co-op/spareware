@@ -50,18 +50,28 @@ fn wall(id: &str, start: [i64; 2], end: [i64; 2], layers: &[(Function, i64)]) ->
             function,
             exterior: Length::from_steps(face),
             interior: Length::from_steps(face - steps(thick)),
+            wraps: false,
         });
         face -= steps(thick);
     }
     let at = |[x, y]: [i64; 2]| [Length::from_steps(steps(x)), Length::from_steps(steps(y))];
-    PlanWall {
-        id: id.to_owned(),
-        start: at(start),
-        end: at(end),
-        base: Length::from_mm(0),
-        top: Length::from_mm(2700),
-        layers: listed,
-    }
+    // The core: the strongest layers, as each type here has them together.
+    let best = layers.iter().filter_map(|l| l.0.priority()).min().unwrap();
+    let first = layers
+        .iter()
+        .position(|l| l.0.priority() == Some(best))
+        .unwrap();
+    let last = layers
+        .iter()
+        .rposition(|l| l.0.priority() == Some(best))
+        .unwrap();
+    PlanWall::new(
+        id.to_owned(),
+        (at(start), at(end)),
+        (Length::from_mm(0), Length::from_mm(2700)),
+        listed,
+        [first, last + 1],
+    )
 }
 
 /// An outline in millimetres (each corner is a whole number of them in these cases).
@@ -416,22 +426,17 @@ fn what_the_rule_does_not_cover_is_left_unjoined_with_its_reason() {
             "more than two walls",
         ),
         (
-            "a corner at an angle",
-            vec![a.clone(), wall("B", [0, 0], [2000, 2000], &THREE)],
-            "do not both run along the plan's axes",
-        ),
-        (
             "two walls in line",
             vec![a.clone(), wall("B", [0, 0], [3000, 0], &THREE)],
             "in line",
         ),
         (
-            "a cross",
+            "a cross too near an end",
             vec![
                 wall("A", [-3000, 0], [3000, 0], &THREE),
-                wall("B", [0, -3000], [0, 3000], &THREE),
+                wall("B", [2950, -3000], [2950, 3000], &THREE),
             ],
-            "crosses it",
+            "too near an end",
         ),
         (
             "a T too near the end",
