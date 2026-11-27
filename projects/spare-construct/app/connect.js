@@ -218,6 +218,7 @@
     roofRibbon(config); // and the roof tool beside the floor tool
     familyRibbon(config); // the family tool beside the door tool
     openingRibbon(config); // the opening and shaft tools beside the family tool
+    componentRibbon(config); // the component tool after them
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -824,7 +825,7 @@
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
-    if (el.recipe.op === FAMILY_OP) return onFamily(role, host, along, up)?.at ?? el.placement;
+    if (el.recipe.op === FAMILY_OP) return onFamily(role, host, along, up, faceFamily(el))?.at ?? el.placement;
     if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
     const own = isWallOpening(el) ? thickness : el.recipe.args.thickness;
@@ -1237,6 +1238,7 @@
     'family.retype': 'changed the type of',
     'family.move': 'moved along its wall:',
     'family.flip': 'flipped to the other side of its wall:',
+    'family.turn': 'turned',
     'family.set': 'set a value of',
     'family.delete': 'deleted',
     'level.create': 'made a level',
@@ -1314,6 +1316,7 @@
     'family.retype': 'a change of a family’s type',
     'family.move': 'moving a family',
     'family.flip': 'flipping a family',
+    'family.turn': 'turning a family',
     'family.set': 'a value of a family',
     'family.delete': 'deleting a family',
     'level.create': 'making a level',
@@ -3701,6 +3704,7 @@
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     if (S.tool === 'family') return '<b>Family:</b> choose a family and a type in the properties palette, then click on a wall to place it.';
+    if (S.tool === 'component') return '<b>Component:</b> choose a category, a family and a type in the properties palette, then click in the plan to place it (on a wall for one that hangs on it).';
     if (S.tool === 'opening' || RECT_TOOLS.includes(S.tool)) return openingHint();
     return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
   }
@@ -3728,6 +3732,8 @@
       html += wallToolHtml();
     } else if (S.tool === 'family' && canEdit()) {
       html += familyToolHtml();
+    } else if (S.tool === 'component' && canEdit()) {
+      html += componentToolHtml();
     } else if ((S.tool === 'opening' || RECT_TOOLS.includes(S.tool)) && canEdit()) {
       html += openingToolHtml();
     } else if (piece) {
@@ -3998,6 +4004,13 @@
   /** Spare Construct's own operations, by what they make. */
   const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
 
+  /** An element dragged to where its record now says: a family that stands is moved by its own command. */
+  function sendMove(piece) {
+    const { id, placement } = piece.el;
+    if (isStanding(piece.el)) edit('family.move', { element: id, x: `${placement.x} mm`, y: `${placement.y} mm` });
+    else edit('element.move', { element: id, placement });
+  }
+
   function watchThePlan() {
     const canvas = $('#pv-canvas');
     let drag = null;
@@ -4011,6 +4024,7 @@
         else if (S.tool === 'wall') placeWall(at);
         else if (S.tool === 'door') placeDoor(at);
         else if (S.tool === 'family') placeFamily(at);
+        else if (S.tool === 'component') placeComponent(at);
         else if (S.tool === 'opening') placeOpening(at);
         else if (S.tool === 'room') placeRoom(at);
         else say(NOT_YET);
@@ -4064,7 +4078,7 @@
       const now = performance.now();
       if (now - lastSent >= SEND_EVERY_MS) {
         lastSent = now;
-        edit('element.move', { element: drag.id, placement: piece.el.placement });
+        sendMove(piece);
       }
     });
 
@@ -4077,7 +4091,7 @@
           edit(move, { element: drag.id, along: `${drag.along} mm` });
         }
       } else if (piece) {
-        edit('element.move', { element: drag.id, placement: piece.el.placement });
+        sendMove(piece);
       }
       drag = null;
     };
@@ -4225,9 +4239,12 @@
     return `<input class="inp" data-chg="${chg}" data-key="${key}" data-a="${esc(value.key)}" value="${esc(shown)}" aria-label="${esc(value.name)}">`;
   }
 
+  /** The library's families that cut an opening in a wall: what the family tool offers. */
+  const wallFamilies = () => library()?.filter((family) => family.hosting === 'wall') ?? null;
+
   function familyToolHtml() {
     let html = typeSel('family', 'Family', '<b>New door or window</b>');
-    const list = library();
+    const list = wallFamilies();
     if (!list) return `${html}<p class="pad small faint">Loading the library.</p>`;
     const family = chosenFamily(list);
     if (!family) return `${html}<p class="pad small faint">The library has no families.</p>`;
@@ -4260,6 +4277,9 @@
     return library()?.find((family) => family.content === record.recipe.args.family) ?? null;
   }
 
+  /** Whether a placed family hangs against its wall's face and cuts nothing (a wall cabinet, a basin). */
+  const faceFamily = (record) => familyOf(record)?.hosting === 'face';
+
   /** What the properties palette shows of a selected family: its type, its values, its place, its side. */
   function familyProperties(piece) {
     const { el } = piece;
@@ -4273,6 +4293,18 @@
     for (const value of family.values) {
       const shown = shownValue(value, el.recipe.args[`value.${value.key}`]);
       html += prow(esc(value.name), mine ? valueInput(value, shown, `family-value:${value.key}`) : esc(shown));
+    }
+    if (isStanding(el)) {
+      const turn = standingTurn(el) * 90;
+      const turns = [0, 90, 180, 270].map((d) => `<option value="${d}"${d === turn ? ' selected' : ''}>${d}°</option>`).join('');
+      html += prow('Turn', mine ? `<select class="inp" data-chg="stackfamilyturn" data-key="family-turn" aria-label="Turn of the family">${turns}</select>` : `${turn}°`);
+      for (const [axis, at] of [['x', el.placement.x], ['y', el.placement.y]]) {
+        html += prow(`Point ${axis}`, mine ? `<input class="inp" data-chg="stackfamilypoint" data-a="${axis}" data-key="family-point-${axis}" value="${at} mm" aria-label="Point ${axis}">` : `${at} mm`);
+      }
+      const offset = el.props?.['@level.offset'];
+      if (offset !== undefined) {
+        html += prow('Offset from the level', mine ? `<input class="inp" data-chg="stackfamilyoffset" data-key="family-offset" value="${storedMm(offset)} mm" aria-label="Offset from the level">` : `${storedMm(offset)} mm`);
+      }
     }
     const along = el.props?.['@host.along'];
     const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -4293,6 +4325,17 @@
     manage('family.set', { element: S.sel, values: { [input.dataset.a]: typed === '' ? null : typed } }, `family:${S.sel}`);
     input.blur();
   };
+  CHG.stackfamilyturn = (select) => {
+    if (S.sel && canEdit()) manage('family.turn', { element: S.sel, turn: select.value }, `family:${S.sel}`);
+  };
+  CHG.stackfamilypoint = (input) => {
+    if (S.sel && canEdit()) manage('family.move', { element: S.sel, [input.dataset.a]: input.value }, `family:${S.sel}`);
+    input.blur();
+  };
+  CHG.stackfamilyoffset = (input) => {
+    if (S.sel && canEdit()) manage('family.move', { element: S.sel, up: input.value }, `family:${S.sel}`);
+    input.blur();
+  };
   CHG.stackfamilyalong = (input) => {
     if (S.sel && canEdit()) manage('family.move', { element: S.sel, along: input.value }, `family:${S.sel}`);
     input.blur();
@@ -4306,22 +4349,27 @@
     C.familyTool.values[input.dataset.a] = input.value;
   };
 
+  /** The wall the point `at` is on or within 300 mm of, as the plan draws it, if there is one. */
+  function wallNear(at) {
+    return [...C.elements.values()].find((piece) => {
+      if (piece.el.kind !== 'wall' || !piece.shape) return false;
+      const box = around(piece);
+      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
+    });
+  }
+
   /**
    * A click on a wall with the family tool: the family goes on the side clicked, its opening's
    * middle where the click is, as far along the wall from its start (the server checks that it fits).
    */
   function placeFamily(at) {
-    const list = library();
+    const list = wallFamilies();
     const family = list && chosenFamily(list);
     if (!family) {
       say('The library has not come yet.');
       return;
     }
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.kind !== 'wall' || !piece.shape) return false;
-      const box = around(piece);
-      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
-    });
+    const wall = wallNear(at);
     if (!wall) {
       say('Click on a wall to place it.');
       return;
@@ -4352,11 +4400,15 @@
    * works it out: its origin on the wall's centre plane, `along` the line from its start, `up` from
    * the wall's base, each to the nearest millimetre, and the turn (0 to 3 quarter turns about z) that
    * points its front out of that side. Null until the wall is filled, and for a wall at an angle.
+   * A family that hangs against the wall's face (`onFace`: a wall cabinet, a basin) has its origin on
+   * that side's face, not on the centre plane.
    */
-  function onFamily(role, host, along, up) {
+  function onFamily(role, host, along, up, onFace = false) {
     const line = lineOf(host);
     if (!line || line.axis === null || host.el.recipe.op !== LAYERED) return null;
-    const centre = Math.floor((line.exterior + line.interior) / 2);
+    const centre = onFace
+      ? (role === 'interior' ? line.interior : line.exterior)
+      : Math.floor((line.exterior + line.interior) / 2);
     const [ux, uy] = line.unit;
     const right = [uy, -ux];
     const outwardOfExterior = line.exterior > line.interior ? 1 : -1;
@@ -4371,8 +4423,20 @@
 
   const turnedRecipe = (recipe, turn) => ({ ...recipe, args: { ...recipe.args, turn } });
 
+  /** Whether a placed family stands on a level: it names no wall. */
+  const isStanding = (el) => isFamily(el) && !(el.references || []).some((ref) => ref.kind === 'face' && !ref.doc);
+
+  /** The quarter turns (0 to 3) a standing family's record turns it by; 0 for none, or for an angle that is not a quarter. */
+  function standingTurn(el) {
+    const stored = el.props?.['@place.turn'];
+    if (stored === undefined) return 0;
+    const quarters = Number(stored.replace('angle:', '')) / 810000000;
+    return Number.isInteger(quarters) ? ((quarters % 4) + 4) % 4 : 0;
+  }
+
   /** Where a placed family sits and how it is turned, on its wall (`host`, or the one it names, if it is here). */
   function seatOfPiece(piece, host) {
+    if (isStanding(piece.el)) return { at: piece.el.placement, turn: standingTurn(piece.el) };
     const hosted = hostOf(piece.el);
     const wall = host ?? hosted?.host;
     const face = hosted?.face ?? (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -4380,7 +4444,7 @@
     const up = piece.el.props?.['@host.up'];
     if (!wall || !face || along === undefined || up === undefined) return null;
     const role = wall.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
-    return onFamily(role, wall, along, up);
+    return onFamily(role, wall, along, up, faceFamily(piece.el));
   }
 
   /** Builds each placed family again, turned as its wall seats it, where it is not built so yet. */
@@ -4419,6 +4483,140 @@
     S.sel = null;
     refresh();
   };
+
+  // --- Components: furniture, casework, plumbing fixtures, lighting, planting and generic models ---
+  // (job 14.9, piece A90). The Component tool lists the library's families that are not doors or
+  // windows, by category, then family, then type (`/families`: each family says what it is placed
+  // on). A family that stands on a level is placed by one click in the plan, its point the middle of
+  // it, turned by the quarter turn chosen and raised by the offset typed, on the level the plan shows;
+  // a family that hangs against a wall (a wall cabinet, a basin) is placed by a click on a wall's
+  // face, as a door is. Each is one `family.place` edit (construct-model's FORMAT.md, "Placed
+  // families"). A selected one shows its type, its values, its point, its turn and its offset (or its
+  // place along its wall and its side) in the properties palette: `family.retype`, `family.set`,
+  // `family.move`, `family.turn`, `family.flip`; Delete is `family.delete`; dragging one that stands
+  // moves it. The page checks nothing: a refusal is the server's words, under the options.
+
+  C.componentTool = { category: null, family: null, type: null, values: {}, turn: 0, offset: '0 mm' }; // the tool's choices
+
+  DTOOLS.architecture.push([
+    'component',
+    'Component',
+    'cube',
+    'Choose a category, a family and a type in the properties palette, then click in the plan to place it (on a wall for one that hangs on it).',
+  ]);
+  TOOLNAME.component = 'component';
+
+  /** The ribbon: the component tool after the opening and shaft tools, in the Build panel. */
+  function componentRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:component')) return;
+    const shaft = build.items.findIndex((item) => item.a === 'architecture:shaft');
+    build.items.splice(shaft >= 0 ? shaft + 1 : build.items.length, 0, DT_('architecture', 'component'));
+  }
+
+  /** The library's families that do not cut a wall: what the component tool offers; null until they have come. */
+  const components = () => library()?.filter((family) => family.hosting === 'unhosted' || family.hosting === 'face') ?? null;
+
+  /** The tool's choices made whole: a category, the families in it, one of them and one of its types. */
+  function chosenComponent(list) {
+    const categories = [...new Set(list.map((family) => family.category))];
+    const category = categories.includes(C.componentTool.category) ? C.componentTool.category : categories[0];
+    const inCategory = list.filter((family) => family.category === category);
+    const family = inCategory.find((f) => f.id === C.componentTool.family) ?? inCategory[0] ?? null;
+    const type = family && (family.types.find((t) => t.key === C.componentTool.type) ?? family.types[0] ?? null);
+    return { categories, category, inCategory, family, type };
+  }
+
+  function componentToolHtml() {
+    let html = typeSel('cube', 'Component', '<b>New component</b>');
+    const list = components();
+    if (!list) return `${html}<p class="pad small faint">Loading the library.</p>`;
+    const { categories, category, inCategory, family, type } = chosenComponent(list);
+    if (!family || !type) return `${html}<p class="pad small faint">The library has no components.</p>`;
+    const option = (value, label, chosen) => `<option value="${esc(value)}"${chosen ? ' selected' : ''}>${esc(label)}</option>`;
+    const names = new Map(list.map((f) => [f.category, f.category_name]));
+    const select = (chg, key, label, options) =>
+      `<select class="inp" data-chg="${chg}" data-key="${key}" aria-label="${label}">${options.join('')}</select>`;
+    html += '<table class="props" data-component-tool="yes">';
+    html += prow('Category', select('stackcomponentcategory', 'component-category', 'Category', categories.map((c) => option(c, names.get(c), c === category))));
+    html += prow('Family', select('stackcomponentfamily', 'component-family', 'Family', inCategory.map((f) => option(f.id, f.name, f.id === family.id))));
+    html += prow('Family type', select('stackcomponenttype', 'component-type', 'Type of the family', family.types.map((t) => option(t.key, t.name, t.key === type.key))));
+    for (const value of family.values) {
+      const typed = C.componentTool.values[value.key] ?? value.shown;
+      html += prow(esc(value.name), valueInput(value, typed, `component-tool-value:${value.key}`, 'stackcomponenttoolvalue'));
+    }
+    if (family.hosting === 'unhosted') {
+      const turns = [0, 1, 2, 3].map((q) => option(q, `${q * 90}°`, q === C.componentTool.turn));
+      html += prow('Turn', select('stackcomponentturn', 'component-turn', 'Turn of the component', turns));
+      html += prow('Offset from the level', `<input class="inp" data-chg="stackcomponentoffset" data-key="component-offset" value="${esc(C.componentTool.offset)}" aria-label="Offset from the level">`);
+    }
+    html += '</table>';
+    html += family.hosting === 'face'
+      ? '<p class="pad small muted">Click on a wall. The side you click is the side it hangs on, and the click is the middle of it.</p>'
+      : '<p class="pad small muted">Click in the plan. The click is the middle of it.</p>';
+    return html + problem('component-place');
+  }
+
+  CHG.stackcomponentcategory = (select) => {
+    C.componentTool = { ...C.componentTool, category: Number(select.value), family: null, type: null, values: {} };
+    refreshSide();
+  };
+  CHG.stackcomponentfamily = (select) => {
+    C.componentTool = { ...C.componentTool, family: select.value, type: null, values: {} };
+    refreshSide();
+  };
+  CHG.stackcomponenttype = (select) => {
+    C.componentTool.type = select.value;
+  };
+  CHG.stackcomponentturn = (select) => {
+    C.componentTool.turn = Number(select.value);
+  };
+  CHG.stackcomponentoffset = (input) => {
+    C.componentTool.offset = input.value;
+  };
+  // The tool's own values, kept as typed until a component is placed.
+  CHG.stackcomponenttoolvalue = (input) => {
+    C.componentTool.values[input.dataset.a] = input.value;
+  };
+
+  /**
+   * A click with the component tool: a family that stands is put at the point clicked, on the level
+   * the plan shows, turned and raised as the tool says; one that hangs on a wall goes on the side of
+   * the wall clicked, the click the middle of it. The server checks it.
+   */
+  function placeComponent(at) {
+    const list = components();
+    const { family, type } = list ? chosenComponent(list) : {};
+    if (!family || !type) {
+      say('The library has not come yet.');
+      return;
+    }
+    const args = { element: newId('F'), family: family.id, type: type.key };
+    const values = {};
+    for (const [key, typed] of Object.entries(C.componentTool.values)) {
+      if (family.values.some((value) => value.key === key) && typed !== '') values[key] = typed;
+    }
+    if (Object.keys(values).length) args.values = values;
+    if (family.hosting === 'face') {
+      const wall = wallNear(at);
+      if (!wall) {
+        say('Click on a wall to hang it.');
+        return;
+      }
+      const spot = onWall(wall, at, 0);
+      if (!spot) {
+        say('That wall has no side to hang it on.');
+        return;
+      }
+      Object.assign(args, { host: wall.el.id, side: spot.exterior ? 'exterior' : 'interior', along: `${spot.offset} mm` });
+    } else {
+      Object.assign(args, { x: `${snap(at.x)} mm`, y: `${snap(at.y)} mm`, level: levelOf(), turn: String(C.componentTool.turn * 90) });
+      const offset = C.componentTool.offset.trim();
+      if (offset !== '' && !/^0(\.0*)?\s*(mm)?$/.test(offset)) args.up = offset;
+    }
+    manage('family.place', args, 'component-place');
+  }
+
 
   // --- Openings and shafts: a hole in a wall, a hole in a floor, a shaft through the floors ---
   // Three tools make them, one edit each (construct-openings' FORMAT.md; the commands are

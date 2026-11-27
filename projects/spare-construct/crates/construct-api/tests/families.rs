@@ -656,12 +656,22 @@ async fn placing_a_family_is_refused_in_words() {
     );
 }
 
-/// The library as the page lists it: the three families, each with its category, types and the
+/// The library as the page lists it: its fifteen families, each with its category, types and the
 /// values each placed one holds.
 #[test]
 fn the_library_lists_its_families_for_the_page() {
     let all = construct_api::cloud::families::read_library();
-    assert_eq!(all.len(), 3);
+    assert_eq!(all.len(), 15);
+    assert_eq!(all.iter().filter(|f| f.hosting == "wall").count(), 3);
+    assert_eq!(all.iter().filter(|f| f.hosting == "face").count(), 2);
+    assert_eq!(all.iter().filter(|f| f.hosting == "unhosted").count(), 10);
+    let desk = all.iter().find(|f| f.id == DESK).unwrap();
+    assert_eq!(desk.kind, "family");
+    assert_eq!(desk.category_name, "Furniture");
+    assert_eq!(desk.types.len(), 3);
+    let cabinet = all.iter().find(|f| f.id == CABINET).unwrap();
+    assert_eq!(cabinet.values[0].key, "mount_height");
+    assert_eq!(cabinet.values[0].shown, "1450 mm");
     let window = all.iter().find(|f| f.id == WINDOW).unwrap();
     assert_eq!(window.kind, "window");
     assert_eq!(window.category, 400);
@@ -673,4 +683,385 @@ fn the_library_lists_its_families_for_the_page() {
     assert_eq!(door.kind, "door");
     assert_eq!(door.values[0].key, "swing");
     assert_eq!(door.values[0].choices.len(), 2);
+}
+
+// Families that stand on a level, and casework and fixtures hung on a wall's face (job 14.9,
+// piece A90): the library's furniture, lighting, casework and plumbing, placed as the page places
+// them.
+
+const DESK: &str = "library.furniture.desk";
+const LIGHT: &str = "library.lighting.ceiling-light";
+const CABINET: &str = "library.casework.wall-cabinet";
+const BASIN: &str = "library.plumbing.basin";
+
+/// `family.place`'s arguments for a family that stands on level 1: family `family` of type `ty`,
+/// as `id`, at `x`, `y`.
+fn stand(id: &str, family: &str, ty: &str, x: &str, y: &str) -> Value {
+    json!({ "element": id, "family": family, "type": ty, "x": x, "y": y, "level": 1 })
+}
+
+/// A desk stands on a level at a point, turned, raised by an offset: its record has its family's
+/// category (furniture), no wall, its point as its placement, its turn as a stored angle and its
+/// level tie; the builder is handed the turn it is built at. It is moved, turned (by whole quarter
+/// turns, as is built today), retyped and deleted, each undone and redone to the same record.
+#[tokio::test]
+async fn a_desk_stands_on_a_level_and_is_moved_turned_retyped_and_deleted_with_undo() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    let mut place = stand("D-1", DESK, "d1500x750", "2 m", "3 m");
+    place["turn"] = json!("90");
+    place["up"] = json!("50 mm");
+    stack.edit("family.place", place).await.unwrap();
+    let (placed, desk) = stack.record("D-1").await.unwrap();
+    assert_eq!(desk.kind, "family");
+    assert_eq!(desk.props["@category"], "1700");
+    assert_eq!(desk.props["@place.turn"], "angle:810000000");
+    assert_eq!(
+        [desk.placement.x, desk.placement.y, desk.placement.z],
+        [2000, 3000, 0]
+    );
+    assert!(desk.references.is_empty(), "a desk is hosted on nothing");
+    assert_eq!(desk.recipe.args["type"], "d1500x750");
+    let tie = construct_levels::base_of(&desk).unwrap().unwrap();
+    assert_eq!(Some(tie.level), construct_levels::implied_id(1));
+    assert_eq!(tie.offset, construct_levels::Length::from_mm(50));
+    assert_eq!(stack.body("D-1").await["turn"], 1);
+
+    // Moved to another point and another offset: a point alone leaves the offset, an offset alone
+    // leaves the point.
+    stack
+        .edit(
+            "family.move",
+            json!({ "element": "D-1", "x": "2500 mm", "up": "100 mm" }),
+        )
+        .await
+        .unwrap();
+    let (_, moved) = stack.record("D-1").await.unwrap();
+    assert_eq!([moved.placement.x, moved.placement.y], [2500, 3000]);
+    let tie = construct_levels::base_of(&moved).unwrap().unwrap();
+    assert_eq!(tie.offset, construct_levels::Length::from_mm(100));
+    stack
+        .edit("family.move", json!({ "element": "D-1", "y": "3500 mm" }))
+        .await
+        .unwrap();
+    let (_, moved) = stack.record("D-1").await.unwrap();
+    assert_eq!([moved.placement.x, moved.placement.y], [2500, 3500]);
+    assert_eq!(
+        construct_levels::base_of(&moved).unwrap().unwrap().offset,
+        construct_levels::Length::from_mm(100)
+    );
+
+    // Turned: by whole quarter turns, either way round; a turn it already has is refused.
+    stack
+        .edit("family.turn", json!({ "element": "D-1", "turn": "180" }))
+        .await
+        .unwrap();
+    let (_, half) = stack.record("D-1").await.unwrap();
+    assert_eq!(half.props["@place.turn"], "angle:1620000000");
+    assert_eq!(stack.body("D-1").await["turn"], 2);
+    stack
+        .edit("family.turn", json!({ "element": "D-1", "turn": "-90" }))
+        .await
+        .unwrap();
+    assert_eq!(stack.body("D-1").await["turn"], 3);
+    stack
+        .edit("family.turn", json!({ "element": "D-1", "turn": "0" }))
+        .await
+        .unwrap();
+    assert!(
+        !stack
+            .record("D-1")
+            .await
+            .unwrap()
+            .1
+            .props
+            .contains_key("@place.turn"),
+        "no turn is no key"
+    );
+    assert_eq!(stack.body("D-1").await["turn"], 0);
+    let same = stack
+        .edit("family.turn", json!({ "element": "D-1", "turn": "360" }))
+        .await
+        .unwrap_err();
+    assert_eq!(same, "D-1 already faces that way.");
+    let odd = stack
+        .edit("family.turn", json!({ "element": "D-1", "turn": "45" }))
+        .await
+        .unwrap_err();
+    assert!(odd.contains("whole quarter turns"), "{odd}");
+
+    // Retyped.
+    let (before, _) = stack.record("D-1").await.unwrap();
+    stack
+        .edit(
+            "family.retype",
+            json!({ "element": "D-1", "type": "d1800x800" }),
+        )
+        .await
+        .unwrap();
+    let (_, retyped) = stack.record("D-1").await.unwrap();
+    assert_eq!(retyped.recipe.args["type"], "d1800x800");
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.record("D-1").await.unwrap().0, before);
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert_eq!(stack.record("D-1").await.unwrap().1, retyped);
+
+    // Undo steps back through every change to the placing.
+    for _ in 0..6 {
+        stack.edit("edit.undo", json!({})).await.unwrap();
+    }
+    assert_eq!(stack.record("D-1").await.unwrap().0, placed);
+    for _ in 0..6 {
+        stack.edit("edit.redo", json!({})).await.unwrap();
+    }
+    assert_eq!(stack.record("D-1").await.unwrap().1, retyped);
+
+    // Deleted, and put back.
+    stack
+        .edit("family.delete", json!({ "element": "D-1" }))
+        .await
+        .unwrap();
+    assert!(stack.record("D-1").await.is_none());
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.record("D-1").await.unwrap().1, retyped);
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert!(stack.record("D-1").await.is_none());
+}
+
+/// A ceiling light hangs at the height its instance value says; a value of another kind is
+/// refused; the value is taken away again to read its default.
+#[tokio::test]
+async fn a_ceiling_light_holds_the_height_it_hangs_at() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    let mut light = stand("L-1", LIGHT, "panel600", "1 m", "1 m");
+    light["values"] = json!({ "mount_height": "2.7 m" });
+    stack.edit("family.place", light).await.unwrap();
+    let (_, placed) = stack.record("L-1").await.unwrap();
+    assert_eq!(placed.props["@category"], "2000");
+    assert_eq!(
+        placed.recipe.args["value.mount_height"],
+        "length:q0:17280000"
+    );
+    let bad = stack
+        .edit(
+            "family.set",
+            json!({ "element": "L-1", "values": { "width": "1 m" } }),
+        )
+        .await
+        .unwrap_err();
+    assert_ne!(bad, "");
+    stack
+        .edit(
+            "family.set",
+            json!({ "element": "L-1", "values": { "mount_height": null } }),
+        )
+        .await
+        .unwrap();
+    assert!(
+        !stack
+            .record("L-1")
+            .await
+            .unwrap()
+            .1
+            .recipe
+            .args
+            .contains_key("value.mount_height")
+    );
+}
+
+/// Every refusal of placing a family that stands on a level, in words; nothing is written by one.
+#[tokio::test]
+async fn standing_a_family_is_refused_in_words() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    let mut cases = Vec::new();
+    let no_point = json!({ "element": "D-9", "family": DESK, "type": "d1500x750", "x": "1 m" });
+    cases.push(no_point);
+    cases.push(stand("D-9", DESK, "d1500x750", "1 m", "1.0005 m"));
+    let mut wall = stand("D-9", DESK, "d1500x750", "1 m", "1 m");
+    wall["host"] = json!("W-1");
+    cases.push(wall);
+    let mut turned = stand("D-9", DESK, "d1500x750", "1 m", "1 m");
+    turned["turn"] = json!("30");
+    cases.push(turned);
+    let mut level = stand("D-9", DESK, "d1500x750", "1 m", "1 m");
+    level["level"] = json!("L-none");
+    cases.push(level);
+    let mut offset = stand("D-9", DESK, "d1500x750", "1 m", "1 m");
+    offset["level"] = json!(null);
+    offset["up"] = json!("1 m");
+    cases.push(offset);
+    cases.push(stand("D-9", DESK, "d1x1", "1 m", "1 m"));
+    let mut refusals = Vec::new();
+    for args in cases {
+        refusals.push(stack.edit("family.place", args).await.unwrap_err());
+    }
+    assert_eq!(refusals[0], "Desk needs the point it stands at: x and y.");
+    assert!(
+        refusals[1].contains("is not a whole number of millimetres"),
+        "{}",
+        refusals[1]
+    );
+    assert_eq!(
+        refusals[2],
+        "Desk stands on a level: it takes a point (x and y), a turn and a level, not a wall."
+    );
+    assert!(
+        refusals[3].contains("whole quarter turns"),
+        "{}",
+        refusals[3]
+    );
+    assert_ne!(refusals[4], "");
+    assert_eq!(
+        refusals[5],
+        "An offset is measured from a level, and none is given."
+    );
+    assert!(
+        refusals[6].starts_with("Desk has no type d1x1;"),
+        "{}",
+        refusals[6]
+    );
+    assert!(stack.record("D-9").await.is_none());
+    // A family that hangs on a wall is not put on a level, and one that stands is not hung.
+    let hung = stack
+        .edit("family.place", stand("C-9", CABINET, "w600", "1 m", "1 m"))
+        .await
+        .unwrap_err();
+    assert!(hung.starts_with("A placed family needs"), "{hung}");
+    stack
+        .edit(
+            "family.place",
+            stand("D-1", DESK, "d1500x750", "1 m", "1 m"),
+        )
+        .await
+        .unwrap();
+    // The generic commands name the family commands, and a desk is not moved along a wall.
+    let generic = stack
+        .edit("element.move", json!({ "element": "D-1", "x": 5 }))
+        .await
+        .unwrap_err();
+    assert!(generic.contains("family.move"), "{generic}");
+    let along = stack
+        .edit("family.move", json!({ "element": "D-1", "along": "1 m" }))
+        .await
+        .unwrap_err();
+    assert!(along.contains("stands on a level"), "{along}");
+    let flip = stack
+        .edit("family.flip", json!({ "element": "D-1" }))
+        .await
+        .unwrap_err();
+    assert_eq!(flip, "D-1 is not hosted on a face of a wall.");
+    let nowhere = stack
+        .edit("family.move", json!({ "element": "D-1" }))
+        .await
+        .unwrap_err();
+    assert!(nowhere.starts_with("A move needs a point"), "{nowhere}");
+}
+
+/// A wall cabinet and a basin hang against a wall's face: each seated with its origin on that
+/// face (the two sides a wall's thickness apart, the exterior's below the wall's line), turned to
+/// face out of it, at the height its instance value says; moved along the wall, flipped, retyped
+/// and refused past the wall's end, in words, each with undo and redo.
+#[tokio::test]
+async fn casework_and_a_basin_hang_on_a_walls_face() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    let mut cabinet = place("C-1", CABINET, "w600", "W-1", "exterior", "1 m");
+    cabinet["values"] = json!({ "mount_height": "1.5 m" });
+    stack.edit("family.place", cabinet).await.unwrap();
+    stack
+        .edit(
+            "family.place",
+            place("B-1", BASIN, "standard", "W-1", "interior", "3 m"),
+        )
+        .await
+        .unwrap();
+    let (_, cabinet) = stack.record("C-1").await.unwrap();
+    assert_eq!(cabinet.kind, "family");
+    assert_eq!(cabinet.props["@category"], "1800");
+    assert_eq!(cabinet.references[0].signature.as_deref(), Some("exterior"));
+    assert_eq!(
+        cabinet.recipe.args["value.mount_height"],
+        "length:q0:9600000"
+    );
+    let (_, basin) = stack.record("B-1").await.unwrap();
+    assert_eq!(basin.props["@category"], "1900");
+    // On the wall's faces: along the line from its start, across it a half thickness each way.
+    // The partition is 115 mm thick, its line in the middle: each face 57.5 mm off it, to the
+    // nearest millimetre as a placement holds it.
+    assert_eq!(cabinet.placement.y, 1943);
+    assert_eq!(basin.placement.y, 2058);
+    let half = 2000 - cabinet.placement.y;
+    assert_eq!([cabinet.placement.x, basin.placement.x], [2000, 4000]);
+    let mut cuts = stack.cuts("W-1").await;
+    cuts.sort();
+    // The exterior one is turned half a turn, the interior one not turned: each faces out.
+    assert_eq!(cuts[0].0, "B-1");
+    assert_eq!(cuts[0].2, 0);
+    assert_eq!(cuts[1].0, "C-1");
+    assert_eq!(cuts[1].2, 2);
+
+    // Moved along its wall, flipped and put back, retyped.
+    let (before, _) = stack.record("C-1").await.unwrap();
+    stack
+        .edit("family.move", json!({ "element": "C-1", "along": "2 m" }))
+        .await
+        .unwrap();
+    assert_eq!(stack.record("C-1").await.unwrap().1.placement.x, 3000);
+    stack
+        .edit("family.flip", json!({ "element": "C-1" }))
+        .await
+        .unwrap();
+    let (_, flipped) = stack.record("C-1").await.unwrap();
+    assert_eq!(flipped.placement.y, 2058);
+    assert_eq!(half, 57);
+    stack
+        .edit("family.retype", json!({ "element": "C-1", "type": "w900" }))
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        stack.edit("edit.undo", json!({})).await.unwrap();
+    }
+    assert_eq!(stack.record("C-1").await.unwrap().0, before);
+    for _ in 0..3 {
+        stack.edit("edit.redo", json!({})).await.unwrap();
+    }
+    assert_eq!(
+        stack.record("C-1").await.unwrap().1.recipe.args["type"],
+        "w900"
+    );
+
+    // Words: past the wall's end, a turn of a family a wall turns, a desk as a wall.
+    let past = stack
+        .edit(
+            "family.place",
+            place("C-2", CABINET, "w600", "W-1", "exterior", "3900 mm"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(past, "family C-2: it crosses the wall's end");
+    let turn = stack
+        .edit("family.turn", json!({ "element": "C-1", "turn": "90" }))
+        .await
+        .unwrap_err();
+    assert!(turn.contains("flip it"), "{turn}");
+    stack
+        .edit(
+            "family.place",
+            stand("D-1", DESK, "d1500x750", "1 m", "1 m"),
+        )
+        .await
+        .unwrap();
+    let host = stack
+        .edit(
+            "family.place",
+            place("C-3", CABINET, "w600", "D-1", "exterior", "1 m"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        host,
+        "D-1 is not a wall: only a wall hosts casework or a fixture."
+    );
+    assert!(stack.record("C-2").await.is_none());
+    assert!(stack.record("C-3").await.is_none());
 }

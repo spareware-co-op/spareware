@@ -2667,3 +2667,108 @@ pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -
         usize::from(island)
     );
 }
+
+// The starter content (job 14.9, piece A90): families that stand on a level or hang against a
+// wall's face, built by the kernel builder through the recipe evaluator.
+
+/// Every family of the library that does not cut a wall (furniture, casework, plumbing fixtures,
+/// lighting, planting, generic models), each of its types, turned none and a quarter, builds on
+/// the engine, and the builder's bounds are the stand-in's box; the shower tray, a solid with a
+/// recess taken out of it, holds exactly its block less its recess; a wall cabinet and a basin hung
+/// on the two faces of a three-layer wall cut nothing (each layer keeps its whole volume, no
+/// opening is cut), and one that would cross the wall's end is refused naming it.
+#[allow(
+    clippy::too_many_lines,
+    reason = "every family's types, the tray's volume and the wall with its two hung families, in order"
+)]
+pub fn the_starter_content_builds_and_hangs_without_cutting<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    use construct_families::{Hosting, Turn};
+    let k = kernel(make());
+    let stand_in = construct_regen::geometry();
+    let library = construct_regen::families::Library::baked();
+    let mut built_types = 0;
+    for (_, family) in library.recipes() {
+        if matches!(family.hosting, Hosting::Wall { .. }) {
+            continue;
+        }
+        for ty in family.named_types() {
+            for turn in [Turn::None, Turn::Quarter] {
+                let recipe = placed(family.id.as_str(), ty.key().as_str(), turn);
+                let b = built(&k, &recipe);
+                assert!(
+                    !b.displays.is_empty() && !b.displays[0].parts.is_empty(),
+                    "{} {}",
+                    family.name,
+                    ty.name()
+                );
+                assert_eq!(
+                    stand_in.build(&recipe).unwrap().bounds,
+                    b.bounds,
+                    "{} {} turned {}: the stand-in's box is the kernel's bounds",
+                    family.name,
+                    ty.name(),
+                    turn.quarters()
+                );
+                built_types += 1;
+            }
+        }
+    }
+    assert_eq!(built_types, 72, "every type of every family");
+
+    // The shower tray is its block less its recess, exactly: 900 by 900 by 60, a recess 800 by 800
+    // from 25 up through the top.
+    let tray = built(
+        &k,
+        &placed("library.plumbing.shower-tray", "t900x900", Turn::None),
+    );
+    let fine = &tray.displays[0];
+    assert_eq!(fine.parts.len(), 1);
+    assert_eq!(fine.parts[0].function, "tray");
+    assert_eq!(
+        signed_six_volume(&part_mesh(fine, 0)),
+        6 * (900 * 900 * 60 - 800 * 800 * 35)
+    );
+
+    // A wall cabinet on the exterior face (the right of the wall's line, 115 mm off it, its front
+    // facing out: half a turn) and a basin on the interior face: neither cuts the wall.
+    let wall = layered_wall([0, 0], [4000, 0], 2700, &THREE);
+    let cabinet = placed("library.casework.wall-cabinet", "w600", Turn::Half);
+    let basin = placed("library.plumbing.basin", "standard", Turn::None);
+    let plain = built(&k, &wall);
+    let hung = hosting(
+        &k,
+        &wall,
+        &[
+            hosted("B-1", &basin, at(&k, [3000, 115, 0])),
+            hosted("C-1", &cabinet, at(&k, [1500, -115, 0])),
+        ],
+    );
+    assert_eq!(hung.bounds, plain.bounds);
+    assert_eq!(
+        layer_volumes(&hung.displays[0]),
+        layer_volumes(&plain.displays[0]),
+        "a family hung on a face takes nothing from the wall"
+    );
+    let body: Value = serde_json::from_slice(&hung.body).unwrap();
+    assert!(
+        body["subtract"].as_array().is_none_or(Vec::is_empty),
+        "no opening is cut: {}",
+        body["subtract"]
+    );
+    assert_eq!(hung.names.len(), plain.names.len());
+    // Past the wall's end, at either end, is refused, naming the family.
+    for x in [3800, 100] {
+        let refused = k
+            .build_hosting(&wall, &[hosted("C-1", &cabinet, at(&k, [x, -115, 0]))])
+            .unwrap_err();
+        assert_eq!(refused.code, "OpeningPastEnd");
+        assert_eq!(refused.message, "family C-1: it crosses the wall's end");
+    }
+    // Just inside each end it hangs.
+    for x in [3700, 300] {
+        k.build_hosting(&wall, &[hosted("C-1", &cabinet, at(&k, [x, -115, 0]))])
+            .unwrap();
+    }
+}

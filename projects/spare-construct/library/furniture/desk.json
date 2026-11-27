@@ -1,0 +1,835 @@
+{
+  "format": 1,
+  "id": "library.furniture.desk",
+  "name": "Desk",
+  "category": 1700,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.furniture.desk.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:9600000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.furniture.desk.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:4800000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.furniture.desk.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:4672000"
+    },
+    {
+      "key": "top_thickness",
+      "definition": {
+        "id": "library.furniture.desk.top_thickness",
+        "name": "Top thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:160000"
+    },
+    {
+      "key": "leg",
+      "definition": {
+        "id": "library.furniture.desk.leg",
+        "name": "Leg size",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:320000"
+    },
+    {
+      "key": "inset",
+      "definition": {
+        "id": "library.furniture.desk.inset",
+        "name": "Leg inset",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:192000"
+    },
+    {
+      "key": "top_material",
+      "definition": {
+        "id": "library.furniture.desk.top_material",
+        "name": "Top material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-white-oak"
+    },
+    {
+      "key": "leg_material",
+      "definition": {
+        "id": "library.furniture.desk.leg_material",
+        "name": "Leg material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:steel-aisi-1025"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "top1",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:-2400000"
+        },
+        {
+          "key": "top2",
+          "x": "length:q0:4800000",
+          "y": "length:q0:-2400000"
+        },
+        {
+          "key": "top3",
+          "x": "length:q0:4800000",
+          "y": "length:q0:2400000"
+        },
+        {
+          "key": "top4",
+          "x": "length:q0:-4800000",
+          "y": "length:q0:2400000"
+        },
+        {
+          "key": "leg11",
+          "x": "length:q0:-4608000",
+          "y": "length:q0:-2208000"
+        },
+        {
+          "key": "leg12",
+          "x": "length:q0:-4288000",
+          "y": "length:q0:-2208000"
+        },
+        {
+          "key": "leg13",
+          "x": "length:q0:-4288000",
+          "y": "length:q0:-1888000"
+        },
+        {
+          "key": "leg14",
+          "x": "length:q0:-4608000",
+          "y": "length:q0:-1888000"
+        },
+        {
+          "key": "leg21",
+          "x": "length:q0:4288000",
+          "y": "length:q0:-2208000"
+        },
+        {
+          "key": "leg22",
+          "x": "length:q0:4608000",
+          "y": "length:q0:-2208000"
+        },
+        {
+          "key": "leg23",
+          "x": "length:q0:4608000",
+          "y": "length:q0:-1888000"
+        },
+        {
+          "key": "leg24",
+          "x": "length:q0:4288000",
+          "y": "length:q0:-1888000"
+        },
+        {
+          "key": "leg31",
+          "x": "length:q0:4288000",
+          "y": "length:q0:1888000"
+        },
+        {
+          "key": "leg32",
+          "x": "length:q0:4608000",
+          "y": "length:q0:1888000"
+        },
+        {
+          "key": "leg33",
+          "x": "length:q0:4608000",
+          "y": "length:q0:2208000"
+        },
+        {
+          "key": "leg34",
+          "x": "length:q0:4288000",
+          "y": "length:q0:2208000"
+        },
+        {
+          "key": "leg41",
+          "x": "length:q0:-4608000",
+          "y": "length:q0:1888000"
+        },
+        {
+          "key": "leg42",
+          "x": "length:q0:-4288000",
+          "y": "length:q0:1888000"
+        },
+        {
+          "key": "leg43",
+          "x": "length:q0:-4288000",
+          "y": "length:q0:2208000"
+        },
+        {
+          "key": "leg44",
+          "x": "length:q0:-4608000",
+          "y": "length:q0:2208000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "top_s",
+          "start": "top1",
+          "end": "top2"
+        },
+        {
+          "key": "top_e",
+          "start": "top2",
+          "end": "top3"
+        },
+        {
+          "key": "top_n",
+          "start": "top3",
+          "end": "top4"
+        },
+        {
+          "key": "top_w",
+          "start": "top4",
+          "end": "top1"
+        },
+        {
+          "key": "leg1_s",
+          "start": "leg11",
+          "end": "leg12"
+        },
+        {
+          "key": "leg1_e",
+          "start": "leg12",
+          "end": "leg13"
+        },
+        {
+          "key": "leg1_n",
+          "start": "leg13",
+          "end": "leg14"
+        },
+        {
+          "key": "leg1_w",
+          "start": "leg14",
+          "end": "leg11"
+        },
+        {
+          "key": "leg2_s",
+          "start": "leg21",
+          "end": "leg22"
+        },
+        {
+          "key": "leg2_e",
+          "start": "leg22",
+          "end": "leg23"
+        },
+        {
+          "key": "leg2_n",
+          "start": "leg23",
+          "end": "leg24"
+        },
+        {
+          "key": "leg2_w",
+          "start": "leg24",
+          "end": "leg21"
+        },
+        {
+          "key": "leg3_s",
+          "start": "leg31",
+          "end": "leg32"
+        },
+        {
+          "key": "leg3_e",
+          "start": "leg32",
+          "end": "leg33"
+        },
+        {
+          "key": "leg3_n",
+          "start": "leg33",
+          "end": "leg34"
+        },
+        {
+          "key": "leg3_w",
+          "start": "leg34",
+          "end": "leg31"
+        },
+        {
+          "key": "leg4_s",
+          "start": "leg41",
+          "end": "leg42"
+        },
+        {
+          "key": "leg4_e",
+          "start": "leg42",
+          "end": "leg43"
+        },
+        {
+          "key": "leg4_n",
+          "start": "leg43",
+          "end": "leg44"
+        },
+        {
+          "key": "leg4_w",
+          "start": "leg44",
+          "end": "leg41"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "top4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg11",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg11",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg12",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg12",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg13",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg13",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg14",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg14",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg21",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg21",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg22",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg22",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg23",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg23",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg24",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg24",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg31",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg31",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg32",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg32",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg33",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg33",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg34",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg34",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg41",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg41",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg42",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg42",
+          "line": "base",
+          "length": "depth / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg43",
+          "line": "axis",
+          "length": "width / 2 - inset - leg",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg43",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg44",
+          "line": "axis",
+          "length": "width / 2 - inset",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "leg44",
+          "line": "base",
+          "length": "depth / 2 - inset",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "top",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "top_s",
+        "top_e",
+        "top_n",
+        "top_w"
+      ],
+      "holes": [],
+      "start": "height - top_thickness",
+      "end": "height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "top_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg1",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "leg1_s",
+        "leg1_e",
+        "leg1_n",
+        "leg1_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height - top_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "leg_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg2",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "leg2_s",
+        "leg2_e",
+        "leg2_n",
+        "leg2_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height - top_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "leg_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg3",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "leg3_s",
+        "leg3_e",
+        "leg3_n",
+        "leg3_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height - top_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "leg_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "leg4",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "leg4_s",
+        "leg4_e",
+        "leg4_n",
+        "leg4_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height - top_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "leg_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "top_s",
+        "top_e",
+        "top_n",
+        "top_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_legs",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "leg1_s",
+        "leg1_e",
+        "leg1_n",
+        "leg1_w",
+        "leg2_s",
+        "leg2_e",
+        "leg2_n",
+        "leg2_w",
+        "leg3_s",
+        "leg3_e",
+        "leg3_n",
+        "leg3_w",
+        "leg4_s",
+        "leg4_e",
+        "leg4_n",
+        "leg4_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth"
+    ],
+    "rows": [
+      {
+        "key": "d1200x600",
+        "name": "1200 x 600",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:3840000"
+        ]
+      },
+      {
+        "key": "d1500x750",
+        "name": "1500 x 750",
+        "values": [
+          "length:q0:9600000",
+          "length:q0:4800000"
+        ]
+      },
+      {
+        "key": "d1800x800",
+        "name": "1800 x 800",
+        "values": [
+          "length:q0:11520000",
+          "length:q0:5120000"
+        ]
+      }
+    ]
+  }
+}

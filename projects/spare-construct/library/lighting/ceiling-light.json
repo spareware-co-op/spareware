@@ -1,0 +1,459 @@
+{
+  "format": 1,
+  "id": "library.lighting.ceiling-light",
+  "name": "Ceiling light",
+  "category": 2000,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.lighting.ceiling-light.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.lighting.ceiling-light.depth",
+        "name": "Length",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.lighting.ceiling-light.height",
+        "name": "Overall height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:384000"
+    },
+    {
+      "key": "diffuser_thickness",
+      "definition": {
+        "id": "library.lighting.ceiling-light.diffuser_thickness",
+        "name": "Diffuser thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:32000"
+    },
+    {
+      "key": "border",
+      "definition": {
+        "id": "library.lighting.ceiling-light.border",
+        "name": "Border",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:128000"
+    },
+    {
+      "key": "housing_material",
+      "definition": {
+        "id": "library.lighting.ceiling-light.housing_material",
+        "name": "Housing material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:aluminium-6061"
+    },
+    {
+      "key": "mount_height",
+      "definition": {
+        "id": "library.lighting.ceiling-light.mount_height",
+        "name": "Height of the ceiling it hangs from",
+        "kind": "length",
+        "holder": "instance",
+        "choices": []
+      },
+      "default": "length:q0:15360000"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "housing1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "housing2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "housing3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1920000"
+        },
+        {
+          "key": "housing4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1920000"
+        },
+        {
+          "key": "diffuser1",
+          "x": "length:q0:-1792000",
+          "y": "length:q0:-1792000"
+        },
+        {
+          "key": "diffuser2",
+          "x": "length:q0:1792000",
+          "y": "length:q0:-1792000"
+        },
+        {
+          "key": "diffuser3",
+          "x": "length:q0:1792000",
+          "y": "length:q0:1792000"
+        },
+        {
+          "key": "diffuser4",
+          "x": "length:q0:-1792000",
+          "y": "length:q0:1792000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "housing_s",
+          "start": "housing1",
+          "end": "housing2"
+        },
+        {
+          "key": "housing_e",
+          "start": "housing2",
+          "end": "housing3"
+        },
+        {
+          "key": "housing_n",
+          "start": "housing3",
+          "end": "housing4"
+        },
+        {
+          "key": "housing_w",
+          "start": "housing4",
+          "end": "housing1"
+        },
+        {
+          "key": "diffuser_s",
+          "start": "diffuser1",
+          "end": "diffuser2"
+        },
+        {
+          "key": "diffuser_e",
+          "start": "diffuser2",
+          "end": "diffuser3"
+        },
+        {
+          "key": "diffuser_n",
+          "start": "diffuser3",
+          "end": "diffuser4"
+        },
+        {
+          "key": "diffuser_w",
+          "start": "diffuser4",
+          "end": "diffuser1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "housing4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser1",
+          "line": "axis",
+          "length": "width / 2 - border",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser1",
+          "line": "base",
+          "length": "depth / 2 - border",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser2",
+          "line": "axis",
+          "length": "width / 2 - border",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser2",
+          "line": "base",
+          "length": "depth / 2 - border",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser3",
+          "line": "axis",
+          "length": "width / 2 - border",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser3",
+          "line": "base",
+          "length": "depth / 2 - border",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser4",
+          "line": "axis",
+          "length": "width / 2 - border",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "diffuser4",
+          "line": "base",
+          "length": "depth / 2 - border",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "housing",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "housing_s",
+        "housing_e",
+        "housing_n",
+        "housing_w"
+      ],
+      "holes": [],
+      "start": "mount_height - height + diffuser_thickness",
+      "end": "mount_height",
+      "subcategory": 2000,
+      "material": {
+        "parameter": "housing_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "diffuser",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "diffuser_s",
+        "diffuser_e",
+        "diffuser_n",
+        "diffuser_w"
+      ],
+      "holes": [],
+      "start": "mount_height - height",
+      "end": "mount_height - height + diffuser_thickness",
+      "subcategory": 2000,
+      "material": {
+        "fixed": "glass-plate"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "housing_s",
+        "housing_e",
+        "housing_n",
+        "housing_w"
+      ],
+      "subcategory": 2000,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_diffuser",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "diffuser_s",
+        "diffuser_e",
+        "diffuser_n",
+        "diffuser_w"
+      ],
+      "subcategory": 2000,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth",
+      "height"
+    ],
+    "rows": [
+      {
+        "key": "panel600",
+        "name": "Panel 600 x 600",
+        "values": [
+          "length:q0:3840000",
+          "length:q0:3840000",
+          "length:q0:384000"
+        ]
+      },
+      {
+        "key": "panel1200",
+        "name": "Panel 1200 x 600",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:3840000",
+          "length:q0:384000"
+        ]
+      },
+      {
+        "key": "batten",
+        "name": "Batten 1200 x 150",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:960000",
+          "length:q0:320000"
+        ]
+      }
+    ]
+  }
+}

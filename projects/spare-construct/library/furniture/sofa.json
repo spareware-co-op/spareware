@@ -1,0 +1,723 @@
+{
+  "format": 1,
+  "id": "library.furniture.sofa",
+  "name": "Sofa",
+  "category": 1700,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.furniture.sofa.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:10240000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.furniture.sofa.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.furniture.sofa.height",
+        "name": "Overall height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5440000"
+    },
+    {
+      "key": "seat_height",
+      "definition": {
+        "id": "library.furniture.sofa.seat_height",
+        "name": "Seat height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:2752000"
+    },
+    {
+      "key": "arm_width",
+      "definition": {
+        "id": "library.furniture.sofa.arm_width",
+        "name": "Arm width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:960000"
+    },
+    {
+      "key": "arm_height",
+      "definition": {
+        "id": "library.furniture.sofa.arm_height",
+        "name": "Arm height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "back_thickness",
+      "definition": {
+        "id": "library.furniture.sofa.back_thickness",
+        "name": "Back thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:1280000"
+    },
+    {
+      "key": "seat_material",
+      "definition": {
+        "id": "library.furniture.sofa.seat_material",
+        "name": "Seat material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-eastern-white-pine"
+    },
+    {
+      "key": "arm_material",
+      "definition": {
+        "id": "library.furniture.sofa.arm_material",
+        "name": "Arm and back material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-eastern-white-pine"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "seat1",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "seat2",
+          "x": "length:q0:5120000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "seat3",
+          "x": "length:q0:5120000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "seat4",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "arm_left1",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "arm_left2",
+          "x": "length:q0:-4160000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "arm_left3",
+          "x": "length:q0:-4160000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "arm_left4",
+          "x": "length:q0:-5120000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "arm_right1",
+          "x": "length:q0:4160000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "arm_right2",
+          "x": "length:q0:5120000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "arm_right3",
+          "x": "length:q0:5120000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "arm_right4",
+          "x": "length:q0:4160000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "back1",
+          "x": "length:q0:-4160000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "back2",
+          "x": "length:q0:4160000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "back3",
+          "x": "length:q0:4160000",
+          "y": "length:q0:-1600000"
+        },
+        {
+          "key": "back4",
+          "x": "length:q0:-4160000",
+          "y": "length:q0:-1600000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "seat_s",
+          "start": "seat1",
+          "end": "seat2"
+        },
+        {
+          "key": "seat_e",
+          "start": "seat2",
+          "end": "seat3"
+        },
+        {
+          "key": "seat_n",
+          "start": "seat3",
+          "end": "seat4"
+        },
+        {
+          "key": "seat_w",
+          "start": "seat4",
+          "end": "seat1"
+        },
+        {
+          "key": "arm_left_s",
+          "start": "arm_left1",
+          "end": "arm_left2"
+        },
+        {
+          "key": "arm_left_e",
+          "start": "arm_left2",
+          "end": "arm_left3"
+        },
+        {
+          "key": "arm_left_n",
+          "start": "arm_left3",
+          "end": "arm_left4"
+        },
+        {
+          "key": "arm_left_w",
+          "start": "arm_left4",
+          "end": "arm_left1"
+        },
+        {
+          "key": "arm_right_s",
+          "start": "arm_right1",
+          "end": "arm_right2"
+        },
+        {
+          "key": "arm_right_e",
+          "start": "arm_right2",
+          "end": "arm_right3"
+        },
+        {
+          "key": "arm_right_n",
+          "start": "arm_right3",
+          "end": "arm_right4"
+        },
+        {
+          "key": "arm_right_w",
+          "start": "arm_right4",
+          "end": "arm_right1"
+        },
+        {
+          "key": "back_s",
+          "start": "back1",
+          "end": "back2"
+        },
+        {
+          "key": "back_e",
+          "start": "back2",
+          "end": "back3"
+        },
+        {
+          "key": "back_n",
+          "start": "back3",
+          "end": "back4"
+        },
+        {
+          "key": "back_w",
+          "start": "back4",
+          "end": "back1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "seat4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left2",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left3",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_left4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right1",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right4",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "arm_right4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back1",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back2",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back3",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back3",
+          "line": "base",
+          "length": "depth / 2 - back_thickness",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back4",
+          "line": "axis",
+          "length": "width / 2 - arm_width",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "back4",
+          "line": "base",
+          "length": "depth / 2 - back_thickness",
+          "side": "right"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "seat",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "seat_s",
+        "seat_e",
+        "seat_n",
+        "seat_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "seat_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "seat_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "arm_left",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "arm_left_s",
+        "arm_left_e",
+        "arm_left_n",
+        "arm_left_w"
+      ],
+      "holes": [],
+      "start": "seat_height",
+      "end": "arm_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "arm_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "arm_right",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "arm_right_s",
+        "arm_right_e",
+        "arm_right_n",
+        "arm_right_w"
+      ],
+      "holes": [],
+      "start": "seat_height",
+      "end": "arm_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "arm_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "back",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "back_s",
+        "back_e",
+        "back_n",
+        "back_w"
+      ],
+      "holes": [],
+      "start": "seat_height",
+      "end": "height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "arm_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "seat_s",
+        "seat_e",
+        "seat_n",
+        "seat_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_arms",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "arm_left_s",
+        "arm_left_e",
+        "arm_left_n",
+        "arm_left_w",
+        "arm_right_s",
+        "arm_right_e",
+        "arm_right_n",
+        "arm_right_w",
+        "back_s",
+        "back_e",
+        "back_n",
+        "back_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth"
+    ],
+    "rows": [
+      {
+        "key": "armchair",
+        "name": "Armchair",
+        "values": [
+          "length:q0:5760000",
+          "length:q0:5440000"
+        ]
+      },
+      {
+        "key": "two_seater",
+        "name": "Two seater",
+        "values": [
+          "length:q0:10240000",
+          "length:q0:5760000"
+        ]
+      },
+      {
+        "key": "three_seater",
+        "name": "Three seater",
+        "values": [
+          "length:q0:13440000",
+          "length:q0:6080000"
+        ]
+      }
+    ]
+  }
+}

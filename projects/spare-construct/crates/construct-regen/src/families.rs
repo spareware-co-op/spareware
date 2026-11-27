@@ -25,8 +25,23 @@
 //! in its wall ([`crate::hosting::seat`] writes it into the recipe a builder is handed), its
 //! solids, and its opening.
 //!
+//! A family that is not hosted stands on a level (job 14.9, piece A90): furniture, a base cabinet, a
+//! WC pan, a ceiling light, a tree. Its record is the placed family's above with no face reference
+//! and no host offsets; where it stands is its `placement` (whole millimetres, `x` and `y`: the
+//! point its origin is put at), its base tie (the level it stands on and the offset from that
+//! level, construct-levels' `write_base`, as a wall's base is), and its turn about its z axis,
+//! [`TURN_KEY`]: a construct-params stored angle in `props`, read as a [`Heading`]. A family that
+//! is hosted on a face of a wall without cutting it (a wall cabinet, a basin) is seated as a door
+//! is, its origin on the face (not the wall's centre plane) and its `+y` out of that face
+//! ([`crate::hosting::seat`]); the wall is not cut for it ([`sits_on_face`]).
+//!
 //! Interim, each here so that replacing it changes this file and no caller:
 //!
+//! - **A turn is a quarter turn**: [`Heading`] holds any angle the stored form can, but only whole
+//!   quarter turns are built today ([`Heading::quarter_turn`], the evaluator's [`Turn`]); any other
+//!   angle is refused in words. Piece A80's any-angle rule (construct-modify, an exact rotation of
+//!   every corner) is not on main yet; when it lands, [`Heading`] gives that rule its angle and the
+//!   refusal goes, with no record rewritten.
 //! - **Where a family's recipe comes from**: the trait [`FamilySource`], given a content id, the
 //!   recipe. [`Library`] answers it from recipes passed in by the caller ([`Library::of`],
 //!   [`Library::read`]) or from the library folder's door and window templates baked in at build
@@ -40,10 +55,12 @@
 //!   its outline extruded through the wall and the rules asked of a polygon.
 
 use construct_families::{
-    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Turn, TypeValues, opening_within,
+    ContentId, EvalError, Hosting, Key, Limits, Recipe as FamilyRecipe, Turn, TypeValues,
+    opening_within,
 };
+use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
-use construct_params::Length;
+use construct_params::{Angle, Length, Value as Stored};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -62,12 +79,29 @@ pub const TURN_ARG: &str = "turn";
 pub const VALUE_PREFIX: &str = "value.";
 /// The owner of Spare Construct's own operations.
 const OWN: &str = "construct";
+/// The `props` key of a standing family's turn about its z axis: a construct-params stored angle,
+/// anticlockwise seen from above; left out for none.
+pub const TURN_KEY: &str = "@place.turn";
 
-/// The library folder's door and window templates, baked in at build time.
-const BAKED: [&str; 3] = [
+/// The library folder's recipes, baked in at build time: the door and window templates
+/// (`library/doors-windows`) and the starter content (furniture, casework, plumbing fixtures,
+/// lighting, planting and a generic model, piece A90).
+const BAKED: [&str; 15] = [
     include_str!("../../../library/doors-windows/single-swing-door.json"),
     include_str!("../../../library/doors-windows/fixed-window.json"),
     include_str!("../../../library/doors-windows/sliding-window.json"),
+    include_str!("../../../library/furniture/desk.json"),
+    include_str!("../../../library/furniture/chair.json"),
+    include_str!("../../../library/furniture/bed.json"),
+    include_str!("../../../library/furniture/sofa.json"),
+    include_str!("../../../library/casework/base-cabinet.json"),
+    include_str!("../../../library/casework/wall-cabinet.json"),
+    include_str!("../../../library/plumbing/wc-pan.json"),
+    include_str!("../../../library/plumbing/basin.json"),
+    include_str!("../../../library/plumbing/shower-tray.json"),
+    include_str!("../../../library/lighting/ceiling-light.json"),
+    include_str!("../../../library/planting/tree.json"),
+    include_str!("../../../library/generic/generic-box.json"),
 ];
 
 fn fault(code: &str, message: impl Into<String>) -> GeometryError {
@@ -117,7 +151,7 @@ impl Library {
         Ok(Library::of(recipes))
     }
 
-    /// The library folder's door and window templates (`library/doors-windows`), baked in at
+    /// The library folder's recipes (`library/doors-windows` and the starter content), baked in at
     /// build time, read once.
     #[must_use]
     pub fn baked() -> Arc<Library> {
@@ -217,6 +251,117 @@ pub fn turned(recipe: &Recipe, turn: Turn) -> Recipe {
         .args
         .insert(TURN_ARG.to_owned(), Value::from(turn.quarters()));
     turned
+}
+
+/// How far a standing family is turned about its z axis, anticlockwise seen from above: a
+/// construct-params angle, stored in the record's `props` under [`TURN_KEY`] ([`Heading::read`],
+/// [`Heading::write`]). Interim (this module's header): only whole quarter turns are built.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Heading(Angle);
+
+impl Default for Heading {
+    /// No turn.
+    fn default() -> Self {
+        Heading(Angle::from_units(0))
+    }
+}
+
+impl Heading {
+    /// The angle in one whole turn, in angle units.
+    const WHOLE_TURN: i64 = 360 * Angle::UNITS_PER_DEGREE;
+    /// The angle in one quarter turn, in angle units.
+    const QUARTER: i64 = 90 * Angle::UNITS_PER_DEGREE;
+
+    /// The heading of `angle`, as it is.
+    #[must_use]
+    pub const fn of(angle: Angle) -> Heading {
+        Heading(angle)
+    }
+
+    /// The heading of `quarters` quarter turns anticlockwise (negative for clockwise).
+    #[must_use]
+    pub fn of_quarters(quarters: i64) -> Heading {
+        Heading(Angle::from_units(
+            quarters.rem_euclid(4).saturating_mul(Self::QUARTER),
+        ))
+    }
+
+    /// The angle it holds.
+    #[must_use]
+    pub const fn angle(self) -> Angle {
+        self.0
+    }
+
+    /// The turn the evaluator builds: the angle as quarter turns, 0 to 3, whole turns dropped.
+    ///
+    /// # Errors
+    ///
+    /// Why not, in words: the angle is not a whole number of quarter turns (interim: only those
+    /// are built until any angle is, piece A80).
+    pub fn quarter_turn(self) -> Result<Turn, String> {
+        let units = self.0.units();
+        if units.checked_rem(Self::QUARTER) != Some(0) {
+            return Err(format!(
+                "a turn of {} degrees: a family is turned by whole quarter turns (90 degrees) \
+                 until any angle can be built",
+                self.0.degrees()
+            ));
+        }
+        units
+            .rem_euclid(Self::WHOLE_TURN)
+            .checked_div(Self::QUARTER)
+            .and_then(|q| u8::try_from(q).ok())
+            .and_then(Turn::of_quarters)
+            .ok_or_else(|| "a turn that does not fit".to_owned())
+    }
+
+    /// The heading `element`'s record stores: none (no turn) when it stores none.
+    ///
+    /// # Errors
+    ///
+    /// Why the record's [`TURN_KEY`] is not a stored angle, in words.
+    pub fn read(element: &Element) -> Result<Heading, String> {
+        match element.props.get(TURN_KEY) {
+            None => Ok(Heading::default()),
+            Some(text) => match Stored::from_stored(text) {
+                Some(Stored::Angle(angle)) => Ok(Heading(angle)),
+                _ => Err(format!("{TURN_KEY} must be a stored angle, not {text}")),
+            },
+        }
+    }
+
+    /// Writes the heading into `props`: nothing for no turn, so a family not turned has no key.
+    pub fn write(self, props: &mut BTreeMap<String, String>) {
+        if self.0.units() == 0 {
+            props.remove(TURN_KEY);
+        } else {
+            props.insert(TURN_KEY.to_owned(), Stored::Angle(self.0).stored());
+        }
+    }
+}
+
+/// What the family `recipe`'s record names is placed on, from `source`.
+///
+/// # Errors
+///
+/// [`Instance::of`]'s and [`resolve`]'s.
+pub fn hosting_of(source: &dyn FamilySource, recipe: &Recipe) -> Result<Hosting, GeometryError> {
+    let instance = Instance::of(recipe)?;
+    Ok(resolve(source, &instance)?.recipe.hosting.clone())
+}
+
+/// Whether the family `recipe` sits against a face of its wall and cuts nothing (its family is
+/// hosted on a face): false for one that cuts an opening, one that is not hosted, and one the
+/// source does not hold (that is the builder's to refuse, naming it).
+#[must_use]
+pub fn sits_on_face(source: &dyn FamilySource, recipe: &Recipe) -> bool {
+    matches!(hosting_of(source, recipe), Ok(Hosting::Face))
+}
+
+/// Whether the family `recipe` stands on a level: its family is not hosted on anything.
+#[must_use]
+pub fn stands(source: &dyn FamilySource, recipe: &Recipe) -> bool {
+    matches!(hosting_of(source, recipe), Ok(Hosting::Unhosted))
 }
 
 /// A placed family as its recipe says.
@@ -411,13 +556,13 @@ mod tests {
 
     use super::*;
 
-    /// The baked library holds the three templates, each under its content id, and finds each
+    /// The baked library holds the fifteen recipes, each under its content id, and finds each
     /// by its permanent id; a placed family's recipe reads back as written, with no turn until it
     /// is seated; a recipe that does not read says which argument.
     #[test]
     fn a_placed_family_names_its_recipe_and_type() {
         let library = Library::baked();
-        assert_eq!(library.ids().len(), 3);
+        assert_eq!(library.ids().len(), 15);
         let (id, door) = library
             .family("library.doors-windows.single-swing-door")
             .unwrap();

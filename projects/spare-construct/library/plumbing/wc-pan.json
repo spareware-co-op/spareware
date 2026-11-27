@@ -1,0 +1,439 @@
+{
+  "format": 1,
+  "id": "library.plumbing.wc-pan",
+  "name": "WC pan",
+  "category": 1900,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.plumbing.wc-pan.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:2304000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.plumbing.wc-pan.depth",
+        "name": "Projection",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:4480000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.plumbing.wc-pan.height",
+        "name": "Cistern top",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5120000"
+    },
+    {
+      "key": "seat_height",
+      "definition": {
+        "id": "library.plumbing.wc-pan.seat_height",
+        "name": "Seat height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:2688000"
+    },
+    {
+      "key": "cistern_depth",
+      "definition": {
+        "id": "library.plumbing.wc-pan.cistern_depth",
+        "name": "Cistern depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:1216000"
+    },
+    {
+      "key": "fixture_material",
+      "definition": {
+        "id": "library.plumbing.wc-pan.fixture_material",
+        "name": "Fixture material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:steel-stainless-aisi-301"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "bowl1",
+          "x": "length:q0:-1152000",
+          "y": "length:q0:-1024000"
+        },
+        {
+          "key": "bowl2",
+          "x": "length:q0:1152000",
+          "y": "length:q0:-1024000"
+        },
+        {
+          "key": "bowl3",
+          "x": "length:q0:1152000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "bowl4",
+          "x": "length:q0:-1152000",
+          "y": "length:q0:2240000"
+        },
+        {
+          "key": "cistern1",
+          "x": "length:q0:-1152000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "cistern2",
+          "x": "length:q0:1152000",
+          "y": "length:q0:-2240000"
+        },
+        {
+          "key": "cistern3",
+          "x": "length:q0:1152000",
+          "y": "length:q0:-1024000"
+        },
+        {
+          "key": "cistern4",
+          "x": "length:q0:-1152000",
+          "y": "length:q0:-1024000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "bowl_s",
+          "start": "bowl1",
+          "end": "bowl2"
+        },
+        {
+          "key": "bowl_e",
+          "start": "bowl2",
+          "end": "bowl3"
+        },
+        {
+          "key": "bowl_n",
+          "start": "bowl3",
+          "end": "bowl4"
+        },
+        {
+          "key": "bowl_w",
+          "start": "bowl4",
+          "end": "bowl1"
+        },
+        {
+          "key": "cistern_s",
+          "start": "cistern1",
+          "end": "cistern2"
+        },
+        {
+          "key": "cistern_e",
+          "start": "cistern2",
+          "end": "cistern3"
+        },
+        {
+          "key": "cistern_n",
+          "start": "cistern3",
+          "end": "cistern4"
+        },
+        {
+          "key": "cistern_w",
+          "start": "cistern4",
+          "end": "cistern1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl1",
+          "line": "base",
+          "length": "depth / 2 - cistern_depth",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl2",
+          "line": "base",
+          "length": "depth / 2 - cistern_depth",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "bowl4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern3",
+          "line": "base",
+          "length": "depth / 2 - cistern_depth",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "cistern4",
+          "line": "base",
+          "length": "depth / 2 - cistern_depth",
+          "side": "right"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "bowl",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "bowl_s",
+        "bowl_e",
+        "bowl_n",
+        "bowl_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "seat_height",
+      "subcategory": 1900,
+      "material": {
+        "parameter": "fixture_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "cistern",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "cistern_s",
+        "cistern_e",
+        "cistern_n",
+        "cistern_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height",
+      "subcategory": 1900,
+      "material": {
+        "parameter": "fixture_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "bowl_s",
+        "bowl_e",
+        "bowl_n",
+        "bowl_w",
+        "cistern_s",
+        "cistern_e",
+        "cistern_n",
+        "cistern_w"
+      ],
+      "subcategory": 1900,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth",
+      "height",
+      "seat_height"
+    ],
+    "rows": [
+      {
+        "key": "standard",
+        "name": "Standard",
+        "values": [
+          "length:q0:2304000",
+          "length:q0:4480000",
+          "length:q0:5120000",
+          "length:q0:2688000"
+        ]
+      },
+      {
+        "key": "accessible",
+        "name": "Accessible",
+        "values": [
+          "length:q0:2432000",
+          "length:q0:4800000",
+          "length:q0:5440000",
+          "length:q0:2944000"
+        ]
+      },
+      {
+        "key": "compact",
+        "name": "Compact",
+        "values": [
+          "length:q0:2240000",
+          "length:q0:3840000",
+          "length:q0:4992000",
+          "length:q0:2560000"
+        ]
+      }
+    ]
+  }
+}

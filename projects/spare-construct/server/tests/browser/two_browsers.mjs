@@ -1697,6 +1697,184 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', fam
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
 }
 
+console.log('\n   Components');
+// Anna puts a desk beside the wall of the last section, and hangs a basin on that wall's face, from the
+// Component tool; Ben sees both, the desk of its family's category (furniture), standing on
+// a level at the point she clicked and turned half a turn, the basin of plumbing fixtures hung on a named face
+// of the wall. Ben changes the desk's type and turns it; Anna sees the new size. Ben deletes it and undoes the
+// delete; a point that is not whole millimetres is refused in words under the field; a fresh load agrees.
+// Nobody changes what the other touched in the last 30 s without the other letting go first, and an undo
+// claims the element it writes too.
+const cmpKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:component"]');
+await anna.waitForSelector('#pv-side select[data-key="component-category"] option', { state: 'attached' });
+const cmpCategories = await anna.locator('#pv-side select[data-key="component-category"] option').allTextContents();
+check(
+  ['Furniture', 'Casework', 'Plumbing fixtures', 'Lighting fixtures', 'Planting', 'Generic models'].every((name) => cmpCategories.includes(name)),
+  `the component tool lists the library's categories: ${cmpCategories.join(', ')}`,
+);
+await anna.locator('#pv-side select[data-key="component-category"]').selectOption({ label: 'Furniture' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-family"] option')].some((o) => o.textContent === 'Desk'),
+);
+const cmpFamilies = await anna.locator('#pv-side select[data-key="component-family"] option').allTextContents();
+check(['Desk', 'Chair', 'Bed', 'Sofa'].every((name) => cmpFamilies.includes(name)), `and the furniture in it: ${cmpFamilies.join(', ')}`);
+await anna.locator('#pv-side select[data-key="component-family"]').selectOption({ label: 'Desk' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-type"] option')].some((o) => o.textContent === '1500 x 750'),
+);
+await anna.locator('#pv-side select[data-key="component-type"]').selectOption({ label: '1500 x 750' });
+await anna.locator('#pv-side select[data-key="component-turn"]').selectOption({ label: '180°' });
+
+// The desk goes on the clear side of her wall, its back toward it: the click is the middle of the desk.
+const cmpDesk = await onPlan(anna, 9000, -700);
+await anna.mouse.click(cmpDesk.x, cmpDesk.y);
+const cmpOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.props['@category'] === '1700' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cmpOf, cmpKnown);
+const cmpId = await ben.evaluate(cmpOf, cmpKnown);
+const cmpRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cmpId);
+check(
+  cmpRecord.kind === 'family' &&
+    cmpRecord.recipe.args.type === 'd1500x750' &&
+    cmpRecord.props['@place.turn'] === 'angle:1620000000' &&
+    (cmpRecord.references ?? []).length === 0 &&
+    Math.abs(cmpRecord.placement.x - 9000) <= 100 &&
+    Math.abs(cmpRecord.placement.y + 700) <= 100,
+  "the desk Anna places is in Ben's browser: furniture on no wall, at the point she clicked, turned half a turn",
+);
+const cmpParts = ([id]) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(cmpParts, [cmpId]);
+await anna.waitForFunction(cmpParts, [cmpId]);
+pass('and both browsers draw its top and its legs, each in its material');
+
+// The basin hangs on the wall's face: it is a click on the wall, the side clicked the side it hangs on.
+await anna.locator('#pv-side select[data-key="component-category"]').selectOption({ label: 'Plumbing fixtures' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-family"] option')].some((o) => o.textContent === 'Basin'),
+);
+await anna.locator('#pv-side select[data-key="component-family"]').selectOption({ label: 'Basin' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-type"] option')].some((o) => o.textContent === 'Standard'),
+);
+check(
+  (await anna.locator('#pv-side select[data-key="component-turn"]').count()) === 0,
+  'a family that hangs on a wall has no turn to choose: its wall turns it',
+);
+const cmpWallBox = await box(anna, famWall);
+await anna.mouse.click(cmpWallBox.x + cmpWallBox.width * 0.8, cmpWallBox.y + cmpWallBox.height / 2 + 1);
+const cmpBasinOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.props['@category'] === '1900' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cmpBasinOf, cmpKnown);
+const cmpBasin = await ben.evaluate(cmpBasinOf, cmpKnown);
+await anna.keyboard.press('Escape');
+const cmpBasinRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cmpBasin);
+check(
+  cmpBasinRecord.kind === 'family' &&
+    cmpBasinRecord.references.length === 1 &&
+    cmpBasinRecord.references[0].kind === 'face' &&
+    cmpBasinRecord.references[0].element === famWall &&
+    /^length:q0:/.test(cmpBasinRecord.props['@host.along']) &&
+    cmpBasinRecord.recipe.args.type === 'standard',
+  "the basin Anna hangs is in Ben's browser: plumbing fixtures hung on a named face of her wall at an offset along it",
+);
+await ben.waitForFunction(cmpParts, [cmpBasin]);
+await anna.waitForFunction(cmpParts, [cmpBasin]);
+pass('and both browsers draw it');
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  await until(
+    async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [],
+    (names) => !names.some((n) => n.role.startsWith(`tool(${cmpBasin})`)),
+    'the server cuts nothing from the wall for the basin',
+  );
+  await ben.waitForFunction(
+    ([wall, basin]) => !window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role.startsWith(`tool(${basin})`)),
+    [famWall, cmpBasin],
+  );
+  pass("the basin takes nothing from the wall, on the server and as Ben's page builds it");
+}
+await shot(ben, 'ben-components');
+
+// Ben retypes the desk, and turns it: Anna sees the new size and the new turn.
+const cmpSize = (page) =>
+  page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return [max[0] - min[0], max[1] - min[1]];
+  }, cmpId);
+const cmpSizeBefore = await cmpSize(anna);
+const cmpPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-family-properties="${id}"] select[data-key="family-retype"]`);
+};
+await cmpPick(ben, cmpId);
+await ben.locator('#pv-side select[data-key="family-retype"]').selectOption({ label: '1800 x 800' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.type === 'd1800x800', cmpId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return max[0] - min[0] === before[0] + 300 && max[1] - min[1] === before[1] + 50;
+  },
+  [cmpId, cmpSizeBefore],
+);
+pass("Ben changes the desk's type to 1800 x 800, and Anna's browser draws the new size");
+await ben.locator('#pv-side select[data-key="family-turn"]').selectOption({ label: '270°' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.props['@place.turn'] === 'angle:2430000000', cmpId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return max[0] - min[0] === before[1] + 50 && max[1] - min[1] === before[0] + 300;
+  },
+  [cmpId, cmpSizeBefore],
+);
+pass('and turns it three quarters round, and her browser draws it across, long way along y');
+
+// A point that is not whole millimetres is refused in words, under the field, and nothing changes.
+const cmpX = '#pv-side input[data-key="family-point-x"]';
+await ben.locator(cmpX).fill('9000.5 mm');
+await ben.locator(cmpX).press('Enter');
+await ben.waitForSelector(`#pv-side [data-problem="family:${cmpId}"]`);
+const cmpWords = await ben.locator(`#pv-side [data-problem="family:${cmpId}"]`).textContent();
+check(cmpWords.includes('is not a whole number of millimetres'), `the refusal reads: ${cmpWords}`);
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).el.placement.x, cmpId)) === cmpRecord.placement.x,
+  'and the desk is where it was',
+);
+
+// Ben deletes the desk, and undoes the delete.
+await cmpPick(ben, cmpId);
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), cmpId);
+pass("Ben deletes the desk, and it is gone from Anna's plan");
+await ben.waitForFunction(() => window.spare.steps.undo?.cmd === 'family.delete');
+await ben.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.waitForFunction(cmpParts, [cmpId]);
+await ben.waitForFunction(cmpParts, [cmpId]);
+pass('and his undo puts it back, in both browsers');
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A fresh load agrees: the same records, the same type and turn, nothing built differently.
+const cmpFresh = await signIn('anna');
+await cmpFresh.waitForFunction(cmpParts, [cmpId]);
+await cmpFresh.waitForFunction(cmpParts, [cmpBasin]);
+for (const id of [cmpId, cmpBasin]) {
+  const here = await anna.evaluate((x) => window.spare.elements.get(x).hash, id);
+  check(
+    (await cmpFresh.evaluate((x) => window.spare.elements.get(x).hash, id)) === here,
+    `a fresh load holds ${id}'s record as Anna's page does`,
+  );
+}
+await cmpFresh.waitForFunction((id) => window.spare.elements.get(id).el.props['@place.turn'] === 'angle:2430000000', cmpId);
+pass('at the turn Ben gave the desk');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', cmpFresh]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the desk's and the basin's included, matches the server's`);
+}
+
 console.log('\n   Openings and shafts');
 // Anna draws a wall of her own below the building and cuts an opening in it from the opening tool;
 // Ben sees the opening, and the wall cut for it where this run's geometry cuts. She draws a floor
