@@ -227,8 +227,10 @@ pub(crate) fn is_floor(record: &Element) -> bool {
     construct_regen::floor_plan::is_floor(&record.recipe)
 }
 
-/// Where `element` sits in `host`'s frame, from the records as they are now. The inner error is
-/// the refusal, in the words of what refused it.
+/// Where `element` sits in `host`'s frame, from the records as they are now, and its recipe as its
+/// host's builder is handed it ([`hosting::seat`]: a placed family's turned to face out of its
+/// side, as the regenerator builds it, so a family on a wall along y fits as it is built). The
+/// inner error is the refusal, in the words of what refused it.
 async fn frame_at<T: Txn>(
     txn: &mut T,
     project: &Id,
@@ -246,7 +248,7 @@ async fn frame_at<T: Txn>(
             )));
         }
     };
-    let at = hosting::at(
+    let seated = hosting::seat(
         &host.edition,
         &host.record,
         &host.recipe,
@@ -254,7 +256,9 @@ async fn frame_at<T: Txn>(
         &recipe,
         hosting,
     );
-    Ok(at.map(|at| (recipe, at)).map_err(|e| e.message))
+    Ok(seated
+        .map(|(at, recipe)| (recipe, at))
+        .map_err(|e| e.message))
 }
 
 /// Where `element`, hosted on `host`, sits in the model, if it fits there with everything else

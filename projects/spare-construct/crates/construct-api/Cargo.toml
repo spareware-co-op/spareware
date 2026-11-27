@@ -26,6 +26,7 @@ cloud = [
     "dep:construct-rooms",
     "dep:construct-phases",
     "dep:construct-styles",
+    "dep:construct-modify",
 ]
 
 [dependencies]
@@ -64,6 +65,9 @@ construct-rooms = { path = "../construct-rooms", optional = true }
 construct-phases = { path = "../construct-phases", optional = true }
 # The view graphics commands: the pens, line patterns and object styles a rule is checked against.
 construct-styles = { path = "../construct-styles", optional = true }
+# The modify commands: construct-modify works out every record a move, copy, turn, mirror or array
+# writes, exactly.
+construct-modify = { path = "../construct-modify", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
