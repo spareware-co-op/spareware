@@ -7,12 +7,12 @@
 //! Each command checks the change with construct-curtain's own rules (a type's grid and parts, a
 //! wall's lines, segments and panels, every refusal in its words), construct-types' (types) and
 //! construct-levels' (ties), and a curtain wall with the very reader and plan the builders use
-//! ([`construct_regen::levels::recipe_at`], and the stand-in's build of it, which evaluates each
-//! door panel's family as the kernel's does), so a curtain wall the command takes is one the
-//! builders take. An embedded one is fitted in its wall by the kernel builder's own rules for a
-//! plain opening ([`construct_regen::kernel::fits`], through [`crate::cloud::hosting`]). A refusal
-//! is the command's result and changes nothing. Nothing here reads a clock or a random number:
-//! the claim's time is the orderer's.
+//! ([`construct_regen::levels::recipe_at`], and the default builder's build of it,
+//! [`construct_regen::geometry`], which lays it out and evaluates each door panel's family), so a
+//! curtain wall the command takes is one the builders take. An embedded one is fitted in its wall
+//! by the kernel builder's own rules for a plain opening ([`construct_regen::kernel::fits`],
+//! through [`crate::cloud::hosting`]). A refusal is the command's result and changes nothing.
+//! Nothing here reads a clock or a random number: the claim's time is the orderer's.
 //!
 //! | Command | Arguments | What it writes |
 //! | --- | --- | --- |
@@ -60,9 +60,9 @@
 //! would refuse, in their words.
 //!
 //! The generic commands do not go behind these ([`generic_rules`]): `element.create` and
-//! `hosted.place` of a curtain wall, `element.set` of a curtain wall's recipe, `type.create` of a curtain walls type and
-//! `type.rename`, `type.duplicate` or `type.delete` of a curtain wall type are refused, naming the
-//! command to use.
+//! `hosted.place` of a curtain wall, `element.set` of a curtain wall's recipe, `type.create` of a
+//! curtain walls type and `type.rename`, `type.duplicate` or `type.delete` of a curtain wall type
+//! are refused, naming the command to use.
 //!
 //! For the page, without the log: [`read_curtain_types`], a document's curtain wall types with
 //! their grid and parts as these commands take them, the materials and the defaults.
@@ -83,12 +83,11 @@ use construct_curtain::{
 use construct_levels::{Length, Tie, base_of, write_base, write_top};
 use construct_materials::MaterialId;
 use construct_model::element::{Element, Placement};
-use construct_model::geometry::{Geometry, Recipe};
+use construct_model::geometry::Recipe;
 use construct_params::Value;
 use construct_regen::hosting as placing;
 use construct_regen::levels as shape_levels;
 use construct_regen::parameters::{self as records, At, CATEGORY_KEY, Context, TYPE_KIND};
-use construct_regen::stand_in::Boxes;
 use construct_types::{ElementType, Instance, SYSTEM_KEY_PREFIX, TypeError, Types};
 use kit_core::Id;
 use kit_ops::{Change, Edit};
@@ -500,9 +499,9 @@ async fn seated<T: Txn>(
     .map_err(|e| e.message))
 }
 
-/// What the builders would make of `record`, read the way they read it: its layout, and every
-/// door panel's family evaluated as the stand-in's build evaluates it. The inner error is the
-/// refusal, after its name.
+/// What the builders would make of `record`, read the way they read it: built by the default
+/// builder ([`construct_regen::geometry`]), which lays it out and evaluates every door panel's
+/// family. The inner error is the refusal, after its name.
 async fn buildable<T: Txn>(
     run: &mut Run<'_, T>,
     record: &Element,
@@ -511,7 +510,7 @@ async fn buildable<T: Txn>(
         Ok(recipe) => recipe,
         Err(refusal) => return Ok(Err(refusal)),
     };
-    Ok(Boxes
+    Ok(construct_regen::geometry()
         .build(&recipe)
         .map(|_| ())
         .map_err(|failed| format!("{}: {}", record.name, failed.message)))
