@@ -1981,4 +1981,3 @@ async fn a_documents_own_family_is_built_and_reloaded_on_the_kernel() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
-

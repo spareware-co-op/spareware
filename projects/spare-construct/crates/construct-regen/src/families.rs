@@ -56,8 +56,8 @@
 //!   its outline extruded through the wall and the rules asked of a polygon.
 
 use construct_families::{
-    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Seat, StoredFamily, Turn, TypeValues,
-    opening_within,
+    ContentId, EvalError, Key, Limits, Recipe as FamilyRecipe, Seat, StoredFamily, Turn,
+    TypeValues, opening_within,
 };
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
