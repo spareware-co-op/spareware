@@ -114,6 +114,11 @@ pub struct Model {
     pub walls: Vec<Wall>,
     /// Every room, with what became of it.
     pub rooms: Vec<Room>,
+    /// What the dimensions found, already measured: construct-dimensions' `measure` works each
+    /// dimension out and its warnings are given here as they are (this crate depends on kit-core
+    /// only, so it cannot measure). [`RULES`] lists their kinds; a warning of a kind that is not
+    /// in [`RULES`] is not listed.
+    pub dimensions: Vec<Warning>,
 }
 
 /// One kind of warning.
@@ -138,7 +143,22 @@ impl Rule {
 }
 
 /// Every kind there is. Add a kind here, with its function; nothing else changes.
-pub const RULES: [Rule; 2] = [
+pub const RULES: [Rule; 5] = [
+    Rule {
+        kind: "dimension.out_of_range",
+        severity: Severity::Warning,
+        find: measured_dimensions,
+    },
+    Rule {
+        kind: "dimension.reference_missing",
+        severity: Severity::Warning,
+        find: measured_dimensions,
+    },
+    Rule {
+        kind: "dimension.reference_parallel",
+        severity: Severity::Warning,
+        find: measured_dimensions,
+    },
     Rule {
         kind: "room.not_enclosed",
         severity: Severity::Warning,
@@ -150,6 +170,18 @@ pub const RULES: [Rule; 2] = [
         find: overlapping,
     },
 ];
+
+/// A reference of a dimension that cannot be used (it is gone, it has no place in the view, it
+/// runs along the dimension's line, or it lies off the kernel's grid), as construct-dimensions
+/// measured it, one warning for each. Its elements: the dimension, then the element referenced.
+fn measured_dimensions(rule: &Rule, model: &Model) -> Vec<Warning> {
+    model
+        .dimensions
+        .iter()
+        .filter(|found| found.kind == rule.kind)
+        .map(|found| rule.warn(found.elements.clone(), found.words.clone()))
+        .collect()
+}
 
 /// A room whose walls do not close round its point. Its elements: the room.
 fn not_enclosed(rule: &Rule, model: &Model) -> Vec<Warning> {

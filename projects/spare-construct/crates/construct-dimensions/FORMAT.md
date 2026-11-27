@@ -50,7 +50,7 @@ A dimension's own reader accepts any element ID: whether it is there is asked ea
 ## What is not stored
 
 - **The value.** Each segment's value is worked out from where its two references are, every time it is asked, so it can never be out of date. Where a reference is, is asked of the model through [`Locator`](src/locate.rs): a *point* is read at the foot of the perpendicular from it to the offset line, a *line* where it meets the offset line (a line along the offset line has no place along it and is reported). A segment's value is the distance between the two places along the offset line, worked in whole numbers of any size; the nearest whole step is taken once, at the end, and the answer says whether it is the true value. A horizontal or vertical dimension between references on whole steps is exact.
-- **A deleted or unusable reference.** It gives a warning, in the shape construct-warnings (piece A77) gives (`kind` `dimension.reference_missing`, `dimension.reference_parallel` or `dimension.out_of_range`; `severity` `warning`; `elements` the dimension, then the element referenced; `words` a sentence naming the reference by its position and what it is), and the segments it ends have no value.
+- **A deleted or unusable reference.** It gives a warning, as construct-warnings' own `Warning` (and the warnings view lists it too; `kind` `dimension.reference_missing`, `dimension.reference_parallel` or `dimension.out_of_range`; `severity` `warning`; `elements` the dimension, then the element referenced; `words` a sentence naming the reference by its position and what it is), and the segments it ends have no value.
 - **The witness lines and the text's place.** Both follow from the references and the offset line.
 
 ## Equalities

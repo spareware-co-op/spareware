@@ -26,7 +26,8 @@
 //! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
 //!   landings), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
-//! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
+//! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping, a
+//!   dimension's reference that is gone), read-only
 //!   and worked out each time from the document.
 //! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
 //!   read of their rows, through the same log.

@@ -736,6 +736,7 @@ dependencies = [
  "construct-grids",
  "construct-model",
  "construct-params",
+ "construct-warnings",
  "kit-core",
  "num-bigint",
 ]

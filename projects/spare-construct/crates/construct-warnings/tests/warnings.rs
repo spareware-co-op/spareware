@@ -58,7 +58,11 @@ fn room(id: &str, state: RoomState) -> Room {
 }
 
 fn model(walls: Vec<Wall>, rooms: Vec<Room>) -> Model {
-    Model { walls, rooms }
+    Model {
+        walls,
+        rooms,
+        ..Model::default()
+    }
 }
 
 fn identities(model: &Model) -> Vec<String> {
@@ -253,7 +257,16 @@ fn the_list_is_ordered_by_kind_then_elements_whatever_order_it_was_given() {
 #[test]
 fn every_kind_is_one_entry_with_its_own_name() {
     let names: Vec<&str> = RULES.iter().map(|r| r.kind).collect();
-    assert_eq!(names, ["room.not_enclosed", "wall.overlap"]);
+    assert_eq!(
+        names,
+        [
+            "dimension.out_of_range",
+            "dimension.reference_missing",
+            "dimension.reference_parallel",
+            "room.not_enclosed",
+            "wall.overlap"
+        ]
+    );
     assert_eq!(Severity::Warning.word(), "warning");
     assert!(Severity::Notice < Severity::Warning && Severity::Warning < Severity::Error);
 }
@@ -293,4 +306,36 @@ fn an_outline_that_is_not_a_convex_polygon_on_the_grid_is_refused() {
     let cw = [[0, 0], [0, 10], [10, 10], [10, 0]];
     let wall = Wall::new(i("W-1"), l, [1, 0], &cw).unwrap();
     assert_eq!(wall.outline(), [[10, 0], [10, 10], [0, 10], [0, 0]]);
+}
+
+#[test]
+fn what_the_dimensions_measured_is_listed_by_kind_and_a_kind_that_is_not_a_rule_is_not() {
+    let found = |kind: &'static str, dimension: &str, wall: &str| Warning {
+        kind,
+        severity: Severity::Error,
+        elements: vec![i(dimension), i(wall)],
+        words: format!("{dimension} says {wall} is the problem"),
+    };
+    let model = Model {
+        dimensions: vec![
+            found("dimension.reference_parallel", "D-2", "W-9"),
+            found("dimension.reference_missing", "D-1", "W-2"),
+            found("dimension.reference_missing", "D-1", "W-1"),
+            found("dimension.no_such_kind", "D-1", "W-3"),
+        ],
+        ..Model::default()
+    };
+    let listed = warnings(&model);
+    let identities: Vec<String> = listed.iter().map(Warning::identity).collect();
+    assert_eq!(
+        identities,
+        [
+            "dimension.reference_missing|D-1|W-1",
+            "dimension.reference_missing|D-1|W-2",
+            "dimension.reference_parallel|D-2|W-9"
+        ]
+    );
+    // The table's severity is the one listed, whatever the measurement carried.
+    assert!(listed.iter().all(|w| w.severity == Severity::Warning));
+    assert_eq!(listed[0].words, "D-1 says W-1 is the problem");
 }

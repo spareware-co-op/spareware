@@ -7,8 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params, roofs,
-    rooms, schedules, sheets, stairs, undo, views, walls,
+    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params,
+    roofs, rooms, schedules, sheets, stairs, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;

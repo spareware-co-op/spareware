@@ -464,3 +464,11 @@ fn the_plain_default_text_has_one_height_and_a_width_for_each_character() {
     assert_eq!(shown[0].fits, Some(false));
     assert_eq!(shown[1].fits, Some(true));
 }
+
+#[test]
+fn every_kind_a_dimension_reports_is_an_entry_of_the_warnings_table() {
+    let table: Vec<&str> = construct_warnings::RULES.iter().map(|r| r.kind).collect();
+    for kind in [REFERENCE_MISSING, REFERENCE_PARALLEL, OUT_OF_RANGE] {
+        assert!(table.contains(&kind), "{kind} is not in the table");
+    }
+}
