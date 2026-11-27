@@ -10,6 +10,11 @@
 //! carrying its material as `data-material`; the strokes follow, over the hatches, each an SVG
 //! `line` (a segment) or `path` (an arc) at its printed width with round ends, carrying its
 //! element and its face's role as `data-element` and `data-role`. Line patterns are drawn solid.
+//! [`Svg::labelled`] writes the names a section's or an elevation's levels and grids carry
+//! ([`crate::datum::Label`]) last, each an SVG `text` in a sans-serif face at its printed height,
+//! in its colour, carrying its element and role the same way; the document's box then holds each
+//! name too (a name is taken as one letter height wide for each character, which no face is
+//! wider than). With no names it writes exactly what [`Svg::document`] writes.
 //!
 //! Numbers: a length of the drawing in millimetres is `steps / 6400`, a terminating decimal, and is
 //! written exactly; so is a point of the paper size at a scale whose denominator has no prime
@@ -23,6 +28,7 @@ use std::fmt::Write as _;
 use construct_styles::{Colour, Micrometres, Scale};
 
 use crate::DrawingError;
+use crate::datum::{Anchor, Label};
 use crate::drawing::{Drawing, Shape, Turn, ViewPoint};
 use crate::pens::Styles;
 use crate::picture::{Output, Picture, picture};
@@ -112,9 +118,9 @@ fn approx(p: ViewPoint) -> (f64, f64) {
     (p.x as f64 / d, p.y as f64 / d)
 }
 
-/// The least and greatest of the picture's points along each axis, as `(num, den)`.
-fn extent(picture: &Picture) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
-    let mut points = Vec::new();
+/// The least and greatest of the picture's points, and of `more`, along each axis, as `(num, den)`.
+fn extent(picture: &Picture, more: &[ViewPoint]) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
+    let mut points = more.to_vec();
     for hatch in &picture.hatches {
         for [a, b] in &hatch.lines {
             points.extend([*a, *b]);
@@ -167,14 +173,14 @@ fn extent(picture: &Picture) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
 
 /// The document's opening tag: the paper size at 1:`n` and the box round the drawing in model
 /// millimetres, grown by 5 mm of paper on every side.
-fn opening(picture: &Picture, n: i128) -> Result<String, DrawingError> {
+fn opening(picture: &Picture, n: i128, more: &[ViewPoint]) -> Result<String, DrawingError> {
     let big = || DrawingError::TooBig;
     // The margin: 5 mm of paper, in steps of the model.
     let margin = n
         .checked_mul(5)
         .and_then(|m| m.checked_mul(PER_MM))
         .ok_or_else(big)?;
-    let [lo, hi] = extent(picture)?.unwrap_or([ViewPoint::grid(0, 0), ViewPoint::grid(0, 0)]);
+    let [lo, hi] = extent(picture, more)?.unwrap_or([ViewPoint::grid(0, 0), ViewPoint::grid(0, 0)]);
     let both = lo.den.checked_mul(hi.den).ok_or_else(big)?;
     let twice = margin
         .checked_mul(2)
@@ -282,8 +288,21 @@ impl Svg {
     ///
     /// [`DrawingError::TooBig`] for a number past 128 bits.
     pub fn document(self, picture: &Picture) -> Result<String, DrawingError> {
+        self.labelled(picture, &[])
+    }
+
+    /// `picture` with `labels` written over it, as an SVG document.
+    ///
+    /// # Errors
+    ///
+    /// [`DrawingError::TooBig`] for a number past 128 bits.
+    pub fn labelled(self, picture: &Picture, labels: &[Label]) -> Result<String, DrawingError> {
         let n = i128::from(picture.scale.denominator());
-        let mut out = opening(picture, n)?;
+        let mut reach = Vec::with_capacity(labels.len().saturating_mul(2));
+        for label in labels {
+            reach.extend(label_box(label, n)?);
+        }
+        let mut out = opening(picture, n, &reach)?;
         out.push('\n');
         for hatch in &picture.hatches {
             let mut d = String::new();
@@ -332,9 +351,87 @@ impl Svg {
                 }
             }
         }
+        for label in labels {
+            let (at_x, at_y) = xy(label.at)?;
+            let size = decimal(
+                i128::from(label.height.get())
+                    .checked_mul(n)
+                    .ok_or(DrawingError::TooBig)?,
+                1000,
+            )?;
+            let (anchor, baseline) = match label.anchor {
+                Anchor::Start => ("start", ""),
+                Anchor::Middle => ("middle", " dominant-baseline=\"central\""),
+            };
+            let Colour(red, green, blue) = label.colour;
+            let _ = writeln!(
+                out,
+                "<text x=\"{at_x}\" y=\"{at_y}\" font-family=\"sans-serif\" font-size=\"{size}\" \
+                 text-anchor=\"{anchor}\"{baseline} fill=\"#{red:02x}{green:02x}{blue:02x}\"{} \
+                 data-element=\"{}\" data-role=\"{}\">{}</text>",
+                tone(label.opacity)?,
+                escaped(label.element.as_str()),
+                escaped(&label.role),
+                escaped(&label.text)
+            );
+        }
         out.push_str("</svg>\n");
         Ok(out)
     }
+}
+
+/// `text` with the five characters XML reserves written as its entities.
+fn escaped(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Two opposite corners of the box `label` takes at 1:`n`, in view coordinates: its letter height
+/// up (centred for a middle anchor), and one letter height across for each character.
+fn label_box(label: &Label, n: i128) -> Result<[ViewPoint; 2], DrawingError> {
+    let big = || DrawingError::TooBig;
+    // The letters' height in the model's steps, over 1000: micrometres of paper times n.
+    let h = i128::from(label.height.get())
+        .checked_mul(n)
+        .and_then(|v| v.checked_mul(PER_MM))
+        .ok_or_else(big)?;
+    let chars = i128::try_from(label.text.chars().count()).map_err(|_| big())?;
+    let w = h.checked_mul(chars.max(1)).ok_or_else(big)?;
+    let p = label.at;
+    // The point moved by (dx / over, dy / over) steps.
+    let at = |dx: i128, dy: i128, over: i128| -> Result<ViewPoint, DrawingError> {
+        let moved = |v: i128, d: i128| {
+            v.checked_mul(over)
+                .zip(d.checked_mul(p.den))
+                .and_then(|(a, b)| a.checked_add(b))
+                .ok_or_else(big)
+        };
+        ViewPoint::new(
+            moved(p.x, dx)?,
+            moved(p.y, dy)?,
+            p.den.checked_mul(over).ok_or_else(big)?,
+        )
+    };
+    let (less_w, less_h) = (
+        w.checked_neg().ok_or_else(big)?,
+        h.checked_neg().ok_or_else(big)?,
+    );
+    Ok(match label.anchor {
+        // From the point, the whole width across and the height up: thousandths of a step.
+        Anchor::Start => [at(0, 0, 1000)?, at(w, h, 1000)?],
+        // Half of each to either side: two-thousandths.
+        Anchor::Middle => [at(less_w, less_h, 2000)?, at(w, h, 2000)?],
+    })
 }
 
 impl Output for Svg {

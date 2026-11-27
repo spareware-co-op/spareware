@@ -43,6 +43,9 @@ pub enum DrawingError {
     /// The interim 2D overlay found its own rule broken (a boundary that does not close, a hole in
     /// no outline): its words. A bug to report, never an answer.
     Overlay(String),
+    /// A view the drawing does not draw: its words (a section whose line is not along a grid axis,
+    /// an elevation that sees no depth).
+    View(String),
 }
 
 impl fmt::Display for DrawingError {
@@ -62,6 +65,7 @@ impl fmt::Display for DrawingError {
             }
             Self::Crop(what) => write!(f, "the crop cannot be applied: {what}"),
             Self::Overlay(what) => write!(f, "the 2D overlay broke its own rule: {what}"),
+            Self::View(what) => write!(f, "this view is not drawn: {what}"),
         }
     }
 }
