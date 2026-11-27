@@ -986,7 +986,7 @@
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
-      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through) || seatChanged(piece)) continue;
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through) || piece.ahead || seatChanged(piece)) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -1165,6 +1165,7 @@
     const piece = edit && C.elements.get(edit.args.element);
     if (piece?.hash && C.model) {
       piece.el = await api(`${modelUrl(C.model.id)}/record/${piece.hash}`);
+      piece.ahead = false;
       drawPlan();
     }
   }
@@ -4085,7 +4086,10 @@
         const offset = alongOn(hosted.host, piece.el, x, y);
         if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
         const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        // The shape of what is hosted in a wall at an angle depends on where it is along it, so a
+        // piece moved ahead of the log is not compared with a checkpoint from before the move.
         piece.el = { ...piece.el, props };
+        piece.ahead = true;
         drag.along = offset;
         queueDraw();
         return;

@@ -1694,6 +1694,7 @@ pass('at the type Ben gave it');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 2000)} ${JSON.stringify(await page.evaluate((id) => { const p = window.spare.elements.get(id); return { stale: p.stale, key: p.seatedKey, ahead: p.ahead, seq: p.seq, body: p.shape?.body, recipe: p.el.recipe }; }, famId)).slice(0, 1500)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
 }
 
@@ -2215,6 +2216,7 @@ await angBodiesMatch('after the window flipped');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 2000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the angled wall's, door's and window's included, matches the server's`);
 }
 await shot(ben, 'ben-angled-wall');
