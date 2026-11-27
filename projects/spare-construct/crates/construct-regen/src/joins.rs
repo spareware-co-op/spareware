@@ -15,6 +15,10 @@
 //!   the walls it is joined with, and why each wall that meets it is not joined with it. A wall
 //!   that meets none has no `joins`, and one in a stored record is dropped first: joints are
 //!   derived, never stored.
+//! - Each wall is read with its own choices (construct-walls' [`Joining`], the stored recipe
+//!   argument [`JOINING`]: joins allowed or not at each end, and the choice of each joint it
+//!   keeps) and its wrapping at free ends ([`wall_plan::WRAP`]), so the rule makes the joints
+//!   and wraps the ends a person chose (job 6.1).
 //! - [`fill`] also gives the IDs of every wall it read (the walls it meets, and the walls they
 //!   meet): the regenerator lists them in the wall's `reads` row, so a change to any of them
 //!   builds it again.
@@ -38,7 +42,9 @@ use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::{Place, list};
 use construct_params::{Length, Value};
 use construct_walls::joins::join;
-use construct_walls::{Function, Joined, PlanLayer, PlanWall, lines_meet};
+use construct_walls::{
+    AtEnds, Function, JOINING, Joined, Joining, PlanLayer, PlanWall, lines_meet,
+};
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
 use serde_json::{Value as Json, json};
@@ -148,26 +154,43 @@ fn plan_wall_at(
     let wall = Layered::of(recipe).ok()?;
     let at = placed_at(placement)?;
     let mut layers = Vec::with_capacity(wall.layers.len());
-    for strip in &wall.layers {
+    for (k, strip) in wall.layers.iter().enumerate() {
         let function: Function =
             serde_json::from_value(Json::String(strip.function.clone())).ok()?;
         layers.push(PlanLayer {
             function,
             exterior: Length::from_steps(strip.exterior),
             interior: Length::from_steps(strip.interior),
+            wraps: wall
+                .wrap
+                .as_ref()
+                .and_then(|w| w.layers.get(k).copied())
+                .unwrap_or(false),
         });
     }
     let base = elevation
         .unwrap_or(Length::from_mm(0))
         .checked_add(Length::checked_from_mm(placement.z)?)?;
-    Some(PlanWall {
+    // A wall that wraps nothing has no core to read: every layer stands in for it, and nothing
+    // turns.
+    let (core, wrap_ends) = match &wall.wrap {
+        Some(wrap) => ([wrap.core.0, wrap.core.1], wrap.ends),
+        None => ([0, layers.len()], AtEnds::None),
+    };
+    let mut plan = PlanWall::new(
         id,
-        start: in_model(wall.plan.start(), at)?,
-        end: in_model(wall.plan.end(), at)?,
-        base,
-        top: base.checked_add(Length::from_steps(wall.height))?,
+        (
+            in_model(wall.plan.start(), at)?,
+            in_model(wall.plan.end(), at)?,
+        ),
+        (base, base.checked_add(Length::from_steps(wall.height))?),
         layers,
-    })
+        core,
+    );
+    plan.wrap_ends = wrap_ends;
+    // A wall whose own choices do not read is joined as if it had none.
+    plan.joining = Joining::from_json(recipe.args.get(JOINING)).unwrap_or_default();
+    Some(plan)
 }
 
 /// A neighbour's recipe filled as it is built, without its joints, and where its base stands.

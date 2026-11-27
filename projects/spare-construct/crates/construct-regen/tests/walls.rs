@@ -447,6 +447,117 @@ fn a_layered_walls_layers_are_read_from_its_type() {
     assert!(refused.message.contains("plain"), "{}", refused.message);
 }
 
+/// A wall's wrapping is filled from its type, each choice replaced by the wall's own where its
+/// record gives one, with each layer's flag and the core; a wall that wraps nothing is filled as
+/// before, with no `wrap`; a wall's own wrapping that does not read fails in words.
+#[test]
+fn a_walls_wrapping_is_filled_from_its_type_and_its_own() {
+    use construct_walls::{AtEnds, AtInserts, Wrapping};
+    let context = context();
+    let ty = wall_type(&context, PARTITION);
+    let element = wall("W-1", PARTITION, [0, 0], [4000, 0]);
+    let filled = walls::filled(&element.recipe, &context, &element, Some(&ty)).unwrap();
+    assert!(
+        !filled.args.contains_key("wrap"),
+        "the default partition wraps nothing"
+    );
+    let wrapping = Wrapping {
+        ends: AtEnds::Exterior,
+        inserts: AtInserts::Both,
+    };
+    let assembly = assembly_of(&ty).unwrap().with_wrapping(wrapping);
+    let wrapped_type = with_assembly(ty.clone(), &assembly).unwrap();
+    let filled = walls::filled(&element.recipe, &context, &element, Some(&wrapped_type)).unwrap();
+    assert_eq!(
+        filled.args["wrap"],
+        json!({ "core": [1, 2], "ends": "exterior", "inserts": "both",
+                "layers": [true, false, true] })
+    );
+    // The wall's own choice over its type's, one at a time.
+    let mut own = element.clone();
+    own.recipe
+        .args
+        .insert("wrapping".to_owned(), json!({ "inserts": "none" }));
+    let filled = walls::filled(&own.recipe, &context, &own, Some(&wrapped_type)).unwrap();
+    assert_eq!(filled.args["wrap"]["inserts"], "none");
+    assert_eq!(filled.args["wrap"]["ends"], "exterior");
+    // Its own wrapping where its type wraps nothing.
+    own.recipe
+        .args
+        .insert("wrapping".to_owned(), json!({ "ends": "interior" }));
+    let filled = walls::filled(&own.recipe, &context, &own, Some(&ty)).unwrap();
+    assert_eq!(filled.args["wrap"]["ends"], "interior");
+    assert_eq!(filled.args["wrap"]["inserts"], "none");
+    // Both its own choices none over a type that wraps: nothing wraps.
+    own.recipe.args.insert(
+        "wrapping".to_owned(),
+        json!({ "ends": "none", "inserts": "none" }),
+    );
+    let filled = walls::filled(&own.recipe, &context, &own, Some(&wrapped_type)).unwrap();
+    assert!(!filled.args.contains_key("wrap"));
+    own.recipe
+        .args
+        .insert("wrapping".to_owned(), json!({ "ends": "sideways" }));
+    let refused = walls::filled(&own.recipe, &context, &own, Some(&ty)).unwrap_err();
+    assert_eq!(refused.code, "BadWrapping");
+}
+
+/// Walls joined at an angle off every whole ratio keep, at their free ends, the corners their
+/// builders' strips have: the join rule meets the faces the builders build (each face's one
+/// rounding is the same in construct-walls and in `wall_plan`), and every joined piece reads back
+/// as the builders take it.
+#[test]
+fn joins_at_an_angle_meet_the_faces_the_builders_build() {
+    use construct_regen::wall_plan::{Layered, Plan};
+    let faces: [(&str, i64, i64); 3] = [
+        ("finish", 368_000, 288_000),
+        ("structure", 288_000, -288_000),
+        ("finish", -288_000, -368_000),
+    ];
+    let recipe = |start: [i64; 2], end: [i64; 2]| {
+        let layers: Vec<_> = faces
+            .iter()
+            .map(|&(f, a, b)| {
+                json!({ "function": f, "material": "m", "exterior": q0(a), "interior": q0(b) })
+            })
+            .collect();
+        let mut args = BTreeMap::new();
+        args.insert("start".to_owned(), json!([q0(start[0]), q0(start[1])]));
+        args.insert("end".to_owned(), json!([q0(end[0]), q0(end[1])]));
+        args.insert("height".to_owned(), json!(q0(17_280_000)));
+        args.insert("layers".to_owned(), json!(layers));
+        Recipe::construct("wall.layered", args)
+    };
+    for (da, db) in [
+        ([7, 4], [-2, 9]),
+        ([1, 3], [-5, 2]),
+        ([123_457, 98_765], [-1, 1]),
+    ] {
+        let start = [-da[0] * 3_000_001, -da[1] * 3_000_001];
+        let end = [db[0] * 2_000_003, db[1] * 2_000_003];
+        let (a, b) = (recipe(start, [0, 0]), recipe([0, 0], end));
+        let joined = construct_regen::joins::among(&[("A", &a), ("B", &b)]);
+        let wall = Layered::of(&joined[0]).unwrap();
+        let pieces = &wall
+            .joined
+            .as_ref()
+            .unwrap_or_else(|| panic!("{da:?}: {:?}", joined[0].args.get("joins")))
+            .layers;
+        let plan = Plan::new(start, [0, 0]).unwrap();
+        for (k, &(_, ext, int)) in faces.iter().enumerate() {
+            let first = &pieces[k][0];
+            for o in [ext, int] {
+                let corner = plan.face(o).unwrap()[0];
+                assert!(
+                    first.contains(&corner),
+                    "{da:?} layer {k}: {first:?} has {corner:?}"
+                );
+            }
+        }
+        assert!(Layered::of(&joined[1]).unwrap().joined.is_some(), "{da:?}");
+    }
+}
+
 /// Through the log: a layered wall is built from its type's layers; a change to its type's layers
 /// builds it again with the new ones, its own record unchanged; a wall changed to another type is
 /// built with that type's; a wall whose type is missing fails, naming it.

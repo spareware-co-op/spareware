@@ -23,9 +23,15 @@
 //!   regenerator seats it: construct-regen's `hosting::seat`) and cut through every layer on the
 //!   same path as a door's, by the same rules ([`super::opening::plan_in`]). Where the family's
 //!   recipe comes from is the caller's [`FamilySource`].
-//! - Wrapping: not built. A layer that wraps at an opening (construct-walls' `Layer::wraps`) is
-//!   cut flush with the opening as every other layer is; turning it round the opening's sides is
-//!   job 6.1 (CON-A4-F2-P4), and its place is the loop over the cutters in `piece`.
+//! - Wrapping at inserts (job 6.1, CON-A4-F2-P4): where the filled recipe's `wrap` wraps a side
+//!   at inserts ([`crate::wall_plan::Wrap`]), each door's and placed family's opening is cut from
+//!   each layer set back by construct-walls' wrapping rule ([`construct_walls::turned`]): grown
+//!   along the wall at both jambs, and up at its head and down at its sill where they are inside
+//!   the wall, by the thicknesses of the wrapping layers that turn in front of it; and each
+//!   wrapping layer's turned part is built as boxes round the opening (two jambs the full grown
+//!   height, a head and a sill between them), across the layers it covers, each listed in the
+//!   body and the displays as a piece of that layer. A plain opening is a hole and is cut flush.
+//!   A wall that wraps nothing at inserts is built exactly as before.
 //! - Joins (job 5.1): a wall whose filled recipe has `joins` ([`crate::wall_plan::Joints`]) is
 //!   built of each layer's joined pieces in place of its strips, each piece extruded the same way
 //!   and listed in the body as a layer of its own, in order; each opening is cut from every piece
@@ -61,6 +67,7 @@ use crate::wall_plan::{Axis, Layered, Strip};
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
+use construct_walls::WrapLayer;
 use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, GridPlane, Profile};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
@@ -73,6 +80,18 @@ struct Asked {
     layers: Vec<AskedLayer>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     subtract: Vec<AskedCut>,
+    /// Where a wall wraps at inserts: each layer's own cutters at each insert, set back.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    grown: Vec<AskedGrown>,
+}
+
+/// One layer's own cutter at an insert where the wall wraps.
+#[derive(Serialize)]
+struct AskedGrown {
+    layer: usize,
+    key: String,
+    extrude: Vec<[i64; 3]>,
+    by: [i64; 3],
 }
 
 /// One layer as the engine was asked for it.
@@ -333,6 +352,16 @@ impl WallFrame {
     /// vector up to its head.
     fn cutter(&self, cut: &Cut) -> Result<(Profile, [i64; 3]), GeometryError> {
         let (lo, hi) = cut.frame_box();
+        self.frame_solid(lo, hi)
+    }
+
+    /// A box of the wall's frame, its lowest and highest corners as a cut's frame box holds them,
+    /// as the engine is asked for it: its corners at its foot, and the vector up to its head.
+    fn frame_solid(
+        &self,
+        lo: [i64; 3],
+        hi: [i64; 3],
+    ) -> Result<(Profile, [i64; 3]), GeometryError> {
         let pick = |v: [i64; 3], i: usize| v.get(i).copied().unwrap_or_default();
         let (along, across) = (self.frame.along, self.across_axis());
         let (a0, a1) = (pick(lo, along), pick(hi, along));
@@ -534,7 +563,7 @@ fn piece<E: Engine>(
     engine: &mut E,
     profile: &Profile,
     by: [i64; 3],
-    cutters: &[Cutter<'_, E::Solid>],
+    cutters: &[&Cutter<'_, E::Solid>],
 ) -> Result<(DisplayMesh, Option<DisplayMesh>), GeometryError> {
     let mut solid = engine.extrude(profile, by).map_err(from_engine)?;
     let plain = engine.mesh(&solid).map_err(from_engine)?;
@@ -580,11 +609,11 @@ impl Levels {
         }
     }
 
-    /// Adds a piece of `layer`, its plan `corners` in the building grid's steps.
+    /// Adds a piece of `layer`, its plan outline `shape` in whole millimetres.
     fn add(
         &mut self,
         layer: &Strip,
-        corners: &[[i64; 2]],
+        shape: &[[i64; 2]],
         (plain, cut): (DisplayMesh, Option<DisplayMesh>),
         units: Units,
     ) -> Result<(), GeometryError> {
@@ -593,12 +622,11 @@ impl Levels {
         let (plain, r1) = millimetres(&plain, units, &mut self.coarse_extent)?;
         self.rounded_coarse |= r1;
         self.rounded_fine |= r0;
-        let shape = outline(corners, units)?;
         let part = |triangles: [u32; 2]| Part {
             material: layer.material.clone(),
             function: layer.function.clone(),
             triangles,
-            outline: shape.clone(),
+            outline: shape.to_vec(),
         };
         self.fine_parts
             .push(part(append(&mut self.fine, &cut_mesh)?));
@@ -606,6 +634,238 @@ impl Levels {
             .push(part(append(&mut self.coarse, &plain)?));
         Ok(())
     }
+}
+
+/// How a wall's layers turn into its inserts (job 6.1): each layer's boxes to cut at each insert,
+/// by the cut's index, and each turned part with the layer it belongs to, all as boxes of the
+/// wall's frame (lowest and highest corners, as a cut's frame box holds them).
+struct Reveal {
+    /// For each layer, its boxes: the index of the cut each stands for, and its corners.
+    cutters: Vec<Vec<FrameBox>>,
+    /// Each turned part: its layer, and its corners.
+    turns: Vec<FrameBox>,
+}
+
+/// A box of a wall's frame with the index it belongs to (a cut's, or a layer's): its lowest and
+/// highest corners, as a cut's frame box holds them.
+type FrameBox = (usize, [i64; 3], [i64; 3]);
+
+/// `v` with its entry `at` set to `to`.
+fn with(mut v: [i64; 3], at: usize, to: i64) -> [i64; 3] {
+    if let Some(slot) = v.get_mut(at) {
+        *slot = to;
+    }
+    v
+}
+
+/// How `wall`, framed as `frame`, turns its layers into the inserts among `cuts`; `None` when it
+/// wraps nothing at inserts, or no insert is cut.
+fn reveal(
+    wall: &Layered,
+    frame: &WallFrame,
+    cuts: &[Cut],
+    units: Units,
+) -> Result<Option<Reveal>, GeometryError> {
+    let Some(wrap) = &wall.wrap else {
+        return Ok(None);
+    };
+    let (exterior, interior) = wrap.inserts.sides();
+    if !(exterior || interior) || !cuts.iter().any(Cut::is_insert) {
+        return Ok(None);
+    }
+    let mut layers = Vec::with_capacity(wall.layers.len());
+    for (layer, &wraps) in wall.layers.iter().zip(&wrap.layers) {
+        layers.push(WrapLayer {
+            thickness: i64::try_from(layer.thickness()).map_err(|_| super::too_big())?,
+            wraps,
+        });
+    }
+    let Some(turned) = construct_walls::turned(&layers, wrap.core, exterior, interior) else {
+        return Ok(None);
+    };
+    if !turned.turns_any() {
+        return Ok(None);
+    }
+    let e = |steps: i64| units.from_q0(steps);
+    let (along, across) = (frame.frame.along, frame.across_axis());
+    let [_, thickness, height] = frame.frame.size;
+    let mut out = Reveal {
+        cutters: vec![Vec::new(); wall.layers.len()],
+        turns: Vec::new(),
+    };
+    for (at, cut) in cuts.iter().enumerate().filter(|(_, c)| c.is_insert()) {
+        let (lo, hi) = cut.frame_box();
+        let pick = |v: [i64; 3], i: usize| v.get(i).copied().unwrap_or_default();
+        let (a0, a1, z0, z1) = (pick(lo, along), pick(hi, along), pick(lo, 2), pick(hi, 2));
+        let (sill, head) = (z0 > 0, z1 < height);
+        // The opening grown by `g`: along at both jambs, and at its head and sill where they are
+        // inside the wall.
+        let grown = |g: i64| -> Result<(i64, i64, i64, i64), GeometryError> {
+            let less = |a: i64, b: i64| a.checked_sub(b).ok_or_else(super::too_big);
+            let more = |a: i64, b: i64| a.checked_add(b).ok_or_else(super::too_big);
+            Ok((
+                less(a0, g)?,
+                more(a1, g)?,
+                if sill { less(z0, g)?.max(0) } else { z0 },
+                if head { more(z1, g)?.min(height) } else { z1 },
+            ))
+        };
+        let frame_box = |(b0, b1): (i64, i64), (c0, c1): (i64, i64), (h0, h1): (i64, i64)| {
+            let lo = with(with(with(lo, along, b0), across, c0), 2, h0);
+            let hi = with(with(with(hi, along, b1), across, c1), 2, h1);
+            (lo, hi)
+        };
+        for (k, parts) in turned.setbacks.iter().enumerate() {
+            let split = parts.len() > 1;
+            for (n, part) in parts.iter().enumerate() {
+                let (g0, g1, h0, h1) = grown(e(part.setback)?)?;
+                // One part spans the whole wall, so its faces are never the layer's own; of two,
+                // each runs from its own side's face to where the two meet.
+                let (c0, c1) = match (split, n) {
+                    (false, _) => (0, thickness),
+                    (true, 0) => (0, e(part.to)?),
+                    (true, _) => (e(part.from)?, thickness),
+                };
+                let (blo, bhi) = frame_box((g0, g1), (c0, c1), (h0, h1));
+                if let Some(slot) = out.cutters.get_mut(k) {
+                    slot.push((at, blo, bhi));
+                }
+            }
+        }
+        for turn in &turned.turns {
+            let (near, far) = (e(turn.near)?, e(turn.far)?);
+            let span = (e(turn.from)?, e(turn.to)?);
+            let (n0, n1, nz0, nz1) = grown(near)?;
+            let (f0, f1, fz0, fz1) = grown(far)?;
+            // A cutter may reach past the wall's base or top to cut it cleanly; a turned part is
+            // the wall's own, so it stops at them.
+            let (fz0, fz1) = (fz0.max(0), fz1.min(height));
+            let mut parts = vec![
+                frame_box((f0, n0), span, (fz0, fz1)),
+                frame_box((n1, f1), span, (fz0, fz1)),
+            ];
+            if head && nz1 < fz1 {
+                parts.push(frame_box((n0, n1), span, (nz1, fz1)));
+            }
+            if sill && fz0 < nz0 {
+                parts.push(frame_box((n0, n1), span, (fz0, nz0)));
+            }
+            for (plo, phi) in parts {
+                out.turns.push((turn.layer, plo, phi));
+            }
+        }
+    }
+    Ok(Some(out))
+}
+
+/// Each layer's own cutters at the inserts `reveal` sets back, made on `engine` and listed in
+/// `asked`.
+fn own_cutters<'c, E: Engine>(
+    engine: &mut E,
+    frame: &WallFrame,
+    reveal: &Reveal,
+    cut_list: &'c [Cut],
+    asked: &mut Asked,
+) -> Result<Vec<Vec<Cutter<'c, E::Solid>>>, GeometryError> {
+    let mut own = Vec::with_capacity(reveal.cutters.len());
+    for (layer, boxes) in reveal.cutters.iter().enumerate() {
+        let mut mine = Vec::with_capacity(boxes.len());
+        for &(at, lo, hi) in boxes {
+            let cut = cut_list.get(at).ok_or_else(super::too_big)?;
+            let (tool, up) = frame.frame_solid(lo, hi)?;
+            asked.grown.push(AskedGrown {
+                layer,
+                key: cut.key().to_owned(),
+                extrude: as_steps(&tool.outer),
+                by: up,
+            });
+            let named = |e: EngineError| cut.engine_error(from_engine(e));
+            mine.push(Cutter {
+                cut,
+                solid: engine.extrude(&tool, up).map_err(named)?,
+                reach: plan_box(&tool.outer),
+            });
+        }
+        own.push(mine);
+    }
+    Ok(own)
+}
+
+/// Each wrapping layer's turned parts round each insert, built on `engine`, listed in `asked` and
+/// added to `levels` as pieces of their layers.
+fn add_turns<E: Engine>(
+    engine: &mut E,
+    frame: &WallFrame,
+    reveal: &Reveal,
+    wall: &Layered,
+    asked: &mut Asked,
+    levels: &mut Levels,
+    units: Units,
+) -> Result<(), GeometryError> {
+    for &(at, lo, hi) in &reveal.turns {
+        let layer = wall.layers.get(at).ok_or_else(super::too_big)?;
+        let (tool, up) = frame.frame_solid(lo, hi)?;
+        asked.layers.push(AskedLayer {
+            function: layer.function.clone(),
+            material: layer.material.clone(),
+            extrude: as_steps(&tool.outer),
+            by: up,
+        });
+        let shape: Vec<[i64; 2]> = tool
+            .outer
+            .iter()
+            .map(|p| [units.nearest_mm(p.x.get()).0, units.nearest_mm(p.y.get()).0])
+            .collect();
+        let made = piece(engine, &tool, up, &[])?;
+        levels.add(layer, &shape, made, units)?;
+    }
+    Ok(())
+}
+
+/// Each piece of each layer of `wall` with a thickness, extruded on `engine` and cut by its
+/// cutters (`own`, a layer's own at its inserts where the wall wraps there, else `cutters`),
+/// listed in `asked` and added to `levels`.
+fn add_layers<E: Engine>(
+    engine: &mut E,
+    wall: &Layered,
+    cutters: &[Cutter<'_, E::Solid>],
+    own: &[Vec<Cutter<'_, E::Solid>>],
+    asked: &mut Asked,
+    levels: &mut Levels,
+    units: Units,
+) -> Result<(), GeometryError> {
+    let by = [0, 0, units.from_q0(wall.height)?];
+    for (at, layer) in wall.layers.iter().enumerate() {
+        if layer.thickness() == 0 {
+            continue;
+        }
+        let mine: Vec<&Cutter<'_, E::Solid>> = match own.get(at) {
+            Some(own) => {
+                let plain = cutters.iter().filter(|c| !c.cut.is_insert());
+                own.iter().chain(plain).collect()
+            }
+            None => cutters.iter().collect(),
+        };
+        for corners in pieces_of(wall, at, layer)? {
+            let outer = corners
+                .iter()
+                .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
+                .collect::<Result<Vec<P3>, _>>()?;
+            asked.layers.push(AskedLayer {
+                function: layer.function.clone(),
+                material: layer.material.clone(),
+                extrude: as_steps(&outer),
+                by,
+            });
+            let profile = Profile {
+                outer,
+                holes: Vec::new(),
+            };
+            let made = piece(engine, &profile, by, &mine)?;
+            levels.add(layer, &outline(&corners, units)?, made, units)?;
+        }
+    }
+    Ok(())
 }
 
 /// Builds a layered wall with the doors `hosted` in it, on `engine`: each piece of each layer
@@ -624,15 +884,20 @@ pub(super) fn build<E: Engine>(
     families: &dyn FamilySource,
 ) -> Result<Built, GeometryError> {
     let op = op_id(recipe)?;
-    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
-        None => (Vec::new(), Vec::new()),
-        Some((frame, cuts)) => {
-            let tools = cuts
-                .iter()
-                .map(|cut| frame.cutter(cut))
-                .collect::<Result<Vec<_>, _>>()?;
-            (cuts, tools)
-        }
+    let (frame, cut_list) = match cuts(wall, hosted, units, band, families)? {
+        None => (None, Vec::new()),
+        Some((frame, cuts)) => (Some(frame), cuts),
+    };
+    let tools = match &frame {
+        Some(frame) => cut_list
+            .iter()
+            .map(|cut| frame.cutter(cut))
+            .collect::<Result<Vec<_>, _>>()?,
+        None => Vec::new(),
+    };
+    let reveal = match &frame {
+        Some(frame) => reveal(wall, frame, &cut_list, units)?,
+        None => None,
     };
     let mut asked = Asked {
         layers: Vec::new(),
@@ -645,8 +910,8 @@ pub(super) fn build<E: Engine>(
                 by: *by,
             })
             .collect(),
+        grown: Vec::new(),
     };
-    let by = [0, 0, units.from_q0(wall.height)?];
     let mut cutters = Vec::with_capacity(tools.len());
     for (cut, (tool, up)) in cut_list.iter().zip(&tools) {
         let named = |e: EngineError| cut.engine_error(from_engine(e));
@@ -656,29 +921,15 @@ pub(super) fn build<E: Engine>(
             reach: plan_box(&tool.outer),
         });
     }
+    // Where the wall wraps at inserts, each layer's own cutters at its inserts, set back.
+    let own = match (&frame, &reveal) {
+        (Some(frame), Some(reveal)) => own_cutters(engine, frame, reveal, &cut_list, &mut asked)?,
+        _ => Vec::new(),
+    };
     let mut levels = Levels::new();
-    for (at, layer) in wall.layers.iter().enumerate() {
-        if layer.thickness() == 0 {
-            continue;
-        }
-        for corners in pieces_of(wall, at, layer)? {
-            let outer = corners
-                .iter()
-                .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
-                .collect::<Result<Vec<P3>, _>>()?;
-            asked.layers.push(AskedLayer {
-                function: layer.function.clone(),
-                material: layer.material.clone(),
-                extrude: as_steps(&outer),
-                by,
-            });
-            let profile = Profile {
-                outer,
-                holes: Vec::new(),
-            };
-            let made = piece(engine, &profile, by, &cutters)?;
-            levels.add(layer, &corners, made, units)?;
-        }
+    add_layers(engine, wall, &cutters, &own, &mut asked, &mut levels, units)?;
+    if let (Some(frame), Some(reveal)) = (&frame, &reveal) {
+        add_turns(engine, frame, reveal, wall, &mut asked, &mut levels, units)?;
     }
     let (lo, hi) = levels
         .extent
