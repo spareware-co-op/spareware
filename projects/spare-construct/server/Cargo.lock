@@ -660,6 +660,7 @@ dependencies = [
  "construct-clash",
  "construct-curtain",
  "construct-dimensions",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -739,6 +740,16 @@ dependencies = [
  "construct-warnings",
  "kit-core",
  "num-bigint",
+]
+
+[[package]]
+name = "construct-doorgen"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-params",
+ "engine-geometry",
+ "kit-core",
 ]
 
 [[package]]

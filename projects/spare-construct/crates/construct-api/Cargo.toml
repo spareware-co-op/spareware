@@ -27,6 +27,7 @@ cloud = [
     "dep:construct-warnings",
     "dep:construct-stairs",
     "dep:construct-phases",
+    "dep:construct-doorgen",
     "dep:construct-schedules",
     "dep:construct-styles",
     "dep:construct-dimensions",
@@ -73,6 +74,8 @@ construct-stairs = { path = "../construct-stairs", optional = true }
 construct-curtain = { path = "../construct-curtain", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
+# The generated door and window types: construct-doorgen makes and verifies each before it is stored.
+construct-doorgen = { path = "../construct-doorgen", optional = true }
 # The schedule commands: construct-schedules checks every schedule and works out its rows.
 construct-schedules = { path = "../construct-schedules", optional = true }
 # The view graphics commands: the pens, line patterns and object styles a rule is checked against.

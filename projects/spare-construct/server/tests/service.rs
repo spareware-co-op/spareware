@@ -3054,3 +3054,66 @@ async fn a_dimensions_lost_reference_is_in_the_warnings_view() {
     edit("edit.undo", json!({})).await.unwrap();
     assert!(ours().await.is_empty());
 }
+
+/// A model's families (job 7.6): a recipe loaded as text is listed first for the page, with where
+/// it came from, before the library's families the model does not hold; a reload, and a remove,
+/// go through the log, each refused in words where they cannot be; someone off the project cannot
+/// read the list.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_models_own_families_are_loaded_and_listed_for_the_page() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let (_, window) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.fixed-window")
+        .unwrap();
+    let mut office = (*window).clone();
+    office.id = i("office.window");
+    "Office window".clone_into(&mut office.name);
+    let load = json!({ "recipe": office.to_json() });
+    s.edit(&anna, &project, &model, "family.load", load)
+        .await
+        .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert_eq!(listed[0].id, "office.window");
+    assert!(listed[0].in_document);
+    assert_eq!(listed[0].source, "text");
+    assert_eq!(listed[0].placed, 0);
+    assert_eq!(listed[0].types.len(), 8);
+    assert!(listed[1..].iter().all(|f| !f.in_document));
+    assert!(refused(s.families(&dan, &project, &model).await));
+
+    "Office window, second issue".clone_into(&mut office.name);
+    let reload = json!({ "family": "office.window", "recipe": office.to_json() });
+    s.edit(&anna, &project, &model, "family.reload", reload)
+        .await
+        .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert_eq!(listed[0].name, "Office window, second issue");
+    let missing = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "family.remove",
+            json!({ "family": "shop.window" }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        missing.to_string(),
+        "There is no family shop.window in this document; it has Office window, second issue \
+         (office.window)."
+    );
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "family.remove",
+        json!({ "family": "office.window" }),
+    )
+    .await
+    .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert!(listed.iter().all(|f| !f.in_document));
+}

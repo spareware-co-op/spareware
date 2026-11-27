@@ -2206,10 +2206,208 @@ pass('at the type Ben gave it');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
   if (mismatched.length > 0) {
     console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   }
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
+}
+
+console.log('\n   Families in the document');
+// Ben makes door types from a spec in the Families dialog (a spec the server refuses is shown in its
+// words); Anna's family tool lists them too. One family of two types: the first made, undone and
+// redone, the second added to it. Anna places the first type in the wall of the last section; it is
+// listed as placed in Ben's dialog and cuts the wall where this run's geometry cuts. A remove of the
+// placed family is refused by its name. Ben swaps the door to the second type and the opening
+// follows (undo and redo); he deletes it and removes the family (undo and redo). Nobody changes what
+// the other touched in the last 30 s without the other letting go first.
+const dfamTypes = async () => (await asAnna('families')).find((f) => f.name === 'Test doors');
+const dfamNames = async () => (await asAnna('families')).filter((f) => f.in_document).map((f) => f.name);
+const dfamSection = (name) => ben.locator(`${manager} section[data-family]`).filter({ has: ben.locator('b', { hasText: name }) });
+const dfamField = (key) => ben.locator(`${manager} [data-key="gen-${key}"]`);
+const dfamMake = async ({ into = '', name = '', mark, width, height }) => {
+  await dfamField('template').selectOption('single-swing-door');
+  await dfamField('family').selectOption(into);
+  if (into === '') await dfamField('name').fill(name);
+  await dfamField('mark').fill(mark);
+  await dfamField('width').fill(width);
+  await dfamField('height').fill(height);
+  await ben.locator(`${manager} [data-key="gen-go"]`).click();
+};
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+await ben.locator('#ribbon [data-act="stackfamilies"]').click();
+await ben.waitForSelector(`${manager} [data-key="gen-mark"]`);
+await ben.waitForSelector(`${manager} section[data-library-family]`);
+const dfamServer = await asAnna('families');
+const dfamShown = await ben
+  .locator(`${manager} section[data-family] > .stack-line > b, ${manager} section[data-library-family] > .stack-line > b`)
+  .allTextContents();
+check(
+  dfamServer.length === dfamShown.length && dfamServer.every((f) => dfamShown.includes(f.name)),
+  "the dialog lists the server's families, the model's and the library's, and no others",
+);
+check(
+  (await dfamSection('Fixed window').textContent()).includes('1 copy placed') &&
+    (await ben.locator(`${manager} section[data-library-family]`).count()) >= 1,
+  "the window of the last section is listed as held, with its copy placed, and the library's other families beside it",
+);
+
+// A spec the server refuses is shown in its words, under the form and as the toast.
+await dfamField('template').selectOption('single-swing-door');
+await dfamField('name').fill('Test doors');
+await dfamField('mark').fill('T1');
+await dfamField('width').fill('wide');
+await dfamField('height').fill('2100 mm');
+await ben.locator(`${manager} [data-key="gen-go"]`).click();
+await ben.waitForSelector(`${manager} [data-problem="famgen"]`);
+await problemIs('famgen', 'a spec the server refuses is shown in its words, and nothing is made');
+check(!(await dfamNames()).includes('Test doors'), 'and the model holds no such family');
+
+// Made from a spec, listed in both browsers.
+await dfamMake({ name: 'Test doors', mark: 'T1', width: '900 mm', height: '2100 mm' });
+await dfamSection('Test doors').waitFor();
+const dfam = await until(dfamTypes, (f) => f?.in_document && f.types.length === 1, 'the server lists the generated family');
+check(
+  dfam.kind === 'door' && dfam.source === 'generated:single-swing-door' && dfam.placed === 0,
+  'Ben makes a door type from a spec: a door family of the model, made by the generator, none placed',
+);
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:family"]');
+await anna.waitForSelector('#pv-side select[data-key="family-choice"] option', { state: 'attached' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="family-choice"] option')].some((o) => o.textContent === 'Test doors'),
+);
+pass("the new door type is listed in Ben's dialog and in Anna's family tool");
+// The dialog's scrim covers the undo button: close it, undo and redo, and open it again.
+await closeDialog();
+await undoRedo('A generated door type', dfamNames, (names) => !names.includes('Test doors'), (names) => names.includes('Test doors'));
+await ben.locator('#ribbon [data-act="stackfamilies"]').click();
+await ben.waitForSelector(`${manager} [data-key="gen-mark"]`);
+await dfamSection('Test doors').waitFor();
+pass('the generated family is listed again once redone, in the dialog');
+
+// A second type of the same family.
+await dfamMake({ into: dfam.id, mark: 'T2', width: '1200 mm', height: '2100 mm' });
+const dfam2 = await until(dfamTypes, (f) => f?.types.length === 2, 'the second type is listed');
+await ben.waitForFunction(
+  (id) => document.querySelectorAll(`#stack-manage ul[data-family-types="${id}"] li`).length === 2,
+  dfam.id,
+);
+pass('a second type made into the same family is listed with the first');
+const [dfamOne, dfamTwo] = dfam2.types.map((t) => t.key);
+
+// Anna places the first type in the wall.
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="family-choice"] option')].some((o) => o.textContent === 'Test doors'),
+);
+await anna.locator('#pv-side select[data-key="family-choice"]').selectOption({ label: 'Test doors' });
+await anna.waitForSelector('#pv-side select[data-key="family-type"]');
+await anna.locator('#pv-side select[data-key="family-type"]').selectOption(dfamOne);
+const dfamWallBox = await box(anna, famWall);
+await anna.mouse.click(dfamWallBox.x + dfamWallBox.width * 0.75, dfamWallBox.y + dfamWallBox.height / 2 - 1);
+const dfamOn = ([wall, family]) =>
+  [...window.spare.elements.values()].find(
+    (p) => p.el.recipe.op === 'family.instance' && p.el.recipe.args.family_id === family && p.el.references?.[0]?.element === wall,
+  )?.el.id;
+await ben.waitForFunction(dfamOn, [famWall, dfam.id]);
+const dfamId = await ben.evaluate(dfamOn, [famWall, dfam.id]);
+await anna.keyboard.press('Escape');
+const dfamParts = (id) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(dfamParts, dfamId);
+await anna.waitForFunction(dfamParts, dfamId);
+check(
+  (await ben.evaluate((id) => window.spare.elements.get(id).el, dfamId)).kind === 'door',
+  "Anna places the generated type in the wall: a door in Ben's browser, drawn in both",
+);
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  const dfamCut = (names) => names.some((n) => n.role === `tool(${dfamId}).head`);
+  await until(async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [], dfamCut, 'the server cuts the wall for the generated door');
+  await ben.waitForFunction(
+    ([wall, cut]) => window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role === `tool(${cut}).head`),
+    [famWall, dfamId],
+  );
+  pass("the generated door cuts the wall, on the server and as Ben's page builds it");
+} else {
+  pass("(the stand-in cuts no openings: the kernel's run checks the wall's cut)");
+}
+await ben.waitForFunction(
+  (id) => /1 copy placed/.test(document.querySelector(`#stack-manage section[data-family="${id}"]`)?.textContent ?? ''),
+  dfam.id,
+);
+pass("and the family is listed as placed in Ben's dialog");
+
+// Anna lets go of the door; a remove of the placed family is refused by its name.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), dfamId);
+await dfamSection('Test doors').locator('[data-act="stackfamilyremove"]').click();
+await ben.waitForSelector(`${manager} [data-problem="famdoc:${dfam.id}"]`);
+const dfamWords = await ben.locator(`${manager} [data-problem="famdoc:${dfam.id}"]`).textContent();
+check(dfamWords.startsWith('Test doors is still placed'), `a remove of the placed family is refused by its name: ${dfamWords}`);
+await problemIs(`famdoc:${dfam.id}`, 'and the refusal is also the toast');
+check((await dfamNames()).includes('Test doors'), 'and the family is still held');
+await closeDialog();
+
+// Ben swaps the door to the second type; the opening follows.
+const dfamSize = (page) =>
+  page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]);
+  }, dfamId);
+const dfamWas = await dfamSize(ben);
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const dfamAt = await box(ben, dfamId);
+await ben.mouse.click(dfamAt.x + dfamAt.width / 2, dfamAt.y + dfamAt.height / 2);
+await ben.waitForSelector(`#pv-side [data-family-properties="${dfamId}"] select[data-key="family-swap"]`);
+await ben.locator('#pv-side select[data-key="family-swap"]').selectOption(`${dfam.id}|${dfamTwo}`);
+await anna.waitForFunction(([id, ty]) => window.spare.elements.get(id)?.el.recipe.args.type === ty, [dfamId, dfamTwo]);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return Math.max(max[0] - min[0], max[1] - min[1]) === before + 300;
+  },
+  [dfamId, dfamWas],
+);
+pass("Ben swaps the door to the second type, and Anna's browser draws the wider door");
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  await until(
+    async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [],
+    (names) => names.some((n) => n.role === `tool(${dfamId}).head`),
+    'the wall is still cut for the swapped door',
+  );
+  pass('and the wall is cut for the wider door');
+}
+const dfamType = () => anna.evaluate((id) => window.spare.elements.get(id)?.el.recipe.args.type, dfamId);
+await undoRedo('A swap', dfamType, (ty) => ty === dfamOne, (ty) => ty === dfamTwo);
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), dfamId);
+
+// Ben deletes the door, and removes the family that is no longer placed; undo and redo take it back.
+const dfamAgain = await box(ben, dfamId);
+await ben.mouse.click(dfamAgain.x + dfamAgain.width / 2, dfamAgain.y + dfamAgain.height / 2);
+await ben.waitForSelector(`#pv-side [data-family-properties="${dfamId}"]`);
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), dfamId);
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+await ben.locator('#ribbon [data-act="stackfamilies"]').click();
+await ben.waitForFunction(
+  (id) => /0 copies placed/.test(document.querySelector(`#stack-manage section[data-family="${id}"]`)?.textContent ?? ''),
+  dfam.id,
+);
+await dfamSection('Test doors').locator('[data-act="stackfamilyremove"]').click();
+await until(dfamNames, (names) => !names.includes('Test doors'), 'the family is removed');
+await dfamSection('Test doors').waitFor({ state: 'detached' });
+await anna.waitForFunction(
+  () => ![...document.querySelectorAll('#pv-side select[data-key="family-choice"] option')].some((o) => o.textContent === 'Test doors'),
+);
+pass("the family is removed once nothing places it, and it is gone from the dialog and from Anna's family tool");
+await closeDialog();
+await undoRedo('A remove', dfamNames, (names) => names.includes('Test doors'), (names) => !names.includes('Test doors'));
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
+  check(mismatched.length === 0, `every body ${name}'s page built, the generated door's included, matches the server's`);
 }
 
 console.log('\n   Openings and shafts');
