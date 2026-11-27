@@ -8,12 +8,16 @@
 //! - A room's recipe argument `{"room":"walls"}` (construct-rooms' `walls_arg`) is filled with
 //!   the room's loop, found by construct-rooms from every wall whose base is on the room's level,
 //!   as the document stands at the state asked (for building, as regeneration has reached it, by
-//!   the kind index, in log order). A wall is read by its outline in plan: a layered wall's
-//!   (`wall.layered`) by the four corners of its outer faces, exactly as both builders lay it out
-//!   ([`crate::wall_plan`]), moved by its placement; the old box wall's (`wall.straight`) by its
-//!   box. A wall that does not build (its type missing, its recipe not as written) is not there to
-//!   bound a room and is passed over, as it is in every view; so is a record of another operation.
-//!   A door or a window in a wall does not cut its outline here: an opening does not break a loop.
+//!   the kind index, in log order). A wall is read by its outline in plan ([`bounds_on`]): a
+//!   layered wall's (`wall.layered`) as its joints with the walls it meets shape it, the whole
+//!   wall's outline of the recipe it is built from ([`crate::joins`], construct-walls' join rule),
+//!   so where two walls join, the room's faces meet where the joint puts them (one point at a
+//!   corner that points into the room, issue 1329); a layered wall no joint changes by the four
+//!   corners of its outer faces, exactly as both builders lay it out ([`crate::wall_plan`]); each
+//!   moved by its placement; the old box wall's (`wall.straight`) by its box. A wall that does not
+//!   build (its type missing, its recipe not as written) is not there to bound a room and is
+//!   passed over, as it is in every view; so is a record of another operation. A door or a window
+//!   in a wall does not cut its outline here: an opening does not break a loop.
 //! - What becomes of the room is construct-rooms' `assess`, with the other rooms of its level:
 //!   enclosed, it is filled for the builders (construct-rooms' `filled`); not enclosed, its build
 //!   fails as `NotEnclosed`; in the same loop as a room whose ID comes first, as `Redundant`,
@@ -27,15 +31,17 @@
 //!
 //! Depends on construct-rooms (the search and the record), construct-levels (ties),
 //! construct-model, construct-params and kit-store, and on [`crate::parameters`] and
-//! [`crate::levels`] for a wall's filled recipe. Interim: none here; a curved wall, when there is
-//! one, is to be read as construct-rooms' `Outline::Curved`, which refuses the room by name.
+//! [`crate::levels`] for a wall's filled recipe and [`crate::joins`] for its joints. Interim: none
+//! here; a curved wall, when there is one, is to be read as construct-rooms' `Outline::Curved`,
+//! which refuses the room by name.
 
+use crate::joins::{self, OnLevel};
 use crate::levels;
 use crate::parameters::ParameterView;
 use crate::parameters::{self, At};
 use crate::wall_plan::{self, Layered};
 use construct_levels::base_of;
-use construct_model::element::Element;
+use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::list;
 use construct_params::{Definition, Holder, Kind, Length, Units, Value};
@@ -181,23 +187,134 @@ fn straight_outline(wall: &Element) -> Option<WallPlan> {
     })
 }
 
-/// A wall's outline in plan, as the builders lay it out, in the model's grid steps; `None` for a
-/// wall that does not build, or a record of another operation.
-async fn outline_of<R: Reader>(
+/// A layered wall's filled recipe, its layers and height read as the builders read them but its
+/// joints not yet made, and the height of its base; `None` for a wall that does not build, or a
+/// record of another operation.
+async fn layered_recipe<R: Reader>(
     reader: &mut R,
     project: &Id,
     document: &Id,
     wall: &Element,
     at: At,
-) -> Result<Option<Vec<[i64; 2]>>, StoreError> {
-    Ok(wall_plan_of(reader, project, document, wall, at)
-        .await?
-        .map(|plan| plan.corners))
+) -> Result<Option<(Recipe, Option<Length>)>, StoreError> {
+    if !wall_plan::is_layered(&wall.recipe) {
+        return Ok(None);
+    }
+    let Ok(recipe) = parameters::recipe_at(reader, project, document, wall, at).await? else {
+        return Ok(None);
+    };
+    let Ok(placed) = levels::placed(reader, project, document, wall, at).await? else {
+        return Ok(None);
+    };
+    let Ok(recipe) = levels::filled(&recipe, &placed) else {
+        return Ok(None);
+    };
+    Ok(Some((recipe, placed.elevation)))
 }
 
-/// A wall's plan, as the builders lay it out: its outline and the direction of its reference
-/// line; `None` for a wall that does not build, or a record of another operation. What rooms and
-/// the warnings read walls by, so they cannot disagree on where a wall is.
+/// `corners` of an element's frame moved by its placement into the model's plan.
+fn moved(corners: &[[i64; 2]], placement: &Placement) -> Option<Vec<[i64; 2]>> {
+    let (dx, dy) = (mm(placement.x)?, mm(placement.y)?);
+    corners
+        .iter()
+        .map(|&[x, y]| Some([x.checked_add(dx)?, y.checked_add(dy)?]))
+        .collect()
+}
+
+/// A layered wall's strip as drawn, between its two finish faces, in its frame: its outline
+/// before any joint shapes its ends.
+fn strip(layered: &Layered) -> Option<Vec<[i64; 2]>> {
+    let (exterior, interior) = layered.outer();
+    let (corners, _) = layered.plan.strip(exterior, interior).ok()?;
+    Some(corners.to_vec())
+}
+
+/// The outline a room reads of a layered wall whose recipe is filled with its joints
+/// ([`joins::on_level`]), in the model's plan: the whole wall's outline as its joints shape it
+/// when any does, else its strip; `None` for a recipe the builders refuse. Whatever way the wall
+/// runs: the outline is the join rule's polygon, read as it is.
+fn joined_outline(recipe: &Recipe, placement: &Placement) -> Option<Vec<[i64; 2]>> {
+    let layered = Layered::of(recipe).ok()?;
+    let corners = match &layered.joined {
+        Some(joints) => joints.outline.clone(),
+        None => strip(&layered)?,
+    };
+    moved(&corners, placement)
+}
+
+/// The walls of `level` as the document stands `at` that state, in the order the kind lists them,
+/// each by its outline in plan as the builders lay it out, in the model's grid steps: a layered
+/// wall's outline as its joints with the walls it meets shape it ([`joins::on_level`], the
+/// recipe the regenerator builds it from), so a room's faces are the walls' faces as joined and
+/// meet where the joint puts them; a layered wall no joint changes by its strip; the old box
+/// wall's (`wall.straight`) by its box. A wall that does not build is passed over.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn bounds_on<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    level: &Id,
+    at: At,
+) -> Result<Vec<Bound>, StoreError> {
+    /// A wall of the level as it is read: the old box's outline, or a layered wall's filled
+    /// recipe and the height of its base, for the join rule.
+    enum Read {
+        Boxed(Vec<[i64; 2]>),
+        Layered(Recipe, Option<Length>),
+    }
+    let mut walls = Vec::new();
+    for wall in of_kind(reader, project, document, WALL_KIND, at).await? {
+        if level_of(&wall).as_ref() != Some(level) {
+            continue;
+        }
+        let read = if wall.recipe.op == "wall.straight" {
+            straight_outline(&wall).map(|plan| Read::Boxed(plan.corners))
+        } else {
+            layered_recipe(reader, project, document, &wall, at)
+                .await?
+                .map(|(recipe, elevation)| Read::Layered(recipe, elevation))
+        };
+        if let Some(read) = read {
+            walls.push((wall, read));
+        }
+    }
+    let level_walls: Vec<OnLevel<'_>> = walls
+        .iter()
+        .filter_map(|(wall, read)| match read {
+            Read::Layered(recipe, elevation) => Some(OnLevel {
+                id: wall.id.as_str(),
+                placement: &wall.placement,
+                recipe,
+                elevation: *elevation,
+            }),
+            Read::Boxed(_) => None,
+        })
+        .collect();
+    let mut joined = joins::on_level(&level_walls).into_iter();
+    let mut bounds = Vec::with_capacity(walls.len());
+    for (wall, read) in &walls {
+        let corners = match read {
+            Read::Boxed(corners) => Some(corners.clone()),
+            Read::Layered(..) => joined
+                .next()
+                .and_then(|recipe| joined_outline(&recipe, &wall.placement)),
+        };
+        if let Some(corners) = corners {
+            bounds.push(Bound {
+                wall: wall.id.clone(),
+                outline: Outline::Polygon(corners),
+            });
+        }
+    }
+    Ok(bounds)
+}
+
+/// A wall's plan as drawn: its strip between its finish faces before any joint shapes its ends,
+/// and the direction of its reference line; `None` for a wall that does not build, or a record
+/// of another operation. What the warnings read walls by (two walls joined at a corner do not
+/// overlap along their length); a room reads each wall's outline as joined ([`bounds_on`]).
 ///
 /// # Errors
 /// A [`StoreError`] when the store fails.
@@ -211,33 +328,14 @@ pub async fn wall_plan_of<R: Reader>(
     if wall.recipe.op == "wall.straight" {
         return Ok(straight_outline(wall));
     }
-    if !wall_plan::is_layered(&wall.recipe) {
-        return Ok(None);
-    }
-    let Ok(recipe) = parameters::recipe_at(reader, project, document, wall, at).await? else {
-        return Ok(None);
-    };
-    let Ok(placed) = levels::placed(reader, project, document, wall, at).await? else {
-        return Ok(None);
-    };
-    let Ok(recipe) = levels::filled(&recipe, &placed) else {
+    let Some((recipe, _)) = layered_recipe(reader, project, document, wall, at).await? else {
         return Ok(None);
     };
     let Ok(layered) = Layered::of(&recipe) else {
         return Ok(None);
     };
-    let (exterior, interior) = layered.outer();
-    let Ok((corners, _)) = layered.plan.strip(exterior, interior) else {
-        return Ok(None);
-    };
-    let (Some(dx), Some(dy)) = (mm(wall.placement.x), mm(wall.placement.y)) else {
-        return Ok(None);
-    };
-    let moved: Option<Vec<[i64; 2]>> = corners
-        .iter()
-        .map(|&[x, y]| Some([x.checked_add(dx)?, y.checked_add(dy)?]))
-        .collect();
-    Ok(moved.map(|corners| WallPlan {
+    let corners = strip(&layered).and_then(|corners| moved(&corners, &wall.placement));
+    Ok(corners.map(|corners| WallPlan {
         corners,
         direction: layered.plan.direction(),
     }))
@@ -286,18 +384,7 @@ pub async fn outcome<R: Reader>(
             ))));
         }
     };
-    let mut bounds = Vec::new();
-    for wall in of_kind(reader, project, document, WALL_KIND, at).await? {
-        if level_of(&wall).as_ref() != Some(level) {
-            continue;
-        }
-        if let Some(corners) = outline_of(reader, project, document, &wall, at).await? {
-            bounds.push(Bound {
-                wall: wall.id.clone(),
-                outline: Outline::Polygon(corners),
-            });
-        }
-    }
+    let bounds = bounds_on(reader, project, document, level, at).await?;
     let mut others = Vec::new();
     for other in of_kind(reader, project, document, ROOM_KIND, at).await? {
         if other.id == room.id || level_of(&other).as_ref() != Some(level) {
@@ -556,4 +643,86 @@ pub async fn worked_at<R: Reader>(
         at,
     )
     .await?))
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::arithmetic_side_effects,
+    reason = "tests; a broken fixture must stop the test loudly"
+)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    const MM: i64 = Length::STEPS_PER_MM;
+
+    fn stored(steps: i64) -> Json {
+        Json::String(Value::Length(Length::from_steps(steps)).stored())
+    }
+
+    fn point([x, y]: [i64; 2]) -> Json {
+        json!([stored(x), stored(y)])
+    }
+
+    fn polygon(corners: &[[i64; 2]]) -> Json {
+        Json::Array(corners.iter().copied().map(point).collect())
+    }
+
+    /// A one-layer wall 1000 steps thick from (0, 0) to (30000, 40000) steps, along neither axis
+    /// (its direction is 3-4-5), with `joins` as given.
+    fn slanted(joins: Option<Json>) -> Recipe {
+        let mut args = BTreeMap::new();
+        args.insert("start".to_owned(), point([0, 0]));
+        args.insert("end".to_owned(), point([30_000, 40_000]));
+        args.insert("height".to_owned(), stored(2700 * MM));
+        args.insert(
+            "layers".to_owned(),
+            json!([{
+                "function": "structure",
+                "material": "concrete-regular",
+                "exterior": stored(500),
+                "interior": stored(-500),
+            }]),
+        );
+        if let Some(joins) = joins {
+            args.insert(wall_plan::JOINS.to_owned(), joins);
+        }
+        Recipe::construct(wall_plan::OP, args)
+    }
+
+    /// A room reads a joined wall by the joint's own outline, whatever way the wall runs: here a
+    /// wall at 3-4-5 with its start mitred (its exterior corner 500 steps back along the line, its
+    /// interior corner 500 on), moved by its placement. Without a joint it is read by its strip.
+    #[test]
+    fn a_joined_wall_at_an_angle_is_read_by_its_joined_outline() {
+        // Its faces 500 steps either side: (4, -3) / 5 to the right of (3, 4).
+        let strip = [[400, -300], [30_400, 39_700], [29_600, 40_300], [-400, 300]];
+        let mitred = [[100, -700], [30_400, 39_700], [29_600, 40_300], [-100, 700]];
+        let placement = Placement {
+            x: 1000,
+            y: -2000,
+            z: 0,
+        };
+        let moved = |corners: &[[i64; 2]]| -> Vec<[i64; 2]> {
+            corners
+                .iter()
+                .map(|&[x, y]| [x + 1000 * MM, y - 2000 * MM])
+                .collect()
+        };
+        assert_eq!(
+            joined_outline(&slanted(None), &placement),
+            Some(moved(&strip))
+        );
+        let joins = json!({
+            "layers": [[polygon(&mitred)]],
+            "outline": polygon(&mitred),
+            "with": ["W-2"],
+        });
+        assert_eq!(
+            joined_outline(&slanted(Some(joins)), &placement),
+            Some(moved(&mitred))
+        );
+    }
 }
