@@ -1452,34 +1452,78 @@ await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${
 await ben.click('#browser [data-act="view"][data-a="l1"]');
 pass('both walls are deleted, and the plan is as it was before the dimension');
 console.log('\n   Dimensions: angles, an aligned dimension and equal segments');
-// Both people have Level 1's working plan open. Anna draws walls south of the building: one running
-// east, one at 3:4 off it, one square to that (a 3:4:5 corner, off the axes) and one parallel to
-// the 3:4 wall, 1000 mm across it. With the dimension tool she measures the angle between the first
-// two (36.87°, the nearest unit, not exact) and the corner (90.00°, exact), each by picking the two
-// walls and clicking inside the angle she means, and the aligned distance across the parallel pair
-// (1000 mm). Ben's browser draws each as the server worked it out. Then she draws four walls across
-// a run and dimensions them as a string; Ben is working on one of them when she makes the segments
-// equal, and the server says so by name; once he lets go she makes them equal, the walls move in
-// one step and both browsers show three equal segments; her undo puts every wall back.
+// Both people have Level 1's working plan open. Anna draws grid lines south of the building (the
+// wall tool draws along x or y; a grid goes any way): one running east, one at 3:4 off it, one
+// square to that (a 3:4:5 corner, off the axes) and one parallel to the 3:4 grid, 1000 mm across
+// it. With the dimension tool she measures the angle between the first two (36.87°, the nearest
+// unit, not exact) and the corner (90.00°, exact), each by picking the two grids and clicking
+// inside the angle she means, and the aligned distance across the parallel pair (1000 mm). Ben's
+// browser draws each as the server worked it out, and Ben reads the angle in his palette. Then she
+// draws four walls across a run and dimensions them as a string; Ben is working on one of them when
+// she makes the segments equal, and the server says so by name; once he lets go she makes them
+// equal, the walls move in one step and both browsers show three equal segments; her undo puts
+// every wall back. Each thing is drawn after the last one is there, as a person draws.
 for (const page of [anna, ben]) {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
   await page.click(viewLeaf('Level 1 working plan'));
 }
 await anna.waitForSelector('#pv-canvas svg');
 await ben.waitForSelector('#pv-canvas svg');
 const angText = (id) => `#pv-canvas g.dim[data-dim="${id}"] text.dimt[data-segment]`;
-const drawWalls = async (page, walls) => {
-  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
-  await page.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
-  for (const [x0, y0, x1, y1] of walls) {
-    await clickModel(page, x0, y0);
-    await clickModel(page, x1, y1);
+const ownGridIds = (page) => page.locator(ownGrids).evaluateAll((gs) => gs.map((g) => g.dataset.datum));
+// Anna draws a grid from one point to another; both browsers have it before she draws the next.
+const angGrid = async (from, to) => {
+  const before = await ownGridIds(anna);
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await anna.click('#ribbon [data-act="dtool"][data-a="architecture:grid"]');
+  await clickModel(anna, ...from);
+  await clickModel(anna, ...to);
+  await anna.keyboard.press('Escape');
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(
+      ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.datum)),
+      [ownGrids, before],
+    );
   }
-  await page.keyboard.press('Escape');
+  return (await ownGridIds(anna)).find((id) => !before.includes(id));
 };
+// East; 3:4 off it; square to that; parallel to the 3:4 grid, 1000 mm across.
+const angGrids = [];
+for (const [from, to] of [
+  [[7000, 8700], [9400, 8700]],
+  [[7400, 9000], [8600, 9900]],
+  [[9600, 9000], [9000, 9800]],
+  [[6800, 9800], [8000, 10700]],
+]) {
+  angGrids.push(await angGrid(from, to));
+}
+check(
+  (await anna.locator(gridGroup(angGrids[1])).getAttribute('data-x1')) === '8600' &&
+    (await ben.locator(gridGroup(angGrids[3])).getAttribute('data-y1')) === '10700',
+  'Anna draws four grids, one east, one at 3:4, one square to it and one parallel to it, and both browsers have them where she drew them',
+);
+// Anna draws walls, one at a time: each is there before she draws the next.
 const newLayered = (before) =>
   [...window.spare.elements.values()]
     .filter((p) => p.el.recipe.op === 'wall.layered' && !before.includes(p.el.id) && p.fill?.recipe?.args?.layers)
     .map((p) => [p.el.id, p.el.recipe.args.start.map((v) => Number(v.split(':').pop()) / 6400)]);
+const drawWalls = async (page, walls) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await page.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+  const before = await wallsOf(page);
+  for (const [n, [x0, y0, x1, y1]] of walls.entries()) {
+    await page.waitForSelector('#pv-canvas svg');
+    await clickModel(page, x0, y0);
+    await clickModel(page, x1, y1);
+    await page.waitForFunction(
+      ([seen, count]) => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !seen.includes(p.el.id)).length === count,
+      [before, n + 1],
+    );
+  }
+  await page.keyboard.press('Escape');
+};
 const bothHave = async (before, count) => {
   for (const page of [anna, ben]) {
     await page.waitForFunction(
@@ -1488,19 +1532,8 @@ const bothHave = async (before, count) => {
     );
   }
 };
-// East; 3:4 off it; square to that; parallel to the 3:4 wall, 1000 mm across.
-const angWallsBefore = await wallsOf(anna);
-await drawWalls(anna, [
-  [7000, 8700, 9400, 8700],
-  [7400, 9000, 8600, 9900],
-  [9600, 9000, 9000, 9800],
-  [6800, 9800, 8000, 10700],
-]);
-await bothHave(angWallsBefore, 4);
-const angWalls = await anna.evaluate(newLayered, angWallsBefore);
-pass('Anna draws four walls, one east, one at 3:4, one square to it and one parallel to it, and both browsers have them');
 
-// The tool offers every kind; an angle is two walls and a click inside the angle meant.
+// The tool offers every kind; an angle is two grids and a click inside the angle meant.
 await anna.locator('#ribbon [role="tab"]', { hasText: 'Annotate' }).click();
 await anna.locator('#ribbon [data-act="dtool"][data-a="architecture:dim"]').first().click();
 const kindSelect = '#pv-side select[data-key="dim-layout"]';
@@ -1527,7 +1560,7 @@ const makeDimension = async (kind, picks, place) => {
   return made;
 };
 const acute = await makeDimension('angular', [[8200, 8700], [8000, 9450]], [8000, 8950]);
-check(acute.kind === 'angular' && acute.figure.kind === 'arc', 'Anna picks the east wall and the 3:4 wall and clicks inside the angle: the server makes an angle drawn as an arc');
+check(acute.kind === 'angular' && acute.figure.kind === 'arc', 'Anna picks the east grid and the 3:4 grid and clicks inside the angle: the server makes an angle drawn as an arc');
 for (const page of [anna, ben]) {
   await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(acute.id), '36.87°']);
 }
@@ -1541,11 +1574,11 @@ for (const page of [anna, ben]) {
   await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(corner.id), '90.00°']);
 }
 check(corner.segments[0].exact === true, 'the 3:4:5 corner off the axes is exactly 90.00° in both browsers');
-const across = await makeDimension('aligned', [[8000, 9450], [7400, 10250]], [7000, 9600]);
+const across = await makeDimension('aligned', [[8000, 9450], [7400, 10250]], [7600, 10000]);
 for (const page of [anna, ben]) {
   await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(across.id), '1000 mm']);
 }
-check(across.layout.kind === 'aligned' && across.segments[0].exact, 'an aligned dimension across the parallel walls reads 1000 mm, exactly, in both browsers');
+check(across.layout.kind === 'aligned' && across.segments[0].exact, 'an aligned dimension across the parallel grids reads 1000 mm, exactly, in both browsers');
 await shot(anna, 'anna-angles');
 await shot(ben, 'ben-angles');
 
@@ -1659,16 +1692,25 @@ for (const made of [eqRun, acute, corner, across]) {
   await anna.keyboard.press('Delete');
   await ben.waitForFunction((id) => !document.querySelector(`#pv-canvas g.dim[data-dim="${id}"]`), made.id);
 }
-for (const id of [...angWalls.map((w) => w[0]), ...eqWalls]) {
+for (const id of eqWalls) {
   await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
   await pickAt(anna, id, 0.5);
   await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
   await anna.keyboard.press('Delete');
   await ben.waitForFunction((wall) => !document.querySelector(`g.element[data-id="${wall}"]`), id);
 }
-check((await dimListing()).length === 0, 'Anna deletes the dimensions and the walls, and the server lists no dimension');
+for (const id of angGrids) {
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const bubble = await boxOf(anna.locator(`${gridGroup(id)} circle.bub`), `grid ${id}'s bubble`);
+  await anna.mouse.click(bubble.x + bubble.width / 2, bubble.y + bubble.height / 2);
+  await anna.waitForSelector(`${gridGroup(id)}[data-picked="yes"]`);
+  await anna.waitForSelector('#ribbon >> text=Delete');
+  await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+  await anna.keyboard.press('Delete');
+  await ben.waitForFunction((at) => !document.querySelector(at), gridGroup(id));
+}
+check((await dimListing()).length === 0, 'Anna deletes the dimensions, the walls and the grids, and the server lists no dimension');
 await ben.click('#browser [data-act="view"][data-a="l1"]');
-await anna.click('#browser [data-act="view"][data-a="l1"]');
 console.log('\n   Roofs, on a rectangle');
 // Anna makes a gable roof over the seed building, of a type she chooses in the roof tool's options;
 // Ben sees it, its ridge drawn from its record. A roof the server refuses (hips) is turned back in the
