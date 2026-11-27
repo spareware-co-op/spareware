@@ -41,9 +41,9 @@ use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::{Place, list};
 use construct_params::{Length, Value};
-use construct_walls::joins::join;
+use construct_walls::joins::{join, meeting};
 use construct_walls::{
-    AtEnds, Function, JOINING, Joined, Joining, PlanLayer, PlanWall, lines_meet,
+    AtEnds, Function, JOINING, Joined, Joining, Meeting, PlanLayer, PlanWall, lines_meet,
 };
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
@@ -211,6 +211,32 @@ async fn neighbour<R: Reader>(
         return Ok(None);
     };
     Ok(plan_wall(element, &recipe, placed.elevation))
+}
+
+/// How the layered walls `a` and `b` of a document meet, as it is `at` that state: construct-walls'
+/// [`meeting`] of their lines in the model's plan, each filled as it is built; `None` when either
+/// does not read as a layered wall, they stand on different levels, or they do not meet. What a
+/// command checks a joint's choice against.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn meeting_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    (a, b): (&Element, &Element),
+    at: At,
+) -> Result<Option<Meeting>, StoreError> {
+    if base_level(a) != base_level(b) {
+        return Ok(None);
+    }
+    let (Some(one), Some(two)) = (
+        neighbour(reader, project, document, a, at).await?,
+        neighbour(reader, project, document, b, at).await?,
+    ) else {
+        return Ok(None);
+    };
+    Ok(meeting(&[one, two], 0, 1))
 }
 
 /// The IDs of the walls of `walls` within two meetings of the wall on `line`: the walls it meets,

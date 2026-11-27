@@ -1274,7 +1274,7 @@
   }
 
   /** The commands that can change where walls meet: a wall made, moved, retyped, changed or deleted. */
-  const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
+  const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.(draw|join|join\.end|wrap))$/;
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
   const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|opening|shaft)\.|^(floor|roof)\.defaults$/;
@@ -1312,8 +1312,12 @@
     'level.tie': 'tied to a level',
     'level.top': 'tied the top of',
     'wall.draw': 'drew',
+    'wall.join': 'changed a joint of',
+    'wall.join.end': 'changed where joins are allowed on',
+    'wall.wrap': 'changed the wrapping of',
     'wall.type.create': 'made a wall type',
     'wall.type.layers': 'changed the layers of a wall type',
+    'wall.type.wrap': 'changed the wrapping of a wall type',
     'wall.type.rename': 'renamed a wall type',
     'wall.type.duplicate': 'copied a wall type',
     'wall.type.delete': 'deleted a wall type',
@@ -1389,8 +1393,12 @@
     'level.tie': 'a tie to a level',
     'level.top': 'a tie of a top',
     'wall.draw': 'drawing a wall',
+    'wall.join': 'a joint of walls',
+    'wall.join.end': 'where a wall joins',
+    'wall.wrap': 'the wrapping of a wall',
     'wall.type.create': 'making a wall type',
     'wall.type.layers': 'the layers of a wall type',
+    'wall.type.wrap': 'the wrapping of a wall type',
     'wall.type.rename': 'renaming a wall type',
     'wall.type.duplicate': 'copying a wall type',
     'wall.type.delete': 'deleting a wall type',
@@ -2785,12 +2793,123 @@
     html += '</table>';
     html += `<span class="lbl">Layers, exterior first</span><table class="props" data-layers="${esc(chosen.id)}">`;
     for (const layer of chosen.assembly.layers) {
-      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+      const wraps = layer.wraps ? ' · wraps' : '';
+      html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}${wraps}`);
     }
+    html += '</table>';
+    const wrap = chosen.assembly.wrap ?? { ends: 'none', inserts: 'none' };
+    html += `<span class="lbl">Wrapping of the type</span><table class="props" data-type-wrap="${esc(chosen.id)}">`;
+    html += prow('At ends', wrapSelect('stacktypewrap', 'ends', WRAP_ENDS, wrap.ends, ''));
+    html += prow('At inserts', wrapSelect('stacktypewrap', 'inserts', WRAP_INSERTS, wrap.inserts, ''));
     html += '</table>';
     html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
     return html + problem('wall-draw');
   }
+
+  // --- A layered wall's joins and wrapping (job 6.1) ---
+  // The server works every joint out (`filled`'s `joins`: the walls joined and why the others are
+  // not); this palette shows what it says and sends a person's choices: how each joint is made and
+  // which wall runs through (`wall.join`; a joint's choice is kept by the wall of the lower ID),
+  // whether joins are allowed at each end (`wall.join.end`), and the wall's own wrapping over its
+  // type's (`wall.wrap`). The type's wrapping is in the wall tool (`wall.type.wrap`). A refusal is
+  // the server's reason, under the rows. Nothing is worked out here.
+
+  const JOIN_KINDS = [
+    ['mitre', 'Mitre'],
+    ['butt', 'Butt'],
+    ['square-off', 'Square off'],
+  ];
+  const WRAP_ENDS = [
+    ['none', 'None'],
+    ['exterior', 'Exterior'],
+    ['interior', 'Interior'],
+  ];
+  const WRAP_INSERTS = [...WRAP_ENDS, ['both', 'Both']];
+  /** The wall that keeps the choice of the joint of walls `a` and `b`: the one of the lower ID. */
+  const keeperOf = (a, b) => (a <= b ? a : b);
+
+  /** The choice kept for the joint of walls `a` and `b` (`{kind, first}`), or null for none. */
+  function jointChoice(a, b) {
+    const keeper = keeperOf(a, b);
+    const other = keeper === a ? b : a;
+    return C.elements.get(keeper)?.el.recipe?.args?.joining?.with?.[other] ?? null;
+  }
+
+  /** A select of wrapping choices for `which` (`ends` or `inserts`), `current` chosen. */
+  function wrapSelect(chg, which, choices, current, extra) {
+    const off = canEdit() ? '' : ' disabled';
+    const options = choices
+      .map(([key, label]) => `<option value="${key}"${key === current ? ' selected' : ''}>${label}</option>`)
+      .join('');
+    return `<select class="inp" data-chg="${chg}" data-wrap="${which}"${off} aria-label="Wrapping at ${which}">${extra}${options}</select>`;
+  }
+
+  function wallJoinsHtml(piece) {
+    const e = piece.el;
+    const joins = piece.fill?.recipe?.args?.joins ?? {};
+    const own = e.recipe.args.joining ?? {};
+    const off = canEdit() ? '' : ' disabled';
+    let html = `<span class="lbl">Joins</span><table class="props" data-joins="${esc(e.id)}">`;
+    for (const other of joins.with ?? []) {
+      const choice = jointChoice(e.id, other);
+      const kind = choice?.kind ?? 'mitre';
+      const first = choice?.first ?? '';
+      const name = C.elements.get(other)?.el.name ?? other;
+      const options = JOIN_KINDS.map(([key, label]) => `<option value="${key}"${key === kind ? ' selected' : ''}>${label}</option>`).join('');
+      const through = first ? ` <span class="small faint" data-through="${esc(first)}">${esc(C.elements.get(first)?.el.name ?? first)} runs through</span>` : '';
+      html += prow(
+        `With ${esc(name)}`,
+        `<select class="inp" data-chg="stackjoint" data-joint="${esc(other)}" data-kind="${esc(kind)}" data-first="${esc(first)}"${off} aria-label="The joint with ${esc(name)}">${options}</select>${through} <button class="btn sm" data-act="stackjointswitch" data-joint="${esc(other)}"${off}>Switch order</button>`,
+      );
+    }
+    if (!(joins.with ?? []).length) html += prow('Joined with', 'No wall');
+    for (const [end, label] of [['start', 'At its start'], ['end', 'At its end']]) {
+      const allowed = !(own.disallow ?? []).includes(end);
+      html += prow(
+        label,
+        `<select class="inp" data-chg="stackjoinend" data-end="${end}" data-allowed="${allowed}"${off} aria-label="Joins ${label.toLowerCase()}"><option value="yes"${allowed ? ' selected' : ''}>Joins allowed</option><option value="no"${allowed ? '' : ' selected'}>Joins not allowed</option></select>`,
+      );
+    }
+    html += '</table>';
+    for (const why of joins.unjoined ?? []) html += `<p class="pad small faint" data-unjoined>${esc(why)}</p>`;
+    html += problem(`joins:${e.id}`);
+    const wrapping = e.recipe.args.wrapping ?? {};
+    const byType = '<option value="type">By its type</option>';
+    html += `<span class="lbl">Wrapping of this wall</span><table class="props" data-wall-wrap="${esc(e.id)}">`;
+    html += prow('At ends', wrapSelect('stackwallwrap', 'ends', WRAP_ENDS, wrapping.ends ?? 'type', byType));
+    html += prow('At inserts', wrapSelect('stackwallwrap', 'inserts', WRAP_INSERTS, wrapping.inserts ?? 'type', byType));
+    html += '</table>';
+    return html + problem(`wrap:${e.id}`);
+  }
+
+  CHG.stackjoint = (select) => {
+    if (!S.sel) return;
+    const kind = select.value;
+    const args = { element: S.sel, with: select.dataset.joint, kind };
+    // A butt or a square-off keeps the wall that runs through, this one if none was chosen.
+    if (kind !== 'mitre') args.first = select.dataset.first || S.sel;
+    manage('wall.join', args, `joins:${S.sel}`);
+  };
+  ACT.stackjointswitch = (button) => {
+    if (!S.sel) return;
+    const other = button.dataset.joint;
+    const choice = jointChoice(S.sel, other);
+    const kind = choice && choice.kind !== 'mitre' ? choice.kind : 'butt';
+    // With no choice kept, the wall of the lower ID runs through first.
+    const now = choice?.first ?? keeperOf(S.sel, other);
+    manage('wall.join', { element: S.sel, with: other, kind, first: now === S.sel ? other : S.sel }, `joins:${S.sel}`);
+  };
+  CHG.stackjoinend = (select) => {
+    if (S.sel) manage('wall.join.end', { element: S.sel, at: select.dataset.end, allow: select.value === 'yes' }, `joins:${S.sel}`);
+  };
+  CHG.stackwallwrap = (select) => {
+    if (S.sel) manage('wall.wrap', { element: S.sel, [select.dataset.wrap]: select.value }, `wrap:${S.sel}`);
+  };
+  CHG.stacktypewrap = (select) => {
+    const view = wallTypes();
+    const chosen = view && chosenWallType(view);
+    if (chosen) manage('wall.type.wrap', { type: chosen.id, [select.dataset.wrap]: select.value }, 'wall-draw');
+  };
 
   CHG.stackwalltype = (select) => {
     C.wallTool.type = select.value;
@@ -4483,6 +4602,7 @@
       }
       html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
       html += '</table>';
+      if (e.recipe.op === LAYERED) html += wallJoinsHtml(piece);
       if (isFamily(e)) html += familyProperties(piece);
       if (isVoid(e)) html += voidProperties(piece);
       if (view?.parameters.length) html += parametersTable(view);

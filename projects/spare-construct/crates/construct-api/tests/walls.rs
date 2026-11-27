@@ -990,3 +990,158 @@ async fn the_default_wall_types_are_made_through_the_log_and_listed_with_their_l
         ("#969696", "#5a5a5a")
     );
 }
+
+/// Joins and wrapping chosen through the log (job 6.1): a joint's choice is kept once, by the
+/// wall of the lower ID, and claimed like any other edit; a mitre at a corner is the default and
+/// keeps nothing; a T has nothing to choose and a cross is only ever a butt; joins are allowed or
+/// not at each end; a wall's own wrapping goes over its type's and `type` takes it away; a wall
+/// type's wrapping is its text's version 2. Each is refused in words where it does not apply, and
+/// each is one undo.
+#[tokio::test]
+async fn joins_and_wrapping_are_chosen_kept_claimed_and_undone() {
+    let stack = Stack::new().await;
+    a_partition(&stack).await;
+    for (id, start, end) in [
+        ("W-2", ["4 m", "0"], ["4 m", "3 m"]),
+        ("W-3", ["2 m", "0"], ["2 m", "-3 m"]),
+        ("W-4", ["3 m", "1.5 m"], ["5 m", "1.5 m"]),
+        ("W-9", ["10 m", "10 m"], ["12 m", "10 m"]),
+    ] {
+        stack
+            .edit("wall.draw", draw(id, PARTITION, start, end))
+            .await
+            .unwrap();
+    }
+    stack.later();
+    let joining = |record: &Element| record.recipe.args.get("joining").cloned();
+    // W-1 and W-2 meet at a corner; W-1 keeps the choice, whichever is named first.
+    let butt = json!({ "element": "W-2", "with": "W-1", "kind": "butt", "first": "W-2" });
+    undone_and_redone(&stack, "wall.join", butt.clone()).await;
+    assert_eq!(
+        joining(&stack.record("W-1").await.unwrap()),
+        Some(json!({ "with": { "W-2": { "first": "W-2", "kind": "butt" } } }))
+    );
+    assert_eq!(joining(&stack.record("W-2").await.unwrap()), None);
+    // Ben cannot change the joint while Anna holds the wall that keeps it.
+    let refused = stack.edit_as("ben", "wall.join", butt).await.unwrap_err();
+    assert_eq!(refused, "anna is working on this.");
+    stack.later();
+    // A mitre at a corner is the default: the choice goes.
+    let mitre = json!({ "element": "W-1", "with": "W-2", "kind": "mitre" });
+    stack.edit_as("ben", "wall.join", mitre).await.unwrap();
+    assert_eq!(joining(&stack.record("W-1").await.unwrap()), None);
+    // A cross is a butt, either wall first; W-2 keeps it.
+    let cross = json!({ "element": "W-4", "with": "W-2", "kind": "butt", "first": "W-4" });
+    undone_and_redone(&stack, "wall.join", cross).await;
+    assert_eq!(
+        joining(&stack.record("W-2").await.unwrap()),
+        Some(json!({ "with": { "W-4": { "first": "W-4", "kind": "butt" } } }))
+    );
+    for (args, words) in [
+        (
+            json!({ "element": "W-1", "with": "W-3", "kind": "butt" }),
+            "meet at a T",
+        ),
+        (
+            json!({ "element": "W-2", "with": "W-4", "kind": "mitre" }),
+            "a cross is a butt",
+        ),
+        (
+            json!({ "element": "W-1", "with": "W-9", "kind": "butt" }),
+            "do not meet",
+        ),
+        (
+            json!({ "element": "W-1", "with": "W-2", "kind": "butt", "first": "W-3" }),
+            "runs through is",
+        ),
+        (
+            json!({ "element": "W-1", "with": "W-2", "kind": "mitre", "first": "W-1" }),
+            "A mitre has no wall",
+        ),
+        (
+            json!({ "element": "W-1", "with": "W-2", "kind": "glued" }),
+            "not a kind of joint",
+        ),
+        (
+            json!({ "element": "W-1", "with": "W-1", "kind": "butt" }),
+            "not joined with itself",
+        ),
+    ] {
+        let refused = stack.edit("wall.join", args.clone()).await.unwrap_err();
+        assert!(refused.contains(words), "{args}: {refused}");
+    }
+    // Joins not allowed at an end.
+    let end = json!({ "element": "W-2", "at": "end", "allow": false });
+    undone_and_redone(&stack, "wall.join.end", end).await;
+    let w2 = joining(&stack.record("W-2").await.unwrap()).unwrap();
+    assert_eq!(w2["disallow"], json!(["end"]));
+    let refused = stack
+        .edit(
+            "wall.join.end",
+            json!({ "element": "W-2", "at": "middle", "allow": false }),
+        )
+        .await
+        .unwrap_err();
+    assert!(refused.contains("not an end"), "{refused}");
+    // A wall's own wrapping, and `type` to read its type's again (Ben's claim on W-1 run out).
+    stack.later();
+    let own = json!({ "element": "W-1", "ends": "exterior" });
+    undone_and_redone(&stack, "wall.wrap", own).await;
+    let wrapping = |record: &Element| record.recipe.args.get("wrapping").cloned();
+    assert_eq!(
+        wrapping(&stack.record("W-1").await.unwrap()),
+        Some(json!({ "ends": "exterior" }))
+    );
+    stack
+        .edit("wall.wrap", json!({ "element": "W-1", "ends": "type" }))
+        .await
+        .unwrap();
+    assert_eq!(wrapping(&stack.record("W-1").await.unwrap()), None);
+    for (args, words) in [
+        (
+            json!({ "element": "W-1", "ends": "both" }),
+            "not a wrapping at ends",
+        ),
+        (json!({ "element": "W-1" }), "needs a wrapping"),
+        (
+            json!({ "element": PARTITION, "ends": "none" }),
+            "not a layered wall",
+        ),
+    ] {
+        let refused = stack.edit("wall.wrap", args.clone()).await.unwrap_err();
+        assert!(refused.contains(words), "{args}: {refused}");
+    }
+    // A wall type's wrapping: version 2 of its text, listed with its layers, kept by an edit of
+    // its layers that sends none.
+    let wrap = json!({ "type": PARTITION, "ends": "exterior", "inserts": "both" });
+    undone_and_redone(&stack, "wall.type.wrap", wrap).await;
+    let assembly = assembly_of(&stack.wall_type(PARTITION).await).unwrap();
+    assert_eq!(assembly.wrap().ends, construct_walls::AtEnds::Exterior);
+    assert_eq!(assembly.wrap().inserts, construct_walls::AtInserts::Both);
+    stack.later();
+    stack
+        .edit(
+            "wall.type.layers",
+            json!({ "type": PARTITION, "assembly": layers_of(PARTITION) }),
+        )
+        .await
+        .unwrap();
+    let kept = assembly_of(&stack.wall_type(PARTITION).await).unwrap();
+    assert_eq!(
+        kept.wrap(),
+        assembly.wrap(),
+        "the layers sent without a wrap keep it"
+    );
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let view = walls::read_wall_types(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap()
+        .unwrap();
+    let listed = view.types.iter().find(|t| t.id == PARTITION).unwrap();
+    assert_eq!(
+        listed.assembly["wrap"],
+        json!({ "ends": "exterior", "inserts": "both" })
+    );
+    // A wall of it is filled with the wrapping, and builds.
+    assert!(stack.bounds("W-1").await.is_ok());
+}

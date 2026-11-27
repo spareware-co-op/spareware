@@ -952,6 +952,93 @@ check(
 );
 await freshWalls.context().close();
 
+console.log('\n   Wall joins and wrapping');
+// Anna's undo of the move puts the corner wall back at the first wall's end. A joint's choice is
+// kept by the wall of the lower ID, so she picks that wall and makes the joint a butt in its
+// palette: both pages take the server's new filling of both walls. She lets go of it by clicking
+// off, and Ben picks the same wall, gives it its own wrapping at its ends and switches which wall
+// runs through: Anna's page takes each. Every body both pages built matches the server's, and a
+// fresh load holds what the server has. Nobody changes what the other touched in the last 30 s.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.move');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await bothTake(layeredId, cornered, 'her undo puts the corner wall back, and both pages take the first wall at the corner again');
+const keeperWall = layeredId < cornerId ? layeredId : cornerId;
+const otherWall = keeperWall === layeredId ? cornerId : layeredId;
+const jointOn = (page, [id, other]) =>
+  page.evaluate(([w, o]) => JSON.stringify(window.spare.elements.get(w)?.el.recipe.args.joining?.with?.[o] ?? null), [id, other]);
+const bothHold = async (want, label) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(
+      ([w, o, text]) => JSON.stringify(window.spare.elements.get(w)?.el.recipe.args.joining?.with?.[o] ?? null) === text,
+      [keeperWall, otherWall, want],
+    );
+  }
+  pass(label);
+};
+const pickWall = async (page, id) => {
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-joins="${id}"] [data-joint]`);
+};
+await anna.keyboard.press('Escape');
+await pickWall(anna, keeperWall);
+check(
+  (await anna.locator(`#pv-side [data-joint="${otherWall}"]`).inputValue()) === 'mitre',
+  "Anna's palette lists the joint with the other wall, a mitre as the rule makes it",
+);
+await anna.locator(`#pv-side [data-joint="${otherWall}"]`).selectOption('butt');
+await bothHold(JSON.stringify({ first: keeperWall, kind: 'butt' }), 'Anna makes the joint a butt, and both pages hold it on the wall that keeps it');
+const butted = await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== cornered,
+  'the server works the butt',
+);
+await bothTake(layeredId, butted, "both pages take the server's filling of the first wall at the butt");
+await bothTake(cornerId, await filledByServer(cornerId), 'and of the corner wall');
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', keeperWall);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), keeperWall);
+pass('Anna lets go of the wall, and Ben sees it free');
+
+await ben.keyboard.press('Escape');
+await pickWall(ben, keeperWall);
+check(
+  (await ben.locator(`#pv-side [data-joint="${otherWall}"]`).inputValue()) === 'butt',
+  "Ben's palette shows the joint as Anna made it",
+);
+await ben.locator('#pv-side [data-wall-wrap] select[data-wrap="ends"]').selectOption('exterior');
+for (const page of [anna, ben]) {
+  await page.waitForFunction(
+    (w) => window.spare.elements.get(w)?.el.recipe.args.wrapping?.ends === 'exterior' && window.spare.elements.get(w)?.fill?.recipe?.args?.wrap?.ends === 'exterior',
+    keeperWall,
+  );
+}
+pass("Ben gives the wall its own wrapping at its ends, and both pages take it, filled by the server");
+await ben.locator(`#pv-side [data-act="stackjointswitch"][data-joint="${otherWall}"]`).click();
+await bothHold(JSON.stringify({ first: otherWall, kind: 'butt' }), 'Ben switches which wall runs through, and both pages hold it');
+const switched = await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== butted,
+  'the server works the switched butt',
+);
+await bothTake(layeredId, switched, "both pages take the first wall as the switched joint shapes it");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built at the chosen joints matches the server's`);
+}
+const freshJoins = await signIn('anna');
+await freshJoins.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+check(
+  (await filledOnPage(freshJoins, layeredId)) === switched &&
+    (await jointOn(freshJoins, [keeperWall, otherWall])) === JSON.stringify({ first: otherWall, kind: 'butt' }),
+  'a fresh load holds the joint and the first wall as the server has them now',
+);
+await freshJoins.context().close();
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), keeperWall);
+pass('Ben lets go of the wall, and Anna sees it free');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");

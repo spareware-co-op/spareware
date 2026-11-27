@@ -19,6 +19,10 @@
 //! | `wall.type.duplicate` | `type`, `new`, `name` | A copy of the wall type, layers and all, as `type.duplicate` |
 //! | `wall.type.delete` | `type` | Its pointer goes, as `type.delete`: refused while a wall is of it |
 //! | `wall.draw` | `element`, `name` (default the ID), `type`, `start`, `end`, `level`, `offset`, then `top` and `top_offset` or `height`, and `line`, `flipped` | A new layered wall |
+//! | `wall.join` | `element`, `with` (two layered walls that meet), `kind` (`butt`, `mitre` or `square-off`), `first` (the wall that runs through: for a butt or a square-off at a corner, either; at a cross, either; default `element`) | The wall of the two whose ID is the lower: its recipe's `joining`, the joint's choice kept there (a mitre at a corner, the default, keeps none) |
+//! | `wall.join.end` | `element`, `at` (`start` or `end`), `allow` (yes or no) | The wall: whether joins are allowed at that end, in its recipe's `joining` |
+//! | `wall.wrap` | `element`, `ends` and `inserts`, each optional: a wrapping choice, or `type` to read its type's again | The wall: its own wrapping over its type's, its recipe's `wrapping` |
+//! | `wall.type.wrap` | `type`, `ends` and `inserts`, each optional (left out, kept) | The wall type: its wrapping at free ends (`none`, `exterior`, `interior`) and at inserts (`none`, `exterior`, `interior`, `both`) |
 //!
 //! `assembly` is the layers from the exterior face to the interior face and the core between its
 //! two boundaries, as construct-walls takes them: `{"core":{"exterior":1,"interior":2},
@@ -39,6 +43,16 @@
 //! with no length, a type the document lacks, a type of another category or one without layers,
 //! a top at or below the base, both a top and a height or neither, and anything the builders
 //! would refuse, in their words.
+//!
+//! Joins and wrapping (job 6.1, notes CON-A4-F2-P2-wall-joins and CON-A4-F2-P4-wall-wrapping):
+//! a joint is two walls', so its choice is kept once, by the wall of the lower ID
+//! (construct-walls' `keeper`), and `wall.join` writes and claims that wall's record; the other
+//! is built again through the regenerator's `reads` as a change to any wall it meets builds it.
+//! `wall.join` asks how the two meet (construct-regen's `joins::meeting_of`): at a corner any
+//! kind; at a T nothing is chosen (the wall abutted always runs through, by layer priority),
+//! and at a cross only a butt, either wall first (the stronger by layer priority runs through
+//! whatever is chosen). Refused: walls that do not meet, a kind the joint does not take, a first
+//! wall that is neither, a mitre with one. Each command is one entry, so one undo takes it back.
 //!
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own. Later, with its place: changing a drawn wall's ends, its location line and its side (a
@@ -66,14 +80,17 @@ use construct_materials::{MaterialId, Materials};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
 use construct_params::{ProjectParams, Units, Value};
+use construct_regen::joins::meeting_of;
 use construct_regen::levels as placing;
 use construct_regen::parameters::{self as records, At, CATEGORY_KEY, Context, TYPE_KIND};
 use construct_regen::wall_plan::{self, Layered};
 use construct_regen::walls::type_arg;
 use construct_types::{ElementType, Instance, SYSTEM_KEY_PREFIX, TypeError, Types};
 use construct_walls::{
-    Assembly, FLIPPED, Function, LOCATION_LINE, Layer, LocationLine, Side, WallError, assembly_of,
-    default_walls, location_line_value, new_wall_type, parameter_definitions, with_assembly,
+    Assembly, AtEnds, AtInserts, Choice, FLIPPED, Function, JOINING, JoinKind, Joining,
+    LOCATION_LINE, Layer, LocationLine, Meeting, OwnWrap, Side, WRAPPING, WallEnd, WallError,
+    Wrapping, assembly_of, default_walls, keeper, location_line_value, new_wall_type,
+    parameter_definitions, with_assembly,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, ClaimChange, Edit};
@@ -84,10 +101,14 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 /// Every command here.
-pub const COMMANDS: [&str; 6] = [
+pub const COMMANDS: [&str; 10] = [
     "wall.draw",
+    "wall.join",
+    "wall.join.end",
+    "wall.wrap",
     "wall.type.create",
     "wall.type.layers",
+    "wall.type.wrap",
     "wall.type.rename",
     "wall.type.duplicate",
     "wall.type.delete",
@@ -122,14 +143,39 @@ struct Args {
     height: Option<String>,
     line: Option<String>,
     flipped: Option<bool>,
+    /// `wall.join`'s other wall.
+    #[serde(default, with = "kit_ops::id::option")]
+    with: Option<Id>,
+    /// `wall.join`'s kind.
+    kind: Option<String>,
+    /// `wall.join`'s wall that runs through.
+    #[serde(default, with = "kit_ops::id::option")]
+    first: Option<Id>,
+    /// `wall.join.end`'s end: `start` or `end`.
+    at: Option<String>,
+    /// `wall.join.end`'s answer.
+    allow: Option<bool>,
+    /// `wall.wrap`'s and `wall.type.wrap`'s wrapping at free ends.
+    ends: Option<String>,
+    /// Their wrapping at inserts.
+    inserts: Option<String>,
 }
 
-/// A wall type's layers and core as a person sends them.
+/// A wall type's layers and core as a person sends them, and its wrapping when it wraps.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AssemblyArgs {
     core: CoreArgs,
     layers: Vec<LayerArgs>,
+    wrap: Option<WrapArgs>,
+}
+
+/// A wall type's wrapping as a person sends it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WrapArgs {
+    ends: String,
+    inserts: String,
 }
 
 /// The core's two boundaries: each the count of layers on its exterior side.
@@ -186,8 +232,29 @@ fn fixed(text: &str) -> Result<Id, String> {
     Id::parse(text).map_err(|_| format!("{text:?} is not an ID."))
 }
 
-/// A wall type's layers and core from what a person sent, checked by construct-walls.
+/// A wrapping from what a person sent.
+fn wrapping(sent: &WrapArgs) -> Result<Wrapping, String> {
+    Ok(Wrapping {
+        ends: at_ends(&sent.ends)?,
+        inserts: at_inserts(&sent.inserts)?,
+    })
+}
+
+fn at_ends(key: &str) -> Result<AtEnds, String> {
+    AtEnds::from_key(key)
+        .ok_or_else(|| format!("{key:?} is not a wrapping at ends: none, exterior or interior."))
+}
+
+fn at_inserts(key: &str) -> Result<AtInserts, String> {
+    AtInserts::from_key(key).ok_or_else(|| {
+        format!("{key:?} is not a wrapping at inserts: none, exterior, interior or both.")
+    })
+}
+
+/// A wall type's layers and core from what a person sent, checked by construct-walls, with its
+/// wrapping when sent (else none).
 fn assembly(sent: AssemblyArgs) -> Result<Assembly, String> {
+    let wrap = sent.wrap.as_ref().map(wrapping).transpose()?;
     let mut layers = Vec::with_capacity(sent.layers.len());
     for (at, layer) in sent.layers.into_iter().enumerate() {
         let thickness = parse_length(&layer.thickness, &units())
@@ -195,7 +262,11 @@ fn assembly(sent: AssemblyArgs) -> Result<Assembly, String> {
         let material = MaterialId::parse(&layer.material).map_err(|e| why(WallError::from(e)))?;
         layers.push(Layer::new(layer.function, thickness, material, layer.wraps));
     }
-    Assembly::new(layers, sent.core.exterior, sent.core.interior).map_err(why)
+    let made = Assembly::new(layers, sent.core.exterior, sent.core.interior).map_err(why)?;
+    Ok(match wrap {
+        Some(wrap) => made.with_wrapping(wrap),
+        None => made,
+    })
 }
 
 /// The document's parameter table with the two wall instance parameters defined and bound to
@@ -387,7 +458,11 @@ pub async fn apply<T: Txn>(
     match edit.cmd.as_str() {
         "wall.type.create" => create_type(&mut run, &document, args).await,
         "wall.type.layers" => set_layers(&mut run, &document, args).await,
+        "wall.type.wrap" => type_wrap(&mut run, &document, args).await,
         "wall.draw" => draw(&mut run, &document, args).await,
+        "wall.join" => join(&mut run, args).await,
+        "wall.join.end" => join_end(&mut run, args).await,
+        "wall.wrap" => wall_wrap(&mut run, args).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
 }
@@ -496,10 +571,11 @@ async fn create_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
 async fn set_layers<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> Answer {
     let sent = (|| {
         let id = need(args.type_id, "a wall type")?;
-        let assembly = assembly(need(args.assembly, "the layers and core")?)?;
-        Ok::<_, String>((id, assembly))
+        let sent = need(args.assembly, "the layers and core")?;
+        let keeps = sent.wrap.is_none();
+        Ok::<_, String>((id, assembly(sent)?, keeps))
     })();
-    let (id, assembly) = match sent {
+    let (id, assembly, keeps_wrap) = match sent {
         Ok(sent) => sent,
         Err(refusal) => return Ok(Err(refusal)),
     };
@@ -507,11 +583,218 @@ async fn set_layers<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args)
         Ok(ty) => ty,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    // Layers sent without a wrap keep the type's wrapping.
+    let assembly = match (keeps_wrap, assembly_of(&ty)) {
+        (true, Ok(before)) => assembly.with_wrapping(before.wrap()),
+        _ => assembly,
+    };
     let changed = match with_assembly(ty, &assembly) {
         Ok(changed) => changed,
         Err(e) => return Ok(Err(why(e))),
     };
     run.put_claimed(&changed.to_record(run.document)).await
+}
+
+async fn type_wrap<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> Answer {
+    let id = match need(args.type_id, "a wall type") {
+        Ok(id) => id,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let ty = match wall_type(run.txn, run.project, run.document, context, &id).await? {
+        Ok(ty) => ty,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let changed = (|| {
+        let before = assembly_of(&ty).map_err(why)?;
+        let mut wrap = before.wrap();
+        if let Some(ends) = &args.ends {
+            wrap.ends = at_ends(ends)?;
+        }
+        if let Some(inserts) = &args.inserts {
+            wrap.inserts = at_inserts(inserts)?;
+        }
+        if args.ends.is_none() && args.inserts.is_none() {
+            return Err("This command needs a wrapping at ends or at inserts.".to_owned());
+        }
+        with_assembly(ty.clone(), &before.with_wrapping(wrap)).map_err(why)
+    })();
+    match changed {
+        Ok(changed) => run.put_claimed(&changed.to_record(run.document)).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// A layered wall of the document, by ID, or why not.
+async fn layered_wall<T: Txn>(
+    run: &mut Run<'_, T>,
+    id: &Id,
+) -> Result<Result<Element, String>, StoreError> {
+    Ok(match run.current(id).await? {
+        Some((_, record)) if wall_plan::is_layered(&record.recipe) => Ok(record),
+        Some((_, record)) => Err(format!("{} is not a layered wall.", record.name)),
+        None => Err(format!("{id} is not in this model.")),
+    })
+}
+
+/// `record` with its recipe argument `key` set to `value`, or taken away for `None`.
+fn with_arg(record: &Element, key: &str, value: Option<serde_json::Value>) -> Element {
+    let mut out = record.clone();
+    match value {
+        Some(value) => {
+            out.recipe.args.insert(key.to_owned(), value);
+        }
+        None => {
+            out.recipe.args.remove(key);
+        }
+    }
+    out
+}
+
+/// A wall's own join choices as its record keeps them, or why they do not read.
+fn joining_of(record: &Element) -> Result<Joining, String> {
+    Joining::from_json(record.recipe.args.get(JOINING)).map_err(|e| format!("{}: {e}", record.name))
+}
+
+async fn join<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let sent = (|| {
+        let a = need(args.element.clone(), "a wall")?;
+        let b = need(args.with.clone(), "the wall it meets")?;
+        let kind = need(args.kind.clone(), "a kind of joint")?;
+        let kind = JoinKind::from_key(&kind).ok_or_else(|| {
+            format!("{kind:?} is not a kind of joint: butt, mitre or square-off.")
+        })?;
+        if a == b {
+            return Err("A wall is not joined with itself.".to_owned());
+        }
+        Ok::<_, String>((a, b, kind))
+    })();
+    let (a, b, kind) = match sent {
+        Ok(sent) => sent,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let one = match layered_wall(run, &a).await? {
+        Ok(one) => one,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let two = match layered_wall(run, &b).await? {
+        Ok(two) => two,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let met = meeting_of(run.txn, run.project, run.document, (&one, &two), At::Now).await?;
+    let first = args.first.clone().unwrap_or_else(|| a.clone());
+    if first != a && first != b {
+        return Ok(Err(format!(
+            "The wall that runs through is {} or {}.",
+            one.name, two.name
+        )));
+    }
+    let choice = match (met, kind) {
+        (None, _) => return Ok(Err(format!("{} and {} do not meet.", one.name, two.name))),
+        (Some(Meeting::Tee { through }), _) => {
+            return Ok(Err(format!(
+                "{} and {} meet at a T: {through} runs through, as their layers' priorities \
+                 have it, and there is nothing to choose.",
+                one.name, two.name
+            )));
+        }
+        (Some(Meeting::Cross), JoinKind::Mitre | JoinKind::SquareOff) => {
+            return Ok(Err(format!(
+                "{} and {} cross: a cross is a butt, one wall running through.",
+                one.name, two.name
+            )));
+        }
+        (Some(Meeting::Corner), JoinKind::Mitre) if args.first.is_some() => {
+            return Ok(Err(
+                "A mitre has no wall that runs through: the two meet on it.".to_owned(),
+            ));
+        }
+        // A mitre at a corner is the default: nothing is kept.
+        (Some(Meeting::Corner), JoinKind::Mitre) => None,
+        (Some(_), kind) => Some(Choice {
+            kind,
+            first: Some(first.to_string()),
+        }),
+    };
+    let (a_text, b_text) = (a.to_string(), b.to_string());
+    let (kept, other) = if keeper(&a_text, &b_text) == a_text {
+        (one, b_text)
+    } else {
+        (two, a_text)
+    };
+    let mut joining = match joining_of(&kept) {
+        Ok(joining) => joining,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match choice {
+        Some(choice) => {
+            joining.with.insert(other, choice);
+        }
+        None => {
+            joining.with.remove(&other);
+        }
+    }
+    let record = with_arg(&kept, JOINING, joining.to_json());
+    run.put_claimed(&record).await
+}
+
+async fn join_end<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let sent = (|| {
+        let id = need(args.element.clone(), "a wall")?;
+        let at = need(args.at.clone(), "an end: start or end")?;
+        let end = WallEnd::from_key(&at)
+            .ok_or_else(|| format!("{at:?} is not an end of a wall: start or end."))?;
+        let allow = need(args.allow, "whether joins are allowed there")?;
+        Ok::<_, String>((id, end, allow))
+    })();
+    let (id, end, allow) = match sent {
+        Ok(sent) => sent,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let wall = match layered_wall(run, &id).await? {
+        Ok(wall) => wall,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let mut joining = match joining_of(&wall) {
+        Ok(joining) => joining,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    if let Some(slot) = joining.allowed.get_mut(end.index()) {
+        *slot = allow;
+    }
+    let record = with_arg(&wall, JOINING, joining.to_json());
+    run.put_claimed(&record).await
+}
+
+async fn wall_wrap<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let id = match need(args.element.clone(), "a wall") {
+        Ok(id) => id,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let wall = match layered_wall(run, &id).await? {
+        Ok(wall) => wall,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let changed = (|| {
+        let mut own = OwnWrap::from_json(wall.recipe.args.get(WRAPPING))
+            .map_err(|e| format!("{}: {e}", wall.name))?;
+        if args.ends.is_none() && args.inserts.is_none() {
+            return Err("This command needs a wrapping at ends or at inserts.".to_owned());
+        }
+        // `type` reads the type's own again.
+        if let Some(ends) = &args.ends {
+            own.ends = (ends != "type").then(|| at_ends(ends)).transpose()?;
+        }
+        if let Some(inserts) = &args.inserts {
+            own.inserts = (inserts != "type")
+                .then(|| at_inserts(inserts))
+                .transpose()?;
+        }
+        Ok::<_, String>(with_arg(&wall, WRAPPING, own.to_json()))
+    })();
+    match changed {
+        Ok(record) => run.put_claimed(&record).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
 }
 
 /// A point from two typed lengths.
@@ -727,13 +1010,23 @@ pub fn assembly_args(assembly: &Assembly) -> serde_json::Value {
                     "material": layer.material.as_str(), "wraps": layer.wraps })
         })
         .collect();
-    json!({
+    let mut args = json!({
         "core": {
             "exterior": assembly.boundary(Side::Exterior),
             "interior": assembly.boundary(Side::Interior),
         },
         "layers": layers,
-    })
+    });
+    let wrap = assembly.wrap();
+    if !wrap.is_none()
+        && let Some(object) = args.as_object_mut()
+    {
+        object.insert(
+            "wrap".to_owned(),
+            json!({ "ends": wrap.ends.key(), "inserts": wrap.inserts.key() }),
+        );
+    }
+    args
 }
 
 /// The `wall.type.create` arguments that make construct-walls' default wall types, in their order,

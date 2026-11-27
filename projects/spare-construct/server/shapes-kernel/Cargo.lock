@@ -206,6 +206,7 @@ dependencies = [
  "construct-model",
  "construct-openings",
  "construct-params",
+ "construct-walls",
  "engine-geometry",
  "hex",
  "kit-core",
@@ -281,6 +282,22 @@ dependencies = [
  "construct-model",
  "construct-params",
  "kit-core",
+]
+
+[[package]]
+name = "construct-walls"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-materials",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
