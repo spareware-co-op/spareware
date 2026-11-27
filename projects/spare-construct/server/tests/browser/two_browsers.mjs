@@ -1759,6 +1759,7 @@ await anna.locator('#pv-side select[data-key="component-family"]').selectOption(
 await anna.waitForFunction(() =>
   [...document.querySelectorAll('#pv-side select[data-key="component-type"] option')].some((o) => o.textContent === 'Standard'),
 );
+await anna.locator('#pv-side select[data-key="component-type"]').selectOption({ label: 'Standard' });
 check(
   (await anna.locator('#pv-side select[data-key="component-turn"]').count()) === 0,
   'a family that hangs on a wall has no turn to choose: its wall turns it',
@@ -1772,13 +1773,15 @@ const cmpBasin = await ben.evaluate(cmpBasinOf, cmpKnown);
 await anna.keyboard.press('Escape');
 const cmpBasinRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cmpBasin);
 check(
-  cmpBasinRecord.kind === 'family' &&
-    cmpBasinRecord.references.length === 1 &&
+  cmpBasinRecord.kind === 'family' && cmpBasinRecord.recipe.args.type === 'standard',
+  `the basin Anna hangs is in Ben's browser, of the type she chose (${cmpBasinRecord.kind}, ${cmpBasinRecord.recipe.args.type})`,
+);
+check(
+  cmpBasinRecord.references.length === 1 &&
     cmpBasinRecord.references[0].kind === 'face' &&
     cmpBasinRecord.references[0].element === famWall &&
-    /^length:q0:/.test(cmpBasinRecord.props['@host.along']) &&
-    cmpBasinRecord.recipe.args.type === 'standard',
-  "the basin Anna hangs is in Ben's browser: plumbing fixtures hung on a named face of her wall at an offset along it",
+    /^length:q0:/.test(cmpBasinRecord.props['@host.along']),
+  `hung on a named face of her wall at an offset along it (${JSON.stringify(cmpBasinRecord.references)}, ${cmpBasinRecord.props['@host.along']})`,
 );
 await ben.waitForFunction(cmpParts, [cmpBasin]);
 await anna.waitForFunction(cmpParts, [cmpBasin]);
