@@ -704,6 +704,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-modify"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-grids",
+ "construct-levels",
+ "construct-model",
+ "construct-openings",
+ "construct-params",
+ "construct-regen",
+ "construct-roofs",
+ "construct-rooms",
+ "construct-slabs",
+ "construct-solver",
+ "construct-walls",
+ "kit-core",
+ "num-integer",
+ "proptest",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-openings"
 version = "0.0.0"
 dependencies = [
