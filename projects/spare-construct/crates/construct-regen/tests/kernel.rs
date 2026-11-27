@@ -623,7 +623,8 @@ fn a_layered_walls_layers_are_solids_with_their_faces_named() {
     assert!(boxed[0].material.is_none());
 }
 
-/// A test engine that answers an extrusion as [`Cuboids`] does, and a loft of two sections the
+/// A test engine that answers an extrusion as [`Cuboids`] does (any other extrusion of a profile
+/// with no holes it keeps as the prism it is, as a loft below), and a loft of two sections the
 /// second of which is the first moved by one vector, which it keeps as the prism it is and meshes
 /// as its two ends (each cut into triangles by clipping ears, so a section need not be convex) and
 /// a quad of two triangles per side, every triangle facing out. It is judged by the suite like any
@@ -716,7 +717,18 @@ impl Engine for Lofts {
     }
 
     fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Lofted, EngineError> {
-        Cuboids.extrude(profile, by).map(Lofted::Cuboid)
+        match Cuboids.extrude(profile, by) {
+            Ok(cuboid) => Ok(Lofted::Cuboid(cuboid)),
+            Err(_) if profile.holes.is_empty() && profile.outer.len() >= 3 && by != [0, 0, 0] => {
+                let point =
+                    |p: &engine_geometry::value::grid::P3| [p.x.get(), p.y.get(), p.z.get()];
+                Ok(Lofted::Prism {
+                    section: profile.outer.iter().map(point).collect(),
+                    by,
+                })
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn subtract(&mut self, _: &Lofted, _: &Lofted) -> Result<Lofted, EngineError> {
@@ -822,6 +834,13 @@ fn a_flat_roof_is_its_layers() {
 #[test]
 fn a_stair_is_its_pieces() {
     kernel_suite::a_stair_is_its_pieces(|| Lofts);
+}
+
+/// A railing's post is extruded up and its rails swept along their pieces on the test engine
+/// that keeps each prism.
+#[test]
+fn a_railing_is_its_pieces() {
+    kernel_suite::a_railing_is_its_pieces(|| Lofts);
 }
 
 #[test]

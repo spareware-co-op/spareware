@@ -24,6 +24,9 @@
 //!
 //! Stairs (job 6.7): a run's side profile lofted across its width and a landing's outline
 //! extruded up, each a closed solid of exactly its volume, named by its pieces' faces.
+//!
+//! Railings (job 14.2): a post's profile extruded up and a rail's upright section swept along its
+//! piece, level or sloped, each a closed solid of exactly its volume, named by its pieces.
 
 #![allow(
     dead_code,
@@ -2719,6 +2722,96 @@ pub fn stair_of() -> Recipe {
             ],
         }),
     )
+}
+
+/// A filled railing recipe (construct-railings' `filled` form): a post 50 mm square and 1000 mm
+/// high at the origin, a piece of top rail 50 mm square along x for 1000 mm with its top at
+/// 1000 mm (its section upright in the plane x = 0), and a piece of handrail 40 mm square 100 mm
+/// along y, swept 1000 mm along x and 500 mm up.
+pub fn railing_of() -> Recipe {
+    let mm = |p: [i64; 3]| p.map(|c| c * 6400);
+    let ring = |points: [[i64; 3]; 4]| points.map(mm);
+    recipe(
+        "railing",
+        json!({
+            "material": "steel-stainless-aisi-301",
+            "pieces": [
+                {
+                    "id": "post.1.1",
+                    "part": "post",
+                    "extrude": ring([[-25, -25, 0], [25, -25, 0], [25, 25, 0], [-25, 25, 0]]),
+                    "by": mm([0, 0, 1000]),
+                },
+                {
+                    "id": "rail.1.1",
+                    "part": "top-rail",
+                    "extrude": ring([[0, -25, 1000], [0, 25, 1000], [0, 25, 950], [0, -25, 950]]),
+                    "by": mm([1000, 0, 0]),
+                },
+                {
+                    "id": "handrail.1.1",
+                    "part": "handrail",
+                    "extrude": ring([[0, 80, 900], [0, 120, 900], [0, 120, 860], [0, 80, 860]]),
+                    "by": mm([1000, 0, 500]),
+                },
+            ],
+        }),
+    )
+}
+
+/// A railing is one solid per piece: its post 50 by 50 by 1000 mm, its level rail 50 by 50 mm by
+/// 1000 mm, and its sloped handrail a prism of its 40 by 40 mm upright section times the 1000 mm
+/// it runs across that section's plane, each a closed mesh of exactly its volume and a part with
+/// its function in the railing's material; its bounds the stand-in's box; its faces named by its
+/// pieces; the body lists what each piece asked of the engine.
+pub fn a_railing_is_its_pieces<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let railing = railing_of();
+    let b = built(&k, &railing);
+    assert_eq!(b.bounds.min, [-25, -25, 0]);
+    assert_eq!(b.bounds.max, [1000, 120, 1400]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&railing).unwrap().bounds
+    );
+    let parts = &b.displays[0].parts;
+    assert_eq!(
+        parts
+            .iter()
+            .map(|p| p.function.as_str())
+            .collect::<Vec<_>>(),
+        vec!["post", "top-rail", "handrail"]
+    );
+    assert!(
+        parts
+            .iter()
+            .all(|p| p.material == "steel-stainless-aisi-301")
+    );
+    for (at, volume) in [
+        (0, 50 * 50 * 1000),
+        (1, 50 * 50 * 1000),
+        (2, 40 * 40 * 1000),
+    ] {
+        assert_eq!(
+            closed_mesh_six_volume(&part_mesh(&b.displays[0], at)),
+            6 * volume,
+            "piece {at}"
+        );
+    }
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from(["post.1.1", "rail.1.1", "handrail.1.1"])
+    );
+    let mut sorted = b.names.clone();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(construct_regen::kernel::names(&railing).unwrap(), sorted);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let asked = body["pieces"].as_array().unwrap();
+    assert_eq!(asked.len(), 3);
+    assert_eq!(asked[2]["extrude"], railing.args["pieces"][2]["extrude"]);
+    assert_eq!(asked[2]["by"], json!([1000 * 6400, 0, 500 * 6400]));
 }
 
 /// A stair is one solid per piece: its run's profile lofted across its 1000 mm width, a closed
