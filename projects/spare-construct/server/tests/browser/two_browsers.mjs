@@ -23,10 +23,19 @@ function check(ok, label) {
   pass(label);
 }
 
+const slowable = [];
+
 async function signIn(person, blocked) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (blocked) await context.route(blocked, (route) => route.abort());
   const page = await context.newPage();
+  // CPU_THROTTLE=4 makes every page four times slower, to bring out what a slow runner shows.
+  // CPU_THROTTLE_LATE=10 does the same only once the 200 ms section is over, to reach what comes after.
+  if (process.env.CPU_THROTTLE || process.env.CPU_THROTTLE_LATE) {
+    const session = await context.newCDPSession(page);
+    slowable.push(session);
+    if (process.env.CPU_THROTTLE) await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE) });
+  }
   page.on('pageerror', (e) => {
     console.error(`${person}'s page: ${e}`);
     process.exit(1);
@@ -147,18 +156,31 @@ const toAnna = await anna.evaluate(() => window.spare.latencies);
 console.log(`      Anna to Ben: ${stats(toBen)}`);
 console.log(`      Ben to Anna: ${stats(toAnna)}`);
 // Where the slowest edits spent their time, so a miss says which part to look at.
-const journeys = [
-  ...(await ben.evaluate(() => window.spare.journeys)),
-  ...(await anna.evaluate(() => window.spare.journeys)),
-];
+// Each also says what its page was doing from the orderer's stamp until its handler ran.
+const withBusy = () =>
+  window.spare.journeys.map((j) => ({ ...j, busy: window.spare.busyIn(j.orderer_ms, j.arrived_ms) }));
+const journeys = [...(await ben.evaluate(withBusy)), ...(await anna.evaluate(withBusy))];
 const took = (j) => j.to_server + j.to_page + j.to_screen;
 for (const journey of journeys.sort((a, b) => took(b) - took(a)).slice(0, 3)) {
-  console.log(`      slowest: ${took(journey)} ms, ${JSON.stringify(journey)}`);
+  const { busy, orderer_ms, sent_ms, got_ms, arrived_ms, ...times } = journey;
+  console.log(`      slowest: ${took(journey)} ms, ${JSON.stringify(times)}`);
+  // Where the time went: the server's write, the wire, the handler, and what the page was doing.
+  console.log(`        server wrote it ${sent_ms - orderer_ms} ms after ordering, page handler began ${got_ms - sent_ms} ms later`);
+  const rel = (at) => at - orderer_ms;
+  for (const t of busy.longTasks) console.log(`        long task from +${rel(t.at)} ms for ${t.ms} ms`);
+  for (const d of busy.doing) console.log(`        page was in ${d.what} from +${rel(d.at)} ms for ${d.ms} ms`);
+  for (const a of busy.asking) console.log(`        page asked ${a.path} from +${rel(a.at)} ms for ${a.ms} ms`);
 }
 check(
   Math.max(...toBen, ...toAnna) < 200,
   'every edit was drawn in the other browser in under 200 ms',
 );
+
+if (process.env.CPU_THROTTLE_LATE) {
+  for (const session of slowable) {
+    await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE_LATE) });
+  }
+}
 
 if (process.env.STACK_KILL) {
   console.log('\n5. Killing and restarting the server mid-edit loses nothing');
@@ -301,20 +323,6 @@ if (process.env.STACK_GEOMETRY === 'kernel') {
 }
 
 console.log('\n   Parameters, through the edit log');
-// The seed made the Arch model's wall types as Anna, and that wrote its parameters record (the
-// walls' location line and flip). A claim lasts 30 s after a person's last edit, and nobody can let
-// go of a parameters record, so Ben waits until hers has run out, as a person told "Anna is working
-// on this" would, before he changes the record.
-for (let tries = 0; ; tries += 1) {
-  const left = await ben.evaluate(() =>
-    fetch('/api/projects/example-1/models/arch-model/claims')
-      .then((r) => r.json())
-      .then((claims) => (claims.parameters ? claims.parameters.until_ms - Date.now() : 0)),
-  );
-  if (left <= 0) break;
-  if (tries > 80) throw new Error("FAILED: Anna's claim on the parameters record never ran out");
-  await ben.waitForTimeout(Math.min(left + 100, 1000));
-}
 // No page yet defines parameters, so Ben's page sends the two edits a parameters dialog will.
 await ben.evaluate(() => {
   const definition = { id: 'P-sill', name: 'Sill height', kind: 'length', holder: 'instance', choices: [] };
@@ -727,6 +735,12 @@ await formulaField.fill('2 * Jamb + 1 m');
 await formulaField.press('Enter');
 await until(() => door('D-103'), (view) => clear(view).shown === '1100 mm', 'the new formula reaches the door');
 pass('a changed formula reaches every door that reads it');
+// The dialog is redrawn from the server after that change. What Ben types next is kept through a
+// redraw (the field is a draft), and he starts only once the dialog shows the formula the server stored.
+await ben.waitForFunction(
+  (id) => /2\s*\*\s*Jamb\s*\+\s*1/.test(document.querySelector(`#stack-manage p[data-formula="${id}"]`)?.textContent ?? ''),
+  clearDef.id,
+);
 await formulaField.fill('Jamb / 0');
 await formulaField.press('Enter');
 await ben.waitForSelector(`${manager} [data-problem="formula:${clearDef.id}"]`);
@@ -863,6 +877,80 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the layered wall's included, matches the server's`);
 }
 await shot(anna, 'anna-layered-wall');
+
+console.log('\n   Walls that meet');
+// Anna draws a second Concrete 200 wall from the end of the first, to make a corner: the server
+// re-works the first wall's end, and both browsers take what it says (`filled`) for that wall, as
+// they take it for the wall that was drawn. Then she deletes the new wall and undoes that, and
+// moves it away: each time the first wall is put right, in both browsers and in a fresh load.
+// Everything here is Anna's own wall, so Ben takes nothing of hers and she nothing of his.
+const filledByServer = async (id) => JSON.stringify((await asAnna(`filled/${id}`)).recipe);
+const filledOnPage = (page, id) => page.evaluate((w) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe), id);
+const bothTake = async (id, want, label) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(([w, text]) => JSON.stringify(window.spare.elements.get(w)?.fill?.recipe) === text, [id, want]);
+  }
+  pass(label);
+};
+const freeEnd = await filledByServer(layeredId);
+check((await filledOnPage(ben, layeredId)) === freeEnd, "the first wall's end is free, and both pages hold the server's filling of it");
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector(wallTypeField);
+await anna.locator(wallTypeField).selectOption({ label: 'Concrete 200' });
+const cornerStart = await onPlan(anna, 5000, 9500);
+const cornerEnd = await onPlan(anna, 5000, 10300);
+await anna.mouse.click(cornerStart.x, cornerStart.y);
+await anna.mouse.click(cornerEnd.x, cornerEnd.y);
+await anna.keyboard.press('Escape');
+const secondWall = (first) =>
+  [...window.spare.elements.values()].find((p) => p.el.props['@type'] === 'wall-concrete-200' && p.el.id !== first)?.el.id;
+await ben.waitForFunction(secondWall, layeredId);
+const cornerId = await ben.evaluate(secondWall, layeredId);
+await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== freeEnd,
+  "the server works the first wall's end for the wall that meets it",
+);
+const cornered = await filledByServer(layeredId);
+await bothTake(layeredId, cornered, "a wall drawn to meet it: both pages take the server's filling of the first wall's end");
+const spots = (page, id) => page.evaluate((w) => [...document.querySelectorAll(`g.element[data-id="${w}"] polygon.part`)].map((p) => p.getAttribute('points')), id);
+check(
+  JSON.stringify(await spots(anna, layeredId)) === JSON.stringify(await spots(ben, layeredId)),
+  "and draw the first wall's layers alike",
+);
+
+// Deleted: the first wall's end is free again.
+const cornerBox = await box(anna, cornerId);
+await anna.mouse.click(cornerBox.x + cornerBox.width / 2, cornerBox.y + cornerBox.height / 2);
+await anna.waitForSelector('#ribbon >> text=Delete');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), cornerId);
+await bothTake(layeredId, freeEnd, 'the corner wall deleted: both pages put the first wall right, its end free again');
+
+// Her undo puts the corner wall back, and the first wall's end is worked again.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.delete');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body`), cornerId);
+await bothTake(layeredId, cornered, 'her undo brings the corner wall back, and both pages take the first wall as it was at the corner');
+
+// Moved away: the walls no longer meet.
+await drag(anna, cornerId, 150, 0);
+await anna.mouse.up();
+await bothTake(layeredId, freeEnd, 'the corner wall moved away: both pages put the first wall right again');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the joined walls included, matches the server's`);
+}
+const freshWalls = await signIn('ben');
+await freshWalls.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+check(
+  (await filledOnPage(freshWalls, layeredId)) === freeEnd &&
+    JSON.stringify(await spots(freshWalls, layeredId)) === JSON.stringify(await spots(anna, layeredId)),
+  'a freshWalls load takes the first wall as the server has it now, and draws it as the others do',
+);
+await freshWalls.context().close();
 
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
@@ -1694,6 +1782,9 @@ pass('at the type Ben gave it');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', famFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) {
+    console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 4000)}`);
+  }
   check(mismatched.length === 0, `every body ${name}'s page built, the window's included, matches the server's`);
 }
 
@@ -2164,6 +2255,9 @@ pass('Anna lets go of the room, and Ben sees it free');
 await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await drag(ben, 'W-103', 25, 0);
 await ben.mouse.up();
+// The drag is many moves, each its own edit, and each gives the room a new area. The area the test
+// reads is the last one, once the server has taken every move; read earlier it is one on the way.
+await ben.waitForFunction(() => window.spare.pending.length === 0);
 const roomMoved = await roomArea(roomFirst);
 check(roomMoved !== roomFirst, `a wall of the room moved: the server gives a new area, ${roomMoved}`);
 await roomTagIs(ben, 'room-area', roomMoved);
@@ -2377,6 +2471,642 @@ if (withKernel) {
   }
 }
 pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
+console.log('\n   Floors, sloped and with slab edges');
+// Anna draws two floors south of the building, of the 200 mm concrete type. She picks the first,
+// types its two heights, draws its slope arrow in the plan with two clicks, and both browsers draw
+// the arrow with its heights and hold the floor's body as the server built it (40 mm lower at one
+// end); the server's read-only rows give its lowest and highest points and its top area. Ben picks
+// the second, chooses a downturn and clicks one of its sides: both browsers draw the slab edge, and
+// the rows give its length and volume. Ben then tries a slope on that floor, and the server's words
+// say why not. Her undo and redo of the slope, and his remove and undo of the edge, are seen in
+// both browsers. Each lets go of the other's floor, and each deletes their own, so the plan ends as
+// it began.
+await floorHome(anna);
+await floorHome(ben);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
+await anna.locator(floorTypeField).selectOption({ label: 'Concrete 200' });
+await anna.waitForSelector('#pv-side [data-floor-layers="floor-concrete-200"]');
+const slFloorA = [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500]];
+const slFloorB = [[11000, -2300], [13000, -2300], [13000, -500], [11000, -500]];
+const slFloorWith = (page, x) =>
+  page.evaluate(
+    (steps) =>
+      [...window.spare.elements.values()].find(
+        (p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === steps,
+      )?.el.id,
+    x * 6400,
+  );
+for (const corners of [slFloorA, slFloorB]) {
+  await floorClicks(anna, [...corners, corners[0]]);
+  await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+  await anna.keyboard.press('Enter');
+  await anna.waitForSelector('#pv-side [data-floor-sketch="empty"]');
+}
+// Ben's page can build the second floor before the first: wait until it holds both, then read them.
+await ben.waitForFunction(
+  (xs) =>
+    xs.every((x) =>
+      [...window.spare.elements.values()].some((p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === x),
+    ),
+  [7000 * 6400, 11000 * 6400],
+);
+const slIdA = await slFloorWith(ben, 7000);
+const slIdB = await slFloorWith(ben, 11000);
+check(slIdA && slIdB && slIdA !== slIdB, 'Anna draws two plain floors, and Ben has both');
+await anna.keyboard.press('Escape');
+
+// The first floor: heights typed, the arrow drawn with two clicks.
+// A page draws a floor once it has fetched and built it, which can be after the other person's page
+// has it: wait until this page's plan shows the floor, as a person would, then click on it.
+const slDrawn = (page, id) => page.waitForSelector(`g.element[data-id="${id}"] path.body.floor`, { state: 'attached' });
+const slPick = async (page, id, x, y) => {
+  await slDrawn(page, id);
+  const at = await onPlan(page, x, y);
+  const clicked = Date.now();
+  await page.mouse.click(at.x, at.y);
+  try {
+    await page.waitForSelector(`#pv-side [data-floor-slope-part]`);
+  } catch (error) {
+    // Say what the page did between the click and the wait giving up (diagnostics only).
+    const seen = await page.evaluate(
+      ([who, from, px, py]) => ({
+        under: (() => {
+          const hit = document.elementFromPoint(px, py);
+          return hit ? `${hit.tagName}.${hit.getAttribute('class') ?? ''} in ${hit.closest('[data-id]')?.dataset.id ?? 'nothing'}` : 'nothing';
+        })(),
+        selectedBody: document.querySelectorAll('g.element path.body.sel').length,
+        hasShape: Boolean(window.spare.elements.get(who)?.shape),
+        stale: Boolean(window.spare.elements.get(who)?.stale),
+        claim: window.spare.claims.get(who)?.person ?? null,
+        side: document.querySelector('#pv-side')?.innerText.slice(0, 160),
+        busy: window.spare.busyIn(from, Date.now()),
+      }),
+      [id, clicked, at.x, at.y],
+    );
+    console.log(`      pick of ${id} at ${at.x},${at.y} found no slope part: ${JSON.stringify(seen)}`);
+    throw error;
+  }
+  await page.waitForFunction((who) => window.spare.claims.get(who)?.person === window.spare.me.person.id, id);
+};
+await slPick(anna, slIdA, 8500, -1400);
+await anna.locator('#pv-side input[data-key="floor-slope-atTail"]').fill('0 mm');
+await anna.locator('#pv-side input[data-key="floor-slope-atHead"]').fill('-40 mm');
+await anna.locator('#pv-side input[data-key="floor-slope-atHead"]').press('Enter');
+await anna.click('#pv-side [data-key="floor-slope-pick"]');
+await anna.waitForSelector('#pv-side [data-floor-pick="tail"]');
+const slTail = await onPlan(anna, 7000, -1400);
+await anna.mouse.click(slTail.x, slTail.y);
+await anna.waitForSelector('#pv-side [data-floor-pick="head"]');
+const slHead = await onPlan(anna, 10000, -1400);
+await anna.mouse.click(slHead.x, slHead.y);
+const slArrow = (id) => `g.element[data-id="${id}"] [data-floor-slope="${id}"]`;
+const slBodyLow = (id) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === -240 && window.spare.elements.get(id).shape.bounds.max[2] === 0;
+for (const [who, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForSelector(slArrow(slIdA));
+  await page.waitForFunction(slBodyLow, slIdA);
+  const heights = await page.locator(`${slArrow(slIdA)} text`).allTextContents();
+  check(heights.join('|') === '0 mm|-40 mm', `${who}'s plan draws the slope arrow with its two heights, ${heights.join(' and ')}`);
+}
+pass("Anna's slope arrow is drawn in both plans, and both browsers hold the body 240 mm deep at its low end");
+const slAsBen = (path) => ben.evaluate((url) => fetch(url).then((r) => r.json()), `${model}/${path}`);
+const slRead = (view, id) => view.parameters.find((p) => p.id === id)?.shown;
+const slRowsA = await until(
+  () => slAsBen(`parameters/${slIdA}`),
+  (view) => slRead(view, 'floor.lowest') !== undefined,
+  'the server works out the slope',
+);
+check(
+  slRead(slRowsA, 'floor.lowest') === '-240 mm' && slRead(slRowsA, 'floor.highest') === '0 mm' && /^5\.40 m²$/.test(slRead(slRowsA, 'floor.top-area')),
+  `the server gives the floor's lowest and highest points and its sloped top area, ${slRead(slRowsA, 'floor.lowest')}, ${slRead(slRowsA, 'floor.highest')} and ${slRead(slRowsA, 'floor.top-area')}`,
+);
+await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="floor.lowest"]')?.textContent === '-240 mm');
+check(
+  (await anna.locator('#pv-side [data-floor-slope-now]').textContent()) === '0 mm to -40 mm',
+  "Anna's palette says what the slope is, read from the record",
+);
+await shot(anna, 'anna-floor-slope');
+
+// The second floor: a downturn on one side, picked in the plan.
+const slAtBen = async (x, y) => onPlan(ben, x, y);
+await slPick(ben, slIdB, 12000, -1400);
+await ben.locator('#pv-side select[data-key="floor-edge-kind"]').selectOption('downturn');
+await ben.locator('#pv-side input[data-key="floor-edge-width"]').fill('300 mm');
+await ben.locator('#pv-side input[data-key="floor-edge-depth"]').fill('400 mm');
+await ben.locator('#pv-side input[data-key="floor-edge-depth"]').press('Enter');
+await ben.click('#pv-side [data-key="floor-edge-pick"]');
+await ben.waitForSelector('#pv-side [data-floor-pick="edge"]');
+// A side is a line with no height, which the page never counts as visible: wait for it to be drawn,
+// then click where the plan puts its middle.
+await ben.waitForSelector('#pv-canvas line[data-floor-edge="o0"]', { state: 'attached' });
+const slSide = await onPlan(ben, 12000, -2300);
+await ben.mouse.click(slSide.x, slSide.y);
+const slEdgeDrawn = (id) => `g.element[data-id="${id}"] path[data-slab-edge="o0"][data-kind="downturn"]`;
+await ben.waitForSelector('#pv-side [data-slab-edge-row="o0"]');
+await anna.waitForSelector(slEdgeDrawn(slIdB));
+await ben.waitForSelector(slEdgeDrawn(slIdB));
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === -600, slIdB);
+pass("Ben's downturn on the floor's first side is drawn in both plans, and the body goes 400 mm deeper");
+const slRowsB = await until(
+  () => slAsBen(`parameters/${slIdB}`),
+  (view) => slRead(view, 'floor.edge-o0.length') !== undefined,
+  'the server works out the slab edge',
+);
+check(
+  slRead(slRowsB, 'floor.edge-o0.length') === '2000 mm' && slRead(slRowsB, 'floor.edge-o0.volume') === '0.24 m³',
+  `the server gives the slab edge's length and volume, ${slRead(slRowsB, 'floor.edge-o0.length')} and ${slRead(slRowsB, 'floor.edge-o0.volume')}`,
+);
+await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="floor.edge-o0.length"]')?.textContent === '2000 mm');
+pass("and Ben's palette shows them beside the floor's");
+await shot(ben, 'ben-floor-edge');
+
+// A slope on a floor with slab edges: refused in the server's words, and nothing changes.
+await ben.click('#pv-side [data-key="floor-slope-pick"]');
+await ben.waitForSelector('#pv-side [data-floor-pick="tail"]');
+const slBadTail = await slAtBen(11500, -1400);
+await ben.mouse.click(slBadTail.x, slBadTail.y);
+await ben.waitForSelector('#pv-side [data-floor-pick="head"]');
+const slBadHead = await slAtBen(12500, -1400);
+await ben.mouse.click(slBadHead.x, slBadHead.y);
+await ben.waitForSelector('#pv-side [data-problem="floor-slope"]');
+const slRefusal = await ben.locator('#pv-side [data-problem="floor-slope"]').textContent();
+check(
+  slRefusal === `${slIdB}'s slope: a floor cannot have both a slope and slab edges yet: slab edges under a sloped floor are not built`,
+  `a slope on the floor with a slab edge is turned back in the server's words: ${slRefusal}`,
+);
+check(
+  (await ben.evaluate((id) => window.spare.elements.get(id).el.recipe.args.slope, slIdB)) === undefined,
+  'and the floor has no slope',
+);
+await ben.keyboard.press('Escape');
+
+// Her undo and redo of the slope.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.slope');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) {
+  await page.waitForFunction((id) => !window.spare.elements.get(id)?.el.recipe.args.slope && !document.querySelector(`g.element[data-id="${id}"] [data-floor-slope]`), slIdA);
+}
+pass("Anna's undo takes the slope off, in both browsers");
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) await page.waitForSelector(slArrow(slIdA));
+pass('and her redo puts the arrow back, in both browsers');
+
+// His remove of the slab edge, and his undo of it.
+await ben.click('#pv-side [data-key="floor-edge-remove-o0"]');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] path[data-slab-edge]`), slIdB);
+await ben.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.edge.remove');
+await ben.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.waitForSelector(slEdgeDrawn(slIdB));
+pass("Ben removes the slab edge and undoes that, and Anna's plan follows both");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(JSON.stringify(mismatched).slice(0, 3000));
+  check(mismatched.length === 0, `every body ${name}'s page built, the shaped floors included, matches the server's`);
+}
+
+// Each deletes their own floor; the plan ends as it began.
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), slIdA);
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), slIdB);
+pass('each deletes their own floor, and both are gone from both plans');
+
+console.log('\n   Warnings, listed from the server');
+// The page keeps no rules: the count in the status bar and the list in the project browser are what
+// the server's /warnings gives, read again after every entry of the log. On the sound model both
+// browsers say there are none; Ben deletes the wall on the room's west side, so the room is not
+// enclosed and both browsers list it with the server's own sentence; Anna chooses it and the room is
+// selected. Ben draws a wall over the gap and both lists are empty again; his undo and redo bring the
+// warning back and take it away. Then Ben draws two walls along one line, so they overlap and the
+// other kind appears, naming both; his deleting one clears it, and undo and redo bring it back and
+// away. Anna only reads and chooses; Ben changes everything, so no claim of one is in the other's way.
+// Both browsers go back to the architecture plan of Level 1, as the Rooms section left it.
+for (const page of [anna, ben]) {
+  await toArchitecture(page);
+  await page.click('#browser [data-act="view"][data-a="l1"]');
+}
+const warnCount = (page, n) =>
+  page.waitForFunction((want) => document.querySelector('#st-warnings')?.dataset.count === want, String(n));
+const warnRowsAre = (page, kind, n) =>
+  page.waitForFunction(
+    ([selector, want]) => document.querySelectorAll(selector).length === want,
+    [`#browser [data-warning][data-kind="${kind}"]`, n],
+  );
+const warnEmptyWords = (page) =>
+  page.waitForFunction(() =>
+    document.querySelector('#browser [data-warnings-empty]')?.textContent.startsWith('No warnings'),
+  );
+const serverWarnings = async () => (await asAnna('warnings')).warnings;
+const severityWords = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+  check(
+    (await page.locator('#st-warnings').textContent()).includes('No warnings'),
+    `${name}'s status bar says there are no warnings, and the list says so in words`,
+  );
+}
+check((await serverWarnings()).length === 0, 'the server lists none for the sound model, so the page shows the server');
+await anna.locator('#st-warnings').click();
+check(
+  await anna.locator('#browser details[data-k="Warnings"]').evaluate((d) => d.open),
+  'the count in the status bar opens the list',
+);
+
+// Ben deletes the wall on the room's west side: the loop is open.
+const gap = await ben.evaluate(() => {
+  const at = document.querySelector('#pv-canvas g.element[data-id="W-103"] .body').getBBox();
+  return { x: at.x, y: at.y, width: at.width, height: at.height };
+});
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const westWall = await box(ben, 'W-103');
+await ben.mouse.click(westWall.x + westWall.width / 2, westWall.y + westWall.height / 2);
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await warnCount(page, 1);
+  await warnRowsAre(page, 'room.not_enclosed', 1);
+}
+const [open] = await serverWarnings();
+check(
+  open.kind === 'room.not_enclosed' && open.elements.length === 1 && open.elements[0] === roomId,
+  "Ben deletes the room's west wall: the server lists the room as not enclosed",
+);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const row = page.locator(`#browser [data-warning="${open.identity}"]`);
+  check(
+    (await row.getAttribute('data-severity')) === open.severity &&
+      (await row.locator('.leaf').textContent()) === `${severityWords(open.severity)}: ${open.words}`,
+    `${name}'s list shows it with how serious it is and the server's own sentence`,
+  );
+  check((await page.locator('#st-warnings').textContent()).includes('1 warning'), `and ${name}'s count reads 1 warning`);
+}
+await shot(anna, 'anna-warning-room');
+
+// Anna chooses the warning: the room is selected, and she lets go of it by clicking off.
+await anna.locator(`#browser [data-warning="${open.identity}"] .leaf`).click();
+await anna.waitForSelector('#pv-side input[data-key="room-name"]');
+check(
+  (await anna.locator('#pv-side input[data-key="room-name"]').inputValue()) === 'Studio A',
+  "Anna chooses the warning and the room it names is selected, in the plan's properties",
+);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Ben draws a wall where the deleted one stood, a little past each end, and the loop is closed.
+const warnWallAt = async (page, from, to) => {
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await page.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+  const a = await onPlan(page, from[0], from[1]);
+  const b = await onPlan(page, to[0], to[1]);
+  await page.mouse.click(a.x, a.y);
+  await page.mouse.click(b.x, b.y);
+  await page.keyboard.press('Escape');
+};
+const lengthwiseY = gap.height > gap.width;
+const middle = lengthwiseY ? gap.x + gap.width / 2 : gap.y + gap.height / 2;
+const past = 40;
+const closeFrom = lengthwiseY ? [middle, gap.y - past] : [gap.x - past, middle];
+const closeTo = lengthwiseY ? [middle, gap.y + gap.height + past] : [gap.x + gap.width + past, middle];
+await warnWallAt(ben, closeFrom, closeTo);
+for (const page of [anna, ben]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+}
+check((await serverWarnings()).length === 0, "Ben draws a wall across the gap: both lists are empty and so is the server's");
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'wall.draw');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 1);
+check((await serverWarnings()).length === 1, "Ben's undo takes the wall away: the warning is back in both browsers");
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 0);
+check((await serverWarnings()).length === 0, 'his redo puts the wall back: the warning is gone from both');
+
+// Two walls along one line: the other kind, naming both.
+const warnWalls = (page) =>
+  page.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered').map((p) => p.el.id));
+const warnBefore = await warnWalls(ben);
+const newWallAfter = async (known) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = (await warnWalls(ben)).find((id) => !known.includes(id));
+    if (found) return found;
+    await ben.waitForTimeout(100);
+  }
+  throw new Error('FAILED: the wall Ben drew never came');
+};
+await warnWallAt(ben, [6000, 9750], [9000, 9750]);
+const warnFirst = await newWallAfter(warnBefore);
+for (const page of [anna, ben]) await page.waitForSelector(`#pv-canvas g.element[data-id="${warnFirst}"]`);
+for (const page of [anna, ben]) await warnCount(page, 0);
+pass('one new wall alone gives no warning');
+await warnWallAt(ben, [7500, 9750], [10500, 9750]);
+const warnSecond = await newWallAfter([...warnBefore, warnFirst]);
+for (const page of [anna, ben]) {
+  await warnCount(page, 1);
+  await warnRowsAre(page, 'wall.overlap', 1);
+}
+const [overlap] = await serverWarnings();
+check(
+  overlap.kind === 'wall.overlap' && [...overlap.elements].sort().join() === [warnFirst, warnSecond].sort().join(),
+  'Ben draws a second wall over the first: the server lists the two as overlapping',
+);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const row = page.locator(`#browser [data-warning="${overlap.identity}"]`);
+  check(
+    (await row.locator('.leaf').textContent()) === `${severityWords(overlap.severity)}: ${overlap.words}` &&
+      (await row.locator('.stack-warning-at [data-act="stackwarning"]').count()) === 2,
+    `${name}'s list shows its sentence and offers each of the two walls`,
+  );
+}
+await anna
+  .locator(`#browser [data-warning="${overlap.identity}"] [data-act="stackwarning"][data-a="${overlap.elements[1]}"]`)
+  .click();
+await anna.waitForSelector(`#pv-canvas g.element[data-id="${overlap.elements[1]}"] .body.sel`);
+pass('Anna chooses one of the two walls and it is selected in the plan');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Ben deletes the second wall: the warning goes from both; undo and redo bring it back and away.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const overBox = await box(ben, warnSecond);
+await ben.mouse.click(overBox.x + overBox.width - 6, overBox.y + overBox.height / 2);
+await ben.waitForSelector('#ribbon >> text=Delete');
+await ben.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await warnCount(page, 0);
+  await warnEmptyWords(page);
+}
+check((await serverWarnings()).length === 0, 'Ben deletes one of the two: the warning is gone from both browsers');
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'element.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnRowsAre(page, 'wall.overlap', 1);
+pass("Ben's undo puts the wall back, and the overlap is listed again in both browsers");
+await ben.locator('#qat [data-act="stackredo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await warnCount(page, 0);
+pass('his redo takes it away again, in both');
+
+// A fresh load agrees with the server.
+const warnFresh = await signIn('anna');
+await warnFresh.waitForFunction(() => document.querySelector('#st-warnings')?.dataset.count === '0');
+await warnFresh.context().close();
+pass('a fresh load reads the same list, none');
+
+console.log('\n   Schedules, in the project browser');
+// Ben makes a schedule of rooms from the browser's Schedules group and Anna's list shows it. Its
+// table is the server's: a heading for each field, a row for each room, each value as the server
+// shows it, and it is asked for again after every entry of the log, so a room Anna places, renames
+// or deletes changes the rows in both browsers. Ben sorts it, refuses himself a sort key twice,
+// filters it, undoes and redoes the filter; choosing a row selects that room in Anna's plan. A
+// fresh load agrees. Ben touches only the schedule and Anna only the rooms, so neither takes
+// what the other touched within 30 s.
+const scheduleLeaf = (name) => `#browser [data-act="stackschedule"]:has(span:text-is("${name}"))`;
+const table = '#stack-sched table[data-schedule-table]';
+const roomIdsOf = (page) =>
+  page.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'room').map((p) => p.el.id).sort());
+const rowIdsOf = (page) => page.locator(`${table} tr[data-row]`).evaluateAll((rows) => rows.map((r) => r.dataset.row));
+const closeScheduleOf = async (page) => {
+  await page.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await page.waitForSelector('#dlg', { state: 'hidden' });
+};
+// The rows of the open table, in the order shown, as [element, ...cells], once they are `want`.
+const schedRows = async (page, want, label) => {
+  const same = (found) => JSON.stringify(found) === JSON.stringify(want);
+  const read = () =>
+    page
+      .locator(`${table} tbody tr`)
+      .evaluateAll((rows) => rows.map((r) => [r.dataset.row, ...[...r.querySelectorAll('td')].map((td) => td.textContent)]))
+      .catch(() => null);
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = await read();
+    if (found && same(found)) return found;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the rows were ${JSON.stringify(await read())}, wanted ${JSON.stringify(want)}`);
+};
+const schedIds = async (page, ids, label) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = [...(await rowIdsOf(page).catch(() => []))].sort();
+    if (JSON.stringify(found) === JSON.stringify([...ids].sort())) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the rows were ${JSON.stringify(await rowIdsOf(page).catch(() => null))}, wanted ${JSON.stringify(ids)}`);
+};
+const areaOf = async (id) =>
+  (await asAnna(`parameters/${id}`)).parameters?.find((p) => p.id === 'room.area')?.shown ?? '';
+const stateOf = async (id) =>
+  (await asAnna(`parameters/${id}`)).parameters?.find((p) => p.id === 'room.state')?.shown ?? '';
+
+await toArchitecture(anna);
+await toArchitecture(ben);
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+check((await asAnna('schedules')).length === 0, 'the model has no schedules yet');
+
+// Ben makes a schedule of rooms: a name and a category.
+await ben.locator('#browser [data-key="new-schedule-name"]').fill('Room list');
+await ben.locator('#browser [data-key="new-schedule-category"]').selectOption({ label: 'Rooms' });
+await ben.locator('#browser [data-act="stacknewschedule"]').click();
+await anna.waitForSelector(scheduleLeaf('Room list'));
+await ben.waitForSelector(table);
+const made = (await asAnna('schedules'))[0];
+check(
+  made.name === 'Room list' && made.category === 3300 && made.fields.join() === 'name',
+  "Ben makes a schedule of rooms from the browser and the server holds it as a schedule record, listing the rooms' names",
+);
+pass("Anna's list shows the schedule Ben made, and Ben's browser opens its table");
+const scheduleId = made.id;
+
+// Its rows are the model's rooms: one row for each, the same IDs, the same names.
+const firstRooms = await roomIdsOf(ben);
+check(firstRooms.length === 1 && firstRooms[0] === roomId, "the model has the room Anna placed earlier, and only it");
+await schedRows(ben, [[roomId, 'Studio A']], "Ben's table has a row for the room, with its name");
+check(
+  (await ben.locator(`${table} thead th`).allTextContents()).join('|') === 'Name',
+  'a heading for the one field, from the server',
+);
+
+// Ben adds the room's area and state from the fields the server offers for rooms.
+const offeredByServer = (await asAnna(`schedules/${scheduleId}`)).offered.map((f) => f.name);
+check(
+  ['Name', 'Type', 'State', 'Area', 'Perimeter', 'Volume'].every((name) => offeredByServer.includes(name)),
+  `the fields the server offers for rooms include its name, type, state, area, perimeter and volume`,
+);
+const addField = async (name) => {
+  await ben.locator('#stack-sched [data-key="sched-add-field"]').selectOption({ label: name });
+  await ben.locator('#stack-sched [data-act="stackschedfieldadd"]').click();
+};
+// Each add sends the whole list of fields the table showed, so the next waits for the new heading.
+const headings = (page, want) =>
+  page.waitForFunction(
+    (list) => [...document.querySelectorAll('#stack-sched table thead th')].map((th) => th.textContent).join('|') === list,
+    want,
+  );
+await addField('Area');
+await headings(ben, 'Name|Area');
+await addField('State');
+await headings(ben, 'Name|Area|State');
+const studioArea = await areaOf(roomId);
+check(/^[0-9.]+ m²$/.test(studioArea), `the server gives the room's area in the document's units, ${studioArea}`);
+await schedRows(ben, [[roomId, 'Studio A', studioArea, await stateOf(roomId)]], "the row's values are the server's, with their units");
+check((await stateOf(roomId)) === 'enclosed', 'the room is enclosed');
+
+// Anna opens it from her list and sees the same table.
+await anna.click(scheduleLeaf('Room list'));
+await anna.waitForSelector(table);
+await schedRows(anna, [[roomId, 'Studio A', studioArea, 'enclosed']], "Anna's table is the same");
+await shot(anna, 'anna-schedule');
+await closeScheduleOf(anna);
+await closeScheduleOf(ben);
+
+// Ben renames it in the browser: type the new name and press Enter.
+await ben.click(scheduleLeaf('Room list'));
+await ben.waitForSelector(table);
+await closeScheduleOf(ben);
+const scheduleName = `#browser input[data-key="schedule-name:${scheduleId}"]`;
+await ben.waitForSelector(scheduleName);
+await ben.locator(scheduleName).fill('Rooms by name');
+await ben.locator(scheduleName).press('Enter');
+await anna.waitForSelector(scheduleLeaf('Rooms by name'));
+await ben.waitForSelector(scheduleLeaf('Rooms by name'));
+check((await anna.locator(scheduleLeaf('Room list')).count()) === 0, "Ben renames the schedule and Anna's list shows the new name, not the old");
+await ben.click(scheduleLeaf('Rooms by name'));
+await ben.waitForSelector(table);
+
+// Anna places a room in the other half of the building with the Room tool; Ben's table gains a row.
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room"]');
+await anna.locator('#pv-side input[data-key="room-tool-name"]').fill('Store');
+await anna.locator('#pv-side input[data-key="room-tool-name"]').press('Enter');
+const storeClick = await onPlan(anna, 7000, 4000);
+await anna.mouse.click(storeClick.x, storeClick.y);
+await anna.keyboard.press('Escape');
+await ben.waitForFunction((before) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'room').length === before + 1, firstRooms.length);
+const storeId = (await roomIdsOf(ben)).find((id) => id !== roomId);
+await schedIds(ben, [roomId, storeId], "Anna places a room: Ben's table has a row for it");
+check(
+  (await ben.locator(`${table} tr[data-row="${storeId}"] td`).first().textContent()) === 'Store',
+  "the new row is the room's name, as the server gives it",
+);
+const storeState = await stateOf(storeId);
+const storeArea = await areaOf(storeId);
+await schedRows(
+  ben,
+  [[roomId, 'Studio A', studioArea, 'enclosed'], [storeId, 'Store', storeArea, storeState]].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+  'the rows are in the order of the elements when nothing is sorted, with the server\'s values',
+);
+check(JSON.stringify(await roomIdsOf(ben)) === JSON.stringify([roomId, storeId].sort()), 'the rows are the rooms of the model, none more');
+await anna.click(scheduleLeaf('Rooms by name'));
+await anna.waitForSelector(table);
+await schedIds(anna, [roomId, storeId], "Anna's own table has both rooms");
+await shot(ben, 'ben-schedule-two-rooms');
+
+// Ben sorts by name, up: Store comes before Studio A; then down: the other way round.
+const sortBy = async (name, order) => {
+  await ben.locator('#stack-sched [data-key="sched-sort-field"]').selectOption({ label: name });
+  await ben.locator('#stack-sched [data-key="sched-sort-order"]').selectOption({ value: order });
+  await ben.locator('#stack-sched [data-act="stackschedsortadd"]').click();
+};
+const namesInOrder = (page, want, label) =>
+  page.waitForFunction(
+    (list) => [...document.querySelectorAll('#stack-sched table tbody tr')].map((r) => r.querySelector('td').textContent).join('|') === list,
+    want.join('|'),
+    { timeout: 15000 },
+  ).then(() => pass(label));
+await sortBy('Name', 'ascending');
+await namesInOrder(ben, ['Store', 'Studio A'], "Ben sorts by name, up: Store, then Studio A");
+await namesInOrder(anna, ['Store', 'Studio A'], "Anna's table follows the sorting");
+await ben.locator('#stack-sched [data-act="stackschedsortflip"]').click();
+await namesInOrder(ben, ['Studio A', 'Store'], 'Ben turns the sorting down: Studio A, then Store');
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows");
+
+// A sort key given twice is refused, in the server's words, in the Sorting part.
+await sortBy('Name', 'ascending');
+const sortWhere = `#stack-sched [data-problem="sched-sorting:${scheduleId}"]`;
+await ben.waitForSelector(sortWhere);
+const sortWords = await ben.locator(sortWhere).textContent();
+check(/twice/.test(sortWords), `a sort key given twice is refused where it was made: "${sortWords}"`);
+check((await ben.locator('#toast-m').textContent()) === sortWords, 'and the toast says the same');
+check((await asAnna(`schedules/${scheduleId}`)).schedule.sorting.length === 1, 'the refused sorting changed nothing');
+await namesInOrder(ben, ['Studio A', 'Store'], 'the rows stay as they were');
+
+// Ben filters by name: only Studio A passes. The filter is the server's, so Anna's table follows.
+await ben.locator('#stack-sched [data-key="sched-filter-field"]').selectOption({ label: 'Name' });
+await ben.locator('#stack-sched [data-key="sched-filter-is"]').selectOption({ value: 'contains' });
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').fill('stud');
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').press('Enter');
+await namesInOrder(ben, ['Studio A'], 'Ben filters the names to those containing "stud": one row');
+await namesInOrder(anna, ['Studio A'], "Anna's table has the one row");
+const heldFilters = (await asAnna(`schedules/${scheduleId}`)).schedule.filters;
+check(
+  heldFilters.length === 1 && heldFilters[0].field === 'name' && heldFilters[0].is === 'contains' && heldFilters[0].to.includes('stud'),
+  `the server holds the filter as a field, a comparison and a value: ${JSON.stringify(heldFilters)}`,
+);
+
+// His undo takes the filter back and his redo puts it back; both browsers follow. The undo and redo
+// buttons are behind the dialog's scrim, so he closes the table, presses one and opens it again.
+const stepAs = async (page, act) => {
+  await closeScheduleOf(page);
+  await page.locator(`#qat [data-act="${act}"]:not([aria-disabled="true"])`).click();
+  await page.click(scheduleLeaf('Rooms by name'));
+  await page.waitForSelector(table);
+};
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'schedule.filters');
+await stepAs(ben, 'stackundo');
+await namesInOrder(ben, ['Studio A', 'Store'], "Ben's undo takes the filter back: both rooms");
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows the undo");
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.redo);
+await stepAs(ben, 'stackredo');
+await namesInOrder(ben, ['Studio A'], "Ben's redo puts the filter back: one row");
+await namesInOrder(anna, ['Studio A'], "Anna's table follows the redo");
+
+// Ben takes the filter off with its Remove button.
+await ben.locator('#stack-sched [data-filter-row] [data-act="stackschedfilteroff"]').click();
+await namesInOrder(ben, ['Studio A', 'Store'], 'Ben removes the filter: both rooms again');
+await namesInOrder(anna, ['Studio A', 'Store'], "Anna's table follows");
+
+// Anna chooses the Store row: the room is selected in her plan, and the palette shows it.
+await anna.locator(`${table} tr[data-row="${storeId}"]`).click();
+await anna.waitForSelector('#pv-side input[data-key="room-name"][value="Store"]', { state: 'attached' });
+await anna.waitForSelector(`${table} tr[data-row="${storeId}"][aria-selected="true"]`);
+pass('Anna chooses the Store row and the room is selected: her properties palette shows it');
+await closeScheduleOf(anna);
+
+// Anna renames the selected room in the palette; the name changes in Ben's table, and the
+// order with it (Ben's sorting is down).
+await anna.locator('#pv-side input[data-key="room-name"]').fill('Pantry');
+await anna.locator('#pv-side input[data-key="room-name"]').press('Enter');
+await namesInOrder(ben, ['Studio A', 'Pantry'], "Anna renames the room: Ben's table has the new name");
+
+// Anna deletes the room; the row goes from Ben's table.
+await anna.locator('#pv-side [data-key="room-delete"]').click();
+await schedIds(ben, [roomId], "Anna deletes the room: Ben's table has one row again");
+await schedRows(ben, [[roomId, 'Studio A', studioArea, 'enclosed']], 'and it is the first room, unchanged');
+check((await roomIdsOf(ben)).join() === roomId, "the rows are the model's rooms");
+
+// A fresh load agrees: the same schedule in the list, the same rows.
+const scheduleFresh = await signIn('anna');
+await scheduleFresh.waitForSelector(scheduleLeaf('Rooms by name'));
+await scheduleFresh.click(scheduleLeaf('Rooms by name'));
+await scheduleFresh.waitForSelector(table);
+await schedRows(scheduleFresh, [[roomId, 'Studio A', studioArea, 'enclosed']], 'a fresh load lists the schedule and gives the same row');
+await scheduleFresh.context().close();
+
+// Anna has the table open; Ben deletes the schedule from the browser, and Anna's list and her open
+// table follow.
+await anna.click(scheduleLeaf('Rooms by name'));
+await anna.waitForSelector(table);
+await closeScheduleOf(ben);
+await ben.locator(`#browser [data-act="stackscheddelete"][data-a="${scheduleId}"]`).click();
+await anna.waitForFunction(() => /deleted/.test(document.querySelector('#stack-sched')?.textContent ?? ''));
+await closeScheduleOf(anna);
+await anna.waitForFunction((name) => ![...document.querySelectorAll('#browser [data-act="stackschedule"] span')].some((s) => s.textContent === name), 'Rooms by name');
+check((await asAnna('schedules')).length === 0, 'Ben deletes the schedule: Anna\'s list is empty again and the server holds none');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
+}
 
 await browser.close();
 console.log('\nThe browser checks passed.');

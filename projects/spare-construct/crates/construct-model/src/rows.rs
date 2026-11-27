@@ -243,9 +243,10 @@ pub const PARAMETER_TABLE: &str = "parameters";
 /// What an element's shape reads besides its own record: the derived `reads` row, kept so that a
 /// change to what it reads builds it again. Written only when there is something in it.
 ///
-/// Written in two spellings. An element that neither is hosted nor hosts writes the list of the
-/// records it reads, ascending (`["T-1","parameters"]`). Any other writes an object,
-/// `{"reads":[...],"host":...,"hosted":[...]}`, each key left out when it is empty. Older rows
+/// Written in two spellings. An element that neither is hosted nor hosts, and whose shape reads no
+/// other wall's, writes the list of the records it reads, ascending (`["T-1","parameters"]`). Any
+/// other writes an object, `{"reads":[...],"host":...,"hosted":[...],"joins":[...]}`, each key
+/// left out when it is empty. Older rows
 /// read too: `null` (the parameter table), a type's ID (the table and that type), and the object
 /// spelling with `"parameters":true` and `"type"` in place of `"reads"`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -260,13 +261,20 @@ pub struct Reads {
     /// The elements hosted on it, by ID, in key order: its shape is cut by theirs, so a change to
     /// any of them builds it again.
     pub hosted: Vec<String>,
+    /// The walls its joints read, by ID, ascending: for a layered wall, the walls it meets and the
+    /// walls they meet (construct-regen's `joins`). When it is built again, so is each of them,
+    /// as it was listed before and as it is now.
+    pub joins: BTreeSet<String>,
 }
 
 impl Reads {
     /// Whether the row holds nothing, and so is not written.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.records.is_empty() && self.host.is_none() && self.hosted.is_empty()
+        self.records.is_empty()
+            && self.host.is_none()
+            && self.hosted.is_empty()
+            && self.joins.is_empty()
     }
 
     /// Whether it reads the record `id`.
@@ -289,6 +297,8 @@ struct ReadsObject {
     host: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hosted: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    joins: BTreeSet<String>,
 }
 
 /// Every spelling of [`Reads`], as read.
@@ -309,7 +319,7 @@ fn table_and(type_id: Option<String>) -> BTreeSet<String> {
 
 impl Serialize for Reads {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if self.host.is_none() && self.hosted.is_empty() {
+        if self.host.is_none() && self.hosted.is_empty() && self.joins.is_empty() {
             return self.records.serialize(serializer);
         }
         ReadsObject {
@@ -318,6 +328,7 @@ impl Serialize for Reads {
             type_id: None,
             host: self.host.clone(),
             hosted: self.hosted.clone(),
+            joins: self.joins.clone(),
         }
         .serialize(serializer)
     }
@@ -343,6 +354,7 @@ impl<'de> Deserialize<'de> for Reads {
                     records,
                     host: o.host,
                     hosted: o.hosted,
+                    joins: o.joins,
                 }
             }
         })

@@ -7,7 +7,7 @@
 
 use crate::{
     CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
-    REFERENCE_PLANES, ROOFS, ROOMS, SHEETS, VIEWPORTS, VIEWS, WALLS,
+    REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, VIEWPORTS, VIEWS, WALLS,
 };
 
 /// Every element kind that exists, with its category, sorted by kind name.
@@ -31,6 +31,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("shaft", OPENINGS),
     ("roof", ROOFS),
     ("room", ROOMS),
+    ("schedule", SCHEDULES),
     ("sheet", SHEETS),
     ("view", VIEWS),
     ("viewport", VIEWPORTS),

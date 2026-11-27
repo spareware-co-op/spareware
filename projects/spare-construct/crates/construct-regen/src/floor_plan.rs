@@ -10,12 +10,21 @@
 //! (construct-slabs' level rule: the top face sits at its level's elevation plus its offset, the
 //! height its built row holds).
 //!
+//! A sloped floor or one with slab edges (job 5.2) is op version [`SHAPED_VERSION`], and its
+//! filled recipe also holds `tops` (a sloped floor's: the top face's height at each corner of each
+//! loop, in the loops' order, in grid steps; every corner 0 when it is left out) or `edges` (each
+//! slab edge as `{"id":<edge ID>,"kind":<kind>,"top":[[x,y,z] x4],"foot":[[x,y,z] x4]}`, its plan
+//! at the floor's underside and at its foot). construct-slabs' `Shape` worked both out and checked
+//! them (every corner on the grid, every piece inside its floor and apart from the others).
+//!
 //! What it promises: a recipe it reads has a loop of at least three corners first, every corner
 //! on the kernel's grid (within 2^40 - 1 steps of the origin), every edge ID once in the floor,
-//! at least one layer, no layer thinner than zero, and a total above zero and at most 10 m. A
-//! recipe whose layers or boundary are not filled yet is `Unfilled`. Whether the loops are simple,
-//! closed and nested properly is construct-slabs' check, made when the regenerator fills the
-//! recipe (its `Boundary`), and the engine's checker judges every solid it returns.
+//! at least one layer, no layer thinner than zero, and a total above zero and at most 10 m; a
+//! height for every corner when it has tops; every slab edge on an edge of the floor, of a known
+//! kind, its foot below its top. A recipe whose layers or boundary are not filled yet is
+//! `Unfilled`. Whether the loops are simple, closed and nested properly is construct-slabs' check,
+//! made when the regenerator fills the recipe (its `Boundary`), and the engine's checker judges
+//! every solid it returns.
 //!
 //! Depends on construct-model (the recipe) and construct-params (the grid's steps per
 //! millimetre). Nothing here is interim: every length is exact in construct-params' unit. Arc
@@ -28,8 +37,10 @@ use std::collections::BTreeSet;
 
 /// A floor's recipe operation (construct-slabs' `FLOOR_OP`).
 pub const OP: &str = "floor";
-/// The version of a floor's recipe this module reads (construct-slabs' `OP_VERSION`).
+/// The version of a flat floor's recipe this module reads (construct-slabs' `OP_VERSION`).
 pub const OP_VERSION: u32 = 1;
+/// The version of a sloped floor's or one with slab edges (construct-slabs' `SHAPED_VERSION`).
+pub const SHAPED_VERSION: u32 = 2;
 /// The owner of Spare Construct's own operations.
 const OWN: &str = "construct";
 /// The most a floor's layers may add up to: 10 m in steps (construct-slabs' `MOST_TOTAL`).
@@ -70,6 +81,19 @@ pub struct PlanLayer {
     pub thickness: i64,
 }
 
+/// One slab edge, as the filled recipe lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanEdge {
+    /// The ID of the edge of the floor it runs along.
+    pub id: String,
+    /// `thickened` or `downturn`.
+    pub kind: String,
+    /// Its plan at the floor's underside: four grid points at one height.
+    pub top: [[i64; 3]; 4],
+    /// Its plan at its foot: four grid points at one height below the top's.
+    pub foot: [[i64; 3]; 4],
+}
+
 /// A floor read from its filled recipe ([`FloorPlan::of`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloorPlan {
@@ -77,6 +101,10 @@ pub struct FloorPlan {
     pub loops: Vec<Vec<PlanCorner>>,
     /// The layers from the top face down.
     pub layers: Vec<PlanLayer>,
+    /// A sloped floor's top face height at each corner of each loop; empty for a flat floor.
+    pub tops: Vec<Vec<i64>>,
+    /// Its slab edges, in order.
+    pub edges: Vec<PlanEdge>,
 }
 
 /// A layer with a thickness, placed in the floor's frame: its index from the top, the layer, and
@@ -92,9 +120,11 @@ impl FloorPlan {
     /// or loops are not filled yet; `MissingArgument` for loops or layers not as the module
     /// header says; `EmptyShape` for a loop of fewer than three corners, no layers, or no
     /// thickness; `NegativeThickness`; `TooBig` for a corner beyond the grid or layers of more
-    /// than 10 m; `DuplicateEdge` for an edge ID used twice.
+    /// than 10 m; `DuplicateEdge` for an edge ID used twice; `MissingArgument` for tops or slab
+    /// edges not as the module header says.
     pub fn of(recipe: &Recipe) -> Result<FloorPlan, GeometryError> {
-        if !is_floor(recipe) || recipe.op_version != OP_VERSION {
+        let known = recipe.op_version == OP_VERSION || recipe.op_version == SHAPED_VERSION;
+        if !is_floor(recipe) || !known {
             return Err(fault(
                 "NotAFloor",
                 format!(
@@ -131,9 +161,19 @@ impl FloorPlan {
             .enumerate()
             .map(|(at, layer)| read_layer(layer, at))
             .collect::<Result<Vec<_>, _>>()?;
+        let tops = match args.get("tops") {
+            Some(tops) => read_tops(tops, &read_loops)?,
+            None => Vec::new(),
+        };
+        let edges = match args.get("edges") {
+            Some(edges) => read_edges(edges, &seen)?,
+            None => Vec::new(),
+        };
         let plan = FloorPlan {
             loops: read_loops,
             layers: read_layers,
+            tops,
+            edges,
         };
         if plan.layers.is_empty() {
             return Err(fault("EmptyShape", "a floor has at least one layer"));
@@ -198,12 +238,49 @@ impl FloorPlan {
         (lo, hi)
     }
 
+    /// The top face's height at corner `k` of loop `ring`, in grid steps: 0 on a flat floor.
+    #[must_use]
+    pub fn top_at(&self, ring: usize, k: usize) -> i64 {
+        self.tops
+            .get(ring)
+            .and_then(|heights| heights.get(k))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// The top face's lowest and highest points, in grid steps: the outer loop's corners (a
+    /// plane's highest and lowest over a polygon are corners, and every hole lies inside the
+    /// outer loop); both 0 on a flat floor.
+    #[must_use]
+    pub fn top_range(&self) -> (i64, i64) {
+        let outer = self.tops.first().map_or(&[][..], Vec::as_slice);
+        (
+            outer.iter().copied().min().unwrap_or(0),
+            outer.iter().copied().max().unwrap_or(0),
+        )
+    }
+
+    /// The floor's lowest point, in grid steps: the bottom face's lowest corner, or the deepest
+    /// slab edge's foot.
+    #[must_use]
+    pub fn lowest(&self) -> i64 {
+        let bottom = self
+            .top_range()
+            .0
+            .saturating_sub(self.total().unwrap_or_default());
+        self.edges
+            .iter()
+            .flat_map(|edge| edge.foot.iter().map(|p| p[2]))
+            .fold(bottom, i64::min)
+    }
+
     /// Whether the floor is exactly the box around its outer loop: one loop of four corners, each
-    /// edge along x or y, and no hole.
+    /// edge along x or y, no hole, no slope and no slab edges.
     #[must_use]
     pub fn is_box(&self) -> bool {
         let outer = self.outer();
-        if !self.holes().is_empty() || outer.len() != 4 {
+        let flat = self.tops.iter().flatten().all(|&z| z == 0) && self.edges.is_empty();
+        if !flat || !self.holes().is_empty() || outer.len() != 4 {
             return false;
         }
         outer
@@ -270,6 +347,99 @@ fn read_loop(
         out.push(PlanCorner {
             id: id.to_owned(),
             at: [x, y],
+        });
+    }
+    Ok(out)
+}
+
+/// The tops of the recipe: one height for each corner of each loop, each within the grid.
+fn read_tops(tops: &Value, loops: &[Vec<PlanCorner>]) -> Result<Vec<Vec<i64>>, GeometryError> {
+    let bad = || {
+        fault(
+            "MissingArgument",
+            "tops must be the top face's height at each corner of each loop, in grid steps",
+        )
+    };
+    let lists = tops.as_array().ok_or_else(bad)?;
+    if lists.len() != loops.len() {
+        return Err(bad());
+    }
+    let mut out = Vec::with_capacity(lists.len());
+    for (list, ring) in lists.iter().zip(loops) {
+        let heights = list
+            .as_array()
+            .filter(|heights| heights.len() == ring.len())
+            .ok_or_else(bad)?
+            .iter()
+            .map(|z| {
+                z.as_i64()
+                    .filter(|z| z.unsigned_abs() <= GRID_LIMIT.unsigned_abs())
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(bad)?;
+        out.push(heights);
+    }
+    Ok(out)
+}
+
+/// Four grid points `[x, y, z]` at one height, each within the grid.
+fn read_plan(value: Option<&Value>) -> Option<[[i64; 3]; 4]> {
+    let list = value?.as_array()?;
+    let mut out = [[0_i64; 3]; 4];
+    if list.len() != out.len() {
+        return None;
+    }
+    for (slot, point) in out.iter_mut().zip(list) {
+        let point = point.as_array()?;
+        if point.len() != 3 {
+            return None;
+        }
+        for (c, v) in slot.iter_mut().zip(point) {
+            *c = v
+                .as_i64()
+                .filter(|v| v.unsigned_abs() <= GRID_LIMIT.unsigned_abs())?;
+        }
+    }
+    let z = out.first()?[2];
+    out.iter().all(|p| p[2] == z).then_some(out)
+}
+
+/// The slab edges of the recipe, each on an edge of the floor (`edges`), its foot below its top.
+fn read_edges(edges: &Value, ids: &BTreeSet<String>) -> Result<Vec<PlanEdge>, GeometryError> {
+    let bad = |what: &str| {
+        fault(
+            "MissingArgument",
+            format!(
+                "{what}: a slab edge is {{\"id\",\"kind\",\"top\",\"foot\"}}, each plan four grid \
+                 points at one height"
+            ),
+        )
+    };
+    let list = edges.as_array().ok_or_else(|| bad("edges"))?;
+    let mut out = Vec::with_capacity(list.len());
+    for edge in list {
+        let id = edge
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| ids.contains(*id))
+            .ok_or_else(|| bad("a slab edge on no edge of the floor"))?;
+        let kind = edge
+            .get("kind")
+            .and_then(Value::as_str)
+            .filter(|kind| ["thickened", "downturn"].contains(kind))
+            .ok_or_else(|| bad(&format!("slab edge {id}")))?;
+        let (Some(top), Some(foot)) = (read_plan(edge.get("top")), read_plan(edge.get("foot")))
+        else {
+            return Err(bad(&format!("slab edge {id}")));
+        };
+        if foot[0][2] >= top[0][2] {
+            return Err(bad(&format!("slab edge {id}'s foot is not below its top")));
+        }
+        out.push(PlanEdge {
+            id: id.to_owned(),
+            kind: kind.to_owned(),
+            top,
+            foot,
         });
     }
     Ok(out)
@@ -431,8 +601,51 @@ mod tests {
             "MissingArgument"
         );
         let mut other = floor(json!({ "loops": [square()], "layers": [layer(1)] }));
-        other.op_version = 2;
+        other.op_version = 3;
         assert_eq!(FloorPlan::of(&other).unwrap_err().code, "NotAFloor");
+    }
+
+    /// A sloped floor's tops and a slab edge read as they are written: its top range, its lowest
+    /// point (the edge's foot or the bottom face under the slope's lowest corner, whichever is
+    /// lower), and no box; tops that miss a corner, an edge on no edge of the floor, an unknown
+    /// kind and a foot not below its top are refused.
+    #[test]
+    fn a_shaped_floor_reads_its_tops_and_edges() {
+        let shaped = |extra: Value| {
+            let mut args = json!({ "loops": [square()], "layers": [layer(1000)] });
+            for (k, v) in extra.as_object().unwrap() {
+                args[k] = v.clone();
+            }
+            let mut recipe = floor(args);
+            recipe.op_version = SHAPED_VERSION;
+            FloorPlan::of(&recipe)
+        };
+        let plan = shaped(json!({ "tops": [[0, -50, -50, 0]] })).unwrap();
+        assert_eq!(plan.top_range(), (-50, 0));
+        assert_eq!(plan.top_at(0, 1), -50);
+        assert_eq!(plan.lowest(), -1050);
+        assert!(!plan.is_box());
+        let edge = |id: &str, kind: &str, foot: i64| {
+            let at = |z: i64| json!([[0, 0, z], [6400, 0, z], [6400, 100, z], [0, 100, z]]);
+            json!({ "id": id, "kind": kind, "top": at(-1000), "foot": at(foot) })
+        };
+        let plan = shaped(json!({ "edges": [edge("a", "downturn", -3000)] })).unwrap();
+        assert_eq!(plan.edges.len(), 1);
+        assert_eq!(plan.lowest(), -3000);
+        let code = |extra: Value| shaped(extra).unwrap_err().code;
+        assert_eq!(code(json!({ "tops": [[0, 0, 0]] })), "MissingArgument");
+        assert_eq!(
+            code(json!({ "edges": [edge("z", "downturn", -3000)] })),
+            "MissingArgument"
+        );
+        assert_eq!(
+            code(json!({ "edges": [edge("a", "ledge", -3000)] })),
+            "MissingArgument"
+        );
+        assert_eq!(
+            code(json!({ "edges": [edge("a", "downturn", -1000)] })),
+            "MissingArgument"
+        );
     }
 
     /// Steps go to the nearest millimetre a half away from zero, saying when that is exact; a

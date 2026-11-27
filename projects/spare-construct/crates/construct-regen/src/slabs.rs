@@ -17,7 +17,10 @@
 //!   its area, perimeter, thickness, volume and mass, and each layer's volume and mass
 //!   (construct-slabs' `read_only` and `layer_read_only`), worked out from its boundary and its
 //!   type each time it is read, never stored, each shown in the document's units and marked
-//!   `read-only`. Masses come from construct-materials' default library, the one a project reads
+//!   `read-only`; then a sloped floor's top face area, highest and lowest points, and each slab
+//!   edge's length and volume (construct-slabs' `shape_read_only`, job 5.2), none of them for a
+//!   flat floor without slab edges. Masses come from construct-materials' default library, the
+//!   one a project reads
 //!   until it keeps its own; a layer of a material the library lacks has no mass, and then nor
 //!   has the floor. The openings and shafts that cut a floor (construct-openings, job 4.2) are more
 //!   holes in the boundary the quantities are worked out of ([`read_only_view_cut`]), so the area,
@@ -33,8 +36,8 @@ use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::{Definition, Units, Value};
 use construct_slabs::{
-    SlabError, boundary_of, filled as slabs_filled, is_floor, layer_read_only, layers_of,
-    quantities, read_only, reads_layers,
+    SlabError, filled as slabs_filled, is_floor, layer_read_only, layers_of, quantities, read_only,
+    reads_layers, shape_of, shape_quantities, shape_read_only,
 };
 use construct_types::ElementType;
 
@@ -104,16 +107,21 @@ pub fn read_only_view_cut(
         return Vec::new();
     }
     let rows = (|| {
-        let boundary = boundary_of(&element.recipe)?;
+        let shape = shape_of(&element.recipe)?;
         let boundary = if cuts.is_empty() {
-            boundary
+            shape.boundary().clone()
         } else {
-            construct_openings::with_cuts(&boundary, cuts)?
+            construct_openings::with_cuts(shape.boundary(), cuts)?
         };
         let layers = layers_of(ty.ok_or(SlabError::NotAFloor("it names no type".to_owned()))?)?;
         let q = quantities(&boundary, &layers, &Materials::default_metric())?;
         let mut rows = read_only(&q)?;
         rows.extend(layer_read_only(&layers, &q)?);
+        // A shaped floor that is cut is not built (the builders refuse it), so no number of its shape is
+        // read off its uncut one.
+        if cuts.is_empty() {
+            rows.extend(shape_read_only(&shape_quantities(&shape, &layers)?)?);
+        }
         Ok::<_, SlabError>(rows)
     })();
     rows.map_or_else(
