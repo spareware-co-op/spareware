@@ -452,15 +452,23 @@ async fn hosted_locus<R: Reader>(
             "its wall runs at an angle: only a wall along x or y hosts",
         )));
     };
-    // Which side the element is on decides which way a family's own x runs.
-    let edition = edition_of(reader, project, document).await?;
-    let interior = edition
-        .and_then(|edition| construct_regen::face_names(&edition, &host_recipe).ok())
-        .is_some_and(|names| {
-            names
-                .iter()
-                .any(|name| name.name == face && name.role == "interior")
-        });
+    // Which side the element is on decides which way a family's own x runs: only a family's
+    // opening is not the same either way round, so only a family needs the side.
+    let interior = if regen_families::is_instance(&recipe) {
+        let edition = edition_of(reader, project, document).await?;
+        let names =
+            edition.and_then(|edition| construct_regen::face_names(&edition, &host_recipe).ok());
+        let Some(names) = names else {
+            return Ok(Err(Missing::unreadable(
+                "the faces of its wall cannot be named, so the side it is on is not known",
+            )));
+        };
+        names
+            .iter()
+            .any(|name| name.name == face && name.role == "interior")
+    } else {
+        false
+    };
     let exterior_is_right: i64 = if wall.exterior > wall.interior { 1 } else { -1 };
     let outward = if interior {
         exterior_is_right.checked_neg().unwrap_or(0)
