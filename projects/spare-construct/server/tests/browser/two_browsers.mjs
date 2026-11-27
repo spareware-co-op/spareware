@@ -1798,6 +1798,260 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, the roof's included, matches the server's`);
 }
 
+console.log('\n   Stairs');
+// Ben makes a level 400 mm above Level 1. Anna picks the stair tool, chooses it for the top and clicks
+// twice: no count of risers fits 400 mm, and the server's refusal, with the nearest heights that work,
+// stands under the tool's options; nothing is drawn. Ben moves the level up to 3.1 m; Anna chooses a
+// main private stairway and clicks again, and the stair is made: Ben sees it with the riser count the
+// server gives, its treads solid below the plan's cut plane and dashed above it, its cut line and its
+// walking line with the arrow. Ben moves the level to 3.5 m and both see it laid out again, with more
+// risers. Anna makes it an L, takes that back with her undo and does it again with her redo, and
+// deletes it; Ben removes the level. Nobody changes what the other touched in the last 30 s without
+// the other letting go first (a pick of a stair claims nothing).
+const stairsOf = async () => (await asAnna('stairs')).stairs;
+const stairLevels = async () => asAnna('levels');
+const stairBaseLevel = (await stairLevels()).find((l) => l.id === '1');
+const stairBase = Number.parseFloat(stairBaseLevel.shown);
+check(stairBaseLevel.shown === `${stairBase} mm`, `Level 1's elevation is read as the server shows it, ${stairBaseLevel.shown}`);
+await roofHome(anna);
+await roofHome(ben);
+const stairLevelDialog = async () => {
+  await ben.locator('#ribbon [role="tab"]', { hasText: 'Manage' }).click();
+  await ben.locator('#ribbon [data-act="stacklevels"]').click();
+  await ben.waitForSelector(`${manager} [data-key="new-level-name"]`);
+};
+const stairLevelClose = async () => {
+  await closeDialog();
+  await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+await stairLevelDialog();
+await makeLevel('Stair top', `${stairBase + 400} mm`);
+await levelSection('Stair top').waitFor();
+await stairLevelClose();
+const stairTop = (await stairLevels()).find((l) => l.name === 'Stair top');
+check(stairTop.shown === `${stairBase + 400} mm`, 'Ben makes a level 400 mm above Level 1');
+
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:stair"]');
+const stairField = (key) => `#pv-side [data-key="stair-${key}"]`;
+await anna.waitForSelector(`${stairField('category')} option[value="main-private"]`, { state: 'attached' });
+await anna.waitForSelector(`${stairField('top')} option[value="${stairTop.id}"]`, { state: 'attached' });
+const stairRules = await asAnna('stairs');
+check(
+  (await anna.locator(`${stairField('category')} option`).count()) === stairRules.categories.length &&
+    (await anna.locator('#pv-side [data-stair-rules]').textContent()).includes('D1/AS1') &&
+    (await anna.locator(stairField('category')).inputValue()) === 'common',
+  "the stair tool offers the rule set's categories as the server lists them, a common stairway first, and names the code",
+);
+await anna.locator(stairField('top')).selectOption(stairTop.id);
+await anna.waitForFunction((id) => document.querySelector('#pv-side [data-key="stair-top"]')?.value === id, stairTop.id);
+// Two clicks, as a person makes a stair: the foot of its first riser, then a point in the direction it runs.
+const stairClicks = async (page, from, to) => {
+  for (const [x, y] of [from, to]) {
+    const at = await onPlan(page, x, y);
+    await page.mouse.click(at.x, at.y);
+  }
+};
+const stairFrom = [13300, 6000];
+const stairTo = [13300, 5000];
+await stairClicks(anna, stairFrom, stairTo);
+await anna.waitForSelector('#pv-side [data-problem="stair-draw"]');
+const stairRefusal = await anna.locator('#pv-side [data-problem="stair-draw"]').textContent();
+check(
+  /^No count of risers lays out a rise of 400 mm on a common stairway/.test(stairRefusal) &&
+    /the nearest floor-to-floor heights that work are \d+ mm and \d+ mm\.$/.test(stairRefusal),
+  `a rise no count of risers fits is refused in the server's words, with the nearest heights that work: ${stairRefusal}`,
+);
+check(
+  (await stairsOf()).length === 0 && !(await ben.evaluate(() => [...window.spare.elements.values()].some((p) => p.el.kind === 'stair'))),
+  'and nothing is made, for Ben or on the server',
+);
+
+// Ben moves the level by typing its elevation and pressing Enter, once the dialog shows the level as it
+// stands. A dialog that was drawn again between the typing and the Enter (a log entry reached it) has
+// the old value back, so he types it again, as a person would.
+const moveStairTop = async (typed) => {
+  const want = `${Math.round(Number.parseFloat(typed) * 1000)} mm`;
+  const topAt = async () => (await stairLevels()).find((l) => l.id === stairTop.id);
+  await stairLevelDialog();
+  const field = ben.locator(`${manager} [data-key="level-elevation:${stairTop.id}"]`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const now = (await topAt()).shown;
+    await ben.waitForFunction(([key, shown]) => document.querySelector(key)?.value === shown, [`${manager} [data-key="level-elevation:${stairTop.id}"]`, now]);
+    await field.fill(typed);
+    await field.press('Enter');
+    for (let tries = 0; tries < 30; tries += 1) {
+      if ((await topAt()).shown === want) {
+        await stairLevelClose();
+        return;
+      }
+      await ben.waitForTimeout(100);
+    }
+  }
+  const problems = await ben.evaluate(() => [...document.querySelectorAll('#stack-manage [data-problem]')].map((n) => n.textContent).join(' | '));
+  throw new Error(`FAILED: the stair's top level moves to ${typed} (levels now ${JSON.stringify(await stairLevels())}; the dialog says: ${problems}; the field: ${await field.inputValue()})`);
+};
+await moveStairTop(`${(stairBase + 3100) / 1000} m`);
+await anna.locator(stairField('category')).selectOption('main-private');
+await stairClicks(anna, stairFrom, stairTo);
+const stairOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'stair')?.el.id;
+await ben.waitForFunction(stairOf);
+const stairId = await ben.evaluate(stairOf);
+const stairDrawn = (id) =>
+  document.querySelector(`g.element[data-id="${id}"] path.body.stair`) &&
+  document.querySelector(`g.element[data-id="${id}"] [data-stair-walk]`) &&
+  document.querySelector(`g.element[data-id="${id}"] [data-stair-arrow]`);
+await ben.waitForFunction(stairDrawn, stairId);
+pass("Anna's stair appears in Ben's browser, with its walking line and its arrow");
+const stairView = async () => (await stairsOf()).find((s) => s.id === stairId);
+const stairLaid = await stairView();
+check(
+  stairLaid.layout && stairLaid.refusal === null && stairLaid.category === 'main-private' && stairLaid.layout.risers === 17,
+  'the server lays it out: 3100 mm of a main private stairway takes 17 risers',
+);
+// What a page draws of it: a line for each riser, those under the plan's cut plane solid and those over it dashed.
+const stairTreads = ([id, count]) => document.querySelectorAll(`g.element[data-id="${id}"] [data-stair-tread]`).length === count;
+const stairLines = (page, id, above) =>
+  page.locator(`g.element[data-id="${id}"] [data-stair-tread][data-above="${above}"]`).count();
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(stairTreads, [stairId, stairLaid.layout.risers]);
+  await page.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] [data-stair-cut]`), stairId);
+  check(
+    (await stairLines(page, stairId, false)) > 0 &&
+      (await stairLines(page, stairId, true)) > 0 &&
+      (await page.locator(`g.element[data-id="${stairId}"] [data-stair-cut]`).count()) === 1,
+    `${name}'s plan draws a line for each of its 17 risers, solid under the cut plane and dashed over it, and the cut line`,
+  );
+}
+await shot(ben, 'ben-stair');
+
+// Ben picks it; his palette reads the risers, riser height and going from the server, read-only.
+const stairPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await box(page, id);
+  // The middle of its first run, as the server filled it (grid steps, 6400 to the millimetre).
+  const middle = await page.evaluate((stair) => {
+    const quad = window.spare.elements.get(stair).fill.recipe.args.pieces[0].plan;
+    return [0, 1].map((axis) => quad.reduce((sum, corner) => sum + corner[axis], 0) / quad.length / 6400);
+  }, id);
+  const at = await onPlan(page, middle[0], middle[1]);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector('#pv-side [data-stair-element]');
+};
+const stairRead = (page, id) => page.locator(`#pv-side [data-read-only="${id}"]`).textContent();
+const stairRows = async () => (await asAnna(`parameters/${stairId}`)).parameters;
+await anna.keyboard.press('Escape');
+await stairPick(ben, stairId);
+await ben.waitForSelector('#pv-side [data-read-only="stair.risers"]');
+const stairShown = async (id) => (await stairRows()).find((p) => p.id === id)?.shown;
+check(
+  (await stairRead(ben, 'stair.risers')) === '17' &&
+    (await stairRead(ben, 'stair.riser-height')) === (await stairShown('stair.riser-height')) &&
+    (await stairRead(ben, 'stair.going')) === (await stairShown('stair.going')) &&
+    (await ben.locator('#pv-side input[data-key^="param:stair"]').count()) === 0,
+  "Ben's palette shows 17 risers, the riser height and the going as the server reads them, and nothing of them can be typed",
+);
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Ben moves the top level to 3.4 m: the server lays the stair out again, and both pages draw what it says.
+await moveStairTop(`${(stairBase + 3500) / 1000} m`);
+const stairTaller = await until(stairView, (s) => s.layout?.risers === 19, 'the server lays the stair out again for 3500 mm');
+check(stairTaller.layout.risers === 19, 'the level moves up and the server lays the stair out again, with 19 risers');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(stairTreads, [stairId, 19]);
+  pass(`${name}'s plan draws the stair laid out again: a line for each of its 19 risers`);
+}
+await stairPick(ben, stairId);
+await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '19');
+await stairPick(anna, stairId);
+await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '19');
+pass("both palettes read 19 risers from the server");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// Anna lays it out as an L turning left, from her palette: a landing is drawn in both browsers.
+const stairLanding = (id) => document.querySelector(`g.element[data-id="${id}"] [data-stair-landing]`);
+await anna.waitForFunction((id) => !window.spare.claims.has(id) || window.spare.claims.get(id).person === window.spare.me.person.id, stairId);
+await anna.locator('#pv-side select[data-key="stair-own-layout"]').selectOption('left');
+await ben.waitForFunction(stairLanding, stairId);
+await anna.waitForFunction(stairLanding, stairId);
+check(
+  (await stairView()).layout.landings.length === 1 && (await stairView()).layout.landings[0].turn === 'left',
+  "Anna's L, turning left, is in both browsers, a landing drawn, and the server has laid it out",
+);
+await anna.waitForFunction(stairTreads, [stairId, 19]);
+await ben.waitForFunction(stairTreads, [stairId, 19]);
+pass('an L of 19 risers is drawn in both browsers, as the server laid it out');
+await shot(ben, 'ben-stair-l');
+
+// Her undo takes the L back to the straight stair, and her redo makes it an L again.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'stair.runs');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-stair-landing]`), stairId);
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-stair-landing]`), stairId);
+pass("Anna's undo takes the L back to the straight stair, in both browsers");
+await anna.waitForFunction(() => window.spare.steps.redo?.cmd === 'edit.undo');
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+await ben.waitForFunction(stairLanding, stairId);
+await anna.waitForFunction(stairLanding, stairId);
+pass("and her redo makes it an L again, in both");
+
+// Anna makes it an accessible stairway from her palette: its riser may be no higher than 180 mm, so
+// the server lays it out in 20 risers, and both browsers draw what it says.
+await anna.locator('#pv-side select[data-key="stair-own-category"]').selectOption('accessible');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.category === 'accessible', stairId);
+const stairAccessible = await until(stairView, (s) => s.layout?.risers === 20, 'the server lays the accessible stairway out in 20 risers');
+check(stairAccessible.category === 'accessible', 'an accessible stairway of 3500 mm takes 20 risers, as the server lays it out');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(stairTreads, [stairId, 20]);
+  pass(`${name}'s plan draws a line for each of its 20 risers`);
+}
+
+// Anna narrows it to 900 mm, and both see the new width. A width its landing is too short for is turned
+// back in the server's words, beside the field, and the stair keeps its width.
+const stairWidth = anna.locator('#pv-side input[data-key="stair-own-width"]');
+await stairWidth.fill('900 mm');
+await stairWidth.press('Enter');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.width === 'length:q0:5760000', stairId);
+check((await stairView()).width.shown === '900 mm', "Anna's new width reaches Ben's browser and the server");
+await stairWidth.fill('1200 mm');
+await stairWidth.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="stair-edit"]');
+check(
+  /^Landing 1 turns/.test(await anna.locator('#pv-side [data-problem="stair-edit"]').textContent()) &&
+    (await stairView()).width.shown === '900 mm',
+  "a width the landing is too short for is turned back in the server's words, and the stair keeps its width",
+);
+
+// A fresh load agrees: the same stair, the same landing, the same treads, and every body built agrees with the server's.
+await ben.reload();
+await ben.waitForSelector('html[data-stack="ready"]');
+await roofHome(ben);
+await ben.waitForFunction(stairDrawn, stairId);
+await ben.waitForFunction(stairLanding, stairId);
+await ben.waitForFunction(stairTreads, [stairId, 20]);
+pass("a fresh load of Ben's page draws the same stair, as an L of 20 risers");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the stair's included, matches the server's`);
+}
+
+// Anna deletes it, and Ben removes the level once nothing is tied to it.
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), stairId);
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), stairId);
+pass("Anna deletes the stair, and it is gone from both plans");
+await stairLevelDialog();
+await ben.locator(`${manager} [data-key="level-delete:${stairTop.id}"]`).click();
+await until(
+  async () => (await stairLevels()).some((l) => l.id === stairTop.id),
+  (still) => !still,
+  "the stair's top level is deleted",
+);
+await stairLevelClose();
+pass("Ben deletes the level, and the plan is as it was before the stair");
+
 console.log('\n   Placed families');
 // Anna draws a wall of her own in clear ground above the building, where the floor was, and puts a window of the
 // library on it from the family tool; Ben sees the window, and the wall cut for it where this run's

@@ -21,6 +21,9 @@
 //! openings' volume, each family's solids exactly theirs and inside their opening; the opening
 //! moving with its wall and resized with its type; and every refusal of a family that does not
 //! fit, in the builder's words, the same from `fits`.
+//!
+//! Stairs (job 6.7): a run's side profile lofted across its width and a landing's outline
+//! extruded up, each a closed solid of exactly its volume, named by its pieces' faces.
 
 #![allow(
     dead_code,
@@ -3062,4 +3065,117 @@ pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -
         body["holes"].as_array().map_or(0, Vec::len),
         usize::from(island)
     );
+}
+
+/// A filled stair recipe (construct-stairs' `filled` form), every point a whole millimetre: a run
+/// 1000 mm wide from the origin towards +x, two risers of 180 mm on a 300 mm going and an
+/// underside from 300 mm along at the floor up to 200 mm high at its end, 600 mm along; then a
+/// landing 900 mm long and 150 mm thick, its top 360 mm up. In the run's plane its profile is
+/// (0, 0), (0, 180), (300, 180), (300, 360), (600, 360), (600, 200), (300, 0): 300 x 180 mm before
+/// its middle and 300 x (360 - 100) mm after, 132,000 mm2.
+pub fn stair_of() -> Recipe {
+    let mm = |p: [i64; 3]| p.map(|c| c * 6400);
+    let profile = [
+        [0, 0],
+        [0, 180],
+        [300, 180],
+        [300, 360],
+        [600, 360],
+        [600, 200],
+        [300, 0],
+    ];
+    let side = |y: i64| -> Vec<[i64; 3]> { profile.iter().map(|&[a, z]| mm([a, y, z])).collect() };
+    let plan = |corners: [[i64; 2]; 4]| -> Vec<[i64; 2]> {
+        corners.iter().map(|&[x, y]| [x * 6400, y * 6400]).collect()
+    };
+    let landing = [
+        [600, 0, 210],
+        [1500, 0, 210],
+        [1500, 1000, 210],
+        [600, 1000, 210],
+    ]
+    .map(mm);
+    recipe(
+        "stair",
+        json!({
+            "material": "concrete-regular",
+            "pieces": [
+                {
+                    "id": "run.1",
+                    "treads": 1,
+                    "plan": plan([[0, 0], [600, 0], [600, 1000], [0, 1000]]),
+                    "loft": [side(0), side(1000)],
+                },
+                {
+                    "id": "landing.1",
+                    "plan": plan([[600, 0], [1500, 0], [1500, 1000], [600, 1000]]),
+                    "extrude": landing,
+                    "by": mm([0, 0, 150]),
+                },
+            ],
+        }),
+    )
+}
+
+/// A stair is one solid per piece: its run's profile lofted across its 1000 mm width, a closed
+/// mesh of exactly 132,000 mm2 by 1000 mm, and its landing's outline extruded up, exactly 900 by
+/// 1000 by 150 mm, each a part in the stair's material; its bounds the stand-in's box; its faces
+/// named by its pieces (a tread and a riser for each tread of a run, its sides, underside and end,
+/// and a landing's top, underside and edges), as `construct_regen::kernel::names` gives them
+/// without building; the body lists what each piece asked of the engine, exactly in steps.
+pub fn a_stair_is_its_pieces<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let stair = stair_of();
+    let b = built(&k, &stair);
+    assert_eq!(b.bounds.min, [0, 0, 0]);
+    assert_eq!(b.bounds.max, [1500, 1000, 360]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&stair).unwrap().bounds
+    );
+    assert_eq!(b.displays[0].deviation, 0);
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 0], [600, 0], [600, 1000], [0, 1000]]
+    );
+    let parts = &b.displays[0].parts;
+    assert_eq!(parts.len(), 2);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    assert_eq!(
+        closed_mesh_six_volume(&part_mesh(&b.displays[0], 0)),
+        6 * 132_000 * 1000
+    );
+    assert_eq!(
+        closed_mesh_six_volume(&part_mesh(&b.displays[0], 1)),
+        6 * 900 * 1000 * 150
+    );
+    assert_eq!(b.displays[1].mesh, b.displays[0].mesh);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from([
+            "run.1.tread.1",
+            "run.1.riser.1",
+            "run.1.side.left",
+            "run.1.side.right",
+            "run.1.underside",
+            "run.1.end",
+            "landing.1.top",
+            "landing.1.underside",
+            "landing.1.edge.0",
+            "landing.1.edge.1",
+            "landing.1.edge.2",
+            "landing.1.edge.3",
+        ])
+    );
+    let mut sorted = b.names.clone();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(construct_regen::kernel::names(&stair).unwrap(), sorted);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let asked = body["pieces"].as_array().unwrap();
+    assert_eq!(asked.len(), 2);
+    assert_eq!(asked[0]["loft"], stair.args["pieces"][0]["loft"]);
+    assert_eq!(asked[1]["extrude"], stair.args["pieces"][1]["extrude"]);
+    assert_eq!(asked[1]["by"], json!([0, 0, 150 * 6400]));
 }

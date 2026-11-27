@@ -14,8 +14,9 @@
 //!
 //! Types, a document's parameter table and its levels have no shape: they are listed by kind and
 //! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
-//! and one that reads its top tie next ([`crate::levels::filled`]); an element's place is its
-//! base level's ([`crate::levels::placed`]). Each element is listed under `reads` with every
+//! and one that reads its top tie next ([`crate::levels::filled`]), a stair laid out from it
+//! ([`crate::stairs::filled`]); an element's place is its base level's
+//! ([`crate::levels::placed`]). Each element is listed under `reads` with every
 //! record it reads (the parameter table, its type, its levels), so a change to any of them, or
 //! its deletion, builds it again in the same pass. A shape is then the same however the log was
 //! reached.
@@ -1289,7 +1290,10 @@ async fn input_of<R: Reader>(
     let recipe = recipe_of(reader, project, document, element).await?;
     Ok(match placed {
         Ok(placed) => {
-            let recipe = recipe.and_then(|recipe| levels::filled(&recipe, &placed));
+            let recipe = recipe
+                .and_then(|recipe| levels::filled(&recipe, &placed))
+                // A stair is laid out from the rise its levels give it.
+                .and_then(|recipe| crate::stairs::filled(&recipe));
             // A room's loop is found from the walls of its level once its height is read.
             let recipe = match recipe {
                 Ok(recipe) => {

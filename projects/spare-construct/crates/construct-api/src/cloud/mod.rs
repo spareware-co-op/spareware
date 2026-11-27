@@ -21,6 +21,8 @@
 //!   through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
+//! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
+//!   landings), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
 //!   and worked out each time from the document.
@@ -52,6 +54,7 @@ pub mod rooms;
 pub mod schedules;
 pub mod sheets;
 pub mod spaces;
+pub mod stairs;
 pub mod transaction;
 pub mod undo;
 pub mod views;

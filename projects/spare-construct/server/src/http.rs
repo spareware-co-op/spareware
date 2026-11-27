@@ -166,6 +166,7 @@ pub fn routes(app: Shared) -> Router {
             get(families),
         )
         .route("/api/projects/{project}/models/{model}/rooms", get(rooms))
+        .route("/api/projects/{project}/models/{model}/stairs", get(stairs))
         .route(
             "/api/projects/{project}/models/{model}/warnings",
             get(warnings),
@@ -759,6 +760,18 @@ async fn roof_types(
     Ok(Json(
         app.service
             .roof_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn stairs(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .stairs(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

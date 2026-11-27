@@ -34,6 +34,14 @@
 //! - [`rooms`]: how a room's recipe finds its loop from the walls of its level (construct-rooms)
 //!   as regeneration has reached them, and which rooms a changed wall or room builds again.
 //!
+//! - [`stair_plan`]: a stair (`stair`) as both builders read it: its filled recipe's material and
+//!   each piece with its solid in grid steps (job 6.7). The kernel builds one solid per piece (a
+//!   run lofted across its width, a landing extruded up), the stand-in one box with its pieces
+//!   drawn.
+//! - [`stairs`]: how a stair's recipe is laid out from the rise its levels give it and filled with
+//!   its pieces (construct-stairs), its layout as a command or a view reads it, and its read-only
+//!   quantities.
+//!
 //! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
 //!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1). Both builders
 //!   build it: the kernel one solid per layer, the stand-in one box of its whole thickness.
@@ -85,6 +93,9 @@ pub mod room_plan;
 pub mod rooms;
 #[cfg(feature = "server")]
 pub mod slabs;
+pub mod stair_plan;
+#[cfg(feature = "server")]
+pub mod stairs;
 pub mod stand_in;
 pub mod voids;
 pub mod wall_plan;
