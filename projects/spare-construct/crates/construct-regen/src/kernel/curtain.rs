@@ -154,7 +154,10 @@ fn door_recipe(
         family: door.door.family().clone(),
         ty: door.door.ty().clone(),
         turn: door.turn,
+        seat: None,
         values: BTreeMap::new(),
+        in_document: None,
+        own: None,
     };
     let mut resolved = families::resolve(families, &instance)
         .map_err(|e| fault(&e.code, format!("door panel {}: {}", door.key, e.message)))?;

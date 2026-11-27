@@ -51,10 +51,12 @@ use construct_drawing::plan::{PlanElement, plan};
 use construct_drawing::svg::Svg;
 use construct_drawing::view::View;
 use construct_materials::{MaterialId, Materials};
-use construct_model::element::Placement;
-use construct_model::geometry::Recipe;
+use construct_model::element::{Element, Placement};
+use construct_model::geometry::{Geometry, Recipe};
 use construct_params::Length;
+use construct_regen::hosting::{self, Hosting};
 use construct_regen::kernel::Kernel;
+use construct_regen::seating;
 use construct_styles::patterns::SOLID;
 use construct_styles::{Colour, Edge, EdgeStyle, LineStyles, ObjectStyles, Scale};
 use construct_views::Crop;
@@ -73,6 +75,22 @@ pub struct ToDraw {
     pub placement: Placement,
     /// Its recipe as the regenerator fills it.
     pub recipe: Recipe,
+    /// The wall it is hosted on, if it is hosted on a face of one: a plan draws it seated there
+    /// (piece A83), as the regenerator builds it.
+    pub hosted_on: Option<HostedOn>,
+}
+
+/// An element hosted on a face of its host, with what seats it there ([`hosting::seat`]).
+#[derive(Clone, Debug)]
+pub struct HostedOn {
+    /// The hosted element's record.
+    pub record: Element,
+    /// The host's record.
+    pub host: Element,
+    /// The host's recipe as the regenerator fills it.
+    pub host_recipe: Recipe,
+    /// How the hosted element's record says it is hosted.
+    pub hosting: Hosting,
 }
 
 /// The pen a crop's outline is drawn with when it is shown: model pen 2.
@@ -212,6 +230,33 @@ impl Defaults {
     }
 }
 
+/// The recipe `element` is drawn from: as the regenerator builds it. An element hosted on a wall
+/// at an angle carries the seat its wall gives it (piece A83), so its drawing stands in the wall
+/// as its shape does; anything else is drawn from its recipe as it is.
+fn seated<E: Engine + Send + 'static>(
+    kernel: &Kernel<E>,
+    element: &ToDraw,
+) -> Result<Recipe, String> {
+    let Some(on) = &element.hosted_on else {
+        return Ok(element.recipe.clone());
+    };
+    let (_, seated) = hosting::seat(
+        &kernel.edition(),
+        &on.host,
+        &on.host_recipe,
+        &on.record,
+        &element.recipe,
+        &on.hosting,
+    )
+    .map_err(|e| e.message)?;
+    let at_an_angle = seating::seat_of(&seated).map_err(|e| e.message)?.is_some();
+    Ok(if at_an_angle {
+        seated
+    } else {
+        element.recipe.clone()
+    })
+}
+
 /// The drawing of what `view`'s plane cuts of one element: each layer of it is its own solid, with
 /// its material, and the element is checked to pen at `scale`.
 fn one<E: Engine + Send + 'static>(
@@ -222,7 +267,8 @@ fn one<E: Engine + Send + 'static>(
     looks: Option<&dyn Looks>,
     element: &ToDraw,
 ) -> Result<Drawing, String> {
-    let layers = kernel.layers(&element.recipe).map_err(|e| e.message)?;
+    let recipe = seated(kernel, element)?;
+    let layers = kernel.layers(&recipe).map_err(|e| e.message)?;
     let parts: Vec<PlanElement<'_, E::Solid>> = layers
         .iter()
         .map(|layer| PlanElement {

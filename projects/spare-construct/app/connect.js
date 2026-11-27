@@ -52,6 +52,7 @@
     log: [],
     three: null,
     builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
+    builder: null, // the open model's shape builder, for the seats the page asks of it
     viewing: false, // this browser can't build the open model, so it draws what's stored
     cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
@@ -620,6 +621,7 @@
     C.problems.clear();
     C.asked.clear();
     C.cuts = false;
+    C.builder = null;
     forgetDatums();
     forgetDimensions();
     S.sel = null;
@@ -634,6 +636,7 @@
     C.model = model;
     C.team = team;
     C.viewing = !builder;
+    C.builder = builder;
     C.cuts = Boolean(builder) && typeof builder.shapes.build_hosting === 'function';
     C.readOnly = C.viewing;
     C.watching.add(model.id);
@@ -694,8 +697,8 @@
       const shapes = await import(path);
       await shapes.default();
       // built: recipe text -> what it builds to, which never changes; hosting: the same for a host
-      // and what is hosted in it
-      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map() };
+      // and what is hosted in it; seats: the same for where an element sits on a wall at an angle
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map(), seats: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
       return null;
@@ -750,7 +753,7 @@
    */
   function buildOn(builder, record, into, fill) {
     const recipe = fill?.recipe ?? record.recipe;
-    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill) : [];
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill, builder) : [];
     if (!guests.length) return buildShape(builder, recipe);
     // Each guest by its place in the host's frame, so a host that moves builds to the same text.
     const host = JSON.stringify({ recipe, placement: { x: 0, y: 0, z: 0 } });
@@ -814,9 +817,9 @@
     if (into.get(id) !== piece || piece.asked !== asked) return;
     Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false, settled: asked });
     seatNote(id, fill);
-    if (isFamily(piece.el) && seatOfPiece(piece)) {
-      // Built unturned: it is not compared until it is built again as its wall seats it.
-      Object.assign(piece, { stale: true, seatedTurn: undefined });
+    if ((isFamily(piece.el) || hostIdOf(piece.el) !== null) && seatOfPiece(piece)) {
+      // Built as it is stored: it is not compared until it is built again as its wall seats it.
+      Object.assign(piece, { stale: true, seatedKey: undefined });
       seatFamilies();
     }
     queueDraw();
@@ -854,7 +857,7 @@
    * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
    * regenerator hands them to its builder.
    */
-  function guestsOf(host, into, fill) {
+  function guestsOf(host, into, fill, builder = C.builder) {
     const drawn = { el: host, shape: into.get(host.id)?.shape, fill: fill ?? into.get(host.id)?.fill };
     const guests = [];
     for (const [id, piece] of into) {
@@ -865,12 +868,13 @@
         continue;
       }
       const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
-      const at = placedOn(piece.el, face, drawn);
+      const at = placedOn(piece.el, face, drawn, builder);
       const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
-      // A placed family is handed to the builder turned to stand in its wall, as the server hands it.
-      const seat = isFamily(piece.el) ? seatOfPiece(piece, drawn) : null;
+      // An element is handed to the builder as its wall seats it, as the server hands it: a placed
+      // family turned to stand in its wall, anything in a wall at an angle with its seat.
+      const seat = seatOfPiece(piece, drawn, builder);
       const own = piece.fill?.recipe ?? piece.el.recipe; // a family copy's filled recipe holds its family's text
-      guests.push({ key: id, recipe: seat ? turnedRecipe(own, seat.turn) : own, placement });
+      guests.push({ key: id, recipe: seat ? seat.recipe : own, placement });
     }
     // A shaft is hosted on nothing: the server says which pass through a floor, as it hands its builder.
     for (const shaft of drawn.fill?.cut_by?.shafts ?? []) guests.push({ key: shaft.key, recipe: shaft.recipe, placement: shaft.placement });
@@ -891,11 +895,14 @@
   }
 
   /** Where `el` sits hosted on `face` of `host` (`{el, shape, fill}`): `placementOf`'s rule. */
-  function placedOn(el, face, host) {
+  function placedOn(el, face, host, builder = C.builder) {
     const along = el.props?.['@host.along'];
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    // A wall at an angle seats what is hosted in it as the package works it out (`seatAtAngle`).
+    const angled = seatAtAngle(builder, el, role, host, along, up);
+    if (angled) return angled.at;
     if (el.recipe.op === FAMILY_OP) return onFamily(role, host, along, up)?.at ?? el.placement;
     if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
@@ -931,7 +938,7 @@
    */
   function lineOf(host) {
     const args = host.fill?.recipe?.args;
-    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length || !args.start || !args.end) return null;
     const start = args.start.map(steps);
     const end = args.end.map(steps);
     const d = [end[0] - start[0], end[1] - start[1]];
@@ -943,9 +950,33 @@
   }
 
   /**
+   * Where `el` sits on side `role` of the layered wall `host` (`{el, shape, fill}`) when that wall
+   * runs at an angle, and the recipe its builder is handed with its seat: asked of the package
+   * (`seat`), which works it out as construct-regen's `hosting::seat` does for the server, in the
+   * wall's own frame with every point rounded once, so this page builds what the server builds.
+   * `{at, recipe}` with `at` in the model, or null: the wall runs along an axis (`onLayered` and
+   * `onFamily` seat that), it is not filled yet, or the package does not answer.
+   */
+  function seatAtAngle(builder, el, role, host, along, up) {
+    if (!builder || typeof builder.shapes.seat !== 'function' || host.el.recipe.op !== LAYERED || !role) return null;
+    const line = lineOf(host);
+    if (!line || line.axis !== null) return null;
+    const wall = JSON.stringify(host.fill.recipe);
+    const text = JSON.stringify([wall, el.recipe, el.id, role, along, up]);
+    if (!builder.seats.has(text)) {
+      builder.seats.set(text, JSON.parse(builder.shapes.seat(wall, JSON.stringify(el.recipe), el.id, role, along, up)));
+    }
+    const seat = builder.seats.get(text).seat;
+    if (!seat) return null;
+    const base = host.el.placement;
+    return { at: { x: base.x + seat.placement.x, y: base.y + seat.placement.y, z: base.z + seat.placement.z }, recipe: seat.recipe };
+  }
+
+  /**
    * Where `el` sits on side `role` of a layered wall, as construct-regen's `hosting` puts it: along
    * the wall's line from its start the way the wall runs, flush with that side and reaching toward
-   * the other, each to the nearest millimetre, and up from its base. Only a wall along an axis hosts.
+   * the other, each to the nearest millimetre, and up from its base. A wall along an axis; one at an
+   * angle seats through `seatAtAngle`.
    */
   function onLayered(el, role, host, along, up) {
     const line = lineOf(host);
@@ -978,7 +1009,14 @@
     const wall = host.el;
     if (wall.recipe.op !== LAYERED) return wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
     const line = lineOf(host);
-    if (!line || line.axis === null) return null;
+    if (!line) return null;
+    if (line.axis === null) {
+      // At an angle a hosted element's origin is `along` the line from its start: the pointer's place
+      // projected onto the line, to the nearest millimetre.
+      const [sx, sy] = line.start.map((v) => v / STEPS_PER_MM);
+      const length = Math.hypot(line.d[0], line.d[1]);
+      return Math.round(((x - wall.placement.x - sx) * line.d[0] + (y - wall.placement.y - sy) * line.d[1]) / length);
+    }
     const a = line.axis;
     const at = [x - wall.placement.x, y - wall.placement.y][a];
     const start = Math.round(line.start[a] / STEPS_PER_MM);
@@ -1053,7 +1091,7 @@
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
-      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through) || piece.ahead || seatChanged(piece)) continue;
       // What is hosted in it changed after the last entry this checkpoint covers: it is built with that change, so
       // the next checkpoint compares it. (Every entry through `through` has been applied here: see `applying`.)
       if ((piece.touched ?? 0) > through) continue;
@@ -1116,8 +1154,9 @@
     const fill = await fillOf(model, record);
     const answer = await shapeFor(model, record, into, fill);
     seatNote(id, fill);
-    // A placed family is built turned to stand in its wall once the wall is here (`seatFamilies`).
-    const unseated = isFamily(record) && into === C.elements;
+    // A hosted element is built as its wall seats it once the wall is here (`seatFamilies`): a
+    // placed family turned to stand in it, anything in a wall at an angle with its seat.
+    const unseated = into === C.elements && (isFamily(record) || hostIdOf(record) !== null);
     if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill, ...(unseated ? { stale: true } : {}) });
     // What it is hosted in is built again with it, as the server builds a host with its guests.
     if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
@@ -1256,6 +1295,7 @@
     const piece = edit && C.elements.get(edit.args.element);
     if (piece?.hash && C.model) {
       piece.el = await api(`${modelUrl(C.model.id)}/record/${piece.hash}`);
+      piece.ahead = false;
       drawPlan();
     }
   }
@@ -2986,7 +3026,7 @@
       html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
     }
     html += '</table>';
-    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right. Hold Shift on the second for any angle.</p>';
     return html + problem('wall-draw');
   }
 
@@ -5714,7 +5754,7 @@
    * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
    * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
    */
-  async function placeWall(at) {
+  async function placeWall(at, anyAngle = false) {
     const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
       S.pend = point;
@@ -5724,8 +5764,9 @@
     const [ax, ay] = S.pend;
     S.pend = null;
     $('#hint').innerHTML = hint();
+    // A wall runs along x or y, whichever is nearer the pointer; with Shift held, to the point itself, at any angle.
     const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
-    const end = along ? [point[0], ay] : [ax, point[1]];
+    const end = anyAngle ? point : along ? [point[0], ay] : [ax, point[1]];
     const level = levelOf();
     let view;
     try {
@@ -5780,14 +5821,7 @@
   }
 
   function placeDoor(at) {
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.kind !== 'wall' || !piece.shape) return false;
-      const box = around(piece);
-      return (
-        at.x >= box.x - 300 && at.x <= box.x + box.w + 300 &&
-        at.y >= box.y - 300 && at.y <= box.y + box.d + 300
-      );
-    });
+    const wall = wallAt(at);
     if (!wall) {
       say('Click on a wall to place a door.');
       return;
@@ -5828,7 +5862,7 @@
       const at = toModel(event);
       if (S.tool !== 'select') {
         if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
-        else if (S.tool === 'wall') placeWall(at);
+        else if (S.tool === 'wall') placeWall(at, event.shiftKey);
         else if (S.tool === 'stair') placeStair(at);
         else if (S.tool === 'curtain') placeCurtain(at);
         else if (S.tool === 'door') placeDoor(at);
@@ -5874,7 +5908,10 @@
         const offset = alongOn(hosted.host, piece.el, x, y);
         if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
         const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        // The shape of what is hosted in a wall at an angle depends on where it is along it, so a
+        // piece moved ahead of the log is not compared with a checkpoint from before the move.
         piece.el = { ...piece.el, props };
+        piece.ahead = true;
         drag.along = offset;
         queueDraw();
         return;
@@ -6177,11 +6214,7 @@
       say('The library has not come yet.');
       return;
     }
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.kind !== 'wall' || !piece.shape) return false;
-      const box = around(piece);
-      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
-    });
+    const wall = wallAt(at);
     if (!wall) {
       say('Click on a wall to place it.');
       return;
@@ -6211,7 +6244,8 @@
    * How a placed family sits on side `role` of a layered wall, as construct-regen's `hosting::seat`
    * works it out: its origin on the wall's centre plane, `along` the line from its start, `up` from
    * the wall's base, each to the nearest millimetre, and the turn (0 to 3 quarter turns about z) that
-   * points its front out of that side. Null until the wall is filled, and for a wall at an angle.
+   * points its front out of that side. Null until the wall is filled, and for a wall at an angle,
+   * which seats through `seatAtAngle`.
    */
   function onFamily(role, host, along, up) {
     const line = lineOf(host);
@@ -6231,8 +6265,17 @@
 
   const turnedRecipe = (recipe, turn) => ({ ...recipe, args: { ...recipe.args, turn } });
 
-  /** Where a placed family sits and how it is turned, on its wall (`host`, or the one it names, if it is here). */
-  function seatOfPiece(piece, host) {
+  /** The recipe a piece is built from before its wall seats it: a family copy's filled recipe holds its family's text. */
+  const ownRecipe = (piece) => (isFamily(piece.el) ? piece.fill?.recipe ?? piece.el.recipe : piece.el.recipe);
+
+  /**
+   * Where a hosted element sits and the recipe its builder is handed, on its wall (`host`, or the
+   * one it names, if it is here), as construct-regen's `hosting::seat` works them out: `{at, recipe}`.
+   * A placed family on a wall along an axis is handed its turn, anything in a wall at an angle its
+   * seat (`seatAtAngle`); null for anything else, which is built as it is stored, and until the
+   * wall is here and filled.
+   */
+  function seatOfPiece(piece, host, builder = C.builder) {
     const hosted = hostOf(piece.el);
     const wall = host ?? hosted?.host;
     const face = hosted?.face ?? (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -6240,27 +6283,59 @@
     const up = piece.el.props?.['@host.up'];
     if (!wall || !face || along === undefined || up === undefined) return null;
     const role = wall.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
-    return onFamily(role, wall, along, up);
+    const angled = seatAtAngle(builder, { ...piece.el, recipe: ownRecipe(piece) }, role, wall, along, up);
+    if (angled) return angled;
+    if (!isFamily(piece.el)) return null;
+    const turned = onFamily(role, wall, along, up);
+    return turned && { at: turned.at, recipe: turnedRecipe(ownRecipe(piece), turned.turn) };
   }
 
-  /** Builds each placed family again, turned as its wall seats it, where it is not built so yet. */
+  /**
+   * What a hosted piece is to be built from: `{seat}` with its seat (null: as stored), or null while
+   * its wall is not here and filled enough to say, as a piece that is hosted but not yet seated.
+   */
+  function seatWanted(piece) {
+    const hosted = hostOf(piece.el);
+    if (!hosted) return null;
+    const { host } = hosted;
+    if (host.el.recipe.op === LAYERED && !lineOf(host)) return null;
+    return { seat: seatOfPiece(piece) };
+  }
+
+  /** The text a seat is told apart by: the recipe the builder is handed, or none. */
+  const seatKey = (seat) => (seat ? JSON.stringify(seat.recipe) : null);
+
+  /** Whether `piece` is built from other than the recipe its wall now seats it with. */
+  const seatChanged = (piece) => {
+    const wanted = seatWanted(piece);
+    return Boolean(wanted) && seatKey(wanted.seat) !== (piece.seatedKey ?? null);
+  };
+
+  /**
+   * Builds each hosted piece again, as its wall seats it, where it is not built so yet (a placed
+   * family turned to stand in its wall; anything in a wall at an angle with its seat), and lets a
+   * hosted piece built as it is stored be compared once its wall has said so.
+   */
   function seatFamilies() {
     if (!C.model || C.viewing) return;
     for (const piece of C.elements.values()) {
-      if (!isFamily(piece.el) || piece.turning || piece.failed) continue;
-      const seat = seatOfPiece(piece);
-      if (seat && piece.seatedTurn !== seat.turn) reseat(piece, seat.turn);
+      if (piece.turning || piece.failed || hostIdOf(piece.el) === null) continue;
+      const wanted = seatWanted(piece);
+      if (!wanted) continue;
+      if (seatKey(wanted.seat) !== (piece.seatedKey ?? null)) reseat(piece, wanted.seat);
+      else if (piece.stale && !isFamily(piece.el)) piece.stale = false;
     }
   }
 
-  async function reseat(piece, turn) {
+  async function reseat(piece, seat) {
     piece.turning = true;
     try {
       const row = C.models.get(C.model.id);
       const builder = row && (await builderFor(row));
       if (!builder) return;
-      const answer = buildOn(builder, { ...piece.el, recipe: turnedRecipe(piece.fill?.recipe ?? piece.el.recipe, turn) }, null, null);
-      Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedTurn: turn, stale: false });
+      const recipe = seat ? seat.recipe : ownRecipe(piece);
+      const answer = buildOn(builder, { ...piece.el, recipe }, null, null);
+      Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedKey: seatKey(seat), stale: false });
       queueDraw();
     } finally {
       piece.turning = false;
@@ -6511,6 +6586,17 @@
   function wallAt(at) {
     return [...C.elements.values()].find((piece) => {
       if (piece.el.kind !== 'wall' || !piece.shape) return false;
+      const line = piece.el.recipe.op === LAYERED ? lineOf(piece) : null;
+      if (line && line.axis === null) {
+        // A wall at an angle is its line and its thickness, not the box round it.
+        const { x, y } = piece.el.placement;
+        const p = [at.x - x - line.start[0] / STEPS_PER_MM, at.y - y - line.start[1] / STEPS_PER_MM];
+        const length = Math.hypot(line.d[0], line.d[1]);
+        const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+        const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+        const [low, high] = [line.exterior, line.interior].map((offset) => offset / STEPS_PER_MM).sort((a, b) => a - b);
+        return alongIt >= -300 && alongIt <= length / STEPS_PER_MM + 300 && right >= low - 300 && right <= high + 300;
+      }
       const box = around(piece);
       return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
     });
@@ -6631,9 +6717,23 @@
       const line = host && lineOf(host);
       const thickness = line ? Math.abs(line.exterior - line.interior) / STEPS_PER_MM : (host?.el.recipe.args.thickness ?? 200);
       const wide = storedMm(e.recipe.args.width);
-      const [w, d] = e.recipe.args.axis === 'y' ? [thickness, wide] : [wide, thickness];
-      box = { x, y, w, d };
-      drawn = RC(x, y, w, d, paint);
+      const seatLine = piece.shape.displays[0]?.outline;
+      if (line && line.axis === null && seatLine?.length === 2) {
+        // In a wall at an angle the opening is seated: its shape's outline is its line on its side
+        // of the wall, and it opens through the wall's thickness to the left of that line.
+        const length = Math.hypot(line.d[0], line.d[1]);
+        const across = [(-line.d[1] / length) * thickness, (line.d[0] / length) * thickness];
+        const corners = [seatLine[0], seatLine[1], [seatLine[1][0] + across[0], seatLine[1][1] + across[1]], [seatLine[0][0] + across[0], seatLine[0][1] + across[1]]]
+          .map(([px, py]) => [x + Math.round(px), y + Math.round(py)]);
+        const xs = corners.map((p) => p[0]);
+        const ys = corners.map((p) => p[1]);
+        box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), d: Math.max(...ys) - Math.min(...ys) };
+        drawn = `<path class="${paint}" d="${ringPath(corners)}"/>`;
+      } else {
+        const [w, d] = e.recipe.args.axis === 'y' ? [thickness, wide] : [wide, thickness];
+        box = { x, y, w, d };
+        drawn = RC(x, y, w, d, paint);
+      }
     } else {
       const ring = (e.recipe.args.outline || []).map(([px, py]) => [x + nearestMm(px), y + nearestMm(py)]);
       const xs = ring.map((p) => p[0]);

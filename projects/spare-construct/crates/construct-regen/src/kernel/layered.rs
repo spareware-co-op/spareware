@@ -12,12 +12,28 @@
 //!   them by material.
 //! - Openings: a door's opening is cut through every layer, by the same rules as the old box's
 //!   ([`super::opening`]): the same refusals, in the same words, asked in the wall's own frame
-//!   (along its line from its start, across it from its exterior face, up from its base). A door
-//!   is hosted only on a layered wall that runs along an axis, because a door is still a box along
-//!   an axis (`door.single`); a wall at any other angle refuses it (`NotAHost`), until doors are
-//!   families that declare their host and their void (job 6.4, CON-A7-F3-P2). Each cutter is
-//!   extruded once and subtracted from each layer, one door after another in the order of their
-//!   keys.
+//!   (along its line from its start, across it from its exterior face, up from its base). Each
+//!   cutter is extruded once and subtracted from each layer, one door after another in the order
+//!   of their keys.
+//! - A wall at an angle (piece A83): every door, plain opening and family in it comes seated
+//!   (construct-regen's `hosting`, [`crate::seating::SEAT_ARG`]), its place read from its seat in
+//!   the wall's frame exactly, never from its placement, which is only the nearest millimetre to
+//!   it; the rules are asked in that frame (`opening::Long` for its length). Each layer is then
+//!   made without a subtraction: cut along the wall at its ends and at every opening's jambs into
+//!   stretches, each stretch's heights outside the openings in runs (a stretch beside the openings
+//!   its whole height, one across an opening the pieces under and over it), each run a cell,
+//!   extruded and united, each sharing part of a side with one before it and none touching the
+//!   rest only along an edge (the engine's union keeps its pieces and refuses that). A cell's
+//!   corners are the wall's frame points on the layer's two faces at those jambs, each put through
+//!   the wall's frame and so rounded once, as the element's own corners are (a door flush with a
+//!   face has its jambs' corners there, exactly the layer's); the layer's corners at the wall's
+//!   ends are its strip's.
+//!   So every vertex of the cut layer is a grid point, as the engine meshes only those (a
+//!   subtraction of a cutter at an angle would leave vertices where a rounded jamb meets a
+//!   rounded face, which no grid point holds). The body lists each layer's cells and each
+//!   opening's place in the frame. An element in such a wall that is not seated (an older door
+//!   hosted by its position), or seated for another wall, is refused (`NotSeated`,
+//!   `SeatMismatch`).
 //! - A placed family's opening (job 6.4, [`crate::families`]): the outline its recipe declares,
 //!   solved at its type's values, placed where the family stands (its origin and its turn, as the
 //!   regenerator seats it: construct-regen's `hosting::seat`) and cut through every layer on the
@@ -51,13 +67,15 @@
 //! face share its one name where chapter 20.2 names each piece `Split` (CON-A3-F1-P2, with the
 //! body record).
 
-use super::opening::{self, Cut, Frame, Hosted, OPENING_OP, PLAIN_OP, Placed, Span};
+use super::opening::{self, Cut, Frame, Hosted, Long, OPENING_OP, PLAIN_OP, Placed, Span};
 use super::{
     AskedCut, Extrusion, KernelSolid, LayerSolid, NamedFace, Units, WALL_ROLES, as_steps, carrier,
     fault, from_engine, name, op_id,
 };
 use crate::families::{self, FamilySource};
+use crate::seating;
 use crate::wall_plan::{Axis, Layered, Strip};
+use construct_families::Seat;
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
@@ -65,6 +83,7 @@ use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, GridPlane
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 /// A layered wall's body bytes: what the engine was asked for each layer, and the cutter of each
 /// opening, once for all the layers. A wall with no openings writes no `subtract`.
@@ -73,15 +92,36 @@ struct Asked {
     layers: Vec<AskedLayer>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     subtract: Vec<AskedCut>,
+    /// In a wall at an angle, each opening's place in the wall's frame, in the order of their keys.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    openings: Vec<AskedOpening>,
 }
 
-/// One layer as the engine was asked for it.
+/// One layer as the engine was asked for it: its strip, and in a wall at an angle with openings
+/// the cells it is made of, each extruded and united in order.
 #[derive(Serialize)]
 struct AskedLayer {
     function: String,
     material: String,
     extrude: Vec<[i64; 3]>,
     by: [i64; 3],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cells: Vec<AskedCell>,
+}
+
+/// One cell of a layer in a wall at an angle, as the engine was asked for it.
+#[derive(Serialize)]
+struct AskedCell {
+    extrude: Vec<[i64; 3]>,
+    by: [i64; 3],
+}
+
+/// An opening's place in a wall at an angle's frame, in steps: along and up.
+#[derive(Serialize)]
+struct AskedOpening {
+    key: String,
+    along: [i64; 2],
+    up: [i64; 2],
 }
 
 /// The low and high grid points a mesh reaches, in steps.
@@ -123,12 +163,15 @@ fn point([x, y]: [i64; 2], z: i64) -> Result<P3, GeometryError> {
     P3::new(x, y, z).map_err(|_| super::too_big())
 }
 
-/// A wall along an axis, as its openings are asked in it: its frame (along its line from its
-/// start, across it from its exterior face toward its interior, up from its base) and how a plan
-/// point, in the engine's steps relative to the wall's placement, goes into that frame and back.
+/// A wall, as its openings are asked in it: its frame (along its line from its start, across it
+/// from its exterior face toward its interior, up from its base) and how a plan point, in the
+/// engine's steps relative to the wall's placement, goes into that frame and back.
 struct WallFrame {
-    /// Its line's direction, a unit vector along x or y.
+    /// Its line's direction, a unit vector along x or y; none for a wall at an angle.
     unit: [i64; 2],
+    /// For a wall at an angle, its line as a seat: `line.plan([along, left])` is the plan point
+    /// `along` its line from its start and `left` to its left, each coordinate rounded once.
+    line: Option<Seat>,
     /// Its line's start, in the engine's steps.
     start: [i64; 2],
     /// Its exterior face's offset to the right of its line, in the engine's steps.
@@ -141,33 +184,52 @@ struct WallFrame {
 }
 
 impl WallFrame {
-    /// The frame of `wall`, which must run along an axis to host the door `first`.
-    fn of(wall: &Layered, units: Units, first: &str) -> Result<WallFrame, GeometryError> {
-        let axis: Axis = wall.plan.axis().ok_or_else(|| {
-            fault(
-                "NotAHost",
-                format!(
-                    "{first}: a door or an opening is hosted only on a wall along x or y until \
-                     doors are families; this wall runs at an angle"
-                ),
-            )
-        })?;
+    /// The frame of `wall`, which runs along `axis`.
+    fn of(wall: &Layered, axis: Axis, units: Units) -> Result<WallFrame, GeometryError> {
         let length = units.from_q0(wall.plan.axis_length().unwrap_or(0))?;
         let (exterior, interior) = wall.outer();
         let thickness = i64::try_from(wall.thickness()).map_err(|_| super::too_big())?;
         let [sx, sy] = wall.plan.start();
         Ok(WallFrame {
             unit: axis.unit(),
+            line: None,
             start: [units.from_q0(sx)?, units.from_q0(sy)?],
             exterior: units.from_q0(exterior)?,
             inward: if exterior > interior { 1 } else { -1 },
             frame: Frame {
                 along: axis.index(),
-                size: [
-                    length,
-                    units.from_q0(thickness)?,
-                    units.from_q0(wall.height)?,
-                ],
+                length: Long::Steps(length),
+                thickness: units.from_q0(thickness)?,
+                height: units.from_q0(wall.height)?,
+                seated: false,
+            },
+        })
+    }
+
+    /// The frame of `wall`, which runs at an angle: along its line in the frame's first place and
+    /// across it in the second, its length the root of its line's square length, its elements
+    /// seated.
+    fn at_angle(wall: &Layered, units: Units) -> Result<WallFrame, GeometryError> {
+        let (exterior, interior) = wall.outer();
+        let thickness = i64::try_from(wall.thickness()).map_err(|_| super::too_big())?;
+        let [sx, sy] = wall.plan.start();
+        let [dx, dy] = wall.plan.direction();
+        let start = [units.from_q0(sx)?, units.from_q0(sy)?];
+        let way = [units.from_q0(dx)?, units.from_q0(dy)?];
+        let square =
+            |v: i64| u128::from(v.unsigned_abs()).saturating_mul(u128::from(v.unsigned_abs()));
+        Ok(WallFrame {
+            unit: [0, 0],
+            line: Some(Seat::new(way, start, [0, 0]).ok_or_else(super::too_big)?),
+            start,
+            exterior: units.from_q0(exterior)?,
+            inward: if exterior > interior { 1 } else { -1 },
+            frame: Frame {
+                along: 0,
+                length: Long::Root(square(way[0]).saturating_add(square(way[1]))),
+                thickness: units.from_q0(thickness)?,
+                height: units.from_q0(wall.height)?,
+                seated: true,
             },
         })
     }
@@ -198,12 +260,17 @@ impl WallFrame {
         Ok([along, across])
     }
 
-    /// A frame point, along and across, in plan relative to the wall's placement.
+    /// A frame point, along and across, in plan relative to the wall's placement; at an angle,
+    /// each coordinate the nearest grid step to the true point.
     fn to_plan(&self, [along, across]: [i64; 2]) -> Result<[i64; 2], GeometryError> {
         let right = self
             .exterior
             .checked_sub(times(across, self.inward)?)
             .ok_or_else(super::too_big)?;
+        if let Some(line) = &self.line {
+            let left = right.checked_neg().ok_or_else(super::too_big)?;
+            return line.plan([along, left]).ok_or_else(super::too_big);
+        }
         let [sx, sy] = self.start;
         let [ux, uy] = self.unit;
         let [rx, ry] = self.right();
@@ -233,7 +300,7 @@ impl WallFrame {
                 return Ok(*hosted);
             };
             let width = units.from_q0(open.width.steps())?;
-            let [_, thickness, _] = self.frame.size;
+            let thickness = self.frame.thickness;
             let size = if open.along_y {
                 [thickness, width]
             } else {
@@ -303,7 +370,7 @@ impl WallFrame {
             ));
         }
         let [along, across] = self.to_frame([hosted.at.x.get(), hosted.at.y.get()])?;
-        let thickness = self.frame.size.get(1).copied().unwrap_or_default();
+        let thickness = self.frame.thickness;
         if across <= 0 || across >= thickness {
             return Err(refused(
                 "OpeningNotInWall",
@@ -362,19 +429,13 @@ fn cuts(
     band: i64,
     families: &dyn FamilySource,
 ) -> Result<Option<(WallFrame, Vec<Cut>)>, GeometryError> {
-    let Some(first) = hosted.iter().min_by(|a, b| a.key.cmp(b.key)) else {
+    if hosted.is_empty() {
         return Ok(None);
-    };
-    if wall.plan.axis().is_none() && families::is_instance(first.recipe) {
-        return Err(fault(
-            "NotAHost",
-            format!(
-                "family {}: a family is hosted only on a wall along x or y; this wall runs at an                  angle",
-                first.key
-            ),
-        ));
     }
-    let frame = WallFrame::of(wall, units, &opening::who(first.recipe, first.key))?;
+    let Some(axis) = wall.plan.axis() else {
+        return seated_cuts(wall, hosted, units, band, families).map(Some);
+    };
+    let frame = WallFrame::of(wall, axis, units)?;
     let (placed, doors): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) =
         hosted.iter().partition(|h| families::is_instance(h.recipe));
     let framed = doors
@@ -389,11 +450,183 @@ fn cuts(
     Ok(Some((frame, cuts)))
 }
 
+/// An element hosted in a wall at an angle, read from its seat: its recipe as stored, the frame
+/// point its seat puts its origin at (along the wall's line from its start and to its left, in
+/// the engine's steps) and which way its own x runs along the line (1 with it, -1 against it).
+struct InFrame {
+    recipe: construct_model::geometry::Recipe,
+    origin: [i64; 2],
+    sign: i64,
+}
+
+/// What `hosted`, in the wall at an angle `wall`, is seated as ([`InFrame`]).
+///
+/// # Errors
+///
+/// `NotSeated` for an element with no seat; `SeatMismatch` for one seated for another wall (its
+/// way is not this wall's line or its opposite, or its base and placement are not this wall's
+/// start); `BadSeat` for a seat that does not read.
+fn in_frame(wall: &Layered, hosted: &Hosted<'_>, units: Units) -> Result<InFrame, GeometryError> {
+    let who = if families::is_instance(hosted.recipe) {
+        format!("family {}", hosted.key)
+    } else {
+        opening::who(hosted.recipe, hosted.key)
+    };
+    let named = |e: GeometryError| fault(&e.code, format!("{who}: {}", e.message));
+    let (recipe, seat) = seating::unseated(hosted.recipe).map_err(named)?;
+    let seat = seat.ok_or_else(|| {
+        fault(
+            "NotSeated",
+            format!(
+                "{who}: it is not seated in its wall, which runs at an angle; an element is placed \
+                 in such a wall by its offsets along it and up it (hosted.move gives them)"
+            ),
+        )
+    })?;
+    let mismatch = || {
+        fault(
+            "SeatMismatch",
+            format!("{who}: it is seated for another wall than the one it is built in"),
+        )
+    };
+    let d = wall.plan.direction();
+    let back = [d[0].checked_neg(), d[1].checked_neg()];
+    let sign = if seat.way() == d {
+        1
+    } else if [Some(seat.way()[0]), Some(seat.way()[1])] == back {
+        -1
+    } else {
+        return Err(mismatch());
+    };
+    // Its base and its placement make the wall's start: it was seated in this wall where it is.
+    let per = construct_params::Length::STEPS_PER_MM;
+    let placed = [hosted.at.x.get(), hosted.at.y.get()].map(|steps| {
+        units
+            .millimetres(steps)
+            .ok()
+            .and_then(|mm| mm.checked_mul(per))
+    });
+    let start = wall.plan.start();
+    for ((base, placed), start) in seat.base().into_iter().zip(placed).zip(start) {
+        if placed.and_then(|p| base.checked_add(p)) != Some(start) {
+            return Err(mismatch());
+        }
+    }
+    let [a, s] = seat.at();
+    let origin = [
+        units.from_q0(a.checked_mul(sign).ok_or_else(super::too_big)?)?,
+        units.from_q0(s.checked_mul(sign).ok_or_else(super::too_big)?)?,
+    ];
+    Ok(InFrame {
+        recipe,
+        origin,
+        sign,
+    })
+}
+
+/// The cuts the elements `hosted` make in `wall`, a wall at an angle, with its frame: each read
+/// from its seat ([`in_frame`]) into the frame (along in the first place, across in the second,
+/// up), its recipe as stored, and the openings' rules asked there.
+fn seated_cuts(
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+    families: &dyn FamilySource,
+) -> Result<(WallFrame, Vec<Cut>), GeometryError> {
+    let frame = WallFrame::at_angle(wall, units)?;
+    let seated = hosted
+        .iter()
+        .map(|h| in_frame(wall, h, units))
+        .collect::<Result<Vec<_>, _>>()?;
+    // Across the wall from its exterior face toward its interior, of a point `left` of its line.
+    let across = |left: i64| {
+        frame
+            .exterior
+            .checked_add(left)
+            .and_then(|c| c.checked_mul(frame.inward))
+            .ok_or_else(super::too_big)
+    };
+    let mut framed = Vec::new();
+    let mut placed = Vec::new();
+    for (h, seat) in hosted.iter().zip(&seated) {
+        let [along, left] = seat.origin;
+        let z = h.at.z.get();
+        if families::is_instance(h.recipe) {
+            let key = h.key;
+            let named = |e: GeometryError| fault(&e.code, format!("family {key}: {}", e.message));
+            let (_, span) = families::opening_of(families, h.recipe).map_err(named)?;
+            if across(left)? <= 0 || across(left)? >= frame.frame.thickness {
+                return Err(fault(
+                    "OpeningNotInWall",
+                    format!("family {key}: its origin is not within the wall's thickness"),
+                ));
+            }
+            let steps =
+                |length: construct_params::Length| units.from_q0(length.steps()).map_err(named);
+            let at = |x: construct_params::Length| -> Result<i64, GeometryError> {
+                along
+                    .checked_add(
+                        steps(x)?
+                            .checked_mul(seat.sign)
+                            .ok_or_else(super::too_big)?,
+                    )
+                    .ok_or_else(super::too_big)
+            };
+            let (x0, x1) = (at(span.x[0])?, at(span.x[1])?);
+            placed.push(Placed {
+                key,
+                noun: "family",
+                op: op_id(&seat.recipe)?,
+                span: Span {
+                    start: x0.min(x1),
+                    end: x0.max(x1),
+                    foot: z
+                        .checked_add(steps(span.z[0])?)
+                        .ok_or_else(super::too_big)?,
+                    head: z
+                        .checked_add(steps(span.z[1])?)
+                        .ok_or_else(super::too_big)?,
+                },
+            });
+            continue;
+        }
+        if seat.sign != 1 {
+            return Err(fault(
+                "SeatMismatch",
+                format!(
+                    "{}: a box is seated the way its wall runs",
+                    opening::who(h.recipe, h.key)
+                ),
+            ));
+        }
+        // A door's box reaches across from its seat's origin by its thickness; a plain opening
+        // goes through the whole wall, so only its place along it is read.
+        let side = if seat.recipe.op == PLAIN_OP {
+            0
+        } else {
+            let deep = Extrusion::door(&seat.recipe.args)
+                .ok()
+                .map(|door| door.long_and_across().1)
+                .map_or(Ok(0), |mm| units.steps(mm))?;
+            let far = left.checked_add(deep).ok_or_else(super::too_big)?;
+            across(left)?.min(across(far)?)
+        };
+        framed.push(Hosted {
+            key: h.key,
+            recipe: &seat.recipe,
+            at: P3::new(along, side, z).map_err(|_| super::too_big())?,
+        });
+    }
+    let cuts = opening::plan_in(frame.frame, &framed, &placed, units, band)?;
+    Ok((frame, cuts))
+}
+
 /// Whether the doors `hosted` fit in `wall` by the openings' rules, asked without the engine.
 ///
 /// # Errors
 ///
-/// The openings' refusals, each naming the door and why; `NotAHost` for a wall at an angle.
+/// The openings' refusals, each naming the door and why; for a wall at an angle, [`in_frame`]'s.
 pub(super) fn fits(
     wall: &Layered,
     hosted: &[Hosted<'_>],
@@ -484,6 +717,192 @@ pub(super) fn empty() -> Mesh {
         positions: Vec::new(),
         indices: Vec::new(),
     }
+}
+
+/// A cell of a layer as the engine is asked for it: its corners at its foot and the vector up to
+/// its head.
+type Cell = (Vec<P3>, [i64; 3]);
+
+/// Where a cell of a layer in a wall at an angle is cut along the wall: its start, a jamb `along`
+/// steps from the start, or its end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Break {
+    Start,
+    At(i64),
+    End,
+}
+
+/// The cells of `layer` of the wall at an angle `wall`, whose line is `line` (in the engine's
+/// steps), with the openings `cuts` taken out (the module header): each a cell's corners at its
+/// foot, anticlockwise from above, and the vector up to its head, in the order they are united.
+fn layer_cells(
+    wall: &Layered,
+    layer: &crate::wall_plan::Strip,
+    line: &Seat,
+    cuts: &[Cut],
+    units: Units,
+) -> Result<Vec<Cell>, GeometryError> {
+    let spans: Vec<Span> = cuts.iter().map(Cut::span).collect();
+    let mut along: Vec<Break> = spans
+        .iter()
+        .flat_map(|s| [Break::At(s.start), Break::At(s.end)])
+        .chain([Break::Start, Break::End])
+        .collect();
+    along.sort_unstable();
+    along.dedup();
+    let height = units.from_q0(wall.height)?;
+    let mut up: Vec<i64> = spans
+        .iter()
+        .flat_map(|s| [s.foot.max(0), s.head])
+        .chain([0, height])
+        .collect();
+    up.sort_unstable();
+    up.dedup();
+    // The layer's corner on its face `offset` steps right of the line at a break: its strip's at
+    // the wall's ends, the frame point on that face at a jamb.
+    let corner = |at: Break, offset: i64| -> Result<[i64; 2], GeometryError> {
+        match at {
+            Break::Start | Break::End => {
+                let face = wall.plan.face(offset)?;
+                let [x, y] = if at == Break::Start { face[0] } else { face[1] };
+                Ok([units.from_q0(x)?, units.from_q0(y)?])
+            }
+            Break::At(a) => {
+                let left = units
+                    .from_q0(offset)?
+                    .checked_neg()
+                    .ok_or_else(super::too_big)?;
+                line.plan([a, left]).ok_or_else(super::too_big)
+            }
+        }
+    };
+    let value = |at: Break| match at {
+        Break::Start => i64::MIN,
+        Break::At(a) => a,
+        Break::End => i64::MAX,
+    };
+    let open = |k: usize, b: usize| -> bool {
+        let pick = |v: &[Break], i: usize| v.get(i).copied().map(value);
+        let (Some(a0), Some(a1)) = (pick(&along, k), pick(&along, k.saturating_add(1))) else {
+            return false;
+        };
+        let (Some(&z0), Some(&z1)) = (up.get(b), up.get(b.saturating_add(1))) else {
+            return false;
+        };
+        spans
+            .iter()
+            .any(|s| s.start <= a0 && a1 <= s.end && s.foot.max(0) <= z0 && z1 <= s.head)
+    };
+    // Each stretch along the wall, its runs of heights outside the openings: a column the whole
+    // height beside every opening, the pieces under and over one in its stretch.
+    let mut pieces: Vec<(usize, i64, i64)> = Vec::new();
+    for k in 0..along.len().saturating_sub(1) {
+        let mut run: Option<(i64, i64)> = None;
+        for b in 0..up.len().saturating_sub(1) {
+            let (Some(&z0), Some(&z1)) = (up.get(b), up.get(b.saturating_add(1))) else {
+                continue;
+            };
+            if open(k, b) {
+                if let Some((low, high)) = run.take() {
+                    pieces.push((k, low, high));
+                }
+            } else {
+                run = Some(run.map_or((z0, z1), |(low, _)| (low, z1)));
+            }
+        }
+        if let Some((low, high)) = run {
+            pieces.push((k, low, high));
+        }
+    }
+    let mut cells = Vec::with_capacity(pieces.len());
+    for at in joined_order(&pieces) {
+        let Some(&(k, z0, z1)) = pieces.get(at) else {
+            continue;
+        };
+        let at = |i: usize| along.get(i).copied().ok_or_else(super::too_big);
+        let (a0, a1) = (at(k)?, at(k.saturating_add(1))?);
+        let mut ring = vec![
+            corner(a0, layer.exterior)?,
+            corner(a1, layer.exterior)?,
+            corner(a1, layer.interior)?,
+            corner(a0, layer.interior)?,
+        ];
+        if area_twice(&ring) < 0 {
+            ring.reverse();
+        }
+        let outer = ring
+            .into_iter()
+            .map(|xy| point(xy, z0))
+            .collect::<Result<Vec<_>, _>>()?;
+        let rise = z1.checked_sub(z0).ok_or_else(super::too_big)?;
+        cells.push((outer, [0, 0, rise]));
+    }
+    Ok(cells)
+}
+
+/// The order pieces of a cut layer are united in, each `(stretch, low, high)`: from the first,
+/// each next the least piece that shares part of a side with one already taken (a neighbouring
+/// stretch, overlapping heights), so the union stays one solid and no piece touches it only along
+/// an edge; a piece none reaches comes after, least first.
+fn joined_order(pieces: &[(usize, i64, i64)]) -> Vec<usize> {
+    let shares = |a: (usize, i64, i64), b: (usize, i64, i64)| {
+        a.0.abs_diff(b.0) == 1 && a.1.max(b.1) < a.2.min(b.2)
+    };
+    let mut order = Vec::with_capacity(pieces.len());
+    let mut taken = BTreeSet::new();
+    while let Some(first) = (0..pieces.len()).find(|i| !taken.contains(i)) {
+        let mut reach = BTreeSet::from([first]);
+        while let Some(next) = reach.pop_first() {
+            if !taken.insert(next) {
+                continue;
+            }
+            order.push(next);
+            let Some(&piece) = pieces.get(next) else {
+                continue;
+            };
+            for (i, &other) in pieces.iter().enumerate() {
+                if !taken.contains(&i) && shares(piece, other) {
+                    reach.insert(i);
+                }
+            }
+        }
+    }
+    order
+}
+
+/// Twice the signed area of a plan ring, positive when it runs anticlockwise from above.
+fn area_twice(ring: &[[i64; 2]]) -> i128 {
+    ring.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let next = i.checked_add(1).and_then(|n| n.checked_rem(ring.len()));
+            let b = next.and_then(|n| ring.get(n)).copied().unwrap_or(*a);
+            i128::from(a[0])
+                .saturating_mul(i128::from(b[1]))
+                .saturating_sub(i128::from(a[1]).saturating_mul(i128::from(b[0])))
+        })
+        .fold(0_i128, i128::saturating_add)
+}
+
+/// The cells `cells` extruded and united in their order, as one solid.
+fn united<E: Engine>(engine: &mut E, cells: Vec<Cell>) -> Result<E::Solid, GeometryError> {
+    let mut made: Option<E::Solid> = None;
+    for (outer, up) in cells {
+        let piece = engine
+            .extrude(
+                &Profile {
+                    outer,
+                    holes: Vec::new(),
+                },
+                up,
+            )
+            .map_err(from_engine)?;
+        made = Some(match made {
+            None => piece,
+            Some(so_far) => engine.unite(&so_far, &piece).map_err(from_engine)?,
+        });
+    }
+    made.ok_or_else(|| fault("EmptyShape", "a layer with no cell outside its openings"))
 }
 
 /// The plan pieces of layer `at` of `wall`, in the building grid's steps: its joined pieces when
@@ -608,6 +1027,92 @@ impl Levels {
     }
 }
 
+/// The cells of `layer` of the wall at an angle `wall` with openings (this module's header), or
+/// the refusal that a wall joined to others is not cut in cells yet.
+fn cells_of(
+    wall: &Layered,
+    layer: &Strip,
+    line: &Seat,
+    cuts: &[Cut],
+    units: Units,
+) -> Result<Vec<Cell>, GeometryError> {
+    if wall.joined.is_some() {
+        return Err(fault(
+            "JoinedAtAnAngle",
+            "a wall at an angle with openings is not joined to other walls yet (interim: its              layers are cut in cells from its own strip)",
+        ));
+    }
+    layer_cells(wall, layer, line, cuts, units)
+}
+
+/// What the body records of one piece of `layer`: its outline, its height and its cells.
+fn asked_layer(layer: &Strip, outer: &[P3], by: [i64; 3], cells: &[Cell]) -> AskedLayer {
+    AskedLayer {
+        function: layer.function.clone(),
+        material: layer.material.clone(),
+        extrude: as_steps(outer),
+        by,
+        cells: cells
+            .iter()
+            .map(|(corners, up)| AskedCell {
+                extrude: as_steps(corners),
+                by: *up,
+            })
+            .collect(),
+    }
+}
+
+/// One piece of a layer on the engine: with openings in a wall at an angle it is its `cells`
+/// united, no subtraction; else [`piece`].
+fn cut_piece<E: Engine>(
+    engine: &mut E,
+    profile: &Profile,
+    by: [i64; 3],
+    cutters: &[Cutter<'_, E::Solid>],
+    cells: Vec<Cell>,
+) -> Result<(DisplayMesh, Option<DisplayMesh>), GeometryError> {
+    if cells.is_empty() {
+        return piece(engine, profile, by, cutters);
+    }
+    let strip = engine.extrude(profile, by).map_err(from_engine)?;
+    let plain = engine.mesh(&strip).map_err(from_engine)?;
+    let joined = united(engine, cells)?;
+    let cut = engine.mesh(&joined).map_err(from_engine)?;
+    Ok((plain, Some(cut)))
+}
+
+/// What the body records before its layers: each cutter, and for a wall at an angle each
+/// opening's place in the wall's frame.
+fn asked_of(cut_list: &[Cut], tools: &[(Profile, [i64; 3])], at_an_angle: bool) -> Asked {
+    Asked {
+        layers: Vec::new(),
+        subtract: cut_list
+            .iter()
+            .zip(tools)
+            .map(|(cut, (tool, by))| AskedCut {
+                key: cut.key().to_owned(),
+                extrude: as_steps(&tool.outer),
+                by: *by,
+            })
+            .collect(),
+        openings: if at_an_angle {
+            cut_list
+                .iter()
+                .map(|cut| {
+                    let span = cut.span();
+                    AskedOpening {
+                        key: cut.key().to_owned(),
+                        along: [span.start, span.end],
+                        up: [span.foot, span.head],
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
+    }
+}
+
 /// Builds a layered wall with the doors `hosted` in it, on `engine`: each piece of each layer
 /// extruded, every opening cut from each piece its cutter reaches.
 ///
@@ -624,28 +1129,18 @@ pub(super) fn build<E: Engine>(
     families: &dyn FamilySource,
 ) -> Result<Built, GeometryError> {
     let op = op_id(recipe)?;
-    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
-        None => (Vec::new(), Vec::new()),
+    let (cut_list, tools, line) = match cuts(wall, hosted, units, band, families)? {
+        None => (Vec::new(), Vec::new(), None),
+        Some((frame, cuts)) if frame.line.is_some() => (cuts, Vec::new(), frame.line),
         Some((frame, cuts)) => {
             let tools = cuts
                 .iter()
                 .map(|cut| frame.cutter(cut))
                 .collect::<Result<Vec<_>, _>>()?;
-            (cuts, tools)
+            (cuts, tools, None)
         }
     };
-    let mut asked = Asked {
-        layers: Vec::new(),
-        subtract: cut_list
-            .iter()
-            .zip(&tools)
-            .map(|(cut, (tool, by))| AskedCut {
-                key: cut.key().to_owned(),
-                extrude: as_steps(&tool.outer),
-                by: *by,
-            })
-            .collect(),
-    };
+    let mut asked = asked_of(&cut_list, &tools, line.is_some());
     let by = [0, 0, units.from_q0(wall.height)?];
     let mut cutters = Vec::with_capacity(tools.len());
     for (cut, (tool, up)) in cut_list.iter().zip(&tools) {
@@ -666,17 +1161,16 @@ pub(super) fn build<E: Engine>(
                 .iter()
                 .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
                 .collect::<Result<Vec<P3>, _>>()?;
-            asked.layers.push(AskedLayer {
-                function: layer.function.clone(),
-                material: layer.material.clone(),
-                extrude: as_steps(&outer),
-                by,
-            });
+            let cells = match &line {
+                Some(line) => cells_of(wall, layer, line, &cut_list, units)?,
+                None => Vec::new(),
+            };
+            asked.layers.push(asked_layer(layer, &outer, by, &cells));
             let profile = Profile {
                 outer,
                 holes: Vec::new(),
             };
-            let made = piece(engine, &profile, by, &cutters)?;
+            let made = cut_piece(engine, &profile, by, &cutters, cells)?;
             levels.add(layer, &corners, made, units)?;
         }
     }

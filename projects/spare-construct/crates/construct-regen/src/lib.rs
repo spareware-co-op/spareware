@@ -65,6 +65,8 @@
 //! - [`hosting`]: how a hosted element (a door) sits in its record, on a face of its host (a wall)
 //!   at an offset along and up it, and where that puts it; the regenerator builds a wall with its
 //!   doors through it, and the server's commands check through it, so the two cannot differ.
+//! - [`seating`]: the seat a builder is handed with an element hosted on a wall at an angle
+//!   (piece A83), read by both builders and written by [`hosting`].
 //! - [`families`]: a placed family (`family.instance`, job 6.4): its record (the family recipe
 //!   version and the type), where its recipe comes from (the [`families::FamilySource`] trait;
 //!   interim, the library baked in at build time, until job 7.6 stores families in the document),
@@ -102,6 +104,7 @@ pub mod roofs;
 pub mod room_plan;
 #[cfg(feature = "server")]
 pub mod rooms;
+pub mod seating;
 #[cfg(feature = "server")]
 pub mod slabs;
 pub mod stair_plan;
