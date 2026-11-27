@@ -672,6 +672,7 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
  "construct-styles",
@@ -680,6 +681,7 @@ dependencies = [
  "construct-versions",
  "construct-views",
  "construct-walls",
+ "construct-warnings",
  "engine-sim",
  "kit-core",
  "kit-mcp",
@@ -875,6 +877,7 @@ dependencies = [
  "construct-params",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
  "construct-types",
@@ -927,6 +930,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-schedules"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-phases",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-sheets"
 version = "0.0.0"
 dependencies = [
@@ -949,6 +965,7 @@ dependencies = [
  "construct-solver",
  "construct-types",
  "kit-core",
+ "num-bigint",
  "serde",
  "serde_json",
 ]
@@ -1036,6 +1053,13 @@ dependencies = [
  "kit-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "construct-warnings"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
 ]
 
 [[package]]

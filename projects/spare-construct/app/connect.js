@@ -19,7 +19,7 @@
   const WORKS = new Set([
     'go', 'view', 'vtab', 'vclose', 'vcloseothers', 'browser', 'uipal', 'dockreset', 'pref', 'zoom',
     'tool', 'dtool', 'seltool', 'deselect', 'closeAll', 'dgclose', 'discmenu', 'account', 'vbmenu',
-    'detailset', 'disc',
+    'detailset', 'disc', 'warnlist',
   ]);
 
   const C = {
@@ -63,6 +63,37 @@
   };
   window.spare = C; // the browser test reads this
 
+  // What this page was doing, kept so a slow edit says where its time went. Diagnostics only: they
+  // read the clock and change nothing the page does.
+  C.longTasks = []; // stretches the main thread was held for 50 ms or more: { at, ms }
+  C.doing = []; // named stretches of this page's own work, 2 ms or more: { what, at, ms }
+  C.asking = []; // what it asked the server for: { path, at, ms }
+  try {
+    new PerformanceObserver((list) => {
+      for (const task of list.getEntries()) {
+        C.longTasks.push({ at: Math.round(performance.timeOrigin + task.startTime), ms: Math.round(task.duration) });
+      }
+    }).observe({ type: 'longtask', buffered: true });
+  } catch {
+    // A browser without long-task reports just has none.
+  }
+  /** Runs `work` and notes how long it held the page, if it did for 2 ms or more. */
+  function spent(what, work) {
+    const at = Date.now();
+    try {
+      return work();
+    } finally {
+      const ms = Date.now() - at;
+      if (ms >= 2) C.doing.push({ what, at, ms });
+    }
+  }
+  /** What the page was doing, and waiting on the server for, between two clock readings. */
+  C.busyIn = (from, to) => ({
+    longTasks: C.longTasks.filter((t) => t.at + t.ms >= from && t.at <= to),
+    doing: C.doing.filter((d) => d.at + d.ms >= from && d.at <= to),
+    asking: C.asking.filter((a) => a.at + a.ms >= from && a.at <= to),
+  });
+
   const named = (person) => person[0].toUpperCase() + person.slice(1);
   // The level the plan shows and a new element is tied to: one chosen in Levels, or the floor plan's own.
   const levelOf = () => C.planLevel?.id ?? (S.view === 'l2' ? '2' : '1');
@@ -75,8 +106,10 @@
   const initials = (name) => name.slice(0, 2).toUpperCase();
 
   async function api(path, options) {
+    const asked = Date.now();
     const response = await fetch(path, options);
     const body = await response.json().catch(() => ({}));
+    C.asking.push({ path: String(path).split('/').slice(-2).join('/'), at: asked, ms: Date.now() - asked });
     if (!response.ok) {
       const error = new Error(body.error || response.statusText);
       error.status = response.status;
@@ -115,7 +148,7 @@
     history.replaceState(null, '', `#${curView()}`);
     S.units = 'mm';
     BOPEN.clear();
-    for (const open of ['Projects', 'Views', 'Project files', 'Linked models']) BOPEN.add(open);
+    for (const open of ['Projects', 'Views', 'Warnings', 'Schedules', 'Project files', 'Linked models']) BOPEN.add(open);
 
     document.addEventListener(
       'click',
@@ -141,7 +174,7 @@
       const waiting = C.pending.length ? `${C.pending.length} waiting · ` : '';
       const checks = C.checked ? `${C.checked} shapes checked · ` : '';
       const speed = last === undefined ? '' : `Last edit from someone else: ${last} ms · `;
-      $('#status-r').innerHTML = `<span id="st-log" class="mono">${esc(waiting + checks + speed)}Edit ${C.head}</span>`;
+      $('#status-r').innerHTML = `${warningsCount()}<span id="st-log" class="mono">${esc(waiting + checks + speed)}Edit ${C.head}</span>`;
     };
     renderBrowser = drawBrowser;
 
@@ -386,7 +419,9 @@
       'Views',
       `<div class="sub">Floor plans</div>${['l1', 'l2'].map((v) => leaf('view', v, VIEWS[v].name, S.screen === 'plan' && S.view === v && !C.openView, 'plan')).join('')}<div class="sub">3D views</div>${leaf('go', '3d', 'Default 3D', S.screen === '3d', 'cube')}${modelViews(leaf)}`,
     );
+    if (C.model) tree += group('Schedules', modelSchedules(leaf));
     if (C.data) tree += group('Project files', projectFiles(leaf));
+    if (C.model) tree += group('Warnings', `<div data-warnings>${warningsList()}</div>`);
     if (C.model) tree += group('Linked models', linkedModels());
     if (C.people) {
       const names = (list) => esc(list.join(', ')) || 'None';
@@ -571,6 +606,11 @@
     C.steps = { undo: null, redo: null };
     C.params = C.typeList = C.manage = C.wallTypes = null;
     C.views = C.openView = C.drawn = null;
+    C.warnings = null;
+    C.warnSeq += 1;
+    clearTimeout(C.warnTimer);
+    C.schedules = C.sched = C.scheduleCategories = null;
+    clearTimeout(C.schedulesTimer);
     C.problems.clear();
     C.asked.clear();
     C.cuts = false;
@@ -598,6 +638,8 @@
     await loadWorkshop();
     await loadSteps();
     await loadViews();
+    await loadWarnings();
+    await loadSchedules();
   }
 
   async function openPackage(team, folder, id) {
@@ -754,7 +796,7 @@
     if (into.get(id) !== piece || piece.asked !== asked) return;
     const answer = await shapeFor(model, piece.el, into, fill);
     if (into.get(id) !== piece || piece.asked !== asked) return;
-    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false });
+    Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false, settled: asked });
     queueDraw();
     if (id === S.sel) refreshSide();
   }
@@ -1017,10 +1059,13 @@
   async function buildHostAgain(model, into, id) {
     const host = id && into.get(id);
     if (!host) return;
+    const asked = host.asked;
     const answer = await shapeFor(model, host.el, into, host.fill);
-    if (into.get(id) !== host) return;
+    // A refill (`fillAgain`) that began or ended meanwhile has the newer fill: its build stands.
+    if (into.get(id) !== host || host.asked !== asked) return;
     Object.assign(host, { shape: undefined, failed: undefined }, answer);
-    host.stale = false;
+    // A refill still in flight (`fillAgain`) keeps it out of the checkpoint compare: this build used the fill held now.
+    host.stale = (host.asked || 0) !== (host.settled || 0);
   }
 
   async function loadClaims() {
@@ -1071,7 +1116,10 @@
       C.connected = true;
       send({ t: 'hello', client: C.client, documents: [...C.watching], since: C.head });
     };
-    socket.onmessage = (event) => receive(JSON.parse(event.data));
+    socket.onmessage = (event) => {
+      const got = Date.now();
+      receive(JSON.parse(event.data), got);
+    };
     socket.onclose = () => {
       C.connected = false;
       setStatus('Reconnecting', false);
@@ -1081,7 +1129,7 @@
     };
   }
 
-  function receive(message) {
+  function receive(message, got) {
     switch (message.t) {
       case 'welcome':
         for (const edit of C.pending) C.socket.send(JSON.stringify(edit));
@@ -1092,7 +1140,7 @@
         statusBar();
         break;
       case 'entry':
-        apply(message.entry);
+        spent('apply', () => apply(message.entry, message.sent_ms, got));
         break;
       case 'ack':
         C.pending = C.pending.filter((edit) => edit.counter !== message.counter);
@@ -1130,7 +1178,7 @@
     }
   }
 
-  function apply(entry) {
+  function apply(entry, sent, got) {
     const fresh = entry.seq > C.head;
     C.head = Math.max(C.head, entry.seq);
     if (entry.cmd === 'document.checkpoint') {
@@ -1145,9 +1193,17 @@
       return;
     }
     if (mine) done(entry.counter);
-    if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now() });
+    if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now(), sent_ms: sent, got_ms: got });
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
+    // A move of elements that are not walls (a door along its wall, say) changes no wall's ends,
+    // so no wall is asked of the server again for it. Read before the loop below, which may delete.
+    const movedNoWall =
+      entry.cmd === 'element.move' &&
+      entry.changes.every((change) => {
+        const known = into.get(change.piece);
+        return known && known.el.kind !== 'wall';
+      });
     // This page drew its own edits ahead of the log, but not an undo: the server works that out.
     const drawn = mine && !UNDOING.has(entry.cmd);
     for (const change of entry.changes) {
@@ -1193,7 +1249,11 @@
     // A type, a parameter or a level changed, or may have: what the selected element reads may have
     // too, and so may what a recipe that reads records is filled with.
     const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
-    if (reads) fillAgain(entry.target, into);
+    // A wall drawn, moved, retyped or deleted changes the ends of the walls that meet it, though
+    // their own records stay as they are: the log names only the wall that changed, so every wall
+    // that reads records is asked of the server again (its `filled` holds the joints; this page
+    // never works a join out), and the ones the change did not touch come back the same.
+    if (reads || (MEETS_WALLS.test(entry.cmd) && !movedNoWall)) fillAgain(entry.target, into);
     if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
@@ -1207,9 +1267,14 @@
         else C.claims.delete(change.piece);
       }
       viewsChanged(entry);
+      warningsChanged(entry);
+      schedulesChanged(entry);
     }
     queueDraw();
   }
+
+  /** The commands that can change where walls meet: a wall made, moved, retyped, changed or deleted. */
+  const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
   const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|opening|shaft)\.|^(floor|roof)\.defaults$/;
@@ -1387,7 +1452,8 @@
     return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
   }
   function hasShape(record) {
-    return record.kind !== 'type' && record.kind !== 'parameters' && record.kind !== 'level' && record.kind !== 'view';
+    // A schedule, a sheet and a viewport are records with no shape too: the plan draws none of them.
+    return !['type', 'parameters', 'level', 'view', 'schedule', 'sheet', 'viewport'].includes(record.kind);
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1509,6 +1575,7 @@
 
   function showProblems() {
     renderManage();
+    renderSchedule();
     refreshSide();
     drawBrowser();
   }
@@ -1909,6 +1976,87 @@
   };
 
   // --- Views ---
+  // --- Warnings ---
+  // The problems the model holds (construct-warnings, A2-F7): the server works the list out of the
+  // document each time it is asked, so this page keeps no rules and no copy of one. It reads the
+  // list when a model opens and again after every entry of the log that changes the model, an undo
+  // and a redo included, whoever made it, so the count in the status bar and the list in the project
+  // browser are never stale. Choosing a warning selects the element it names, the way any list in
+  // the page does; a warning of two walls offers each.
+
+  C.warnings = null; // the open model's warnings as the server lists them; null until they come
+  C.warnSeq = 0; // goes up with each read, so an old answer is not kept
+  C.warnTimer = null;
+
+  /** Reads the model's warnings and draws the count and the list. */
+  async function loadWarnings() {
+    if (!C.model) return;
+    const model = C.model.id;
+    C.warnSeq += 1;
+    const seq = C.warnSeq;
+    let answer;
+    try {
+      answer = await api(`${modelUrl(model)}/warnings`);
+    } catch {
+      return;
+    }
+    if (C.model?.id !== model || seq !== C.warnSeq) return;
+    const same = JSON.stringify(C.warnings) === JSON.stringify(answer.warnings);
+    C.warnings = answer.warnings;
+    if (same) return;
+    spent('warnings-draw', () => {
+      statusBar();
+      // Only the Warnings part is drawn again, never the whole browser: a person may be typing in it.
+      const part = $('#browser [data-warnings]');
+      if (part) part.innerHTML = warningsList();
+      else drawBrowser();
+    });
+  }
+
+  /** An entry of the log arrived for the open model: read the list again once the entries arriving together have come. */
+  function warningsChanged(entry) {
+    if (/^element\.(claim|release)$/.test(entry.cmd)) return;
+    clearTimeout(C.warnTimer);
+    C.warnTimer = setTimeout(loadWarnings, 100);
+  }
+
+  /** The count, always in the status bar: a button that shows the list. */
+  function warningsCount() {
+    if (!C.model) return '';
+    const n = C.warnings?.length;
+    const words = n === undefined ? 'Warnings' : n === 0 ? 'No warnings' : plural(n, 'warning');
+    return `<button id="st-warnings" data-act="warnlist" data-count="${n ?? ''}">${ic('warn', 'sm')}${esc(words)}</button><span class="sep"></span>`;
+  }
+
+  const SEVERITY = { notice: 'Notice', warning: 'Warning', error: 'Error' };
+
+  /** The project browser's Warnings part: each warning with how serious it is and its sentence. */
+  function warningsList() {
+    if (!C.warnings) return '<p class="pad small faint">Loading.</p>';
+    if (!C.warnings.length) return '<p class="pad small faint" data-warnings-empty>No warnings: nothing in this model needs a look.</p>';
+    let html = '';
+    for (const w of C.warnings) {
+      html += `<div class="stack-warning" data-warning="${esc(w.identity)}" data-severity="${esc(w.severity)}" data-kind="${esc(w.kind)}">`;
+      html += `<button class="leaf" data-act="stackwarning" data-a="${esc(w.elements[0])}">${ic('warn', 'sm')}<span><b>${esc(SEVERITY[w.severity] || w.severity)}</b>: ${esc(w.words)}</span></button>`;
+      if (w.elements.length > 1) {
+        html += '<div class="stack-warning-at">';
+        for (const id of w.elements) html += `<button class="btn sm" data-act="stackwarning" data-a="${esc(id)}">${esc(id)}</button>`;
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    return html;
+  }
+
+  ACT.stackwarning = (button) => select(button.dataset.a);
+
+  /** The count in the status bar, and the ribbon's Warnings, show the list. */
+  ACT.warnlist = () => {
+    BOPEN.add('Warnings');
+    drawBrowser();
+    $('#browser [data-k="Warnings"]')?.scrollIntoView({ block: 'start' });
+  };
+
   // A view is a record of the model with a name, a kind, a scale and, for a plan, a level
   // (construct-views' FORMAT.md). The project browser lists them as the server reads them and keeps
   // the list live through the log; a person makes, renames and deletes one there with the view
@@ -2204,6 +2352,350 @@
     manage('view.graphics.clear', { view: m.view, category: m.category, edge: button.dataset.a }, `graphics:${m.category}:${button.dataset.a}`);
   };
   ACT.stackgfxclearall = (button) => manage('view.graphics.clear', { view: C.manage.view, category: Number(button.dataset.a) }, 'graphics');
+  // --- Schedules ---
+  // A schedule is a record of the model: a name, the category it lists, its fields in order, its
+  // filters and its sorting (construct-schedules' FORMAT.md). Its rows are worked out by the server
+  // from the model each time they are asked for and are stored nowhere, so this page keeps no rows
+  // of its own and works none out: it asks for the table (`/schedules/<schedule>`: the columns, the
+  // rows with each value as the server shows it with its unit, and the fields the category offers)
+  // and draws it. The table is asked for again after every entry of the log for the open model (an
+  // edit of this browser's or another's, an undo, a redo) except claims, which change no row, once
+  // the entries arriving together have all come, so it is never older than the log the page holds.
+  // The browser lists the schedules in a group of their own beside the views; a person makes one
+  // there (a name and a category), renames it (type the new name, Enter) and deletes it, all
+  // through the schedule commands, never the generic element commands, which the server turns back
+  // for a schedule. Opening one shows its table in a dialog with its fields, filters and sorting
+  // to change, each a whole-list schedule command; a refusal is the server's words in the part
+  // where the person made the change. Choosing a row selects that element in the model.
+
+  C.schedules = null; // the model's schedules as the server lists them; null until they come
+  C.scheduleCategories = null; // { model, list }: the categories a schedule may list
+  C.sched = null; // the schedule last opened: { id, table, error, seq, gone, shown, draft }
+  C.schedulesSeq = 0; // goes up with each read of the list, so an old answer is not kept
+  C.schedulesTimer = null;
+  C.schedulesBusy = false; // a read is out
+  C.schedulesAgain = false; // an entry came while it was
+  C.newScheduleCategory = null;
+
+  const COMPARISONS = {
+    equals: 'is',
+    not_equals: 'is not',
+    less: 'is less than',
+    less_or_equal: 'is at most',
+    greater: 'is more than',
+    greater_or_equal: 'is at least',
+    contains: 'contains',
+    begins_with: 'begins with',
+  };
+
+  /** Reads the model's schedules and the open table again; one read at a time, and one more if entries came meanwhile. */
+  async function loadSchedules() {
+    if (C.schedulesBusy) {
+      C.schedulesAgain = true;
+      return;
+    }
+    C.schedulesBusy = true;
+    try {
+      await readSchedules();
+    } finally {
+      C.schedulesBusy = false;
+    }
+    if (C.schedulesAgain) {
+      C.schedulesAgain = false;
+      loadSchedules();
+    }
+  }
+
+  /** Reads the model's schedules and the categories they may list, and the open table again. */
+  async function readSchedules() {
+    if (!C.model) return;
+    const model = C.model.id;
+    C.schedulesSeq += 1;
+    const seq = C.schedulesSeq;
+    let list;
+    let categories = C.scheduleCategories;
+    try {
+      list = await api(`${modelUrl(model)}/schedules`);
+      if (categories?.model !== model) categories = { model, list: await api(`${modelUrl(model)}/schedule-categories`) };
+    } catch {
+      return;
+    }
+    if (C.model?.id !== model || seq !== C.schedulesSeq) return;
+    C.schedules = list;
+    C.scheduleCategories = categories;
+    // Gone only once it has been seen: one just made is not in a read that began before its entry.
+    if (C.sched) C.sched.gone = C.sched.table !== null && !list.some((schedule) => schedule.id === C.sched.id);
+    spent('schedules-draw', drawBrowser);
+    if (C.sched?.gone) spent('schedule-draw', renderSchedule);
+    else loadScheduleTable();
+  }
+
+  /** Reads the open schedule's table from the server and draws it. */
+  async function loadScheduleTable() {
+    const open = C.sched;
+    if (!open || !C.model || open.gone) return;
+    const model = C.model.id;
+    open.seq += 1;
+    const seq = open.seq;
+    try {
+      const table = await api(`${modelUrl(model)}/schedules/${encodeURIComponent(open.id)}`);
+      if (C.sched !== open || C.model?.id !== model || seq !== open.seq) return;
+      open.table = table;
+      open.error = null;
+    } catch (error) {
+      if (C.sched !== open || seq !== open.seq) return;
+      // A schedule just made is not in the list until the log's entry for it comes.
+      open.error = C.schedules?.some((schedule) => schedule.id === open.id) ? error.message : null;
+    }
+    spent('schedule-draw', renderSchedule);
+  }
+
+  /** An entry of the log arrived for the open model: its schedules and the open table may differ. */
+  function schedulesChanged(entry) {
+    if (/^element\.(claim|release)$/.test(entry.cmd)) return;
+    // With no schedule there are no rows to follow; one is made or comes back only by these.
+    if (C.schedules && !C.schedules.length && !/^schedule\.|^edit\.(undo|redo)$/.test(entry.cmd)) return;
+    clearTimeout(C.schedulesTimer);
+    C.schedulesTimer = setTimeout(loadSchedules, 100);
+  }
+
+  /** The browser's group for the model's schedules: each one, the open one's name and delete, and a new one. */
+  function modelSchedules(leaf) {
+    if (!C.model) return '';
+    if (!C.schedules) return '<p class="pad small faint">Loading.</p>';
+    let html = '';
+    if (!C.schedules.length) html += '<p class="pad small faint">No schedules yet.</p>';
+    const off = canEdit() ? '' : ' disabled';
+    for (const schedule of C.schedules) {
+      const open = schedule.id === C.sched?.id;
+      const id = esc(schedule.id);
+      html += `<div data-schedule="${id}">${leaf('stackschedule', schedule.id, schedule.name, open, 'sheet', `title="${esc(`Lists ${schedule.category_name}`)}"`)}`;
+      if (open) {
+        html += `<div class="stack-line pad"><input class="inp" data-chg="stackschedrename" data-schedule="${id}" data-key="schedule-name:${id}" value="${esc(schedule.name)}" aria-label="Name of ${esc(schedule.name)}"${off}>`;
+        html += `<button class="btn sm" data-act="stackscheddelete" data-a="${id}" data-key="schedule-delete:${id}" aria-label="Delete ${esc(schedule.name)}"${off}>Delete</button></div>`;
+        html += problem(`schedule:${schedule.id}`);
+      }
+      html += '</div>';
+    }
+    const categories = C.scheduleCategories?.list ?? [];
+    const here = C.newScheduleCategory ?? categories[0]?.id;
+    const options = categories.map((c) => `<option value="${c.id}"${c.id === here ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+    html += `<div class="stack-line pad"><input class="inp" data-draft data-enter="stacknewschedule" data-key="new-schedule-name" placeholder="New schedule name" aria-label="Name for a new schedule"${off}>`;
+    html += `<select class="inp" data-chg="stacknewschedulecat" data-key="new-schedule-category" aria-label="Category the new schedule lists"${off}>${options}</select>`;
+    html += `<button class="btn pri sm" data-act="stacknewschedule" data-key="new-schedule-make"${off}>Make schedule</button></div>`;
+    return html + problem('new-schedule');
+  }
+
+  CHG.stacknewschedulecat = (select) => {
+    C.newScheduleCategory = Number(select.value); // kept across redraws of the browser
+  };
+  CHG.stackschedrename = (input) => manage('schedule.rename', { schedule: input.dataset.schedule, name: input.value }, `schedule:${input.dataset.schedule}`);
+  ACT.stackscheddelete = (button) => manage('schedule.delete', { schedule: button.dataset.a }, `schedule:${button.dataset.a}`);
+  ACT.stacknewschedule = () => {
+    const name = $('#browser [data-key="new-schedule-name"]');
+    const category = $('#browser [data-key="new-schedule-category"]');
+    if (!name || !category) return;
+    const id = newId('SC');
+    const args = { schedule: id, name: name.value, category: Number(category.value), fields: ['name'] };
+    manage('schedule.create', args, 'new-schedule', () => {
+      const again = $('#browser [data-key="new-schedule-name"]');
+      if (again) again.value = '';
+      openSchedule(id);
+    });
+  };
+  ACT.stackschedule = (button) => openSchedule(button.dataset.a);
+
+  /** Opens a schedule's table in a dialog. */
+  function openSchedule(id) {
+    const schedule = C.schedules?.find((s) => s.id === id);
+    C.sched = { id, table: null, error: null, seq: 0, gone: false, shown: false, draft: {} };
+    openDlg(schedule?.name ?? 'Schedule', `<div id="stack-sched" class="stack-manage stack-sched" data-schedule="${esc(id)}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
+    drawBrowser();
+    loadScheduleTable();
+  }
+
+  /** Draws the open schedule's dialog from the table as the server last gave it. */
+  function renderSchedule() {
+    const open = C.sched;
+    const root = $('#stack-sched');
+    if (!open || !root || $('#dlg').hidden || root.dataset.schedule !== open.id) return;
+    let html;
+    if (open.gone) html = '<p class="note bad small" role="alert">This schedule has been deleted.</p>';
+    else if (open.error) html = `<div class="note bad small" role="alert">${esc(open.error)}</div>`;
+    else if (!open.table) html = '<p class="small faint">Loading.</p>';
+    else html = scheduleHtml(open);
+    redraw(root, html);
+    if (open.table && !open.gone) $('#dlg-h').textContent = open.table.schedule.name;
+  }
+
+  /** The words for a field key, from what the category offers. */
+  const fieldName = (table, key) => table.offered.find((field) => field.field === key)?.name ?? key;
+
+  function scheduleHtml(open) {
+    const table = open.table;
+    const schedule = table.schedule;
+    const id = esc(schedule.id);
+    const off = canEdit() ? '' : ' disabled';
+    const draft = open.draft;
+    let html = `<p class="small muted">Lists ${esc(schedule.category_name)}: ${plural(table.rows.length, 'row')}, worked out from the model each time it changes. Choose a row to select that element.</p>`;
+    if (schedule.problem) html += `<div class="note bad small" role="alert">${esc(schedule.problem)}</div>`;
+
+    // The table: a heading for each field, a row for each element, each value as the server shows it.
+    html += `<div class="sched-scroll"><table class="sched-table" data-schedule-table="${id}"><thead><tr>`;
+    html += table.columns.map((column) => `<th data-field="${esc(column.field)}">${esc(column.name)}</th>`).join('');
+    html += '</tr></thead><tbody>';
+    for (const row of table.rows) {
+      const chosen = S.sel === row.element;
+      html += `<tr class="click${chosen ? ' sel' : ''}" data-act="stackschedrow" data-a="${esc(row.element)}" data-row="${esc(row.element)}"${chosen ? ' aria-selected="true"' : ''}>`;
+      html += row.cells.map((cell) => `<td>${esc(cell.shown ?? '')}</td>`).join('');
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    if (!table.rows.length) html += '<p class="small faint">No element passes the filters.</p>';
+
+    // Fields: in order, to move or take off; the category's other fields to add.
+    html += '<section data-part="fields"><h3>Fields</h3>';
+    table.columns.forEach((column, at) => {
+      html += `<div class="stack-line" data-field-row="${esc(column.field)}"><span class="grow">${esc(column.name)}</span>`;
+      html += `<button class="btn sm" data-act="stackschedfieldup" data-a="${at}" aria-label="Move ${esc(column.name)} earlier"${at === 0 ? ' disabled' : off}>Earlier</button>`;
+      html += `<button class="btn sm" data-act="stackschedfielddown" data-a="${at}" aria-label="Move ${esc(column.name)} later"${at === table.columns.length - 1 ? ' disabled' : off}>Later</button>`;
+      html += `<button class="btn sm" data-act="stackschedfieldoff" data-a="${at}" aria-label="Take ${esc(column.name)} off"${off}>Remove</button></div>`;
+    });
+    const unused = table.offered.filter((field) => !schedule.fields.includes(field.field));
+    if (unused.length) {
+      const chosen = unused.find((field) => field.field === draft.add)?.field ?? unused[0].field;
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedaddchoice" data-key="sched-add-field" aria-label="Field to add"${off}>`;
+      html += unused.map((field) => `<option value="${esc(field.field)}"${field.field === chosen ? ' selected' : ''}>${esc(field.name)}</option>`).join('');
+      html += `</select><button class="btn pri sm" data-act="stackschedfieldadd" data-key="sched-add-make"${off}>Add field</button></div>`;
+    }
+    html += `${problem(`sched-fields:${schedule.id}`)}</section>`;
+
+    // Filters: every one must hold.
+    html += '<section data-part="filters"><h3>Filters</h3>';
+    if (!schedule.filters.length) html += '<p class="small faint">No filters: every element of the category is listed.</p>';
+    schedule.filters.forEach((filter, at) => {
+      const words = `${fieldName(table, filter.field)} ${COMPARISONS[filter.is] ?? filter.is} ${filter.to}`;
+      html += `<div class="stack-line" data-filter-row="${at}"><span class="grow">${esc(words)}</span>`;
+      html += `<button class="btn sm" data-act="stackschedfilteroff" data-a="${at}" aria-label="Remove the filter ${esc(words)}"${off}>Remove</button></div>`;
+    });
+    if (table.offered.length) {
+      const field = table.offered.find((f) => f.field === draft.filterField) ?? table.offered[0];
+      const is = field.comparisons.includes(draft.filterIs) ? draft.filterIs : field.comparisons[0];
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedfilterfield" data-key="sched-filter-field" aria-label="Field to filter by"${off}>`;
+      html += table.offered.map((f) => `<option value="${esc(f.field)}"${f.field === field.field ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+      html += '</select>';
+      html += `<select class="inp" data-chg="stackschedfilteris" data-key="sched-filter-is" aria-label="How to compare"${off}>`;
+      html += field.comparisons.map((key) => `<option value="${esc(key)}"${key === is ? ' selected' : ''}>${esc(COMPARISONS[key] ?? key)}</option>`).join('');
+      html += '</select>';
+      html += `<input class="inp" data-draft data-enter="stackschedfilteradd" data-key="sched-filter-value" placeholder="Value" aria-label="Value to compare with"${off}>`;
+      html += `<button class="btn pri sm" data-act="stackschedfilteradd" data-key="sched-filter-make"${off}>Add filter</button></div>`;
+    }
+    html += `${problem(`sched-filters:${schedule.id}`)}</section>`;
+
+    // Sorting: the first key first, each up or down.
+    html += '<section data-part="sorting"><h3>Sorting</h3>';
+    if (!schedule.sorting.length) html += '<p class="small faint">Not sorted: the rows come in the order of the elements.</p>';
+    schedule.sorting.forEach((sort, at) => {
+      const words = `${fieldName(table, sort.field)}, ${sort.order === 'descending' ? 'down' : 'up'}`;
+      html += `<div class="stack-line" data-sort-row="${at}"><span class="grow">${esc(words)}</span>`;
+      html += `<button class="btn sm" data-act="stackschedsortflip" data-a="${at}" aria-label="Turn ${esc(fieldName(table, sort.field))} the other way round"${off}>${sort.order === 'descending' ? 'Up instead' : 'Down instead'}</button>`;
+      html += `<button class="btn sm" data-act="stackschedsortoff" data-a="${at}" aria-label="Remove sorting by ${esc(fieldName(table, sort.field))}"${off}>Remove</button></div>`;
+    });
+    if (table.offered.length) {
+      const field = table.offered.find((f) => f.field === draft.sortField)?.field ?? table.offered[0].field;
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedsortfield" data-key="sched-sort-field" aria-label="Field to sort by"${off}>`;
+      html += table.offered.map((f) => `<option value="${esc(f.field)}"${f.field === field ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+      html += '</select>';
+      html += `<select class="inp" data-chg="stackschedsortorder" data-key="sched-sort-order" aria-label="Which way"${off}>`;
+      html += ['ascending', 'descending'].map((o) => `<option value="${o}"${o === (draft.sortOrder ?? 'ascending') ? ' selected' : ''}>${o === 'ascending' ? 'Up' : 'Down'}</option>`).join('');
+      html += '</select>';
+      html += `<button class="btn pri sm" data-act="stackschedsortadd" data-key="sched-sort-make"${off}>Add sorting</button></div>`;
+    }
+    html += `${problem(`sched-sorting:${schedule.id}`)}</section>`;
+    return html;
+  }
+
+  /** Sends a whole new list for one part of the open schedule. */
+  const scheduleSet = (cmd, key, list, part) => {
+    const open = C.sched;
+    if (!open?.table) return;
+    manage(cmd, { schedule: open.id, [key]: list }, `sched-${part}:${open.id}`);
+  };
+  const scheduleOf = () => C.sched?.table?.schedule;
+  const moved = (list, at, by) => {
+    const next = [...list];
+    const [item] = next.splice(at, 1);
+    next.splice(at + by, 0, item);
+    return next;
+  };
+
+  ACT.stackschedrow = (row) => {
+    const id = row.dataset.a;
+    if (!C.elements.has(id)) {
+      say('That element is not in this model’s plan.');
+      return;
+    }
+    select(id);
+    renderSchedule();
+  };
+  CHG.stackschedaddchoice = (select) => {
+    C.sched.draft.add = select.value;
+  };
+  ACT.stackschedfieldadd = () => {
+    const field = $('#stack-sched [data-key="sched-add-field"]')?.value;
+    if (field) scheduleSet('schedule.fields', 'fields', [...scheduleOf().fields, field], 'fields');
+  };
+  ACT.stackschedfieldoff = (button) => {
+    const fields = scheduleOf().fields.filter((_, at) => at !== Number(button.dataset.a));
+    scheduleSet('schedule.fields', 'fields', fields, 'fields');
+  };
+  ACT.stackschedfieldup = (button) => scheduleSet('schedule.fields', 'fields', moved(scheduleOf().fields, Number(button.dataset.a), -1), 'fields');
+  ACT.stackschedfielddown = (button) => scheduleSet('schedule.fields', 'fields', moved(scheduleOf().fields, Number(button.dataset.a), 1), 'fields');
+
+  CHG.stackschedfilterfield = (select) => {
+    C.sched.draft.filterField = select.value;
+    C.sched.draft.filterIs = undefined;
+    renderSchedule();
+  };
+  CHG.stackschedfilteris = (select) => {
+    C.sched.draft.filterIs = select.value;
+  };
+  ACT.stackschedfilteradd = () => {
+    const root = $('#stack-sched');
+    const field = $('[data-key="sched-filter-field"]', root)?.value;
+    const is = $('[data-key="sched-filter-is"]', root)?.value;
+    const to = $('[data-key="sched-filter-value"]', root)?.value ?? '';
+    if (!field || !is) return;
+    scheduleSet('schedule.filters', 'filters', [...scheduleOf().filters.map(({ field: f, is: i, to: t }) => ({ field: f, is: i, to: t })), { field, is, to }], 'filters');
+  };
+  ACT.stackschedfilteroff = (button) => {
+    const filters = scheduleOf().filters.filter((_, at) => at !== Number(button.dataset.a));
+    scheduleSet('schedule.filters', 'filters', filters.map(({ field, is, to }) => ({ field, is, to })), 'filters');
+  };
+
+  CHG.stackschedsortfield = (select) => {
+    C.sched.draft.sortField = select.value;
+  };
+  CHG.stackschedsortorder = (select) => {
+    C.sched.draft.sortOrder = select.value;
+  };
+  ACT.stackschedsortadd = () => {
+    const root = $('#stack-sched');
+    const field = $('[data-key="sched-sort-field"]', root)?.value;
+    const order = $('[data-key="sched-sort-order"]', root)?.value;
+    if (field && order) scheduleSet('schedule.sorting', 'sorting', [...scheduleOf().sorting.map(({ field: f, order: o }) => ({ field: f, order: o })), { field, order }], 'sorting');
+  };
+  ACT.stackschedsortoff = (button) => {
+    const sorting = scheduleOf().sorting.filter((_, at) => at !== Number(button.dataset.a));
+    scheduleSet('schedule.sorting', 'sorting', sorting.map(({ field, order }) => ({ field, order })), 'sorting');
+  };
+  ACT.stackschedsortflip = (button) => {
+    const sorting = scheduleOf().sorting.map(({ field, order }, at) => ({
+      field,
+      order: at === Number(button.dataset.a) ? (order === 'descending' ? 'ascending' : 'descending') : order,
+    }));
+    scheduleSet('schedule.sorting', 'sorting', sorting, 'sorting');
+  };
 
   // --- The wall tool ---
   // A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
@@ -2571,8 +3063,8 @@
 
   /** The sketch in the plan: closed loops, the loop being drawn up to the pointer, and a boundary the server turned back. */
   function floorSketch() {
-    if (!sketching()) return '';
-    let svg = '';
+    let svg = pickInPlan();
+    if (!sketching()) return svg;
     const where = S.tool === 'roof' ? 'roof-draw' : 'floor-draw';
     if (FLOOR.sent && C.problems.has(where)) {
       svg += `<path class="floor-refused" data-${S.tool}-refused="${FLOOR.sent.loops.length}" d="${FLOOR.sent.loops.map(ringPath).join('')}"/>`;
@@ -2605,6 +3097,7 @@
     const chosen = S.sel === e.id;
     let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
     group += `<path class="body floor${chosen ? ' sel' : ''}" data-material="${esc(top?.material ?? '')}" data-holes="${placed.length - 1}"${fill} d="${placed.map(ringPath).join('')}"/>`;
+    group += floorShapeInPlan(piece, x, y, scale);
     const claim = heldClaim(e.id);
     if (claim) {
       const theirs = claim.person !== C.me.person.id;
@@ -2640,12 +3133,250 @@
     html += prow('Level', esc(levelName(e))) + prow('Offset', `<span class="mono" data-floor-offset>${esc(floorOffset(e))}</span>`);
     if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
     html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    html += floorShapeHtml(piece);
     if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
     if (view) {
       html += readOnlyTable(view);
       html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
     }
     return html;
+  }
+
+  // --- A floor's slope and slab edges, and its sketched outline ---
+  // A selected floor's palette sets its slope (an arrow drawn in the plan by two clicks, with the top
+  // face's two heights typed beside it: `floor.slope`; `floor.slope.clear`) and its slab edges (a
+  // profile typed, then the floor's edges picked in the plan: `floor.edge`; `floor.edge.remove`).
+  // The page checks nothing and works out no geometry: the plan draws the arrow from the floor's
+  // record and its slab edges from its recipe as the server filled it, 3D draws what the server
+  // built, the quantities are the server's read-only rows, and a refusal (a slope and slab edges on
+  // one floor, a corner off the grid) is the server's reason under the part it came from.
+  // A sketched outline's dimensions are changed by `floor.dimension`, which the page does not offer
+  // yet: it has no way to show a sketch's dimensions (construct-model's FORMAT.md, "Floors").
+
+  Object.assign(WORDS, {
+    'floor.slope': 'sloped',
+    'floor.slope.clear': 'took the slope off',
+    'floor.edge': 'put a slab edge on',
+    'floor.edge.remove': 'took a slab edge off',
+    'floor.dimension': 'changed a dimension of',
+  });
+  Object.assign(STEP_WORDS, {
+    'floor.slope': 'a floor’s slope',
+    'floor.slope.clear': 'taking a floor’s slope off',
+    'floor.edge': 'a floor’s slab edge',
+    'floor.edge.remove': 'taking a slab edge off',
+    'floor.dimension': 'a floor’s dimension',
+  });
+
+  C.slopeTool = { atTail: '0 mm', atHead: '-40 mm' };
+  C.edgeTool = { kind: 'downturn', width: '300 mm', foot: '150 mm', depth: '400 mm' };
+  // What the plan is waiting for: { floor, what: 'slope', tail: [x, y] | null } for the arrow's two
+  // clicks, or { floor, what: 'edge' } for slab edges picked on the floor's sides.
+  const PICK = { now: null };
+
+  const mmPoint = (stored) => [nearestMm(stored[0]), nearestMm(stored[1])];
+
+  /** A floor's slope as its record holds it, or null. */
+  function slopeOf(e) {
+    const slope = e.recipe?.args?.slope;
+    if (!slope) return null;
+    const at = (key) => (slope[key] === undefined ? null : `${storedMm(slope[key])} mm`);
+    return {
+      tail: mmPoint(slope.tail),
+      head: mmPoint(slope.head),
+      atTail: at('at_tail'),
+      atHead: at('at_head'),
+      gradient: slope.slope ? typedPitch(slope.slope) : null,
+    };
+  }
+
+  /** A floor's slab edges as its record holds them: `[{ edge, kind, width, foot, depth }]`. */
+  function slabEdgesOf(e) {
+    const list = e.recipe?.args?.edges;
+    if (!Array.isArray(list)) return [];
+    const mm = (text) => (text === undefined ? '' : `${storedMm(text)} mm`);
+    return list.map((s) => ({ edge: s.edge, kind: s.kind, width: mm(s.width), foot: mm(s.foot), depth: mm(s.depth) }));
+  }
+
+  /** The slope and slab edges part of a selected floor's palette. */
+  function floorShapeHtml(piece) {
+    const { el: e } = piece;
+    const editable = canEdit();
+    const slope = slopeOf(e);
+    const edges = slabEdgesOf(e);
+    const field = (tool, key, label) => `<input class="inp" data-chg="stackfloorfield" data-tool="${tool}" data-a="${key}" data-key="floor-${tool}-${key}" value="${esc(C[`${tool}Tool`][key])}" aria-label="${esc(label)}">`;
+    let html = '<span class="lbl">Slope</span><table class="props" data-floor-slope-part>';
+    if (slope) {
+      const run = slope.gradient ? `rises ${esc(slope.gradient)}` : `${esc(slope.atTail)} to ${esc(slope.atHead)}`;
+      html += prow('Now', `<span class="mono" data-floor-slope-now>${run}</span>`);
+    } else {
+      html += prow('Now', '<span class="faint" data-floor-slope-now>Flat</span>');
+    }
+    if (editable) {
+      html += prow('Height at tail', field('slope', 'atTail', 'The top face’s height at the arrow’s tail, from the floor’s own height'));
+      html += prow('Height at head', field('slope', 'atHead', 'The top face’s height at the arrow’s head'));
+    }
+    html += '</table>';
+    if (editable) {
+      const waiting = PICK.now?.floor === e.id && PICK.now.what === 'slope';
+      const hint = waiting ? `<p class="pad small muted" data-floor-pick="${PICK.now.tail ? 'head' : 'tail'}">${PICK.now.tail ? 'Click where the arrow ends.' : 'Click where the arrow starts.'}</p>` : '';
+      html += `${hint}<div class="pad"><button class="btn sm" data-act="stackslopepick" data-key="floor-slope-pick">${waiting ? 'Stop drawing' : slope ? 'Draw it again' : 'Draw slope arrow'}</button>`;
+      if (slope) html += ' <button class="btn sm" data-act="stackslopeclear" data-key="floor-slope-clear">Clear slope</button>';
+      html += '</div>';
+    }
+    html += problem('floor-slope');
+    html += '<span class="lbl">Slab edges</span>';
+    if (edges.length) {
+      html += '<table class="props" data-floor-slab-edges>';
+      for (const s of edges) {
+        const sizes = s.kind === 'thickened' ? `${s.width} wide, ${s.foot} foot, ${s.depth} deep` : `${s.width} wide, ${s.depth} deep`;
+        const remove = editable ? ` <button class="btn sm" data-act="stackedgeremove" data-edge="${esc(s.edge)}" data-key="floor-edge-remove-${esc(s.edge)}">Remove</button>` : '';
+        html += prow(esc(s.edge), `<span data-slab-edge-row="${esc(s.edge)}">${esc(capital(s.kind))}: ${esc(sizes)}</span>${remove}`);
+      }
+      html += '</table>';
+    } else {
+      html += '<p class="pad small faint" data-floor-slab-edges="none">None.</p>';
+    }
+    if (editable) {
+      const kinds = [['downturn', 'Downturn'], ['thickened', 'Thickened']].map(([id, name]) => `<option value="${id}"${id === C.edgeTool.kind ? ' selected' : ''}>${name}</option>`);
+      html += '<table class="props">';
+      html += prow('Edge', `<select class="inp" data-chg="stackedgekind" data-key="floor-edge-kind" aria-label="Slab edge profile">${kinds.join('')}</select>`);
+      html += prow('Width', field('edge', 'width', 'Width in from the edge'));
+      if (C.edgeTool.kind === 'thickened') html += prow('Foot', field('edge', 'foot', 'Width at the bottom'));
+      html += prow('Depth', field('edge', 'depth', 'Depth below the floor'));
+      html += '</table>';
+      const waiting = PICK.now?.floor === e.id && PICK.now.what === 'edge';
+      const hint = waiting ? '<p class="pad small muted" data-floor-pick="edge">Click the floor’s edges in the plan.</p>' : '';
+      html += `${hint}<div class="pad"><button class="btn sm" data-act="stackedgepick" data-key="floor-edge-pick">${waiting ? 'Stop picking' : 'Pick edges'}</button></div>`;
+    }
+    return html + problem('floor-edge');
+  }
+
+  CHG.stackfloorfield = (input) => {
+    C[`${input.dataset.tool}Tool`][input.dataset.a] = input.value;
+  };
+  CHG.stackedgekind = (select) => {
+    C.edgeTool.kind = select.value;
+    refreshSide();
+  };
+
+  /** Starts or stops waiting for clicks in the plan for the selected floor. */
+  function startPick(what) {
+    const stopping = PICK.now?.floor === S.sel && PICK.now.what === what;
+    PICK.now = stopping || !S.sel ? null : { floor: S.sel, what, tail: null };
+    clearProblems(/^floor-(slope|edge)$/);
+    refreshSide();
+    queueDraw();
+  }
+  ACT.stackslopepick = () => startPick('slope');
+  ACT.stackedgepick = () => startPick('edge');
+  ACT.stackslopeclear = () => {
+    if (S.sel) manage('floor.slope.clear', { element: S.sel }, 'floor-slope');
+  };
+  ACT.stackedgeremove = (button) => {
+    if (S.sel) manage('floor.edge.remove', { element: S.sel, edge: button.dataset.edge }, 'floor-edge');
+  };
+
+  /** The arrow's two clicks: its tail, then its head, which sends the slope with the heights typed. */
+  function slopeClick(at) {
+    const point = [snap(at.x), snap(at.y)];
+    if (!PICK.now.tail) {
+      PICK.now.tail = point;
+      refreshSide();
+      queueDraw();
+      return;
+    }
+    const [tail, floor] = [PICK.now.tail, PICK.now.floor];
+    PICK.now = null;
+    if (tail[0] === point[0] && tail[1] === point[1]) {
+      refreshSide();
+      queueDraw();
+      return;
+    }
+    const slope = {
+      tail: tail.map((v) => `${v} mm`),
+      head: point.map((v) => `${v} mm`),
+      at_tail: C.slopeTool.atTail,
+      at_head: C.slopeTool.atHead,
+    };
+    manage('floor.slope', { element: floor, slope }, 'floor-slope');
+    queueDraw();
+  }
+
+  /** A click on one of the selected floor's sides while edges are being picked. */
+  function edgeClick(side) {
+    const tool = C.edgeTool;
+    const profile = { kind: tool.kind, width: tool.width, depth: tool.depth };
+    if (tool.kind === 'thickened') profile.foot = tool.foot;
+    manage('floor.edge', { element: PICK.now.floor, edge: side.dataset.floorEdge, profile }, 'floor-edge');
+  }
+
+  // Before the plan's own handlers, as the floor tool's clicks are.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!PICK.now || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (S.sel !== PICK.now.floor || !canEdit()) return;
+      if (PICK.now.what === 'slope') {
+        event.stopPropagation();
+        slopeClick(toModel(event));
+        return;
+      }
+      // A click that is not on one of the floor's sides is the plan's own (it picks something else).
+      const side = event.target.closest('[data-floor-edge]');
+      if (!side) return;
+      event.stopPropagation();
+      edgeClick(side);
+    },
+    true,
+  );
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && PICK.now) {
+      PICK.now = null;
+      refreshSide();
+      queueDraw();
+    }
+  });
+
+  /**
+   * A floor's slope arrow and slab edges in the plan, from its record and its recipe as the server
+   * filled it: the arrow with its two heights, each slab edge's plan at the floor's underside, and,
+   * while edges are picked, a stripe along each side of the chosen floor to click.
+   */
+  function floorShapeInPlan(piece, x, y, scale) {
+    const { el: e } = piece;
+    let svg = '';
+    for (const s of piece.fill?.recipe?.args?.edges ?? []) {
+      const ring = s.top.map((p) => [x + nearestMm(p[0]), y + nearestMm(p[1])]);
+      svg += `<path class="floor-slab-edge" data-slab-edge="${esc(s.id)}" data-kind="${esc(s.kind)}" d="${ringPath(ring)}"/>`;
+    }
+    const slope = slopeOf(e);
+    if (slope) {
+      const [[ax, ay], [bx, by]] = [slope.tail, slope.head].map(([px, py]) => [x + px, y + py]);
+      const length = Math.hypot(bx - ax, by - ay) || 1;
+      const [ux, uy] = [(bx - ax) / length, (by - ay) / length];
+      const back = (n) => [bx - ux * n - uy * n * 0.4, by - uy * n + ux * n * 0.4];
+      const other = (n) => [bx - ux * n + uy * n * 0.4, by - uy * n - ux * n * 0.4];
+      const head = [[bx, by], back(250), other(250)];
+      svg += `<g class="floor-slope" data-floor-slope="${esc(e.id)}"><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/><path d="${ringPath(head)}"/>`;
+      svg += `${TX(ax, ay - 120, scale, slope.atTail ?? '', 'tf', 220)}${TX(bx, by - 120, scale, slope.atHead ?? slope.gradient ?? '', 'tf', 220)}</g>`;
+    }
+    if (PICK.now?.what === 'edge' && PICK.now.floor === e.id) {
+      for (const ring of piece.fill?.recipe?.args?.loops ?? []) {
+        ring.forEach((corner, k) => {
+          const next = ring[(k + 1) % ring.length];
+          const [p, q] = [corner, next].map((c) => [x + nearestMm(c.at[0]), y + nearestMm(c.at[1])]);
+          svg += `<line class="floor-edge-hit" data-floor-edge="${esc(corner.id)}" x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}"/>`;
+        });
+      }
+    }
+    return svg;
+  }
+
+  /** The arrow's tail once it is clicked, drawn while the head is awaited. */
+  function pickInPlan() {
+    const tail = PICK.now?.what === 'slope' ? PICK.now.tail : null;
+    return tail ? `<circle class="apf floor-sketch" data-floor-slope-tail cx="${tail[0]}" cy="${tail[1]}" r="60"/>` : '';
   }
 
   /** The properties palette's floor part: the floor tool's options, or a selected floor; '' for anything else. */
@@ -3782,9 +4513,11 @@
     drawQueued = true;
     requestAnimationFrame(() => {
       drawQueued = false;
-      drawPlan();
-      statusBar();
-      if (C.three) C.three.update();
+      spent('draw', () => {
+        drawPlan();
+        statusBar();
+        if (C.three) C.three.update();
+      });
     });
   }
 
@@ -3864,6 +4597,17 @@
         to_server: entry.orderer_ms - entry.author_ms,
         to_page: entry.arrived_ms - entry.orderer_ms,
         to_screen: now - entry.arrived_ms,
+        // The same to_page, cut in three: the server ordering the edit and writing it to this page's
+        // stream, the frame on the wire until this page's message handler ran, and the handler
+        // reaching the point of noting the edit. The stamps are kept so what the page was busy with
+        // in between can be read with `busyIn`.
+        server_late: entry.sent_ms - entry.orderer_ms,
+        wire: entry.got_ms - entry.sent_ms,
+        handling: entry.arrived_ms - entry.got_ms,
+        orderer_ms: entry.orderer_ms,
+        sent_ms: entry.sent_ms,
+        got_ms: entry.got_ms,
+        arrived_ms: entry.arrived_ms,
       });
       $('#hint').textContent = `${named(entry.author)}’s edit arrived in ${C.latencies.at(-1)} ms.`;
     }

@@ -254,8 +254,9 @@ fn holes_are_inside_and_apart() {
     );
 }
 
-/// A sketch with constraints is refused until floors are sketched with the solver (job 5.2); a
-/// sketch with a line no loop uses, or a loop whose edges do not join end to start, is refused.
+/// A sketch with constraints it already meets solves to the corners it has (job 5.2: floors are
+/// sketched with the solver, tests/sketched.rs); a sketch with a line no loop uses, or a loop
+/// whose edges do not join end to start, is refused.
 #[test]
 fn the_sketch_is_only_the_loops() {
     let floor = l_with_hole();
@@ -263,10 +264,10 @@ fn the_sketch_is_only_the_loops() {
     constrained
         .add_constraint(Constraint::Horizontal(construct_solver::LineId(0)))
         .unwrap();
-    assert_eq!(
-        Boundary::new(constrained, floor.outer().to_vec(), floor.holes().to_vec()),
-        Err(SlabError::Constrained)
-    );
+    let solved =
+        Boundary::new(constrained, floor.outer().to_vec(), floor.holes().to_vec()).unwrap();
+    assert_eq!(solved.profile(), floor.profile());
+    assert_eq!(solved.sketch().constraints().len(), 1);
     let mut spare = floor.sketch().clone();
     let p = spare.add_point(mm(100), mm(100)).unwrap();
     let q = spare.add_point(mm(200), mm(100)).unwrap();
