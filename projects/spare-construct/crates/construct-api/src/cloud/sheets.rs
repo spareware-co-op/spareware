@@ -340,14 +340,24 @@ pub struct SheetListing {
     pub viewports: Vec<ViewportView>,
 }
 
-/// The extent of a view as far as it is known: a plan's is the box of what it cuts and sees, in
-/// whole millimetres, rounded outward as the shapes' boxes are; the other kinds have none yet
-/// (their crops and datum extents are later jobs), so they are points on the paper.
+/// The extent of a view as far as it is known: the box around its crop region when it has a crop
+/// that is on (exact, as stored); else a plan's is the box of what it cuts and sees, in whole
+/// millimetres, rounded outward as the shapes' boxes are; the other kinds have none yet (their
+/// datum extents are a later job), so they are points on the paper.
 fn extent_of(
     views: &ViewWorld,
     id: &Id,
     shaped: &[Shaped],
 ) -> Result<Option<(Length, Length)>, String> {
+    if let Some(crop) = views.views().get(id).and_then(|view| view.crop())
+        && crop.is_on()
+    {
+        return crop
+            .region()
+            .size()
+            .map(Some)
+            .ok_or_else(|| "A crop is too large to be placed on a sheet.".to_owned());
+    }
     let plan = views
         .views()
         .get(id)

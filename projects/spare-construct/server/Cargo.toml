@@ -27,6 +27,7 @@ construct-drawing = { path = "../crates/construct-drawing" }
 construct-materials = { path = "../crates/construct-materials" }
 construct-params = { path = "../crates/construct-params" }
 construct-styles = { path = "../crates/construct-styles" }
+construct-views = { path = "../crates/construct-views" }
 engine-geometry = { path = "../../engines/crates/engine-geometry" }
 construct-model = { path = "../crates/construct-model" }
 construct-regen = { path = "../crates/construct-regen", features = ["server"] }

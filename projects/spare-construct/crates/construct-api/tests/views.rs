@@ -1557,3 +1557,429 @@ async fn rules_replay_from_the_log_to_the_same_bytes() {
         assert_eq!(again.rows(table).await, stack.rows(table).await, "{table}");
     }
 }
+
+fn rect_region(x0: &str, y0: &str, x1: &str, y1: &str) -> Value {
+    json!({ "rectangle": { "min": { "x": x0, "y": y0 }, "max": { "x": x1, "y": y1 } } })
+}
+
+fn outline_region(corners: &[(&str, &str)]) -> Value {
+    let corners: Vec<Value> = corners
+        .iter()
+        .map(|(x, y)| json!({ "x": x, "y": y }))
+        .collect();
+    json!({ "outline": corners })
+}
+
+async fn crop_views() -> Stack {
+    let stack = Stack::new().await;
+    two_levels(&stack).await;
+    stack
+        .edit("view.create", plan("V-g", "Ground floor", "L-g"))
+        .await
+        .unwrap();
+    stack
+        .edit("view.create", section("V-s", "Section A"))
+        .await
+        .unwrap();
+    for (id, kind, name) in [
+        ("V-3", "three_d", "House"),
+        ("V-d", "drafting", "Details"),
+        ("V-l", "legend", "Legend"),
+    ] {
+        stack
+            .edit(
+                "view.create",
+                json!({ "view": id, "kind": kind, "name": name }),
+            )
+            .await
+            .unwrap();
+    }
+    stack
+}
+
+#[tokio::test]
+async fn a_crop_is_set_changed_shown_and_cleared_through_the_log() {
+    let stack = crop_views().await;
+    assert!(
+        view(&stack, "V-g").await.crop().is_none(),
+        "an old view has none"
+    );
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "region": rect_region("0", "0", "12 m", "8 m") }),
+        )
+        .await
+        .unwrap();
+    let crop = view(&stack, "V-g").await.crop().cloned().unwrap();
+    assert!(crop.is_on() && crop.is_shown() && crop.annotation().is_none());
+    assert_eq!(crop.region().key(), "rectangle");
+    assert_eq!(
+        crop.region().size(),
+        Some((Length::from_mm(12_000), Length::from_mm(8_000)))
+    );
+
+    // A shaped crop replaces the region; the switches stay.
+    let l = outline_region(&[
+        ("0", "0"),
+        ("12 m", "0"),
+        ("12 m", "3 m"),
+        ("4 m", "3 m"),
+        ("4 m", "8 m"),
+        ("0", "8 m"),
+    ]);
+    stack
+        .edit("view.crop.set", json!({ "view": "V-g", "region": l }))
+        .await
+        .unwrap();
+    let crop = view(&stack, "V-g").await.crop().cloned().unwrap();
+    assert_eq!(crop.region().key(), "outline");
+    assert_eq!(crop.region().corners().len(), 6);
+
+    // The annotation region, and off.
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "annotation": rect_region("-1 m", "-1 m", "13 m", "9 m"),
+                    "on": false }),
+        )
+        .await
+        .unwrap();
+    let crop = view(&stack, "V-g").await.crop().cloned().unwrap();
+    assert!(!crop.is_on());
+    assert_eq!(crop.annotation().unwrap().key(), "rectangle");
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "annotation": null }),
+        )
+        .await
+        .unwrap();
+    assert!(
+        view(&stack, "V-g")
+            .await
+            .crop()
+            .unwrap()
+            .annotation()
+            .is_none()
+    );
+
+    // Hide and show.
+    stack
+        .edit("view.crop.show", json!({ "view": "V-g", "shown": false }))
+        .await
+        .unwrap();
+    assert!(!view(&stack, "V-g").await.crop().unwrap().is_shown());
+    stack
+        .edit("view.crop.show", json!({ "view": "V-g", "shown": true }))
+        .await
+        .unwrap();
+    assert!(view(&stack, "V-g").await.crop().unwrap().is_shown());
+
+    // A section holds one too, in its own coordinates; clearing takes it away.
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-s", "region": rect_region("0", "0", "6 m", "3.2 m") }),
+        )
+        .await
+        .unwrap();
+    assert!(view(&stack, "V-s").await.crop().is_some());
+    stack
+        .edit("view.crop.clear", json!({ "view": "V-s" }))
+        .await
+        .unwrap();
+    assert!(view(&stack, "V-s").await.crop().is_none());
+}
+
+#[tokio::test]
+async fn a_crop_change_that_changes_nothing_is_no_step() {
+    let stack = crop_views().await;
+    let region = rect_region("0", "0", "12 m", "8 m");
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "region": region.clone() }),
+        )
+        .await
+        .unwrap();
+    let rows = stack.rows("piece").await;
+    let step = stack.state("anna").await.undo.map(|step| step.cmd);
+    stack.later();
+    for (cmd, args) in [
+        ("view.crop.set", json!({ "view": "V-g", "region": region })),
+        ("view.crop.set", json!({ "view": "V-g", "on": true })),
+        ("view.crop.show", json!({ "view": "V-g", "shown": true })),
+        ("view.crop.clear", json!({ "view": "V-s" })),
+    ] {
+        stack.edit(cmd, args).await.unwrap();
+    }
+    assert_eq!(stack.rows("piece").await, rows);
+    assert_eq!(stack.state("anna").await.undo.map(|step| step.cmd), step);
+}
+
+#[tokio::test]
+async fn every_crop_command_is_undone_and_redone() {
+    let stack = crop_views().await;
+    let l = outline_region(&[("0", "0"), ("4 m", "0"), ("4 m", "3 m"), ("0", "3 m")]);
+    for (cmd, args) in [
+        (
+            "view.crop.set",
+            json!({ "view": "V-g", "region": rect_region("0", "0", "12 m", "8 m") }),
+        ),
+        ("view.crop.set", json!({ "view": "V-g", "region": l })),
+        (
+            "view.crop.set",
+            json!({ "view": "V-g", "annotation": rect_region("-1 m", "-1 m", "13 m", "9 m") }),
+        ),
+        ("view.crop.set", json!({ "view": "V-g", "on": false })),
+        ("view.crop.show", json!({ "view": "V-g", "shown": false })),
+        ("view.duplicate", json!({ "view": "V-g", "new": "V-2" })),
+        ("view.crop.clear", json!({ "view": "V-g" })),
+    ] {
+        undone_and_redone(&stack, cmd, args).await;
+    }
+}
+
+#[tokio::test]
+async fn a_crop_that_is_not_allowed_is_refused_in_words_and_changes_nothing() {
+    let stack = crop_views().await;
+    let region = rect_region("0", "0", "12 m", "8 m");
+    let refuse = |cmd: &'static str, args: Value, why: &'static str| {
+        let stack = &stack;
+        async move {
+            assert_eq!(stack.edit(cmd, args).await.unwrap_err(), why, "{cmd}");
+        }
+    };
+    let rows = stack.rows("piece").await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region": rect_region("0", "0", "0", "8 m") }),
+        "A crop rectangle needs its lower left corner below and left of its upper right.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region": outline_region(&[("0", "0"), ("1 m", "0")]) }),
+        "A crop outline needs at least three corners, not 2.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region":
+                outline_region(&[("0", "0"), ("1 m", "0"), ("1 m", "0"), ("0", "1 m")]) }),
+        "A crop outline gives corner 2 twice in a row.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region":
+                outline_region(&[("0", "0"), ("1 m", "1 m"), ("1 m", "0"), ("0", "1 m")]) }),
+        "A crop outline must not cross itself: edges 1 and 3 meet.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region": outline_region(&[
+                ("0", "0"), ("4 m", "0"), ("4 m", "3 m"), ("2 m", "0"), ("0", "3 m")]) }),
+        "A crop outline must not cross itself: edges 1 and 3 meet.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "region": region.clone(),
+                "annotation": outline_region(&[("0", "0"), ("1 m", "0")]) }),
+        "A crop outline needs at least three corners, not 2.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "on": false }),
+        "This view has no crop yet: view.crop.set needs a region.",
+    )
+    .await;
+    refuse(
+        "view.crop.show",
+        json!({ "view": "V-g", "shown": true }),
+        "The view V-g has no crop.",
+    )
+    .await;
+    refuse(
+        "view.crop.show",
+        json!({ "view": "V-g" }),
+        "This command needs shown (true or false).",
+    )
+    .await;
+    for (view, kind) in [("V-3", "three d"), ("V-d", "drafting"), ("V-l", "legend")] {
+        let why =
+            format!("A {kind} view has no crop: only plans, sections and elevations are cropped.");
+        let got = stack
+            .edit(
+                "view.crop.set",
+                json!({ "view": view, "region": region.clone() }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(got, why);
+    }
+    assert!(
+        stack
+            .edit(
+                "view.crop.set",
+                json!({ "view": "V-none", "region": region.clone() })
+            )
+            .await
+            .unwrap_err()
+            .contains("no view V-none")
+    );
+    assert_eq!(stack.rows("piece").await, rows, "nothing was written");
+
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "region": region.clone() }),
+        )
+        .await
+        .unwrap();
+    let rows = stack.rows("piece").await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "shown": false }),
+        "view.crop.set does not show or hide the outline: use view.crop.show.",
+    )
+    .await;
+    refuse(
+        "view.crop.set",
+        json!({ "view": "V-g", "scale": 50 }),
+        "view.crop.set takes only a view and the crop's own parts.",
+    )
+    .await;
+    refuse(
+        "view.crop.clear",
+        json!({ "view": "V-g", "on": true }),
+        "view.crop.clear takes no part of a crop.",
+    )
+    .await;
+    refuse(
+        "view.crop.show",
+        json!({ "view": "V-g", "shown": false, "on": true }),
+        "view.crop.show takes only shown.",
+    )
+    .await;
+    assert!(
+        stack
+            .edit(
+                "view.crop.set",
+                json!({ "view": "V-g", "region": rect_region("x", "0", "1 m", "1 m") })
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(stack.rows("piece").await, rows);
+}
+
+#[tokio::test]
+async fn the_generic_and_other_view_commands_are_no_way_round_the_crop() {
+    let stack = crop_views().await;
+    stack
+        .edit(
+            "view.crop.set",
+            json!({ "view": "V-g", "region": rect_region("0", "0", "12 m", "8 m") }),
+        )
+        .await
+        .unwrap();
+    stack.later();
+    let rows = stack.rows("piece").await;
+    let changed = "A view is changed: use view.set, view.rename or view.duplicate.";
+    assert_eq!(
+        stack
+            .edit(
+                "element.set",
+                json!({ "element": "V-g", "props": { "@view.crop": "{}" } })
+            )
+            .await
+            .unwrap_err(),
+        changed
+    );
+    let why = "view.set has no region, annotation, on or shown: a crop is set with view.crop.set.";
+    let one = rect_region("0", "0", "1 m", "1 m");
+    for args in [
+        json!({ "view": "V-g", "region": one }),
+        json!({ "view": "V-g", "on": false }),
+        json!({ "view": "V-g", "shown": false }),
+        json!({ "view": "V-g", "annotation": null }),
+    ] {
+        assert_eq!(stack.edit("view.set", args).await.unwrap_err(), why);
+    }
+    let made = json!({ "view": "V-n", "kind": "section", "name": "N", "look": "left",
+                       "depth": "5 m", "from": { "x": "0", "y": "0" },
+                       "to": { "x": "6 m", "y": "0" }, "region": one });
+    assert!(
+        stack
+            .edit("view.create", made)
+            .await
+            .unwrap_err()
+            .starts_with("view.create has no region")
+    );
+    assert_eq!(stack.rows("piece").await, rows);
+    // Other view commands leave the crop be, and a duplicate keeps it.
+    let before = view(&stack, "V-g").await.crop().cloned().unwrap();
+    stack
+        .edit("view.set", json!({ "view": "V-g", "scale": 50 }))
+        .await
+        .unwrap();
+    stack
+        .edit("view.rename", json!({ "view": "V-g", "name": "Level 0" }))
+        .await
+        .unwrap();
+    assert_eq!(view(&stack, "V-g").await.crop(), Some(&before));
+    stack
+        .edit("view.duplicate", json!({ "view": "V-g", "new": "V-2" }))
+        .await
+        .unwrap();
+    assert_eq!(view(&stack, "V-2").await.crop(), Some(&before));
+}
+
+#[tokio::test]
+async fn the_view_range_is_set_by_view_set_with_its_default_and_its_refusals() {
+    let stack = crop_views().await;
+    // A new plan's range is the default the drawing has always used: 1200 mm up for the cut.
+    let setup = view(&stack, "V-g").await.kind().plan().unwrap().clone();
+    assert_eq!(setup.range.cut.offset, Length::from_mm(1200));
+    assert_eq!(setup.range.top.offset, Length::from_mm(2300));
+    assert_eq!(setup.range.bottom.offset, Length::from_mm(0));
+    assert_eq!(setup.range.depth.offset, Length::from_mm(-500));
+    let range = json!({ "top": { "offset": "4 m" }, "cut": { "level": "L-1", "offset": "0.3 m" } });
+    undone_and_redone(&stack, "view.set", json!({ "view": "V-g", "range": range })).await;
+    let setup = view(&stack, "V-g").await.kind().plan().unwrap().clone();
+    assert_eq!(setup.range.cut.level, i("L-1"));
+    // Top below the cut, cut below the bottom and a level that does not exist are each refused.
+    let rows = stack.rows("piece").await;
+    let top_low = stack
+        .edit(
+            "view.set",
+            json!({ "view": "V-g", "range": { "top": { "offset": "0" } } }),
+        )
+        .await
+        .unwrap_err();
+    assert!(top_low.starts_with("A view range must run top, cut plane, bottom, view depth"));
+    let bottom_high = stack
+        .edit(
+            "view.set",
+            json!({ "view": "V-g", "range": { "bottom": { "level": "L-1", "offset": "1 m" } } }),
+        )
+        .await
+        .unwrap_err();
+    assert!(bottom_high.starts_with("A view range must run top"));
+    assert_eq!(
+        stack
+            .edit(
+                "view.set",
+                json!({ "view": "V-g", "range": { "depth": { "level": "L-9" } } })
+            )
+            .await
+            .unwrap_err(),
+        "There is no level L-9 in this model."
+    );
+    assert_eq!(stack.rows("piece").await, rows);
+}

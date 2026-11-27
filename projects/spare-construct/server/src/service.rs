@@ -4,7 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, Skipped, ToDraw, ViewLooks};
+use crate::plan::{Drawer, PlanCrop, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -1177,8 +1177,15 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             }
         }
         let looks = ViewLooks::new(&world, view);
+        let crop = world.views().get(view).and_then(|v| v.crop());
         let drawn = drawer
-            .draw(cut.cut, cut.scale, &elements, Some(&looks))
+            .draw(
+                cut.cut,
+                cut.scale,
+                &elements,
+                Some(&looks),
+                crop.map(|crop| PlanCrop { view, crop }),
+            )
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {
