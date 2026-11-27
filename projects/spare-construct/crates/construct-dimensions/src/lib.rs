@@ -17,7 +17,7 @@
 //!   model, behind a trait of ours. construct-api's `cloud::dimensions` answers it from the
 //!   document's records; the tests answer it from a table.
 //! - [`Measured`], [`Segment`], [`Witness`], [`EqualState`]: the answer. A reference that is gone,
-//!   or has no place in the view, or runs along the offset line, gives a [`DimensionWarning`]
+//!   or has no place in the view, or runs along the offset line, gives a [`Warning`]
 //!   naming it (the shape of construct-warnings' warnings) and no value for the segments it ends:
 //!   never a wrong number.
 //! - Equality ("EQ"): [`Dimension::with_equalities`] stores which segments are to be equal, as
@@ -71,6 +71,4 @@ pub use locate::{Located, Locator, Locus, Missing, Why};
 pub use measure::{EqualState, Measured, Segment, Witness, measure};
 pub use reference::{Edge, Feature, REFERENCE_KIND, Reference, Side};
 pub use text::{Label, PlainText, TextSize, Unmeasured, display, labels};
-pub use warning::{
-    DimensionWarning, OUT_OF_RANGE, REFERENCE_MISSING, REFERENCE_PARALLEL, Severity,
-};
+pub use warning::{OUT_OF_RANGE, REFERENCE_MISSING, REFERENCE_PARALLEL, Severity, Warning};

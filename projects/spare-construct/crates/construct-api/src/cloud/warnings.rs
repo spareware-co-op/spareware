@@ -7,6 +7,9 @@
 //! order as a view a page, a script or an AI reads: each warning's identity, kind, severity,
 //! elements and sentence.
 //!
+//! A dimension's warnings (a reference that is gone or has no place) are measured the way the
+//! dimension listing measures them and handed over as they are ([`Model::dimensions`]).
+//!
 //! A wall that does not build (its type missing, its recipe not as written) is not there, as in
 //! every view; a wall with no level is not on one, so it overlaps nothing. A room the search
 //! refuses is read as refused, not as a warning of this list (the refusal has its own words on
@@ -82,6 +85,8 @@ pub async fn read_warnings<R: Reader>(
             state,
         });
     }
+    model.dimensions =
+        crate::cloud::dimensions::measured_warnings(reader, project, document).await?;
     Ok(WarningsView {
         warnings: warnings(&model)
             .into_iter()

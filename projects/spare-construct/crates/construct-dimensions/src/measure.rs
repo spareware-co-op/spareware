@@ -6,15 +6,13 @@
 //! an exact square root, with `exact` saying whether the true value is that step. For a
 //! horizontal or a vertical dimension the offset line has a unit direction, so the value is a
 //! difference of two exact fractions and is exact whenever the references are on whole steps. A
-//! reference that cannot be found gives a [`DimensionWarning`] naming it and no value for the
+//! reference that cannot be found gives a [`Warning`] naming it and no value for the
 //! segments it ends: never a wrong number.
 
 use crate::dimension::Dimension;
 use crate::exact::{Axis, Frac, round_root};
 use crate::locate::{Locator, Locus, Missing};
-use crate::warning::{
-    DimensionWarning, OUT_OF_RANGE, REFERENCE_MISSING, REFERENCE_PARALLEL, Severity,
-};
+use crate::warning::{OUT_OF_RANGE, REFERENCE_MISSING, REFERENCE_PARALLEL, Severity, Warning};
 use construct_grids::Point;
 use construct_params::Length;
 use kit_core::Id;
@@ -73,7 +71,7 @@ pub struct Measured {
     /// too far), by position from 0, ascending: segments that end at one have no value.
     pub unusable: Vec<usize>,
     /// What went wrong, by reference, in order.
-    pub warnings: Vec<DimensionWarning>,
+    pub warnings: Vec<Warning>,
 }
 
 fn point(at: [i64; 2]) -> Point {
@@ -85,13 +83,13 @@ fn steps(at: Point) -> [i64; 2] {
     [at.x.steps(), at.y.steps()]
 }
 
-fn warn(dimension: &Dimension, kind: &'static str, at: usize, words: &str) -> DimensionWarning {
+fn warn(dimension: &Dimension, kind: &'static str, at: usize, words: &str) -> Warning {
     let reference = dimension.references().get(at);
     let mut elements = vec![dimension.id().clone()];
     if let Some(reference) = reference {
         elements.push(reference.element().clone());
     }
-    DimensionWarning {
+    Warning {
         kind,
         severity: Severity::Warning,
         elements,
@@ -111,7 +109,7 @@ fn place(
     locator: &dyn Locator,
     axis: &Axis,
     at: usize,
-    warnings: &mut Vec<DimensionWarning>,
+    warnings: &mut Vec<Warning>,
 ) -> (Option<Frac>, Option<Witness>) {
     let Some(reference) = dimension.references().get(at) else {
         return (None, None);
@@ -166,7 +164,7 @@ fn segments_of(
     dimension: &Dimension,
     axis: &Axis,
     places: &[Option<Frac>],
-    warnings: &mut Vec<DimensionWarning>,
+    warnings: &mut Vec<Warning>,
 ) -> (Vec<Segment>, Vec<Option<Frac>>) {
     let mut squares = Vec::new();
     let mut segments = Vec::new();

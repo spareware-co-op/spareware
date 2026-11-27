@@ -47,9 +47,8 @@
 use crate::cloud::elements::write_record;
 use construct_categories::DIMENSIONS;
 use construct_dimensions::{
-    DIMENSION_KIND, Dimension, DimensionError, DimensionWarning, Dimensions, Direction, Edge,
-    Feature, Layout, Located, Locus, Measured, Missing, PlainText, Reference, Side, display,
-    labels, measure,
+    DIMENSION_KIND, Dimension, DimensionError, Dimensions, Direction, Edge, Feature, Layout,
+    Located, Locus, Measured, Missing, PlainText, Reference, Side, display, labels, measure,
 };
 use construct_grids::{Datum, Point, Shape, datum_of_recipe};
 use construct_model::element::Element;
@@ -762,7 +761,7 @@ pub struct WarningView {
     pub words: String,
 }
 
-fn warning_view(warning: &DimensionWarning) -> WarningView {
+fn warning_view(warning: &construct_dimensions::Warning) -> WarningView {
     WarningView {
         kind: warning.kind.to_owned(),
         severity: warning.severity.word().to_owned(),
@@ -913,6 +912,30 @@ pub async fn listing<R: Reader>(
         view_name: shown.name().to_owned(),
         dimensions: found,
     })))
+}
+
+/// What every dimension of a document reports now, whatever its view: each is measured as the
+/// listing measures it and its warnings are gathered in the dimensions' order, for the warnings
+/// view. A document whose dimension or view records do not read has none here (the listing of a
+/// view says why).
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn measured_warnings<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+) -> Result<Vec<construct_dimensions::Warning>, StoreError> {
+    let Ok(world) = read_world(reader, project, document).await? else {
+        return Ok(Vec::new());
+    };
+    let mut found = Vec::new();
+    for dimension in world.dimensions.all() {
+        let references: Vec<&Reference> = dimension.references().iter().collect();
+        let table = located(reader, project, document, &references).await?;
+        found.extend(measure(dimension, &table).warnings);
+    }
+    Ok(found)
 }
 
 // ---------------------------------------------------------------------------------------------

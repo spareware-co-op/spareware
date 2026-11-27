@@ -3008,3 +3008,49 @@ async fn a_curtain_wall_drawn_by_command_shows_its_quantities_in_units() {
         .unwrap();
     assert_eq!(quantities(s, &project, &model, "CW-900").await, read);
 }
+
+/// A dimension whose reference is gone is listed by the warnings view as well as by the dimension
+/// listing: the same kind, elements and sentence, by the same identity; it leaves with an undo.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dimensions_lost_reference_is_in_the_warnings_view() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    let ours = || async {
+        s.warnings(&anna, &project, &model)
+            .await
+            .unwrap()
+            .warnings
+            .into_iter()
+            .filter(|w| w.kind.starts_with("dimension."))
+            .collect::<Vec<_>>()
+    };
+    let wall = |id: &str, feature: &str| json!({ "element": id, "feature": feature });
+    edit(
+        "dimension.create",
+        json!({ "dimension": "DM-1", "view": "VP-1",
+                "layout": { "kind": "horizontal", "y": "4000" },
+                "references": [wall("W-103", "wall.line"), wall("W-104", "wall.line")] }),
+    )
+    .await
+    .unwrap();
+    assert!(ours().await.is_empty());
+    edit("element.delete", json!({ "element": "W-104" }))
+        .await
+        .unwrap();
+    let lost = ours().await;
+    assert_eq!(lost.len(), 1, "{lost:?}");
+    assert_eq!(lost[0].identity, "dimension.reference_missing|DM-1|W-104");
+    assert_eq!(lost[0].severity, "warning");
+    let listed = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(listed.dimensions[0].warnings[0].words, lost[0].words);
+    edit("edit.undo", json!({})).await.unwrap();
+    assert!(ours().await.is_empty());
+}
