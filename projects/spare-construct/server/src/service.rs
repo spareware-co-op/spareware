@@ -584,7 +584,8 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     /// values it reads and where each came from, shown in units. The same reader the commands
     /// check against and the regenerator builds from (`construct_regen::parameters`). A floor's
     /// area, volume and mass are those after the openings and shafts that cut it
-    /// ([`cloud::openings::floor_cuts`]).
+    /// ([`cloud::openings::floor_cuts`]); a stair's quantities are its layout's as its levels
+    /// stand ([`construct_regen::stairs::read_only_at`]).
     ///
     /// # Errors
     ///
@@ -638,7 +639,39 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 view.parameters.extend(room.rows());
             }
         }
+        // A stair's rise, risers, riser height, treads, going, total run, pitch and width, read
+        // only, from its layout as its levels stand.
+        view.parameters.extend(
+            construct_regen::stairs::read_only_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+                records::At::Now,
+            )
+            .await?,
+        );
         Ok(view)
+    }
+
+    /// A model's stairs as the page's stair tool needs them: the rule set's categories, and each
+    /// stair with its layout as its levels stand, or why it has none
+    /// ([`cloud::stairs::read_stairs`]).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn stairs(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::stairs::StairsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::stairs::read_stairs(&mut snapshot, project, model).await?)
     }
 
     /// The kinds of parameter and the categories of a model, for the page's lists: read from the

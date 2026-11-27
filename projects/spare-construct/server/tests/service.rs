@@ -2143,6 +2143,65 @@ async fn a_room_in_the_seeded_building_reports_its_state_and_measures() {
     assert_eq!(back.room.unwrap().area, Some(area));
 }
 
+/// A stair made by command in the seeded building, from level 1 to level 2 (3000 mm): a common
+/// stairway in two runs with a landing between, 16 risers of 187.5 mm, 8 to a run, on 280 mm
+/// goings. The stairs view lists it with its layout and the rule set's categories; its parameters
+/// view reads its quantities back read-only; a person off the team can neither make one nor read
+/// the view; deleted, it is gone from the view.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stair_made_by_command_is_laid_out_and_read_back() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.stairs(&anna, &project, &model).await.unwrap();
+    assert!(none.stairs.is_empty());
+    assert!(none.categories.iter().any(|c| c.id == "common"));
+    assert!(refused(s.stairs(&dan, &project, &model).await));
+    let create = json!({ "element": "S-900", "name": "Stair", "level": "1", "top": "2",
+                         "start": ["20 m", "0"], "runs": [{}, {}],
+                         "landings": [{ "length": "1 m", "turn": "back-left" }] });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "stair.create", create.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "stair.create", create)
+        .await
+        .unwrap();
+    let view = s.stairs(&anna, &project, &model).await.unwrap();
+    let layout = view.stairs[0].layout.as_ref().unwrap();
+    assert_eq!(layout.risers, 16);
+    assert_eq!(layout.rise.value, "length:q0:19200000");
+    assert_eq!(layout.riser_height.value, "length:q0:1200000");
+    assert_eq!(
+        layout.runs.iter().map(|r| r.risers).collect::<Vec<_>>(),
+        vec![8, 8]
+    );
+    let read = quantities(s, &project, &model, "S-900").await;
+    assert_eq!(read["stair.risers"].1.as_deref(), Some("16"));
+    assert_eq!(read["stair.going"].1.as_deref(), Some("280 mm"));
+    assert_eq!(read["stair.treads"].1.as_deref(), Some("14"));
+    assert_eq!(
+        read["stair.riser-height"].0.as_deref(),
+        Some("length:q0:1200000")
+    );
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "stair.delete",
+        json!({ "element": "S-900" }),
+    )
+    .await
+    .unwrap();
+    assert!(
+        s.stairs(&anna, &project, &model)
+            .await
+            .unwrap()
+            .stairs
+            .is_empty()
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
     let stack = seeded().await;

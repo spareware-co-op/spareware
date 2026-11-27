@@ -21,6 +21,8 @@
 //!   through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
+//! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
+//!   landings), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
@@ -44,6 +46,7 @@ pub mod roofs;
 pub mod rooms;
 pub mod sheets;
 pub mod spaces;
+pub mod stairs;
 pub mod transaction;
 pub mod undo;
 pub mod views;
