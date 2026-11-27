@@ -40,7 +40,7 @@ A floor is read from the top down: the finish people walk on (a screed, a toppin
 
 ## Not decided here
 
-- Sloped floors, slab edges and floors sketched with constraints (job 5.2); floors made by picking walls; openings by shafts (job 4.2); structural decks; a core in a floor type.
+- Sloped floors, slab edges and floors sketched with constraints (job 5.2): data, commands (`floor.slope`, `floor.slope.clear`, `floor.edge`, `floor.edge.remove`, `floor.dimension`) and the page's slope arrow and slab edge tools are done, in [the slope and edges note](CON-A4-F4-P1-floor-slope-and-edges.md); floors made by picking walls; openings by shafts (job 4.2); structural decks; a core in a floor type.
 - How a floor's layers join a wall's at their meeting (the join jobs).
 - Editing a floor's boundary on the page by dragging its corners (with slope arrows and slab edges, job 5.2), and an editor for a type's layers.
 - A floor's level and offset are changed by `level.tie`, as any element's.

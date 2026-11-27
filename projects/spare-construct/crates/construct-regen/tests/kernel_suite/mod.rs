@@ -1145,6 +1145,167 @@ pub fn an_l_shaped_floor_with_a_hole_is_its_layers<E: Engine + Send + 'static>(
     assert!(by_role(&two).contains_key("face.1"));
 }
 
+/// A filled floor recipe of a sloped floor or one with slab edges (construct-slabs' `filled` form,
+/// version 2): `floor_of`'s with `extra` arguments, every length in whole millimetres written
+/// in grid steps by the caller.
+pub fn shaped_floor(base: Recipe, extra: &[(&str, Value)]) -> Recipe {
+    let mut recipe = base;
+    recipe.op_version = 2;
+    for (key, value) in extra {
+        recipe.args.insert((*key).to_owned(), value.clone());
+    }
+    recipe
+}
+
+/// A slab edge's filled form: its edge, its kind, its plan at the underside `top` at height
+/// `under` and at its foot at `foot`, all in whole millimetres.
+pub fn slab_edge(
+    id: &str,
+    kind: &str,
+    (top, under): ([[i64; 2]; 4], i64),
+    (foot, down): ([[i64; 2]; 4], i64),
+) -> Value {
+    let at = |p: &[[i64; 2]; 4], z: i64| -> Vec<[i64; 3]> {
+        p.iter()
+            .map(|&[x, y]| [x * 6400, y * 6400, z * 6400])
+            .collect()
+    };
+    json!({ "id": id, "kind": kind, "top": at(&top, under), "foot": at(&foot, down) })
+}
+
+/// A rectangle floor falling 40 mm towards x (construct-slabs' tops: 0 at x = 0, -40 mm at
+/// x = 4 m), of a 50 mm and a 150 mm layer: each layer is the rectangle lifted onto the sloped
+/// plane and extruded straight up, so the floor holds its plan area times its thickness exactly,
+/// 12 m2 by 200 mm; its corners stand at 0 and -40 mm on top and -200 and -240 mm below; its
+/// bounds are the stand-in's box, 240 mm deep; it keeps a flat floor's names; and the body lists
+/// each layer's sloped profile.
+pub fn a_sloped_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let flat = floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]);
+    let tops = json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let sloped = shaped_floor(flat.clone(), &[("tops", tops)]);
+    let b = built(&k, &sloped);
+    assert_eq!(b.bounds.min, [0, 0, -240]);
+    assert_eq!(b.bounds.max, [4000, 3000, 0]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&sloped).unwrap().bounds
+    );
+    let area = 12_000_000_i128;
+    // One layer is one closed solid; two are two shells sharing a face, measured together.
+    let one = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let tops_one = json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let single = built(&k, &shaped_floor(one, &[("tops", tops_one)]));
+    holds(
+        &k,
+        &single.displays[0].mesh,
+        6 * area * 200,
+        2 * area + 14_000 * 240,
+    );
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * area * 200);
+    assert_eq!(
+        heights(&b.displays[0].mesh),
+        BTreeSet::from([-240, -200, -90, -50, -40, 0])
+    );
+    assert_eq!(by_role(&b), by_role(&built(&k, &flat)));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(
+        body["layers"][0]["extrude"][1],
+        json!([4000 * 6400, 0, -90 * 6400])
+    );
+    assert_eq!(body["layers"][0]["by"], json!([0, 0, 50 * 6400]));
+    assert_eq!(body["layers"][0]["lofted"], json!(true));
+
+    // The L-shaped floor with its hole, sloped along its diagonal from 100 mm at the origin
+    // falling 160 mm to (8 m, 8 m): z = 100 - (x + y) / 100 mm at each corner, the hole cut
+    // through each layer; 44 m2 by 200 mm, exactly.
+    let z = |x: i64, y: i64| (100 - (x + y) / 100) * 6400;
+    let ring = |r: &[(&str, i64, i64)]| r.iter().map(|&(_, x, y)| z(x, y)).collect::<Vec<_>>();
+    let tops = json!([ring(&L_OUTER), ring(&L_HOLE)]);
+    let l = floor_of(&[&L_OUTER, &L_HOLE], &[("structure", 200)]);
+    let b = built(&k, &shaped_floor(l, &[("tops", tops)]));
+    assert_eq!(b.bounds.max[2], 100);
+    assert_eq!(b.bounds.min[2], -220);
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * 44_000_000 * 200);
+}
+
+/// A rectangle floor 200 mm thick with a thickened edge all round, 400 mm wide at its underside
+/// tapering to 200 mm at its foot 300 mm down, mitred at each corner: one solid, the slab united
+/// with the four pieces (construct-slabs' volumes: 1.148 m3 of edges), its faces named
+/// `edge.<edge ID>` besides the slab's; and a single 300 by 400 mm downturn, square at its ends.
+pub fn a_floor_with_slab_edges_is_one_solid<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let flat = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let thick = |id: &str, top: [[i64; 2]; 4], foot: [[i64; 2]; 4]| {
+        slab_edge(id, "thickened", (top, -200), (foot, -500))
+    };
+    let edges = json!([
+        thick(
+            "e0",
+            [[0, 0], [4000, 0], [3600, 400], [400, 400]],
+            [[0, 0], [4000, 0], [3800, 200], [200, 200]]
+        ),
+        thick(
+            "e1",
+            [[4000, 0], [4000, 3000], [3600, 2600], [3600, 400]],
+            [[4000, 0], [4000, 3000], [3800, 2800], [3800, 200]]
+        ),
+        thick(
+            "e2",
+            [[4000, 3000], [0, 3000], [400, 2600], [3600, 2600]],
+            [[4000, 3000], [0, 3000], [200, 2800], [3800, 2800]]
+        ),
+        thick(
+            "e3",
+            [[0, 3000], [0, 0], [400, 400], [400, 2600]],
+            [[0, 3000], [0, 0], [200, 200], [200, 2800]]
+        ),
+    ]);
+    let all_round = shaped_floor(flat.clone(), &[("edges", edges)]);
+    let b = built(&k, &all_round);
+    assert_eq!(b.bounds.min, [0, 0, -500]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry()
+            .build(&all_round)
+            .unwrap()
+            .bounds
+    );
+    let slab = 12_000_000_i128 * 200;
+    let six = 6 * (slab + 1_148_000_000);
+    holds(&k, &b.displays[0].mesh, six, 2 * 12_000_000 + 14_000 * 500);
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), six);
+    assert_eq!(b.displays[0].parts.len(), 1);
+    let names = by_role(&b);
+    for edge in ["e0", "e1", "e2", "e3"] {
+        assert!(names.contains_key(&format!("edge.{edge}")), "{edge}");
+    }
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["edges"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        body["layers"][0]["edges"][0]["loft"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let down = slab_edge(
+        "e0",
+        "downturn",
+        ([[0, 0], [4000, 0], [4000, 300], [0, 300]], -200),
+        ([[0, 0], [4000, 0], [4000, 300], [0, 300]], -600),
+    );
+    let one = built(&k, &shaped_floor(flat, &[("edges", json!([down]))]));
+    let six = 6 * (slab + 4000 * 300 * 400);
+    assert_eq!(signed_six_volume(&one.displays[0].mesh), six);
+    let body: Value = serde_json::from_slice(&one.body).unwrap();
+    assert_eq!(
+        body["layers"][0]["edges"][0]["by"],
+        json!([0, 0, 400 * 6400])
+    );
+}
+
 /// The default partition's layers (construct-walls' `wall-partition-stud-90`), from the exterior:
 /// function, material and thickness in grid steps (12.5 mm, 90 mm, 12.5 mm; 115 mm in all).
 pub const PARTITION: [(&str, &str, i64); 3] = [
@@ -1457,6 +1618,196 @@ pub fn a_layered_wall_at_an_angle_is_its_strips_extruded<E: Engine + Send + 'sta
     for at in 0..3 {
         let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
         assert!(six > 0, "layer {at} holds a volume");
+    }
+}
+
+/// A lining, a stud and a lining of whole millimetres (20, 100 and 20 mm), so every corner of a
+/// joint is on a millimetre and a display holds each piece exactly.
+pub const LINED: [(&str, &str, i64); 3] = [
+    ("finish", "plasterboard-gypsum", 128_000),
+    ("structure", "timber-douglas-fir", 640_000),
+    ("finish", "plasterboard-gypsum", 128_000),
+];
+
+/// Two walls of [`LINED`] at an L, filled with their joints as the regenerator fills them: `A`
+/// along x from (-3000, 0) to the corner, `B` from the corner up y, 2700 mm high; the joined
+/// shape is 3070 by 140 mm and 140 by 2930 mm in plan.
+pub fn joined_l() -> Vec<Recipe> {
+    let a = layered_wall([-3000, 0], [0, 0], 2700, &LINED);
+    let b = layered_wall([0, 0], [0, 3000], 2700, &LINED);
+    construct_regen::joins::among(&[("A", &a), ("B", &b)])
+}
+
+/// A T of [`LINED`] walls: `C` along x from (-3000, 0) to (3000, 0), `D` from (0, -3000) up to
+/// `C`'s line; the joined shape is 6000 by 140 mm and 140 by 2930 mm in plan.
+pub fn joined_t() -> Vec<Recipe> {
+    let c = layered_wall([-3000, 0], [3000, 0], 2700, &LINED);
+    let d = layered_wall([0, -3000], [0, 0], 2700, &LINED);
+    construct_regen::joins::among(&[("C", &c), ("D", &d)])
+}
+
+/// Six times the volume each part of a built shape's finest display holds, every part closed, in
+/// cubic millimetres.
+fn parts_six_volumes(b: &Built) -> Vec<i128> {
+    (0..b.displays[0].parts.len())
+        .map(|at| closed_mesh_six_volume(&part_mesh(&b.displays[0], at)))
+        .collect()
+}
+
+/// Two layered walls at an L and at a T, each built with its joints: each piece of each layer is
+/// a closed solid, and the pieces' volumes add up exactly to the joined shape's, so the two walls
+/// neither overlap nor leave a gap; the body asks the engine for each piece; the L's walls run to
+/// the outer corner (70, -70); the T's through wall is cut back for the stud in two pieces; the
+/// display's outline is the joined outline.
+pub fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let height = 2700_i128;
+    for (case, walls, area, pieces) in [
+        ("L", joined_l(), 3070 * 140 + 140 * 2930, [3, 3]),
+        ("T", joined_t(), 6000 * 140 + 140 * 2930, [4, 3]),
+    ] {
+        let built: Vec<Built> = walls.iter().map(|w| built(&k, w)).collect();
+        let mut six = 0;
+        for (b, count) in built.iter().zip(pieces) {
+            let volumes = parts_six_volumes(b);
+            assert_eq!(volumes.len(), count, "{case}: one part per piece");
+            assert!(volumes.iter().all(|&v| v > 0), "{case}: {volumes:?}");
+            six += volumes.iter().sum::<i128>();
+            let body: Value = serde_json::from_slice(&b.body).unwrap();
+            assert_eq!(body["layers"].as_array().unwrap().len(), count, "{case}");
+            assert_eq!(
+                b.displays[0].deviation, 0,
+                "{case}: every corner on a millimetre"
+            );
+        }
+        assert_eq!(
+            six,
+            6 * area * height,
+            "{case}: the pieces fill the joined shape"
+        );
+    }
+    let corner = joined_l();
+    let along = built(&k, &corner[0]);
+    assert_eq!(along.bounds.min, [-3000, -70, 0]);
+    assert_eq!(along.bounds.max, [70, 70, 2700]);
+    assert_eq!(
+        along.displays[0].outline,
+        vec![[-3000, 70], [-3000, -70], [70, -70], [-70, 70]]
+    );
+    let tee = joined_t();
+    let through = built(&k, &tee[0]);
+    let lining: Vec<_> = through.displays[0].parts[..2]
+        .iter()
+        .map(|p| p.outline.clone())
+        .collect();
+    assert_eq!(
+        lining,
+        vec![
+            vec![[-3000, -70], [-50, -70], [-50, -50], [-3000, -50]],
+            vec![[50, -70], [3000, -70], [3000, -50], [50, -50]]
+        ]
+    );
+    let stand_in = construct_regen::geometry();
+    for wall in corner.iter().chain(&tee) {
+        assert!(stand_in.build(wall).is_ok(), "the stand-in keeps its box");
+    }
+}
+
+/// Each piece a joined wall's body asks for, made again on `e` straight from the body: its plan
+/// corners and its height, in steps.
+fn body_pieces<E: Engine>(e: &mut E, b: &Built) -> Vec<(E::Solid, i128)> {
+    use engine_geometry::value::engine::Profile;
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    body["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|layer| {
+            let outer: Vec<P3> = layer["extrude"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    let c: Vec<i64> = p
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_i64().unwrap())
+                        .collect();
+                    P3::new(c[0], c[1], c[2]).unwrap()
+                })
+                .collect();
+            let by: Vec<i64> = layer["by"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_i64().unwrap())
+                .collect();
+            let profile = Profile {
+                outer,
+                holes: vec![],
+            };
+            let solid = e
+                .extrude(&profile, [by[0], by[1], by[2]])
+                .unwrap_or_else(|e| panic!("a piece: {e:?}"));
+            let six = engine_six_volume(e, &solid);
+            (solid, six)
+        })
+        .collect()
+}
+
+/// Six times a solid's volume, in cubic steps, from the engine's mesh of it, which must close.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "mesh positions are whole steps under 2^40, which an i64 holds"
+)]
+fn engine_six_volume<E: Engine>(e: &mut E, solid: &E::Solid) -> i128 {
+    let mesh = e.mesh(solid).unwrap_or_else(|e| panic!("a mesh: {e:?}"));
+    let positions = mesh
+        .positions
+        .iter()
+        .flat_map(|q| q.map(|c| c as i64))
+        .collect();
+    let indices = mesh.triangles.iter().flatten().copied().collect();
+    closed_mesh_six_volume(&Mesh { positions, indices })
+}
+
+/// The two walls of an L and of a T, made on the engine itself from their bodies: each piece of
+/// one wall less every piece of the other keeps its whole volume, so no two overlap, and the
+/// pieces' volumes add up to the joined shape's, so there is no gap. Needs an engine that
+/// subtracts.
+pub fn joined_walls_meet_without_overlap_on_the_engine<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let mut e = make();
+    let per = 6400_i128;
+    for (case, walls, area) in [
+        ("L", joined_l(), 3070 * 140 + 140 * 2930),
+        ("T", joined_t(), 6000 * 140 + 140 * 2930),
+    ] {
+        let one = body_pieces(&mut e, &built(&k, &walls[0]));
+        let two = body_pieces(&mut e, &built(&k, &walls[1]));
+        let total: i128 = one.iter().chain(&two).map(|(_, v)| v).sum();
+        assert_eq!(
+            total,
+            6 * area * 2700 * per * per * per,
+            "{case}: the pieces fill the joined shape"
+        );
+        for (a, va) in &one {
+            for (b, _) in &two {
+                let less = e
+                    .subtract(a, b)
+                    .unwrap_or_else(|err| panic!("{case}: a piece less another: {err:?}"));
+                assert_eq!(
+                    engine_six_volume(&mut e, &less),
+                    *va,
+                    "{case}: no piece of one wall overlaps a piece of the other"
+                );
+            }
+        }
     }
 }
 
@@ -2616,6 +2967,51 @@ pub fn an_opening_in_a_floor_is_refused_by_name<E: Engine + Send + 'static>(make
             })
             .collect();
         let said = construct_regen::kernel::fits(&edition, &floor, &placed).expect_err(case);
+        assert_eq!(said, error, "{case}: fits says what building says");
+    }
+}
+
+/// A floor with a slope or slab edges that an opening or a shaft would cut is refused by name,
+/// never built wrongly, and `fits` says the same: the cutters are level outlines cut straight
+/// through every layer, and a sloped floor's layers and an edge's piece are not level.
+pub fn a_shaped_floor_that_is_cut_is_refused_by_name<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let flat = floor_of(&[&RECTANGLE], &[("structure", 200)]);
+    let tops = json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let sloped = shaped_floor(flat.clone(), &[("tops", tops)]);
+    let square = [[0, 0], [4000, 0], [4000, 300], [0, 300]];
+    let down = slab_edge("e0", "downturn", (square, -200), (square, -600));
+    let edged = shaped_floor(flat, &[("edges", json!([down]))]);
+    let inside = floor_opening(&square_mm(1000, 1000, 2000, 2000));
+    let zero = at(&k, [0, 0, 0]);
+    let edition = k.edition();
+    for (case, floor, shaped, away) in [
+        ("sloped", &sloped, "a slope", "the slope"),
+        ("with slab edges", &edged, "slab edges", "the slab edges"),
+    ] {
+        let hosted = vec![hosted("O-1", &inside, zero)];
+        let error = k.build_hosting(floor, &hosted).expect_err(case);
+        assert_eq!(error.code, "ShapedFloorCut", "{case}");
+        assert_eq!(
+            error.message,
+            format!(
+                "opening O-1: it would be cut through a floor with {shaped}, and a floor with \
+                 {shaped} is not cut by openings and shafts yet: take {away} away, or put the \
+                 opening or shaft elsewhere"
+            ),
+            "{case}"
+        );
+        let placed: Vec<construct_model::geometry::Hosted<'_>> = hosted
+            .iter()
+            .map(|h| construct_model::geometry::Hosted {
+                key: h.key,
+                recipe: h.recipe,
+                at: construct_model::element::Placement { x: 0, y: 0, z: 0 },
+            })
+            .collect();
+        let said = construct_regen::kernel::fits(&edition, floor, &placed).expect_err(case);
         assert_eq!(said, error, "{case}: fits says what building says");
     }
 }

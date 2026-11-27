@@ -4,7 +4,8 @@
 //! and what the engine does with a face within its tolerance) among them, the whole
 //! server seeded and checked on it, a hosted door keeping its face when its wall is lengthened,
 //! layered walls drawn and their types changed through the commands, a floor with a hole drawn
-//! through the commands and its quantities read back, gable, mono-pitch and flat roofs built one
+//! through the commands and its quantities read back, a sloped floor and one with slab edges built
+//! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
 //! cutting a three-layer wall (job 6.4), doors, windows and openings in walls at any angle (piece
 //! A83), and a document of one edition reported,
@@ -125,6 +126,16 @@ fn an_l_shaped_floor_with_a_hole_is_its_layers() {
 }
 
 #[test]
+fn a_sloped_floor_is_its_layers() {
+    kernel_suite::a_sloped_floor_is_its_layers(engine);
+}
+
+#[test]
+fn a_floor_with_slab_edges_is_one_solid() {
+    kernel_suite::a_floor_with_slab_edges_is_one_solid(engine);
+}
+
+#[test]
 fn a_gable_roof_is_its_layers() {
     kernel_suite::a_gable_roof_is_its_layers(engine);
 }
@@ -193,6 +204,21 @@ fn openings_and_a_shaft_cut_every_layer_of_a_floor() {
 #[test]
 fn an_opening_in_a_floor_is_refused_by_name() {
     kernel_suite::an_opening_in_a_floor_is_refused_by_name(engine);
+}
+
+#[test]
+fn a_shaped_floor_that_is_cut_is_refused_by_name() {
+    kernel_suite::a_shaped_floor_that_is_cut_is_refused_by_name(engine);
+}
+
+#[test]
+fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
+    kernel_suite::walls_joined_at_an_l_and_a_t_fill_the_joined_shape(engine);
+}
+
+#[test]
+fn joined_walls_meet_without_overlap_on_the_engine() {
+    kernel_suite::joined_walls_meet_without_overlap_on_the_engine(engine);
 }
 
 #[test]
@@ -731,7 +757,9 @@ async fn layered(
 
 /// Through the server's commands on the kernel: two wall types made, a partition with 12.5 mm
 /// linings drawn along x from level 1 to a level of its own and a concrete wall along y of a
-/// height, each built one solid per layer (the display lists each layer's material); a door
+/// height from its end, each built one solid per layer (the display lists each layer's material)
+/// and joined at the corner (the partition's exterior lining runs to the concrete's outer face,
+/// the concrete from the partition's stud's exterior face); a door
 /// hosted on the partition cuts every layer; the top level moved and a layer thickened build the
 /// partition again, writing no wall; undo and redo of the thickening; and the whole model
 /// rebuilt from empty gives the same bytes.
@@ -778,7 +806,7 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     .await;
 
     let (shown, names, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 2700]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 2700]));
     let materials: Vec<&str> = shown
         .display
         .as_ref()
@@ -799,7 +827,7 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
         assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
     }
     let (concrete, _, bounds) = layered(&s, &project, &model, "W-901").await;
-    assert_eq!(bounds, ([53_900, 0, 0], [54_100, 4000, 2700]));
+    assert_eq!(bounds, ([53_900, -45, 0], [54_100, 4000, 2700]));
     assert_eq!(concrete.display.as_ref().unwrap().parts.len(), 1);
 
     let exterior = names
@@ -836,19 +864,19 @@ async fn layered_walls_drawn_through_commands_are_built_one_solid_per_layer() {
     )
     .await;
     let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 3000]));
     edit(
         "wall.type.layers",
         json!({ "type": "wall-partition", "assembly": partition("140 mm") }),
     )
     .await;
     let (thicker, names, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -83, 0], [54_000, 83, 3000]));
+    assert_eq!(bounds, ([50_000, -83, 0], [54_100, 83, 3000]));
     assert_eq!(thicker.built.input, wall, "no wall was written");
     assert_eq!(cut_roles(&names).len(), 3, "the door still cuts it");
     edit("edit.undo", json!({})).await;
     let (_, _, bounds) = layered(&s, &project, &model, "W-900").await;
-    assert_eq!(bounds, ([50_000, -58, 0], [54_000, 58, 3000]));
+    assert_eq!(bounds, ([50_000, -58, 0], [54_100, 58, 3000]));
     edit("edit.redo", json!({})).await;
     let (again, _, _) = layered(&s, &project, &model, "W-900").await;
     assert_eq!(again.built.result, thicker.built.result);
@@ -978,6 +1006,84 @@ async fn a_floor_drawn_through_commands_is_built_one_solid_per_layer() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
+}
+
+/// Six times the volume a shape's finest display holds, part by part, each part closed, in cubic
+/// millimetres.
+fn parts_six(shown: &ShapeView) -> i128 {
+    let display = shown.display.as_ref().unwrap();
+    (0..display.parts.len())
+        .map(|at| kernel_suite::closed_mesh_six_volume(&kernel_suite::part_mesh(display, at)))
+        .sum()
+}
+
+/// Through the server's commands on the kernel: three walls of a lined type (20, 100 and 20 mm)
+/// drawn to make an L and a T are each built with their joints, and their pieces' volumes add up
+/// exactly to the joined shape's, so they neither overlap nor leave a gap; moving the corner wall
+/// away builds the first again with a square end, its record unwritten; the whole model rebuilt
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn walls_drawn_to_meet_through_commands_are_joined_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let layer = |function: &str, thickness: &str, material: &str| json!({ "function": function, "thickness": thickness, "material": material });
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-lined", "name": "Lined", "assembly": {
+            "core": { "exterior": 1, "interior": 2 }, "layers": [
+                layer("finish", "20 mm", "plasterboard-gypsum"),
+                layer("structure", "100 mm", "timber-douglas-fir"),
+                layer("finish", "20 mm", "plasterboard-gypsum"),
+            ] } }),
+    )
+    .await;
+    for (id, start, end) in [
+        ("W-910", ["60 m", "-20 m"], ["64 m", "-20 m"]),
+        ("W-911", ["64 m", "-20 m"], ["64 m", "-17 m"]),
+        ("W-912", ["62 m", "-23 m"], ["62 m", "-20 m"]),
+    ] {
+        edit(
+            "wall.draw",
+            json!({ "element": id, "type": "wall-lined", "start": start, "end": end,
+                    "level": "1", "height": "2.7 m" }),
+        )
+        .await;
+    }
+    let (first, _, bounds) = layered(&s, &project, &model, "W-910").await;
+    assert_eq!(bounds, ([60_000, -20_070, 0], [64_070, -19_930, 2700]));
+    assert_eq!(
+        first.display.as_ref().unwrap().parts.len(),
+        4,
+        "its exterior lining is in two pieces"
+    );
+    let mut six = parts_six(&first);
+    for wall in ["W-911", "W-912"] {
+        six += parts_six(&layered(&s, &project, &model, wall).await.0);
+    }
+    let area = 4070 * 140 + 140 * 2930 + 140 * 2930;
+    assert_eq!(six, 6 * area * 2700, "the walls fill the joined shape");
+
+    edit(
+        "element.move",
+        json!({ "element": "W-911", "placement": { "x": 1000, "y": 0, "z": 0 } }),
+    )
+    .await;
+    let (moved, _, bounds) = layered(&s, &project, &model, "W-910").await;
+    assert_eq!(bounds, ([60_000, -20_070, 0], [64_000, -19_930, 2700]));
+    assert_eq!(moved.built.input, first.built.input, "no wall was written");
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+    assert_eq!(fresh.verify(&project).await.unwrap(), 29);
 }
 
 /// A level's plan drawn on solidcore, as the page asks for it: every wall of the level has its
@@ -1309,4 +1415,78 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
+}
+
+/// The warnings view on the kernel engine: the list is read from the document, so it is the same
+/// as on the default engine. A room whose wall is deleted is listed not enclosed; two walls drawn
+/// along each other are listed as an overlap, and the list is empty of both again when the
+/// second wall is deleted and the first wall of the room is back by undo.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let identities = || async {
+        s.warnings(&anna, &project, &model)
+            .await
+            .unwrap()
+            .warnings
+            .into_iter()
+            .map(|w| w.identity)
+            .collect::<Vec<_>>()
+    };
+    let base = identities().await;
+    assert!(base.iter().all(|w| !w.starts_with("room.")), "{base:?}");
+    edit(
+        "room.place",
+        json!({ "element": "R-900", "name": "Studio", "level": "1", "at": ["3 m", "4 m"],
+                "top": "2" }),
+    )
+    .await;
+    assert_eq!(identities().await, base, "enclosed: nothing to say");
+    edit("element.delete", json!({ "element": "W-103" })).await;
+    let open = identities().await;
+    assert_eq!(open.len(), base.len() + 1);
+    assert!(
+        open.contains(&"room.not_enclosed|R-900".to_owned()),
+        "{open:?}"
+    );
+
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    for (wall, from, to) in [("W-900", "50 m", "54 m"), ("W-901", "52 m", "56 m")] {
+        edit(
+            "wall.draw",
+            json!({ "element": wall, "type": "wall-partition", "start": [from, "0"],
+                    "end": [to, "0"], "level": "1", "height": "2.7 m" }),
+        )
+        .await;
+    }
+    let both = identities().await;
+    assert!(
+        both.contains(&"wall.overlap|W-900|W-901".to_owned()),
+        "{both:?}"
+    );
+    assert!(both.contains(&"room.not_enclosed|R-900".to_owned()));
+    edit("element.delete", json!({ "element": "W-901" })).await;
+    assert_eq!(identities().await, open);
+    for _ in 0..8 {
+        edit("edit.undo", json!({})).await;
+        if !identities()
+            .await
+            .contains(&"room.not_enclosed|R-900".to_owned())
+        {
+            break;
+        }
+    }
+    assert_eq!(identities().await, base);
 }

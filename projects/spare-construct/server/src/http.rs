@@ -160,11 +160,16 @@ pub fn routes(app: Shared) -> Router {
         .route("/api/projects/{project}/models/{model}/types", get(types))
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .merge(view_routes())
+        .merge(schedule_routes())
         .route(
             "/api/projects/{project}/models/{model}/families",
             get(families),
         )
         .route("/api/projects/{project}/models/{model}/rooms", get(rooms))
+        .route(
+            "/api/projects/{project}/models/{model}/warnings",
+            get(warnings),
+        )
         .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
             get(filled),
@@ -222,6 +227,59 @@ fn view_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/sheets/{sheet}",
             get(sheet),
         )
+}
+
+/// A model's schedules: the list, and one with its rows (read only).
+fn schedule_routes() -> Router<Shared> {
+    Router::new()
+        .route(
+            "/api/projects/{project}/models/{model}/schedules",
+            get(schedules),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/schedules/{schedule}",
+            get(schedule),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/schedule-categories",
+            get(schedule_categories),
+        )
+}
+
+async fn schedule_categories(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedule_categories(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn schedules(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedules(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn schedule(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, schedule)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedule(&person, &id(&project)?, &id(&model)?, &id(&schedule)?)
+            .await?,
+    ))
 }
 
 /// The Spare Construct demo's own page, unchanged, with the connector added. The page is the
@@ -696,6 +754,18 @@ async fn rooms(
     Ok(Json(
         app.service
             .rooms(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn warnings(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .warnings(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

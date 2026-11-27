@@ -1,0 +1,59 @@
+{
+  "about": [
+    "The house script: the commands a person's edits make, in order, that build one small house.",
+    "tests/house.rs runs every step through the edit log (the same path as a page) and checks the numbers it works out by hand.",
+    "To add a step: append an object {\"note\": why, \"cmd\": the command, \"args\": its arguments} to the end of \"steps\" (the order is the log's order).",
+    "Then, in tests/house.rs, raise STEPS by one, and add what the step makes to the counts and to the numbers, each worked out by hand in a comment beside it.",
+    "Lengths are typed text in millimetres or metres; the house's walls' reference lines are the rectangle 0..8000 by 0..6000 in plan."
+  ],
+  "steps": [
+    { "note": "Ground at 0, First at 3 m", "cmd": "level.create", "args": { "level": "L-g", "name": "Ground", "elevation": "0" } },
+    { "note": "", "cmd": "level.create", "args": { "level": "L-1", "name": "First", "elevation": "3 m" } },
+
+    { "note": "Four grid lines on the house's four centre lines", "cmd": "grid.create", "args": { "grid": "G-A", "name": "A", "x0": "0", "y0": "-1000", "x1": "0", "y1": "7000" } },
+    { "note": "", "cmd": "grid.create", "args": { "grid": "G-B", "name": "B", "x0": "8000", "y0": "-1000", "x1": "8000", "y1": "7000" } },
+    { "note": "", "cmd": "grid.create", "args": { "grid": "G-1", "name": "1", "x0": "-1000", "y0": "0", "x1": "9000", "y1": "0" } },
+    { "note": "", "cmd": "grid.create", "args": { "grid": "G-2", "name": "2", "x0": "-1000", "y0": "6000", "x1": "9000", "y1": "6000" } },
+
+    { "note": "The outer wall type: brick veneer, cavity, wrap (0 mm), frame (the core), lining; 250 mm", "cmd": "wall.type.create", "args": {
+      "type": "wall-brick-veneer-90", "name": "Brick veneer, 40 cavity, 90 timber frame, 10 plasterboard",
+      "assembly": { "core": { "exterior": 3, "interior": 4 }, "layers": [
+        { "function": "finish", "thickness": "110 mm", "material": "brick-clay", "wraps": false },
+        { "function": "thermal", "thickness": "40 mm", "material": "air-dry", "wraps": false },
+        { "function": "membrane", "thickness": "0 mm", "material": "membrane-polyethylene", "wraps": true },
+        { "function": "structure", "thickness": "90 mm", "material": "timber-douglas-fir", "wraps": false },
+        { "function": "finish", "thickness": "10 mm", "material": "plasterboard-gypsum", "wraps": true } ] } } },
+    { "note": "The inner wall type: lining, 90 mm frame (the core), lining; 115 mm", "cmd": "wall.type.create", "args": {
+      "type": "wall-partition-stud-90", "name": "Partition, 90 timber stud, 12.5 plasterboard both sides",
+      "assembly": { "core": { "exterior": 1, "interior": 2 }, "layers": [
+        { "function": "finish", "thickness": "12.5 mm", "material": "plasterboard-gypsum", "wraps": true },
+        { "function": "structure", "thickness": "90 mm", "material": "timber-douglas-fir", "wraps": false },
+        { "function": "finish", "thickness": "12.5 mm", "material": "plasterboard-gypsum", "wraps": true } ] } } },
+
+    { "note": "South wall, walked west to east so its exterior is on the south", "cmd": "wall.draw", "args": { "element": "W-s", "type": "wall-brick-veneer-90", "start": ["0", "0"], "end": ["8000", "0"], "level": "L-g", "top": "L-1" } },
+    { "note": "East wall", "cmd": "wall.draw", "args": { "element": "W-e", "type": "wall-brick-veneer-90", "start": ["8000", "0"], "end": ["8000", "6000"], "level": "L-g", "top": "L-1" } },
+    { "note": "North wall", "cmd": "wall.draw", "args": { "element": "W-n", "type": "wall-brick-veneer-90", "start": ["8000", "6000"], "end": ["0", "6000"], "level": "L-g", "top": "L-1" } },
+    { "note": "West wall, closing the rectangle", "cmd": "wall.draw", "args": { "element": "W-w", "type": "wall-brick-veneer-90", "start": ["0", "6000"], "end": ["0", "0"], "level": "L-g", "top": "L-1" } },
+    { "note": "An inner wall across the middle", "cmd": "wall.draw", "args": { "element": "W-i", "type": "wall-partition-stud-90", "start": ["4000", "0"], "end": ["4000", "6000"], "level": "L-g", "top": "L-1" } },
+
+    { "note": "The default floor types", "cmd": "floor.defaults", "args": {} },
+    { "note": "The ground floor slab, 200 mm of concrete, over the rectangle", "cmd": "floor.create", "args": { "element": "F-g", "type": "floor-concrete-200", "level": "L-g",
+      "boundary": { "outer": [
+        { "id": "r0", "at": ["0", "0"] }, { "id": "r1", "at": ["8000", "0"] },
+        { "id": "r2", "at": ["8000", "6000"] }, { "id": "r3", "at": ["0", "6000"] } ] } } },
+    { "note": "A 1 m by 2 m opening in the slab", "cmd": "opening.draw", "args": { "element": "O-1", "host": "F-g",
+      "outline": [["1000", "1000"], ["2000", "1000"], ["2000", "3000"], ["1000", "3000"]] } },
+
+    { "note": "A door on the south wall's exterior, 2 m along its reference line", "cmd": "family.place", "args": { "element": "D-1", "family": "library.doors-windows.single-swing-door", "type": "d900x2100", "host": "W-s", "side": "exterior", "along": "2 m" } },
+    { "note": "A window on the south wall, 5.5 m along", "cmd": "family.place", "args": { "element": "N-1", "family": "library.doors-windows.fixed-window", "type": "w1200x1200", "host": "W-s", "side": "exterior", "along": "5.5 m" } },
+    { "note": "A window on the north wall, 4 m along", "cmd": "family.place", "args": { "element": "N-2", "family": "library.doors-windows.fixed-window", "type": "w1200x1200", "host": "W-n", "side": "exterior", "along": "4 m" } },
+
+    { "note": "The default roof types", "cmd": "roof.defaults", "args": {} },
+    { "note": "A hip roof over the rectangle at 5:12, no overhang", "cmd": "roof.create", "args": { "element": "R-1", "type": "roof-concrete-200-insulated", "level": "L-1", "form": "hip", "pitch": "5:12",
+      "footprint": { "outer": [
+        { "id": "e0", "at": ["0", "0"] }, { "id": "e1", "at": ["8000", "0"] },
+        { "id": "e2", "at": ["8000", "6000"] }, { "id": "e3", "at": ["0", "6000"] } ] } } },
+
+    { "note": "A room in the west half, between the west wall and the inner wall", "cmd": "room.place", "args": { "element": "Rm-1", "name": "Living", "level": "L-g", "at": ["2000", "3000"], "top": "L-1" } }
+  ]
+}

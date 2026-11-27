@@ -39,6 +39,9 @@
 //!   build it: the kernel one solid per layer, the stand-in one box of its whole thickness.
 //! - [`walls`]: how a layered wall's recipe reads its layers from its wall type, filled with the
 //!   parameters by [`parameters::recipe_at`].
+//! - [`joins`]: how a layered wall's recipe is filled with its joints with the walls it meets
+//!   (job 5.1): the walls are found from the stored walls of its level, the rule is
+//!   construct-walls', and the regenerator and the server's `/filled` both fill through it.
 //!
 //! - [`voids`]: the display shape of an opening and a shaft (job 4.2), which have no solid; both
 //!   builders hand a void's recipe to it first, as a datum's. What one cuts is its host's builder's.
@@ -67,6 +70,8 @@ pub mod families;
 pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;
+#[cfg(feature = "server")]
+pub mod joins;
 pub mod kernel;
 #[cfg(feature = "server")]
 pub mod levels;
