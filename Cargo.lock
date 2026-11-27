@@ -782,6 +782,7 @@ dependencies = [
  "construct-model",
  "construct-openings",
  "construct-params",
+ "construct-railings",
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
