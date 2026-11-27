@@ -2197,5 +2197,249 @@ if (withKernel) {
 }
 pass('her redos hide the walls and clear the rule again, and the plan is as it was in both browsers');
 
+console.log('\n   Crop region and view range, in a view');
+// Anna opens Level 1's plan, then its Crop and range from the view's line in the browser, and Ben
+// opens his own, which stays open and follows. She makes a crop (typing its corners and pressing
+// Enter), and on a server with the geometry kernel both pages draw the plan cut at its edge with its
+// outline; she hides the outline, turns the crop off and on, edits a corner, is turned back in the
+// server's words for a corner that would turn it inside out, raises the plan's cut plane so the
+// door goes, and removes the crop. Her undos and redos take each step back and forward, and Ben
+// follows every one.
+const cropView = 'VP-1';
+const cropDialog = '#stack-manage';
+const cropControl = (key) => `${cropDialog} [data-key="${key}"]`;
+const cropDrawn = '#pv-canvas g.drawn';
+const cropDoor = `${cropDrawn} line[data-element="D-101"]`;
+// The view as the server lists it, read from the page.
+const cropRead = (page) =>
+  page.evaluate(
+    (url) => fetch(url).then((r) => r.json()).then((list) => list.find((v) => v.id === 'VP-1')),
+    `${model}/views`,
+  );
+// Waits until the server's view holds `want` at `path` (null for no value at all).
+const cropWait = (page, path, want) =>
+  page.waitForFunction(
+    async ([url, steps, value]) => {
+      const list = await fetch(url).then((r) => r.json());
+      let at = list.find((v) => v.id === 'VP-1');
+      for (const step of steps) at = at === null || at === undefined ? at : at[step];
+      return (at ?? null) === value;
+    },
+    [`${model}/views`, path, want],
+    { polling: 250 },
+  );
+// The far right of what the page draws of the server's plan, in millimetres: every line's ends and
+// every hatch line's points, as the server wrote them.
+const cropReach = (page) =>
+  page.evaluate((sel) => {
+    let far = Number.NEGATIVE_INFINITY;
+    for (const line of document.querySelectorAll(`${sel} line`)) {
+      far = Math.max(far, Number(line.getAttribute('x1')), Number(line.getAttribute('x2')));
+    }
+    for (const path of document.querySelectorAll(`${sel} path[data-material]`)) {
+      const words = path.getAttribute('d').split(/\s+/);
+      words.forEach((word, at) => {
+        if (word === 'M' || word === 'L') far = Math.max(far, Number(words[at + 1]));
+      });
+    }
+    return far;
+  }, cropDrawn);
+const cropFrame = (page) => page.locator(`${cropDrawn} line[data-role="crop"]`);
+// Waits until the page's drawing reaches no further right than `limit` (and has something drawn).
+const cropWithin = (page, limit) =>
+  page.waitForFunction(
+    ([sel, most]) => {
+      const lines = [...document.querySelectorAll(`${sel} line`)];
+      if (!lines.length) return false;
+      let far = Number.NEGATIVE_INFINITY;
+      for (const line of lines) far = Math.max(far, Number(line.getAttribute('x1')), Number(line.getAttribute('x2')));
+      for (const path of document.querySelectorAll(`${sel} path[data-material]`)) {
+        const words = path.getAttribute('d').split(/\s+/);
+        words.forEach((word, at) => {
+          if (word === 'M' || word === 'L') far = Math.max(far, Number(words[at + 1]));
+        });
+      }
+      return far <= most;
+    },
+    [cropDrawn, limit],
+  );
+const cropBeyond = (page, limit) =>
+  page.waitForFunction(
+    ([sel, most]) =>
+      [...document.querySelectorAll(`${sel} line`)].some(
+        (line) => Number(line.getAttribute('x1')) > most || Number(line.getAttribute('x2')) > most,
+      ),
+    [cropDrawn, limit],
+  );
+
+await anna.click(viewLeaf('Level 1 plan'));
+await ben.click(viewLeaf('Level 1 plan'));
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(cropDoor, { state: 'attached' });
+    await cropBeyond(page, 6000);
+    check((await cropFrame(page).count()) === 0, 'a view with no crop draws no outline');
+  }
+}
+await anna.click('#browser [data-act="stackviewcrop"]');
+await anna.waitForSelector(`${cropDialog} [data-crop-none]`);
+await ben.click('#browser [data-act="stackviewcrop"]');
+await ben.waitForSelector(`${cropDialog} [data-crop-none]`);
+check(
+  (await anna.locator(cropControl('range-offset:cut')).inputValue()) === '1200 mm' &&
+    (await anna.locator(cropControl('range-level:cut')).inputValue()) === '1',
+  "the dialog shows the plan's cut plane: 1200 mm above Level 1",
+);
+
+// A crop made by typing its corners: its outline and what it holds come to both pages.
+await anna.locator(cropControl('crop-new-minx')).fill('0');
+await anna.locator(cropControl('crop-new-miny')).fill('-500');
+await anna.locator(cropControl('crop-new-maxx')).fill('6 m');
+await anna.locator(cropControl('crop-new-maxy')).fill('8.5 m');
+await anna.locator(cropControl('crop-new-maxy')).press('Enter');
+await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+check(
+  (await ben.locator(cropControl('crop-maxx')).inputValue()) === '6000 mm' &&
+    (await ben.locator(cropControl('crop-miny')).inputValue()) === '-500 mm',
+  "Ben's dialog shows the corners Anna typed, as the server reads them",
+);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await cropWithin(page, 6000);
+    await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, `${cropDrawn} line[data-role="crop"]`);
+    const frame = await boxOf(cropFrame(page).first(), "the crop's outline");
+    check(frame.height > 0 || frame.width > 0, 'the crop outline is drawn on the page, four lines');
+  }
+  pass("the plan is cut at the crop's edge in both browsers: no line or hatch runs past 6 m");
+}
+await shot(anna, 'anna-crop');
+
+// Hiding the outline takes it away and keeps the cut; turning the crop off gives the whole plan.
+await anna.locator(cropControl('crop-shown')).uncheck();
+await anna.waitForSelector(`${cropDialog} [data-crop-state="on-hidden"]`);
+await ben.waitForSelector(`${cropDialog} [data-crop-state="on-hidden"]`);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 0, `${cropDrawn} line[data-role="crop"]`);
+    await cropWithin(page, 6000);
+  }
+  pass('a hidden outline is gone from both pages while the plan stays cut');
+}
+await anna.locator(cropControl('crop-shown')).check();
+await anna.locator(cropControl('crop-on')).uncheck();
+await anna.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
+await ben.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await cropBeyond(page, 6000);
+    await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, `${cropDrawn} line[data-role="crop"]`);
+  }
+  pass('a crop that is off draws the whole plan with its outline, in both browsers');
+}
+await anna.locator(cropControl('crop-on')).check();
+await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+
+// Editing a corner moves the cut.
+await anna.locator(cropControl('crop-maxx')).fill('4 m');
+await anna.locator(cropControl('crop-maxx')).press('Enter');
+await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], '4000 mm');
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await cropWithin(page, 4000);
+    await page.waitForSelector(cropDoor, { state: 'attached' });
+  }
+  pass('a corner moved to 4 m: both plans are cut there, and the door inside it is still drawn');
+}
+check(
+  (await ben.locator(cropControl('crop-maxx')).inputValue()) === '4000 mm',
+  "Ben's dialog follows the corner",
+);
+
+// A corner that would turn the rectangle inside out is turned back in the server's words.
+await anna.locator(cropControl('crop-maxx')).fill('-1 m');
+await anna.locator(cropControl('crop-maxx')).press('Enter');
+await anna.waitForSelector(`${cropDialog} [data-problem="crop"]`);
+const cropWords = await anna.locator(`${cropDialog} [data-problem="crop"]`).textContent();
+check(
+  /lower left corner below and left of its upper right/.test(cropWords),
+  `the refusal reads: ${cropWords}`,
+);
+check((await cropRead(ben)).crop.region.corners[2].x === '4000 mm', 'and the crop is as it was');
+
+// Raising the cut plane takes the door away in both browsers; the top goes up first so the range
+// stays in order, and a cut above the top is turned back in words.
+await anna.locator(cropControl('range-offset:cut')).fill('2.5 m');
+await anna.locator(cropControl('range-offset:cut')).press('Enter');
+await anna.waitForSelector(`${cropDialog} [data-problem="range"]`);
+check(
+  (await cropRead(ben)).range.cut.offset === '1200 mm',
+  'a cut plane above the top is turned back, and the range is as it was',
+);
+await anna.locator(cropControl('range-offset:top')).fill('3.5 m');
+await anna.locator(cropControl('range-offset:top')).press('Enter');
+await cropWait(ben, ['range', 'top', 'offset'], '3500 mm');
+await anna.locator(cropControl('range-offset:cut')).fill('2.5 m');
+await anna.locator(cropControl('range-offset:cut')).press('Enter');
+await cropWait(ben, ['range', 'heights', 'cut'], '2500 mm');
+await ben.waitForFunction(
+  () => document.querySelector('#stack-manage [data-key="range-offset:cut"]')?.value === '2500 mm',
+);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(cropDoor, { state: 'detached' });
+    await page.waitForSelector(`${cropDrawn} line[data-element="W-101"]`, { state: 'attached' });
+  }
+  pass('the cut plane at 2500 mm: the door (2100 mm high) is not cut and the wall is, in both browsers');
+}
+
+// Her undos take the heights back, then the corner; Ben follows each.
+await anna.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+await anna.waitForSelector('#dlg', { state: 'hidden' });
+await anna.click('#qat [data-act="stackundo"]');
+await cropWait(ben, ['range', 'cut', 'offset'], '1200 mm');
+await anna.click('#qat [data-act="stackundo"]');
+await cropWait(ben, ['range', 'top', 'offset'], '2300 mm');
+if (withKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(cropDoor, { state: 'attached' });
+}
+pass('her two undos put the heights back, the door is drawn again, and Ben follows');
+await anna.click('#qat [data-act="stackundo"]');
+await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], '6000 mm');
+if (withKernel) {
+  for (const page of [anna, ben]) await cropWithin(page, 6000);
+}
+pass('her next undo puts the corner back at 6 m, and Ben follows');
+
+// Removing the crop gives the whole plan back; undo and redo go there and back.
+await anna.click('#browser [data-act="stackviewcrop"]');
+await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+await anna.click(cropControl('crop-clear'));
+await anna.waitForSelector(`${cropDialog} [data-crop-none]`);
+await ben.waitForSelector(`${cropDialog} [data-crop-none]`);
+if (withKernel) {
+  for (const page of [anna, ben]) {
+    await cropBeyond(page, 6000);
+    await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 0, `${cropDrawn} line[data-role="crop"]`);
+  }
+}
+check((await cropRead(ben)).crop === null, 'the crop removed, the view has none in either browser');
+await anna.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+await anna.waitForSelector('#dlg', { state: 'hidden' });
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+if (withKernel) {
+  for (const page of [anna, ben]) await cropWithin(page, 6000);
+}
+pass('her undo brings the crop back and the plan is cut again, in both browsers');
+await anna.click('#qat [data-act="stackredo"]');
+await ben.waitForSelector(`${cropDialog} [data-crop-none]`);
+if (withKernel) {
+  for (const page of [anna, ben]) await cropBeyond(page, 6000);
+}
+pass('her redo removes it again');
+await ben.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+await ben.waitForSelector('#dlg', { state: 'hidden' });
+
 await browser.close();
 console.log('\nThe browser checks passed.');

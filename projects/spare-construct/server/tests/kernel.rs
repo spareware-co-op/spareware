@@ -1240,7 +1240,7 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
 /// plan draws the walls and the doors (2100 mm high) they hold; raised to 2500 mm it draws the
 /// walls and no door; raised above the walls' tops (3000 mm) it has nothing cut to draw. The
 /// default range draws the bytes it always did, undo and redo each go there and back, and a
-/// crop stored on the view changes nothing in the drawing yet (the clipping is the next job).
+/// crop stored on the view is the next test's.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_views_stored_range_sets_where_the_plan_is_cut() {
     let (store, files) = (Memory::new(), MemoryFiles::default());
@@ -1277,7 +1277,7 @@ async fn a_views_stored_range_sets_where_the_plan_is_cut() {
     let above = draw().await;
     assert!(!has(&above, "W-101") && !has(&above, "D-101"));
 
-    // A crop is stored and served; the drawing is not clipped to it yet.
+    // The default range again.
     edit(
         "view.set",
         json!({ "view": "VP-1", "range": { "top": { "offset": "2.3 m" },
@@ -1289,19 +1289,112 @@ async fn a_views_stored_range_sets_where_the_plan_is_cut() {
         low,
         "the default range draws what it always did"
     );
-    edit(
-        "view.crop.set",
-        json!({ "view": "VP-1", "region": { "rectangle": {
-            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
-    )
-    .await;
-    assert_eq!(draw().await, low);
-
     // Undo and redo take the range there and back.
-    edit("edit.undo", json!({})).await;
     edit("edit.undo", json!({})).await;
     assert_eq!(draw().await, above);
     edit("edit.redo", json!({})).await;
+    assert_eq!(draw().await, low);
+}
+
+/// The x of every `x1` and `x2` of an SVG's lines and every point of its hatch paths, in
+/// millimetres.
+fn xs(svg: &str) -> Vec<f64> {
+    let mut out = Vec::new();
+    for key in ["x1=\"", "x2=\""] {
+        for part in svg.split(key).skip(1) {
+            out.push(part.split('"').next().unwrap().parse().unwrap());
+        }
+    }
+    for part in svg.split(" d=\"").skip(1) {
+        let d = part.split('"').next().unwrap();
+        let words: Vec<&str> = d.split_whitespace().collect();
+        for w in words.windows(2) {
+            if w[0] == "M" || w[0] == "L" {
+                out.push(w[1].parse().unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// A view's crop clips its plan exactly: while it is on, no line or hatch line is drawn beyond its
+/// edge and the walls it crosses are cut at it; while it is shown, its outline is four strokes
+/// with the role `crop`, apart from the drawing's own; hidden, there is no outline; off, the
+/// whole plan is drawn again (with the outline if it is shown); cleared, the plan is the bytes it
+/// was; and undo and redo take it there and back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_crop_clips_the_plan_and_draws_its_outline() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = || async {
+        s.plan(&anna, &project, &model, &i("VP-1"))
+            .await
+            .unwrap()
+            .svg
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let outline = |svg: &str| svg.matches("data-role=\"crop\"").count();
+    let low = draw().await;
+    assert_eq!(outline(&low), 0);
+    let widest = |svg: &str| xs(svg).into_iter().fold(f64::MIN, f64::max);
+    assert!(widest(&low) > 6000.0, "the whole plan runs past 6 m");
+
+    // A crop 0 to 6 m across and all the way up: its outline and nothing beyond its right edge.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "-500" }, "max": { "x": "6 m", "y": "8.5 m" } } } }),
+    )
+    .await;
+    let cropped = draw().await;
+    assert_eq!(outline(&cropped), 4, "a new crop is shown");
+    assert!(
+        widest(&cropped) <= 6000.0,
+        "nothing drawn past the crop's right edge: {}",
+        widest(&cropped)
+    );
+    assert!(
+        xs(&cropped).contains(&6000.0),
+        "a wall the crop's edge crosses is cut at the edge"
+    );
+    assert_eq!(cropped, draw().await, "the same crop draws the same bytes");
+
+    // Hidden: the same clip with no outline. Off but shown: the whole plan with the outline.
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": false })).await;
+    let hidden = draw().await;
+    assert_eq!(outline(&hidden), 0);
+    assert!(widest(&hidden) <= 6000.0);
+    assert_ne!(hidden, low);
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": true })).await;
+    edit("view.crop.set", json!({ "view": "VP-1", "on": false })).await;
+    let off = draw().await;
+    assert_eq!(outline(&off), 4);
+    assert!(widest(&off) > 6000.0, "a crop that is off clips nothing");
+
+    // A shaped crop (a triangle off the axes) cuts at fractions of a millimetre and still draws
+    // nothing outside it.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "on": true, "region": { "outline": [
+            { "x": "0", "y": "-500" }, { "x": "6 m", "y": "-500" }, { "x": "0", "y": "8.5 m" }] } }),
+    )
+    .await;
+    let triangle = draw().await;
+    assert_eq!(outline(&triangle), 3);
+    assert!(widest(&triangle) <= 6000.0);
+    assert_ne!(triangle, hidden);
+
+    // Cleared, the plan is what it was; undo brings the crop back, redo clears it.
+    edit("view.crop.clear", json!({ "view": "VP-1" })).await;
+    assert_eq!(draw().await, low);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, triangle);
     edit("edit.redo", json!({})).await;
     assert_eq!(draw().await, low);
 }

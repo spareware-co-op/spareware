@@ -1900,12 +1900,17 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     );
 }
 
+/// A crop as the drawer was given it: the view, on, shown and the corners in grid steps.
+type AskedCrop = (String, bool, bool, Vec<(i64, i64)>);
+
 /// A drawer that only records what the server asks of it, so the read path is tested without an
 /// engine: the cut height and scale of the view, and the elements the plan cuts as the model
 /// holds them.
 #[derive(Default)]
 struct Recording {
     asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
+    /// Each request's crop: the view it is of and the crop's on, shown and corners, as text.
+    crops: std::sync::Mutex<Vec<Option<AskedCrop>>>,
 }
 
 impl Drawer for Recording {
@@ -1915,7 +1920,21 @@ impl Drawer for Recording {
         scale: Scale,
         elements: &[ToDraw],
         _looks: Option<&dyn construct_drawing::look::Looks>,
+        crop: Option<spare_server::plan::PlanCrop<'_>>,
     ) -> Result<Drawn, String> {
+        self.crops.lock().unwrap().push(crop.map(|c| {
+            (
+                c.view.to_string(),
+                c.crop.is_on(),
+                c.crop.is_shown(),
+                c.crop
+                    .region()
+                    .corners()
+                    .iter()
+                    .map(|p| (p.x.steps(), p.y.steps()))
+                    .collect(),
+            )
+        }));
         self.asked
             .lock()
             .unwrap()
@@ -1976,6 +1995,30 @@ async fn a_plan_is_the_drawers_picture_of_what_the_views_plane_cuts() {
         let wall = elements.iter().find(|e| e.id.as_str() == "W-201").unwrap();
         assert_eq!(wall.placement.z, 3000);
     }
+
+    // A view with no crop passes none; a crop is passed with its view, switches and corners.
+    assert_eq!(*recording.crops.lock().unwrap(), [None, None]);
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    let (right, top) = (6000 * 6400, 4000 * 6400);
+    assert_eq!(
+        recording.crops.lock().unwrap().last().cloned().unwrap(),
+        Some((
+            "VP-1".to_owned(),
+            true,
+            true,
+            vec![(0, 0), (right, 0), (right, top), (0, top)]
+        ))
+    );
 
     // Only floor plans are drawn yet: a three-dimensional view says so.
     s.edit(
