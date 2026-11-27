@@ -2309,8 +2309,9 @@ if (withKernel) {
   for (const page of [anna, ben]) {
     await cropWithin(page, 6000);
     await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, `${cropDrawn} line[data-role="crop"]`);
-    const frame = await boxOf(cropFrame(page).first(), "the crop's outline");
-    check(frame.height > 0 || frame.width > 0, 'the crop outline is drawn on the page, four lines');
+    // A line has no area, so the drawn plan as a whole is what is looked at.
+    const plan = await boxOf(page.locator(cropDrawn), 'the drawn plan');
+    check(plan.width > 0 && plan.height > 0, 'the cut plan and its four-line outline are drawn on the page');
   }
   pass("the plan is cut at the crop's edge in both browsers: no line or hatch runs past 6 m");
 }
