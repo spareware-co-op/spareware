@@ -115,7 +115,7 @@ pub fn placed(placing: Placing, place: Point, loci: &[Locus]) -> Result<Layout, 
                 }),
             ) = (loci.first(), loci.get(1))
             else {
-                return Err(cannot("an angle is put between two straight lines"));
+                return Err(cannot("an angle is measured between two straight lines"));
             };
             let [a1x, a1y] = steps(*a1).map(frac);
             let [a2x, a2y] = steps(*a2).map(frac);
@@ -143,7 +143,7 @@ pub fn placed(placing: Placing, place: Point, loci: &[Locus]) -> Result<Layout, 
             let radius = length_of(&qx, &qy)?;
             if radius <= 0 {
                 return Err(cannot(
-                    "put an angle's arc away from the point where its lines meet",
+                    "its arc goes away from the point where its lines meet",
                 ));
             }
             Layout::angular(ray(&alpha), ray(&beta), Length::from_steps(radius))
@@ -151,7 +151,7 @@ pub fn placed(placing: Placing, place: Point, loci: &[Locus]) -> Result<Layout, 
         Placing::Radial | Placing::Diameter | Placing::ArcLength => {
             let Some(Locus::Arc(curve)) = loci.first() else {
                 return Err(cannot(
-                    "a radius, a diameter or an arc length is put beside an arc or a circle",
+                    "a radius, a diameter or an arc length measures an arc or a circle",
                 ));
             };
             let [cx, cy] = steps(curve.centre);
@@ -161,7 +161,7 @@ pub fn placed(placing: Placing, place: Point, loci: &[Locus]) -> Result<Layout, 
                 return Err(cannot("the place is beyond the kernel's grid"));
             };
             if dx == 0 && dy == 0 {
-                return Err(cannot("put the dimension away from the curve's centre"));
+                return Err(cannot("it goes away from the curve's centre"));
             }
             match placing {
                 Placing::Radial => Ok(Layout::radial(Direction::new(

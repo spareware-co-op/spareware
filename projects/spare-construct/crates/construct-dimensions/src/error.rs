@@ -83,10 +83,10 @@ impl fmt::Display for DimensionError {
             | Self::Unshowable(why)
             | Self::Malformed(why)
             | Self::References(why)
-            | Self::CannotPlace(why)
             | Self::BadOverride(why)
             | Self::BadStyle(why) => f.write_str(why),
             Self::CannotEqualize(why) => write!(f, "Cannot make the segments equal: {why}."),
+            Self::CannotPlace(why) => write!(f, "Cannot put the dimension there: {why}."),
             Self::Duplicate(id) => write!(f, "There is already a dimension {id}."),
             Self::Unknown(id) => write!(f, "There is no dimension {id} in this model."),
         }
