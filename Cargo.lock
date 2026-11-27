@@ -572,6 +572,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-curtain"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-families",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-doorgen"
 version = "0.0.0"
 dependencies = [
