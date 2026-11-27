@@ -23,14 +23,18 @@ function check(ok, label) {
   pass(label);
 }
 
+const slowable = [];
+
 async function signIn(person, blocked) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (blocked) await context.route(blocked, (route) => route.abort());
   const page = await context.newPage();
   // CPU_THROTTLE=4 makes every page four times slower, to bring out what a slow runner shows.
-  if (process.env.CPU_THROTTLE) {
+  // CPU_THROTTLE_LATE=10 does the same only once the 200 ms section is over, to reach what comes after.
+  if (process.env.CPU_THROTTLE || process.env.CPU_THROTTLE_LATE) {
     const session = await context.newCDPSession(page);
-    await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE) });
+    slowable.push(session);
+    if (process.env.CPU_THROTTLE) await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE) });
   }
   page.on('pageerror', (e) => {
     console.error(`${person}'s page: ${e}`);
@@ -171,6 +175,12 @@ check(
   Math.max(...toBen, ...toAnna) < 200,
   'every edit was drawn in the other browser in under 200 ms',
 );
+
+if (process.env.CPU_THROTTLE_LATE) {
+  for (const session of slowable) {
+    await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE_LATE) });
+  }
+}
 
 if (process.env.STACK_KILL) {
   console.log('\n5. Killing and restarting the server mid-edit loses nothing');
@@ -2321,8 +2331,30 @@ const slDrawn = (page, id) => page.waitForSelector(`g.element[data-id="${id}"] p
 const slPick = async (page, id, x, y) => {
   await slDrawn(page, id);
   const at = await onPlan(page, x, y);
+  const clicked = Date.now();
   await page.mouse.click(at.x, at.y);
-  await page.waitForSelector(`#pv-side [data-floor-slope-part]`);
+  try {
+    await page.waitForSelector(`#pv-side [data-floor-slope-part]`);
+  } catch (error) {
+    // Say what the page did between the click and the wait giving up (diagnostics only).
+    const seen = await page.evaluate(
+      ([who, from, px, py]) => ({
+        under: (() => {
+          const hit = document.elementFromPoint(px, py);
+          return hit ? `${hit.tagName}.${hit.getAttribute('class') ?? ''} in ${hit.closest('[data-id]')?.dataset.id ?? 'nothing'}` : 'nothing';
+        })(),
+        selectedBody: document.querySelectorAll('g.element path.body.sel').length,
+        hasShape: Boolean(window.spare.elements.get(who)?.shape),
+        stale: Boolean(window.spare.elements.get(who)?.stale),
+        claim: window.spare.claims.get(who)?.person ?? null,
+        side: document.querySelector('#pv-side')?.innerText.slice(0, 160),
+        busy: window.spare.busyIn(from, Date.now()),
+      }),
+      [id, clicked, at.x, at.y],
+    );
+    console.log(`      pick of ${id} at ${at.x},${at.y} found no slope part: ${JSON.stringify(seen)}`);
+    throw error;
+  }
   await page.waitForFunction((who) => window.spare.claims.get(who)?.person === window.spare.me.person.id, id);
 };
 await slPick(anna, slIdA, 8500, -1400);
