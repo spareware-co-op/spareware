@@ -92,6 +92,7 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_views::VIEW_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
+        && element.kind != construct_dimensions::DIMENSION_KIND
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).

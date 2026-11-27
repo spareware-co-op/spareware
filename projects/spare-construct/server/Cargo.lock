@@ -658,6 +658,7 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-clash",
+ "construct-dimensions",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -706,6 +707,18 @@ dependencies = [
  "construct-model",
  "engine-geometry",
  "kit-store",
+]
+
+[[package]]
+name = "construct-dimensions"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "num-bigint",
 ]
 
 [[package]]
@@ -865,6 +878,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-dimensions",
  "construct-families",
  "construct-formulas",
  "construct-grids",

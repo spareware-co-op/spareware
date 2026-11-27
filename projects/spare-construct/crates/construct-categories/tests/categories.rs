@@ -251,6 +251,10 @@ fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("view"), Ok(construct_categories::VIEWS));
     assert_eq!(category_of_kind("sheet"), Ok(construct_categories::SHEETS));
     assert_eq!(
+        category_of_kind("dimension"),
+        Ok(construct_categories::DIMENSIONS)
+    );
+    assert_eq!(
         category_of_kind("viewport"),
         Ok(construct_categories::VIEWPORTS)
     );
