@@ -1644,6 +1644,8 @@ const famLetGo = async (page, other) => {
 };
 const famSizeBefore = await famSize(anna);
 await famPick(anna, famId);
+// The category is read from the server after the palette opens, so the wait names it.
+await anna.waitForFunction(() => document.querySelector('#pv-side')?.textContent.includes('Windows'));
 check((await anna.locator('#pv-side').textContent()).includes('Windows'), "Anna's palette gives the window its family's category, Windows");
 await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
 await famLetGo(anna, ben);
