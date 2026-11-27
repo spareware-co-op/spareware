@@ -29,6 +29,10 @@
 //! - `stair`: one solid per piece, each the solid construct-stairs worked out for it (a run's side
 //!   profile lofted across its width, a landing's outline extruded up), in the child module
 //!   `stair` (job 6.7); its points are construct-params' steps ([`crate::stair_plan`]).
+//! - `railing`: one solid per piece, each the extrusion construct-railings worked out for it (a
+//!   post's or a baluster's profile swept up, a rail's section swept along its piece of line), in
+//!   the child module `railing` (job 14.2); its points are construct-params' steps
+//!   ([`crate::railing_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
@@ -106,6 +110,7 @@ mod family;
 mod floor;
 mod layered;
 pub mod opening;
+mod railing;
 mod roof;
 mod room;
 mod stair;
@@ -688,6 +693,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
         let plan = crate::stair_plan::StairPlan::of(recipe)?;
         return stair::names(op_id(recipe)?, &plan);
     }
+    if crate::railing_plan::is_railing(recipe) {
+        let plan = crate::railing_plan::RailingPlan::of(recipe)?;
+        return railing::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
@@ -875,8 +884,8 @@ impl<E: Engine> Kernel<E> {
         self.band
     }
 
-    /// A floor, a roof, a stair or a placed family, each built by its own builder; `None` for any
-    /// other recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
+    /// A floor, a roof, a stair, a railing or a placed family, each built by its own builder; `None`
+    /// for any other recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
     fn build_other_kind(
         &self,
         host: &Recipe,
@@ -890,6 +899,9 @@ impl<E: Engine> Kernel<E> {
         }
         if crate::stair_plan::is_stair(host) {
             return Some(self.build_stair(host, hosted.len()));
+        }
+        if crate::railing_plan::is_railing(host) {
+            return Some(self.build_railing(host, hosted.len()));
         }
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));

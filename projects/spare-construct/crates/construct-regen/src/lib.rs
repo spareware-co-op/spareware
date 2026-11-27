@@ -42,6 +42,13 @@
 //!   its pieces (construct-stairs), its layout as a command or a view reads it, and its read-only
 //!   quantities.
 //!
+//! - [`railing_plan`]: a railing (`railing`) as both builders read it: its filled recipe's
+//!   material and each piece, a flat profile swept along a vector in grid steps (job 14.2). The
+//!   kernel builds one solid per piece, the stand-in one box with its pieces drawn.
+//! - [`railings`]: how a railing's recipe is laid out along its path or the stair it follows and
+//!   filled with its pieces (construct-railings), what it reads, its layout, read-only quantities
+//!   and warnings as a command or a view reads them.
+//!
 //! - [`wall_plan`]: a layered wall (`wall.layered`) in plan: where each layer face lies on the
 //!   kernel's grid, rounded once per face, read from its filled recipe (job 4.1). Both builders
 //!   build it: the kernel one solid per layer, the stand-in one box of its whole thickness.
@@ -78,6 +85,9 @@ pub mod kernel;
 pub mod levels;
 #[cfg(feature = "server")]
 pub mod parameters;
+pub mod railing_plan;
+#[cfg(feature = "server")]
+pub mod railings;
 #[cfg(feature = "server")]
 pub mod regenerator;
 pub mod roof_plan;

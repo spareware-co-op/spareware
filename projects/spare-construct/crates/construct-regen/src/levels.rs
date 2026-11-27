@@ -250,7 +250,8 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
 /// The recipe `element` is built from, as the document is `at` that state, every argument that
 /// reads a record filled: its parameters and its wall type's layers
 /// ([`crate::parameters::recipe_at`]), then its top tie ([`filled`]), and a stair laid out from
-/// it ([`crate::stairs::filled`]). What a command asks of a shape's rules (a door's fit in its
+/// it ([`crate::stairs::filled`]), or a railing laid out along its path or its stair
+/// ([`crate::railings::filled`]). What a command asks of a shape's rules (a door's fit in its
 /// wall) is asked of this, as the regenerator builds it.
 ///
 /// # Errors
@@ -267,6 +268,18 @@ pub async fn recipe_at<R: Reader>(
         Ok(recipe) => recipe,
         Err(e) => return Ok(Err(e)),
     };
+    if construct_railings::is_railing_recipe(&recipe) {
+        // A railing is laid out along its path or its stair from where its base stands.
+        return Ok(
+            match placed(reader, project, document, element, at).await? {
+                Ok(placed) => {
+                    crate::railings::filled(reader, project, document, recipe, placed.elevation, at)
+                        .await?
+                }
+                Err(e) => Err(e),
+            },
+        );
+    }
     if !reads_top(&recipe) {
         return Ok(Ok(recipe));
     }

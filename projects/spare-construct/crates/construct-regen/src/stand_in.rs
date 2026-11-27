@@ -26,6 +26,12 @@
 //! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
 //! to build (the interim register's row).
 //!
+//! A railing (`railing`) is one box too: the box around every piece ([`crate::railing_plan`]),
+//! rounded outward to whole millimetres, named `box.<role>` for its pieces. Its displays draw each
+//! post, baluster and piece of rail as a part in the railing's material, the prism it is, every
+//! point the nearest millimetre. Interim, as every stand-in shape: its pieces as solids are the
+//! kernel's to build (the interim register's row).
+//!
 //! A stair (`stair`) is one box too: the box around every piece ([`crate::stair_plan`]), rounded
 //! outward to whole millimetres, named `box.<role>` for its pieces' faces. Its displays draw each
 //! piece as a part in the stair's material: a landing as its prism, a run as its side profile cut
@@ -54,6 +60,7 @@
 
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
+use crate::railing_plan::{self, RailingPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
 use crate::stair_plan::{self, PieceSolid, StairPlan};
@@ -782,6 +789,97 @@ fn stair(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A railing as one box ([`crate::railing_plan`]): the box around every piece, rounded outward to
+/// whole millimetres, named `box.<role>` for every piece. Its displays draw each piece as a part
+/// in the railing's material, function its part: the prism it is, its profile and the same swept,
+/// every point the nearest millimetre, so a page shows the posts, rails and balusters on either
+/// edition; its body is the one box. Its displays stray by 1 mm where a point was rounded.
+fn railing(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = RailingPlan::of(recipe)?;
+    let (lo, hi) = plan.extent();
+    let min = lo.map(floor_plan::floor_mm);
+    let max = hi.map(floor_plan::ceil_mm);
+    let mut rounded = false;
+    let mut near = |p: [i64; 3]| {
+        p.map(|c| {
+            let (mm, exact) = floor_plan::nearest_mm(c);
+            rounded |= !exact;
+            mm
+        })
+    };
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut first_outline = Vec::new();
+    for piece in &plan.pieces {
+        let outline: Vec<[i64; 2]> = piece
+            .plan()
+            .iter()
+            .map(|&[x, y]| {
+                let [x, y, _] = near([x, y, 0]);
+                [x, y]
+            })
+            .collect();
+        if first_outline.is_empty() {
+            first_outline.clone_from(&outline);
+        }
+        let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+        let low: Vec<[i64; 3]> = piece.profile.iter().map(|p| near(*p)).collect();
+        let high: Vec<[i64; 3]> = piece
+            .profile
+            .iter()
+            .map(|p| {
+                near([
+                    p[0].saturating_add(piece.by[0]),
+                    p[1].saturating_add(piece.by[1]),
+                    p[2].saturating_add(piece.by[2]),
+                ])
+            })
+            .collect();
+        let triangles = prism(&mut mesh, &low, &high)?;
+        parts.push(Part {
+            material: plan.material.clone(),
+            function: piece.part.clone(),
+            triangles: [start, part_count(triangles)?],
+            outline,
+        });
+    }
+    let body = FloorBody {
+        kind: "railing",
+        min,
+        max,
+    };
+    let deviation = i64::from(rounded);
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: first_outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: railing_names(&plan),
+        displays,
+    })
+}
+
+/// A railing's face names: `box.<role>` for each of its pieces, in order.
+fn railing_names(plan: &RailingPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// A stair's face names: `box.<role>` for each of its pieces' roles, in order.
 fn stair_names(plan: &StairPlan) -> Vec<FaceName> {
     plan.roles()
@@ -1056,6 +1154,9 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     if stair_plan::is_stair(recipe) {
         return Ok(stair_names(&StairPlan::of(recipe)?));
     }
+    if railing_plan::is_railing(recipe) {
+        return Ok(railing_names(&RailingPlan::of(recipe)?));
+    }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
     } else {
@@ -1202,6 +1303,9 @@ impl Geometry for Boxes {
         }
         if stair_plan::is_stair(recipe) {
             return stair(recipe);
+        }
+        if railing_plan::is_railing(recipe) {
+            return railing(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);

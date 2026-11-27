@@ -6,7 +6,7 @@
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
 use crate::{
-    CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
+    CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS, RAILINGS,
     REFERENCE_PLANES, ROOFS, ROOMS, SHEETS, STAIRS, VIEWPORTS, VIEWS, WALLS,
 };
 
@@ -29,6 +29,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("refplane.horizontal", REFERENCE_PLANES),
     ("refplane.vertical", REFERENCE_PLANES),
     ("shaft", OPENINGS),
+    ("railing", RAILINGS),
     ("roof", ROOFS),
     ("room", ROOMS),
     ("sheet", SHEETS),
