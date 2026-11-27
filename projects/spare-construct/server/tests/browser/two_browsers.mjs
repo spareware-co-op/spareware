@@ -2321,7 +2321,14 @@ for (const corners of [slFloorA, slFloorB]) {
   await anna.keyboard.press('Enter');
   await anna.waitForSelector('#pv-side [data-floor-sketch="empty"]');
 }
-await ben.waitForFunction((x) => [...window.spare.elements.values()].some((p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === x), 11000 * 6400);
+// Ben's page can build the second floor before the first: wait until it holds both, then read them.
+await ben.waitForFunction(
+  (xs) =>
+    xs.every((x) =>
+      [...window.spare.elements.values()].some((p) => p.el.kind === 'floor' && p.el.recipe.args.boundary?.sketch?.points?.[0]?.x === x),
+    ),
+  [7000 * 6400, 11000 * 6400],
+);
 const slIdA = await slFloorWith(ben, 7000);
 const slIdB = await slFloorWith(ben, 11000);
 check(slIdA && slIdB && slIdA !== slIdB, 'Anna draws two plain floors, and Ben has both');
