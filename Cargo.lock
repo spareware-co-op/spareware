@@ -512,6 +512,7 @@ dependencies = [
  "construct-api",
  "construct-categories",
  "construct-clash",
+ "construct-curtain",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -769,6 +770,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-curtain",
  "construct-families",
  "construct-formulas",
  "construct-grids",

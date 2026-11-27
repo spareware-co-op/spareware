@@ -19,6 +19,8 @@
 //!   log.
 //! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
 //!   through the same log.
+//! - [`curtains`]: curtain wall types (their grid and parts) and curtain walls, drawn on their own
+//!   line or embedded in a wall, their grid lines, segments and panels, through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
@@ -31,6 +33,7 @@
 
 pub mod access;
 pub mod commands;
+pub mod curtains;
 pub mod directory;
 pub mod elements;
 pub mod families;

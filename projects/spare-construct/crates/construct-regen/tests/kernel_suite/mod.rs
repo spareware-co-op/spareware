@@ -2667,3 +2667,167 @@ pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -
         usize::from(island)
     );
 }
+
+/// A mullion profile of `width` by `depth` whole millimetres, centred on the wall's line, in its
+/// stored form.
+fn curtain_profile(width: i64, depth: i64) -> String {
+    format!(
+        r#"{{"shape":"rectangle","width":"length:q0:{}","depth":"length:q0:{}","offset":"length:q0:0","material":"timber-douglas-fir"}}"#,
+        width * 6400,
+        depth * 6400
+    )
+}
+
+/// A curtain wall type's grid and parts in its stored form (construct-curtain's FORMAT.md):
+/// vertical lines every `vertical` mm and horizontal lines every `horizontal` mm from the start
+/// (0 for none), 24 mm glazing, and 50 by 150 mm mullions on every line and border when
+/// `mullions`, the vertical ones running through.
+pub fn curtain_spec(vertical: i64, horizontal: i64, mullions: bool) -> String {
+    let layout = |every: i64| {
+        if every == 0 {
+            r#"{"layout":"none"}"#.to_owned()
+        } else {
+            format!(
+                r#"{{"layout":"spacing","spacing":"length:q0:{}","justify":"start"}}"#,
+                every * 6400
+            )
+        }
+    };
+    let slot = if mullions {
+        curtain_profile(50, 150)
+    } else {
+        "null".to_owned()
+    };
+    format!(
+        r#"{{"version":1,"vertical":{},"horizontal":{},"panel":{{"kind":"glazed","thickness":"length:q0:153600","offset":"length:q0:0","material":"glass-plate"}},"mullions":{{"interior-vertical":{slot},"interior-horizontal":{slot},"border-vertical":{slot},"border-horizontal":{slot}}},"crossing":"vertical"}}"#,
+        layout(vertical),
+        layout(horizontal)
+    )
+}
+
+/// A curtain wall's filled recipe, as the regenerator hands it to a builder: from the origin to
+/// `end` (mm), `height` mm high, of the grid and parts `spec`, with its own edits `grid`.
+pub fn curtain(end: [i64; 2], height: i64, spec: &str, grid: Option<Value>) -> Recipe {
+    let q0 = |mm: i64| format!("length:q0:{}", mm * 6400);
+    let mut args = json!({
+        "start": [q0(0), q0(0)],
+        "end": [q0(end[0]), q0(end[1])],
+        "height": q0(height),
+        "curtain": spec,
+    });
+    if let Some(grid) = grid {
+        args["grid"] = grid;
+    }
+    recipe("wall.curtain", args)
+}
+
+/// A curtain wall of 6 m by 3 m, vertical lines every 1.5 m and horizontal lines every 1 m, with
+/// 50 by 150 mm mullions on every line and border, is one solid per panel and per mullion: 12
+/// panels then 31 mullions, each a closed mesh holding exactly its box (the panels between the
+/// mullions' faces, 1425, 1450, 1450 and 1425 mm wide by 925, 950 and 925 mm high, 24 mm thick;
+/// the vertical mullions 1 m long, running through; the horizontal ones as long as the columns
+/// are wide), each with its material; the bounds the stand-in's; its faces the wall's six roles,
+/// as `construct_regen::kernel::names` gives them without building.
+pub fn a_curtain_wall_is_its_panels_and_mullions<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let wall = curtain([6000, 0], 3000, &curtain_spec(1500, 1000, true), None);
+    let b = built(&k, &wall);
+    let parts = &b.displays[0].parts;
+    assert_eq!(parts.len(), 12 + 31);
+    let (columns, rows) = ([1425_i128, 1450, 1450, 1425], [925_i128, 950, 925]);
+    let mut expected = Vec::new();
+    for w in columns {
+        for h in rows {
+            expected.push(("panel.glazed", "glass-plate", w * 24 * h));
+        }
+    }
+    for _ in 0..15 {
+        expected.push(("mullion", "timber-douglas-fir", 50 * 150 * 1000));
+    }
+    for _ in 0..4 {
+        for w in columns {
+            expected.push(("mullion", "timber-douglas-fir", 50 * 150 * w));
+        }
+    }
+    for (at, (function, material, volume)) in expected.iter().enumerate() {
+        assert_eq!(parts[at].function, *function, "part {at}");
+        assert_eq!(parts[at].material, *material, "part {at}");
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * volume, "part {at}");
+    }
+    assert_eq!(b.bounds.min, [0, -75, 0]);
+    assert_eq!(b.bounds.max, [6000, 75, 3000]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&wall).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 75], [0, -75], [6000, -75], [6000, 75]]
+    );
+    assert_eq!(b.displays[0].deviation, 0);
+    assert_eq!(b.displays[1].mesh, b.displays[0].mesh);
+    let roles: BTreeSet<String> = by_role(&b).into_keys().collect();
+    let six: BTreeSet<String> = WALL_ROLES.iter().map(|r| (*r).to_owned()).collect();
+    assert_eq!(roles, six);
+    assert_eq!(construct_regen::kernel::names(&wall).unwrap(), b.names);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["solids"].as_array().unwrap().len(), 43);
+    assert_eq!(body["solids"][0]["key"], "panel.0.0");
+    assert!(body.get("doors").is_none());
+    assert_eq!(
+        built(&k, &wall).body,
+        b.body,
+        "the same recipe, the same bytes"
+    );
+}
+
+/// A door panel is its family's solids, sized to its panel: in a 6 m by 3 m curtain wall of 1 m
+/// columns with a horizontal line added at 2.1 m and no mullions, the library's single-swing door
+/// in the cell from 1 m along stands inside that cell (1 to 2 m along), drawn as parts named for
+/// its family's steps, as the stand-in draws them; the other 11 panels are glazed. The body names
+/// the door, its size and where it stands.
+pub fn a_door_panel_is_its_familys_solids<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let (content, _) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.single-swing-door")
+        .unwrap();
+    let q0 = |mm: i64| format!("length:q0:{}", mm * 6400);
+    let grid = json!({
+        "added": { "vertical": [], "horizontal": [q0(2100)] },
+        "removed": { "vertical": [], "horizontal": [] },
+        "omitted": [],
+        "panels": [{ "at": [q0(1000), q0(0)],
+            "panel": { "kind": "door", "family": content.as_str(), "type": "d900x2100" } }],
+    });
+    let wall = curtain([6000, 0], 3000, &curtain_spec(1000, 0, false), Some(grid));
+    let b = built(&k, &wall);
+    let parts = &b.displays[0].parts;
+    let glazed = parts
+        .iter()
+        .filter(|p| p.function == "panel.glazed")
+        .count();
+    assert_eq!(glazed, 11);
+    let doors: Vec<_> = parts
+        .iter()
+        .filter(|p| p.function.starts_with("door."))
+        .collect();
+    assert!(!doors.is_empty());
+    for door in &doors {
+        for [x, _] in &door.outline {
+            assert!((1000..=2000).contains(x), "{door:?}");
+        }
+    }
+    let stand_in = construct_regen::geometry().build(&wall).unwrap();
+    let functions = |parts: &[construct_model::geometry::Part]| -> Vec<String> {
+        parts.iter().map(|p| p.function.clone()).collect()
+    };
+    assert_eq!(functions(parts), functions(&stand_in.displays[0].parts));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let door = &body["doors"][0];
+    assert_eq!(door["family"], content.as_str());
+    assert_eq!(door["width"], json!(q0(1000)));
+    assert_eq!(door["height"], json!(q0(2100)));
+    assert_eq!(door["origin"], json!([1500 * 6400, 0, 0]));
+    assert!(b.bounds.max[2] <= 3000 && b.bounds.min[0] >= 0);
+}

@@ -1105,3 +1105,13 @@ fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
 fn a_family_that_does_not_fit_is_refused_with_a_reason() {
     kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
 }
+
+#[test]
+fn a_curtain_wall_is_its_panels_and_mullions() {
+    kernel_suite::a_curtain_wall_is_its_panels_and_mullions(|| Cuboids);
+}
+
+#[test]
+fn a_door_panel_is_its_familys_solids() {
+    kernel_suite::a_door_panel_is_its_familys_solids(|| Pieces);
+}

@@ -1092,7 +1092,13 @@ async fn hosted_in<R: Reader>(
                 }));
             }
         };
-        match hosting::seat(edition, host, own, &record, &recipe, &hosting) {
+        // An embedded curtain wall is handed to its host as the opening it cuts.
+        let seated = match hosting::cut_of(edition, host, own, &record, &recipe, &hosting) {
+            Ok(Some(cut)) => Ok(cut),
+            Ok(None) => hosting::seat(edition, host, own, &record, &recipe, &hosting),
+            Err(e) => Err(e),
+        };
+        match seated {
             Ok((at, recipe)) => found.push(HostedInput {
                 key: key.clone(),
                 recipe,

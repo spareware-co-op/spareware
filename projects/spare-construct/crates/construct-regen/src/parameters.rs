@@ -817,8 +817,9 @@ pub async fn read_document<R: Reader>(
 /// The recipe `element` is built from, as the document is `at` that state: its own, with every
 /// argument that names a parameter filled ([`filled`]), every argument that reads its wall type's
 /// layers ([`crate::walls::filled`]), a floor's layers and loops from its floor type
-/// ([`crate::slabs::filled`]), and a roof's layers and shape from its roof type
-/// ([`crate::roofs::filled`]). A recipe that reads none of them needs no read. The regenerator
+/// ([`crate::slabs::filled`]), a roof's layers and shape from its roof type
+/// ([`crate::roofs::filled`]), and a curtain wall's grid and parts from its curtain wall type
+/// ([`crate::curtains::filled`]). A recipe that reads none of them needs no read. The regenerator
 /// builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
 ///
 /// # Errors
@@ -854,7 +855,8 @@ pub async fn recipe_at<R: Reader>(
     })
     .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
     .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref()))
-    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref())))
+    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref()))
+    .and_then(|recipe| crate::curtains::filled(&recipe, ty.as_ref())))
 }
 
 /// Whether a recipe reads the document's parameter table and the element's type: it names a
@@ -868,4 +870,5 @@ pub fn reads_records(recipe: &Recipe) -> bool {
         || crate::walls::reads_type(recipe)
         || crate::slabs::reads_type(recipe)
         || crate::roofs::reads_type(recipe)
+        || crate::curtains::reads_type(recipe)
 }

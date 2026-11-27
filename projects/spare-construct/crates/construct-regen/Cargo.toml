@@ -71,6 +71,9 @@ construct-views = { path = "../construct-views", optional = true }
 construct-openings = { path = "../construct-openings" }
 # A sheet and a viewport are records with no shape too (the viewport commands, A74).
 construct-sheets = { path = "../construct-sheets", optional = true }
+# Curtain walls (job 14.1): their layout, solids and quantities, which both builders read
+# (src/curtain_plan.rs), so it is not optional. Same workspace.
+construct-curtain = { path = "../construct-curtain" }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }
