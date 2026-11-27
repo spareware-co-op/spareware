@@ -234,6 +234,18 @@
     },
     {
       "program": "spare-construct",
+      "place": "construct-drawing's sweep module (crate-private), used by section::part, and section::section's hiding",
+      "operation": "what a section or an elevation sees beyond its plane: the outline of each flat-faced solid seen along a grid axis between the plane and the view's depth, less the cut regions and the elements wholly nearer",
+      "answered_by": "Spare Construct's own exact code over Engine::section, since the seam has no projection: the solid cut once between each two depths where three of its face planes meet, neighbouring cuts of one shape made one stretch, each stretch's shadow its cut at the nearer depth and the pieces of its faces turned toward the viewer, all united by the crate's overlay; a piece of an outline inside or along a cut region, or the shadow of an element whose farthest depth is at or before its own nearest, is hidden",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-drawing/tests/section.rs",
+        "test": "a_section_through_a_layered_wall_with_a_door"
+      },
+      "known_faults": ["only each element's outline is drawn, not the edges inside it (job 8.2)", "elements whose depths overlap do not hide each other, so a line one hides can show (job 9.1)", "the events try every three face planes, cubic in the faces of one solid"],
+      "replaced_by": "the kernel's exact view predicates, sections and hidden lines through engine-geometry (geom-draw, pieces G388, G389 and G394), under the same tests (tests/section.rs)"
+    },
+    {
+      "program": "spare-construct",
       "place": "construct-regen's stand_in::Boxes, a floor",
       "operation": "floor (a filled floor recipe: its loops and layers)",
       "answered_by": "one box around the floor's outer loop, its sides rounded outward to whole millimetres, from its bottom face to its top face at 0, by Spare Construct's own code with no engine; its outline is the outer loop and its deviation the box's plan diagonal, 0 when the floor is an upright rectangle",

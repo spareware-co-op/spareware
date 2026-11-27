@@ -22,6 +22,7 @@
 mod support;
 
 use construct_api::cloud::spaces::folders;
+use construct_api::cloud::views::DatumPlace;
 use construct_model::rows::{BuiltResult, LinkKind};
 use construct_params::Length;
 use construct_styles::Scale;
@@ -31,7 +32,7 @@ use kit_store::{FileStore, Kv, Scope};
 use kit_sync::{read_log, verify_log};
 use serde_json::{Value, json};
 use spare_server::backup;
-use spare_server::plan::{Drawer, Drawn, ToDraw};
+use spare_server::plan::{Drawer, Drawn, SectionAsk, ToDraw};
 use spare_server::seed::seed;
 use spare_server::service::{Refusal, Service, View};
 use std::collections::BTreeMap;
@@ -1911,6 +1912,24 @@ struct Recording {
     asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
     /// Each request's crop: the view it is of and the crop's on, shown and corners, as text.
     crops: std::sync::Mutex<Vec<Option<AskedCrop>>>,
+    /// Each section or elevation asked for.
+    sections: std::sync::Mutex<Vec<AskedSection>>,
+}
+
+/// A section or an elevation as the drawer was given it: its line's ends (whole millimetres) and
+/// side, its depth, whether it cuts, its scale, the elements' IDs in order, each datum's name and
+/// its height (a level's) or none (a grid's), and whether a crop came with it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AskedSection {
+    from: (i64, i64),
+    to: (i64, i64),
+    look: construct_views::Side,
+    far: Length,
+    cuts: bool,
+    scale: u32,
+    elements: Vec<String>,
+    datums: Vec<(String, Option<Length>)>,
+    cropped: bool,
 }
 
 impl Drawer for Recording {
@@ -1944,6 +1963,144 @@ impl Drawer for Recording {
             skipped: Vec::new(),
         })
     }
+
+    fn section(&self, ask: &SectionAsk<'_>) -> Result<Drawn, String> {
+        let at = |p: construct_views::Point| (p.x.steps() / 6400, p.y.steps() / 6400);
+        self.sections.lock().unwrap().push(AskedSection {
+            from: at(ask.line.from()),
+            to: at(ask.line.to()),
+            look: ask.line.look(),
+            far: ask.line.far(),
+            cuts: ask.cuts,
+            scale: ask.scale.denominator(),
+            elements: ask.elements.iter().map(|e| e.id.to_string()).collect(),
+            datums: ask
+                .datums
+                .iter()
+                .map(|d| {
+                    let height = match d.at {
+                        DatumPlace::Level(h) => Some(h),
+                        _ => None,
+                    };
+                    (d.name.clone(), height)
+                })
+                .collect(),
+            cropped: ask.crop.is_some(),
+        });
+        Ok(Drawn {
+            svg: "<svg section/>".to_owned(),
+            skipped: Vec::new(),
+        })
+    }
+}
+
+/// The page asks the server for a section as for a plan: the server hands the drawer the view's
+/// line, whether it cuts, its scale, every element the line crosses or sees within its depth, the
+/// model's levels, and its crop, and sends back what the drawer drew. An elevation made by the face
+/// it shows cuts nothing; a plan is not drawn here; a view that is not there, and a person who may
+/// not read the model, are answered as for any read.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_section_is_the_drawers_picture_of_what_its_line_cuts_and_sees() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let recording = Arc::new(Recording::default());
+    let drawer: Arc<dyn Drawer> = recording.clone();
+    let service = build(&store, &files).with_drawer(Some(drawer));
+    seed(&store, &service).await.unwrap();
+    let s = &service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    // Across the house at x = 3 m, looking east 4 m: it cuts the walls along x and sees the inside
+    // wall at x = 6.1 m, not the end wall at x = 11.9 m.
+    let args = json!({ "view": "VS-1", "kind": "section", "name": "Section A", "look": "right",
+        "depth": "4 m", "from": { "x": "3 m", "y": "-2 m" }, "to": { "x": "3 m", "y": "10 m" } });
+    s.edit(&anna, &project, &model, "view.create", args)
+        .await
+        .unwrap();
+    let drawn = s
+        .section(&anna, &project, &model, &i("VS-1"))
+        .await
+        .unwrap();
+    assert_eq!(drawn.svg, "<svg section/>");
+    assert_eq!(drawn.view.name, "Section A");
+    assert!(drawn.through > 0);
+    let asked = recording.sections.lock().unwrap().last().cloned().unwrap();
+    assert_eq!((asked.from, asked.to), ((3000, -2000), (3000, 10_000)));
+    assert_eq!(asked.look, construct_views::Side::Right);
+    assert_eq!(asked.far, Length::from_mm(4000));
+    assert!(asked.cuts);
+    assert_eq!(asked.scale, 100);
+    for wall in ["W-101", "W-102", "W-105", "W-201", "W-202", "W-205"] {
+        assert!(
+            asked.elements.contains(&wall.to_owned()),
+            "{wall}: {asked:?}"
+        );
+    }
+    for wall in ["W-103", "W-104", "W-203", "W-204"] {
+        assert!(
+            !asked.elements.contains(&wall.to_owned()),
+            "{wall}: {asked:?}"
+        );
+    }
+    assert_eq!(
+        asked.datums,
+        [
+            ("Level 1".to_owned(), Some(Length::from_mm(0))),
+            ("Level 2".to_owned(), Some(Length::from_mm(3000))),
+        ]
+    );
+    assert!(!asked.cropped);
+
+    // The south elevation, made by its face, does not cut; its crop reaches the drawer.
+    let args = json!({ "view": "VE-S", "name": "South elevation", "face": "south",
+        "from": { "x": "-2 m", "y": "-3 m" }, "width": "16 m", "depth": "20 m" });
+    s.edit(&anna, &project, &model, "view.elevation.create", args)
+        .await
+        .unwrap();
+    let crop = json!({ "view": "VE-S", "region": { "rectangle": {
+        "min": { "x": "0", "y": "-1 m" }, "max": { "x": "16 m", "y": "8 m" } } } });
+    s.edit(&anna, &project, &model, "view.crop.set", crop)
+        .await
+        .unwrap();
+    s.section(&anna, &project, &model, &i("VE-S"))
+        .await
+        .unwrap();
+    let asked = recording.sections.lock().unwrap().last().cloned().unwrap();
+    assert!(!asked.cuts);
+    assert_eq!((asked.from, asked.to), ((-2000, -3000), (14_000, -3000)));
+    assert_eq!(asked.look, construct_views::Side::Left);
+    assert!(asked.cropped);
+    assert!(asked.elements.contains(&"W-101".to_owned()));
+
+    let Err(Refusal::Bad(why)) = s.section(&anna, &project, &model, &i("VP-1")).await else {
+        panic!("a plan is not drawn as a section");
+    };
+    assert_eq!(
+        why,
+        "Level 1 plan is a floor plan view; only a section or an elevation is drawn here."
+    );
+    let none = s.section(&anna, &project, &model, &i("VS-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    assert!(refused(s.section(&dan, &project, &model, &i("VS-1")).await));
+}
+
+/// Without the kernel a server cannot draw a section either, and says so.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_server_without_a_drawer_says_it_cannot_draw_sections() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let args = json!({ "view": "VS-1", "kind": "section", "name": "Section A", "look": "right",
+        "depth": "4 m", "from": { "x": "3 m", "y": "-2 m" }, "to": { "x": "3 m", "y": "10 m" } });
+    s.edit(&anna, &project, &model, "view.create", args)
+        .await
+        .unwrap();
+    let Err(Refusal::Bad(why)) = s.section(&anna, &project, &model, &i("VS-1")).await else {
+        panic!("a section needs a drawer");
+    };
+    assert_eq!(
+        why,
+        "This server was built without the geometry kernel, so it cannot draw sections or \
+         elevations."
+    );
 }
 
 /// The page asks the server for a plan: the server cuts it at the view's own height, hands the

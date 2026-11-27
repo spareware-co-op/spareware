@@ -1508,6 +1508,83 @@ pub fn section_cut(world: &World, id: &Id) -> Result<Option<SectionCut>, String>
     }))
 }
 
+/// Where a level or a grid is, as a section or an elevation draws it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DatumPlace {
+    /// A level, at its height above the project's zero.
+    Level(Length),
+    /// A straight grid, from one end to the other in plan.
+    Grid {
+        /// Its first end.
+        from: Point,
+        /// Its second end.
+        to: Point,
+    },
+    /// An arc grid.
+    ArcGrid,
+}
+
+/// A level or a grid of a document, for a section or an elevation to draw.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatumLine {
+    /// Its permanent ID.
+    pub id: Id,
+    /// Its category: levels or grids.
+    pub category: CategoryId,
+    /// The name people see.
+    pub name: String,
+    /// Where it is.
+    pub at: DatumPlace,
+}
+
+/// Every level of `world` (lowest first) and every grid of the document (by ID), as a section or
+/// an elevation draws them. The inner error is a grid record that is not as written, in words.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn datums_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    world: &World,
+) -> Result<Result<Vec<DatumLine>, String>, StoreError> {
+    let mut found: Vec<DatumLine> = world
+        .levels
+        .ordered()
+        .into_iter()
+        .map(|level| DatumLine {
+            id: level.id().clone(),
+            category: construct_categories::LEVELS,
+            name: level.name().to_owned(),
+            at: DatumPlace::Level(level.elevation()),
+        })
+        .collect();
+    let all = records::read_document(reader, project, document).await?;
+    let datums = match construct_grids::Datums::from_records(all.values().map(|(_, r)| r)) {
+        Ok(datums) => datums,
+        Err(e) => return Ok(Err(e.to_string())),
+    };
+    for grid in datums.grids() {
+        let at = match grid.shape() {
+            construct_grids::Shape::Line { from, to } => DatumPlace::Grid {
+                from: Point {
+                    x: from.x,
+                    y: from.y,
+                },
+                to: Point { x: to.x, y: to.y },
+            },
+            construct_grids::Shape::Arc { .. } => DatumPlace::ArcGrid,
+        };
+        found.push(DatumLine {
+            id: grid.id().clone(),
+            category: construct_categories::GRIDS,
+            name: grid.name().to_owned(),
+            at,
+        });
+    }
+    Ok(Ok(found))
+}
+
 /// A whole number as a colour part, 0 to 255.
 fn colour_of(parts: &[i64]) -> Result<Colour, String> {
     let words = || "A colour is [red, green, blue], each a whole number from 0 to 255.".to_owned();

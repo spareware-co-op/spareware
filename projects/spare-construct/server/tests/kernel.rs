@@ -997,6 +997,100 @@ async fn the_server_draws_a_levels_plan_on_the_kernel() {
     assert_eq!(plan.svg, again.svg);
 }
 
+/// A section across the house and its south elevation drawn on solidcore, as the page asks for
+/// them: the section cuts the walls it crosses on both levels (their layers hatched), outlines the
+/// inside wall it sees beyond, keeps to its width and names its two levels; the elevation cuts
+/// nothing and outlines the walls it faces; each draws the same bytes twice; and a section whose
+/// line is not along a grid axis is refused in words.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_server_draws_a_section_and_an_elevation_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "view.create",
+        json!({ "view": "VS-1", "kind": "section", "name": "Section A", "look": "right",
+            "depth": "4 m", "from": { "x": "3 m", "y": "-2 m" }, "to": { "x": "3 m", "y": "10 m" } }),
+    )
+    .await;
+    let section = s
+        .section(&anna, &project, &model, &i("VS-1"))
+        .await
+        .unwrap();
+    for wall in ["W-101", "W-102", "W-105", "W-201", "W-202", "W-205"] {
+        assert!(
+            !section.skipped.iter().any(|left| left.element == wall),
+            "{wall} was left out: {:?}",
+            section.skipped
+        );
+        assert!(
+            section.svg.contains(&format!("data-element=\"{wall}\"")),
+            "{wall} is drawn"
+        );
+    }
+    assert!(
+        section.svg.contains("data-material="),
+        "the cut layers are hatched"
+    );
+    assert!(section.svg.contains(">Level 1</text>"), "{}", section.svg);
+    assert!(section.svg.contains(">Level 2</text>"));
+    // Looking east the drawing's x is -y: the line's ends at y = -2 m and 10 m bound it.
+    let widest = xs(&section.svg).into_iter().fold(f64::MIN, f64::max);
+    let least = xs(&section.svg).into_iter().fold(f64::MAX, f64::min);
+    assert!(
+        widest <= 2000.0 && least >= -10_000.0,
+        "{least} to {widest}"
+    );
+    let again = s
+        .section(&anna, &project, &model, &i("VS-1"))
+        .await
+        .unwrap();
+    assert_eq!(section.svg, again.svg);
+
+    edit(
+        "view.elevation.create",
+        json!({ "view": "VE-S", "name": "South elevation", "face": "south",
+            "from": { "x": "-2 m", "y": "-3 m" }, "width": "16 m", "depth": "20 m" }),
+    )
+    .await;
+    let south = s
+        .section(&anna, &project, &model, &i("VE-S"))
+        .await
+        .unwrap();
+    assert!(
+        !south.svg.contains("data-material="),
+        "an elevation cuts nothing"
+    );
+    assert!(
+        south.svg.contains("data-element=\"W-101\""),
+        "the south wall is outlined"
+    );
+    let again = s
+        .section(&anna, &project, &model, &i("VE-S"))
+        .await
+        .unwrap();
+    assert_eq!(south.svg, again.svg);
+
+    edit(
+        "view.create",
+        json!({ "view": "VS-2", "kind": "section", "name": "Section B", "look": "left",
+            "depth": "4 m", "from": { "x": "0", "y": "0" }, "to": { "x": "3 m", "y": "4 m" } }),
+    )
+    .await;
+    let Err(spare_server::service::Refusal::Bad(why)) =
+        s.section(&anna, &project, &model, &i("VS-2")).await
+    else {
+        panic!("a slanted section is not drawn yet");
+    };
+    assert!(why.contains("along a grid axis"), "{why}");
+}
+
 /// A view's graphics rules reach the drawing on the kernel: with no rule the plan is the bytes it
 /// was; a heavier pen, another fill and colour, and halftone for what walls cut change those lines
 /// and hatches and nothing else; a hidden category leaves its edges and hatches out (the walls', not

@@ -4,7 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, PlanCrop, Skipped, ToDraw, ViewLooks};
+use crate::plan::{Drawer, PlanCrop, SectionAsk, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -116,6 +116,9 @@ pub struct FilledView {
 
 const NO_DRAWER: &str =
     "This server was built without the geometry kernel, so it cannot draw plans.";
+
+const NO_SECTION_DRAWER: &str = "This server was built without the geometry kernel, so it cannot \
+                                 draw sections or elevations.";
 
 /// A floor plan as the server draws it from the stored model.
 #[derive(Serialize, Debug)]
@@ -1098,6 +1101,81 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 Some(&looks),
                 crop.map(|crop| PlanCrop { view, crop }),
             )
+            .map_err(Refusal::Bad)?;
+        left_out.extend(drawn.skipped);
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        };
+        let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
+        Ok(PlanDrawing {
+            view: listing.view,
+            through,
+            svg: drawn.svg,
+            skipped: left_out,
+        })
+    }
+
+    /// A section or an elevation drawn from the stored model as of the log's head
+    /// ([`crate::section`]): what its plane cuts, the outlines of what it sees beyond to its depth,
+    /// kept to its width and its crop, and the levels and grids that cross it with their names.
+    /// The page asks for it as it asks for a plan, with the same answer's shape.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when this server has no drawer, when the view is not a section or an
+    /// elevation, or when the drawing cannot be made (a line not along a grid axis among them),
+    /// saying why.
+    pub async fn section(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<PlanDrawing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let cut = cloud::views::section_cut(&world, view)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let Some(drawer) = &self.drawer else {
+            return Err(Refusal::Bad(NO_SECTION_DRAWER.to_owned()));
+        };
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
+        let listing = cloud::views::listing_of(&world, view, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let mut elements = Vec::new();
+        let mut left_out = Vec::new();
+        for one in &shaped {
+            let id = one.record.id.to_string();
+            if !listing.cut.contains(&id) && !listing.seen.contains(&id) {
+                continue;
+            }
+            match to_draw(&mut snapshot, project, model, one).await? {
+                Ok(element) => elements.push(element),
+                Err(why) => left_out.push(Skipped { element: id, why }),
+            }
+        }
+        let datums = cloud::views::datums_of(&mut snapshot, project, model, &world)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let looks = ViewLooks::new(&world, view);
+        let crop = world.views().get(view).and_then(|v| v.crop());
+        let drawn = drawer
+            .section(&SectionAsk {
+                line: &cut.line,
+                cuts: cut.cuts,
+                scale: cut.scale,
+                elements: &elements,
+                datums: &datums,
+                looks: Some(&looks),
+                crop: crop.map(|crop| PlanCrop { view, crop }),
+            })
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {
