@@ -14,10 +14,11 @@
 // functions, signs the people in again where a later section uses their page, and sets every other
 // top-level value from what the saved state holds; their actions are not run.
 //
-// The server's state is saved and restored through its own backup and restore commands
-// (spare-server backup, restore: every key, so the edit logs with them, and every file; see
-// src/backup.rs), through STACK_SAVE and STACK_RESTORE, which the runner sets. Those commands take
-// a state's name last.
+// The server's state is saved through its own backup command (spare-server backup, every key, so
+// the edit logs with them, and every file; see src/backup.rs), by STACK_SAVE, which the runner sets
+// (it takes a state's name last). The runner restores a state the same way (spare-server restore)
+// into empty stores and starts the server before this test starts; SECTIONS_PLAN=1 only says
+// which state is wanted, and checks its stamp, so a refusal comes before anything is built.
 //
 // A saved state carries a stamp: the text of the test up to the end of its section, and the code
 // it was made from (SECTION_CODE, which the runner sets: the commit the branch last took from main,
@@ -29,6 +30,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'acorn';
 
+// Written straight to the log, so a line is there even if the process ends abruptly.
+const note = (words) => fs.writeSync(1, `${words}\n`);
 const fail = (words) => {
   throw new Error(`FAILED: ${words}`);
 };
@@ -143,6 +146,10 @@ export async function runSections(testUrl) {
   const code = process.env.SECTION_CODE || 'unknown';
 
   // The state to start from, and whether it is the right one.
+  if (process.env.SECTIONS_PLAN && first === 0) {
+    note('STATE none');
+    return;
+  }
   let kept = {};
   if (first > 0) {
     const before = sections[first - 1];
@@ -160,17 +167,13 @@ export async function runSections(testUrl) {
       say('but the test up to and including that section has changed since it was saved');
     }
     kept = JSON.parse(fs.readFileSync(path.join(folder, 'vars.json'), 'utf8'));
-    for (const command of ['STACK_RESTORE', 'STACK_START']) if (!process.env[command]) fail(`${command} is not set`);
-    console.log(`-- restoring the state saved after "${before.label}" (${meta.savedAt})`);
-    execSync(`${process.env.STACK_RESTORE} ${stateName(before.index)}`, { stdio: 'inherit' });
-    execSync(process.env.STACK_START);
-    const until = Date.now() + 90_000;
-    for (;;) {
-      const ok = await fetch(`${process.env.STACK_URL || 'http://localhost:8080'}/health`).then((r) => r.ok, () => false);
-      if (ok) break;
-      if (Date.now() > until) fail('the server did not answer after the state was restored');
-      await new Promise((r) => setTimeout(r, 500));
+    // The runner restores the state into the empty stores and starts the server (it asks here
+    // first, with SECTIONS_PLAN, so a refusal comes before anything is built or started).
+    if (process.env.SECTIONS_PLAN) {
+      note(`STATE ${stateName(before.index)} ${before.label}`);
+      return;
     }
+    if (!process.env.SECTIONS_RESTORED) fail('the runner did not restore the state first (SECTIONS_RESTORED)');
   } else if (saving) {
     fs.mkdirSync(saveTo, { recursive: true });
     for (const old of fs.readdirSync(saveTo)) if (/^s\d\d$/.test(old)) fs.rmSync(path.join(saveTo, old), { recursive: true });
@@ -258,6 +261,7 @@ export async function runSections(testUrl) {
   // line numbers of a failure the same as the test's.
   const copy = testFile.replace(/\.mjs$/, '.sections.mjs');
   fs.writeFileSync(copy, text);
+  process.on('exit', (code) => note(`-- the test ended with code ${code}`));
   try {
     await import(pathToFileURL(copy).href);
   } finally {
