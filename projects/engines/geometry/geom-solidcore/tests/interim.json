@@ -369,7 +369,7 @@
       },
       "known_faults": [
         "a point not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
-        "seated in a wall at an angle (piece A83) each corner is rounded once to the grid, so a profile on an upright plane is built as upright boxes (its grid cells, each extruded and united, every vertex a grid point), and one with a sloped edge is refused (UprightNotSquare, construct-families' tests/seated.rs)"
+        "seated in a wall at an angle (piece A83) each corner is rounded once to the grid, so a profile on an upright plane is built as upright boxes (its stretches' runs of height, each extruded and united, every vertex a grid point), and one with a sloped edge is refused (UprightNotSquare, construct-families' tests/seated.rs)"
       ],
       "replaced_by": "the kernel's own exact extrusion and booleans behind the same trait, and every profile built turned as it is once the seam can turn or place a solid"
     },
