@@ -2292,9 +2292,30 @@ await ben.click(viewLeaf('Level 1 plan'));
 if (withKernel) {
   for (const page of [anna, ben]) {
     await cropDoorIs(page, 'attached');
-    await cropBeyond(page, 6000);
+    await cropBeyond(page, cropWide);
     check((await cropFrame(page).count()) === 0, 'a view with no crop draws no outline');
   }
+}
+// The crop is sized round the door as it is drawn now (earlier sections moved things): whole metres
+// past its right end for the wide crop, to its right end for the narrow one, and wide enough up and
+// down to hold it.
+let cropWide = 6000;
+let cropNarrow = 4000;
+let cropBottom = -500;
+let cropTop = 8500;
+if (withKernel) {
+  const door = await anna.evaluate((sel) => {
+    const ends = [...document.querySelectorAll(sel)].flatMap((l) => [
+      [Number(l.getAttribute('x1')), -Number(l.getAttribute('y1'))],
+      [Number(l.getAttribute('x2')), -Number(l.getAttribute('y2'))],
+    ]);
+    return { right: Math.max(...ends.map((e) => e[0])), low: Math.min(...ends.map((e) => e[1])), high: Math.max(...ends.map((e) => e[1])) };
+  }, cropDoor);
+  cropNarrow = Math.ceil(door.right / 1000) * 1000;
+  cropWide = cropNarrow + 1000;
+  cropBottom = Math.min(cropBottom, Math.floor(door.low) - 500);
+  cropTop = Math.max(cropTop, Math.ceil(door.high) + 500);
+  pass(`the door is drawn up to ${door.right} mm: the crops are sized to hold it`);
 }
 await anna.click('#browser [data-act="stackviewcrop"]');
 await anna.waitForSelector(`${cropDialog} [data-crop-none]`);
@@ -2308,27 +2329,28 @@ check(
 
 // A crop made by typing its corners: its outline and what it holds come to both pages.
 await anna.locator(cropControl('crop-new-minx')).fill('0');
-await anna.locator(cropControl('crop-new-miny')).fill('-500');
-await anna.locator(cropControl('crop-new-maxx')).fill('6 m');
-await anna.locator(cropControl('crop-new-maxy')).fill('8.5 m');
+await anna.locator(cropControl('crop-new-miny')).fill(`${cropBottom}`);
+await anna.locator(cropControl('crop-new-maxx')).fill(`${cropWide} mm`);
+await anna.locator(cropControl('crop-new-maxy')).fill(`${cropTop} mm`);
 await anna.locator(cropControl('crop-new-maxy')).press('Enter');
 await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 await ben.waitForFunction(
-  () =>
-    document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === '6000 mm' &&
-    document.querySelector('#stack-manage [data-key="crop-miny"]')?.value === '-500 mm',
+  ([right, bottom]) =>
+    document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === right &&
+    document.querySelector('#stack-manage [data-key="crop-miny"]')?.value === bottom,
+  [`${cropWide} mm`, `${cropBottom} mm`],
 );
 pass("Ben's dialog shows the corners Anna typed, as the server reads them");
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await cropWithin(page, 6000);
+    await cropWithin(page, cropWide);
     await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, `${cropDrawn} line[data-role="crop"]`);
     // A line has no area, so the drawn plan as a whole is what is looked at.
     const plan = await boxOf(page.locator(cropDrawn), 'the drawn plan');
     check(plan.width > 0 && plan.height > 0, 'the cut plan and its four-line outline are drawn on the page');
   }
-  pass("the plan is cut at the crop's edge in both browsers: no line or hatch runs past 6 m");
+  pass("the plan is cut at the crop's edge in both browsers: no line or hatch runs past its right edge");
 }
 await shot(anna, 'anna-crop');
 
@@ -2339,7 +2361,7 @@ await ben.waitForSelector(`${cropDialog} [data-crop-state="on-hidden"]`);
 if (withKernel) {
   for (const page of [anna, ben]) {
     await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 0, `${cropDrawn} line[data-role="crop"]`);
-    await cropWithin(page, 6000);
+    await cropWithin(page, cropWide);
   }
   pass('a hidden outline is gone from both pages while the plan stays cut');
 }
@@ -2349,7 +2371,7 @@ await anna.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
 await ben.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await cropBeyond(page, 6000);
+    await cropBeyond(page, cropWide);
     await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, `${cropDrawn} line[data-role="crop"]`);
   }
   pass('a crop that is off draws the whole plan with its outline, in both browsers');
@@ -2358,18 +2380,19 @@ await anna.locator(cropControl('crop-on')).check();
 await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 
 // Editing a corner moves the cut.
-await anna.locator(cropControl('crop-maxx')).fill('4 m');
+await anna.locator(cropControl('crop-maxx')).fill(`${cropNarrow} mm`);
 await anna.locator(cropControl('crop-maxx')).press('Enter');
-await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], '4000 mm');
+await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], `${cropNarrow} mm`);
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await cropWithin(page, 4000);
+    await cropWithin(page, cropNarrow);
     await cropDoorIs(page, 'attached');
   }
-  pass('a corner moved to 4 m: both plans are cut there, and the door inside it is still drawn');
+  pass('a corner moved in: both plans are cut there, and the door inside it is still drawn');
 }
 await ben.waitForFunction(
-  () => document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === '4000 mm',
+  (want) => document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === want,
+  `${cropNarrow} mm`,
 );
 pass("Ben's dialog follows the corner");
 
@@ -2382,7 +2405,7 @@ check(
   /lower left corner below and left of its upper right/.test(cropWords),
   `the refusal reads: ${cropWords}`,
 );
-check((await cropRead(ben)).crop.region.corners[2].x === '4000 mm', 'and the crop is as it was');
+check((await cropRead(ben)).crop.region.corners[2].x === `${cropNarrow} mm`, 'and the crop is as it was');
 
 // Raising the cut plane takes the door away in both browsers; the top goes up first so the range
 // stays in order, and a cut above the top is turned back in words.
@@ -2422,11 +2445,11 @@ if (withKernel) {
 }
 pass('her two undos put the heights back, the door is drawn again, and Ben follows');
 await anna.click('#qat [data-act="stackundo"]');
-await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], '6000 mm');
+await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], `${cropWide} mm`);
 if (withKernel) {
-  for (const page of [anna, ben]) await cropWithin(page, 6000);
+  for (const page of [anna, ben]) await cropWithin(page, cropWide);
 }
-pass('her next undo puts the corner back at 6 m, and Ben follows');
+pass('her next undo puts the corner back, and Ben follows');
 
 // Removing the crop gives the whole plan back; undo and redo go there and back.
 await anna.click('#browser [data-act="stackviewcrop"]');
@@ -2436,7 +2459,7 @@ await anna.waitForSelector(`${cropDialog} [data-crop-none]`);
 await ben.waitForSelector(`${cropDialog} [data-crop-none]`);
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await cropBeyond(page, 6000);
+    await cropBeyond(page, cropWide);
     await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 0, `${cropDrawn} line[data-role="crop"]`);
   }
 }
@@ -2446,13 +2469,13 @@ await anna.waitForSelector('#dlg', { state: 'hidden' });
 await anna.click('#qat [data-act="stackundo"]');
 await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 if (withKernel) {
-  for (const page of [anna, ben]) await cropWithin(page, 6000);
+  for (const page of [anna, ben]) await cropWithin(page, cropWide);
 }
 pass('her undo brings the crop back and the plan is cut again, in both browsers');
 await anna.click('#qat [data-act="stackredo"]');
 await ben.waitForSelector(`${cropDialog} [data-crop-none]`);
 if (withKernel) {
-  for (const page of [anna, ben]) await cropBeyond(page, 6000);
+  for (const page of [anna, ben]) await cropBeyond(page, cropWide);
 }
 pass('her redo removes it again');
 await ben.locator('#dlg .dlg-f [data-act="dgclose"]').click();
