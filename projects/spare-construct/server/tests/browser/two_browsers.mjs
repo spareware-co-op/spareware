@@ -1553,10 +1553,10 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
 console.log('\n   Stairs');
 // Ben makes a level 400 mm above Level 1. Anna picks the stair tool, chooses it for the top and clicks
 // twice: no count of risers fits 400 mm, and the server's refusal, with the nearest heights that work,
-// stands under the tool's options; nothing is drawn. Ben moves the level up to 3 m; Anna chooses a
+// stands under the tool's options; nothing is drawn. Ben moves the level up to 3.1 m; Anna chooses a
 // main private stairway and clicks again, and the stair is made: Ben sees it with the riser count the
 // server gives, its treads solid below the plan's cut plane and dashed above it, its cut line and its
-// walking line with the arrow. Ben moves the level to 3.4 m and both see it laid out again, with more
+// walking line with the arrow. Ben moves the level to 3.5 m and both see it laid out again, with more
 // risers. Anna makes it an L, takes that back with her undo and does it again with her redo, and
 // deletes it; Ben removes the level. Nobody changes what the other touched in the last 30 s without
 // the other letting go first (a pick of a stair claims nothing).
@@ -1644,7 +1644,7 @@ const moveStairTop = async (typed) => {
   const problems = await ben.evaluate(() => [...document.querySelectorAll('#stack-manage [data-problem]')].map((n) => n.textContent).join(' | '));
   throw new Error(`FAILED: the stair's top level moves to ${typed} (levels now ${JSON.stringify(await stairLevels())}; the dialog says: ${problems}; the field: ${await field.inputValue()})`);
 };
-await moveStairTop(`${(stairBase + 3000) / 1000} m`);
+await moveStairTop(`${(stairBase + 3100) / 1000} m`);
 await anna.locator(stairField('category')).selectOption('main-private');
 await stairClicks(anna, stairFrom, stairTo);
 const stairOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'stair')?.el.id;
@@ -1659,8 +1659,8 @@ pass("Anna's stair appears in Ben's browser, with its walking line and its arrow
 const stairView = async () => (await stairsOf()).find((s) => s.id === stairId);
 const stairLaid = await stairView();
 check(
-  stairLaid.layout && stairLaid.refusal === null && stairLaid.category === 'main-private' && stairLaid.layout.risers === 16,
-  'the server lays it out: 3000 mm of a main private stairway takes 16 risers',
+  stairLaid.layout && stairLaid.refusal === null && stairLaid.category === 'main-private' && stairLaid.layout.risers === 17,
+  'the server lays it out: 3100 mm of a main private stairway takes 17 risers',
 );
 // What a page draws of it: a line for each riser, those under the plan's cut plane solid and those over it dashed.
 const stairTreads = ([id, count]) => document.querySelectorAll(`g.element[data-id="${id}"] [data-stair-tread]`).length === count;
@@ -1673,7 +1673,7 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
     (await stairLines(page, stairId, false)) > 0 &&
       (await stairLines(page, stairId, true)) > 0 &&
       (await page.locator(`g.element[data-id="${stairId}"] [data-stair-cut]`).count()) === 1,
-    `${name}'s plan draws a line for each of its 16 risers, solid under the cut plane and dashed over it, and the cut line`,
+    `${name}'s plan draws a line for each of its 17 risers, solid under the cut plane and dashed over it, and the cut line`,
   );
 }
 await shot(ben, 'ben-stair');
@@ -1698,27 +1698,27 @@ await stairPick(ben, stairId);
 await ben.waitForSelector('#pv-side [data-read-only="stair.risers"]');
 const stairShown = async (id) => (await stairRows()).find((p) => p.id === id)?.shown;
 check(
-  (await stairRead(ben, 'stair.risers')) === '16' &&
+  (await stairRead(ben, 'stair.risers')) === '17' &&
     (await stairRead(ben, 'stair.riser-height')) === (await stairShown('stair.riser-height')) &&
     (await stairRead(ben, 'stair.going')) === (await stairShown('stair.going')) &&
     (await ben.locator('#pv-side input[data-key^="param:stair"]').count()) === 0,
-  "Ben's palette shows 16 risers, the riser height and the going as the server reads them, and nothing of them can be typed",
+  "Ben's palette shows 17 risers, the riser height and the going as the server reads them, and nothing of them can be typed",
 );
 await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 
 // Ben moves the top level to 3.4 m: the server lays the stair out again, and both pages draw what it says.
-await moveStairTop(`${(stairBase + 3400) / 1000} m`);
-const stairTaller = await until(stairView, (s) => s.layout?.risers === 18, 'the server lays the stair out again for 3400 mm');
-check(stairTaller.layout.risers === 18, 'the level moves up and the server lays the stair out again, with 18 risers');
+await moveStairTop(`${(stairBase + 3500) / 1000} m`);
+const stairTaller = await until(stairView, (s) => s.layout?.risers === 19, 'the server lays the stair out again for 3500 mm');
+check(stairTaller.layout.risers === 19, 'the level moves up and the server lays the stair out again, with 19 risers');
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
-  await page.waitForFunction(stairTreads, [stairId, 18]);
-  pass(`${name}'s plan draws the stair laid out again: a line for each of its 18 risers`);
+  await page.waitForFunction(stairTreads, [stairId, 19]);
+  pass(`${name}'s plan draws the stair laid out again: a line for each of its 19 risers`);
 }
 await stairPick(ben, stairId);
-await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '18');
+await ben.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '19');
 await stairPick(anna, stairId);
-await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '18');
-pass("both palettes read 18 risers from the server");
+await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="stair.risers"]')?.textContent === '19');
+pass("both palettes read 19 risers from the server");
 await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 
 // Anna lays it out as an L turning left, from her palette: a landing is drawn in both browsers.
@@ -1731,9 +1731,9 @@ check(
   (await stairView()).layout.landings.length === 1 && (await stairView()).layout.landings[0].turn === 'left',
   "Anna's L, turning left, is in both browsers, a landing drawn, and the server has laid it out",
 );
-await anna.waitForFunction(stairTreads, [stairId, 18]);
-await ben.waitForFunction(stairTreads, [stairId, 18]);
-pass('an L of 18 risers is drawn in both browsers, as the server laid it out');
+await anna.waitForFunction(stairTreads, [stairId, 19]);
+await ben.waitForFunction(stairTreads, [stairId, 19]);
+pass('an L of 19 risers is drawn in both browsers, as the server laid it out');
 await shot(ben, 'ben-stair-l');
 
 // Her undo takes the L back to the straight stair, and her redo makes it an L again.
@@ -1749,14 +1749,14 @@ await anna.waitForFunction(stairLanding, stairId);
 pass("and her redo makes it an L again, in both");
 
 // Anna makes it an accessible stairway from her palette: its riser may be no higher than 180 mm, so
-// the server lays it out in 19 risers, and both browsers draw what it says.
+// the server lays it out in 20 risers, and both browsers draw what it says.
 await anna.locator('#pv-side select[data-key="stair-own-category"]').selectOption('accessible');
 await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.category === 'accessible', stairId);
-const stairAccessible = await until(stairView, (s) => s.layout?.risers === 19, 'the server lays the accessible stairway out in 19 risers');
-check(stairAccessible.category === 'accessible', 'an accessible stairway of 3400 mm takes 19 risers, as the server lays it out');
+const stairAccessible = await until(stairView, (s) => s.layout?.risers === 20, 'the server lays the accessible stairway out in 20 risers');
+check(stairAccessible.category === 'accessible', 'an accessible stairway of 3500 mm takes 20 risers, as the server lays it out');
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
-  await page.waitForFunction(stairTreads, [stairId, 19]);
-  pass(`${name}'s plan draws a line for each of its 19 risers`);
+  await page.waitForFunction(stairTreads, [stairId, 20]);
+  pass(`${name}'s plan draws a line for each of its 20 risers`);
 }
 
 // Anna narrows it to 900 mm, and both see the new width. A width its landing is too short for is turned
@@ -1781,8 +1781,8 @@ await ben.waitForSelector('html[data-stack="ready"]');
 await roofHome(ben);
 await ben.waitForFunction(stairDrawn, stairId);
 await ben.waitForFunction(stairLanding, stairId);
-await ben.waitForFunction(stairTreads, [stairId, 19]);
-pass("a fresh load of Ben's page draws the same stair, as an L of 19 risers");
+await ben.waitForFunction(stairTreads, [stairId, 20]);
+pass("a fresh load of Ben's page draws the same stair, as an L of 20 risers");
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
