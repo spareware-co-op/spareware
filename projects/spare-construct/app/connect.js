@@ -357,7 +357,7 @@
       C.socket.close();
     }
     Object.assign(C, { socket: null, connected: false, project: null, data: null, model: null });
-    Object.assign(C, { pending: [], links: [], log: [], readOnly: false });
+    Object.assign(C, { pending: [], links: [], log: [], readOnly: false, owedFrom: undefined });
     for (const map of [C.elements, C.claims, C.linked, C.fixed]) map.clear();
     C.watching.clear();
     S.sel = null;
@@ -1038,7 +1038,7 @@
     const area = `level=${encodeURIComponent(C.level)}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
     const seen = await api(`${modelUrl(model)}/area?${area}`);
     // Regeneration can be behind the log, so ask for what came after what this shows.
-    if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+    if (seen.through < C.head) watchSince(model, seen.through);
     const ids = new Set(Object.keys(seen.pieces));
     await Promise.all(
       [...ids].map(async (id) => {
@@ -1122,6 +1122,16 @@
 
   // --- The live channel ---
 
+  /**
+   * Asks for what the log holds after `through`, the point regeneration had reached when a read was
+   * made. The socket may not be open yet, and `send` drops what it cannot send, so the point is
+   * kept for the hello that opens it: otherwise a page that read a lagging view would stay on it.
+   */
+  function watchSince(model, through) {
+    C.owedFrom = Math.min(C.owedFrom ?? through, through);
+    send({ t: 'watch', document: model, since: through });
+  }
+
   function send(message) {
     if (C.connected) C.socket.send(JSON.stringify(message));
   }
@@ -1133,7 +1143,8 @@
     setStatus('Connecting', false);
     socket.onopen = () => {
       C.connected = true;
-      send({ t: 'hello', client: C.client, documents: [...C.watching], since: C.head });
+      send({ t: 'hello', client: C.client, documents: [...C.watching], since: Math.min(C.head, C.owedFrom ?? C.head) });
+      C.owedFrom = undefined;
     };
     socket.onmessage = (event) => {
       const got = Date.now();
@@ -4093,7 +4104,7 @@
     if (model) {
       for (const kind of WORKSHOP_KINDS) {
         const seen = await api(`${modelUrl(model)}/kind/${kind}`);
-        if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+        if (seen.through < C.head) watchSince(model, seen.through);
         await Promise.all(
           Object.entries(seen.pieces).map(async ([id, hash]) => {
             const el = await api(`${modelUrl(model)}/record/${hash}`);
@@ -4225,7 +4236,7 @@
       for (const model of models.filter(Boolean)) {
         for (const kind of DATUM_KINDS) {
           const seen = await api(`${modelUrl(model)}/kind/${kind}`);
-          if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+          if (seen.through < C.head) watchSince(model, seen.through);
           await Promise.all(
             Object.entries(seen.pieces).map(async ([id, hash]) =>
               keepDatum(model, id, await api(`${modelUrl(model)}/record/${hash}`), hash, seen.through),

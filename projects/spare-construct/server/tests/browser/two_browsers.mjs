@@ -200,7 +200,15 @@ if (process.env.STACK_KILL) {
   const [a, b] = [await position(anna, 'D-102'), await position(ben, 'D-102')];
   check(a.join() === b.join(), `Ben's browser ends with the door where Anna left it, ${a}`);
   await anna.reload();
-  await anna.waitForSelector('g.element[data-id="D-102"]');
+  // A fresh page may draw the door from a view that regeneration left behind the log, then catch
+  // up: the wait names the position the door must have, and the check reads it.
+  await anna.waitForFunction(
+    ([x, y]) => {
+      const g = document.querySelector('g.element[data-id="D-102"]');
+      return g && Number(g.dataset.x) === x && Number(g.dataset.y) === y;
+    },
+    a,
+  );
   check((await position(anna, 'D-102')).join() === a.join(), 'and a fresh load agrees');
   // Anna's claim on the door outlives her reload: a claim lasts 30 s after her last edit, and the
   // server turns back anyone else's change to the door until then. Ben changes this door's type
@@ -2138,6 +2146,8 @@ const famLetGo = async (page, other) => {
 };
 const famSizeBefore = await famSize(anna);
 await famPick(anna, famId);
+// The category is read from the server after the palette opens, so the wait names it.
+await anna.waitForFunction(() => document.querySelector('#pv-side')?.textContent.includes('Windows'));
 check((await anna.locator('#pv-side').textContent()).includes('Windows'), "Anna's palette gives the window its family's category, Windows");
 await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', famId);
 await famLetGo(anna, ben);
