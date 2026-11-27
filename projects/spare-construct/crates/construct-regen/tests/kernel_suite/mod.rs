@@ -2756,14 +2756,16 @@ type AtAngle<'a> = (&'a str, &'a Recipe, &'a str, i32, i32, [i64; 2], [i64; 2]);
 
 /// A door, a window, a plain opening and a placed door, each in a three-layer wall at 30, 45 and
 /// 60 degrees and at a 3:4:5 slope (piece A83), fit and cut it as along an axis: `fits` passes
-/// them; each cutter is its opening's width at its place along the wall, from 100 mm past one
-/// face to 100 mm past the other, swept straight up from its foot (100 mm under the floor for one
-/// to the floor) to its head, every corner the nearest grid step to its exact point in the wall's
-/// frame (on the 3:4:5 wall, exactly that point); each layer holds a volume. Each element built
-/// alone builds on this engine and on the stand-in, placed at the nearest millimetre to the origin
-/// its seat puts it at; the box door's own corners are its seat's frame points, rounded once, its
-/// jambs at its opening's along; and each family's every point stands inside its opening, across
-/// the wall's thickness.
+/// them; each opening lies in the wall's frame exactly where its offsets put it; each layer is
+/// made of its cells outside the openings (the wall cut at its ends and every jamb, and up at
+/// every sill and head: 27 cells less the 6 the openings take), every cell corner either the
+/// layer's own at the wall's ends or the nearest grid step to a frame point on one of its faces
+/// at a jamb (on the 3:4:5 wall, exactly that point), swept straight up; each layer holds a
+/// volume. Each element built alone builds on this engine and on the stand-in, placed at the
+/// nearest millimetre to the origin its seat puts it at; the box door's own corners are its
+/// seat's frame points, rounded once, and those on the exterior face are exactly the exterior
+/// layer's corners at its jambs: it stands in its hole on the same grid points; and each family's
+/// every point stands inside its opening, across the wall's thickness.
 #[allow(
     clippy::too_many_lines,
     reason = "four elements in four walls, each asked of the wall, of itself and of the stand-in"
@@ -2828,37 +2830,69 @@ pub fn elements_at_any_angle_cut_their_wall_and_stand_in_it<E: Engine + Send + '
         let built = Geometry::build_hosting(&k, &wall, &list)
             .unwrap_or_else(|e| panic!("{name}: the wall builds with them: {e}"));
         let body: Value = serde_json::from_slice(&built.body).unwrap();
-        // The wall is 230 mm thick, centred on its line: a cutter reaches 215 mm each side of it.
-        let (past, reach) = (100 * mm, 215 * mm);
+        assert!(
+            body.get("subtract").is_none(),
+            "{name}: nothing is subtracted"
+        );
         for (key, .., [a0, a1], [foot, head]) in &elements {
-            let cut = body["subtract"]
+            let opening = body["openings"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .find(|c| c["key"] == *key)
+                .find(|o| o["key"] == *key)
                 .unwrap_or_else(|| panic!("{name}: {key} is cut"));
-            let corners: Vec<[i64; 3]> = serde_json::from_value(cut["extrude"].clone()).unwrap();
-            let by: [i64; 3] = serde_json::from_value(cut["by"].clone()).unwrap();
-            let low = if *foot == 0 { -past } else { foot * mm };
-            assert_eq!(by, [0, 0, head * mm - low], "{name}: {key}");
-            let frame = [
-                [a0 * mm, -reach],
-                [a1 * mm, -reach],
-                [a1 * mm, reach],
-                [a0 * mm, reach],
-            ];
-            assert_eq!(corners.len(), 4, "{name}: {key}");
-            for (c, f) in corners.iter().zip(frame) {
-                assert_eq!(c[2], low, "{name}: {key}");
-                assert!(
-                    lands_at(d, f, [c[0], c[1]]),
-                    "{name}: {key}'s cutter corner {c:?} for {f:?}"
+            assert_eq!(opening["along"], json!([a0 * mm, a1 * mm]), "{name}: {key}");
+            assert_eq!(
+                opening["up"],
+                json!([foot * mm, head * mm]),
+                "{name}: {key}"
+            );
+        }
+        let jambs: Vec<i64> = elements
+            .iter()
+            .flat_map(|e| [e.5[0] * mm, e.5[1] * mm])
+            .collect();
+        let plan = construct_regen::wall_plan::Layered::of(&wall).unwrap();
+        let mut exterior_corners = Vec::new();
+        for (layer, asked) in plan.layers.iter().zip(body["layers"].as_array().unwrap()) {
+            let cells = asked["cells"].as_array().unwrap();
+            assert_eq!(cells.len(), 21, "{name}");
+            let faces = [layer.exterior, layer.interior];
+            let ends: Vec<[i64; 2]> = faces
+                .iter()
+                .flat_map(|&o| plan.plan.face(o).unwrap())
+                .collect();
+            for cell in cells {
+                let corners: Vec<[i64; 3]> =
+                    serde_json::from_value(cell["extrude"].clone()).unwrap();
+                let by: [i64; 3] = serde_json::from_value(cell["by"].clone()).unwrap();
+                assert_eq!(
+                    (by[0], by[1]),
+                    (0, 0),
+                    "{name}: a cell is swept straight up"
                 );
-                if name == "3:4:5" {
-                    // (3, 4) / 5 takes a multiple of five steps to a grid point: no rounding.
-                    let (dx, dy, l) = (d[0], d[1], 5000 * mm);
-                    assert_eq!(c[0] * l, f[0] * dx - f[1] * dy, "{key}");
-                    assert_eq!(c[1] * l, f[0] * dy + f[1] * dx, "{key}");
+                assert!(by[2] > 0, "{name}");
+                for c in &corners {
+                    let at = [c[0], c[1]];
+                    let on_a_jamb = jambs.iter().any(|&a| {
+                        faces.iter().any(|&o| {
+                            let landed = lands_at(d, [a, -o], at);
+                            if landed && name == "3:4:5" {
+                                // (3, 4) / 5 takes a multiple of five steps to a grid point.
+                                let l = 5000 * mm;
+                                assert_eq!(at[0] * l, a * d[0] + o * d[1]);
+                                assert_eq!(at[1] * l, a * d[1] - o * d[0]);
+                            }
+                            landed
+                        })
+                    });
+                    assert!(
+                        on_a_jamb || ends.contains(&at),
+                        "{name}: a cell corner {c:?} is neither a jamb's nor the layer's own"
+                    );
+                }
+                if layer.exterior == plan.outer().0 {
+                    exterior_corners.extend(corners.iter().map(|c| [c[0], c[1]]));
                 }
             }
         }
@@ -2897,6 +2931,12 @@ pub fn elements_at_any_angle_cut_their_wall_and_stand_in_it<E: Engine + Send + '
                 for (c, f) in corners.iter().zip(frame) {
                     let got = [c[0] + at.x * mm, c[1] + at.y * mm];
                     assert!(lands_at(d, f, got), "{name}: the door's corner {got:?}");
+                    if f[1] == s0 {
+                        assert!(
+                            exterior_corners.contains(&got),
+                            "{name}: the door's corner {got:?} is its hole's"
+                        );
+                    }
                 }
             }
             if key.starts_with('F') {

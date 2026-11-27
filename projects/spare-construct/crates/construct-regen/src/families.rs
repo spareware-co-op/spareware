@@ -22,7 +22,7 @@
 //!   parameter's default. They are flat strings so that a recipe with them reads no record.
 //!
 //! Derived and never stored: [`TURN_ARG`], how far the family is turned about its z axis to stand
-//! in a wall along x or y, or [`crate::hosting::SEAT_ARG`], where it stands in a wall at any angle
+//! in a wall along x or y, or [`crate::seating::SEAT_ARG`], where it stands in a wall at any angle
 //! (piece A83; [`crate::hosting::seat`] writes one or the other into the recipe a builder is
 //! handed), its solids, and its opening.
 //!
@@ -230,7 +230,7 @@ pub struct Instance {
     pub ty: Key,
     /// How far it is turned about its z axis: none unless it is seated in a host along x or y.
     pub turn: Turn,
-    /// Where it stands in a host at an angle ([`crate::hosting::SEAT_ARG`]), in place of a turn.
+    /// Where it stands in a host at an angle ([`crate::seating::SEAT_ARG`]), in place of a turn.
     pub seat: Option<Seat>,
     /// The values it holds for the parameters each instance holds, in stored text, by key.
     pub values: BTreeMap<Key, String>,
@@ -243,7 +243,7 @@ impl Instance {
     ///
     /// `NotAFamily` for another operation; `BadInstance` for a family that is not a content id, a
     /// type that is not a key, a turn that is not 0 to 3, or both a turn and a seat; `BadSeat` for
-    /// a seat that does not read ([`crate::hosting::seat_of`]).
+    /// a seat that does not read ([`crate::seating::seat_of`]).
     pub fn of(recipe: &Recipe) -> Result<Instance, GeometryError> {
         if !is_instance(recipe) {
             return Err(fault(
@@ -272,13 +272,13 @@ impl Instance {
                 .and_then(Turn::of_quarters)
                 .ok_or_else(|| fault("BadInstance", format!("{TURN_ARG} must be 0, 1, 2 or 3")))?,
         };
-        let seat = crate::hosting::seat_of(recipe)?;
+        let seat = crate::seating::seat_of(recipe)?;
         if seat.is_some() && recipe.args.contains_key(TURN_ARG) {
             return Err(fault(
                 "BadInstance",
                 format!(
                     "a placed family is turned ({TURN_ARG}) or seated ({}), not both",
-                    crate::hosting::SEAT_ARG
+                    crate::seating::SEAT_ARG
                 ),
             ));
         }

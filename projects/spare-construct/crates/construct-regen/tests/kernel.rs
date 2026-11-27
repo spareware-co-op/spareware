@@ -1215,9 +1215,9 @@ fn walls_along_the_axes_host_byte_for_byte_as_before() {
     );
 }
 
-/// A test engine that extrudes as [`Prisms`] does and answers a subtraction with its target
-/// unchanged: it judges what the builder asks of a wall at an angle and of what is seated in it
-/// (the cutters' corners, each element's own), not the shape a cut gives.
+/// A test engine that extrudes as [`Prisms`] does and answers a subtraction or a union with its
+/// first solid unchanged: it judges what the builder asks of a wall at an angle and of what is
+/// seated in it (each layer's cells, each element's own), not the shape the engine gives.
 struct Seated;
 
 impl Engine for Seated {
@@ -1246,8 +1246,8 @@ impl Engine for Seated {
         Err(unsupported("loft"))
     }
 
-    fn unite(&mut self, _: &Prism, _: &Prism) -> Result<Prism, EngineError> {
-        Err(unsupported("unite"))
+    fn unite(&mut self, a: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Ok(a.clone())
     }
 
     fn volume(&mut self, _: &Prism) -> Result<Volume, EngineError> {

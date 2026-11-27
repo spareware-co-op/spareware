@@ -16,13 +16,21 @@
 //!   cutter is extruded once and subtracted from each layer, one door after another in the order
 //!   of their keys.
 //! - A wall at an angle (piece A83): every door, plain opening and family in it comes seated
-//!   (construct-regen's `hosting`, [`crate::hosting::SEAT_ARG`]), its place read from its seat in
+//!   (construct-regen's `hosting`, [`crate::seating::SEAT_ARG`]), its place read from its seat in
 //!   the wall's frame exactly, never from its placement, which is only the nearest millimetre to
-//!   it; the rules are asked in that frame ([`super::opening::Long`] for its length), and each
-//!   cutter's corners are put through the wall's frame as the element's own are, each the nearest
-//!   grid step to its true place, so an element and its opening are made from one frame. An
-//!   element in it that is not seated (an older door hosted by its position), or seated for
-//!   another wall, is refused (`NotSeated`, `SeatMismatch`).
+//!   it; the rules are asked in that frame (`opening::Long` for its length). Each layer is then
+//!   made without a subtraction: cut into cells along the wall at its ends and at every opening's
+//!   jambs and up it at every opening's sill and head, every cell outside the openings extruded
+//!   and united, each sharing a whole side with one before it. A cell's corners are the wall's
+//!   frame points on the layer's two faces at those jambs, each put through the wall's frame and
+//!   so rounded once, as the element's own corners are (a door flush with a face has its jambs'
+//!   corners there, exactly the layer's); the layer's corners at the wall's ends are its strip's.
+//!   So every vertex of the cut layer is a grid point, as the engine meshes only those (a
+//!   subtraction of a cutter at an angle would leave vertices where a rounded jamb meets a
+//!   rounded face, which no grid point holds). The body lists each layer's cells and each
+//!   opening's place in the frame. An element in such a wall that is not seated (an older door
+//!   hosted by its position), or seated for another wall, is refused (`NotSeated`,
+//!   `SeatMismatch`).
 //! - A placed family's opening (job 6.4, [`crate::families`]): the outline its recipe declares,
 //!   solved at its type's values, placed where the family stands (its origin and its turn, as the
 //!   regenerator seats it: construct-regen's `hosting::seat`) and cut through every layer on the
@@ -56,7 +64,7 @@ use super::{
     fault, from_engine, name, op_id,
 };
 use crate::families::{self, FamilySource};
-use crate::hosting;
+use crate::seating;
 use crate::wall_plan::{Axis, Layered};
 use construct_families::Seat;
 use construct_model::geometry::{
@@ -66,6 +74,7 @@ use engine_geometry::value::engine::{DisplayMesh, Engine, EngineError, GridPlane
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 /// A layered wall's body bytes: what the engine was asked for each layer, and the cutter of each
 /// opening, once for all the layers. A wall with no openings writes no `subtract`.
@@ -74,15 +83,36 @@ struct Asked {
     layers: Vec<AskedLayer>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     subtract: Vec<AskedCut>,
+    /// In a wall at an angle, each opening's place in the wall's frame, in the order of their keys.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    openings: Vec<AskedOpening>,
 }
 
-/// One layer as the engine was asked for it.
+/// One layer as the engine was asked for it: its strip, and in a wall at an angle with openings
+/// the cells it is made of, each extruded and united in order.
 #[derive(Serialize)]
 struct AskedLayer {
     function: String,
     material: String,
     extrude: Vec<[i64; 3]>,
     by: [i64; 3],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cells: Vec<AskedCell>,
+}
+
+/// One cell of a layer in a wall at an angle, as the engine was asked for it.
+#[derive(Serialize)]
+struct AskedCell {
+    extrude: Vec<[i64; 3]>,
+    by: [i64; 3],
+}
+
+/// An opening's place in a wall at an angle's frame, in steps: along and up.
+#[derive(Serialize)]
+struct AskedOpening {
+    key: String,
+    along: [i64; 2],
+    up: [i64; 2],
 }
 
 /// The low and high grid points a mesh reaches, in steps.
@@ -434,7 +464,7 @@ fn in_frame(wall: &Layered, hosted: &Hosted<'_>, units: Units) -> Result<InFrame
         opening::who(hosted.recipe, hosted.key)
     };
     let named = |e: GeometryError| fault(&e.code, format!("{who}: {}", e.message));
-    let (recipe, seat) = hosting::unseated(hosted.recipe).map_err(named)?;
+    let (recipe, seat) = seating::unseated(hosted.recipe).map_err(named)?;
     let seat = seat.ok_or_else(|| {
         fault(
             "NotSeated",
@@ -680,6 +710,167 @@ pub(super) fn empty() -> Mesh {
     }
 }
 
+/// A cell of a layer as the engine is asked for it: its corners at its foot and the vector up to
+/// its head.
+type Cell = (Vec<P3>, [i64; 3]);
+
+/// Where a cell of a layer in a wall at an angle is cut along the wall: its start, a jamb `along`
+/// steps from the start, or its end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Break {
+    Start,
+    At(i64),
+    End,
+}
+
+/// The cells of `layer` of the wall at an angle `wall`, whose line is `line` (in the engine's
+/// steps), with the openings `cuts` taken out (the module header): each a cell's corners at its
+/// foot, anticlockwise from above, and the vector up to its head, in the order they are united.
+fn layer_cells(
+    wall: &Layered,
+    layer: &crate::wall_plan::Strip,
+    line: &Seat,
+    cuts: &[Cut],
+    units: Units,
+) -> Result<Vec<Cell>, GeometryError> {
+    let spans: Vec<Span> = cuts.iter().map(Cut::span).collect();
+    let mut along: Vec<Break> = spans
+        .iter()
+        .flat_map(|s| [Break::At(s.start), Break::At(s.end)])
+        .chain([Break::Start, Break::End])
+        .collect();
+    along.sort_unstable();
+    along.dedup();
+    let height = units.from_q0(wall.height)?;
+    let mut up: Vec<i64> = spans
+        .iter()
+        .flat_map(|s| [s.foot.max(0), s.head])
+        .chain([0, height])
+        .collect();
+    up.sort_unstable();
+    up.dedup();
+    // The layer's corner on its face `offset` steps right of the line at a break: its strip's at
+    // the wall's ends, the frame point on that face at a jamb.
+    let corner = |at: Break, offset: i64| -> Result<[i64; 2], GeometryError> {
+        match at {
+            Break::Start | Break::End => {
+                let face = wall.plan.face(offset)?;
+                let [x, y] = if at == Break::Start { face[0] } else { face[1] };
+                Ok([units.from_q0(x)?, units.from_q0(y)?])
+            }
+            Break::At(a) => {
+                let left = units
+                    .from_q0(offset)?
+                    .checked_neg()
+                    .ok_or_else(super::too_big)?;
+                line.plan([a, left]).ok_or_else(super::too_big)
+            }
+        }
+    };
+    let value = |at: Break| match at {
+        Break::Start => i64::MIN,
+        Break::At(a) => a,
+        Break::End => i64::MAX,
+    };
+    let open = |k: usize, b: usize| -> bool {
+        let pick = |v: &[Break], i: usize| v.get(i).copied().map(value);
+        let (Some(a0), Some(a1)) = (pick(&along, k), pick(&along, k.saturating_add(1))) else {
+            return false;
+        };
+        let (Some(&z0), Some(&z1)) = (up.get(b), up.get(b.saturating_add(1))) else {
+            return false;
+        };
+        spans
+            .iter()
+            .any(|s| s.start <= a0 && a1 <= s.end && s.foot.max(0) <= z0 && z1 <= s.head)
+    };
+    let mut kept = BTreeSet::new();
+    for k in 0..along.len().saturating_sub(1) {
+        for b in 0..up.len().saturating_sub(1) {
+            if !open(k, b) {
+                kept.insert((k, b));
+            }
+        }
+    }
+    let mut cells = Vec::with_capacity(kept.len());
+    let mut taken = BTreeSet::new();
+    while let Some(&first) = kept.iter().find(|c| !taken.contains(*c)) {
+        let mut reach = BTreeSet::from([first]);
+        while let Some(next) = reach.pop_first() {
+            if !taken.insert(next) {
+                continue;
+            }
+            let (k, b) = next;
+            let sides = [
+                k.checked_sub(1).map(|k| (k, b)),
+                k.checked_add(1).map(|k| (k, b)),
+                b.checked_sub(1).map(|b| (k, b)),
+                b.checked_add(1).map(|b| (k, b)),
+            ];
+            for side in sides.into_iter().flatten() {
+                if kept.contains(&side) && !taken.contains(&side) {
+                    reach.insert(side);
+                }
+            }
+            let at = |i: usize| along.get(i).copied().ok_or_else(super::too_big);
+            let (a0, a1) = (at(k)?, at(k.saturating_add(1))?);
+            let z = |i: usize| up.get(i).copied().ok_or_else(super::too_big);
+            let (z0, z1) = (z(b)?, z(b.saturating_add(1))?);
+            let mut ring = vec![
+                corner(a0, layer.exterior)?,
+                corner(a1, layer.exterior)?,
+                corner(a1, layer.interior)?,
+                corner(a0, layer.interior)?,
+            ];
+            if area_twice(&ring) < 0 {
+                ring.reverse();
+            }
+            let outer = ring
+                .into_iter()
+                .map(|xy| point(xy, z0))
+                .collect::<Result<Vec<_>, _>>()?;
+            let rise = z1.checked_sub(z0).ok_or_else(super::too_big)?;
+            cells.push((outer, [0, 0, rise]));
+        }
+    }
+    Ok(cells)
+}
+
+/// Twice the signed area of a plan ring, positive when it runs anticlockwise from above.
+fn area_twice(ring: &[[i64; 2]]) -> i128 {
+    ring.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let next = i.checked_add(1).and_then(|n| n.checked_rem(ring.len()));
+            let b = next.and_then(|n| ring.get(n)).copied().unwrap_or(*a);
+            i128::from(a[0])
+                .saturating_mul(i128::from(b[1]))
+                .saturating_sub(i128::from(a[1]).saturating_mul(i128::from(b[0])))
+        })
+        .fold(0_i128, i128::saturating_add)
+}
+
+/// The cells `cells` extruded and united in their order, as one solid.
+fn united<E: Engine>(engine: &mut E, cells: Vec<Cell>) -> Result<E::Solid, GeometryError> {
+    let mut made: Option<E::Solid> = None;
+    for (outer, up) in cells {
+        let piece = engine
+            .extrude(
+                &Profile {
+                    outer,
+                    holes: Vec::new(),
+                },
+                up,
+            )
+            .map_err(from_engine)?;
+        made = Some(match made {
+            None => piece,
+            Some(so_far) => engine.unite(&so_far, &piece).map_err(from_engine)?,
+        });
+    }
+    made.ok_or_else(|| fault("EmptyShape", "a layer with no cell outside its openings"))
+}
+
 /// Builds a layered wall with the doors `hosted` in it, on `engine`.
 ///
 /// # Errors
@@ -699,14 +890,15 @@ pub(super) fn build<E: Engine>(
     families: &dyn FamilySource,
 ) -> Result<Built, GeometryError> {
     let op = op_id(recipe)?;
-    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
-        None => (Vec::new(), Vec::new()),
+    let (cut_list, tools, line) = match cuts(wall, hosted, units, band, families)? {
+        None => (Vec::new(), Vec::new(), None),
+        Some((frame, cuts)) if frame.line.is_some() => (cuts, Vec::new(), frame.line),
         Some((frame, cuts)) => {
             let tools = cuts
                 .iter()
                 .map(|cut| frame.cutter(cut))
                 .collect::<Result<Vec<_>, _>>()?;
-            (cuts, tools)
+            (cuts, tools, None)
         }
     };
     let mut asked = Asked {
@@ -720,6 +912,21 @@ pub(super) fn build<E: Engine>(
                 by: *by,
             })
             .collect(),
+        openings: if line.is_some() {
+            cut_list
+                .iter()
+                .map(|cut| {
+                    let span = cut.span();
+                    AskedOpening {
+                        key: cut.key().to_owned(),
+                        along: [span.start, span.end],
+                        up: [span.foot, span.head],
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
     };
     let by = [0, 0, units.from_q0(wall.height)?];
     let mut cutters = Vec::with_capacity(tools.len());
@@ -741,11 +948,22 @@ pub(super) fn build<E: Engine>(
             .iter()
             .map(|&[x, y]| point([units.from_q0(x)?, units.from_q0(y)?], 0))
             .collect::<Result<Vec<P3>, _>>()?;
+        let cells = match &line {
+            Some(line) => layer_cells(wall, layer, line, &cut_list, units)?,
+            None => Vec::new(),
+        };
         asked.layers.push(AskedLayer {
             function: layer.function.clone(),
             material: layer.material.clone(),
             extrude: as_steps(&outer),
             by,
+            cells: cells
+                .iter()
+                .map(|(corners, up)| AskedCell {
+                    extrude: as_steps(corners),
+                    by: *up,
+                })
+                .collect(),
         });
         let profile = Profile {
             outer,
@@ -757,8 +975,11 @@ pub(super) fn build<E: Engine>(
             let named = |e: EngineError| cut.engine_error(from_engine(e));
             solid = engine.subtract(&solid, cutter).map_err(named)?;
         }
+        if !cells.is_empty() {
+            solid = united(engine, cells)?;
+        }
         // A layer with no openings has the same mesh at both levels.
-        let (cut_mesh, r0) = if cutters.is_empty() {
+        let (cut_mesh, r0) = if cutters.is_empty() && line.is_none() {
             millimetres(&plain, units, &mut extent)?
         } else {
             millimetres(

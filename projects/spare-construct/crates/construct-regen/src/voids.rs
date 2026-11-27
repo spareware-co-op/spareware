@@ -28,7 +28,7 @@
 //! Depends on construct-openings (the recipes) and the rounding of [`crate::wall_plan`]. Nothing
 //! here is interim but what construct-openings refuses (a curved outline).
 
-use crate::hosting;
+use crate::seating;
 use crate::wall_plan::nearest_mm;
 use construct_model::geometry::{Bounds, Built, Display, GeometryError, Mesh, Recipe};
 use construct_openings::{OpeningError, Shaft, WallOpening, is_void, outline_of};
@@ -130,7 +130,7 @@ fn made(recipe: &Recipe) -> Result<Built, GeometryError> {
     .unwrap_or_default();
     let mut round = Rounder { rounded: false };
     let (mesh, outline, bounds) = if recipe.op == construct_openings::WALL_OP {
-        let (stored, seat) = hosting::unseated(recipe)?;
+        let (stored, seat) = seating::unseated(recipe)?;
         let opening = WallOpening::of(UNNAMED, &stored).map_err(|e| refusal(&e))?;
         let (w, h) = (
             round.mm(opening.width.steps()),

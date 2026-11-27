@@ -42,7 +42,7 @@
 //! the kernel's edition, with no solid and no face.
 //!
 //! In a wall at an angle (piece A83) what is hosted comes seated (construct-regen's `hosting`,
-//! [`crate::hosting::SEAT_ARG`]): a box door is the prism on its plan rectangle laid along its own
+//! [`crate::seating::SEAT_ARG`]): a box door is the prism on its plan rectangle laid along its own
 //! x, and a placed family's every solid the prism on its box's plan rectangle in the family's own
 //! frame, each corner put through the seat and then the nearest whole millimetre, so each is drawn
 //! turned with its wall, as the kernel's builder builds it.
@@ -53,9 +53,9 @@
 
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
-use crate::hosting;
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
+use crate::seating;
 use crate::wall_plan::{self, Layered};
 use construct_families::{Limits, Seat, extents};
 use construct_model::geometry::{
@@ -1136,7 +1136,7 @@ impl Geometry for Boxes {
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
         }
-        if let (stored, Some(seat)) = hosting::unseated(recipe)? {
+        if let (stored, Some(seat)) = seating::unseated(recipe)? {
             return seated_box(&stored, &seat);
         }
         let size = size_of(recipe)?;

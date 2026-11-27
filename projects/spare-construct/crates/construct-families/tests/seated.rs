@@ -1,10 +1,10 @@
 //! A family seated in a host that runs at any angle (piece A83, CON-A4-F3-P1): the library's door
 //! and windows seated along walls drawn at 30, 45 and 60 degrees and at a 3:4:5 slope, every
 //! extrusion a level profile swept straight up, each of its corners the nearest grid step to where
-//! the exact turn puts it (checked on whole numbers, by squaring); an upright profile made of its
-//! box less its cutters, each reaching 10 mm past where it opens onto the outside; a level profile
-//! seated corner for corner as it is; a sloped upright profile refused at an angle but built turned
-//! by a quarter turn; and each seat kept apart in the cache. Judged through this crate's types and
+//! the exact turn puts it (checked on whole numbers, by squaring); an upright profile made of the
+//! cells its corners' lines cut it into, united; a level profile seated corner for corner as it
+//! is; a sloped upright profile refused at an angle but built turned by a quarter turn; and each
+//! seat kept apart in the cache. Judged through this crate's types and
 //! the `Engine` trait only.
 
 #![allow(
@@ -30,9 +30,6 @@ const DOOR: &str = include_str!("../../../library/doors-windows/single-swing-doo
 const FIXED: &str = include_str!("../../../library/doors-windows/fixed-window.json");
 const SLIDING: &str = include_str!("../../../library/doors-windows/sliding-window.json");
 
-/// How far a cutter reaches past the solid it cuts: 10 mm.
-const PAST: i64 = 64_000;
-
 fn read(text: &str) -> Recipe {
     Recipe::from_json(text).unwrap()
 }
@@ -50,6 +47,7 @@ enum Asked {
         by: [i64; 3],
     },
     Subtract(Box<Asked>, Box<Asked>),
+    Unite(Box<Asked>, Box<Asked>),
 }
 
 /// A test engine that keeps what it is asked, and answers nothing else.
@@ -103,8 +101,8 @@ impl Engine for Asks {
         Err(unanswered("loft"))
     }
 
-    fn unite(&mut self, _: &Asked, _: &Asked) -> Result<Asked, EngineError> {
-        Err(unanswered("unite"))
+    fn unite(&mut self, a: &Asked, b: &Asked) -> Result<Asked, EngineError> {
+        Ok(Asked::Unite(Box::new(a.clone()), Box::new(b.clone())))
     }
 
     fn volume(&mut self, _: &Asked) -> Result<Volume, EngineError> {
@@ -160,7 +158,7 @@ fn boxes(asked: &Asked) -> Vec<(Vec<[i64; 3]>, [i64; 3])> {
             assert!(holes.is_empty(), "an upright box has no hole");
             vec![(corners.clone(), *by)]
         }
-        Asked::Subtract(target, tool) => {
+        Asked::Subtract(target, tool) | Asked::Unite(target, tool) => {
             let mut all = boxes(target);
             all.extend(boxes(tool));
             all
@@ -168,14 +166,45 @@ fn boxes(asked: &Asked) -> Vec<(Vec<[i64; 3]>, [i64; 3])> {
     }
 }
 
-/// An upright profile's solid seated at an angle off the quarter turns is its box less its
-/// cutters, each a level rectangle swept straight up, every corner the nearest step to the exact
-/// turn of its point in the family's frame: the box around the profile through its depth, then a
-/// cutter for what the profile leaves out of its box (a door frame's notch, reaching 10 mm under
-/// its foot) and one for each hole (a window frame's light, between its faces), each reaching
-/// 10 mm past both faces. Every template, every type, on every way; a 3:4:5 way lands exactly.
+/// The cells of an upright profile (its outline and holes in the sketch's two coordinates), by
+/// hand: a line along each axis through every corner, each cell kept when an odd number of the
+/// loops hold its middle.
+fn cells_of(rings: &[Vec<[i64; 2]>]) -> Vec<[i64; 4]> {
+    let breaks = |k: usize| {
+        let mut at: Vec<i64> = rings.iter().flatten().map(|p| p[k]).collect();
+        at.sort_unstable();
+        at.dedup();
+        at
+    };
+    let (us, vs) = (breaks(0), breaks(1));
+    let mut found = Vec::new();
+    for u in us.windows(2) {
+        for v in vs.windows(2) {
+            let (mu, mv) = (u[0] + u[1], v[0] + v[1]);
+            let mut odd = false;
+            for ring in rings {
+                for (i, a) in ring.iter().enumerate() {
+                    let b = ring[(i + 1) % ring.len()];
+                    if a[0] == b[0] && 2 * a[0] > mu && (2 * a[1] < mv) != (2 * b[1] < mv) {
+                        odd = !odd;
+                    }
+                }
+            }
+            if odd {
+                found.push([u[0], u[1], v[0], v[1]]);
+            }
+        }
+    }
+    found
+}
+
+/// An upright profile's solid seated at an angle off the quarter turns is the union of its cells:
+/// each a level rectangle swept straight up through the profile's depth, every corner the nearest
+/// step to the exact turn of its point in the family's frame; together exactly the profile's
+/// cells, each once (a door frame's two jambs and its head in three, a window frame round its
+/// light in eight). Every template, every type, on every way; a 3:4:5 way lands exactly.
 #[test]
-fn an_upright_profile_seated_at_an_angle_is_its_box_less_its_cutters() {
+fn an_upright_profile_seated_at_an_angle_is_its_cells_united() {
     for text in [DOOR, FIXED, SLIDING] {
         let recipe = read(text);
         for ty in recipe.named_types() {
@@ -193,77 +222,68 @@ fn an_upright_profile_seated_at_an_angle_is_its_box_less_its_cutters() {
                     // Every template's solid is on its centre plane: x and z, swept along y.
                     assert_eq!((by[0], by[2]), (0, 0));
                     let level = corners[0][1];
-                    let (lo, hi) = (level.min(level + by[1]), level.max(level + by[1]));
-                    let xs = corners.iter().map(|c| c[0]);
-                    let zs = corners.iter().map(|c| c[2]);
-                    let (x0, x1) = (xs.clone().min().unwrap(), xs.max().unwrap());
-                    let (z0, z1) = (zs.clone().min().unwrap(), zs.max().unwrap());
-                    let mut wanted = vec![([x0, x1, z0, z1], (lo, hi))];
-                    let notch = corners.len() > 4;
-                    if notch {
-                        // The door's frame: its notch from its foot to its head, between its
-                        // jambs, past the foot.
-                        let inner: Vec<i64> = corners
-                            .iter()
-                            .map(|c| c[0])
-                            .filter(|&x| x != x0 && x != x1)
-                            .collect();
-                        let head = corners
-                            .iter()
-                            .map(|c| c[2])
-                            .filter(|&z| z != z0 && z != z1)
-                            .max()
-                            .unwrap();
-                        let (a, b) = (*inner.iter().min().unwrap(), *inner.iter().max().unwrap());
-                        wanted.push(([a, b, z0 - PAST, head], (lo - PAST, hi + PAST)));
-                    }
-                    for hole in holes {
-                        let xs = hole.iter().map(|c| c[0]);
-                        let zs = hole.iter().map(|c| c[2]);
-                        wanted.push((
-                            [
-                                xs.clone().min().unwrap(),
-                                xs.max().unwrap(),
-                                zs.clone().min().unwrap(),
-                                zs.max().unwrap(),
-                            ],
-                            (lo - PAST, hi + PAST),
-                        ));
-                    }
+                    let (w0, w1) = (level.min(level + by[1]), level.max(level + by[1]));
+                    let ring = |c: &[[i64; 3]]| c.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+                    let mut rings = vec![ring(corners)];
+                    rings.extend(holes.iter().map(|h| ring(h)));
+                    let mut wanted = cells_of(&rings);
                     let asked = boxes(&turned.solid);
-                    assert_eq!(
-                        asked.len(),
-                        wanted.len(),
-                        "{name} {} {}",
-                        ty.key(),
-                        flat.step
-                    );
-                    for ((corners, up), ([a, b, v0, v1], (w0, w1))) in asked.iter().zip(&wanted) {
-                        assert_eq!(*up, [0, 0, v1 - v0], "{name} {}", flat.step);
-                        let frame = [[*a, *w0], [*b, *w0], [*b, *w1], [*a, *w1]];
-                        for (got, point) in corners.iter().zip(frame) {
-                            assert_eq!(got[2], *v0);
-                            assert!(
-                                lands(&seat, point, [got[0], got[1]]),
-                                "{name} {} {}: {point:?} at {got:?}",
-                                ty.key(),
-                                flat.step
-                            );
-                            if name == "3:4:5" {
-                                // A point on a multiple of five steps lands exactly.
+                    let what = format!("{name} {} {}", ty.key(), flat.step);
+                    assert_eq!(asked.len(), wanted.len(), "{what}");
+                    for (corners, up) in &asked {
+                        let at = wanted
+                            .iter()
+                            .position(|&[a, b, v0, v1]| {
+                                *up == [0, 0, v1 - v0]
+                                    && corners.iter().all(|c| c[2] == v0)
+                                    && corners
+                                        .iter()
+                                        .zip([[a, w0], [b, w0], [b, w1], [a, w1]])
+                                        .all(|(got, point)| lands(&seat, point, [got[0], got[1]]))
+                            })
+                            .unwrap_or_else(|| panic!("{what}: a cell at {corners:?}"));
+                        let [a, b, v0, _] = wanted.remove(at);
+                        if name == "3:4:5" {
+                            // A point on a multiple of five steps lands exactly.
+                            for (got, point) in
+                                corners.iter().zip([[a, w0], [b, w0], [b, w1], [a, w1]])
+                            {
                                 let [x, y] = [point[0] + 7_000, point[1] - 3_000];
                                 let [wx, wy] = way;
                                 let length = 4000 * 6400;
-                                assert_eq!(got[0] - 123, (x * wx - y * wy) / length);
                                 assert_eq!((x * wx - y * wy) % length, 0);
-                                assert_eq!((x * wy + y * wx) % length, 0);
+                                assert_eq!(got[0] - 123, (x * wx - y * wy) / length);
+                                assert_eq!(got[1] + 456, (x * wy + y * wx) / length);
+                                assert_eq!(got[2], v0);
                             }
                         }
                     }
+                    assert!(wanted.is_empty(), "{what}: {wanted:?} not built");
                 }
             }
         }
     }
+    // The door's frame is its two jambs and its head; the window's frame eight cells round its
+    // light; the glass and the leaf one each.
+    let door = read(DOOR);
+    let values = TypeValues::of(&door, &key("d900x2100")).unwrap();
+    let seat = Seat::new(WAYS[0].1, [0, 0], [0, 0]).unwrap();
+    let seated = evaluate_seated(&mut Asks, &door, &values, Limits::DEFAULT, &seat).unwrap();
+    let counts: Vec<usize> = seated
+        .solids
+        .iter()
+        .map(|s| boxes(&s.solid).len())
+        .collect();
+    assert_eq!(counts, [5, 1]);
+    let window = read(FIXED);
+    let values = TypeValues::of(&window, &key("w1200x1200")).unwrap();
+    let seated = evaluate_seated(&mut Asks, &window, &values, Limits::DEFAULT, &seat).unwrap();
+    let counts: Vec<usize> = seated
+        .solids
+        .iter()
+        .map(|s| boxes(&s.solid).len())
+        .collect();
+    assert_eq!(counts, [8, 1]);
 }
 
 /// A level profile seated at an angle is put through the seat corner for corner, holes and all,

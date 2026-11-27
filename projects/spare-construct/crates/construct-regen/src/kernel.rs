@@ -112,7 +112,7 @@ mod seated;
 pub use opening::Hosted;
 
 use crate::families::{self, FamilySource};
-use crate::hosting;
+use crate::seating;
 use crate::wall_plan::{self, Layered};
 use construct_families::CacheKey;
 
@@ -908,7 +908,7 @@ impl<E: Engine> Kernel<E> {
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));
         }
-        if host.args.contains_key(hosting::SEAT_ARG) {
+        if host.args.contains_key(seating::SEAT_ARG) {
             return Some(self.build_seated(host, hosted));
         }
         None
@@ -922,7 +922,7 @@ impl<E: Engine> Kernel<E> {
                 format!("{}: a seated {} hosts nothing", first.key, host.op),
             ));
         }
-        let (stored, seat) = hosting::unseated(host)?;
+        let (stored, seat) = seating::unseated(host)?;
         let shape = Extrusion::of(&stored)?;
         let Some(seat) = seat else {
             return Err(fault("BadSeat", "a seated box with no seat"));
@@ -1062,7 +1062,7 @@ impl<E: Engine> Kernel<E> {
     ///
     /// What [`Geometry::build`] gives for a recipe it cannot build, and the engine's errors.
     pub fn solid(&self, recipe: &Recipe) -> Result<KernelSolid<E::Solid>, GeometryError> {
-        if let (stored, Some(seat)) = hosting::unseated(recipe)? {
+        if let (stored, Some(seat)) = seating::unseated(recipe)? {
             let shape = Extrusion::of(&stored)?;
             let mut engine = self
                 .engine

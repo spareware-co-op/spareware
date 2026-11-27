@@ -1,6 +1,6 @@
 //! A box hosted in a wall at an angle (piece A83, CON-A4-F3-P1): a box door (`door.single`), or
 //! any box this builder makes, handed with its seat (construct-regen's `hosting`,
-//! [`crate::hosting::SEAT_ARG`]): its plan rectangle laid along its own x (its width along, its
+//! [`crate::seating::SEAT_ARG`]): its plan rectangle laid along its own x (its width along, its
 //! thickness across, as a box along x is), each corner put through its seat, so each is the
 //! nearest grid step to where the wall's frame puts it, and extruded straight up by its height.
 //! The opening its wall cuts for it is worked out from the same frame (the parent's `layered`

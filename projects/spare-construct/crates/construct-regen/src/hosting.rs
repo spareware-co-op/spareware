@@ -68,6 +68,7 @@
 //! y hosts as it always has, byte for byte; no seat is written for it.
 
 use crate::families;
+pub use crate::seating::{SEAT_ARG, seat_of, unseated, with_seat};
 use crate::wall_plan::{self, Axis, Layered};
 use construct_families::{Seat, Turn};
 use construct_model::element::{Element, Placement, Reference, Want};
@@ -81,10 +82,6 @@ pub const ALONG_KEY: &str = "@host.along";
 pub const UP_KEY: &str = "@host.up";
 /// The kind of reference a hosted element names its host's face by.
 pub const FACE_KIND: &str = "face";
-/// The argument a builder is handed with an element hosted on a wall at an angle: its seat in the
-/// wall's frame (this module's header), `{"way": [x, y], "base": [x, y], "at": [x, y]}` in grid
-/// steps. Derived from the host, never stored.
-pub const SEAT_ARG: &str = "seat";
 /// The old box wall's operation, which hosts.
 pub const HOST_OP: &str = "wall.straight";
 /// Every operation that hosts: the old box wall and the layered wall.
@@ -311,64 +308,6 @@ pub fn at(
     hosting: &Hosting,
 ) -> Result<Placement, GeometryError> {
     seat(edition, host, host_recipe, hosted, hosted_recipe, hosting).map(|(at, _)| at)
-}
-
-/// `recipe` with the seat a builder is handed ([`SEAT_ARG`]).
-#[must_use]
-pub fn with_seat(recipe: &Recipe, seat: &Seat) -> Recipe {
-    let mut seated = recipe.clone();
-    seated.args.insert(
-        SEAT_ARG.to_owned(),
-        serde_json::json!({ "way": seat.way(), "base": seat.base(), "at": seat.at() }),
-    );
-    seated
-}
-
-/// The seat `recipe` was handed ([`SEAT_ARG`]), if any.
-///
-/// # Errors
-///
-/// `BadSeat` for a seat that is not three pairs of whole grid steps, its way of some length.
-pub fn seat_of(recipe: &Recipe) -> Result<Option<Seat>, GeometryError> {
-    let Some(value) = recipe.args.get(SEAT_ARG) else {
-        return Ok(None);
-    };
-    let bad = || GeometryError {
-        code: "BadSeat".to_owned(),
-        message: format!(
-            "{SEAT_ARG} must be a way, a base and an origin, each two whole numbers of grid \
-             steps, the way of some length"
-        ),
-    };
-    let object = value
-        .as_object()
-        .filter(|object| object.len() == 3)
-        .ok_or_else(bad)?;
-    let pair = |name: &str| {
-        object
-            .get(name)
-            .and_then(serde_json::Value::as_array)
-            .and_then(|pair| match pair.as_slice() {
-                [x, y] => Some([x.as_i64()?, y.as_i64()?]),
-                _ => None,
-            })
-            .ok_or_else(bad)
-    };
-    Seat::new(pair("way")?, pair("base")?, pair("at")?)
-        .map(Some)
-        .ok_or_else(bad)
-}
-
-/// `recipe` as stored, without the seat it was handed, and that seat, if any.
-///
-/// # Errors
-///
-/// [`seat_of`]'s.
-pub fn unseated(recipe: &Recipe) -> Result<(Recipe, Option<Seat>), GeometryError> {
-    let seat = seat_of(recipe)?;
-    let mut stored = recipe.clone();
-    stored.args.remove(SEAT_ARG);
-    Ok((stored, seat))
 }
 
 /// What a hosted element is called in a refusal: a placed family, a plain or floor opening, or a

@@ -595,6 +595,17 @@ impl Cut {
         &self.key
     }
 
+    /// Where the opening itself lies in its wall's frame: along from `start` to `end`, up from
+    /// `foot` to `head`, in steps (its cutter reaches past those).
+    pub(super) fn span(&self) -> Span {
+        Span {
+            start: self.start,
+            end: self.end,
+            foot: self.foot,
+            head: self.head,
+        }
+    }
+
     /// The cutter as the engine is asked for it: its plan at its foot, counter-clockwise from
     /// above, and the vector up to its head.
     pub(super) fn profile(&self) -> Result<(Profile, [i64; 3]), GeometryError> {

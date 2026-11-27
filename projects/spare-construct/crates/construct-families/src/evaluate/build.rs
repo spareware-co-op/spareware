@@ -23,15 +23,16 @@
 //! points only `L / gcd` apart along it (`L` the way in steps, `gcd` its two coordinates'), so
 //! three rounded corners of one upright face are in general not on one plane, and the engine takes
 //! no such profile. It is made of upright boxes instead, each a level rectangle extruded straight
-//! up, which stays a flat-faced prism whatever its corners round to ([`upright`]): the box around
-//! its outline, less one cutter for each rectangle of what the outline leaves out of that box and
-//! for each rectangle of each hole, every cutter reaching [`PAST`] past the solid where it opens
-//! onto the outside, so no face of a cutter lies on a face of the box. That holds for a profile
-//! whose every edge runs along its sketch's two axes, as the library's frames, leaves, sashes and
-//! glass do; one with a sloped edge is refused off the quarter turns (`UprightNotSquare`).
-//! Interim: the kernel's `Engine` interface cannot turn a solid once it is made; an engine that
-//! can (a later kernel piece, with the exact kernel) builds every profile turned as it is, and
-//! this rule goes.
+//! up, which stays a flat-faced prism whatever its corners round to ([`upright`]): the profile is
+//! cut into cells by a line along each of its axes through every corner, and the cells inside it
+//! are extruded and united, each sharing a whole side with one before it. Every corner of every
+//! cell is a seated grid point and neighbouring cells share theirs exactly, so the union's every
+//! vertex is a grid point (a subtraction would leave vertices where a rounded face meets another,
+//! which no grid point holds, and the engine meshes none). That holds for a profile whose every
+//! edge runs along its sketch's two axes, as the library's frames, leaves, sashes and glass do; one
+//! with a sloped edge is refused off the quarter turns (`UprightNotSquare`). Interim: the kernel's
+//! `Engine` interface cannot turn a solid once it is made; an engine that can (a later kernel
+//! piece, with the exact kernel) builds every profile turned as it is, and this rule goes.
 
 use super::error::{EvalError, Place, Reason};
 use super::limits::{Limits, Meter};
@@ -47,10 +48,6 @@ use engine_geometry::value::engine::{Engine, Profile};
 use engine_geometry::value::grid::{GridStep, P3};
 use kit_core::Id;
 use std::collections::{BTreeMap, BTreeSet};
-
-/// How far a cutter of an upright profile built at an angle reaches past the solid it cuts, where
-/// it opens onto the outside: 10 mm, a thousand times the model's tolerance, in steps.
-pub(crate) const PAST: i64 = 64_000;
 
 /// How a family stands while it is built: turned by quarter turns, or seated at any angle.
 #[derive(Clone, Copy, Debug)]
@@ -274,73 +271,96 @@ fn square(ring: &[[i64; 2]]) -> bool {
     })
 }
 
-/// The rectangles whose union is the region inside `rings` (each a loop of corners, every edge
-/// along an axis), a point being inside when an odd number of the rings hold it: the region cut
-/// by a line across at every corner's height into slabs, each slab's stretches inside found from
-/// the upright edges that span it, and each stretch made as tall as the region lets it be (while
-/// the slabs above and below hold the whole stretch). Sorted, each once, so one region always
-/// gives the same rectangles.
-fn rectangles(rings: &[&[[i64; 2]]]) -> Vec<Rectangle> {
-    let mut heights: Vec<i64> = rings.iter().flat_map(|r| r.iter().map(|p| p[1])).collect();
-    heights.sort_unstable();
-    heights.dedup();
-    let slabs: Vec<(i64, i64)> = heights
-        .windows(2)
-        .filter_map(|w| match w {
-            [a, b] => Some((*a, *b)),
-            _ => None,
-        })
-        .collect();
-    let stretches: Vec<Vec<(i64, i64)>> = slabs
-        .iter()
-        .map(|&(low, high)| {
-            let mut crossings: Vec<i64> = Vec::new();
-            for ring in rings {
-                for (i, a) in ring.iter().enumerate() {
-                    let Some(b) = after(i, ring.len()).and_then(|n| ring.get(n)) else {
-                        continue;
-                    };
-                    if a[0] == b[0] && a[1].min(b[1]) <= low && a[1].max(b[1]) >= high {
-                        crossings.push(a[0]);
-                    }
-                }
-            }
-            crossings.sort_unstable();
-            let (pairs, _) = crossings.as_chunks::<2>();
-            pairs
-                .iter()
-                .filter_map(|&[a, b]| (a < b).then_some((a, b)))
-                .collect()
-        })
-        .collect();
-    let holds = |slab: usize, (a, b): (i64, i64)| {
-        stretches
-            .get(slab)
-            .is_some_and(|s| s.iter().any(|&(c, d)| c <= a && b <= d))
-    };
-    let mut found = BTreeSet::new();
-    for (k, slab) in stretches.iter().enumerate() {
-        for &stretch in slab {
-            let (mut first, mut last) = (k, k);
-            while first > 0 && holds(first.saturating_sub(1), stretch) {
-                first = first.saturating_sub(1);
-            }
-            while holds(last.saturating_add(1), stretch) {
-                last = last.saturating_add(1);
-            }
-            if let (Some(&(v0, _)), Some(&(_, v1))) = (slabs.get(first), slabs.get(last)) {
-                found.insert([stretch.0, stretch.1, v0, v1]);
+/// Whether the point at half `[u2, v2]` (each coordinate doubled, so a cell's middle is whole) is
+/// inside `rings`, by the even-odd rule: the upright edges to its right that span its height.
+fn inside(rings: &[&[[i64; 2]]], [u2, v2]: [i128; 2]) -> bool {
+    let mut odd = false;
+    for ring in rings {
+        for (i, a) in ring.iter().enumerate() {
+            let Some(b) = after(i, ring.len()).and_then(|n| ring.get(n)) else {
+                continue;
+            };
+            let twice = |c: i64| i128::from(c).saturating_mul(2);
+            if a[0] == b[0] && twice(a[0]) > u2 && (twice(a[1]) < v2) != (twice(b[1]) < v2) {
+                odd = !odd;
             }
         }
     }
-    found.into_iter().collect()
+    odd
+}
+
+/// The cells of the region inside `rings` (each a loop of corners, every edge along an axis; a
+/// point inside when an odd number of the rings hold it): the region cut by a line along each axis
+/// through every corner, each cell `[u0, u1, v0, v1]` kept when its middle is inside. In the order
+/// they are united: from the lowest cell, each next the least cell sharing a whole side with one
+/// already taken, so the union stays one solid; a cell no earlier cell reaches comes after, least
+/// first. The same region always gives the same cells in the same order.
+fn cells(rings: &[&[[i64; 2]]]) -> Vec<Rectangle> {
+    let breaks = |pick: usize| {
+        let mut at: Vec<i64> = rings
+            .iter()
+            .flat_map(|r| r.iter().filter_map(move |p| p.get(pick).copied()))
+            .collect();
+        at.sort_unstable();
+        at.dedup();
+        at
+    };
+    let (us, vs) = (breaks(0), breaks(1));
+    let mut kept = BTreeSet::new();
+    for (i, u) in us.windows(2).enumerate() {
+        for (j, v) in vs.windows(2).enumerate() {
+            if let ([u0, u1], [v0, v1]) = (u, v) {
+                let middle = [
+                    i128::from(*u0).saturating_add(i128::from(*u1)),
+                    i128::from(*v0).saturating_add(i128::from(*v1)),
+                ];
+                if inside(rings, middle) {
+                    kept.insert((i, j));
+                }
+            }
+        }
+    }
+    let mut order: Vec<(usize, usize)> = Vec::with_capacity(kept.len());
+    let mut taken = BTreeSet::new();
+    while let Some(&first) = kept.iter().find(|c| !taken.contains(*c)) {
+        let mut reach = BTreeSet::from([first]);
+        while let Some(next) = reach.pop_first() {
+            if !taken.insert(next) {
+                continue;
+            }
+            order.push(next);
+            let (i, j) = next;
+            let sides = [
+                i.checked_sub(1).map(|i| (i, j)),
+                i.checked_add(1).map(|i| (i, j)),
+                j.checked_sub(1).map(|j| (i, j)),
+                j.checked_add(1).map(|j| (i, j)),
+            ];
+            for side in sides.into_iter().flatten() {
+                if kept.contains(&side) && !taken.contains(&side) {
+                    reach.insert(side);
+                }
+            }
+        }
+    }
+    order
+        .into_iter()
+        .filter_map(|(i, j)| {
+            let next = |k: usize| k.checked_add(1);
+            Some([
+                *us.get(i)?,
+                *us.get(next(i)?)?,
+                *vs.get(j)?,
+                *vs.get(next(j)?)?,
+            ])
+        })
+        .collect()
 }
 
 /// An upright profile (on an `xz` plane, or a `yz` one when `side`), its corners `outer` and its
 /// holes `holes` at the plane's level, `depth` deep, seated at `seat` off the quarter turns, made
-/// of upright boxes (this module's header): the box around the outline less a cutter for each
-/// rectangle of what the outline leaves out of it, then for each rectangle of each hole, each list
-/// in its sorted order.
+/// of upright boxes (this module's header): its cells ([`cells`]), each extruded through the
+/// profile's depth and united in their order.
 fn upright<E: Engine>(
     engine: &mut E,
     side: bool,
@@ -367,47 +387,21 @@ fn upright<E: Engine>(
     if !square(&ring) || !hole_rings.iter().all(|h| square(h)) {
         return Err(Reason::UprightNotSquare);
     }
-    let reach = |pick: usize| {
-        let values = ring.iter().filter_map(|p| p.get(pick).copied());
-        Some((values.clone().min()?, values.max()?))
-    };
-    let ((u_min, u_max), (v_min, v_max)) = reach(0).zip(reach(1)).ok_or(Reason::NotALoop)?;
-    let around = [
-        [u_min, v_min],
-        [u_max, v_min],
-        [u_max, v_max],
-        [u_min, v_max],
-    ];
-    let moved = |at: i64, by: i64| at.checked_add(by).ok_or(Reason::OutOfRange);
-    let mut cutters = Vec::new();
-    for [u0, u1, v0, v1] in rectangles(&[&around, &ring]) {
-        // Past the box where the rectangle meets its side.
-        let past = |at: i64, edge: i64, by: i64| if at == edge { moved(at, by) } else { Ok(at) };
-        cutters.push([
-            past(u0, u_min, -PAST)?,
-            past(u1, u_max, PAST)?,
-            past(v0, v_min, -PAST)?,
-            past(v1, v_max, PAST)?,
-        ]);
+    let rings: Vec<&[[i64; 2]]> = std::iter::once(ring.as_slice())
+        .chain(hole_rings.iter().map(Vec::as_slice))
+        .collect();
+    let pieces = cells(&rings);
+    meter.corners(pieces.len().saturating_mul(4))?;
+    let far = level.checked_add(depth.steps()).ok_or(Reason::OutOfRange)?;
+    let mut made: Option<E::Solid> = None;
+    for cell in pieces {
+        let piece = upright_box(engine, side, cell, (level, far), seat)?;
+        made = Some(match made {
+            None => piece,
+            Some(so_far) => engine.unite(&so_far, &piece).map_err(Reason::Engine)?,
+        });
     }
-    for hole in &hole_rings {
-        cutters.extend(rectangles(&[hole]));
-    }
-    meter.corners(cutters.len().saturating_add(1).saturating_mul(4))?;
-    let far = moved(level, depth.steps())?;
-    let reaching = (moved(level, -PAST)?, moved(far, PAST)?);
-    let mut made = upright_box(
-        engine,
-        side,
-        [u_min, u_max, v_min, v_max],
-        (level, far),
-        seat,
-    )?;
-    for cutter in cutters {
-        let tool = upright_box(engine, side, cutter, reaching, seat)?;
-        made = engine.subtract(&made, &tool).map_err(Reason::Engine)?;
-    }
-    Ok(made)
+    made.ok_or(Reason::NotALoop)
 }
 
 /// The upright box of the rectangle `[u0, u1, v0, v1]` of an upright profile (on a `yz` plane when
@@ -484,32 +478,15 @@ fn material(worked: &Worked, step: &Step) -> Result<Id, Reason> {
 mod tests {
     use super::*;
 
-    /// A case: its name, its rings, and how many rectangles it is.
+    /// A case: its name, its rings, and how many cells it is.
     type Case<'a> = (&'a str, Vec<&'a [[i64; 2]]>, usize);
 
-    /// Whether the cell `[u, u + 1] x [v, v + 1]` is inside `rings`, by the even-odd rule.
-    fn inside(rings: &[&[[i64; 2]]], u: i64, v: i64) -> bool {
-        let (cu, cv) = (2 * u + 1, 2 * v + 1);
-        let mut odd = false;
-        for ring in rings {
-            for (i, a) in ring.iter().enumerate() {
-                let b = ring[(i + 1) % ring.len()];
-                // An upright edge to the right of the cell's centre, spanning its height.
-                if a[0] == b[0] && 2 * a[0] > cu && (2 * a[1] < cv) != (2 * b[1] < cv) {
-                    odd = !odd;
-                }
-            }
-        }
-        odd
-    }
-
-    /// The rectangles of a region cover exactly the region, cell by cell, and each lies inside it:
-    /// a door's frame left out of its box (the notch under its head), a window's frame's hole, an
-    /// L, a stair and an E (whose two notches stand one over the other and stay apart).
+    /// The cells of a region cover exactly the region, unit square by unit square, each once, and
+    /// each after the first shares a whole side with one before it: a door's frame (its jambs and
+    /// its head), a window's frame round its light, an L, a stair and an E.
     #[test]
-    fn the_rectangles_of_a_region_are_exactly_the_region() {
-        let around = [[0, 0], [10, 0], [10, 9], [0, 9]];
-        let u = [
+    fn the_cells_of_a_region_are_exactly_the_region_each_joined_to_one_before() {
+        let door = [
             [0, 0],
             [2, 0],
             [2, 7],
@@ -519,7 +496,8 @@ mod tests {
             [10, 9],
             [0, 9],
         ];
-        let hole = [[2, 2], [8, 2], [8, 7], [2, 7]];
+        let outer = [[0, 0], [10, 0], [10, 9], [0, 9]];
+        let light = [[2, 2], [8, 2], [8, 7], [2, 7]];
         let l = [[0, 0], [10, 0], [10, 3], [4, 3], [4, 9], [0, 9]];
         let stair = [
             [0, 0],
@@ -546,30 +524,47 @@ mod tests {
             [0, 9],
         ];
         let cases: [Case<'_>; 5] = [
-            ("door frame", vec![&around, &u], 1),
-            ("window hole", vec![&hole], 1),
-            ("l", vec![&around, &l], 1),
-            ("stair", vec![&around, &stair], 2),
-            ("e", vec![&around, &e], 2),
+            ("door frame", vec![&door], 5),
+            ("window frame", vec![&outer, &light], 8),
+            ("l", vec![&l], 3),
+            ("stair", vec![&stair], 6),
+            ("e", vec![&e], 8),
         ];
         for (name, rings, count) in cases {
-            let found = rectangles(&rings);
+            let found = cells(&rings);
             assert_eq!(found.len(), count, "{name}: {found:?}");
             for u in -1..11 {
                 for v in -1..10 {
-                    let covered = found
+                    let covering = found
                         .iter()
-                        .any(|r| r[0] <= u && u < r[1] && r[2] <= v && v < r[3]);
-                    assert_eq!(covered, inside(&rings, u, v), "{name} at ({u}, {v})");
+                        .filter(|c| c[0] <= u && u < c[1] && c[2] <= v && v < c[3])
+                        .count();
+                    let wanted = usize::from(inside(
+                        &rings,
+                        [2 * i128::from(u) + 1, 2 * i128::from(v) + 1],
+                    ));
+                    assert_eq!(covering, wanted, "{name} at ({u}, {v})");
                 }
             }
+            for (k, c) in found.iter().enumerate().skip(1) {
+                let shares = |d: &Rectangle| {
+                    let along = (c[0] == d[1] || c[1] == d[0]) && c[2] == d[2] && c[3] == d[3];
+                    let up = (c[2] == d[3] || c[3] == d[2]) && c[0] == d[0] && c[1] == d[1];
+                    along || up
+                };
+                assert!(found[..k].iter().any(shares), "{name}: {c:?}");
+            }
         }
-        // The notch under the door's head runs from the foot to the head, between the jambs.
-        assert_eq!(rectangles(&[&around, &u]), vec![[2, 8, 0, 7]]);
-        // A stair's steps: the narrow one as tall as the region lets it be.
+        // The door's frame: its left jamb, then its head across, then its right jamb.
         assert_eq!(
-            rectangles(&[&around, &stair]),
-            vec![[4, 10, 6, 9], [7, 10, 3, 9]]
+            cells(&[&door]),
+            vec![
+                [0, 2, 0, 7],
+                [0, 2, 7, 9],
+                [2, 8, 7, 9],
+                [8, 10, 7, 9],
+                [8, 10, 0, 7]
+            ]
         );
     }
 
