@@ -1742,7 +1742,7 @@ await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
 await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-stair-landing]`), stairId);
 await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-stair-landing]`), stairId);
 pass("Anna's undo takes the L back to the straight stair, in both browsers");
-await anna.waitForFunction(() => window.spare.steps.redo?.cmd === 'stair.runs');
+await anna.waitForFunction(() => window.spare.steps.redo?.cmd === 'edit.undo');
 await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
 await ben.waitForFunction(stairLanding, stairId);
 await anna.waitForFunction(stairLanding, stairId);
