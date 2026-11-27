@@ -113,8 +113,10 @@ impl Live {
             }
             for mut message in out {
                 // When this stream wrote the entry, to set against the orderer's stamp and the page's.
-                if message["t"] == "entry" {
-                    message["sent_ms"] = json!(now_ms());
+                if message.get("t").and_then(Value::as_str) == Some("entry")
+                    && let Some(fields) = message.as_object_mut()
+                {
+                    fields.insert("sent_ms".to_owned(), json!(now_ms()));
                 }
                 sink.send(Message::Text(message.to_string().into()))
                     .await
