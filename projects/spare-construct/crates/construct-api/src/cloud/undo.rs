@@ -55,7 +55,7 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{
-    families, floors, grids, hosting, levels, loading, openings, params, roofs, rooms, sheets,
+    families, floors, grids, hosting, levels, loading, openings, params, roofs, rooms, schedules, sheets,
     views, walls,
 };
 use construct_model::element::Element;
@@ -114,6 +114,7 @@ pub fn is_step(cmd: &str) -> bool {
         || roofs::is_command(cmd)
         || rooms::is_command(cmd)
         || views::is_command(cmd)
+        || schedules::is_command(cmd)
         || sheets::is_command(cmd)
         || is_command(cmd)
 }
@@ -514,6 +515,10 @@ pub async fn apply<T: Txn>(
     }
     // Nor a view without the levels, phases or options it stands on.
     if let Err(why) = views::undo_rules(txn, project, document, &written, whole).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a schedule whose category or fields the document no longer has.
+    if let Err(why) = schedules::undo_rules(txn, project, document, &written).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     // Nor a sheet without its viewports' views, or a view placed twice.

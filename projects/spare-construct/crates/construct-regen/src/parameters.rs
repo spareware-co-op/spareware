@@ -17,7 +17,7 @@
 //! - A recipe argument written `{"wall":"type"}` is filled in the same read with the layers of
 //!   the element's wall type ([`crate::walls`]), so [`recipe_at`] is the one place a recipe that
 //!   reads records is filled.
-//! - Records of kind `type`, [`TABLE_KIND`], `level` and `view` have no shape ([`has_shape`]).
+//! - Records of kind `type`, [`TABLE_KIND`], `level`, `view` and `schedule` have no shape ([`has_shape`]).
 //! - A parameter whose definition carries a formula is worked out whenever it is read, never
 //!   stored: [`Context::worked`] for an element, [`Context::type_worked`] for a type, with
 //!   construct-formulas' `work_out` over the values of the holder's other parameters, in the order
@@ -90,6 +90,7 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_levels::LEVEL_KIND
         && element.kind != construct_views::VIEW_KIND
         && !crate::families::is_record(element)
+        && element.kind != construct_schedules::SCHEDULE_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
 }

@@ -16,8 +16,12 @@
 //! - [`boundary`]: [`Boundary`], [`Segment`], [`Edge`], [`Ring`], [`Corner`]; every check and
 //!   refusal; [`Boundary::profile`] for the builder; the stored and the plain (command) forms.
 //! - [`measure`]: [`area`], [`perimeter`], [`quantities`], [`read_only`], [`layer_read_only`].
+//! - [`shape`]: a sloped floor and slab edges (job 5.2): [`SlopeArrow`], [`Rise`],
+//!   [`EdgeProfile`], [`SlabEdge`], [`Shape`] (a boundary with both, checked), [`EdgePiece`],
+//!   [`TopArea`].
 //! - [`floor`]: the element record and its recipe ([`floor_record`], [`floor_recipe`],
-//!   [`boundary_of`], [`with_boundary`], [`filled`]).
+//!   [`shaped_recipe`], [`shape_of`], [`boundary_of`], [`with_boundary`], [`with_slope`],
+//!   [`with_edges`], [`filled`]).
 //! - [`defaults`]: [`default_floors`], [`default_floor_types`].
 //! - [`error`]: [`SlabError`], every refusal as a value.
 //!
@@ -27,10 +31,15 @@
 //! construct-types, construct-params, construct-materials, construct-levels, construct-model,
 //! construct-categories and kit-core.
 //!
+//! A floor's sketch may hold constraints, solved by construct-solver as a family recipe's are
+//! ([`boundary`]); a floor may slope and carry slab edges ([`shape`]); the decisions are in the
+//! note CON-A4-F4-P1-floor-slope-and-edges.
+//!
 //! Interim: an arc edge is held in the data and refused ([`SlabError::Arc`]) because the engine
 //! seam's extrusion takes polygons only; it is built once the kernel's exact sweep takes arcs
-//! (geom-sweep, chapter 13.4). Not here, with their places kept: sloped floors and slab edges
-//! (job 5.2, this crate), floors by picking walls, openings by shafts (job 4.2), structural decks.
+//! (geom-sweep, chapter 13.4). Not here, with their places kept: slab edges under a sloped floor
+//! ([`SlabError::SlopeWithEdges`]), floors by picking walls, openings by shafts (job 4.2),
+//! structural decks.
 
 pub mod boundary;
 pub mod defaults;
@@ -39,19 +48,24 @@ pub mod floor;
 pub mod floor_type;
 pub mod layers;
 pub mod measure;
+pub mod shape;
 pub mod stored;
 
 pub use boundary::{BOUNDARY_VERSION, Boundary, Corner, Edge, Ring, Segment};
+pub use construct_solver::{ConstraintId, Point};
 pub use defaults::{DefaultFloor, default_floor_types, default_floors};
 pub use error::SlabError;
 pub use floor::{
-    BOUNDARY_ARG, FLOOR_KIND, FLOOR_OP, LAYERS_ARG, LOOPS_ARG, OP_VERSION, boundary_of, filled,
-    floor_recipe, floor_record, is_floor, layers_arg, reads_layers, with_boundary,
+    BOUNDARY_ARG, EDGES_ARG, FLOOR_KIND, FLOOR_OP, LAYERS_ARG, LOOPS_ARG, OP_VERSION,
+    SHAPED_VERSION, SLOPE_ARG, TOPS_ARG, boundary_of, filled, floor_recipe, floor_record, is_floor,
+    layers_arg, reads_layers, shape_of, shaped_recipe, with_boundary, with_edges, with_slope,
 };
 pub use floor_type::{layers_of, new_floor_type, with_layers};
 pub use layers::{FloorLayer, Function, Layers, MOST_TOTAL};
 pub use measure::{
-    AREA, LayerQuantity, MASS, PERIMETER, Quantities, THICKNESS, VOLUME, area, layer_read_only,
-    perimeter, quantities, read_only,
+    AREA, EdgeQuantity, HIGHEST, LOWEST, LayerQuantity, MASS, PERIMETER, Quantities,
+    ShapeQuantities, THICKNESS, TOP_AREA, VOLUME, area, layer_read_only, perimeter, quantities,
+    read_only, shape_quantities, shape_read_only,
 };
+pub use shape::{EdgePiece, EdgeProfile, Rise, Shape, SlabEdge, SlopeArrow, TopArea};
 pub use stored::{FORMAT_VERSION, OWNER};

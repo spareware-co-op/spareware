@@ -828,9 +828,28 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(cloud::rooms::read_rooms(&mut snapshot, project, model).await?)
     }
 
+    /// The problems a model holds now (a room not enclosed, two walls overlapping), worked out
+    /// from the document as it stands, never stored: by kind, then by the elements involved.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn warnings(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::warnings::WarningsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::warnings::read_warnings(&mut snapshot, project, model).await?)
+    }
+
     /// The recipe an element is built from now, each argument that reads a record filled (its
-    /// parameters, its wall type's layers, its top tie), as the regenerator fills it
-    /// ([`levels::recipe_at`]), with how far the log had got when it was read: a page builds an
+    /// parameters, its wall type's layers, its top tie) and a layered wall's joints with the walls
+    /// it meets, as the regenerator fills it (`construct_regen::joins::recipe_at`), with how far
+    /// the log had got when it was read: a page builds an
     /// element whose recipe reads records from this, and compares what it built with the server's
     /// bodies from that point of the log on. A recipe that cannot be filled is the build failure,
     /// in its words.
@@ -893,7 +912,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             });
         }
         Ok(
-            match levels::recipe_at(&mut snapshot, project, model, &record, at).await? {
+            match construct_regen::joins::recipe_at(&mut snapshot, project, model, &record, at)
+                .await?
+            {
                 Ok(recipe) => {
                     let cut_by = if construct_regen::floor_plan::is_floor(&record.recipe) {
                         Some(
@@ -1017,6 +1038,73 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)?;
         let shaped = shaped_of(&mut snapshot, project, model).await?;
         cloud::views::listing_of(&world, view, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
+    /// A model's schedules: each with its category, fields, filters and sorting, by name. Read
+    /// only; schedules are made and changed by the schedule commands.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a schedule record cannot be read, saying why.
+    pub async fn schedules(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::schedules::ScheduleSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::schedules::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::schedules::summaries(&world))
+    }
+
+    /// The categories a schedule may list (what a person chooses from when making one).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a schedule record cannot be read, saying why.
+    pub async fn schedule_categories(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::schedules::ListableView>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::schedules::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::schedules::listable(&world))
+    }
+
+    /// One schedule with its rows: a live query over the elements as they are now (a row for
+    /// each element of its category that passes its filters, in its sorting), worked out on each
+    /// read and stored nowhere.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// schedule; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn schedule(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        schedule: &Id,
+    ) -> Result<cloud::schedules::ScheduleTable, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::schedules::read_table(&mut snapshot, project, model, schedule)
+            .await?
             .map_err(Refusal::Bad)?
             .ok_or(Refusal::NotFound)
     }

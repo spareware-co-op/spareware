@@ -10,13 +10,26 @@
 //!   (the level rule: its built row holds the height its top face stands at). A layer of no
 //!   thickness (a membrane) is a face between its neighbours and has no solid. Each solid is the
 //!   engine's, so the kernel's checker has passed it, as the seam's contract says.
+//! - A sloped floor (job 5.2): the same, each layer's bottom face the floor's loops lifted onto
+//!   the sloped plane (every corner at its top's height, [`FloorPlan::top_at`], let down by the
+//!   layer's depth: grid points on one plane, as construct-slabs' `Shape` checked) and lofted to
+//!   the same loop moved straight up by its thickness ([`Engine::loft`], every wall upright and
+//!   flat), each hole cut through by its own loft ([`Engine::subtract`]); so the layers are plumb
+//!   and their side faces upright. The engine answers an extrusion of a profile that is not level
+//!   with a curved surface, so a sloped layer is not asked for as one.
+//! - Slab edges (job 5.2): each piece of [`FloorPlan::edges`], a downturn as its foot extruded
+//!   straight up to the floor's underside ([`Engine::extrude`]) and a thickened edge as its foot
+//!   lofted to its top ([`Engine::loft`]: every wall of it flat), united in order with the lowest
+//!   layer's solid ([`Engine::unite`], the engine's flat-faced boolean), so the lowest layer's
+//!   part holds them in its material. A union the engine does not answer is the engine's refusal,
+//!   never a floor built without its edges.
 //! - Names (chapter 20.2), under the recipe's operation as every shape's are, so a rebuilt or
 //!   reshaped floor keeps them: `top` and `bottom`, the floor's outer faces; `face.<k>` between
 //!   layer `k - 1` and layer `k`, for `k` from 1, as a layered wall's faces between its layers;
-//!   and `side.<edge ID>` for the side each edge of each loop sweeps, named by the edge's own
+//!   `side.<edge ID>` for the side each edge of each loop sweeps, named by the edge's own
 //!   permanent ID (construct-slabs' `Segment`), so a boundary drawn again with the same edges keeps
-//!   its sides' names. Each layer's piece of a side carries the floor's name for it, as a layered
-//!   wall's pieces of its ends do.
+//!   its sides' names; and `edge.<edge ID>` for each slab edge. Each layer's piece of a side
+//!   carries the floor's name for it, as a layered wall's pieces of its ends do.
 //! - Openings and shafts (job 4.2, CON-A4-F3-P2): each floor opening hosted in it and each shaft
 //!   the regenerator hands it (one passing wholly through its thickness) is one more hole in every
 //!   layer's profile, so it is cut through every layer by the floor's own extrusion, with no
@@ -24,9 +37,13 @@
 //!   the floor's own boundary checks with them as more holes: each refusal names the opening or the
 //!   shaft and says why, before the engine is asked, and [`fits`] asks the same without building.
 //!   A shaft beside the floor in plan is passed over. Their sides are named as a tool's faces,
-//!   `tool(<key>).side.<i>`, under the floor's operation.
+//!   `tool(<key>).side.<i>`, under the floor's operation. A sloped floor or one with slab edges
+//!   that an opening or a shaft would cut is refused by name instead (job 5.2: the cutters are
+//!   level outlines and the slope's layers and the edges' pieces are not, so a cut through them is
+//!   not built until it is built exactly; [`SHAPED_FLOOR_CUT`], the interim register's row).
 //! - The body's bytes: what the engine was asked for each layer (its function, its material, its
-//!   outer loop and holes and the vector, in the engine's steps), and the keys of what was cut.
+//!   outer loop and holes and the vector, in the engine's steps, and the lowest layer's slab
+//!   edges, each its extrusion or its loft), and the keys of what was cut.
 //! - Displays: levels 0 and 1 the same mesh, its openings cut, the layers' meshes one
 //!   after another, in whole millimetres, each coordinate the nearest millimetre to the engine's
 //!   grid point (a corner at 12.5 mm is not on one); a level that rounded anything strays by 1 mm.
@@ -48,7 +65,7 @@ use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
 use construct_openings::{Cutter, OpeningError, fit_in_floor, is_floor_opening, is_shaft};
-use engine_geometry::value::engine::{DisplayMesh, Engine, Profile};
+use engine_geometry::value::engine::{DisplayMesh, Engine, Profile, Section};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
@@ -72,6 +89,10 @@ struct FloorCut {
     op: OpId,
     ring: Vec<[i64; 2]>,
 }
+
+/// The code of the refusal of an opening or a shaft that would cut a sloped floor or one with slab
+/// edges (the interim register's row).
+pub const SHAPED_FLOOR_CUT: &str = "ShapedFloorCut";
 
 /// What the floor's refusals call it: the builder is handed its recipe, not its record.
 const THIS_FLOOR: &str = "its floor";
@@ -161,6 +182,32 @@ fn floor_cuts(
         .map(|hole| engine_ring(hole, units))
         .collect::<Result<Vec<_>, _>>()?;
     let cutting = fit_in_floor(THIS_FLOOR, &outer, &holes, &cutters).map_err(|e| refusal(&e))?;
+    // Job 5.2: a cutter is a level outline cut straight through every layer, and a sloped floor's
+    // layers and a slab edge's piece are not level: a cut through either is refused by name, never
+    // built wrongly, until it is built exactly.
+    if let Some(at) = cutting.first() {
+        let shaped = if !plan.tops.is_empty() {
+            Some("a slope")
+        } else if !plan.edges.is_empty() {
+            Some("slab edges")
+        } else {
+            None
+        };
+        if let (Some(shaped), Some(cutter)) = (shaped, cutters.get(*at)) {
+            return Err(fault(
+                SHAPED_FLOOR_CUT,
+                format!(
+                    "{}: it would be cut through a floor with {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: take {} away, or put the opening or shaft elsewhere",
+                    cutter.element,
+                    if shaped == "a slope" {
+                        "the slope"
+                    } else {
+                        "the slab edges"
+                    }
+                ),
+            ));
+        }
+    }
     let mut cuts = Vec::with_capacity(cutting.len());
     for at in cutting {
         let (Some(h), Some(cutter)) = (hosted.get(at), cutters.get(at)) else {
@@ -202,6 +249,14 @@ struct AskedLayer {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     holes: Vec<Vec<[i64; 3]>>,
     by: [i64; 3],
+    /// A sloped layer's: its outer loop lofted from its bottom face to its top (`extrude` to it
+    /// moved by `by`), each hole cut through as its loop lofted from a step under the bottom face
+    /// to a step over the top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lofted: Option<bool>,
+    /// The slab edges united with the lowest layer; none on any other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    edges: Vec<AskedEdge>,
 }
 
 /// The low and high grid points a mesh reaches, in the engine's steps.
@@ -216,6 +271,9 @@ fn roles(plan: &FloorPlan) -> Vec<String> {
     }
     for corner in plan.loops.iter().flatten() {
         roles.push(format!("side.{}", corner.id));
+    }
+    for edge in &plan.edges {
+        roles.push(format!("edge.{}", edge.id));
     }
     roles
 }
@@ -302,6 +360,132 @@ pub(super) fn ring(corners: &[PlanCorner], units: Units, z: i64) -> Result<Vec<P
         .collect()
 }
 
+/// Loop `at` of the plan as grid points of the engine, each corner `depth` (grid steps, at or
+/// below zero) under the top face there: on a flat floor all at `depth`, on a sloped one on the
+/// plane through the corners' tops let down by `depth`, a plane still.
+fn lifted_ring(
+    plan: &FloorPlan,
+    at: usize,
+    corners: &[PlanCorner],
+    units: Units,
+    depth: i64,
+) -> Result<Vec<P3>, GeometryError> {
+    corners
+        .iter()
+        .enumerate()
+        .map(|(k, corner)| {
+            let [x, y] = corner.at;
+            let z = plan.top_at(at, k).checked_add(depth).ok_or_else(too_big)?;
+            P3::new(units.from_q0(x)?, units.from_q0(y)?, units.from_q0(z)?).map_err(|_| too_big())
+        })
+        .collect()
+}
+
+/// `points` each moved by `by` (engine steps).
+fn shifted(points: &[P3], by: [i64; 3]) -> Result<Vec<P3>, GeometryError> {
+    points
+        .iter()
+        .map(|p| {
+            let at = |c: i64, d: i64| c.checked_add(d).ok_or_else(too_big);
+            P3::new(
+                at(p.x.get(), by[0])?,
+                at(p.y.get(), by[1])?,
+                at(p.z.get(), by[2])?,
+            )
+            .map_err(|_| too_big())
+        })
+        .collect()
+}
+
+/// A sloped layer: its outer loop on its sloped bottom face lofted to the same loop moved up by
+/// `by` ([`Engine::loft`]: every wall upright and flat, both caps on the sloped planes), less each
+/// hole lofted the same way from one grid step under the bottom face to one over the top
+/// ([`Engine::subtract`]), so no face of a cutter lies on a face of the layer. An extrusion of a
+/// profile that is not level is not used: the engine answers it with a curved surface.
+fn sloped_layer<E: Engine>(
+    engine: &mut E,
+    outer: &[P3],
+    holes: &[Vec<P3>],
+    by: [i64; 3],
+) -> Result<E::Solid, GeometryError> {
+    let up = |points: &[P3], d: [i64; 3]| shifted(points, d).map(|corners| Section { corners });
+    let mut solid = engine
+        .loft(&[up(outer, [0, 0, 0])?, up(outer, by)?])
+        .map_err(from_engine)?;
+    for hole in holes {
+        let over = by[2].checked_add(1).ok_or_else(too_big)?;
+        let cutter = engine
+            .loft(&[up(hole, [0, 0, -1])?, up(hole, [0, 0, over])?])
+            .map_err(from_engine)?;
+        solid = engine.subtract(&solid, &cutter).map_err(from_engine)?;
+    }
+    Ok(solid)
+}
+
+/// Four corners of a slab edge's plan as grid points of the engine.
+fn corners(plan: &[[i64; 3]; 4], units: Units) -> Result<Vec<P3>, GeometryError> {
+    plan.iter()
+        .map(|&[x, y, z]| {
+            P3::new(units.from_q0(x)?, units.from_q0(y)?, units.from_q0(z)?).map_err(|_| too_big())
+        })
+        .collect()
+}
+
+/// A slab edge as the engine was asked for it: a downturn's foot extruded up (`extrude`, `by`),
+/// a thickened edge's foot lofted to its top (`loft`).
+#[derive(Serialize)]
+struct AskedEdge {
+    id: String,
+    kind: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    extrude: Vec<[i64; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    by: Option<[i64; 3]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    loft: Vec<Vec<[i64; 3]>>,
+}
+
+/// Each slab edge of `plan` as a solid united with `layer` (the lowest layer's solid), in order,
+/// each asked as `asked` records.
+fn with_edges<E: Engine>(
+    engine: &mut E,
+    plan: &FloorPlan,
+    units: Units,
+    mut layer: E::Solid,
+    asked: &mut Vec<AskedEdge>,
+) -> Result<E::Solid, GeometryError> {
+    for edge in &plan.edges {
+        let (top, foot) = (corners(&edge.top, units)?, corners(&edge.foot, units)?);
+        let mut entry = AskedEdge {
+            id: edge.id.clone(),
+            kind: edge.kind.clone(),
+            extrude: Vec::new(),
+            by: None,
+            loft: Vec::new(),
+        };
+        let piece = if edge.top.map(|p| [p[0], p[1]]) == edge.foot.map(|p| [p[0], p[1]]) {
+            let rise = edge.top[0][2]
+                .checked_sub(edge.foot[0][2])
+                .ok_or_else(too_big)?;
+            let by = [0, 0, units.from_q0(rise)?];
+            entry.extrude = as_steps(&foot);
+            entry.by = Some(by);
+            let profile = Profile {
+                outer: foot,
+                holes: Vec::new(),
+            };
+            engine.extrude(&profile, by).map_err(from_engine)?
+        } else {
+            let sections = [Section { corners: foot }, Section { corners: top }];
+            entry.loft = sections.iter().map(|s| as_steps(&s.corners)).collect();
+            engine.loft(&sections).map_err(from_engine)?
+        };
+        asked.push(entry);
+        layer = engine.unite(&layer, &piece).map_err(from_engine)?;
+    }
+    Ok(layer)
+}
+
 impl<E: Engine> Kernel<E> {
     /// Builds a filled floor recipe with the openings and shafts `hosted` cut through every layer,
     /// as the module header says.
@@ -362,14 +546,18 @@ impl<E: Engine> Kernel<E> {
                 .engine
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
-            for (_, layer, bottom, top) in plan.slabs() {
-                let z = units.from_q0(bottom)?;
+            let slabs = plan.slabs();
+            let last = slabs.len().saturating_sub(1);
+            let sloped = plan.tops.iter().flatten().any(|&z| z != 0);
+            for (n, (_, layer, bottom, top)) in slabs.into_iter().enumerate() {
                 let up = units.from_q0(top.saturating_sub(bottom))?;
-                let outer = ring(plan.outer(), units, z)?;
+                let z = units.from_q0(bottom)?;
+                let outer = lifted_ring(&plan, 0, plan.outer(), units, bottom)?;
                 let mut holes = plan
                     .holes()
                     .iter()
-                    .map(|hole| ring(hole, units, z))
+                    .enumerate()
+                    .map(|(k, hole)| lifted_ring(&plan, k.saturating_add(1), hole, units, bottom))
                     .collect::<Result<Vec<_>, _>>()?;
                 for cut in &cuts {
                     let mut hole = Vec::with_capacity(cut.ring.len());
@@ -379,17 +567,27 @@ impl<E: Engine> Kernel<E> {
                     holes.push(hole);
                 }
                 let by = [0, 0, up];
-                asked.layers.push(AskedLayer {
+                let mut entry = AskedLayer {
                     function: layer.function.clone(),
                     material: layer.material.clone(),
                     extrude: as_steps(&outer),
                     holes: holes.iter().map(|h| as_steps(h)).collect(),
                     by,
-                });
-                let profile = Profile { outer, holes };
-                let solid = engine
-                    .extrude(&profile, by)
-                    .map_err(|e| named(from_engine(e)))?;
+                    lofted: sloped.then_some(true),
+                    edges: Vec::new(),
+                };
+                let mut solid = if sloped {
+                    sloped_layer(&mut *engine, &outer, &holes, by)?
+                } else {
+                    let profile = Profile { outer, holes };
+                    engine
+                        .extrude(&profile, by)
+                        .map_err(|e| named(from_engine(e)))?
+                };
+                if n == last {
+                    solid = with_edges(&mut *engine, &plan, units, solid, &mut entry.edges)?;
+                }
+                asked.layers.push(entry);
                 let shown = engine.mesh(&solid).map_err(|e| named(from_engine(e)))?;
                 let appended = append(&mut mesh, &shown, units, &mut extent)?;
                 rounded |= appended.rounded;
