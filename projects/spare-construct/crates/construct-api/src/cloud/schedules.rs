@@ -348,7 +348,8 @@ pub fn listable(world: &World) -> Vec<ListableView> {
 
 /// The facts a schedule reads of every element with a category: its name, its type's name, its
 /// parameter values and the read-only quantities the product works out of it (a floor's and a
-/// roof's from their types and outlines, a room's from its loop), each exact and shown in the
+/// roof's from their types and outlines, a wall's from its line, layers, openings and joints, a
+/// room's from its loop), each exact and shown in the
 /// document's units. Worked out from the records as they are, so the same call after an edit
 /// gives the new facts.
 ///
@@ -387,30 +388,44 @@ pub async fn subjects<R: Reader>(
             Vec::new()
         };
         let mut readings = BTreeMap::new();
-        if let Ok(view) = context.view_cut(record, ty.as_ref(), &cuts) {
-            for row in view.parameters {
-                let Some(value) = row.value.as_deref().and_then(Value::from_stored) else {
+        // A wall's length, area and volume, worked out of the document as it stands now.
+        let wall_rows = construct_regen::wall_measure::read_only_view(
+            reader,
+            project,
+            document,
+            record,
+            &context.units,
+        )
+        .await?;
+        let rows = context
+            .view_cut(record, ty.as_ref(), &cuts)
+            .map(|view| view.parameters)
+            .unwrap_or_default();
+        for row in rows.into_iter().chain(wall_rows) {
+            let Some(value) = row.value.as_deref().and_then(Value::from_stored) else {
+                continue;
+            };
+            let field = if row.from == construct_regen::slabs::READ_ONLY {
+                if !QUANTITIES
+                    .iter()
+                    .any(|q| q.name == row.name && q.id == row.id)
+                {
                     continue;
-                };
-                let field = if row.from == construct_regen::slabs::READ_ONLY {
-                    if !QUANTITIES.iter().any(|q| q.name == row.name) {
-                        continue;
-                    }
-                    Field::Quantity(row.name)
-                } else {
-                    match Id::parse(&row.id) {
-                        Ok(id) => Field::Parameter(id),
-                        Err(_) => continue,
-                    }
-                };
-                readings.insert(
-                    field.key(),
-                    Reading {
-                        value,
-                        shown: row.shown.unwrap_or_default(),
-                    },
-                );
-            }
+                }
+                Field::Quantity(row.name)
+            } else {
+                match Id::parse(&row.id) {
+                    Ok(id) => Field::Parameter(id),
+                    Err(_) => continue,
+                }
+            };
+            readings.insert(
+                field.key(),
+                Reading {
+                    value,
+                    shown: row.shown.unwrap_or_default(),
+                },
+            );
         }
         if construct_regen::rooms::is_room(record) {
             room_readings(
