@@ -74,8 +74,8 @@ use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
-use crate::stair_plan::{self, PieceSolid, StairPlan};
 use crate::seating;
+use crate::stair_plan::{self, PieceSolid, StairPlan};
 use crate::wall_plan::{self, Layered};
 use construct_families::{Limits, Seat, extents};
 use construct_model::geometry::{
