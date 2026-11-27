@@ -1,0 +1,459 @@
+{
+  "format": 1,
+  "id": "library.plumbing.shower-tray",
+  "name": "Shower tray",
+  "category": 1900,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.plumbing.shower-tray.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.plumbing.shower-tray.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.plumbing.shower-tray.height",
+        "name": "Tray height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:384000"
+    },
+    {
+      "key": "lip",
+      "definition": {
+        "id": "library.plumbing.shower-tray.lip",
+        "name": "Lip width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:320000"
+    },
+    {
+      "key": "floor",
+      "definition": {
+        "id": "library.plumbing.shower-tray.floor",
+        "name": "Tray floor thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:160000"
+    },
+    {
+      "key": "fixture_material",
+      "definition": {
+        "id": "library.plumbing.shower-tray.fixture_material",
+        "name": "Fixture material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:steel-stainless-aisi-301"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "block1",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "block2",
+          "x": "length:q0:2880000",
+          "y": "length:q0:-2880000"
+        },
+        {
+          "key": "block3",
+          "x": "length:q0:2880000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "block4",
+          "x": "length:q0:-2880000",
+          "y": "length:q0:2880000"
+        },
+        {
+          "key": "recess1",
+          "x": "length:q0:-2560000",
+          "y": "length:q0:-2560000"
+        },
+        {
+          "key": "recess2",
+          "x": "length:q0:2560000",
+          "y": "length:q0:-2560000"
+        },
+        {
+          "key": "recess3",
+          "x": "length:q0:2560000",
+          "y": "length:q0:2560000"
+        },
+        {
+          "key": "recess4",
+          "x": "length:q0:-2560000",
+          "y": "length:q0:2560000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "block_s",
+          "start": "block1",
+          "end": "block2"
+        },
+        {
+          "key": "block_e",
+          "start": "block2",
+          "end": "block3"
+        },
+        {
+          "key": "block_n",
+          "start": "block3",
+          "end": "block4"
+        },
+        {
+          "key": "block_w",
+          "start": "block4",
+          "end": "block1"
+        },
+        {
+          "key": "recess_s",
+          "start": "recess1",
+          "end": "recess2"
+        },
+        {
+          "key": "recess_e",
+          "start": "recess2",
+          "end": "recess3"
+        },
+        {
+          "key": "recess_n",
+          "start": "recess3",
+          "end": "recess4"
+        },
+        {
+          "key": "recess_w",
+          "start": "recess4",
+          "end": "recess1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "block4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess1",
+          "line": "axis",
+          "length": "width / 2 - lip",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess1",
+          "line": "base",
+          "length": "depth / 2 - lip",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess2",
+          "line": "axis",
+          "length": "width / 2 - lip",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess2",
+          "line": "base",
+          "length": "depth / 2 - lip",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess3",
+          "line": "axis",
+          "length": "width / 2 - lip",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess3",
+          "line": "base",
+          "length": "depth / 2 - lip",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess4",
+          "line": "axis",
+          "length": "width / 2 - lip",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "recess4",
+          "line": "base",
+          "length": "depth / 2 - lip",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "block",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "block_s",
+        "block_e",
+        "block_n",
+        "block_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height",
+      "subcategory": 1900,
+      "material": {
+        "parameter": "fixture_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": false,
+        "fine": false
+      }
+    },
+    {
+      "key": "recess",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "recess_s",
+        "recess_e",
+        "recess_n",
+        "recess_w"
+      ],
+      "holes": [],
+      "start": "floor",
+      "end": "height + 10 mm",
+      "subcategory": 1900,
+      "material": {
+        "parameter": "fixture_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": false,
+        "fine": false
+      }
+    },
+    {
+      "key": "tray",
+      "op": "subtract",
+      "target": "block",
+      "tool": "recess",
+      "subcategory": 1900,
+      "material": {
+        "parameter": "fixture_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "block_s",
+        "block_e",
+        "block_n",
+        "block_w"
+      ],
+      "subcategory": 1900,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_floor",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "recess_s",
+        "recess_e",
+        "recess_n",
+        "recess_w"
+      ],
+      "subcategory": 1900,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth"
+    ],
+    "rows": [
+      {
+        "key": "t900x900",
+        "name": "900 x 900",
+        "values": [
+          "length:q0:5760000",
+          "length:q0:5760000"
+        ]
+      },
+      {
+        "key": "t1000x1000",
+        "name": "1000 x 1000",
+        "values": [
+          "length:q0:6400000",
+          "length:q0:6400000"
+        ]
+      },
+      {
+        "key": "t1200x900",
+        "name": "1200 x 900",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:5760000"
+        ]
+      }
+    ]
+  }
+}

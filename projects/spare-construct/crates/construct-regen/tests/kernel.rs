@@ -1125,6 +1125,11 @@ fn a_family_cuts_every_layer_and_stands_in_its_opening() {
 }
 
 #[test]
+fn the_starter_content_builds_and_hangs_without_cutting() {
+    kernel_suite::the_starter_content_builds_and_hangs_without_cutting(|| Pieces);
+}
+
+#[test]
 fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
     kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(|| Pieces);
 }

@@ -48,6 +48,11 @@
 //! into the recipe a builder is handed, derived and never stored). Its place is to the nearest
 //! millimetre, as a placement holds it; the opening its wall cuts is cut where the family then
 //! is, so the two agree exactly.
+//!
+//! A family whose recipe is hosted on a face (a wall cabinet, a basin: [`families::sits_on_face`])
+//! is seated on that side's face instead: its origin on the face, so its back is against the wall
+//! and its `+y` out into the room, and the wall cuts nothing for it. A family that is hosted on
+//! nothing is not seated here: it stands where its own record puts it ([`crate::families`]).
 
 use crate::families;
 use crate::wall_plan::{self, Layered};
@@ -379,7 +384,12 @@ pub fn seat(
                 ),
             ));
         }
-        let (at, turn) = family_on_layered(host, host_recipe, &role, along, up, &refuse)?;
+        // A family hosted on a face is seated on that face; one that cuts an opening, on the
+        // wall's centre plane. A family the library does not hold is seated as a door is: its
+        // builder refuses it, naming it.
+        let on_face = families::sits_on_face(&*families::baked(), hosted_recipe);
+        let (at, turn) =
+            family_on_layered(host, host_recipe, &role, (along, up), on_face, &refuse)?;
         return Ok((at, families::turned(hosted_recipe, turn)));
     }
     if wall_plan::is_layered(host_recipe) {
@@ -454,18 +464,21 @@ pub fn seat(
 }
 
 /// Where a placed family sits on the side `role` of a layered wall (its filled recipe), `along`
-/// its line from its start to the family's insertion point and `up` from its base, in whole
-/// millimetres in the wall's frame, and how far it is turned: its origin on the wall's centre
-/// plane, its `+y` out of that side, its `+x` a quarter turn clockwise from that (so the family is
-/// turned, never mirrored). Each coordinate is the nearest millimetre, as a placement holds it.
+/// its line from its start to the family's insertion point and `up` from its base (`offsets`), in
+/// whole millimetres in the wall's frame, and how far it is turned: its origin on the wall's
+/// centre plane (a family that cuts an opening) or on the side's face (`on_face`: a family that
+/// hangs against the wall and cuts nothing), its `+y` out of that side, its `+x` a quarter turn
+/// clockwise from that (so the family is turned, never mirrored). Each coordinate is the nearest
+/// millimetre, as a placement holds it.
 fn family_on_layered(
     host: &Element,
     host_recipe: &Recipe,
     role: &FaceName,
-    along: Length,
-    up: Length,
+    offsets: (Length, Length),
+    on_face: bool,
     refuse: &impl Fn(&str, String) -> GeometryError,
 ) -> Result<(Placement, Turn), GeometryError> {
+    let (along, up) = offsets;
     let wall = Layered::of(host_recipe).map_err(|e| refuse(&e.code, e.message))?;
     let axis = wall.plan.axis().ok_or_else(|| {
         refuse(
@@ -492,11 +505,20 @@ fn family_on_layered(
     whole("along", along)?;
     let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
     let (exterior, interior) = wall.outer();
-    // The centre plane, to a whole step (half a step at most from it, far under a millimetre).
-    let centre = exterior
-        .checked_add(interior)
-        .map(|twice| twice.div_euclid(2))
-        .ok_or_else(too_big)?;
+    // Across the wall the origin is on the centre plane, to a whole step (half a step at most
+    // from it, far under a millimetre), or on the face the family hangs against.
+    let centre = if on_face {
+        if role.role == "interior" {
+            interior
+        } else {
+            exterior
+        }
+    } else {
+        exterior
+            .checked_add(interior)
+            .map(|twice| twice.div_euclid(2))
+            .ok_or_else(too_big)?
+    };
     let [ux, uy] = axis.unit();
     let right = [uy, ux.checked_neg().ok_or_else(too_big)?];
     // The exterior is on the line's right as drawn, on its left when the wall is flipped.

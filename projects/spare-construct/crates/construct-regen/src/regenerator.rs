@@ -1060,7 +1060,7 @@ async fn placement_of<R: Reader>(
     let what = hosting::noun(own);
     let hosting = match hosting::read(element) {
         Ok(Some(hosting @ (Hosting::OnFace { .. } | Hosting::InPlan { .. }))) => hosting,
-        Ok(_) => return Ok(Ok((element.placement, None))),
+        Ok(_) => return Ok(standing(element, own)),
         Err(why) => {
             return Ok(Err(GeometryError {
                 code: "BadHost".to_owned(),
@@ -1098,6 +1098,22 @@ async fn placement_of<R: Reader>(
             },
         ),
     )
+}
+
+/// Where an element that is hosted on nothing sits: its own placement, and for a placed family
+/// its recipe as a builder is handed it, turned as its record says it stands
+/// ([`crate::families::Heading`]).
+fn standing(element: &Element, own: &Recipe) -> Result<(Placement, Option<Recipe>), GeometryError> {
+    if !crate::families::is_instance(own) {
+        return Ok((element.placement, None));
+    }
+    let turn = crate::families::Heading::read(element)
+        .and_then(crate::families::Heading::quarter_turn)
+        .map_err(|why| GeometryError {
+            code: "BadTurn".to_owned(),
+            message: format!("family {}: {why}", element.id),
+        })?;
+    Ok((element.placement, Some(crate::families::turned(own, turn))))
 }
 
 /// The elements `listed` as hosted on `host`, of the filled recipe `own`, each with its filled

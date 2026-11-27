@@ -329,6 +329,50 @@ impl WallFrame {
         })
     }
 
+    /// A placed family that hangs against the wall's face, checked to lie along the wall: the
+    /// boxes of its solids, turned as it stands, from where its origin is, must not cross the
+    /// wall's ends. It cuts nothing, so nothing else is asked of it.
+    fn along_the_wall(
+        &self,
+        hosted: &Hosted<'_>,
+        families: &dyn FamilySource,
+        units: Units,
+    ) -> Result<(), GeometryError> {
+        let key = hosted.key;
+        let named = |e: GeometryError| fault(&e.code, format!("family {key}: {}", e.message));
+        let instance = families::Instance::of(hosted.recipe).map_err(named)?;
+        let resolved = families::resolve(families, &instance).map_err(named)?;
+        let boxes = construct_families::extents(
+            &resolved.recipe,
+            &resolved.values,
+            construct_families::Limits::DEFAULT,
+            instance.turn,
+        )
+        .map_err(|e| named(families::evaluation_refused(&resolved.recipe, &e)))?;
+        let a = self.frame.along;
+        let sign = self.unit.get(a).copied().unwrap_or(1);
+        let (mut low, mut high) = (i64::MAX, i64::MIN);
+        for b in &boxes {
+            for edge in [b.low.get(a), b.high.get(a)].into_iter().flatten() {
+                let at = units.from_q0(edge.steps()).map_err(named)?;
+                let along = times(at, sign)?;
+                low = low.min(along);
+                high = high.max(along);
+            }
+        }
+        let origin = self.to_frame([hosted.at.x.get(), hosted.at.y.get()])?;
+        let along = origin.first().copied().unwrap_or_default();
+        let length = self.frame.size.first().copied().unwrap_or_default();
+        let (start, end) = (add(along, low)?, add(along, high)?);
+        if start < 0 || end > length {
+            return Err(fault(
+                "OpeningPastEnd",
+                format!("family {key}: it crosses the wall's end"),
+            ));
+        }
+        Ok(())
+    }
+
     /// A cut's cutter in plan, as the engine is asked for it: its corners at its foot, and the
     /// vector up to its head.
     fn cutter(&self, cut: &Cut) -> Result<(Profile, [i64; 3]), GeometryError> {
@@ -375,8 +419,19 @@ fn cuts(
         ));
     }
     let frame = WallFrame::of(wall, units, &opening::who(first.recipe, first.key))?;
-    let (placed, doors): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) =
-        hosted.iter().partition(|h| families::is_instance(h.recipe));
+    // A family that hangs against the wall's face cuts nothing: it only has to lie along the wall.
+    let (faced, cutting): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) = hosted.iter().partition(|h| {
+        families::is_instance(h.recipe) && families::sits_on_face(families, h.recipe)
+    });
+    for h in faced {
+        frame.along_the_wall(h, families, units)?;
+    }
+    let (placed, doors): (Vec<&Hosted<'_>>, Vec<&Hosted<'_>>) = cutting
+        .into_iter()
+        .partition(|h| families::is_instance(h.recipe));
+    if placed.is_empty() && doors.is_empty() {
+        return Ok(None);
+    }
     let framed = doors
         .into_iter()
         .map(|h| frame.door(h, units))
