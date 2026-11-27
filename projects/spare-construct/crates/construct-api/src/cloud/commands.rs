@@ -8,8 +8,7 @@ use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folde
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
     dimensions, elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms,
-    schedules,
-    sheets, undo, views, walls,
+    schedules, sheets, stairs, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -117,8 +116,8 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
 }
 
 impl<K: Kv, D: Decider> ProjectCommands<K, D> {
-    /// An `element.*` command, after the view, hosting, floor and wall rules of the generic
-    /// commands.
+    /// An `element.*` command, after the view, hosting, floor, wall, roof and stair rules of the
+    /// generic commands.
     async fn element<T: kit_store::Txn>(
         &self,
         staged: &mut T,
@@ -159,6 +158,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = roofs::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = stairs::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         elements::apply(staged, project, context, edit, self.claim_ms).await
     }
 }
@@ -194,6 +196,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || floors::is_command(cmd)
                 || roofs::is_command(cmd)
                 || rooms::is_command(cmd)
+                || stairs::is_command(cmd)
                 || views::is_command(cmd)
                 || schedules::is_command(cmd)
                 || sheets::is_command(cmd)
@@ -261,6 +264,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || floors::is_command(&edit.cmd)
             || roofs::is_command(&edit.cmd)
             || rooms::is_command(&edit.cmd)
+            || stairs::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
             || schedules::is_command(&edit.cmd)
             || sheets::is_command(&edit.cmd)
@@ -324,6 +328,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if roofs::is_command(&edit.cmd) {
             roofs::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if stairs::is_command(&edit.cmd) {
+            stairs::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if views::is_command(&edit.cmd) {
             views::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if schedules::is_command(&edit.cmd) {

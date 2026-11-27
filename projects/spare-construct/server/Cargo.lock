@@ -676,6 +676,7 @@ dependencies = [
  "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-styles",
  "construct-transport",
  "construct-types",
@@ -894,6 +895,7 @@ dependencies = [
  "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-types",
  "construct-views",
  "construct-walls",
@@ -1000,6 +1002,21 @@ dependencies = [
  "construct-model",
  "kit-core",
  "rstar",
+]
+
+[[package]]
+name = "construct-stairs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-roofs",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

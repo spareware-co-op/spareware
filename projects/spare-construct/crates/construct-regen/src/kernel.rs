@@ -26,6 +26,9 @@
 //! - `room`: one solid, its loop with its holes extruded from its base up to its upper limit, in
 //!   the child module `room` (job 5.4); its lengths are construct-params' steps
 //!   ([`crate::room_plan`]).
+//! - `stair`: one solid per piece, each the solid construct-stairs worked out for it (a run's side
+//!   profile lofted across its width, a landing's outline extruded up), in the child module
+//!   `stair` (job 6.7); its points are construct-params' steps ([`crate::stair_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
 //!   place its shape is decided.
@@ -105,6 +108,7 @@ mod layered;
 pub mod opening;
 mod roof;
 mod room;
+mod stair;
 
 pub use opening::Hosted;
 
@@ -680,6 +684,10 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
         let plan = crate::room_plan::RoomPlan::of(recipe)?;
         return room::names(op_id(recipe)?, &plan);
     }
+    if crate::stair_plan::is_stair(recipe) {
+        let plan = crate::stair_plan::StairPlan::of(recipe)?;
+        return stair::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
     }
@@ -867,8 +875,8 @@ impl<E: Engine> Kernel<E> {
         self.band
     }
 
-    /// A floor, a roof or a placed family, each built by its own builder; `None` for any other
-    /// recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
+    /// A floor, a roof, a stair or a placed family, each built by its own builder; `None` for any
+    /// other recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
     fn build_other_kind(
         &self,
         host: &Recipe,
@@ -879,6 +887,9 @@ impl<E: Engine> Kernel<E> {
         }
         if crate::roof_plan::is_roof(host) {
             return Some(self.build_roof(host, hosted.len()));
+        }
+        if crate::stair_plan::is_stair(host) {
+            return Some(self.build_stair(host, hosted.len()));
         }
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));

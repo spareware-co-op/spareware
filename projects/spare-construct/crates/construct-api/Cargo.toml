@@ -25,6 +25,7 @@ cloud = [
     "dep:construct-roofs",
     "dep:construct-rooms",
     "dep:construct-warnings",
+    "dep:construct-stairs",
     "dep:construct-phases",
     "dep:construct-schedules",
     "dep:construct-styles",
@@ -65,6 +66,8 @@ construct-roofs = { path = "../construct-roofs", optional = true }
 construct-rooms = { path = "../construct-rooms", optional = true }
 # The warnings view: construct-warnings works the list out from walls and rooms read as rooms read them.
 construct-warnings = { path = "../construct-warnings", optional = true }
+# The stair commands: construct-stairs checks every stair and lays it out by its rule set.
+construct-stairs = { path = "../construct-stairs", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
 # The schedule commands: construct-schedules checks every schedule and works out its rows.

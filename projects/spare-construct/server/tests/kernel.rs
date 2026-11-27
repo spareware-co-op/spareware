@@ -7,7 +7,8 @@
 //! through the commands and its quantities read back, a sloped floor and one with slab edges built
 //! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
-//! cutting a three-layer wall (job 6.4), and a document of one edition reported,
+//! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
+//! and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -147,6 +148,11 @@ fn a_mono_roof_is_its_layers() {
 #[test]
 fn a_flat_roof_is_its_layers() {
     kernel_suite::a_flat_roof_is_its_layers(engine);
+}
+
+#[test]
+fn a_stair_is_its_pieces() {
+    kernel_suite::a_stair_is_its_pieces(engine);
 }
 
 #[test]
@@ -1221,6 +1227,71 @@ async fn a_roof_drawn_through_commands_is_built_one_solid_per_layer() {
         quantities(&s, &project, &model, "R-900").await["roof.ridge-height"],
         read["roof.ridge-height"]
     );
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+}
+
+/// Through the server's commands on the kernel (job 6.7): a common stairway from level 1 to level 2
+/// (3000 mm) in two runs of 8 risers of 187.5 mm, an L on a 1000 mm landing, built one solid per
+/// piece (each run's profile lofted across its width, reaching under the landing; the landing
+/// extruded), each a part of the display, named by its pieces' faces; turned into a U and widened
+/// it is built again; its quantities read back as on the stand-in; and the whole model rebuilt
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stair_made_through_commands_is_built_one_solid_per_piece() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "stair.create",
+        json!({ "element": "S-900", "level": "1", "top": "2", "start": ["60 m", "0"],
+                "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "left" }] }),
+    )
+    .await;
+    let (shown, names, bounds) = layered(&s, &project, &model, "S-900").await;
+    // 7 treads of 280 mm, the landing to 2960 mm, the second run from 1000 mm to 2960 mm up +y;
+    // the second run's last inner corner is 3000 - 187.5 mm up.
+    assert_eq!(bounds, ([60_000, 0, 0], [62_960, 2960, 2813]));
+    let parts = &shown.display.as_ref().unwrap().parts;
+    assert_eq!(parts.len(), 3);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    for role in [
+        "run.1.tread.7",
+        "run.2.riser.1",
+        "landing.1.top",
+        "run.2.underside",
+    ] {
+        assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
+    }
+    let read = quantities(&s, &project, &model, "S-900").await;
+    assert_eq!(read["stair.risers"].1.as_deref(), Some("16"));
+    assert_eq!(
+        read["stair.riser-height"].0.as_deref(),
+        Some("length:q0:1200000")
+    );
+
+    edit(
+        "stair.runs",
+        json!({ "element": "S-900", "runs": [{}, {}],
+                "landings": [{ "length": "1200 mm", "turn": "back-right" }] }),
+    )
+    .await;
+    edit(
+        "stair.width",
+        json!({ "element": "S-900", "width": "1100 mm" }),
+    )
+    .await;
+    let (_, _, bounds) = layered(&s, &project, &model, "S-900").await;
+    assert_eq!((bounds.0[1], bounds.1[1]), (-1100, 1100), "{bounds:?}");
 
     let before = derived(&store, &project).await;
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());

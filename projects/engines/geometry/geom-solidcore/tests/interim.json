@@ -474,6 +474,35 @@
         "the volume of a room under a roof is not its true volume until it is bounded by the roof (job 6.3)"
       ],
       "replaced_by": "the room's volume as its prism less what lies above a sloped plane, through the engine seam's boolean, once rooms are bounded by floors, ceilings and roofs (job 6.3)"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a stair",
+      "operation": "stair (a filled stair recipe: each run's two sections and each landing's outline and vector)",
+      "answered_by": "one box around every piece, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw each landing as its prism and each run as its side profile cut upright at every corner into quadrilaterals, each a prism across the run, every point the nearest millimetre",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/stairs.rs",
+        "test": "the_stand_in_draws_each_piece"
+      },
+      "known_faults": [
+        "a stair's pieces are not solids on the stand-in's edition, and its displays stray by 1 mm where a point of a run's underside is not on a whole millimetre"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's stair builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::stair, a stair's pieces",
+      "operation": "stair (Kernel: one Engine::loft of each run's side profile from its right-hand side to its left, one Engine::extrude of each landing's outline up by its waist)",
+      "answered_by": "the engine behind the Engine trait, each piece a solid of its own: on the server's kernel setting solidcore's engine, a loft by the engine's own exact rows (each wall a flat face through the sections' grid corners) and an extrusion by the kernel's make.prism; the pieces' meshes put one after another in whole millimetres, each point the nearest millimetre, the stair's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_stair_is_its_pieces"
+      },
+      "known_faults": [
+        "a corner of a run not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
+        "the pieces touch where a run meets a landing and are not united into one body"
+      ],
+      "replaced_by": "the kernel's own exact ruled loft and extrusion (geom-sweep, chapters 13.4 and 13.6) behind the same trait, display meshes on the kernel's grid, and a union of the pieces once the trait's boolean takes touching solids"
     }
   ]
 }

@@ -28,6 +28,13 @@
 //! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
 //! to build (the interim register's row).
 //!
+//! A stair (`stair`) is one box too: the box around every piece ([`crate::stair_plan`]), rounded
+//! outward to whole millimetres, named `box.<role>` for its pieces' faces. Its displays draw each
+//! piece as a part in the stair's material: a landing as its prism, a run as its side profile cut
+//! upright at every corner into quadrilaterals, each a prism across the run, every point the
+//! nearest millimetre, so a page shows the steps on either edition. Interim, as every stand-in
+//! shape: its pieces as solids are the kernel's to build (the interim register's row).
+//!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
@@ -51,6 +58,7 @@ use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
+use crate::stair_plan::{self, PieceSolid, StairPlan};
 use crate::wall_plan::{self, Layered};
 use construct_families::{Limits, extents};
 use construct_model::geometry::{
@@ -590,6 +598,227 @@ fn roof_names(plan: &RoofPlan) -> Vec<FaceName> {
         .collect()
 }
 
+/// The corners of a run's side profile in its own plane: `(a, z)` along the plan axis it runs on
+/// (`x` when every corner has one `y`, else `y`), in grid steps.
+fn profile_in_plane(section: &[[i64; 3]]) -> Result<Vec<[i64; 2]>, GeometryError> {
+    let first = section.first().copied().unwrap_or_default();
+    let along_x = section.iter().all(|p| p[1] == first[1]);
+    let along_y = section.iter().all(|p| p[0] == first[0]);
+    if !(along_x || along_y) {
+        return Err(GeometryError {
+            code: "MissingArgument".to_owned(),
+            message: "a stair's run is profiled in an upright plane along x or y".to_owned(),
+        });
+    }
+    Ok(section
+        .iter()
+        .map(|p| [if along_x { p[0] } else { p[1] }, p[2]])
+        .collect())
+}
+
+/// The height at `a` of the edge from `p` to `q` (`p[0] != q[0]`), in grid steps, to the nearest
+/// step: a display's point, never stored.
+fn height_at(p: [i64; 2], q: [i64; 2], a: i64) -> i64 {
+    let (da, dz) = (
+        i128::from(q[0]).saturating_sub(i128::from(p[0])),
+        i128::from(q[1]).saturating_sub(i128::from(p[1])),
+    );
+    let along = i128::from(a).saturating_sub(i128::from(p[0]));
+    // p.z + dz * along / da, rounded to the nearest step a half up.
+    let num = dz
+        .saturating_mul(along)
+        .saturating_mul(2)
+        .saturating_add(da);
+    let step = num.checked_div_euclid(da.saturating_mul(2)).unwrap_or(0);
+    i64::try_from(i128::from(p[1]).saturating_add(step)).unwrap_or(p[1])
+}
+
+/// A run's side profile cut upright at every corner into strips, each a quadrilateral (its top
+/// and bottom straight across it), as `[(a0, bottom), (a1, bottom), (a1, top), (a0, top)]`.
+fn strips(profile: &[[i64; 2]]) -> Result<Vec<[[i64; 2]; 4]>, GeometryError> {
+    let mut stops: Vec<i64> = profile.iter().map(|p| p[0]).collect();
+    stops.sort_unstable();
+    stops.dedup();
+    let edges: Vec<([i64; 2], [i64; 2])> = profile
+        .iter()
+        .zip(profile.iter().cycle().skip(1))
+        .map(|(p, q)| if p[0] <= q[0] { (*p, *q) } else { (*q, *p) })
+        .filter(|(p, q)| p[0] < q[0])
+        .collect();
+    let mut out = Vec::new();
+    for pair in stops.windows(2) {
+        let (Some(&a0), Some(&a1)) = (pair.first(), pair.get(1)) else {
+            continue;
+        };
+        let across: Vec<([i64; 2], [i64; 2])> = edges
+            .iter()
+            .filter(|(p, q)| p[0] <= a0 && q[0] >= a1)
+            .copied()
+            .collect();
+        let [(p0, q0), (p1, q1)] = across.as_slice() else {
+            return Err(GeometryError {
+                code: "MissingArgument".to_owned(),
+                message: "a stair's run is one strip from its foot to its end".to_owned(),
+            });
+        };
+        let (mut bottom, mut top) = (
+            [height_at(*p0, *q0, a0), height_at(*p0, *q0, a1)],
+            [height_at(*p1, *q1, a0), height_at(*p1, *q1, a1)],
+        );
+        if bottom[0].saturating_add(bottom[1]) > top[0].saturating_add(top[1]) {
+            std::mem::swap(&mut bottom, &mut top);
+        }
+        out.push([[a0, bottom[0]], [a1, bottom[1]], [a1, top[1]], [a0, top[0]]]);
+    }
+    Ok(out)
+}
+
+/// A run's loft drawn as its side profile `right` cut upright at every corner into quadrilaterals
+/// ([`strips`]), each a prism across to `left`, every point put through `near`. The count of its
+/// triangles.
+fn run_strips(
+    mesh: &mut Mesh,
+    right: &[[i64; 3]],
+    left: &[[i64; 3]],
+    near: &mut impl FnMut([i64; 3]) -> [i64; 3],
+) -> Result<usize, GeometryError> {
+    let (Some(r0), Some(l0)) = (right.first(), left.first()) else {
+        return Ok(0);
+    };
+    let across = [l0[0].saturating_sub(r0[0]), l0[1].saturating_sub(r0[1]), 0];
+    let shift = [
+        floor_plan::nearest_mm(across[0]).0,
+        floor_plan::nearest_mm(across[1]).0,
+    ];
+    let along_x = right.iter().all(|p| p[1] == r0[1]);
+    let fixed = if along_x { r0[1] } else { r0[0] };
+    let mut triangles = 0_usize;
+    for strip in strips(&profile_in_plane(right)?)? {
+        let place = |[a, z]: [i64; 2]| {
+            if along_x {
+                [a, fixed, z]
+            } else {
+                [fixed, a, z]
+            }
+        };
+        let mut ring: Vec<[i64; 3]> = strip.iter().map(|c| near(place(*c))).collect();
+        // Faces outward: the ring turns anticlockwise seen from the side across.
+        if dot(newell(&ring), across) < 0 {
+            ring.reverse();
+        }
+        let other: Vec<[i64; 3]> = ring
+            .iter()
+            .map(|p| {
+                [
+                    p[0].saturating_add(shift[0]),
+                    p[1].saturating_add(shift[1]),
+                    p[2],
+                ]
+            })
+            .collect();
+        triangles = triangles.saturating_add(prism(mesh, &ring, &other)?);
+    }
+    Ok(triangles)
+}
+
+/// A stair as one box ([`crate::stair_plan`]): the box around every piece, rounded outward to
+/// whole millimetres, named `box.<role>` for every role its pieces have. Its displays draw each
+/// piece as a part in the stair's material: a landing as the prism it is, a run as its side
+/// profile cut upright at every corner into quadrilaterals, each a prism across its width, every
+/// point the nearest millimetre, so a page shows the steps on either edition; its body is the one
+/// box. Its displays stray by 1 mm where a point was rounded.
+fn stair(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = StairPlan::of(recipe)?;
+    let (lo, hi) = plan.extent();
+    let min = lo.map(floor_plan::floor_mm);
+    let max = hi.map(floor_plan::ceil_mm);
+    let mut rounded = false;
+    let mut near = |p: [i64; 3]| {
+        p.map(|c| {
+            let (mm, exact) = floor_plan::nearest_mm(c);
+            rounded |= !exact;
+            mm
+        })
+    };
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut first_outline = Vec::new();
+    for piece in &plan.pieces {
+        let outline: Vec<[i64; 2]> = piece
+            .plan
+            .iter()
+            .map(|&[x, y]| {
+                let [x, y, _] = near([x, y, 0]);
+                [x, y]
+            })
+            .collect();
+        if first_outline.is_empty() {
+            first_outline.clone_from(&outline);
+        }
+        let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+        let triangles = match &piece.solid {
+            PieceSolid::Extrude { profile, by } => {
+                let low: Vec<[i64; 3]> = profile.iter().map(|p| near(*p)).collect();
+                let high: Vec<[i64; 3]> = profile
+                    .iter()
+                    .map(|p| {
+                        near([
+                            p[0].saturating_add(by[0]),
+                            p[1].saturating_add(by[1]),
+                            p[2].saturating_add(by[2]),
+                        ])
+                    })
+                    .collect();
+                prism(&mut mesh, &low, &high)?
+            }
+            PieceSolid::Loft {
+                sections: [right, left],
+            } => run_strips(&mut mesh, right, left, &mut near)?,
+        };
+        parts.push(Part {
+            material: plan.material.clone(),
+            function: "structure".to_owned(),
+            triangles: [start, part_count(triangles)?],
+            outline,
+        });
+    }
+    let body = FloorBody {
+        kind: "stair",
+        min,
+        max,
+    };
+    let deviation = i64::from(rounded);
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: first_outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: stair_names(&plan),
+        displays,
+    })
+}
+
+/// A stair's face names: `box.<role>` for each of its pieces' roles, in order.
+fn stair_names(plan: &StairPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// A floor's face names: `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each
 /// loop, in loop order.
 fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
@@ -855,6 +1084,9 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     if room_plan::is_room(recipe) {
         return Ok(room_names(&RoomPlan::of(recipe)?));
     }
+    if stair_plan::is_stair(recipe) {
+        return Ok(stair_names(&StairPlan::of(recipe)?));
+    }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
     } else {
@@ -998,6 +1230,9 @@ impl Geometry for Boxes {
         }
         if room_plan::is_room(recipe) {
             return room(recipe);
+        }
+        if stair_plan::is_stair(recipe) {
+            return stair(recipe);
         }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
