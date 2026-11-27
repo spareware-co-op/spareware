@@ -27,6 +27,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .stack-log { margin: 0; list-style: none; font-size: 12px; color: var(--ink-2); }
 .dw .stack-ghost { pointer-events: none; }
 .dw .element { cursor: move; }
+/* Words drawn with an element (a door's or a window's name above it, who is editing it) are not the
+   element: a click on them goes to what is drawn under them, as a room's tag and a slope arrow's
+   heights already let it. A window's name can lie over a floor beside its wall, and how far it
+   reaches depends on the browser's font, so a click meant for the floor must not pick the window. */
+.dw .element text { pointer-events: none; }
 .dw .claim.mine { fill: none; stroke: var(--success); }
 /* A layered wall: each layer in its material's cut colour (set on the part, from the server's
    materials), a neutral fill for a material not listed, and the wall's outline over them. */
