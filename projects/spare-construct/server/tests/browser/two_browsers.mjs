@@ -27,6 +27,11 @@ async function signIn(person, blocked) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (blocked) await context.route(blocked, (route) => route.abort());
   const page = await context.newPage();
+  // CPU_THROTTLE=4 makes every page four times slower, to bring out what a slow runner shows.
+  if (process.env.CPU_THROTTLE) {
+    const session = await context.newCDPSession(page);
+    await session.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_THROTTLE) });
+  }
   page.on('pageerror', (e) => {
     console.error(`${person}'s page: ${e}`);
     process.exit(1);
@@ -147,13 +152,20 @@ const toAnna = await anna.evaluate(() => window.spare.latencies);
 console.log(`      Anna to Ben: ${stats(toBen)}`);
 console.log(`      Ben to Anna: ${stats(toAnna)}`);
 // Where the slowest edits spent their time, so a miss says which part to look at.
-const journeys = [
-  ...(await ben.evaluate(() => window.spare.journeys)),
-  ...(await anna.evaluate(() => window.spare.journeys)),
-];
+// Each also says what its page was doing from the orderer's stamp until its handler ran.
+const withBusy = () =>
+  window.spare.journeys.map((j) => ({ ...j, busy: window.spare.busyIn(j.orderer_ms, j.arrived_ms) }));
+const journeys = [...(await ben.evaluate(withBusy)), ...(await anna.evaluate(withBusy))];
 const took = (j) => j.to_server + j.to_page + j.to_screen;
 for (const journey of journeys.sort((a, b) => took(b) - took(a)).slice(0, 3)) {
-  console.log(`      slowest: ${took(journey)} ms, ${JSON.stringify(journey)}`);
+  const { busy, orderer_ms, sent_ms, got_ms, arrived_ms, ...times } = journey;
+  console.log(`      slowest: ${took(journey)} ms, ${JSON.stringify(times)}`);
+  // Where the time went: the server's write, the wire, the handler, and what the page was doing.
+  console.log(`        server wrote it ${sent_ms - orderer_ms} ms after ordering, page handler began ${got_ms - sent_ms} ms later`);
+  const rel = (at) => at - orderer_ms;
+  for (const t of busy.longTasks) console.log(`        long task from +${rel(t.at)} ms for ${t.ms} ms`);
+  for (const d of busy.doing) console.log(`        page was in ${d.what} from +${rel(d.at)} ms for ${d.ms} ms`);
+  for (const a of busy.asking) console.log(`        page asked ${a.path} from +${rel(a.at)} ms for ${a.ms} ms`);
 }
 check(
   Math.max(...toBen, ...toAnna) < 200,

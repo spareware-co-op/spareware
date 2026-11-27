@@ -63,6 +63,37 @@
   };
   window.spare = C; // the browser test reads this
 
+  // What this page was doing, kept so a slow edit says where its time went. Diagnostics only: they
+  // read the clock and change nothing the page does.
+  C.longTasks = []; // stretches the main thread was held for 50 ms or more: { at, ms }
+  C.doing = []; // named stretches of this page's own work, 2 ms or more: { what, at, ms }
+  C.asking = []; // what it asked the server for: { path, at, ms }
+  try {
+    new PerformanceObserver((list) => {
+      for (const task of list.getEntries()) {
+        C.longTasks.push({ at: Math.round(performance.timeOrigin + task.startTime), ms: Math.round(task.duration) });
+      }
+    }).observe({ type: 'longtask', buffered: true });
+  } catch {
+    // A browser without long-task reports just has none.
+  }
+  /** Runs `work` and notes how long it held the page, if it did for 2 ms or more. */
+  function spent(what, work) {
+    const at = Date.now();
+    try {
+      return work();
+    } finally {
+      const ms = Date.now() - at;
+      if (ms >= 2) C.doing.push({ what, at, ms });
+    }
+  }
+  /** What the page was doing, and waiting on the server for, between two clock readings. */
+  C.busyIn = (from, to) => ({
+    longTasks: C.longTasks.filter((t) => t.at + t.ms >= from && t.at <= to),
+    doing: C.doing.filter((d) => d.at + d.ms >= from && d.at <= to),
+    asking: C.asking.filter((a) => a.at + a.ms >= from && a.at <= to),
+  });
+
   const named = (person) => person[0].toUpperCase() + person.slice(1);
   // The level the plan shows and a new element is tied to: one chosen in Levels, or the floor plan's own.
   const levelOf = () => C.planLevel?.id ?? (S.view === 'l2' ? '2' : '1');
@@ -75,8 +106,10 @@
   const initials = (name) => name.slice(0, 2).toUpperCase();
 
   async function api(path, options) {
+    const asked = Date.now();
     const response = await fetch(path, options);
     const body = await response.json().catch(() => ({}));
+    C.asking.push({ path: String(path).split('/').slice(-2).join('/'), at: asked, ms: Date.now() - asked });
     if (!response.ok) {
       const error = new Error(body.error || response.statusText);
       error.status = response.status;
@@ -1083,7 +1116,10 @@
       C.connected = true;
       send({ t: 'hello', client: C.client, documents: [...C.watching], since: C.head });
     };
-    socket.onmessage = (event) => receive(JSON.parse(event.data));
+    socket.onmessage = (event) => {
+      const got = Date.now();
+      receive(JSON.parse(event.data), got);
+    };
     socket.onclose = () => {
       C.connected = false;
       setStatus('Reconnecting', false);
@@ -1093,7 +1129,7 @@
     };
   }
 
-  function receive(message) {
+  function receive(message, got) {
     switch (message.t) {
       case 'welcome':
         for (const edit of C.pending) C.socket.send(JSON.stringify(edit));
@@ -1104,7 +1140,7 @@
         statusBar();
         break;
       case 'entry':
-        apply(message.entry);
+        spent('apply', () => apply(message.entry, message.sent_ms, got));
         break;
       case 'ack':
         C.pending = C.pending.filter((edit) => edit.counter !== message.counter);
@@ -1142,7 +1178,7 @@
     }
   }
 
-  function apply(entry) {
+  function apply(entry, sent, got) {
     const fresh = entry.seq > C.head;
     C.head = Math.max(C.head, entry.seq);
     if (entry.cmd === 'document.checkpoint') {
@@ -1157,9 +1193,17 @@
       return;
     }
     if (mine) done(entry.counter);
-    if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now() });
+    if (!mine && fresh) C.arriving.push({ ...entry, arrived_ms: Date.now(), sent_ms: sent, got_ms: got });
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
+    // A move of elements that are not walls (a door along its wall, say) changes no wall's ends,
+    // so no wall is asked of the server again for it. Read before the loop below, which may delete.
+    const movedNoWall =
+      entry.cmd === 'element.move' &&
+      entry.changes.every((change) => {
+        const known = into.get(change.piece);
+        return known && known.el.kind !== 'wall';
+      });
     // This page drew its own edits ahead of the log, but not an undo: the server works that out.
     const drawn = mine && !UNDOING.has(entry.cmd);
     for (const change of entry.changes) {
@@ -1209,7 +1253,7 @@
     // their own records stay as they are: the log names only the wall that changed, so every wall
     // that reads records is asked of the server again (its `filled` holds the joints; this page
     // never works a join out), and the ones the change did not touch come back the same.
-    if (reads || MEETS_WALLS.test(entry.cmd)) fillAgain(entry.target, into);
+    if (reads || (MEETS_WALLS.test(entry.cmd) && !movedNoWall)) fillAgain(entry.target, into);
     if (reads && entry.target === C.model?.id) {
       C.paramsEpoch += 1;
       refreshSide();
@@ -1960,11 +2004,13 @@
     const same = JSON.stringify(C.warnings) === JSON.stringify(answer.warnings);
     C.warnings = answer.warnings;
     if (same) return;
-    statusBar();
-    // Only the Warnings part is drawn again, never the whole browser: a person may be typing in it.
-    const part = $('#browser [data-warnings]');
-    if (part) part.innerHTML = warningsList();
-    else drawBrowser();
+    spent('warnings-draw', () => {
+      statusBar();
+      // Only the Warnings part is drawn again, never the whole browser: a person may be typing in it.
+      const part = $('#browser [data-warnings]');
+      if (part) part.innerHTML = warningsList();
+      else drawBrowser();
+    });
   }
 
   /** An entry of the log arrived for the open model: read the list again once the entries arriving together have come. */
@@ -2379,8 +2425,8 @@
     C.scheduleCategories = categories;
     // Gone only once it has been seen: one just made is not in a read that began before its entry.
     if (C.sched) C.sched.gone = C.sched.table !== null && !list.some((schedule) => schedule.id === C.sched.id);
-    drawBrowser();
-    if (C.sched?.gone) renderSchedule();
+    spent('schedules-draw', drawBrowser);
+    if (C.sched?.gone) spent('schedule-draw', renderSchedule);
     else loadScheduleTable();
   }
 
@@ -2401,7 +2447,7 @@
       // A schedule just made is not in the list until the log's entry for it comes.
       open.error = C.schedules?.some((schedule) => schedule.id === open.id) ? error.message : null;
     }
-    renderSchedule();
+    spent('schedule-draw', renderSchedule);
   }
 
   /** An entry of the log arrived for the open model: its schedules and the open table may differ. */
@@ -4467,9 +4513,11 @@
     drawQueued = true;
     requestAnimationFrame(() => {
       drawQueued = false;
-      drawPlan();
-      statusBar();
-      if (C.three) C.three.update();
+      spent('draw', () => {
+        drawPlan();
+        statusBar();
+        if (C.three) C.three.update();
+      });
     });
   }
 
@@ -4549,6 +4597,17 @@
         to_server: entry.orderer_ms - entry.author_ms,
         to_page: entry.arrived_ms - entry.orderer_ms,
         to_screen: now - entry.arrived_ms,
+        // The same to_page, cut in three: the server ordering the edit and writing it to this page's
+        // stream, the frame on the wire until this page's message handler ran, and the handler
+        // reaching the point of noting the edit. The stamps are kept so what the page was busy with
+        // in between can be read with `busyIn`.
+        server_late: entry.sent_ms - entry.orderer_ms,
+        wire: entry.got_ms - entry.sent_ms,
+        handling: entry.arrived_ms - entry.got_ms,
+        orderer_ms: entry.orderer_ms,
+        sent_ms: entry.sent_ms,
+        got_ms: entry.got_ms,
+        arrived_ms: entry.arrived_ms,
       });
       $('#hint').textContent = `${named(entry.author)}’s edit arrived in ${C.latencies.at(-1)} ms.`;
     }
