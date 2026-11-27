@@ -5316,10 +5316,25 @@
 
   /** Embeds a curtain wall in the layered wall under the click: the side clicked, its middle at the click. */
   async function embedCurtain(at) {
-    // The wall under the click as the door tool finds it: a wall at an angle is its line and its
-    // thickness, not the box round it (piece A83), so a neighbour's box never takes the click.
-    const wall = wallAt(at);
-    if (!wall || wall.el.recipe.op !== LAYERED) {
+    // The layered wall nearest the click among those it is on (within the margin the door tool
+    // gives): a wall is its line and its thickness, at any angle (piece A83), not the box round it,
+    // so a neighbour's box or margin never takes the click.
+    let wall = null;
+    let nearest = Infinity;
+    for (const piece of C.elements.values()) {
+      const line = piece.el.recipe.op === LAYERED && piece.shape ? lineOf(piece) : null;
+      if (!line) continue;
+      const { x, y } = piece.el.placement;
+      const p = [at.x - x - line.start[0] / STEPS_PER_MM, at.y - y - line.start[1] / STEPS_PER_MM];
+      const length = Math.hypot(line.d[0], line.d[1]);
+      const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+      const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+      const [low, high] = [line.exterior, line.interior].map((offset) => offset / STEPS_PER_MM).sort((m, n) => m - n);
+      if (alongIt < -300 || alongIt > length / STEPS_PER_MM + 300 || right < low - 300 || right > high + 300) continue;
+      const away = Math.abs(right - (low + high) / 2);
+      if (away < nearest) [wall, nearest] = [piece, away];
+    }
+    if (!wall) {
       say('Click on a wall to embed a curtain wall in it.');
       return;
     }
