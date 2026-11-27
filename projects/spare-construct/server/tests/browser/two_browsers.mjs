@@ -2304,13 +2304,16 @@ let cropNarrow = 4000;
 let cropBottom = -500;
 let cropTop = 8500;
 if (withKernel) {
-  const door = await anna.evaluate((sel) => {
+  // A redraw takes the lines away for a moment: wait until they are there to be read.
+  const found = await anna.waitForFunction((sel) => {
     const ends = [...document.querySelectorAll(sel)].flatMap((l) => [
       [Number(l.getAttribute('x1')), -Number(l.getAttribute('y1'))],
       [Number(l.getAttribute('x2')), -Number(l.getAttribute('y2'))],
     ]);
+    if (!ends.length) return false;
     return { right: Math.max(...ends.map((e) => e[0])), low: Math.min(...ends.map((e) => e[1])), high: Math.max(...ends.map((e) => e[1])) };
   }, cropDoor);
+  const door = await found.jsonValue();
   cropNarrow = Math.ceil(door.right / 1000) * 1000;
   cropWide = cropNarrow + 1000;
   cropBottom = Math.min(cropBottom, Math.floor(door.low) - 500);
