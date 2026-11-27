@@ -59,10 +59,7 @@ fn a_mirrored_wall_turns_its_side_over() {
     let mirrored = moved(&w, &mirror_x(5000), &NOT_FLIPPED).unwrap();
     assert_eq!(point_of(&mirrored, "start"), [10_000 * MM, 0]);
     assert_eq!(point_of(&mirrored, "end"), [6000 * MM, 0]);
-    assert_eq!(
-        mirrored.props["wall.flipped"],
-        Value::YesNo(true).stored()
-    );
+    assert_eq!(mirrored.props["wall.flipped"], Value::YesNo(true).stored());
     let back = moved(&w, &mirror_x(5000), &Fixed { flipped: true }).unwrap();
     assert_eq!(back.props["wall.flipped"], Value::YesNo(false).stored());
 }
@@ -76,9 +73,10 @@ fn a_point_off_the_grid_is_refused_naming_the_element() {
     let turned = moved(&w, &turn, &NOT_FLIPPED).unwrap();
     assert_eq!(point_of(&turned, "end"), [3840, -5120]);
     let mut off = w.clone();
-    off.recipe
-        .args
-        .insert("end".to_owned(), serde_json::json!(["length:q0:1", "length:q0:0"]));
+    off.recipe.args.insert(
+        "end".to_owned(),
+        serde_json::json!(["length:q0:1", "length:q0:0"]),
+    );
     let refused = moved(&off, &turn, &NOT_FLIPPED).unwrap_err();
     assert_eq!(
         refused,
@@ -108,7 +106,10 @@ fn a_floor_keeps_its_edges_ids_through_every_motion() {
     // A mirror runs the loop the other way round; construct-slabs takes either way, and each edge
     // keeps its ID.
     let mirrored = moved(&f, &mirror_x(0), &NOT_FLIPPED).unwrap();
-    let ids: Vec<String> = floor_corners(&mirrored).into_iter().map(|(id, _)| id).collect();
+    let ids: Vec<String> = floor_corners(&mirrored)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
     assert_eq!(ids, ["e0", "e1", "e2", "e3"]);
     assert_eq!(floor_corners(&mirrored)[1].1, [-4000 * MM, 0]);
     assert_eq!(mirrored.props, f.props);
@@ -138,7 +139,10 @@ fn a_room_moves_its_point() {
         [-1500 * MM, 2000 * MM]
     );
     assert_eq!(construct_rooms::number_of(&turned), Some("101"));
-    assert_eq!(construct_rooms::limit_of(&turned), construct_rooms::limit_of(&r));
+    assert_eq!(
+        construct_rooms::limit_of(&turned),
+        construct_rooms::limit_of(&r)
+    );
 }
 
 #[test]
@@ -159,7 +163,11 @@ fn a_shaft_and_a_floor_opening_move_their_outlines() {
     let by = moved(&o, &shift(50, -50), &NOT_FLIPPED).unwrap();
     assert_eq!(
         outline_corners(&by),
-        vec![[150 * MM, 50 * MM], [650 * MM, 50 * MM], [650 * MM, 350 * MM]]
+        vec![
+            [150 * MM, 50 * MM],
+            [650 * MM, 50 * MM],
+            [650 * MM, 350 * MM]
+        ]
     );
     assert_eq!(by.references, o.references);
 }
@@ -215,11 +223,7 @@ fn a_reference_plane_moves_in_plan_and_a_horizontal_one_stays() {
             to: p(500, 1000)
         }
     );
-    let level = plane(
-        "P-2",
-        None,
-        PlaneShape::Horizontal { elevation: mm(900) },
-    );
+    let level = plane("P-2", None, PlaneShape::Horizontal { elevation: mm(900) });
     assert_eq!(moved(&level, &shift(500, 0), &NOT_FLIPPED).unwrap(), level);
 }
 
@@ -309,12 +313,18 @@ fn what_follows_a_wall_changes_only_what_names_its_wall() {
     let f = swing_door("F-1", "W-1", 2000);
     assert_eq!(value_of(&f, "swing"), None);
     let mirrored = follower(&f, &mirror_x(0), &NOT_FLIPPED).unwrap().unwrap();
-    assert_eq!(value_of(&mirrored, "swing").as_deref(), Some("choice:right"));
+    assert_eq!(
+        value_of(&mirrored, "swing").as_deref(),
+        Some("choice:right")
+    );
     let again = follower(&mirrored, &mirror_x(0), &NOT_FLIPPED)
         .unwrap()
         .unwrap();
     assert_eq!(value_of(&again, "swing").as_deref(), Some("choice:left"));
-    assert_eq!(follower(&f, &quarter_about([0, 0]), &NOT_FLIPPED).unwrap(), None);
+    assert_eq!(
+        follower(&f, &quarter_about([0, 0]), &NOT_FLIPPED).unwrap(),
+        None
+    );
     assert_eq!(mirrored.references, f.references);
     assert_eq!(mirrored.props, f.props);
 }

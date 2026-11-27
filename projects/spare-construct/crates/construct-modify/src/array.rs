@@ -104,7 +104,9 @@ pub fn radial(centre: Steps, angle: Angle, count: u32) -> Result<Vec<Motion>, Mo
         return Err(ModifyError::InPlace);
     }
     // The fewest steps that come back round: a full turn over what the angle shares with it.
-    let round = FULL.checked_div(units.gcd(&FULL)).ok_or(ModifyError::TooLarge)?;
+    let round = FULL
+        .checked_div(units.gcd(&FULL))
+        .ok_or(ModifyError::TooLarge)?;
     if i64::from(count) > round {
         return Err(ModifyError::RoundAgain {
             count,

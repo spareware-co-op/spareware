@@ -48,10 +48,7 @@ pub fn degrees(d: i64) -> Angle {
 }
 
 pub fn stored_point([x, y]: [i64; 2]) -> Json {
-    json!([
-        Value::Length(mm(x)).stored(),
-        Value::Length(mm(y)).stored()
-    ])
+    json!([Value::Length(mm(x)).stored(), Value::Length(mm(y)).stored()])
 }
 
 /// A record's point as a layered wall's recipe holds it, in grid steps.
@@ -75,14 +72,8 @@ pub fn wall(id: &str, start: [i64; 2], end: [i64; 2]) -> Element {
     let mut args = BTreeMap::new();
     args.insert("start".to_owned(), stored_point(start));
     args.insert("end".to_owned(), stored_point(end));
-    args.insert(
-        "height".to_owned(),
-        json!(Value::Length(mm(2700)).stored()),
-    );
-    args.insert(
-        "layers".to_owned(),
-        construct_regen::walls::type_arg(),
-    );
+    args.insert("height".to_owned(), json!(Value::Length(mm(2700)).stored()));
+    args.insert("layers".to_owned(), construct_regen::walls::type_arg());
     let mut props = props("100");
     props.insert("@type".to_owned(), "wall-partition-stud-90".to_owned());
     Element {

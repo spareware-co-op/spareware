@@ -184,8 +184,7 @@ pub(crate) fn what(record: &Element) -> Result<What, ModifyError> {
         What::Roof
     } else if construct_rooms::is_room(record) {
         What::Room
-    } else if construct_openings::is_shaft(recipe) || construct_openings::is_floor_opening(recipe)
-    {
+    } else if construct_openings::is_shaft(recipe) || construct_openings::is_floor_opening(recipe) {
         What::Outline
     } else if record.kind == construct_grids::GRID_KIND {
         What::Grid
@@ -212,12 +211,7 @@ fn origin(record: &Element) -> Result<Steps, ModifyError> {
 }
 
 /// Where `motion` takes the point `p` of a record framed at `origin`, in the same frame.
-fn moved_point(
-    motion: &Motion,
-    origin: Steps,
-    p: Steps,
-    name: &str,
-) -> Result<Steps, ModifyError> {
+fn moved_point(motion: &Motion, origin: Steps, p: Steps, name: &str) -> Result<Steps, ModifyError> {
     let [ox, oy] = origin;
     let [x, y] = p;
     let plan = [
@@ -365,8 +359,7 @@ fn roof(record: &Element, motion: &Motion) -> Result<Element, ModifyError> {
     let roof = construct_roofs::roof_of(&record.recipe).map_err(|e| refused(record)(&e))?;
     let footprint = moved_boundary(record, roof.footprint(), motion)?;
     let edges: BTreeMap<_, _> = roof.edges().iter().cloned().collect();
-    let moved =
-        construct_roofs::Roof::new(footprint, &edges).map_err(|e| refused(record)(&e))?;
+    let moved = construct_roofs::Roof::new(footprint, &edges).map_err(|e| refused(record)(&e))?;
     construct_roofs::with_roof(record.clone(), &moved).map_err(|e| refused(record)(&e))
 }
 
@@ -395,7 +388,8 @@ fn outline(record: &Element, motion: &Motion) -> Result<Element, ModifyError> {
         })
         .collect::<Result<Vec<_>, ModifyError>>()?;
     let named = construct_openings::named(key, &record.recipe);
-    let moved = construct_openings::Outline::new(&named, corners).map_err(|e| refused(record)(&e))?;
+    let moved =
+        construct_openings::Outline::new(&named, corners).map_err(|e| refused(record)(&e))?;
     let mut out = record.clone();
     out.recipe
         .args
@@ -488,16 +482,20 @@ fn block(record: &Element, motion: &Motion) -> Result<Element, ModifyError> {
     let mm = |v: i64| v.checked_mul(STEPS_PER_MM).ok_or(ModifyError::TooLarge);
     let corner = [mm(record.placement.x)?, mm(record.placement.y)?];
     let far = [
-        mm(record.placement.x.checked_add(width).ok_or(ModifyError::TooLarge)?)?,
-        mm(record.placement.y.checked_add(depth).ok_or(ModifyError::TooLarge)?)?,
+        mm(record
+            .placement
+            .x
+            .checked_add(width)
+            .ok_or(ModifyError::TooLarge)?)?,
+        mm(record
+            .placement
+            .y
+            .checked_add(depth)
+            .ok_or(ModifyError::TooLarge)?)?,
     ];
     let [ax, ay] = moved_point(motion, [0, 0], corner, &record.name)?;
     let [bx, by] = moved_point(motion, [0, 0], far, &record.name)?;
-    let size = |a: i64, b: i64| {
-        a.checked_sub(b)
-            .map(i64::abs)
-            .ok_or(ModifyError::TooLarge)
-    };
+    let size = |a: i64, b: i64| a.checked_sub(b).map(i64::abs).ok_or(ModifyError::TooLarge);
     let mut out = record.clone();
     out.placement = Placement {
         x: whole_mm(record, ax.min(bx))?,
@@ -552,7 +550,10 @@ pub fn follower(
     let mut out = record.clone();
     let mut changed = false;
     let recipe = &record.recipe;
-    if motion.square().is_some_and(crate::exact::Square::swaps_axes) {
+    if motion
+        .square()
+        .is_some_and(crate::exact::Square::swaps_axes)
+    {
         if construct_openings::is_wall_opening(recipe) {
             let key = record.id.as_str();
             let opening = construct_openings::WallOpening::of(key, recipe)
@@ -571,9 +572,7 @@ pub fn follower(
             if recipe.args.get(AXIS).and_then(Json::as_str) == Some("y") {
                 out.recipe.args.remove(AXIS);
             } else {
-                out.recipe
-                    .args
-                    .insert(AXIS.to_owned(), Json::from("y"));
+                out.recipe.args.insert(AXIS.to_owned(), Json::from("y"));
             }
             changed = true;
         }
@@ -662,9 +661,7 @@ pub(crate) fn along_host(
         .checked_add(Length::from_steps(step))
         .ok_or(ModifyError::TooLarge)?;
     let mut out = record.clone();
-    out.props.insert(
-        hosting::ALONG_KEY.to_owned(),
-        Value::Length(moved).stored(),
-    );
+    out.props
+        .insert(hosting::ALONG_KEY.to_owned(), Value::Length(moved).stored());
     Ok(out)
 }

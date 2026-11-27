@@ -344,11 +344,7 @@ impl Motion {
         let across = mul(2, mul(run, rise)?)?;
         let denominator = run_run.checked_add(rise_rise).ok_or_else(too_large)?;
         let minus = diagonal.checked_neg().ok_or_else(too_large)?;
-        Motion::about(
-            [[diagonal, across], [across, minus]],
-            denominator,
-            start,
-        )
+        Motion::about([[diagonal, across], [across, minus]], denominator, start)
     }
 
     /// This motion and then `next`.
@@ -484,7 +480,13 @@ mod tests {
         let turn = Motion::turn_about([10, 0], Turn::quarters(1)).unwrap();
         assert_eq!(turn.apply([20, 0]), Ok([10, 10]));
         assert_eq!(turn.apply([10, 0]), Ok([10, 0]));
-        assert_eq!(turn.square(), Some(Square { quarters: 1, mirrored: false }));
+        assert_eq!(
+            turn.square(),
+            Some(Square {
+                quarters: 1,
+                mirrored: false
+            })
+        );
         assert!(!turn.is_mirror());
     }
 
@@ -492,7 +494,13 @@ mod tests {
     fn a_mirror_at_45_degrees_is_whole() {
         let mirror = Motion::mirror([0, 0], [5, 5]).unwrap();
         assert_eq!(mirror.apply([3, 1]), Ok([1, 3]));
-        assert_eq!(mirror.square(), Some(Square { quarters: 1, mirrored: true }));
+        assert_eq!(
+            mirror.square(),
+            Some(Square {
+                quarters: 1,
+                mirrored: true
+            })
+        );
         assert!(mirror.is_mirror());
     }
 }

@@ -88,7 +88,13 @@ fn what_a_wall_hosts_follows_it_unchanged() {
 #[test]
 fn a_quarter_turn_changes_the_axis_its_box_door_and_opening_name() {
     let model = walls();
-    let planned = plan(&model, &ids(&["W-1"]), &Request::Move(quarter()), &NOT_FLIPPED).unwrap();
+    let planned = plan(
+        &model,
+        &ids(&["W-1"]),
+        &Request::Move(quarter()),
+        &NOT_FLIPPED,
+    )
+    .unwrap();
     let changed: Vec<&str> = planned.changed.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(changed, ["D-1", "O-1", "W-1"]);
     assert_eq!(planned.changed[0].recipe.args["axis"], "y");
@@ -101,7 +107,10 @@ fn a_mirror_changes_the_placed_doors_hand_and_the_walls_side() {
     let planned = plan(&model, &ids(&["W-1"]), &Request::Move(mirror), &NOT_FLIPPED).unwrap();
     let changed: Vec<&str> = planned.changed.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(changed, ["D-2", "W-1"]);
-    assert_eq!(value_of(&planned.changed[0], "swing").as_deref(), Some("choice:right"));
+    assert_eq!(
+        value_of(&planned.changed[0], "swing").as_deref(),
+        Some("choice:right")
+    );
     assert_eq!(
         planned.changed[1].props["wall.flipped"],
         Value::YesNo(true).stored()
@@ -120,7 +129,10 @@ fn a_hosted_element_alone_slides_along_its_host_or_is_refused_by_name() {
         ["W-1"]
     );
     // A wall running toward -x slides it the other way along.
-    let reversed = document(vec![wall("W-9", [6000, 0], [0, 0]), door("D-9", "W-9", 500)]);
+    let reversed = document(vec![
+        wall("W-9", [6000, 0], [0, 0]),
+        door("D-9", "W-9", 500),
+    ]);
     let planned = plan(&reversed, &ids(&["D-9"]), &move_by(250, 0), &NOT_FLIPPED).unwrap();
     assert_eq!(along(&planned.changed[0]), 250 * MM);
 
@@ -130,8 +142,13 @@ fn a_hosted_element_alone_slides_along_its_host_or_is_refused_by_name() {
         "D-1 is hosted on W-1: alone it moves only along W-1, and this would take it off. Move \
          W-1 with it, or move it along W-1."
     );
-    let refused = plan(&model, &ids(&["D-2"]), &Request::Move(quarter()), &NOT_FLIPPED)
-        .unwrap_err();
+    let refused = plan(
+        &model,
+        &ids(&["D-2"]),
+        &Request::Move(quarter()),
+        &NOT_FLIPPED,
+    )
+    .unwrap_err();
     assert_eq!(
         refused,
         ModifyError::TurnsWithHost {
@@ -139,7 +156,10 @@ fn a_hosted_element_alone_slides_along_its_host_or_is_refused_by_name() {
             host: "W-1".to_owned()
         }
     );
-    let angled = document(vec![wall("W-3", [0, 0], [3000, 4000]), door("D-3", "W-3", 500)]);
+    let angled = document(vec![
+        wall("W-3", [0, 0], [3000, 4000]),
+        door("D-3", "W-3", 500),
+    ]);
     let refused = plan(&angled, &ids(&["D-3"]), &move_by(30, 40), &NOT_FLIPPED).unwrap_err();
     assert_eq!(
         refused,
@@ -170,7 +190,10 @@ fn a_floor_opening_moves_with_its_floor() {
     let planned = plan(&model, &ids(&["F-1"]), &move_by(1000, 0), &NOT_FLIPPED).unwrap();
     let changed: Vec<&str> = planned.changed.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(changed, ["F-1", "O-1"]);
-    assert_eq!(outline_corners(&planned.changed[1])[0], [1100 * MM, 100 * MM]);
+    assert_eq!(
+        outline_corners(&planned.changed[1])[0],
+        [1100 * MM, 100 * MM]
+    );
     // Alone, it moves in its floor's plan and stays on it.
     let alone = plan(&model, &ids(&["O-1"]), &move_by(10, 10), &NOT_FLIPPED).unwrap();
     assert_eq!(alone.changed.len(), 1);
@@ -200,14 +223,23 @@ fn copies_take_new_ids_and_their_hosted_elements_the_copy_of_their_host() {
     // Counted in the order of the originals' IDs: D-1, D-2, O-1, W-1.
     assert_eq!(
         made,
-        [("C.1", "D-1"), ("C.2", "D-2"), ("C.3", "O-1"), ("C.4", "W-1")]
+        [
+            ("C.1", "D-1"),
+            ("C.2", "D-2"),
+            ("C.3", "O-1"),
+            ("C.4", "W-1")
+        ]
     );
     for hosted in &planned.made[..3] {
         assert_eq!(host_of(hosted), i("C.4"));
     }
     let wall_copy = &planned.made[3];
     assert_eq!(point_of(wall_copy, "start"), [0, 1000 * MM]);
-    assert_eq!(wall_copy.props, model[&i("W-1")].props, "same type and parameters");
+    assert_eq!(
+        wall_copy.props,
+        model[&i("W-1")].props,
+        "same type and parameters"
+    );
     assert_eq!(
         planned.hosts.iter().map(Id::as_str).collect::<Vec<_>>(),
         ["C.4"]
@@ -276,8 +308,14 @@ fn copies_are_refused_in_words() {
         &NOT_FLIPPED,
     )
     .unwrap_err();
-    assert_eq!(refused.to_string(), "That would put every copy on its original.");
-    let taken = document(vec![wall("W-2", [0, 0], [1000, 0]), wall("C.1", [0, 5], [1, 5])]);
+    assert_eq!(
+        refused.to_string(),
+        "That would put every copy on its original."
+    );
+    let taken = document(vec![
+        wall("W-2", [0, 0], [1000, 0]),
+        wall("C.1", [0, 5], [1, 5]),
+    ]);
     let refused = plan(
         &taken,
         &ids(&["W-2"]),

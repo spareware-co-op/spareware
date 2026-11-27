@@ -195,10 +195,7 @@ impl fmt::Display for ModifyError {
                  multiply to a whole number (3 to 4 to 5 does)."
             ),
             Self::NoDirection => write!(f, "A direction needs a length."),
-            Self::LineOnePoint => write!(
-                f,
-                "A mirror line runs through two different points."
-            ),
+            Self::LineOnePoint => write!(f, "A mirror line runs through two different points."),
             Self::BoxTurns { element } => write!(
                 f,
                 "{element} is a box along x and y: it turns by quarter turns and mirrors about \
@@ -247,10 +244,7 @@ impl fmt::Display for ModifyError {
                 "An element {id} is already in this model: give the copies another key."
             ),
             Self::InPlace => write!(f, "That would put every copy on its original."),
-            Self::TooFew => write!(
-                f,
-                "An array makes at least two, the originals counted."
-            ),
+            Self::TooFew => write!(f, "An array makes at least two, the originals counted."),
             Self::TooMany { most } => write!(
                 f,
                 "That would make more than {most} elements at once: make the array in parts."

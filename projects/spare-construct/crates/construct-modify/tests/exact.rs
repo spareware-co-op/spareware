@@ -143,9 +143,10 @@ fn a_turn_and_its_way_back_are_no_turn() {
             &((-50_i64..50, -50_i64..50), (-50_i64..50, -50_i64..50)),
             |((ux, uy), (vx, vy))| {
                 prop_assume!((ux, uy) != (0, 0) && (vx, vy) != (0, 0));
-                let (Ok(there), Ok(back)) =
-                    (Turn::between([ux, uy], [vx, vy]), Turn::between([vx, vy], [ux, uy]))
-                else {
+                let (Ok(there), Ok(back)) = (
+                    Turn::between([ux, uy], [vx, vy]),
+                    Turn::between([vx, vy], [ux, uy]),
+                ) else {
                     return Ok(());
                 };
                 prop_assert_eq!(there.then(back).unwrap(), Turn::NONE);
@@ -187,7 +188,10 @@ fn a_mirror_lands_on_lines_along_the_axes_and_at_45_degrees() {
 fn a_mirror_twice_is_no_motion() {
     runner()
         .run(
-            &((-1_000_i64..1_000, -1_000_i64..1_000), (-9_i64..9, -9_i64..9)),
+            &(
+                (-1_000_i64..1_000, -1_000_i64..1_000),
+                (-9_i64..9, -9_i64..9),
+            ),
             |((ax, ay), (dx, dy))| {
                 prop_assume!((dx, dy) != (0, 0));
                 let mirror = Motion::mirror([ax, ay], [ax + dx, ay + dy]).unwrap();

@@ -66,7 +66,9 @@ enum Role {
 
 /// The record of `id`, or the refusal.
 fn record<'a>(document: &'a BTreeMap<Id, Element>, id: &Id) -> Result<&'a Element, ModifyError> {
-    document.get(id).ok_or_else(|| ModifyError::Missing(id.clone()))
+    document
+        .get(id)
+        .ok_or_else(|| ModifyError::Missing(id.clone()))
 }
 
 /// Every piece the request moves and how, in the order of their IDs.
@@ -274,7 +276,9 @@ impl Unique {
 /// `copy` hosted on `host` instead of on `was`: its face reference names the host's copy.
 fn hosted_on(copy: &mut Element, was: &Id, host: &Id) {
     for reference in &mut copy.references {
-        if reference.kind == hosting::FACE_KIND && reference.doc.is_none() && reference.element == *was
+        if reference.kind == hosting::FACE_KIND
+            && reference.doc.is_none()
+            && reference.element == *was
         {
             reference.element = host.clone();
         }
