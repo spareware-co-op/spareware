@@ -88,3 +88,15 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .room-tag text { pointer-events: none; fill: var(--ink-2); }
 .dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
 .dw .room-tag .room-state { fill: var(--danger); }
+
+/* Linear dimensions: the open view's own are picked by a band along the offset line; the text is never picked. */
+.dw .dim.own { cursor: pointer; }
+.dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .dim-line, .dw .dim-tick { stroke: var(--ink); }
+.dw .dim-w { stroke: var(--ink-3); }
+.dw .dimt { fill: var(--ink); pointer-events: none; }
+.dw .dimt.bad { fill: var(--danger); }
+.dw .dim.bad .dim-line, .dw .dim.bad .dim-tick { stroke: var(--danger); }
+.dw .dim[data-picked="yes"] .dim-line, .dw .dim[data-picked="yes"] .dim-tick { stroke: var(--app-strong); stroke-width: 2px; }
+.dw .dim.lost .dimt { pointer-events: auto; cursor: pointer; }
+.dw .dim-pick { pointer-events: none; }

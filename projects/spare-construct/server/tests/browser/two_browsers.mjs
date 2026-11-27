@@ -1291,6 +1291,166 @@ check(
   'a fresh load lists the same views, by name',
 );
 await fresh.context().close();
+console.log('\n   Dimensions, between two walls');
+// Both people have Level 1's working plan open: a dimension belongs to one view. Anna draws two
+// vertical walls south of the building and dimensions them with the dimension tool, picking each
+// wall at the side she means and then the place for the line; both browsers draw the line, its
+// witness lines and the value the server worked out. She drags the line and Ben sees it move. Ben
+// drags one wall and both browsers show the new value. Ben deletes that wall: both show the warning,
+// naming it, and no value; his undo puts the wall back and the value with it. Anna deletes the
+// dimension, and the walls go.
+const dimView = madeView.id;
+for (const page of [anna, ben]) {
+  await page.click(viewLeaf('Level 1 working plan'));
+}
+const dimLines = '#pv-canvas g.dim[data-kind="dimension"]';
+const dimText = `${dimLines} text.dimt[data-segment]`;
+const dimListing = async () => (await asAnna(`views/${dimView}/dimensions`)).dimensions;
+const dimWallsBefore = await wallsOf(anna);
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+for (const x of [7000, 11000]) {
+  const from = await onPlan(anna, x, 8700);
+  const to = await onPlan(anna, x, 10100);
+  await anna.mouse.click(from.x, from.y);
+  await anna.mouse.click(to.x, to.y);
+}
+await anna.keyboard.press('Escape');
+const dimNewWalls = (before) =>
+  [...window.spare.elements.values()]
+    .filter((p) => p.el.recipe.op === 'wall.layered' && !before.includes(p.el.id) && p.fill?.recipe?.args?.layers)
+    .map((p) => [p.el.id, Number(p.el.recipe.args.start[0].split(':').pop()) / 6400]);
+await anna.waitForFunction((before) => {
+  const found = [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !before.includes(p.el.id) && p.fill?.recipe?.args?.layers);
+  return found.length === 2;
+}, dimWallsBefore);
+await ben.waitForFunction((before) => {
+  const found = [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !before.includes(p.el.id) && p.fill?.recipe?.args?.layers);
+  return found.length === 2;
+}, dimWallsBefore);
+const [dimWallA, dimWallB] = (await anna.evaluate(dimNewWalls, dimWallsBefore)).sort((a, b) => a[1] - b[1]).map((found) => found[0]);
+pass("Anna draws two vertical walls, 4000 mm apart, and both browsers have them");
+
+// The tool: picking a wall by the side nearer the click; the palette lists what is picked.
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Annotate' }).click();
+await anna.locator('#ribbon [data-act="dtool"][data-a="architecture:dim"]').first().click();
+await anna.waitForSelector('#pv-side select[data-key="dim-layout"]');
+check((await anna.locator('#pv-side select[data-key="dim-layout"]').inputValue()) === 'horizontal', 'the dimension tool offers a horizontal dimension to begin with');
+const pickAt = async (page, id, fraction) => {
+  const found = await box(page, id);
+  await page.mouse.click(found.x + found.width * fraction, found.y + found.height / 2);
+};
+await pickAt(anna, dimWallA, 0.85);
+await anna.waitForSelector('#pv-canvas g.dim-pick[data-pick="0"]');
+await pickAt(anna, dimWallB, 0.15);
+await anna.waitForSelector('#pv-canvas g.dim-pick[data-pick="1"]');
+const picked = await anna.locator('#pv-side [data-dim-picks] li').allTextContents();
+check(
+  picked.length === 2 && picked[0].includes(dimWallA) && picked[1].includes(dimWallB) && picked.every((words) => /face of/.test(words)),
+  "Anna picks the near side of each wall, and the palette says which faces she has picked",
+);
+await clickModel(anna, 9000, 8350);
+await anna.waitForSelector(dimLines);
+await ben.waitForSelector(dimLines);
+const dimId = await anna.locator(dimLines).getAttribute('data-dim');
+check((await ben.locator(dimLines).getAttribute('data-dim')) === dimId, "Anna's dimension is the same one in Ben's browser");
+const dimValue = (page) => page.locator(dimText).first().textContent();
+await anna.waitForFunction((at) => document.querySelector(at)?.textContent, dimText);
+await ben.waitForFunction((at) => document.querySelector(at)?.textContent, dimText);
+const dimListed = await dimListing();
+check(
+  dimListed.length === 1 && dimListed[0].segments.length === 1 && dimListed[0].references.length === 2,
+  "the server lists one dimension with one segment between two references",
+);
+check(
+  (await dimValue(anna)) === dimListed[0].segments[0].text && (await dimValue(ben)) === dimListed[0].segments[0].text,
+  "both browsers show the value the server worked out: the page works out nothing",
+);
+const dimFirst = await dimValue(anna);
+// The walls' lines are 4000 mm apart; a near face is half a wall's thickness off its line, so the clear distance is a little less.
+const dimBase = parseFloat(dimFirst);
+check(dimFirst === `${dimBase} mm` && dimBase > 3500 && dimBase < 4000, `the distance between the picked faces of walls 4000 mm apart, less their thickness (${dimFirst})`);
+check(
+  (await anna.locator(`${dimLines} line.dim-w`).count()) === 2 && (await anna.locator(`${dimLines} line.dim-tick`).count()) === 2,
+  'drawn with a witness line and a tick at each wall',
+);
+await shot(anna, 'anna-dimension');
+
+// Anna lets go of the tool, picks the dimension by its line and drags the line up; Ben sees it move.
+await anna.keyboard.press('Escape');
+await anna.waitForFunction(() => document.querySelector('#pv-canvas svg') && !document.querySelector('#pv-side select[data-key="dim-layout"]'));
+check((await ben.locator(dimLines).getAttribute('data-line')) === '8350', "the line is at 8350 in Ben's browser");
+// A line has no height for the browser to find: it is picked where the model puts it.
+const [lineX, lineY] = await onScreen(anna, 9000, 8350);
+const [liftX, liftY] = await onScreen(anna, 9000, 8150);
+await anna.mouse.move(lineX, lineY);
+await anna.mouse.down();
+for (let i = 1; i <= 10; i += 1) {
+  await anna.mouse.move(lineX + ((liftX - lineX) * i) / 10, lineY + ((liftY - lineY) * i) / 10);
+  await anna.waitForTimeout(16);
+}
+await anna.mouse.up();
+await ben.waitForFunction((at) => document.querySelector(at)?.dataset.line === '8150', dimLines);
+await anna.waitForFunction((at) => document.querySelector(at)?.dataset.line === '8150', dimLines);
+check((await dimValue(ben)) === dimFirst, "Anna drags the dimension's line, and Ben's browser draws it there, its value unchanged");
+check((await dimListing())[0].layout.y === `length:q0:${8150 * 6400}`, 'and the server stores the line at 8150');
+await anna.waitForSelector(`${dimLines}[data-picked="yes"]`);
+check((await anna.locator('#pv-side [data-dim-segment="0"]').textContent()) === dimFirst, "the palette reads the same value");
+
+// Ben drags the second wall to the right; both show the new value.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+const wallBefore = await position(ben, dimWallB);
+await drag(ben, dimWallB, 40, 0);
+await ben.mouse.up();
+await ben.waitForFunction(([id, x]) => Number(document.querySelector(`g.element[data-id="${id}"]`)?.dataset.x) !== x, [dimWallB, wallBefore[0]]);
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+const wallAfter = await position(ben, dimWallB);
+const shift = wallAfter[0] - wallBefore[0];
+check(shift > 0, "Ben drags the right-hand wall to the right");
+const widerValue = `${dimBase + shift} mm`;
+for (const page of [anna, ben]) {
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [dimText, widerValue]);
+}
+check((await dimListing())[0].segments[0].text === widerValue, `both browsers show ${widerValue}, the server's new value, and not a number worked out on the page`);
+
+// Ben deletes the wall: the dimension keeps its other reference and says what is wrong.
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), dimWallB);
+await ben.keyboard.press('Delete');
+for (const page of [anna, ben]) {
+  await page.waitForFunction((at) => Number(document.querySelector(at)?.dataset.warnings) > 0, dimLines);
+  await page.waitForFunction((at) => !document.querySelector(at), dimText);
+}
+pass("Ben deletes the wall; both browsers draw the dimension with no value and a mark for its warning");
+await anna.waitForSelector('#pv-side [data-dim-warnings] li');
+check(
+  (await anna.locator('#pv-side [data-dim-warnings] li').first().textContent()).includes(dimWallB),
+  "Anna's palette names the wall that is gone, in the server's words",
+);
+await ben.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) {
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [dimText, widerValue]);
+  await page.waitForFunction((at) => Number(document.querySelector(at)?.dataset.warnings) === 0, dimLines);
+}
+pass("Ben's undo puts the wall back, and both browsers show the value again with no warning");
+
+// Anna deletes the dimension with the Delete key; then the walls go, each by the person holding it.
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+for (const page of [anna, ben]) await page.waitForFunction((at) => !document.querySelector(at), dimLines);
+pass("Anna deletes the dimension with the Delete key and it goes from Ben's browser too");
+check((await dimListing()).length === 0, 'and the server lists none');
+await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`), dimWallB);
+await pickAt(ben, dimWallB, 0.5);
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), dimWallB);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await pickAt(anna, dimWallA, 0.5);
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), dimWallA);
+await ben.click('#browser [data-act="view"][data-a="l1"]');
+pass('both walls are deleted, and the plan is as it was before the dimension');
 console.log('\n   Roofs, on a rectangle');
 // Anna makes a gable roof over the seed building, of a type she chooses in the roof tool's options;
 // Ben sees it, its ridge drawn from its record. A roof the server refuses (hips) is turned back in the
