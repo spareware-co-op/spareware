@@ -2299,11 +2299,12 @@ await anna.locator(cropControl('crop-new-maxy')).fill('8.5 m');
 await anna.locator(cropControl('crop-new-maxy')).press('Enter');
 await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
-check(
-  (await ben.locator(cropControl('crop-maxx')).inputValue()) === '6000 mm' &&
-    (await ben.locator(cropControl('crop-miny')).inputValue()) === '-500 mm',
-  "Ben's dialog shows the corners Anna typed, as the server reads them",
+await ben.waitForFunction(
+  () =>
+    document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === '6000 mm' &&
+    document.querySelector('#stack-manage [data-key="crop-miny"]')?.value === '-500 mm',
 );
+pass("Ben's dialog shows the corners Anna typed, as the server reads them");
 if (withKernel) {
   for (const page of [anna, ben]) {
     await cropWithin(page, 6000);
@@ -2351,10 +2352,10 @@ if (withKernel) {
   }
   pass('a corner moved to 4 m: both plans are cut there, and the door inside it is still drawn');
 }
-check(
-  (await ben.locator(cropControl('crop-maxx')).inputValue()) === '4000 mm',
-  "Ben's dialog follows the corner",
+await ben.waitForFunction(
+  () => document.querySelector('#stack-manage [data-key="crop-maxx"]')?.value === '4000 mm',
 );
+pass("Ben's dialog follows the corner");
 
 // A corner that would turn the rectangle inside out is turned back in the server's words.
 await anna.locator(cropControl('crop-maxx')).fill('-1 m');
