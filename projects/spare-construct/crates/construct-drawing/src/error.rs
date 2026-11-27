@@ -38,6 +38,8 @@ pub enum DrawingError {
         /// The most it may draw.
         most: u64,
     },
+    /// A crop cannot be applied exactly: its words (an arc whose circle meets the outline).
+    Crop(String),
     /// The interim 2D overlay found its own rule broken (a boundary that does not close, a hole in
     /// no outline): its words. A bug to report, never an answer.
     Overlay(String),
@@ -58,6 +60,7 @@ impl fmt::Display for DrawingError {
             Self::Budget { lines, most } => {
                 write!(f, "a hatch of {lines} lines, past the most allowed, {most}")
             }
+            Self::Crop(what) => write!(f, "the crop cannot be applied: {what}"),
             Self::Overlay(what) => write!(f, "the 2D overlay broke its own rule: {what}"),
         }
     }
