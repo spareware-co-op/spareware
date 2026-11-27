@@ -983,10 +983,10 @@ const pickWall = async (page, id) => {
 await anna.keyboard.press('Escape');
 await pickWall(anna, keeperWall);
 check(
-  (await anna.locator(`#pv-side [data-joint="${otherWall}"]`).inputValue()) === 'mitre',
+  (await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).inputValue()) === 'mitre',
   "Anna's palette lists the joint with the other wall, a mitre as the rule makes it",
 );
-await anna.locator(`#pv-side [data-joint="${otherWall}"]`).selectOption('butt');
+await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).selectOption('butt');
 await bothHold(JSON.stringify({ first: keeperWall, kind: 'butt' }), 'Anna makes the joint a butt, and both pages hold it on the wall that keeps it');
 const butted = await until(
   async () => await filledByServer(layeredId),
@@ -1003,7 +1003,7 @@ pass('Anna lets go of the wall, and Ben sees it free');
 await ben.keyboard.press('Escape');
 await pickWall(ben, keeperWall);
 check(
-  (await ben.locator(`#pv-side [data-joint="${otherWall}"]`).inputValue()) === 'butt',
+  (await ben.locator(`#pv-side select[data-joint="${otherWall}"]`).inputValue()) === 'butt',
   "Ben's palette shows the joint as Anna made it",
 );
 await ben.locator('#pv-side [data-wall-wrap] select[data-wrap="ends"]').selectOption('exterior');
