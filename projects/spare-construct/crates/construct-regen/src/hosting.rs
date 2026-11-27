@@ -68,8 +68,8 @@
 //! y hosts as it always has, byte for byte; no seat is written for it.
 
 use crate::families;
-pub use crate::seating::{SEAT_ARG, noun, seat_of, unseated, with_seat};
 use crate::seating;
+pub use crate::seating::{SEAT_ARG, noun, seat_of, unseated, with_seat};
 use crate::wall_plan::{self, Axis, Layered};
 use construct_families::Turn;
 use construct_model::element::{Element, Placement, Reference, Want};

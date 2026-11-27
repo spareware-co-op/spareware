@@ -1032,7 +1032,12 @@ async fn the_server_draws_a_door_in_a_wall_at_an_angle_seated_in_its_wall() {
     )
     .await;
     let (_, names, _) = layered(&s, &project, &model, "W-A83").await;
-    let exterior = names.iter().find(|n| n.role == "exterior").unwrap().name.clone();
+    let exterior = names
+        .iter()
+        .find(|n| n.role == "exterior")
+        .unwrap()
+        .name
+        .clone();
     edit(
         "hosted.place",
         json!({ "element": "D-A83", "host": "W-A83", "face": exterior, "along": "1200 mm",

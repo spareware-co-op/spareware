@@ -122,8 +122,8 @@ pub(crate) fn size_in(
             })
     };
     if construct_openings::is_wall_opening(hosted_recipe) {
-        let opening = construct_openings::WallOpening::of(key, hosted_recipe)
-            .map_err(|e| GeometryError {
+        let opening =
+            construct_openings::WallOpening::of(key, hosted_recipe).map_err(|e| GeometryError {
                 code: e.code().to_owned(),
                 message: e.to_string(),
             })?;
@@ -322,8 +322,9 @@ pub fn seat_json(wall: &str, recipe: &str, key: &str, role: &str, along: &str, u
         Err(e) => return failed(&e.code, e.message),
     };
     match seat_at_angle(&wall, key, &recipe, role, along, up) {
-        Ok((at, seated)) => serde_json::json!({ "seat": { "placement": at, "recipe": seated } })
-            .to_string(),
+        Ok((at, seated)) => {
+            serde_json::json!({ "seat": { "placement": at, "recipe": seated } }).to_string()
+        }
         Err(e) => failed(&e.code, e.message),
     }
 }

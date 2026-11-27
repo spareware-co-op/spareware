@@ -866,7 +866,7 @@
    */
   function lineOf(host) {
     const args = host.fill?.recipe?.args;
-    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length || !args.start || !args.end) return null;
     const start = args.start.map(steps);
     const end = args.end.map(steps);
     const d = [end[0] - start[0], end[1] - start[1]];
@@ -886,9 +886,9 @@
    * `onFamily` seat that), it is not filled yet, or the package does not answer.
    */
   function seatAtAngle(builder, el, role, host, along, up) {
+    if (!builder || typeof builder.shapes.seat !== 'function' || host.el.recipe.op !== LAYERED || !role) return null;
     const line = lineOf(host);
-    if (!builder || typeof builder.shapes.seat !== 'function' || !line || line.axis !== null) return null;
-    if (host.el.recipe.op !== LAYERED || !role) return null;
+    if (!line || line.axis !== null) return null;
     const wall = JSON.stringify(host.fill.recipe);
     const text = JSON.stringify([wall, el.recipe, el.id, role, along, up]);
     if (!builder.seats.has(text)) {
@@ -2172,7 +2172,7 @@
     const style = look.style;
     const mm = (um) => `${um / 1000} mm`;
     const pens = (here.annotation ? d.annotation_pens : d.pens).map((pen) => `<option value="${pen.number}"${pen.number === style.pen ? ' selected' : ''}>${esc(`${pen.number} ${pen.name}, ${mm(pen.width)}`)}</option>`);
-    const lines = d.seatLinepatterns.map((p) => `<option value="${p.id}"${p.id === style.pattern ? ' selected' : ''}>${esc(p.name)}</option>`);
+    const lines = d.line_patterns.map((p) => `<option value="${p.id}"${p.id === style.pattern ? ' selected' : ''}>${esc(p.name)}</option>`);
     const fills = ['<option value="">The material’s own</option>', ...d.fill_patterns.map((name) => `<option value="${esc(name)}"${style.fill?.pattern === name ? ' selected' : ''}>${esc(capital(name))}</option>`)];
     const edge = (which, label) => `<button class="btn sm" data-act="stackgfxedge" data-a="${which}" data-key="gfx-edge:${which}" aria-pressed="${m.edge === which}"${which === 'cut' && !here.cut ? ' disabled' : ''}>${label}</button>`;
     const options = d.looks.map((l) => `<option value="${l.category}"${l.category === here.category ? ' selected' : ''}>${l.parent === null ? '' : '– '}${esc(l.name)}</option>`);
@@ -2335,7 +2335,7 @@
       html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
     }
     html += '</table>';
-    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right. Hold Shift on the second for any angle.</p>';
     return html + problem('wall-draw');
   }
 
@@ -3933,7 +3933,7 @@
    * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
    * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
    */
-  async function placeWall(at) {
+  async function placeWall(at, anyAngle = false) {
     const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
       S.pend = point;
@@ -3943,8 +3943,9 @@
     const [ax, ay] = S.pend;
     S.pend = null;
     $('#hint').innerHTML = hint();
+    // A wall runs along x or y, whichever is nearer the pointer; with Shift held, to the point itself, at any angle.
     const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
-    const end = along ? [point[0], ay] : [ax, point[1]];
+    const end = anyAngle ? point : along ? [point[0], ay] : [ax, point[1]];
     const level = levelOf();
     let view;
     try {
@@ -4040,7 +4041,7 @@
       const at = toModel(event);
       if (S.tool !== 'select') {
         if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
-        else if (S.tool === 'wall') placeWall(at);
+        else if (S.tool === 'wall') placeWall(at, event.shiftKey);
         else if (S.tool === 'door') placeDoor(at);
         else if (S.tool === 'family') placeFamily(at);
         else if (S.tool === 'opening') placeOpening(at);

@@ -219,10 +219,12 @@ fn seated<E: Engine + Send + 'static>(
         &on.hosting,
     )
     .map_err(|e| e.message)?;
-    let at_an_angle = seating::seat_of(&seated)
-        .map_err(|e| e.message)?
-        .is_some();
-    Ok(if at_an_angle { seated } else { element.recipe.clone() })
+    let at_an_angle = seating::seat_of(&seated).map_err(|e| e.message)?.is_some();
+    Ok(if at_an_angle {
+        seated
+    } else {
+        element.recipe.clone()
+    })
 }
 
 /// The drawing of what `view`'s plane cuts of one element: each layer of it is its own solid, with
