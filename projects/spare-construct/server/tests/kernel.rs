@@ -1364,6 +1364,15 @@ async fn a_views_crop_clips_the_plan_and_draws_its_outline() {
         "a wall the crop's edge crosses is cut at the edge"
     );
     assert_eq!(cropped, draw().await, "the same crop draws the same bytes");
+    let elements: Vec<&str> = cropped
+        .split("data-element=\"")
+        .skip(1)
+        .filter_map(|part| part.split('"').next())
+        .collect();
+    assert!(
+        elements.contains(&"D-101"),
+        "the door inside the crop is drawn: {elements:?}"
+    );
 
     // Hidden: the same clip with no outline. Off but shown: the whole plan with the outline.
     edit("view.crop.show", json!({ "view": "VP-1", "shown": false })).await;
@@ -1371,12 +1380,33 @@ async fn a_views_crop_clips_the_plan_and_draws_its_outline() {
     assert_eq!(outline(&hidden), 0);
     assert!(widest(&hidden) <= 6000.0);
     assert_ne!(hidden, low);
+    assert!(
+        hidden.contains("data-element=\"D-101\""),
+        "hidden: the door is drawn"
+    );
     edit("view.crop.show", json!({ "view": "VP-1", "shown": true })).await;
     edit("view.crop.set", json!({ "view": "VP-1", "on": false })).await;
     let off = draw().await;
     assert_eq!(outline(&off), 4);
     assert!(widest(&off) > 6000.0, "a crop that is off clips nothing");
+    assert!(
+        off.contains("data-element=\"D-101\""),
+        "off: the door is drawn"
+    );
 
+    // Moving the right edge in to 4 m keeps the door at 2500 mm and still cuts there.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "on": true, "region": { "rectangle": {
+            "min": { "x": "0", "y": "-500" }, "max": { "x": "4 m", "y": "8.5 m" } } } }),
+    )
+    .await;
+    let narrow = draw().await;
+    assert!(widest(&narrow) <= 4000.0, "{}", widest(&narrow));
+    assert!(
+        narrow.contains("data-element=\"D-101\""),
+        "the door is inside 4 m"
+    );
     // A shaped crop (a triangle off the axes) cuts at fractions of a millimetre and still draws
     // nothing outside it.
     edit(

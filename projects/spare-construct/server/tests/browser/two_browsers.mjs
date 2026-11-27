@@ -2244,6 +2244,21 @@ const cropReach = (page) =>
     }
     return far;
   }, cropDrawn);
+// The door in the drawing, waited for; a miss says what was drawn instead.
+const cropDoorIs = async (page, state) => {
+  try {
+    await page.waitForSelector(cropDoor, { state, timeout: 20000 });
+  } catch (error) {
+    const seen = await page.evaluate(
+      (sel) => ({
+        elements: [...new Set([...document.querySelectorAll(`${sel} [data-element]`)].map((e) => e.dataset.element))],
+        note: document.querySelector('.stack-plan-note')?.textContent ?? null,
+      }),
+      cropDrawn,
+    );
+    throw new Error(`the door was not ${state}: ${JSON.stringify(seen)}; ${error.message}`);
+  }
+};
 const cropFrame = (page) => page.locator(`${cropDrawn} line[data-role="crop"]`);
 // Waits until the page's drawing reaches no further right than `limit` (and has something drawn).
 const cropWithin = (page, limit) =>
@@ -2276,7 +2291,7 @@ await anna.click(viewLeaf('Level 1 plan'));
 await ben.click(viewLeaf('Level 1 plan'));
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await page.waitForSelector(cropDoor, { state: 'attached' });
+    await cropDoorIs(page, 'attached');
     await cropBeyond(page, 6000);
     check((await cropFrame(page).count()) === 0, 'a view with no crop draws no outline');
   }
@@ -2349,7 +2364,7 @@ await cropWait(ben, ['crop', 'region', 'corners', 2, 'x'], '4000 mm');
 if (withKernel) {
   for (const page of [anna, ben]) {
     await cropWithin(page, 4000);
-    await page.waitForSelector(cropDoor, { state: 'attached' });
+    await cropDoorIs(page, 'attached');
   }
   pass('a corner moved to 4 m: both plans are cut there, and the door inside it is still drawn');
 }
@@ -2389,7 +2404,7 @@ await ben.waitForFunction(
 );
 if (withKernel) {
   for (const page of [anna, ben]) {
-    await page.waitForSelector(cropDoor, { state: 'detached' });
+    await cropDoorIs(page, 'detached');
     await page.waitForSelector(`${cropDrawn} line[data-element="W-101"]`, { state: 'attached' });
   }
   pass('the cut plane at 2500 mm: the door (2100 mm high) is not cut and the wall is, in both browsers');
@@ -2403,7 +2418,7 @@ await cropWait(ben, ['range', 'cut', 'offset'], '1200 mm');
 await anna.click('#qat [data-act="stackundo"]');
 await cropWait(ben, ['range', 'top', 'offset'], '2300 mm');
 if (withKernel) {
-  for (const page of [anna, ben]) await page.waitForSelector(cropDoor, { state: 'attached' });
+  for (const page of [anna, ben]) await cropDoorIs(page, 'attached');
 }
 pass('her two undos put the heights back, the door is drawn again, and Ben follows');
 await anna.click('#qat [data-act="stackundo"]');
