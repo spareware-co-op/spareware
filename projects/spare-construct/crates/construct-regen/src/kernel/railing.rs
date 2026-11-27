@@ -1,12 +1,16 @@
 //! A railing on the engine (job 14.2, CON-A4-F5-P3): one solid per piece of a filled `railing`
-//! recipe ([`crate::railing_plan`]), each the extrusion construct-railings worked out for it, asked
-//! of the engine through its trait alone.
+//! recipe ([`crate::railing_plan`]), each the sweep construct-railings worked out for it, asked of
+//! the engine through its trait alone.
 //!
 //! What it builds:
 //!
-//! - A solid for each post, baluster and piece of top rail or handrail: its flat profile swept
-//!   along its vector ([`Engine::extrude`]): upright for a post or a baluster, along the piece of
-//!   line for a rail.
+//! - A solid for each post and baluster: its flat profile in plan extruded straight up
+//!   ([`Engine::extrude`]).
+//! - A solid for each piece of top rail or handrail: its upright section lofted to the same section
+//!   moved along its piece ([`Engine::loft`] of two sections: every wall of such a loft is flat,
+//!   each joining two corners of one section to the same two of the other, as a stair's run is
+//!   built), since an extrusion along a vector that is not upright is not every engine's: the
+//!   server's answers one with a surface the kernel has no kind for.
 //! - Each solid is the engine's, so the kernel's checker has passed it, as the seam's contract
 //!   says. The pieces touch or overlap where a rail meets a post or a baluster and are not united.
 //! - Names (chapter 20.2), under the recipe's operation as every shape's are: one role for each
@@ -31,7 +35,7 @@ use crate::railing_plan::RailingPlan;
 use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
-use engine_geometry::value::engine::{Engine, Profile};
+use engine_geometry::value::engine::{Engine, Profile, Section};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
 use serde::Serialize;
@@ -48,6 +52,8 @@ struct AskedPiece {
     id: String,
     extrude: Vec<[i64; 3]>,
     by: [i64; 3],
+    /// Lofted to the same profile moved by `by`, not extruded.
+    lofted: bool,
 }
 
 /// The names of a railing's faces, sorted by name.
@@ -126,16 +132,39 @@ impl<E: Engine> Kernel<E> {
                     units.from_q0(piece.by[1])?,
                     units.from_q0(piece.by[2])?,
                 ];
+                let lofted = piece.by[0] != 0 || piece.by[1] != 0;
                 asked.pieces.push(AskedPiece {
                     id: piece.id.clone(),
                     extrude: as_steps(&outer),
                     by,
+                    lofted,
                 });
-                let profile = Profile {
-                    outer,
-                    holes: Vec::new(),
+                let made = if lofted {
+                    let swept: Vec<[i64; 3]> = piece
+                        .profile
+                        .iter()
+                        .map(|p| {
+                            [
+                                p[0].saturating_add(piece.by[0]),
+                                p[1].saturating_add(piece.by[1]),
+                                p[2].saturating_add(piece.by[2]),
+                            ]
+                        })
+                        .collect();
+                    let sections = [
+                        Section { corners: outer },
+                        Section {
+                            corners: on_engine(&swept, units)?,
+                        },
+                    ];
+                    engine.loft(&sections).map_err(from_engine)?
+                } else {
+                    let profile = Profile {
+                        outer,
+                        holes: Vec::new(),
+                    };
+                    engine.extrude(&profile, by).map_err(from_engine)?
                 };
-                let made = engine.extrude(&profile, by).map_err(from_engine)?;
                 let shown = engine.mesh(&made).map_err(from_engine)?;
                 let appended = append(&mut mesh, &shown, units, &mut extent)?;
                 rounded |= appended.rounded;

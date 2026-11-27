@@ -125,6 +125,47 @@ pub(crate) fn term(c: &[i128], r: &[i128], d: &[i128]) -> Option<Real> {
     Real::new(BigInt::zero(), vec![(product(c), product(r))], product(d))
 }
 
+/// Whether `points` are a flat polygon with an area and `by` sweeps it out of its plane, exactly:
+/// the polygon's Newell normal is not nothing, every point lies on the plane through the first
+/// square to it, and the normal's dot with `by` is not nothing. Our own check of every piece
+/// before the engine is asked for it.
+pub(crate) fn flat_and_swept(points: &[[i64; 3]], by: [i64; 3]) -> bool {
+    let big = |p: &[i64; 3]| p.map(BigInt::from);
+    let mut normal = [BigInt::zero(), BigInt::zero(), BigInt::zero()];
+    for (k, p) in points.iter().enumerate() {
+        let Some(q) = points.get((k + 1) % points.len()) else {
+            return false;
+        };
+        let (p, q) = (big(p), big(q));
+        for (axis, n) in normal.iter_mut().enumerate() {
+            let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+            let (Some(pa), Some(qa), Some(pb), Some(qb)) = (p.get(a), q.get(a), p.get(b), q.get(b))
+            else {
+                return false;
+            };
+            *n += (pa - qa) * (pb + qb);
+        }
+    }
+    let dot = |v: &[BigInt; 3]| -> BigInt {
+        normal
+            .iter()
+            .zip(v)
+            .fold(BigInt::zero(), |sum, (n, c)| sum + n * c)
+    };
+    let Some(first) = points.first().map(big) else {
+        return false;
+    };
+    let on_plane = points.iter().all(|p| {
+        let p = big(p);
+        let d = [&p[0] - &first[0], &p[1] - &first[1], &p[2] - &first[2]];
+        dot(&d).is_zero()
+    });
+    points.len() >= 3
+        && normal.iter().any(|n| !n.is_zero())
+        && on_plane
+        && !dot(&big(&by)).is_zero()
+}
+
 impl Real {
     /// A whole number of steps.
     pub(crate) fn whole(v: i128) -> Self {
@@ -346,6 +387,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(three.sign(), None);
+    }
+
+    #[test]
+    fn a_profile_is_flat_and_swept_out_of_its_plane() {
+        let square = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]];
+        assert!(flat_and_swept(&square, [0, 0, 5]));
+        assert!(flat_and_swept(&square, [3, 4, 5]));
+        // Swept along its own plane, bent out of it, or of no area: refused.
+        assert!(!flat_and_swept(&square, [5, 0, 0]));
+        assert!(!flat_and_swept(
+            &[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]],
+            [0, 0, 5]
+        ));
+        assert!(!flat_and_swept(
+            &[[0, 0, 0], [10, 0, 0], [20, 0, 0]],
+            [0, 0, 5]
+        ));
     }
 
     #[test]

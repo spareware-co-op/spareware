@@ -262,7 +262,7 @@ async fn a_railing_is_made_changed_and_deleted_by_its_own_commands() {
     let laid = view.railings[0].laid.as_ref().unwrap();
     assert_eq!((laid.balusters, laid.posts), (27, 2));
     assert_eq!(laid.rail_length.shown, "3000 mm");
-    assert!(laid.warnings.is_empty());
+    assert_eq!(laid.warnings.len(), 0);
     assert_eq!(
         stack.bounds("R-1").await.unwrap(),
         ([-25, -25, 0], [3025, 25, 1000])
@@ -560,7 +560,7 @@ async fn the_view_lists_the_categories_and_every_railing() {
             .collect::<Vec<_>>(),
         vec![("children", "sphere"), ("no-children", "most")]
     );
-    assert!(view.railings.is_empty());
+    assert_eq!(view.railings.len(), 0);
     stack
         .edit(
             "railing.create",

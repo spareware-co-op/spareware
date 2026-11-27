@@ -18,6 +18,8 @@
 //!   any angle and on any pitch. The profile's top is at the rail's height above the line's start.
 //!   Where the line steps up at a run's foot no piece of rail joins the two heights: the post
 //!   stands there.
+//! - **Every piece is checked** before a builder asks the engine for it: its profile flat, with an
+//!   area, and its sweep out of its plane, exactly ([`RailingError::NotFlat`] otherwise).
 //! - **A round profile** is twelve corners on its circle, at every 30 degrees from its top for a
 //!   rail and from `+x` for a post or a baluster; their sines and cosines are `0`, `1/2`,
 //!   `sqrt(3)/2` and `1`, so every corner stays exact before its one rounding. Interim, as
@@ -373,6 +375,15 @@ pub fn shape(kind: &RailingType, layout: &Layout) -> Result<Vec<Piece>, RailingE
                 });
             }
         }
+    }
+    // Our own check of every piece before the engine is asked for it.
+    if let Some(bad) = pieces
+        .iter()
+        .find(|p| !exact::flat_and_swept(&p.profile, p.by))
+    {
+        return Err(RailingError::NotFlat {
+            piece: bad.id.clone(),
+        });
     }
     Ok(pieces)
 }

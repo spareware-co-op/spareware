@@ -381,6 +381,10 @@ impl RailingType {
 
     /// Reads a type, each length by `length`, over `base` where a field is not given (none: every
     /// field must be).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "every field of a type in the stored form's order, each over its base"
+    )]
     fn read(v: &Json, length: &Reader<'_>, base: Option<&Self>) -> Result<Self, RailingError> {
         let top = fields(
             v,

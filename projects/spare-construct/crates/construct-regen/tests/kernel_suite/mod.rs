@@ -2812,6 +2812,14 @@ pub fn a_railing_is_its_pieces<E: Engine + Send + 'static>(make: impl Fn() -> E)
     assert_eq!(asked.len(), 3);
     assert_eq!(asked[2]["extrude"], railing.args["pieces"][2]["extrude"]);
     assert_eq!(asked[2]["by"], json!([1000 * 6400, 0, 500 * 6400]));
+    // A post is extruded up; a rail is lofted along its piece.
+    assert_eq!(
+        asked
+            .iter()
+            .map(|a| a["lofted"].clone())
+            .collect::<Vec<_>>(),
+        vec![json!(false), json!(true), json!(true)]
+    );
 }
 
 /// A stair is one solid per piece: its run's profile lofted across its 1000 mm width, a closed

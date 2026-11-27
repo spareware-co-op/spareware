@@ -504,17 +504,18 @@
     {
       "program": "spare-construct",
       "place": "construct-regen's kernel::railing, a railing's pieces",
-      "operation": "railing (Kernel: one Engine::extrude of each piece: a post's or a baluster's profile in plan swept up, a rail's upright section in the plane x = const or y = const swept along its piece of line, level or sloped)",
-      "answered_by": "the engine behind the Engine trait, each piece a solid of its own: on the server's kernel setting solidcore's engine, an extrusion by the kernel's make.prism; the pieces' meshes put one after another in whole millimetres, each point the nearest millimetre, the railing's names written from its recipe",
+      "operation": "railing (Kernel: one Engine::extrude of each post's or baluster's profile in plan up, one Engine::loft of each piece of rail's upright section in the plane x = const or y = const to the same moved along its piece of line, level or sloped)",
+      "answered_by": "the engine behind the Engine trait, each piece a solid of its own: on the server's kernel setting solidcore's engine, an extrusion by the kernel's make.prism and a loft by the engine's own exact rows (each wall a flat face through the sections' grid corners); the pieces' meshes put one after another in whole millimetres, each point the nearest millimetre, the railing's names written from its recipe",
       "pinned_by": {
         "file": "projects/spare-construct/server/tests/kernel.rs",
         "test": "a_railing_is_its_pieces"
       },
       "known_faults": [
         "a corner not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
-        "the pieces touch or overlap where a rail meets a post or a baluster and are not united into one body"
+        "the pieces touch or overlap where a rail meets a post or a baluster and are not united into one body",
+        "a rail is lofted, not extruded: solidcore's extrusion along a vector that is not upright gives a spline surface the kernel has no kind for"
       ],
-      "replaced_by": "the kernel's own exact extrusion (geom-sweep, chapter 13.6) behind the same trait, display meshes on the kernel's grid, and a union of the pieces once the trait's boolean takes touching solids"
+      "replaced_by": "the kernel's own exact extrusion and ruled loft (geom-sweep, chapters 13.4 and 13.6) behind the same trait, display meshes on the kernel's grid, and a union of the pieces once the trait's boolean takes touching solids"
     },
     {
       "program": "spare-construct",

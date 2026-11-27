@@ -29,9 +29,9 @@
 //! - `stair`: one solid per piece, each the solid construct-stairs worked out for it (a run's side
 //!   profile lofted across its width, a landing's outline extruded up), in the child module
 //!   `stair` (job 6.7); its points are construct-params' steps ([`crate::stair_plan`]).
-//! - `railing`: one solid per piece, each the extrusion construct-railings worked out for it (a
-//!   post's or a baluster's profile swept up, a rail's section swept along its piece of line), in
-//!   the child module `railing` (job 14.2); its points are construct-params' steps
+//! - `railing`: one solid per piece, each the sweep construct-railings worked out for it (a post's
+//!   or a baluster's profile extruded up, a rail's section lofted along its piece of line), in the
+//!   child module `railing` (job 14.2); its points are construct-params' steps
 //!   ([`crate::railing_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one

@@ -365,7 +365,10 @@ async fn a_railing_reads_back_its_quantities_and_warnings() {
         .await
         .unwrap();
     assert_eq!(
-        warnings.iter().map(|w| w.identity()).collect::<Vec<_>>(),
+        warnings
+            .iter()
+            .map(construct_railings::Warning::identity)
+            .collect::<Vec<_>>(),
         vec!["railing.opening|R-1"]
     );
     let now =

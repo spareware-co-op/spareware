@@ -84,6 +84,12 @@ pub enum RailingError {
         /// The segment, from 1.
         segment: usize,
     },
+    /// A piece that is not a flat profile with an area swept out of its plane: our own check of
+    /// every piece before the engine is asked for it.
+    NotFlat {
+        /// The piece's ID.
+        piece: String,
+    },
     /// A railing on both sides of a stair has no other side to flip to.
     BothSides,
     /// A record or recipe that is not a railing's.
@@ -111,6 +117,7 @@ impl RailingError {
             | Self::TurnsBack { .. }
             | Self::SlopedOffAxis { .. } => "BadPath",
             Self::NoBalusterHeight { .. } => "NoBalusterHeight",
+            Self::NotFlat { .. } => "BadShape",
             Self::BothSides => "BothSides",
             Self::NotARailing(_) => "NotARailing",
             Self::Host(_) => "HostMissing",
@@ -172,6 +179,10 @@ impl fmt::Display for RailingError {
             Self::SlopedOffAxis { line, segment } => write!(
                 f,
                 "Segment {segment} of line {line} slopes and does not run along an axis in plan."
+            ),
+            Self::NotFlat { piece } => write!(
+                f,
+                "A railing's piece {piece} is not a flat profile swept out of its plane."
             ),
             Self::BothSides => write!(
                 f,
