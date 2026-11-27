@@ -30,9 +30,10 @@ use construct_params::{Area, Choice, Definition, Holder, Kind, Length, ProjectPa
 use construct_regen::parameters::{self, At, Context, TYPE_KEY};
 use construct_regen::regenerator::Regenerator;
 use construct_regen::stand_in::Boxes;
+use construct_regen::wall_plan::Layered;
 use construct_regen::walls::{self, type_arg};
-use construct_regen::{hosting, rooms};
-use construct_rooms::{Limit, Outcome as Room, room_record};
+use construct_regen::{hosting, joins, rooms};
+use construct_rooms::{Bound, Limit, Outcome as Room, Outline, room_record};
 use construct_walls::{
     FLIPPED, LOCATION_LINE, LocationLine, default_wall_types, location_line_value,
 };
@@ -49,6 +50,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const PROJECT: &str = "p";
 const DOCUMENT: &str = "doc";
 const CONCRETE: &str = "wall-concrete-200";
+/// The defaults' 250 mm outer wall: 110 mm brick, a 40 mm cavity, a 0 mm wrap, a 90 mm timber
+/// frame and a 10 mm lining, from the exterior.
+const VENEER: &str = "wall-brick-veneer-90";
+/// The defaults' 115 mm partition: 12.5 mm linings either side of a 90 mm timber stud.
+const STUD: &str = "wall-partition-stud-90";
 const MM: i64 = 6400;
 
 fn i(text: &str) -> Id {
@@ -208,6 +214,17 @@ impl Stack {
         self.run("put", json!({ "record": record })).await;
     }
 
+    /// Stores the default wall type `id` too.
+    async fn put_type(&self, id: &str) {
+        let context = Context::new(table()).unwrap();
+        let ty = default_wall_types(&context.params, &context.categories)
+            .unwrap()
+            .into_iter()
+            .find(|ty| ty.id().as_str() == id)
+            .unwrap();
+        self.put(&ty.to_record(&i(DOCUMENT))).await;
+    }
+
     async fn delete(&self, id: &str) {
         self.run("delete", json!({ "id": id })).await;
     }
@@ -245,6 +262,29 @@ impl Stack {
         let mut snapshot = self.store.snapshot().await.unwrap();
         let row: Option<Reads> = read_row(&mut snapshot, &place.key()).await.unwrap();
         row.unwrap_or_default().records.into_iter().collect()
+    }
+
+    /// A wall's outline as it is built now, in grid steps of the model's plan (every wall here is
+    /// placed at the origin): its recipe with its joints made, as `/filled` gives it, and the
+    /// outline they shape; `None` when no joint changes it.
+    async fn joined(&self, wall: &Element) -> Option<Vec<[i64; 2]>> {
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        let recipe = joins::recipe_at(&mut snapshot, &i(PROJECT), &i(DOCUMENT), wall, At::Now)
+            .await
+            .unwrap()
+            .unwrap();
+        Layered::of(&recipe)
+            .unwrap()
+            .joined
+            .map(|joints| joints.outline)
+    }
+
+    /// The walls of level L-0 as a room reads them now.
+    async fn bounds_on(&self) -> Vec<Bound> {
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        rooms::bounds_on(&mut snapshot, &i(PROJECT), &i(DOCUMENT), &i("L-0"), At::Now)
+            .await
+            .unwrap()
     }
 
     /// What becomes of a room as the document stands now.
@@ -304,18 +344,24 @@ fn on(level: &str) -> Tie {
 /// A 200 mm concrete wall on level L-0, its centre line from `start` to `end` in millimetres,
 /// 2700 mm high, its layers read from its type.
 fn wall(id: &str, start: [i64; 2], end: [i64; 2]) -> Element {
+    typed_wall(CONCRETE, id, start, end, 2700)
+}
+
+/// A wall of the default type `ty` on level L-0, its centre line from `start` to `end` and its
+/// height in millimetres, its layers read from its type.
+fn typed_wall(ty: &str, id: &str, start: [i64; 2], end: [i64; 2], height: i64) -> Element {
     let mm = |v: i64| q0(v * MM);
     let mut args = BTreeMap::new();
     args.insert("start".to_owned(), json!([mm(start[0]), mm(start[1])]));
     args.insert("end".to_owned(), json!([mm(end[0]), mm(end[1])]));
-    args.insert("height".to_owned(), json!(mm(2700)));
+    args.insert("height".to_owned(), json!(mm(height)));
     args.insert("layers".to_owned(), type_arg());
     let mut props = BTreeMap::new();
     props.insert(
         parameters::CATEGORY_KEY.to_owned(),
         parameters::write_category(WALLS),
     );
-    props.insert(TYPE_KEY.to_owned(), CONCRETE.to_owned());
+    props.insert(TYPE_KEY.to_owned(), ty.to_owned());
     write_base(&mut props, Some(&on("L-0")));
     Element {
         id: i(id),
@@ -531,4 +577,156 @@ async fn a_door_leaves_a_room_enclosed_and_a_second_room_is_redundant() {
     stack.put(&lost).await;
     let failed = stack.bounds("R-4").await.unwrap_err();
     assert!(failed.starts_with("PointInWall"), "{failed}");
+}
+
+/// A room's loop in millimetres, corner by corner.
+fn loop_mm(outcome: &Room) -> Vec<[i64; 2]> {
+    let Room::Enclosed { found, .. } = outcome else {
+        panic!("not enclosed: {outcome:?}")
+    };
+    found.outer.iter().map(|c| c.at.map(|v| v / MM)).collect()
+}
+
+/// An L-shaped room meets its walls where their joint puts their faces, worked by hand (issue
+/// 1329). Six 250 mm brick veneer walls 3000 mm high, drawn on their centre lines from (0,0) to
+/// (8000,0), (8000,3000), (4000,3000), (4000,6000), (0,6000) and back, exterior out; a room at
+/// (2000,2000) up to level L-1 at 3000 mm. Each inner face is 125 mm in from its line, so the
+/// room's outline is (125,125) (7875,125) (7875,2875) (3875,2875) (3875,5875) (125,5875): at
+/// (4000,3000), the corner that points into the room, the two inner faces meet at the one point
+/// (3875,2875).
+/// - Area: 7750 x 2750 + 3750 x 3000 = 21,312,500 + 11,250,000 = 32,562,500 mm2. Check: the
+///   centre lines enclose 8000 x 3000 + 4000 x 3000 = 36,000,000; less the perimeter 28,000 x 125
+///   = 3,500,000; plus 5 outward corners x 125 x 125 = 78,125; less 1 inward corner x 15,625:
+///   32,562,500.
+/// - Perimeter: 7750 + 2750 + 4000 + 3000 + 3750 + 5750 = 27,000 mm.
+/// - Volume to 3000 mm: 32,562,500 x 3000 = 97,687,500,000 mm3.
+///
+/// Read from each wall's plain rectangle instead of its joined outline, the inward corner keeps a
+/// 125 by 125 mm notch, (4000,2875) (4000,3000) (3875,3000): 32,578,125 mm2 and
+/// 97,734,375,000 mm3, one 15,625 mm2 square too much.
+#[tokio::test]
+async fn an_l_shaped_room_meets_its_inward_corner_where_the_walls_join() {
+    let stack = Stack::new().await;
+    stack.put_type(VENEER).await;
+    let line = [
+        [0, 0],
+        [8000, 0],
+        [8000, 3000],
+        [4000, 3000],
+        [4000, 6000],
+        [0, 6000],
+    ];
+    let walls: Vec<Element> = (0..6)
+        .map(|k| {
+            typed_wall(
+                VENEER,
+                &format!("W-{}", k + 1),
+                line[k],
+                line[(k + 1) % 6],
+                3000,
+            )
+        })
+        .collect();
+    for wall in &walls {
+        stack.put(wall).await;
+    }
+    let up = Limit::Level(on("L-1"));
+    let l_room = room("R-1", "101", [2000, 2000], &up);
+    stack.put(&l_room).await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([125, 125, 0], [7875, 5875, 3000]))
+    );
+    let outcome = stack.room(&l_room).await;
+    assert_eq!(
+        loop_mm(&outcome),
+        [
+            [125, 125],
+            [7875, 125],
+            [7875, 2875],
+            [3875, 2875],
+            [3875, 5875],
+            [125, 5875],
+        ]
+    );
+    let Room::Enclosed { measures, found } = outcome else {
+        panic!("not enclosed")
+    };
+    assert_eq!(measures.area, mm2(32_562_500));
+    assert_eq!(measures.perimeter, Length::from_mm(27_000));
+    assert_eq!(
+        measures.volume,
+        mm2(32_562_500).checked_mul(Length::from_mm(3000)).unwrap()
+    );
+    assert_eq!(found.walls.len(), 6);
+
+    // The room reads each wall by its outline as it is built, every corner joined.
+    let bounds = stack.bounds_on().await;
+    assert_eq!(bounds.len(), 6);
+    for (bound, wall) in bounds.iter().zip(&walls) {
+        assert_eq!(bound.wall, wall.id);
+        let built = stack.joined(wall).await.unwrap();
+        assert_eq!(bound.outline, Outline::Polygon(built));
+    }
+}
+
+/// Rooms either side of a partition that meets the outer walls in two T's, by layer priority,
+/// worked by hand: a 6000 by 4000 mm box of 250 mm brick veneer walls drawn on their centre lines,
+/// 3000 mm high, a 115 mm stud partition on x = 3000 from wall to wall. At each T the partition's
+/// 90 mm stud runs through the outer wall's 10 mm lining to its frame, and its 12.5 mm linings stop
+/// at the outer lining's face, so the outer wall's joined outline has a 10 mm notch where the stud
+/// goes in; the rooms still meet the faces at one point. Each room is 2942.5 - 125 = 2817.5 by
+/// 3875 - 125 = 3750 mm: 10,565,625 mm2, perimeter 2 x (2817.5 + 3750) = 13,135 mm, volume to
+/// 3000 mm 31,696,875,000 mm3.
+#[tokio::test]
+async fn rooms_either_side_of_a_t_meet_the_faces_as_the_layers_join() {
+    let stack = Stack::new().await;
+    stack.put_type(VENEER).await;
+    stack.put_type(STUD).await;
+    for (id, start, end) in [
+        ("W-S", [0, 0], [6000, 0]),
+        ("W-E", [6000, 0], [6000, 4000]),
+        ("W-N", [6000, 4000], [0, 4000]),
+        ("W-W", [0, 4000], [0, 0]),
+    ] {
+        stack.put(&typed_wall(VENEER, id, start, end, 3000)).await;
+    }
+    let partition = typed_wall(STUD, "W-P", [3000, 0], [3000, 4000], 3000);
+    stack.put(&partition).await;
+    // The stud's 90 mm, x = 2955 to 3045, goes 10 mm into the south wall, to its frame's face.
+    let south = stack
+        .joined(&typed_wall(VENEER, "W-S", [0, 0], [6000, 0], 3000))
+        .await
+        .unwrap();
+    for corner in [[2955, 125], [2955, 115], [3045, 115], [3045, 125]] {
+        assert!(south.contains(&corner.map(|v| v * MM)), "{south:?}");
+    }
+    let up = Limit::Level(on("L-1"));
+    let west = room("R-1", "101", [1500, 2000], &up);
+    let east = room("R-2", "102", [4500, 2000], &up);
+    stack.put(&west).await;
+    stack.put(&east).await;
+    let corners = |x0: i64, x1: i64| {
+        vec![
+            [x0, 125 * MM],
+            [x1, 125 * MM],
+            [x1, 3875 * MM],
+            [x0, 3875 * MM],
+        ]
+    };
+    // 2942.5 and 3057.5 mm, the partition's faces, in steps.
+    let (face_w, face_e) = (2942 * MM + MM / 2, 3057 * MM + MM / 2);
+    for (record, x0, x1) in [(&west, 125 * MM, face_w), (&east, face_e, 5875 * MM)] {
+        let Room::Enclosed { measures, found } = stack.room(record).await else {
+            panic!("not enclosed")
+        };
+        let at: Vec<[i64; 2]> = found.outer.iter().map(|c| c.at).collect();
+        assert_eq!(at, corners(x0, x1));
+        assert_eq!(measures.area, mm2(10_565_625));
+        assert_eq!(measures.perimeter, Length::from_mm(13_135));
+        assert_eq!(
+            measures.volume,
+            mm2(10_565_625).checked_mul(Length::from_mm(3000)).unwrap()
+        );
+    }
 }
