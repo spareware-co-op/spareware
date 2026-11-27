@@ -879,6 +879,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-stairs"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-roofs",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-styles"
 version = "0.0.0"
 dependencies = [
