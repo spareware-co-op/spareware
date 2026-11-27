@@ -59,8 +59,8 @@
 //! not fit there (the kernel builder's words), and anything construct-curtain or the builders
 //! would refuse, in their words.
 //!
-//! The generic commands do not go behind these ([`generic_rules`]): `element.create` of a curtain
-//! wall, `element.set` of a curtain wall's recipe, `type.create` of a curtain walls type and
+//! The generic commands do not go behind these ([`generic_rules`]): `element.create` and
+//! `hosted.place` of a curtain wall, `element.set` of a curtain wall's recipe, `type.create` of a curtain walls type and
 //! `type.rename`, `type.duplicate` or `type.delete` of a curtain wall type are refused, naming the
 //! command to use.
 //!
@@ -1067,7 +1067,8 @@ fn is_curtain_type(record: &Element) -> bool {
 
 /// The curtain wall rules of the generic commands, asked before one runs, as the wall rules are
 /// ([`crate::cloud::walls::generic_rules`]): a curtain wall is drawn by `curtain.draw` or
-/// `curtain.embed`, not made by `element.create` nor its recipe changed by `element.set`; a
+/// `curtain.embed`, not made by `element.create` or `hosted.place` nor its recipe changed by
+/// `element.set`; a
 /// curtain wall type is made by `curtain.type.create`, not `type.create`, and renamed, copied and
 /// deleted by `curtain.type.rename`, `curtain.type.duplicate` and `curtain.type.delete`. The inner
 /// error is the refusal, naming the command to use. An edit these rules have nothing to say of is
@@ -1090,6 +1091,10 @@ pub async fn generic_rules<T: Txn>(
         "element.create" if a_curtain_recipe => {
             Err(use_instead("A curtain wall is drawn", "curtain.draw"))
         }
+        "hosted.place" if a_curtain_recipe => Err(use_instead(
+            "A curtain wall is embedded in a wall",
+            "curtain.embed",
+        )),
         "element.set" if args.recipe.is_some() => {
             let Some(id) = &args.element else {
                 return Ok(Ok(()));

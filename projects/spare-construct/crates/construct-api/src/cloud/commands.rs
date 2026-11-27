@@ -306,9 +306,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         } else if hosting::is_command(&edit.cmd) {
             match families::generic_rules(&mut staged, project, edit).await? {
                 Ok(()) => match openings::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => {
-                        hosting::apply(&mut staged, project, context, edit, self.claim_ms).await?
-                    }
+                    Ok(()) => match curtains::generic_rules(&mut staged, project, edit).await? {
+                        Ok(()) => {
+                            hosting::apply(&mut staged, project, context, edit, self.claim_ms)
+                                .await?
+                        }
+                        Err(refused) => Err(refused),
+                    },
                     Err(refused) => Err(refused),
                 },
                 Err(refused) => Err(refused),

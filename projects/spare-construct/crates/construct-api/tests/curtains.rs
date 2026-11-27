@@ -703,6 +703,12 @@ async fn curtain_walls_refuse_in_words() {
             on(json!({ "recipe": curtain_recipe })),
             "curtain.grid",
         ),
+        (
+            "hosted.place",
+            json!({ "element": "CW-9", "host": "CW-1", "face": "box.exterior", "along": "0",
+                    "recipe": curtain_recipe }),
+            "curtain.embed",
+        ),
     ] {
         let refused = stack.edit(cmd, args).await.unwrap_err();
         assert!(refused.contains(words), "{cmd}: {refused}");
