@@ -31,9 +31,15 @@ construct-openings = { path = "../construct-openings" }
 construct-grids = { path = "../construct-grids" }
 # A layered wall's side is its instance parameter `wall.flipped`. Same workspace.
 construct-walls = { path = "../construct-walls" }
-# Whole-number greatest common divisors and exact square roots, for reducing an exact turn and
-# a mirror line to their lowest terms. MIT OR Apache-2.0.
+# Whole numbers of any size, so a motion's fractions never overflow and a turn by any angle is
+# worked out far past the grid before its points are rounded once (src/exact.rs, src/trig.rs).
+# MIT OR Apache-2.0; 0.4.8, as the workspace already locks it.
+num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
+# Greatest common divisors and floor division of those numbers, for lowest terms. MIT OR
+# Apache-2.0.
 num-integer = { version = "0.1.47", default-features = false, features = ["std"] }
+# Their traits (zero, one, sign). MIT OR Apache-2.0; 0.2.19, as the workspace already locks it.
+num-traits = { version = "0.2.19", default-features = false, features = ["std"] }
 # Recipes hold JSON. MIT OR Apache-2.0.
 serde_json = "1.0.154"
 

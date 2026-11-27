@@ -14,16 +14,22 @@
 //!
 //! `elements` is a list of element IDs. A point (`by`, `about`, `spacing`, `span`, `from`, `to`)
 //! is `[x, y]` as typed lengths (`["1200 mm", "0"]`); `line` is two points; `angle` and `sweep`
-//! are typed angles (`90°`); `from` and `to` are two directions, the turn taking the first to the
-//! second; `count` is how many in all, the originals counted; `copy` is a key the copies' IDs are
-//! made from (`<copy>.<n>`; an array's `<copy>.<k>.<n>`), fresh for each command, as a new
-//! element's ID is.
+//! are typed angles, any angle (`90°`, `37.5°`); `from` and `to` are two directions, the turn
+//! taking the first to the second; `count` is how many in all, the originals counted (a `sweep` of
+//! a full turn spreads them evenly round); `copy` is a key the copies' IDs are made from
+//! (`<copy>.<n>`; an array's `<copy>.<k>.<n>`), fresh for each command, as a new element's ID is.
+//!
+//! Every point written is the nearest grid step to where the motion takes it, rounded once
+//! (construct-modify's `exact`): exact for a move, a quarter turn, a 3:4:5 turn or a mirror that
+//! lands it, within half a step and 2^-94 of a step of the exact turn for any other angle.
 //!
 //! Refused, as the result and in words, writing nothing: what construct-modify refuses (an
-//! element not in the model or of a kind it does not move, a point off the length grid, a turn
-//! that is not exact, a hosted element moved off its host or turned alone, an older door hosted
-//! by its position, a copy's ID already taken), another person's claim on an element it
-//! rewrites, and anything the builders would refuse of what it writes, in their words: every
+//! element not in the model or of a kind it does not move, a point past the model's limit, a
+//! hosted element moved off its host or turned alone, an older door hosted by its position, a
+//! copy's ID already taken), another person's claim on an element it rewrites, and anything the
+//! builders would refuse of what it writes, in their words (a door, a family or an opening is
+//! hosted only on a wall along x or y today, so a wall that hosts one is turned off the axes only
+//! when the builder hosts them at any angle): every
 //! record written is filled and read by the builders' own readers as regeneration reads it
 //! ([`construct_regen::levels::recipe_at`], [`construct_regen::face_names`]; a room by
 //! [`construct_regen::rooms::found_at`]), every grid and plane is read again with their names
@@ -124,10 +130,10 @@ fn angle(typed: &str, what: &str) -> Result<Angle, String> {
     }
 }
 
-/// The turn a rotate or a radial array asks for: by an angle, or from one direction to another.
+/// The turn a rotate asks for: by any angle, or from one direction to another.
 fn turn(args: &Args) -> Result<Turn, String> {
     match (&args.angle, &args.from, &args.to) {
-        (Some(typed), None, None) => Turn::of_angle(angle(typed, "The angle")?).map_err(why),
+        (Some(typed), None, None) => Ok(Turn::of_angle(angle(typed, "The angle")?)),
         (None, Some(from), Some(to)) => Turn::between(
             point(Some(from), "a direction from")?,
             point(Some(to), "a direction to")?,
@@ -204,7 +210,7 @@ fn request(cmd: &str, args: &Args) -> Result<Request, String> {
         COPY => copies(vec![Motion::by(point(args.by.as_ref(), "a displacement")?)]),
         ROTATE => {
             let about = point(args.about.as_ref(), "a centre")?;
-            one(Motion::turn_about(about, turn(args)?).map_err(why)?)
+            one(Motion::turn_about(about, &turn(args)?))
         }
         MIRROR => {
             let [a, b] = args

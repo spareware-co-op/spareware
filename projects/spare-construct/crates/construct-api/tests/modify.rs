@@ -350,9 +350,9 @@ async fn a_wall_moves_with_what_it_hosts_and_one_undo_takes_it_back() {
 }
 
 /// A quarter turn takes a wall to run along y; the opening it hosts names that axis now, and the
-/// door turns with it. Any other angle is refused naming the quarter turns either side of it; a
-/// turn from one direction to another lands a wall of its own exactly, and a wall that hosts a door
-/// is refused in the builder's words, since a door sits only on a wall along x or y.
+/// door turns with it. A turn from one direction to another lands a wall of its own exactly. A
+/// wall that hosts a door or an opening, turned off the axes by any other angle, is refused in the
+/// builder's words, since the builder hosts them only on a wall along x or y today.
 #[tokio::test]
 async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
     let stack = Stack::new().await;
@@ -372,6 +372,7 @@ async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
     assert_eq!(cuts.keys().collect::<Vec<_>>(), ["F-1", "O-1"]);
     assert!(stack.bounds("F-1").await.is_ok());
 
+    let before = stack.rows("piece").await;
     let refused = stack
         .edit(
             "modify.rotate",
@@ -379,11 +380,14 @@ async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
         )
         .await
         .unwrap_err();
+    assert!(
+        refused.starts_with("opening O-1: W-1 runs at an angle"),
+        "{refused}"
+    );
     assert_eq!(
-        refused,
-        "A turn of 30° does not land on the length grid: only a whole number of quarter turns \
-         does, and the nearest are 0° and 90°. To turn by another angle, turn from one direction \
-         to another whose lengths are whole (3 to 4 to 5, say)."
+        stack.rows("piece").await,
+        before,
+        "a refusal writes nothing"
     );
 
     // A 3:4:5 turn about the origin takes (0, 4 m) to (-3.2 m, 2.4 m) and (6 m, 4 m) to
@@ -442,6 +446,79 @@ async fn a_door_fits_a_wall_along_y_as_it_is_built() {
         cuts_of(&stack, "W-y").await.keys().collect::<Vec<_>>(),
         ["F-y", "F-z"]
     );
+}
+
+/// Walls turn by any angle (37.5 degrees here), each end the nearest step to where the turn takes
+/// it (the points worked out apart from this crate); two joined at a corner share the rounded
+/// corner, so they stay joined, and both build. Turned back by the same angle, the corner is one
+/// step (0.00016 mm) from where it began: a turn and its way back are exact, but the corner was
+/// rounded between them. A radial array at 30 degrees puts its third copy a quarter turn round,
+/// exactly; a sweep of a full turn spreads seven evenly round; one undo takes an array back.
+#[tokio::test]
+async fn walls_turn_by_any_angle_and_stay_joined() {
+    let stack = Stack::new().await;
+    a_house(&stack).await;
+    let partition = walls::default_type_args().unwrap().remove(0);
+    for (id, start, end) in [
+        ("W-3", ["10 m", "0"], ["14 m", "0"]),
+        ("W-4", ["14 m", "0"], ["14 m", "3 m"]),
+    ] {
+        let draw = json!({ "element": id, "type": partition["type"], "start": start, "end": end,
+                           "level": "L-g", "top": "L-1" });
+        stack.edit("wall.draw", draw).await.unwrap();
+    }
+    let both =
+        |angle: &str| json!({ "elements": ["W-3", "W-4"], "about": ["10 m", "0"], "angle": angle });
+    stack.edit("modify.rotate", both("37.5°")).await.unwrap();
+    let w3 = stack.record("W-3").await.unwrap();
+    let w4 = stack.record("W-4").await.unwrap();
+    assert_eq!(point_of(&w3, "start"), [10_000 * MM, 0]);
+    assert_eq!(point_of(&w3, "end"), [84_309_846, 15_584_293]);
+    assert_eq!(point_of(&w4, "start"), point_of(&w3, "end"), "still joined");
+    assert_eq!(point_of(&w4, "end"), [72_621_626, 30_816_677]);
+    for id in ["W-3", "W-4"] {
+        assert!(stack.bounds(id).await.is_ok(), "{id}");
+    }
+
+    stack.edit("modify.rotate", both("-37.5°")).await.unwrap();
+    let w3 = stack.record("W-3").await.unwrap();
+    let w4 = stack.record("W-4").await.unwrap();
+    assert_eq!(
+        point_of(&w3, "end"),
+        [14_000 * MM + 1, 0],
+        "one step from where it began"
+    );
+    assert_eq!(point_of(&w4, "start"), point_of(&w3, "end"), "still joined");
+    assert_eq!(point_of(&w4, "end"), [14_000 * MM, 3_000 * MM]);
+
+    stack
+        .edit(
+            "modify.array",
+            json!({ "elements": ["W-3"], "about": ["10 m", "0"], "angle": "30°", "count": 12,
+                    "copy": "R" }),
+        )
+        .await
+        .unwrap();
+    let quarter = stack.record("R.3.1").await.unwrap();
+    assert_eq!(point_of(&quarter, "end"), [10_000 * MM, 4_000 * MM + 1]);
+    assert!(stack.record("R.11.1").await.is_some());
+    assert!(stack.bounds("R.1.1").await.is_ok());
+
+    stack
+        .edit(
+            "modify.array",
+            json!({ "elements": ["W-3"], "about": ["10 m", "0"], "sweep": "360°", "count": 7,
+                    "copy": "S" }),
+        )
+        .await
+        .unwrap();
+    let seventh = stack.record("S.1.1").await.unwrap();
+    assert_eq!(point_of(&seventh, "end"), [79_961_340, 20_014_887]);
+    assert!(stack.record("S.6.1").await.is_some());
+    assert!(stack.record("S.7.1").await.is_none());
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert!(stack.record("S.1.1").await.is_none());
+    assert!(stack.record("R.1.1").await.is_some());
 }
 
 /// A wall mirrored keeps its exterior where the mirror puts it: drawn on its exterior finish face
@@ -801,6 +878,19 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
         (
             "modify.rotate",
             json!({ "elements": ["W-1"], "about": ["0", "0"], "angle": "45°" }),
+        ),
+        (
+            "modify.rotate",
+            json!({ "elements": ["W-2"], "about": ["1 m", "1 m"], "angle": "37.5°" }),
+        ),
+        (
+            "modify.array",
+            json!({ "elements": ["W-2"], "about": ["0", "0"], "angle": "30°", "count": 4,
+                    "copy": "R" }),
+        ),
+        (
+            "modify.array",
+            json!({ "elements": ["W-2"], "count": 4, "span": ["1 m", "1 m"], "copy": "L" }),
         ),
     ] {
         let _ = stack.edit(cmd, args).await;

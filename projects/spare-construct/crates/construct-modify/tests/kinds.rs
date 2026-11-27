@@ -14,13 +14,25 @@
 mod fixtures;
 
 use construct_grids::{Grid, PlaneShape, Point as GridPoint, ReferencePlane, Shape};
+use construct_modify::exact::LIMIT;
 use construct_modify::kinds::{follower, moved};
 use construct_modify::{ModifyError, Motion, Turn};
-use construct_params::Value;
+use construct_params::{Angle, Value};
 use fixtures::*;
 
 fn quarter_about(centre: [i64; 2]) -> Motion {
-    Motion::turn_about(centre.map(|c| c * MM), Turn::quarters(1)).unwrap()
+    Motion::turn_about(centre.map(|c| c * MM), &Turn::quarters(1))
+}
+
+/// A turn by 37.5 degrees about `centre` millimetres.
+fn turn_375(centre: [i64; 2]) -> Motion {
+    let angle = Angle::from_units(375 * Angle::UNITS_PER_DEGREE / 10);
+    Motion::turn_about(centre.map(|c| c * MM), &Turn::of_angle(angle))
+}
+
+/// The turn taking (3, 4) onto (1, 0) about the origin.
+fn three_four() -> Motion {
+    Motion::turn_about([0, 0], &Turn::between([3, 4], [1, 0]).unwrap())
 }
 
 fn shift(dx: i64, dy: i64) -> Motion {
@@ -64,29 +76,48 @@ fn a_mirrored_wall_turns_its_side_over() {
     assert_eq!(back.props["wall.flipped"], Value::YesNo(false).stored());
 }
 
+/// A wall turned by 37.5 degrees: each end the nearest step to where the turn takes it (10 m along
+/// x from the origin goes to (50,774,614, 38,960,731) steps, worked out apart from this crate).
 #[test]
-fn a_point_off_the_grid_is_refused_naming_the_element() {
+fn a_wall_turns_by_any_angle_each_end_to_the_nearest_step() {
+    let w = wall("W-1", [0, 0], [10_000, 0]);
+    let turned = moved(&w, &turn_375([0, 0]), &NOT_FLIPPED).unwrap();
+    assert_eq!(point_of(&turned, "start"), [0, 0]);
+    assert_eq!(point_of(&turned, "end"), [50_774_614, 38_960_731]);
+    assert_eq!(turned.props, w.props);
+    assert_eq!(turned.recipe.args["layers"], w.recipe.args["layers"]);
+}
+
+#[test]
+fn a_point_between_steps_is_rounded_once_and_one_past_the_limit_is_refused() {
     // A 3:4:5 turn about the origin takes (1 mm, 0) to (0.6 mm, -0.8 mm): 3,840 and -5,120 steps,
-    // on the grid. One step is not.
-    let turn = Motion::turn_about([0, 0], Turn::between([3, 4], [1, 0]).unwrap()).unwrap();
+    // exactly. One step goes to (0.6, -0.8) steps, the nearest step (1, -1).
     let w = wall("W-1", [0, 0], [1, 0]);
-    let turned = moved(&w, &turn, &NOT_FLIPPED).unwrap();
+    let turned = moved(&w, &three_four(), &NOT_FLIPPED).unwrap();
     assert_eq!(point_of(&turned, "end"), [3840, -5120]);
     let mut off = w.clone();
     off.recipe.args.insert(
         "end".to_owned(),
         serde_json::json!(["length:q0:1", "length:q0:0"]),
     );
-    let refused = moved(&off, &turn, &NOT_FLIPPED).unwrap_err();
+    let turned = moved(&off, &three_four(), &NOT_FLIPPED).unwrap();
+    assert_eq!(point_of(&turned, "end"), [1, -1]);
+    let mut edge = w.clone();
+    edge.recipe.args.insert(
+        "end".to_owned(),
+        serde_json::json!([format!("length:q0:{LIMIT}"), "length:q0:0"]),
+    );
+    let refused = moved(&edge, &Motion::by([1, 0]), &NOT_FLIPPED).unwrap_err();
     assert_eq!(
         refused,
-        ModifyError::OffGrid {
+        ModifyError::PastLimit {
             element: "W-1".to_owned()
         }
     );
     assert_eq!(
         refused.to_string(),
-        "W-1 would not land on the length grid: a point of it would lie between two of its steps."
+        "W-1 would go past the model's limit: a point of it would be more than 171.8 km from the \
+         origin along x or y."
     );
 }
 
@@ -194,10 +225,22 @@ fn a_grid_line_and_an_arc_turn_and_mirror_exactly() {
         *Grid::from_record(&mirrored).unwrap().shape(),
         Shape::arc(p(1000, 0), mm(6000), degrees(280), degrees(350)).unwrap()
     );
-    // Any other turn would put its angles off the angle units.
-    let other = Motion::turn_about([0, 0], Turn::between([3, 4], [1, 0]).unwrap()).unwrap();
+    // Turned by 37.5 degrees, its angles change by exactly that, and its centre, 1 m along x, goes
+    // to the nearest step to (793.35 mm, 608.76 mm).
+    let turned = moved(&arc, &turn_375([0, 0]), &NOT_FLIPPED).unwrap();
+    let tenths = |t: i64| Angle::from_units(t * Angle::UNITS_PER_DEGREE / 10);
+    let centre = GridPoint::new(
+        construct_params::Length::from_steps(5_077_461),
+        construct_params::Length::from_steps(3_896_073),
+    );
     assert_eq!(
-        moved(&arc, &other, &NOT_FLIPPED).unwrap_err(),
+        *Grid::from_record(&turned).unwrap().shape(),
+        Shape::arc(centre, mm(6000), tenths(475), tenths(1175)).unwrap()
+    );
+    // A turn between two directions at another angle would put its angles between the angle
+    // units it holds.
+    assert_eq!(
+        moved(&arc, &three_four(), &NOT_FLIPPED).unwrap_err(),
         ModifyError::ArcTurns {
             element: "1".to_owned()
         }
@@ -246,13 +289,14 @@ fn a_block_turns_by_quarters_in_whole_millimetres() {
             element: "B-1".to_owned()
         }
     );
-    let other = Motion::turn_about([0, 0], Turn::between([3, 4], [1, 0]).unwrap()).unwrap();
-    assert_eq!(
-        moved(&b, &other, &NOT_FLIPPED).unwrap_err(),
-        ModifyError::BoxTurns {
-            element: "B-1".to_owned()
-        }
-    );
+    for other in [three_four(), turn_375([0, 0])] {
+        assert_eq!(
+            moved(&b, &other, &NOT_FLIPPED).unwrap_err(),
+            ModifyError::BoxTurns {
+                element: "B-1".to_owned()
+            }
+        );
+    }
 }
 
 #[test]
@@ -298,9 +342,11 @@ fn what_follows_a_wall_changes_only_what_names_its_wall() {
         .unwrap()
         .unwrap();
     assert!(!back.recipe.args.contains_key("axis"));
-    let half = Motion::turn_about([0, 0], Turn::quarters(2)).unwrap();
+    let half = Motion::turn_about([0, 0], &Turn::quarters(2));
     assert_eq!(follower(&d, &half, &NOT_FLIPPED).unwrap(), None);
     assert_eq!(follower(&d, &shift(5, 5), &NOT_FLIPPED).unwrap(), None);
+    // Turned by any other angle, it sits at its offsets along its wall, its record unchanged.
+    assert_eq!(follower(&d, &turn_375([0, 0]), &NOT_FLIPPED).unwrap(), None);
 
     let o = wall_opening("O-1", "W-1", 1000, false);
     let turned = follower(&o, &quarter_about([0, 0]), &NOT_FLIPPED)

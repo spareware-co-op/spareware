@@ -14,7 +14,7 @@ mod fixtures;
 
 use construct_modify::array::{linear, linear_span, radial, radial_sweep};
 use construct_modify::{Copies, ModifyError, Motion, Request, Turn, plan};
-use construct_params::Value;
+use construct_params::{Angle, Value};
 use construct_regen::hosting;
 use fixtures::*;
 use kit_core::Id;
@@ -30,7 +30,12 @@ fn move_by(dx: i64, dy: i64) -> Request {
 }
 
 fn quarter() -> Motion {
-    Motion::turn_about([0, 0], Turn::quarters(1)).unwrap()
+    Motion::turn_about([0, 0], &Turn::quarters(1))
+}
+
+/// An angle of `tenths` tenths of a degree.
+fn tenths(tenths: i64) -> Angle {
+    Angle::from_units(tenths * Angle::UNITS_PER_DEGREE / 10)
 }
 
 fn copy(key: &str, motions: Vec<Motion>) -> Request {
@@ -304,7 +309,7 @@ fn copies_are_refused_in_words() {
     let refused = plan(
         &model,
         &ids(&["W-2"]),
-        &copy("C", vec![Motion::IDENTITY]),
+        &copy("C", vec![Motion::identity()]),
         &NOT_FLIPPED,
     )
     .unwrap_err();
@@ -353,55 +358,140 @@ fn a_selection_is_refused_by_name() {
     );
 }
 
+/// A span split evenly is split exactly; one that does not split on the grid puts each copy at
+/// the nearest step to its share, worked out from the originals: 64 steps in 7 are 9.14, 18.29,
+/// ... steps, so the copies sit 9, 18, 27, 37, 46, 55 and 64 along, and the last is the span.
 #[test]
-fn a_linear_array_by_a_span_splits_it_or_names_the_counts_that_do() {
+fn a_linear_array_by_a_span_puts_each_copy_at_the_nearest_step_to_its_share() {
     let motions = linear_span([900 * MM, 0], 4).unwrap();
     assert_eq!(motions[0].translation(), Some([300 * MM, 0]));
     assert_eq!(motions[2].translation(), Some([900 * MM, 0]));
-    // 7 steps do not split 64 evenly: 5 in all (4 steps) and 9 in all (8 steps) do.
-    let refused = linear_span([64, 0], 8).unwrap_err();
+    let shares: Vec<[i64; 2]> = linear_span([64, -64], 8)
+        .unwrap()
+        .iter()
+        .map(|m| m.translation().unwrap())
+        .collect();
+    let along: Vec<i64> = shares.iter().map(|[x, _]| *x).collect();
+    assert_eq!(along, [9, 18, 27, 37, 46, 55, 64]);
+    let across: Vec<i64> = shares.iter().map(|[_, y]| *y).collect();
     assert_eq!(
-        refused,
-        ModifyError::Span {
-            count: 8,
-            below: Some(5),
-            above: Some(9)
-        }
-    );
-    assert_eq!(
-        refused.to_string(),
-        "That span does not split into 7 equal steps on the length grid: 5 or 9 in all would."
+        across,
+        [-9, -18, -27, -37, -46, -55, -64],
+        "a half away from zero"
     );
     assert_eq!(linear([0, 0], 3).unwrap_err(), ModifyError::InPlace);
+    assert_eq!(linear_span([0, 0], 3).unwrap_err(), ModifyError::InPlace);
     assert_eq!(linear([1, 0], 1).unwrap_err(), ModifyError::TooFew);
 }
 
+/// A radial array turns by any angle, each copy worked out from the originals by its own angle,
+/// so a copy that comes to a quarter turn lands exactly however many small steps came before it;
+/// one that would come round onto the originals is refused.
 #[test]
-fn a_radial_array_turns_by_quarters_and_never_comes_round_onto_itself() {
+fn a_radial_array_turns_by_any_angle_each_copy_from_the_originals() {
     let motions = radial([0, 0], degrees(90), 4).unwrap();
     assert_eq!(motions.len(), 3);
-    assert_eq!(motions[1].apply([MM, 0]), Ok([-MM, 0]));
+    assert_eq!(motions[1].apply([MM, 0]), Some([-MM, 0]));
     let refused = radial([0, 0], degrees(90), 5).unwrap_err();
     assert_eq!(
         refused.to_string(),
         "5 at that angle come round onto the original: at most 4 fit."
     );
-    assert!(matches!(
-        radial([0, 0], degrees(45), 8).unwrap_err(),
-        ModifyError::AngleOffGrid { .. }
-    ));
-    let swept = radial_sweep([0, 0], degrees(180), 3).unwrap();
-    assert_eq!(swept[0].apply([MM, 0]), Ok([0, MM]));
+    // Eight at 45 degrees: the first at the nearest step to (1 mm / sqrt 2, 1 mm / sqrt 2), the
+    // second a quarter turn exactly.
+    let eighths = radial([0, 0], degrees(45), 8).unwrap();
+    assert_eq!(eighths.len(), 7);
+    assert_eq!(eighths[0].apply([MM, 0]), Some([4525, 4525]));
+    assert_eq!(eighths[1].apply([MM, 0]), Some([0, MM]));
+    assert_eq!(eighths[3].apply([MM, 0]), Some([-MM, 0]));
     assert_eq!(
-        radial_sweep([0, 0], degrees(180), 5).unwrap_err(),
-        ModifyError::AngleOffGrid {
-            angle: degrees(45),
-            below: degrees(0),
-            above: degrees(90)
-        }
+        radial([0, 0], degrees(45), 9).unwrap_err(),
+        ModifyError::RoundAgain { count: 9, most: 8 }
+    );
+    // 900 steps of 0.1 degrees: the last is a quarter turn, exactly, with nothing built up.
+    let small = radial([0, 0], tenths(1), 901).unwrap();
+    assert_eq!(small.len(), 900);
+    assert_eq!(small[899].apply([10_000 * MM, 0]), Some([0, 10_000 * MM]));
+    assert_eq!(
+        small[449].apply([10_000 * MM, 0]),
+        turned(degrees(45), [10_000 * MM, 0])
+    );
+}
+
+/// A sweep splits into any number of turns, in whole angle units or not; a sweep of a full turn
+/// spreads the count evenly round. The first of eight over 100 degrees (100/7 degrees) and the
+/// first of seven round (360/7 degrees) take 10 m along x to the points pinned, worked out apart
+/// from this crate.
+#[test]
+fn a_radial_array_by_a_sweep_splits_it_into_any_count() {
+    let ten_m = [10_000 * MM, 0];
+    let swept = radial_sweep([0, 0], degrees(180), 3).unwrap();
+    assert_eq!(swept[0].apply([MM, 0]), Some([0, MM]));
+    let fifths = radial_sweep([0, 0], degrees(180), 5).unwrap();
+    assert_eq!(fifths[1].apply([MM, 0]), Some([0, MM]));
+    assert_eq!(fifths[3].apply([MM, 0]), Some([-MM, 0]));
+    let sevenths = radial_sweep([0, 0], degrees(100), 8).unwrap();
+    assert_eq!(sevenths[0].apply(ten_m), Some([62_020_946, 15_792_473]));
+    assert_eq!(sevenths[6].apply(ten_m), turned(degrees(100), ten_m));
+    let round = radial_sweep([0, 0], degrees(360), 7).unwrap();
+    assert_eq!(round.len(), 6);
+    assert_eq!(round[0].apply(ten_m), Some([39_903_347, 50_037_215]));
+    let back = radial_sweep([0, 0], degrees(-360), 4).unwrap();
+    assert_eq!(back[0].apply([MM, 0]), Some([0, -MM]));
+    // Seven angle units over two steps are three and a half each; the second is seven exactly.
+    let halves = radial_sweep([0, 0], Angle::from_units(7), 3).unwrap();
+    assert_eq!(
+        halves[1],
+        radial([0, 0], Angle::from_units(7), 2).unwrap()[0]
     );
     assert_eq!(
-        radial_sweep([0, 0], construct_params::Angle::from_units(7), 3).unwrap_err(),
-        ModifyError::Sweep { count: 3 }
+        radial_sweep([0, 0], degrees(0), 3).unwrap_err(),
+        ModifyError::InPlace
+    );
+}
+
+fn turned(angle: Angle, p: [i64; 2]) -> Option<[i64; 2]> {
+    Motion::turn_about([0, 0], &Turn::of_angle(angle)).apply(p)
+}
+
+/// Three walls joined at their corners, turned together by 37.5 degrees about a point off the
+/// millimetres: each shared end is rounded once, so they are still joined.
+#[test]
+fn joined_walls_turned_by_any_angle_stay_joined() {
+    let model = document(vec![
+        wall("W-1", [0, 0], [4000, 0]),
+        wall("W-2", [4000, 0], [4000, 3000]),
+        wall("W-3", [4000, 3000], [0, 3000]),
+    ]);
+    let centre = [1234 * MM + 17, 567 * MM - 3];
+    let turn = Motion::turn_about(centre, &Turn::of_angle(tenths(375)));
+    let planned = plan(
+        &model,
+        &ids(&["W-1", "W-2", "W-3"]),
+        &Request::Move(turn),
+        &NOT_FLIPPED,
+    )
+    .unwrap();
+    let [w1, w2, w3] = &planned.changed[..] else {
+        panic!("{:?}", planned.changed)
+    };
+    assert_eq!(point_of(w1, "end"), point_of(w2, "start"));
+    assert_eq!(point_of(w2, "end"), point_of(w3, "start"));
+    assert_ne!(point_of(w1, "end"), point_of(&model[&i("W-1")], "end"));
+}
+
+/// A wall turned by any angle takes what it hosts with it, their records unchanged: each sits at
+/// its offsets along the wall, so it stays on it exactly. (Whether the builder hosts a door on a
+/// wall off the axes is the server's check.)
+#[test]
+fn what_a_wall_hosts_follows_any_turn_unchanged() {
+    let model = walls();
+    let turn = Motion::turn_about([0, 0], &Turn::of_angle(tenths(375)));
+    let planned = plan(&model, &ids(&["W-1"]), &Request::Move(turn), &NOT_FLIPPED).unwrap();
+    let changed: Vec<&str> = planned.changed.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(changed, ["W-1"]);
+    assert_eq!(
+        planned.hosts.iter().map(Id::as_str).collect::<Vec<_>>(),
+        ["W-1"]
     );
 }

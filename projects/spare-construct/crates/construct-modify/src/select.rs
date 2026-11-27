@@ -164,7 +164,7 @@ fn under(
 ///
 /// # Errors
 /// The first refusal, naming its element: one not in the model, one the modify tools do not move,
-/// a point off the grid, a hosted element moved off its host or turned alone, and the refusals of
+/// a point past the model's limit, a hosted element moved off its host or turned alone, and the refusals of
 /// the crates that own each kind's form; for copies, a key that makes no ID, an ID already taken,
 /// copies that would lie on their originals, and more than [`MOST_MADE`] records.
 pub fn plan(

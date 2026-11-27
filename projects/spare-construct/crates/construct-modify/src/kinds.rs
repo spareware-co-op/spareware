@@ -1,6 +1,7 @@
-//! What each kind of element becomes under an exact motion ([`crate::exact::Motion`]), read and
-//! written by the crate that owns its stored form, so a moved record is exactly the record of one
-//! drawn there:
+//! What each kind of element becomes under a motion ([`crate::exact::Motion`]), read and written by
+//! the crate that owns its stored form, so a moved record is exactly the record of one drawn there.
+//! Each point is moved once, from where it is, to the nearest grid step to where the motion takes
+//! it:
 //!
 //! | Kind | What moves | Read and written by |
 //! | --- | --- | --- |
@@ -9,12 +10,13 @@
 //! | Roof | Its footprint's corners, each edge keeping its ID and what it does | construct-roofs |
 //! | Room | Its point | construct-rooms |
 //! | Shaft, floor opening | Its outline's corners | construct-openings |
-//! | Grid line, reference plane | Its geometry; an arc's angles by quarter turns and 45-degree mirrors only | construct-grids |
+//! | Grid line, reference plane | Its geometry; an arc's centre, and its angles by the whole angle units a turn by an angle or a square's motion changes them by | construct-grids |
 //! | Block | Its box, by quarter turns and 45-degree mirrors, in whole millimetres | its placement and recipe |
 //! | Older box wall or door (`wall.straight`, a `door.single` on no host) | Its placement, moved only, in whole millimetres | its placement |
 //!
 //! An element hosted on a face of a wall (a door, a placed family, a wall opening) is not moved
-//! here: where it sits is read from its host, so it follows its host with its record unchanged,
+//! here: where it sits is read from its host, at its offsets along and up it, so it follows its host
+//! with its record unchanged and stays exactly on it however the host's own points are rounded,
 //! except what the host's turn or mirror changes in it ([`follower`]): a box door or a wall
 //! opening names the axis its wall runs along, so a quarter turn that takes x to y changes it; a
 //! placed family's hand (an instance choice of left or right, [`hands_of`]) changes in a mirror,
@@ -27,7 +29,7 @@
 //! the same frame.
 
 use crate::error::ModifyError;
-use crate::exact::{Miss, Motion, Steps};
+use crate::exact::{Motion, Steps};
 use construct_families::{Key, ParameterValue, Recipe as FamilyRecipe};
 use construct_grids::{Grid, PlaneShape, Point as GridPoint, ReferencePlane, Shape};
 use construct_model::element::{Element, Placement};
@@ -210,7 +212,10 @@ fn origin(record: &Element) -> Result<Steps, ModifyError> {
     Ok([steps(record.placement.x)?, steps(record.placement.y)?])
 }
 
-/// Where `motion` takes the point `p` of a record framed at `origin`, in the same frame.
+/// Where `motion` takes the point `p` of a record framed at `origin`, in the same frame: the
+/// nearest grid step to where it goes, rounded once ([`Motion::apply`]). Every record moves each of
+/// its points through here, so a point two records share (the end where two walls join, a corner of
+/// a floor and of an opening drawn on it) lands on one point.
 fn moved_point(motion: &Motion, origin: Steps, p: Steps, name: &str) -> Result<Steps, ModifyError> {
     let [ox, oy] = origin;
     let [x, y] = p;
@@ -218,11 +223,8 @@ fn moved_point(motion: &Motion, origin: Steps, p: Steps, name: &str) -> Result<S
         x.checked_add(ox).ok_or(ModifyError::TooLarge)?,
         y.checked_add(oy).ok_or(ModifyError::TooLarge)?,
     ];
-    let [mx, my] = motion.apply(plan).map_err(|miss| match miss {
-        Miss::OffGrid => ModifyError::OffGrid {
-            element: name.to_owned(),
-        },
-        Miss::TooLarge => ModifyError::TooLarge,
+    let [mx, my] = motion.apply(plan).ok_or_else(|| ModifyError::PastLimit {
+        element: name.to_owned(),
     })?;
     Ok([
         mx.checked_sub(ox).ok_or(ModifyError::TooLarge)?,
@@ -243,8 +245,8 @@ fn refused(record: &Element) -> impl Fn(&dyn std::fmt::Display) -> ModifyError +
 /// moves alone).
 ///
 /// # Errors
-/// [`ModifyError::OffGrid`] for a point that would leave the grid; the kind's own refusal of
-/// what it would become; [`ModifyError::BoxTurns`], [`ModifyError::OlderBox`],
+/// [`ModifyError::PastLimit`] for a point that would go past the model's limit; the kind's own
+/// refusal of what it would become; [`ModifyError::BoxTurns`], [`ModifyError::OlderBox`],
 /// [`ModifyError::NotWholeMm`] and [`ModifyError::ArcTurns`] as the table in the module header
 /// says; [`ModifyError::NotMoved`] for a hosted element or one of a kind not listed.
 pub fn moved(record: &Element, motion: &Motion, sense: &dyn Sense) -> Result<Element, ModifyError> {
@@ -416,14 +418,15 @@ fn grid(record: &Element, motion: &Motion) -> Result<Element, ModifyError> {
             from,
             to,
         } => {
-            let square = motion.square().ok_or_else(|| ModifyError::ArcTurns {
+            let angles = motion.angles().ok_or_else(|| ModifyError::ArcTurns {
                 element: record.name.clone(),
             })?;
-            // A mirror runs the arc the other way round, so its ends change places.
-            let (from, to) = if square.mirrored {
-                (square.angle(to), square.angle(from))
+            // A mirror runs the arc the other way round, so its ends change places. Its angles
+            // change by whole angle units exactly; its centre is a point, rounded once.
+            let (from, to) = if angles.mirrored {
+                (angles.angle(to), angles.angle(from))
             } else {
-                (square.angle(from), square.angle(to))
+                (angles.angle(from), angles.angle(to))
             };
             Shape::arc(grid_point(record, motion, centre)?, radius, from, to)
         }

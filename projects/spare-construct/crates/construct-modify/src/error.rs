@@ -1,7 +1,8 @@
 //! Why a modify was refused, in words a person reads, each naming the element it is about. A
-//! refusal writes nothing: the command that asked is turned back whole.
+//! refusal writes nothing: the command that asked is turned back whole. A point between two of the
+//! length grid's steps is no refusal: it is rounded once to the nearest ([`crate::exact`]); what
+//! is refused is what cannot be built.
 
-use construct_params::{Angle, Definition, Holder, Kind, Units, Value};
 use kit_core::Id;
 use std::fmt;
 
@@ -19,24 +20,13 @@ pub enum ModifyError {
         /// Its kind.
         kind: String,
     },
-    /// A point of an element would lie between the length grid's steps.
-    OffGrid {
+    /// A point of an element would go past the model's limit.
+    PastLimit {
         /// The element's name.
         element: String,
     },
-    /// A number grew past what is held exactly.
+    /// A number grew past what a coordinate holds.
     TooLarge,
-    /// An angle that is not a whole number of quarter turns.
-    AngleOffGrid {
-        /// The angle asked for.
-        angle: Angle,
-        /// The quarter turn below it.
-        below: Angle,
-        /// The quarter turn above it.
-        above: Angle,
-    },
-    /// A turn from one direction to another whose lengths do not multiply to a whole number.
-    TurnNotWhole,
     /// A direction of no length.
     NoDirection,
     /// A mirror line given by one point twice.
@@ -57,7 +47,8 @@ pub enum ModifyError {
         /// The element's name.
         element: String,
     },
-    /// An arc grid turned or mirrored other than by a quarter turn or about a line at 45 degrees.
+    /// An arc grid turned or mirrored by a motion that changes angles by no whole number of angle
+    /// units: a turn between two directions, or a mirror about a line at another angle.
     ArcTurns {
         /// The element's name.
         element: String,
@@ -114,20 +105,6 @@ pub enum ModifyError {
         /// The most records one command makes.
         most: usize,
     },
-    /// A linear array spread over a span that does not split evenly on the length grid.
-    Span {
-        /// How many it was asked for, the originals counted.
-        count: u32,
-        /// The nearest smaller count that splits evenly, if any.
-        below: Option<u32>,
-        /// The nearest larger count that splits evenly, if any.
-        above: Option<u32>,
-    },
-    /// A radial array spread over a sweep that does not split into whole angle units.
-    Sweep {
-        /// How many it was asked for.
-        count: u32,
-    },
     /// A radial array whose copies come round onto the original.
     RoundAgain {
         /// How many it was asked for.
@@ -135,22 +112,6 @@ pub enum ModifyError {
         /// The most it can be at its angle.
         most: u32,
     },
-}
-
-/// An angle as a person reads it: whole degrees as they are (`90°`), any other in
-/// construct-params' display of angles.
-fn angle_text(angle: Angle) -> String {
-    let degrees = angle.degrees();
-    if degrees.is_integer() {
-        return format!("{}°", degrees.numer());
-    }
-    let shown = Id::parse("modify-angle").ok().and_then(|id| {
-        let definition = Definition::new(id, "Angle", Kind::Angle, Holder::Instance).ok()?;
-        definition
-            .format(&Value::Angle(angle), &Units::default())
-            .ok()
-    });
-    shown.unwrap_or_else(|| format!("{} angle units", angle.units()))
 }
 
 impl fmt::Display for ModifyError {
@@ -167,32 +128,14 @@ impl fmt::Display for ModifyError {
                 "{element} is a {kind}, which the modify tools do not move: change it with its own \
                  commands."
             ),
-            Self::OffGrid { element } => write!(
+            Self::PastLimit { element } => write!(
                 f,
-                "{element} would not land on the length grid: a point of it would lie between two \
-                 of its steps."
+                "{element} would go past the model's limit: a point of it would be more than \
+                 171.8 km from the origin along x or y."
             ),
             Self::TooLarge => write!(
                 f,
-                "That motion grows past the numbers held exactly: make it in fewer steps."
-            ),
-            Self::AngleOffGrid {
-                angle,
-                below,
-                above,
-            } => write!(
-                f,
-                "A turn of {} does not land on the length grid: only a whole number of quarter \
-                 turns does, and the nearest are {} and {}. To turn by another angle, turn from \
-                 one direction to another whose lengths are whole (3 to 4 to 5, say).",
-                angle_text(*angle),
-                angle_text(*below),
-                angle_text(*above)
-            ),
-            Self::TurnNotWhole => write!(
-                f,
-                "That turn does not land on the length grid: the two directions' lengths do not \
-                 multiply to a whole number (3 to 4 to 5 does)."
+                "That goes past the numbers a coordinate holds: make it smaller."
             ),
             Self::NoDirection => write!(f, "A direction needs a length."),
             Self::LineOnePoint => write!(f, "A mirror line runs through two different points."),
@@ -212,8 +155,8 @@ impl fmt::Display for ModifyError {
             ),
             Self::ArcTurns { element } => write!(
                 f,
-                "{element} is an arc: it turns by quarter turns and mirrors about lines along x or \
-                 y or at 45 degrees to them, so its angles stay exact."
+                "{element} is an arc, whose angles are whole angle units: it turns by an angle, and \
+                 mirrors about lines along x or y or at 45 degrees to them."
             ),
             Self::OffItsHost { element, host } => write!(
                 f,
@@ -248,27 +191,6 @@ impl fmt::Display for ModifyError {
             Self::TooMany { most } => write!(
                 f,
                 "That would make more than {most} elements at once: make the array in parts."
-            ),
-            Self::Span {
-                count,
-                below,
-                above,
-            } => {
-                write!(
-                    f,
-                    "That span does not split into {} equal steps on the length grid",
-                    count.saturating_sub(1)
-                )?;
-                match (below, above) {
-                    (Some(b), Some(a)) => write!(f, ": {b} or {a} in all would."),
-                    (Some(n), None) | (None, Some(n)) => write!(f, ": {n} in all would."),
-                    (None, None) => write!(f, "."),
-                }
-            }
-            Self::Sweep { count } => write!(
-                f,
-                "That sweep does not split into {} equal turns of whole angle units.",
-                count.saturating_sub(1)
             ),
             Self::RoundAgain { count, most } => write!(
                 f,
