@@ -512,6 +512,7 @@ dependencies = [
  "construct-api",
  "construct-categories",
  "construct-clash",
+ "construct-dimensions",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -570,6 +571,19 @@ name = "construct-cli"
 version = "0.0.0"
 dependencies = [
  "construct-api",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-dimensions"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-model",
+ "construct-params",
+ "kit-core",
+ "num-bigint",
  "serde_json",
 ]
 
@@ -755,6 +769,7 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-dimensions",
  "construct-families",
  "construct-formulas",
  "construct-grids",

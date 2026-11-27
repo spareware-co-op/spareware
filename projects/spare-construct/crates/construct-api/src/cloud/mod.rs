@@ -27,6 +27,8 @@
 //! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
 //!   read of their rows, through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
+//! - [`dimensions`]: linear dimensions bound to references, and the listing of a view's dimensions
+//!   with their values worked out, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -35,6 +37,7 @@
 
 pub mod access;
 pub mod commands;
+pub mod dimensions;
 pub mod directory;
 pub mod elements;
 pub mod families;

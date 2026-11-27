@@ -25,6 +25,7 @@ server = [
     "dep:construct-views",
     "dep:construct-schedules",
     "dep:construct-sheets",
+    "dep:construct-dimensions",
 ]
 
 [dependencies]
@@ -74,6 +75,8 @@ construct-schedules = { path = "../construct-schedules", optional = true }
 construct-openings = { path = "../construct-openings" }
 # A sheet and a viewport are records with no shape too (the viewport commands, A74).
 construct-sheets = { path = "../construct-sheets", optional = true }
+# A dimension is a record with no shape as well (the dimension commands, A81).
+construct-dimensions = { path = "../construct-dimensions", optional = true }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

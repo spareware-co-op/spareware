@@ -28,6 +28,7 @@ cloud = [
     "dep:construct-phases",
     "dep:construct-schedules",
     "dep:construct-styles",
+    "dep:construct-dimensions",
 ]
 
 [dependencies]
@@ -74,6 +75,9 @@ construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
 construct-sheets = { path = "../construct-sheets" }
+# Dimensions bound to references: the dimension commands read and write them (cloud/dimensions.rs),
+# so the browser's build leaves it, and its exact arithmetic, out.
+construct-dimensions = { path = "../construct-dimensions", optional = true }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }
