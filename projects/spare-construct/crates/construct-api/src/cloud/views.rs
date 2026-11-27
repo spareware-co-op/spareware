@@ -22,6 +22,19 @@
 //! | `view.crop.set` | `view`, and any of `region`, `annotation` (`null` for none), `on` | The view's crop: made from `region` when the view has none, else the named parts change |
 //! | `view.crop.clear` | `view` | The crop goes; nothing at all when there is none |
 //! | `view.crop.show` | `view`, `shown` (true or false) | Whether the crop's outline is shown in the view |
+//! | `view.line.move` | `view`, `by` (`{"x", "y"}`, typed lengths) | A section's or elevation's line, both ends moved by `by`; nothing at all when `by` is nothing |
+//! | `view.line.flip` | `view` | A section's or elevation's line looking to its other side |
+//! | `view.elevation.create` | `view`, `name`, `face` (`north`, `south`, `east` or `west`), `from` (`{"x", "y"}`), `width`, `depth`; optional `scale`, `detail`, `staging`, `phasing` | An elevation of that face of the building: its line `width` long from `from`, square to the face's direction, looking at the face |
+//!
+//! A section is made by its line with `view.create` (`from`, `to`, `look`, `depth`), its depth
+//! is set with `view.set`, and it is moved with `view.line.move` or turned to look the other way
+//! with `view.line.flip`; both read the line as it is when they run, so two people's moves add up
+//! in the log's order. An elevation by direction (`view.elevation.create`) names the face it
+//! shows, as an architect names elevations: the north elevation shows the building's north face,
+//! seen from the north, looking south. Its line runs from `from`, its left end as one faces the
+//! building, `width` across, and it looks to its left (at the building) as far as `depth`; its line
+//! is along a grid axis, so it is drawn. A section's or an elevation's line not along a grid axis
+//! is stored, and refused only when it is drawn.
 //!
 //! A crop (CON-A8-F1-P3) is a plan's, section's or elevation's window onto the model: a `region`
 //! is `{"rectangle": {"min": {"x", "y"}, "max": {"x", "y"}}}` or `{"outline": [{"x", "y"}, ...]}`
@@ -96,7 +109,7 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 10] = [
+pub const COMMANDS: [&str; 13] = [
     "view.create",
     "view.rename",
     "view.set",
@@ -107,6 +120,9 @@ pub const COMMANDS: [&str; 10] = [
     "view.crop.set",
     "view.crop.clear",
     "view.crop.show",
+    "view.line.move",
+    "view.line.flip",
+    "view.elevation.create",
 ];
 
 /// The scale of a view made without one: 1:100.
@@ -168,6 +184,12 @@ struct Args {
     on: Option<bool>,
     /// Whether a crop's outline is shown.
     shown: Option<bool>,
+    /// How far a line is moved (`view.line.move`).
+    by: Option<PointArgs>,
+    /// The face of the building an elevation shows (`view.elevation.create`).
+    face: Option<String>,
+    /// How long an elevation's line is (`view.elevation.create`).
+    width: Option<String>,
 }
 
 /// A crop region as a person names it.
@@ -796,6 +818,19 @@ pub async fn apply<T: Txn>(
             edit.cmd
         )));
     }
+    if edit.cmd != "view.line.move" && args.by.is_some() {
+        return Ok(Err(format!(
+            "{} has no by: a line is moved with view.line.move.",
+            edit.cmd
+        )));
+    }
+    if edit.cmd != "view.elevation.create" && (args.face.is_some() || args.width.is_some()) {
+        return Ok(Err(format!(
+            "{} has no face or width: an elevation by direction is made with \
+             view.elevation.create.",
+            edit.cmd
+        )));
+    }
     let mut run = Run {
         txn,
         project,
@@ -805,6 +840,9 @@ pub async fn apply<T: Txn>(
         claim_ms,
     };
     match edit.cmd.as_str() {
+        "view.line.move" => move_line(&mut run, args).await,
+        "view.line.flip" => flip_line(&mut run, args).await,
+        "view.elevation.create" => create_elevation(&mut run, args).await,
         "view.crop.set" => set_crop(&mut run, args).await,
         "view.crop.clear" => clear_crop(&mut run, args).await,
         "view.crop.show" => show_crop(&mut run, args).await,
@@ -1220,6 +1258,253 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         }],
         claims: vec![released],
         ..Applied::default()
+    }))
+}
+
+/// The line of `view`, a section or an elevation, or why it has none.
+fn line_or_refusal(view: &View) -> Result<CutLine, String> {
+    view.kind().cut_line().copied().ok_or_else(|| {
+        format!(
+            "A {} has no line: only a section or an elevation is moved or flipped.",
+            view.kind().key().replace('_', " ")
+        )
+    })
+}
+
+/// `view` with its line put back as `line`, keeping its kind.
+fn with_line(view: View, line: CutLine) -> View {
+    let kind = match view.kind() {
+        ViewKind::Elevation(_) => ViewKind::Elevation(line),
+        _ => ViewKind::Section(line),
+    };
+    view.with_kind(kind)
+}
+
+/// The view after a `view.line.move`, or why it cannot be.
+fn moved_by(args: &Args, view: View) -> Result<View, String> {
+    let line = line_or_refusal(&view)?;
+    let by = need(args.by.as_ref(), "how far to move it (by)")?;
+    let (dx, dy) = (length(&by.x)?, length(&by.y)?);
+    let shift = |p: Point| -> Result<Point, String> {
+        let add = |a: Length, b: Length| {
+            a.steps()
+                .checked_add(b.steps())
+                .map(Length::from_steps)
+                .ok_or_else(|| "That move takes the line past the grid's reach.".to_owned())
+        };
+        Ok(Point {
+            x: add(p.x, dx)?,
+            y: add(p.y, dy)?,
+        })
+    };
+    let moved = CutLine::new(
+        shift(line.from())?,
+        shift(line.to())?,
+        line.look(),
+        line.far(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(with_line(view, moved))
+}
+
+async fn move_line<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    if let Err(refusal) = alone(&args, "view.line.move", &["by"]) {
+        return Ok(Err(refusal));
+    }
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match moved_by(&args, view.clone()) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// The view after a `view.line.flip`: its line looking to its other side.
+fn flipped(view: View) -> Result<View, String> {
+    let line = line_or_refusal(&view)?;
+    let look = match line.look() {
+        Side::Left => Side::Right,
+        Side::Right => Side::Left,
+    };
+    let turned =
+        CutLine::new(line.from(), line.to(), look, line.far()).map_err(|e| e.to_string())?;
+    Ok(with_line(view, turned))
+}
+
+async fn flip_line<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    if let Err(refusal) = alone(&args, "view.line.flip", &[]) {
+        return Ok(Err(refusal));
+    }
+    let (world, hash, view) = match subject(run, args.view.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match flipped(view.clone()) {
+        Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
+        Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+/// Refuses every argument of `args` but `allowed`, naming the command: a command that moves or
+/// flips a line takes nothing else.
+fn alone(args: &Args, cmd: &str, allowed: &[&str]) -> Result<(), String> {
+    let given = [
+        ("new", args.copy.is_some()),
+        ("kind", args.kind.is_some()),
+        ("name", args.name.is_some()),
+        ("level", args.level.is_some()),
+        ("scale", args.scale.is_some()),
+        ("detail", args.detail.is_some()),
+        ("range", args.range.is_some()),
+        ("from", args.from.is_some()),
+        ("to", args.to.is_some()),
+        ("look", args.look.is_some()),
+        ("depth", args.depth.is_some()),
+        ("staging", args.staging.is_some()),
+        ("phasing", args.phasing.is_some()),
+        ("by", args.by.is_some()),
+        ("face", args.face.is_some()),
+        ("width", args.width.is_some()),
+    ];
+    for (key, there) in given {
+        if there && !allowed.contains(&key) {
+            return Err(format!("{cmd} takes no {key}."));
+        }
+    }
+    Ok(())
+}
+
+/// The line of an elevation of the face `face` of the building, from `from` (its left end as one
+/// faces the building) `width` along it: its second end, and that it looks to its left.
+fn elevation_line(face: &str, from: Point, width: Length) -> Result<(Point, Side), String> {
+    let w = width.steps();
+    let back = w
+        .checked_neg()
+        .ok_or_else(|| "That elevation's line reaches past the grid.".to_owned())?;
+    // Walking from the first end to the second, the building is on the left.
+    let (dx, dy) = match face {
+        // Looking north at the south face: the line runs east.
+        "south" => (w, 0),
+        // Looking south at the north face: the line runs west.
+        "north" => (back, 0),
+        // Looking east at the west face: the line runs south.
+        "west" => (0, back),
+        // Looking west at the east face: the line runs north.
+        "east" => (0, w),
+        other => {
+            return Err(format!(
+                "{other:?} is not a face of the building: north, south, east or west."
+            ));
+        }
+    };
+    let add = |a: Length, d: i64| {
+        a.steps()
+            .checked_add(d)
+            .map(Length::from_steps)
+            .ok_or_else(|| "That elevation's line reaches past the grid.".to_owned())
+    };
+    Ok((
+        Point {
+            x: add(from.x, dx)?,
+            y: add(from.y, dy)?,
+        },
+        Side::Left,
+    ))
+}
+
+/// The elevation a `view.elevation.create` asks for, before it is checked against the document.
+fn make_elevation(args: &Args, world: &World) -> Result<View, String> {
+    alone(
+        args,
+        "view.elevation.create",
+        &[
+            "name", "from", "depth", "scale", "detail", "staging", "phasing", "face", "width",
+        ],
+    )?;
+    let id = need(args.view.clone(), "a view")?;
+    let name = need(args.name.as_deref(), "a name")?;
+    let face = need(args.face.as_deref(), "the face it shows (face)")?;
+    let from = point_over(None, args.from.as_ref(), "its left end (from)")?;
+    let width = length(need(args.width.as_deref(), "a width")?)?;
+    if width <= Length::from_steps(0) {
+        return Err("An elevation's width must be above zero.".to_owned());
+    }
+    let far = length(need(args.depth.as_deref(), "a depth")?)?;
+    let (to, look) = elevation_line(face, from, width)?;
+    let line = CutLine::new(from, to, look, far).map_err(|e| e.to_string())?;
+    let phasing = match &args.phasing {
+        Some(value) => phasing_of(value)?,
+        None => None,
+    };
+    let scale = scale_of(args.scale.unwrap_or(DEFAULT_SCALE))?;
+    let detail = match &args.detail {
+        Some(key) => detail_of(key)?,
+        None => DEFAULT_DETAIL,
+    };
+    let staging = staging_of(args, world)?;
+    View::new(id, name, scale, detail, ViewKind::Elevation(line), staging)
+        .map(|view| view.with_phasing(phasing))
+        .map_err(|e| e.to_string())
+}
+
+async fn create_elevation<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let world = match run.world().await? {
+        Ok(world) => world,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let view = match make_elevation(&args, &world) {
+        Ok(view) => view,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    if run.current(view.id()).await?.is_some() {
+        return Ok(Err("That element already exists.".to_owned()));
+    }
+    let mut views = world.views.clone();
+    if let Err(e) = views.add(view.clone()) {
+        return Ok(Err(e.to_string()));
+    }
+    if let Err(refusal) = world.check(&view) {
+        return Ok(Err(refusal));
+    }
+    run.put_claimed(&record_of(&view, run.document), None).await
+}
+
+/// How a section or an elevation is drawn: its line, whether it cuts, and its scale.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SectionCut {
+    /// The line, the side it looks to and how far it sees.
+    pub line: CutLine,
+    /// `true` for a section (what its plane crosses is cut), `false` for an elevation.
+    pub cuts: bool,
+    /// The scale it is printed at.
+    pub scale: Scale,
+}
+
+/// The line of the section or elevation `id`: `None` when the document has no such view.
+///
+/// # Errors
+/// In words, when the view is not a section or an elevation.
+pub fn section_cut(world: &World, id: &Id) -> Result<Option<SectionCut>, String> {
+    let Some(view) = world.views.get(id) else {
+        return Ok(None);
+    };
+    let (line, cuts) = match view.kind() {
+        ViewKind::Section(line) => (*line, true),
+        ViewKind::Elevation(line) => (*line, false),
+        other => {
+            return Err(format!(
+                "{} is a {} view; only a section or an elevation is drawn here.",
+                view.name(),
+                other.key().replace('_', " ")
+            ));
+        }
+    };
+    Ok(Some(SectionCut {
+        line,
+        cuts,
+        scale: view.scale(),
     }))
 }
 
@@ -1738,6 +2023,11 @@ struct GenericArgs {
     recipe: Option<Recipe>,
 }
 
+/// Whether a view's record is a section's or an elevation's, by its stored kind.
+fn has_line(record: &Element) -> bool {
+    View::from_record(record).is_ok_and(|view| view.kind().cut_line().is_some())
+}
+
 /// Whether a recipe is a view's.
 fn a_view_recipe(recipe: &Recipe) -> bool {
     records::category_of(recipe).is_ok_and(|category| category == VIEWS)
@@ -1772,6 +2062,10 @@ pub async fn generic_rules<T: Txn>(
             match records::read_element(txn, project, &edit.target, id).await? {
                 Some((_, record)) if record.kind == VIEW_KIND => Err(match edit.cmd.as_str() {
                     "element.delete" => use_instead("A view is deleted", "view.delete"),
+                    "element.move" if has_line(&record) => use_instead(
+                        "A section's or an elevation's line is moved",
+                        "view.line.move",
+                    ),
                     _ => use_instead(
                         "A view is changed",
                         "view.set, view.rename or view.duplicate",

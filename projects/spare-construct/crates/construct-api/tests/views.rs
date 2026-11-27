@@ -14,7 +14,7 @@
 )]
 
 use construct_api::cloud::undo::{self, CANNOT, State};
-use construct_api::cloud::views::options;
+use construct_api::cloud::views::{options, read_world, section_cut};
 use construct_api::cloud::{Access, ProjectCommands};
 use construct_categories::{CategoryId, CategoryTable};
 use construct_model::element::Element;
@@ -1982,4 +1982,291 @@ async fn the_view_range_is_set_by_view_set_with_its_default_and_its_refusals() {
         "There is no level L-9 in this model."
     );
     assert_eq!(stack.rows("piece").await, rows);
+}
+
+// ----- sections and elevations: their lines moved and flipped, elevations by direction -----
+
+fn ends_of(view: &View) -> ((Length, Length), (Length, Length), Side, Length) {
+    let line = view.kind().cut_line().unwrap();
+    (
+        (line.from().x, line.from().y),
+        (line.to().x, line.to().y),
+        line.look(),
+        line.far(),
+    )
+}
+
+/// A section is moved by a vector (each move reads the line as it is, so two add up), flipped to
+/// look the other way and back, and its depth set; a move by nothing is no step.
+#[tokio::test]
+async fn a_section_is_moved_and_flipped_through_the_log() {
+    let stack = Stack::new().await;
+    stack
+        .edit("view.create", section("V-s", "Section A"))
+        .await
+        .unwrap();
+    let by = |x: &str, y: &str| json!({ "view": "V-s", "by": { "x": x, "y": y } });
+    stack
+        .edit("view.line.move", by("1 m", "2 m"))
+        .await
+        .unwrap();
+    stack.edit("view.line.move", by("0", "-500")).await.unwrap();
+    assert_eq!(
+        ends_of(&view(&stack, "V-s").await),
+        (
+            (mm(1000), mm(1500)),
+            (mm(7000), mm(1500)),
+            Side::Left,
+            mm(5000)
+        )
+    );
+    stack
+        .edit("view.line.flip", json!({ "view": "V-s" }))
+        .await
+        .unwrap();
+    assert_eq!(ends_of(&view(&stack, "V-s").await).2, Side::Right);
+    stack
+        .edit("view.line.flip", json!({ "view": "V-s" }))
+        .await
+        .unwrap();
+    assert_eq!(ends_of(&view(&stack, "V-s").await).2, Side::Left);
+    stack
+        .edit("view.set", json!({ "view": "V-s", "depth": "12.5 m" }))
+        .await
+        .unwrap();
+    assert_eq!(ends_of(&view(&stack, "V-s").await).3, mm(12500));
+    assert!(matches!(
+        view(&stack, "V-s").await.kind(),
+        ViewKind::Section(_)
+    ));
+    let rows = stack.rows("piece").await;
+    let step = stack.state("anna").await;
+    stack.later();
+    stack.edit("view.line.move", by("0", "0")).await.unwrap();
+    assert_eq!(stack.rows("piece").await, rows);
+    assert_eq!(stack.state("anna").await, step);
+}
+
+/// An elevation by direction shows the face it names, as an architect names it: its line runs
+/// from its left end as one faces the building, the width across, and it looks to its left.
+#[tokio::test]
+async fn an_elevation_is_made_by_the_face_it_shows() {
+    let stack = Stack::new().await;
+    let at = |x: &str, y: &str| json!({ "x": x, "y": y });
+    for (id, face, from) in [
+        ("V-south", "south", at("0", "-5 m")),
+        ("V-north", "north", at("12 m", "15 m")),
+        ("V-west", "west", at("-5 m", "10 m")),
+        ("V-east", "east", at("17 m", "-2 m")),
+    ] {
+        let args = json!({ "view": id, "name": format!("{face} elevation"), "face": face,
+                           "from": from, "width": "12 m", "depth": "20 m", "scale": 50 });
+        stack.edit("view.elevation.create", args).await.unwrap();
+    }
+    let ends = |v: &View| {
+        let (a, b, look, far) = ends_of(v);
+        assert_eq!(look, Side::Left);
+        assert_eq!(far, mm(20_000));
+        assert!(matches!(v.kind(), ViewKind::Elevation(_)));
+        (a, b)
+    };
+    // The south face is seen looking north: walking east along the line, north is on the left.
+    assert_eq!(
+        ends(&view(&stack, "V-south").await),
+        ((mm(0), mm(-5000)), (mm(12_000), mm(-5000)))
+    );
+    assert_eq!(
+        ends(&view(&stack, "V-north").await),
+        ((mm(12_000), mm(15_000)), (mm(0), mm(15_000)))
+    );
+    assert_eq!(
+        ends(&view(&stack, "V-west").await),
+        ((mm(-5000), mm(10_000)), (mm(-5000), mm(-2000)))
+    );
+    assert_eq!(
+        ends(&view(&stack, "V-east").await),
+        ((mm(17_000), mm(-2000)), (mm(17_000), mm(10_000)))
+    );
+    assert_eq!(
+        view(&stack, "V-east").await.scale(),
+        Scale::new(50).unwrap()
+    );
+    // How each is drawn: an elevation does not cut, a section does, and a plan is not drawn here.
+    stack
+        .edit("view.create", section("V-s", "Section A"))
+        .await
+        .unwrap();
+    stack
+        .edit("level.create", level("L-g", "Ground", "0"))
+        .await
+        .unwrap();
+    stack
+        .edit("view.create", plan("V-g", "Ground floor", "L-g"))
+        .await
+        .unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let world = read_world(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap()
+        .unwrap();
+    let south = section_cut(&world, &i("V-south")).unwrap().unwrap();
+    assert!(!south.cuts);
+    assert_eq!(south.scale, Scale::new(50).unwrap());
+    assert_eq!(south.line.to().x, mm(12_000));
+    assert!(section_cut(&world, &i("V-s")).unwrap().unwrap().cuts);
+    assert_eq!(
+        section_cut(&world, &i("V-g")).unwrap_err(),
+        "Ground floor is a floor plan view; only a section or an elevation is drawn here."
+    );
+    assert_eq!(section_cut(&world, &i("V-none")), Ok(None));
+}
+
+/// The arguments of the elevation of the south face from (0, -5 m), 12 m wide and 20 m deep, with
+/// `extra` put over them.
+fn south_elevation(extra: &Value) -> Value {
+    let mut args = json!({ "view": "V-e", "name": "South", "face": "south",
+        "from": { "x": "0", "y": "-5 m" }, "width": "12 m", "depth": "20 m" });
+    for (k, v) in extra.as_object().unwrap() {
+        args[k] = v.clone();
+    }
+    args
+}
+
+/// What the line commands and the elevation by direction refuse, each in words, changing nothing.
+#[tokio::test]
+async fn the_line_commands_refuse_in_words_and_change_nothing() {
+    let stack = Stack::new().await;
+    two_levels(&stack).await;
+    stack
+        .edit("view.create", plan("V-g", "Ground floor", "L-g"))
+        .await
+        .unwrap();
+    stack
+        .edit("view.create", section("V-s", "Section A"))
+        .await
+        .unwrap();
+    stack.later();
+    let rows = stack.rows("piece").await;
+    let no_line = "A floor plan has no line: only a section or an elevation is moved or flipped.";
+    let unknown = ViewError::UnknownView(i("V-9")).to_string();
+    let no_depth = ViewError::NoDepth.to_string();
+    let taken = ViewError::DuplicateName("section a".to_owned()).to_string();
+    let cases: Vec<(&str, Value, &str)> = vec![
+        (
+            "view.line.move",
+            json!({ "view": "V-g", "by": { "x": "1 m", "y": "0" } }),
+            no_line,
+        ),
+        ("view.line.flip", json!({ "view": "V-g" }), no_line),
+        (
+            "view.line.move",
+            json!({ "view": "V-s" }),
+            "This command needs how far to move it (by).",
+        ),
+        (
+            "view.line.move",
+            json!({ "view": "V-s", "by": { "x": "1 m", "y": "0" }, "depth": "2 m" }),
+            "view.line.move takes no depth.",
+        ),
+        (
+            "view.line.flip",
+            json!({ "view": "V-s", "look": "right" }),
+            "view.line.flip takes no look.",
+        ),
+        ("view.line.flip", json!({ "view": "V-9" }), &unknown),
+        (
+            "view.set",
+            json!({ "view": "V-s", "by": { "x": "1 m", "y": "0" } }),
+            "view.set has no by: a line is moved with view.line.move.",
+        ),
+        (
+            "view.create",
+            json!({ "view": "V-e", "kind": "elevation", "name": "E", "face": "south" }),
+            "view.create has no face or width: an elevation by direction is made with \
+             view.elevation.create.",
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "face": "up" })),
+            "\"up\" is not a face of the building: north, south, east or west.",
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "width": "0" })),
+            "An elevation's width must be above zero.",
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "depth": "-1 m" })),
+            &no_depth,
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "to": { "x": "1 m", "y": "0" } })),
+            "view.elevation.create takes no to.",
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "look": "right" })),
+            "view.elevation.create takes no look.",
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "name": "section a" })),
+            &taken,
+        ),
+        (
+            "view.elevation.create",
+            south_elevation(&json!({ "view": "V-s" })),
+            "That element already exists.",
+        ),
+        (
+            "element.move",
+            json!({ "element": "V-s", "placement": { "x": 0, "y": 0, "z": 0 } }),
+            "A section's or an elevation's line is moved: use view.line.move.",
+        ),
+    ];
+    for (cmd, args, why) in cases {
+        assert_eq!(
+            stack.edit(cmd, args.clone()).await.unwrap_err(),
+            why,
+            "{cmd} {args}"
+        );
+    }
+    assert_eq!(stack.rows("piece").await, rows);
+    // Another person's claim on the section turns a flip away until it runs out.
+    stack
+        .edit("view.line.flip", json!({ "view": "V-s" }))
+        .await
+        .unwrap();
+    let refused = stack
+        .edit_as("ben", "view.line.flip", json!({ "view": "V-s" }))
+        .await
+        .unwrap_err();
+    assert_eq!(refused, "anna is working on this.");
+    stack.later();
+    stack
+        .edit_as("ben", "view.line.flip", json!({ "view": "V-s" }))
+        .await
+        .unwrap();
+    assert_eq!(ends_of(&view(&stack, "V-s").await).2, Side::Left);
+}
+
+#[tokio::test]
+async fn every_line_command_is_undone_and_redone() {
+    let stack = Stack::new().await;
+    undone_and_redone(&stack, "view.create", section("V-s", "Section A")).await;
+    for (cmd, args) in [
+        ("view.elevation.create", south_elevation(&json!({}))),
+        (
+            "view.line.move",
+            json!({ "view": "V-s", "by": { "x": "250", "y": "-1 m" } }),
+        ),
+        ("view.line.flip", json!({ "view": "V-s" })),
+        ("view.line.flip", json!({ "view": "V-e" })),
+        ("view.set", json!({ "view": "V-e", "depth": "8 m" })),
+        ("view.delete", json!({ "view": "V-e" })),
+    ] {
+        undone_and_redone(&stack, cmd, args).await;
+    }
 }
