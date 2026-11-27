@@ -32,7 +32,8 @@
 //! ([`Joints`], derived from construct-walls' join rule by construct-regen's `joins`, job 5.1):
 //! each layer's pieces once its joints are made, which the kernel builder extrudes in place of the
 //! layer's strip, and the whole wall's outline. Every corner there is the crossing of two layer
-//! faces of walls along the plan's axes, so it is on the grid with no rounding.
+//! faces: along the plan's axes, or on whole ratios, a grid point with no rounding; at any other
+//! angle (job 6.1) the true crossing rounded once to the grid.
 //!
 //! When it wraps (job 6.1), `wrap` too ([`Wrap`], filled by construct-regen's `walls` from the
 //! wall type and the wall's own choice): its wrapping at free ends and at inserts, each layer's

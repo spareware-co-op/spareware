@@ -37,8 +37,8 @@
 //!   and listed in the body as a layer of its own, in order; each opening is cut from every piece
 //!   its cutter's plan box reaches, and the display's outline is the joined outline. The pieces
 //!   are worked out before building (construct-walls' join rule, filled by construct-regen's
-//!   `joins`), so this builder never reads another wall. X joins, mitres at any angle and
-//!   wrapping are job 6.1's.
+//!   `joins`, with crosses, joins at any angle and wrapped free ends from job 6.1), so this
+//!   builder never reads another wall.
 //! - Names (chapter 20.2): the wall's six roles, `base`, `top`, `exterior`, `interior`, `end0` and
 //!   `end1`, are named as the old box's are, under this recipe's operation, so a door hosted on
 //!   the exterior keeps its face through every rebuild. `exterior` is the first layer's outer
