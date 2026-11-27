@@ -3904,6 +3904,10 @@ if (withKernel) {
   pass('a hidden outline is gone from both pages while the plan stays cut');
 }
 await anna.locator(cropControl('crop-shown')).check();
+// The outline is shown again on both pages before the next control is touched: a dialog that is
+// drawn again by this change's answer would otherwise put the next click back.
+await anna.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
+await ben.waitForSelector(`${cropDialog} [data-crop-state="on-shown"]`);
 await anna.locator(cropControl('crop-on')).uncheck();
 await anna.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
 await ben.waitForSelector(`${cropDialog} [data-crop-state="off-shown"]`);
