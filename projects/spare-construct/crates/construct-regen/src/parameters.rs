@@ -92,6 +92,11 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_views::VIEW_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
+        // A detail item (a line, a region, a component, a spot slope or a line style) belongs to one
+        // view and is no shape. Its kinds all begin `detail.` (construct-detailing's `KIND_PREFIX`): the
+        // crate cannot be named here, because construct-detailing depends on construct-modify, which
+        // depends on this crate. A test in construct-api holds the two to the same list.
+        && !element.kind.starts_with("detail.")
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).

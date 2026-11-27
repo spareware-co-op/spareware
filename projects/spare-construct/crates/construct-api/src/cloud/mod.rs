@@ -23,6 +23,10 @@
 //!   same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
+//! - [`detailing`]: detail lines, filled regions, detail components and spot slopes in a view, and a
+//!   person's own line styles, and the listing of a view's items, through the same log.
+//! - [`modify`]: moving, copying, turning, mirroring and arraying a selection, hosted elements
+//!   with their hosts, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -31,6 +35,7 @@
 
 pub mod access;
 pub mod commands;
+pub mod detailing;
 pub mod directory;
 pub mod elements;
 pub mod families;
@@ -38,6 +43,7 @@ pub mod floors;
 pub mod grids;
 pub mod hosting;
 pub mod levels;
+pub mod modify;
 pub mod openings;
 pub mod params;
 pub mod roofs;

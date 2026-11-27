@@ -10,6 +10,8 @@
 //! carrying its material as `data-material`; the strokes follow, over the hatches, each an SVG
 //! `line` (a segment) or `path` (an arc) at its printed width with round ends, carrying its
 //! element and its face's role as `data-element` and `data-role`. Line patterns are drawn solid.
+//! What the view draws over its model ([`crate::over`]) follows the strokes: solid fills (a closed `path`
+//! filled in its colour), pattern lines (as a hatch, with `data-element`), then lines.
 //!
 //! Numbers: a length of the drawing in millimetres is `steps / 6400`, a terminating decimal, and is
 //! written exactly; so is a point of the paper size at a scale whose denominator has no prime
@@ -24,8 +26,9 @@ use construct_styles::{Colour, Micrometres, Scale};
 
 use crate::DrawingError;
 use crate::drawing::{Drawing, Shape, Turn, ViewPoint};
+use crate::over::Over;
 use crate::pens::Styles;
-use crate::picture::{Output, Picture, picture};
+use crate::picture::{Output, Picture, Stroke, picture};
 
 /// `num / den` as a decimal: exact when it terminates, else to nine places.
 fn decimal(num: i128, den: i128) -> Result<String, DrawingError> {
@@ -120,12 +123,20 @@ fn extent(picture: &Picture) -> Result<Option<[ViewPoint; 2]>, DrawingError> {
             points.extend([*a, *b]);
         }
     }
-    for stroke in &picture.strokes {
+    for stroke in picture.strokes.iter().chain(&picture.over.strokes) {
         match stroke.shape {
             Shape::Segment { start, end } => points.extend([start, end]),
             Shape::Arc {
                 centre, start, end, ..
             } => points.extend([centre, start, end]),
+        }
+    }
+    for fill in &picture.over.fills {
+        points.extend(fill.outline.iter().copied());
+    }
+    for hatch in &picture.over.hatches {
+        for [a, b] in &hatch.lines {
+            points.extend([*a, *b]);
         }
     }
     let less = |a: i128, ad: i128, b: i128, bd: i128| -> Result<bool, DrawingError> {
@@ -303,38 +314,87 @@ impl Svg {
             );
         }
         for line in &picture.strokes {
-            let stroke = format!(
-                "{} stroke-linecap=\"round\"{}",
-                pen(line.colour, line.width, n)?,
-                tone(line.opacity)?
-            );
-            let data = format!(
-                "data-element=\"{}\" data-role=\"{}\"",
-                line.element.as_str(),
-                line.role
-            );
-            match line.shape {
-                Shape::Segment { start, end } => {
-                    let ((x1, y1), (x2, y2)) = (xy(start)?, xy(end)?);
-                    let _ = writeln!(
-                        out,
-                        "<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" {stroke} {data}/>"
-                    );
-                }
-                Shape::Arc {
-                    centre,
-                    start,
-                    end,
-                    turn,
-                } => {
-                    let d = arc(centre, start, end, turn)?;
-                    let _ = writeln!(out, "<path d=\"{d}\" fill=\"none\" {stroke} {data}/>");
-                }
-            }
+            write_stroke(&mut out, line, n)?;
         }
+        write_over(&mut out, &picture.over, n)?;
         out.push_str("</svg>\n");
         Ok(out)
     }
+}
+
+/// One line of the picture: an SVG `line` (a segment) or `path` (an arc).
+fn write_stroke(out: &mut String, line: &Stroke, n: i128) -> Result<(), DrawingError> {
+    let stroke = format!(
+        "{} stroke-linecap=\"round\"{}",
+        pen(line.colour, line.width, n)?,
+        tone(line.opacity)?
+    );
+    let data = format!(
+        "data-element=\"{}\" data-role=\"{}\"",
+        line.element.as_str(),
+        line.role
+    );
+    match line.shape {
+        Shape::Segment { start, end } => {
+            let ((x1, y1), (x2, y2)) = (xy(start)?, xy(end)?);
+            let _ = writeln!(
+                out,
+                "<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{x2}\" y2=\"{y2}\" {stroke} {data}/>"
+            );
+        }
+        Shape::Arc {
+            centre,
+            start,
+            end,
+            turn,
+        } => {
+            let d = arc(centre, start, end, turn)?;
+            let _ = writeln!(out, "<path d=\"{d}\" fill=\"none\" {stroke} {data}/>");
+        }
+    }
+    Ok(())
+}
+
+/// What a view draws over its model: solid fills (an SVG `path` closed, filled in its colour with
+/// no stroke), then pattern lines (one `path` of straight pieces, as a material's hatch), then
+/// lines; each carrying its item as `data-element`.
+fn write_over(out: &mut String, over: &Over, n: i128) -> Result<(), DrawingError> {
+    for fill in &over.fills {
+        let mut d = String::new();
+        for (i, p) in fill.outline.iter().enumerate() {
+            let (x, y) = xy(*p)?;
+            let _ = write!(d, "{} {x} {y} ", if i == 0 { "M" } else { "L" });
+        }
+        let c = fill.colour;
+        let _ = writeln!(
+            out,
+            "<path d=\"{d}Z\" fill=\"#{:02x}{:02x}{:02x}\" stroke=\"none\" data-element=\"{}\" data-role=\"fill\"/>",
+            c.0,
+            c.1,
+            c.2,
+            fill.element.as_str()
+        );
+    }
+    for hatch in &over.hatches {
+        let mut d = String::new();
+        for [a, b] in &hatch.lines {
+            let ((x1, y1), (x2, y2)) = (xy(*a)?, xy(*b)?);
+            if !d.is_empty() {
+                d.push(' ');
+            }
+            let _ = write!(d, "M {x1} {y1} L {x2} {y2}");
+        }
+        let _ = writeln!(
+            out,
+            "<path d=\"{d}\" fill=\"none\" {} stroke-linecap=\"butt\" data-element=\"{}\" data-role=\"pattern\"/>",
+            pen(hatch.colour, hatch.width, n)?,
+            hatch.element.as_str()
+        );
+    }
+    for line in &over.strokes {
+        write_stroke(out, line, n)?;
+    }
+    Ok(())
 }
 
 impl Output for Svg {

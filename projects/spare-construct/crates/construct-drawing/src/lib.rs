@@ -27,6 +27,8 @@
 //!   merged regions hatched in their material's cut pattern and outlined at their category's cut
 //!   weight for the scale, a line two regions share drawn once; [`picture::Output`], the writer
 //!   of a picture.
+//! - [`over`]: [`over::Over`], what a view draws over its model: solid fills, pattern lines and
+//!   lines of its own detail items, laid on a [`picture::Picture`] and written with it.
 //! - [`look`]: [`look::Looks`], what answers for a view how a category looks on each edge (the
 //!   server asks construct-views' `resolve`); with none the drawing is as it was.
 //! - [`svg`]: [`svg::Svg`], the SVG output, and [`svg::to_svg`], so a person can see a drawing.
@@ -60,6 +62,7 @@ pub mod error;
 pub mod hatch;
 pub mod look;
 pub mod merge;
+pub mod over;
 mod overlay;
 pub mod pens;
 pub mod picture;

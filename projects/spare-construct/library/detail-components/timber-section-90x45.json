@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "key": "timber-section-90x45",
+  "name": "Timber section 90 x 45",
+  "lines": [
+    { "from": ["-45 mm", "-22.5 mm"], "to": ["45 mm", "-22.5 mm"], "style": "standard" },
+    { "from": ["45 mm", "-22.5 mm"], "to": ["45 mm", "22.5 mm"], "style": "standard" },
+    { "from": ["45 mm", "22.5 mm"], "to": ["-45 mm", "22.5 mm"], "style": "standard" },
+    { "from": ["-45 mm", "22.5 mm"], "to": ["-45 mm", "-22.5 mm"], "style": "standard" }
+  ],
+  "fills": [
+    {
+      "outline": [["-45 mm", "-22.5 mm"], ["45 mm", "-22.5 mm"], ["45 mm", "22.5 mm"], ["-45 mm", "22.5 mm"]],
+      "pattern": "timber",
+      "colour": "#000000"
+    }
+  ]
+}

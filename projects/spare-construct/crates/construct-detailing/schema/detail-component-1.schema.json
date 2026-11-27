@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spareware.example/schemas/detail-component-1.schema.json",
+  "title": "Spare Construct detail component recipe, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "key", "name", "lines", "fills"],
+  "properties": {
+    "schema": { "const": 1 },
+    "key": { "type": "string", "pattern": "^[a-z0-9-]{1,64}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "lines": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "style"],
+        "properties": {
+          "from": { "$ref": "#/$defs/point" },
+          "to": { "$ref": "#/$defs/point" },
+          "style": { "enum": ["fine", "standard", "bold", "centre", "hidden", "dotted"] }
+        }
+      }
+    },
+    "fills": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outline", "pattern", "colour"],
+        "properties": {
+          "outline": { "type": "array", "minItems": 3, "maxItems": 1024, "items": { "$ref": "#/$defs/point" } },
+          "pattern": { "type": "string", "minLength": 1 },
+          "colour": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

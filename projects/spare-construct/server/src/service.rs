@@ -1017,6 +1017,32 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .ok_or(Refusal::NotFound)
     }
 
+    /// The detail items of one view (detail lines, filled and masking regions, detail components,
+    /// spot slopes) and the line styles they may use, each region with its area and each spot slope
+    /// with its slope worked out now from the floor or roof it reads; a face that is missing or flat
+    /// is a warning by name. Read as of the log's head; nothing is stored but each item's own
+    /// inputs.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn detail(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::detailing::DetailListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        cloud::detailing::listing(&mut snapshot, project, model, view)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// A view's graphics rules: how each category or subcategory it says anything about looks in
     /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
     /// project's object styles say. Read as of the log's head.
@@ -1089,8 +1115,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             }
         }
         let looks = ViewLooks::new(&world, view);
+        let detail = cloud::detailing::prepare(&mut snapshot, project, model, view)
+            .await?
+            .map_err(Refusal::Bad)?;
         let drawn = drawer
-            .draw(cut.cut, cut.scale, &elements, Some(&looks))
+            .draw(cut.cut, cut.scale, &elements, Some(&looks), Some(&detail))
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {

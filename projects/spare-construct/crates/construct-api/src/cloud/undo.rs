@@ -54,7 +54,8 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{
-    families, floors, grids, hosting, levels, openings, params, roofs, rooms, sheets, views, walls,
+    detailing, families, floors, grids, hosting, levels, modify, openings, params, roofs, rooms,
+    sheets, views, walls,
 };
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
@@ -113,6 +114,8 @@ pub fn is_step(cmd: &str) -> bool {
         || rooms::is_command(cmd)
         || views::is_command(cmd)
         || sheets::is_command(cmd)
+        || detailing::is_command(cmd)
+        || modify::is_command(cmd)
         || is_command(cmd)
 }
 
@@ -512,6 +515,10 @@ pub async fn apply<T: Txn>(
     }
     // Nor a sheet without its viewports' views, or a view placed twice.
     if let Err(why) = sheets::undo_rules(txn, project, document, &written, &deleted).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a detail item in a view that is not there, or one that does not read.
+    if let Err(why) = detailing::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {

@@ -1235,3 +1235,107 @@ async fn a_window_placed_through_commands_cuts_its_wall_and_stands_in_it() {
     fresh.rebuild(&project).await.unwrap();
     assert_eq!(derived(&store, &project).await, before);
 }
+
+/// A view has detail items drawn over its plan on the kernel: a masking region hides what is under
+/// it, a filled region has its pattern lines, a repeating component and a placed one and a detail
+/// line are drawn, all after the model, in the view they are in and in no other; the same items
+/// draw the same bytes, a view that hides the detail lines leaves them out and keeps the rest.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_detail_items_are_drawn_over_its_plan_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = |view: &'static str| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.plan(anna, project, model, &i(view)).await.unwrap().svg }
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let plain = draw("VP-1").await;
+    assert!(!plain.contains("data-role=\"detail line\""));
+    let point = |x: &str, y: &str| json!({ "x": x, "y": y });
+    let square = json!([
+        point("0", "0"),
+        point("2 m", "0"),
+        point("2 m", "2 m"),
+        point("0", "2 m")
+    ]);
+    edit(
+        "detail.region.create",
+        json!({ "region": "MR-1", "view": "VP-1", "kind": "masking", "outline": square }),
+    )
+    .await;
+    edit(
+        "detail.region.create",
+        json!({ "region": "FR-1", "view": "VP-1", "kind": "filled", "pattern": "insulation",
+                "colour": "#0000ff",
+                "outline": [point("3 m", "0"), point("5 m", "0"), point("5 m", "2 m"),
+                            point("3 m", "2 m")] }),
+    )
+    .await;
+    edit(
+        "detail.line.create",
+        json!({ "line": "DL-1", "view": "VP-1", "style": "builtin:bold",
+                "curve": { "kind": "straight", "start": point("0", "0"), "end": point("5 m", "2 m") } }),
+    )
+    .await;
+    edit(
+        "detail.repeat.create",
+        json!({ "repeat": "RP-1", "view": "VP-1", "recipe": "blocking-cross-90x45",
+                "from": point("0", "3 m"), "to": point("3 m", "3 m"), "spacing": "600 mm" }),
+    )
+    .await;
+    edit(
+        "detail.component.create",
+        json!({ "component": "C-1", "view": "VP-1", "recipe": "timber-section-90x45",
+                "position": point("4 m", "3 m"), "rotation": "30°" }),
+    )
+    .await;
+    let drawn = draw("VP-1").await;
+    assert_ne!(drawn, plain);
+    assert_eq!(
+        drawn,
+        draw("VP-1").await,
+        "the same items draw the same bytes"
+    );
+    for item in ["MR-1", "FR-1", "DL-1", "RP-1", "C-1"] {
+        assert!(
+            drawn.contains(&format!("data-element=\"{item}\"")),
+            "{item}"
+        );
+    }
+    assert!(
+        drawn.contains("fill=\"#ffffff\""),
+        "the masking region is opaque paper"
+    );
+    assert!(
+        drawn.contains("stroke=\"#0000ff\""),
+        "the filled region has its pattern lines"
+    );
+    // The model is still there and is drawn first; the items lie over it.
+    let last_wall = drawn.rfind("data-element=\"W-10").unwrap();
+    assert!(last_wall < drawn.find("data-element=\"MR-1\"").unwrap());
+    assert!(last_wall < drawn.find("data-element=\"DL-1\"").unwrap());
+    // Another view of the model shows none of them.
+    let other = draw("VP-2").await;
+    assert!(!other.contains("data-element=\"MR-1\""));
+    assert!(!other.contains("data-role=\"detail line\""));
+    // A view that hides detail lines leaves them out, and nothing else.
+    edit(
+        "view.graphics.set",
+        json!({ "view": "VP-1", "category": 5800, "edge": "projection",
+                "style": { "shown": false } }),
+    )
+    .await;
+    let hidden = draw("VP-1").await;
+    assert!(!hidden.contains("data-role=\"detail line\""));
+    assert!(hidden.contains("data-element=\"MR-1\""));
+    assert!(
+        hidden.contains("data-element=\"RP-1\""),
+        "components are another category"
+    );
+}

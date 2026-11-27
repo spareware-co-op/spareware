@@ -25,6 +25,7 @@ use crate::drawing::{Drawing, Line, LineKind, Shape, ViewPoint};
 use crate::hatch::hatch;
 use crate::look::opacity;
 use crate::merge::merge;
+use crate::over::Over;
 use crate::overlay::Overlay;
 use crate::pens::{Styles, look_of, style};
 
@@ -75,6 +76,9 @@ pub struct Picture {
     /// The lines, drawn over the hatches: the merged outlines, then the other lines in the
     /// drawing's order.
     pub strokes: Vec<Stroke>,
+    /// What the view draws over all of the above: its detail items ([`crate::over`]); nothing
+    /// unless the caller sets it.
+    pub over: Over,
 }
 
 /// A writer of pictures: SVG today, and any other output a later job adds.
@@ -249,5 +253,6 @@ pub fn picture(
         scale,
         hatches,
         strokes,
+        over: Over::none(),
     })
 }
