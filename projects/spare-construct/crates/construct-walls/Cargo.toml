@@ -15,6 +15,13 @@ construct-params = { path = "../construct-params" }
 # A wall type is an element type with a system block; instances and resolution. Same workspace.
 construct-types = { path = "../construct-types" }
 kit-core = { path = "../../../kit/crates/kit-core" }
+# Joins at any angle (src/joins/exact.rs): where two layer faces cross, worked exactly in whole
+# numbers that pass 128 bits, then rounded once to the grid. num-bigint's integers, with
+# num-integer and num-traits for their traits; all MIT OR Apache-2.0, the versions the workspace
+# already locks (construct-drawing pins the same).
+num-bigint = "=0.4.8"
+num-integer = "=0.1.47"
+num-traits = "=0.2.19"
 # The stored text is JSON. MIT OR Apache-2.0.
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

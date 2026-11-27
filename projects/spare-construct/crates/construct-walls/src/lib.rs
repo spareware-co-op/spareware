@@ -56,17 +56,20 @@
 pub mod assembly;
 pub mod defaults;
 pub mod error;
+pub mod joining;
 pub mod joins;
 pub mod layer;
 mod length;
 pub mod offsets;
 pub mod stored;
 pub mod wall_type;
+pub mod wrap;
 
 pub use assembly::{Assembly, MOST_TOTAL, Side, Zone};
 pub use defaults::{DefaultWall, default_wall_types, default_walls};
 pub use error::WallError;
-pub use joins::{Joined, Outline, PlanLayer, PlanWall, TOLERANCE, lines_meet};
+pub use joining::{Choice, JOINING, JoinKind, Joining, OwnWrap, WRAPPING, WallEnd, keeper};
+pub use joins::{Joined, Meeting, Outline, PlanLayer, PlanWall, TOLERANCE, lines_meet, meeting};
 pub use layer::{Function, Join, Layer, join};
 pub use offsets::{LocationLine, Offsets};
 pub use stored::{FORMAT_VERSION, OWNER};
@@ -74,3 +77,4 @@ pub use wall_type::{
     FLIPPED, LOCATION_LINE, add_parameters, assembly_of, location_line_value, new_wall_type,
     offsets_of, parameter_definitions, placement, with_assembly,
 };
+pub use wrap::{AtEnds, AtInserts, Setback, Turn, Turned, WrapLayer, Wrapping, turned};
