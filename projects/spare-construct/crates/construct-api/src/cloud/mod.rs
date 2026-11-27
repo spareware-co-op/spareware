@@ -23,6 +23,8 @@
 //!   same log.
 //! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
 //!   landings), through the same log.
+//! - [`railings`]: making and changing railings along a sketched path or on a stair (type, path,
+//!   side), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
@@ -42,6 +44,7 @@ pub mod hosting;
 pub mod levels;
 pub mod openings;
 pub mod params;
+pub mod railings;
 pub mod roofs;
 pub mod rooms;
 pub mod sheets;

@@ -669,6 +669,7 @@ dependencies = [
  "construct-openings",
  "construct-params",
  "construct-phases",
+ "construct-railings",
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
@@ -862,6 +863,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-railings"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-stairs",
+ "construct-types",
+ "kit-core",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-regen"
 version = "0.0.0"
 dependencies = [
@@ -874,6 +894,7 @@ dependencies = [
  "construct-model",
  "construct-openings",
  "construct-params",
+ "construct-railings",
  "construct-roofs",
  "construct-rooms",
  "construct-sheets",

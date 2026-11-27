@@ -2203,6 +2203,48 @@ async fn a_stair_made_by_command_is_laid_out_and_read_back() {
     );
 }
 
+/// A railing made by command on a stair of the seeded building (level 1 to level 2, 3000 mm, a
+/// main private stairway of 16 risers in one straight run of 15 treads): on its right side, 50 mm in,
+/// along the pitch from the first nosing to the last, 4200 mm in plan by 2812.5 mm up. The
+/// railings view lists it with its quantities and the rule set's categories; its parameters view
+/// reads them back read-only; a person off the team can neither make one nor read the view.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_railing_made_by_command_follows_its_stair_and_is_read_back() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.railings(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.railings.len(), 0);
+    assert!(none.categories.iter().any(|c| c.id == "household-stair"));
+    assert!(refused(s.railings(&dan, &project, &model).await));
+    let stair = json!({ "element": "S-900", "name": "Stair", "level": "1", "top": "2",
+                        "start": ["20 m", "0"], "category": "main-private" });
+    s.edit(&anna, &project, &model, "stair.create", stair)
+        .await
+        .unwrap();
+    let create = json!({ "element": "RL-900", "name": "Stair rail", "stair": "S-900",
+                         "side": "right" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "railing.stair", create.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "railing.stair", create)
+        .await
+        .unwrap();
+    let view = s.railings(&anna, &project, &model).await.unwrap();
+    let railing = &view.railings[0];
+    assert_eq!(railing.stair.as_deref(), Some("S-900"));
+    let laid = railing.laid.as_ref().unwrap();
+    assert_eq!(laid.posts, 2);
+    let read = quantities(s, &project, &model, "RL-900").await;
+    assert_eq!(read["railing.posts"].1.as_deref(), Some("2"));
+    assert_eq!(read["railing.height"].1.as_deref(), Some("1000 mm"));
+    assert_eq!(
+        read["railing.rail-length"].0.as_deref(),
+        Some(laid.rail_length.value.as_str())
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
     let stack = seeded().await;

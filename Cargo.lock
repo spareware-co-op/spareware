@@ -523,6 +523,7 @@ dependencies = [
  "construct-openings",
  "construct-params",
  "construct-phases",
+ "construct-railings",
  "construct-regen",
  "construct-roofs",
  "construct-rooms",

@@ -585,7 +585,8 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     /// check against and the regenerator builds from (`construct_regen::parameters`). A floor's
     /// area, volume and mass are those after the openings and shafts that cut it
     /// ([`cloud::openings::floor_cuts`]); a stair's quantities are its layout's as its levels
-    /// stand ([`construct_regen::stairs::read_only_at`]).
+    /// stand ([`construct_regen::stairs::read_only_at`]), and a railing's as its path or its stair
+    /// lays it out ([`construct_regen::railings::read_only_at`]).
     ///
     /// # Errors
     ///
@@ -652,7 +653,39 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             )
             .await?,
         );
+        // A railing's rail and handrail lengths, balusters, posts and height, read only, as its
+        // path or its stair lays it out.
+        view.parameters.extend(
+            construct_regen::railings::read_only_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+                records::At::Now,
+            )
+            .await?,
+        );
         Ok(view)
+    }
+
+    /// A model's railings as the page's railing tool needs them: the rule set's categories and
+    /// openings rules, and each railing with its quantities and warnings as the model stands, or
+    /// why it has none ([`cloud::railings::read_railings`]).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn railings(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::railings::RailingsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::railings::read_railings(&mut snapshot, project, model).await?)
     }
 
     /// A model's stairs as the page's stair tool needs them: the rule set's categories, and each
