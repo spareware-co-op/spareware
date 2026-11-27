@@ -19,12 +19,14 @@
 //! | `stair.width` | `element`, `width` | The stair: its width |
 //! | `stair.direction` | `element`, `direction` and or `start` | The stair: which way it runs and where it starts |
 //! | `stair.runs` | `element`, `runs`, `landings`, `going` (left as it is when not given) | The stair: its runs and landings |
+//! | `stair.category` | `element`, `category` | The stair: the rule set's category it is laid out by |
+//! | `stair.top` | `element`, `top` (a level's ID), `top_offset` (typed text, default `0`) | The stair: the level and offset its top is tied to |
 //! | `stair.delete` | `element` | The stair goes |
 //!
 //! `runs` is a list of runs from the bottom, each `{}` to share the risers the others leave or
 //! `{"risers": n}`; `landings` one fewer, each `{"length": "<typed text>", "turn": "straight" |
 //! "left" | "right" | "back-left" | "back-right"}`. A stair's base level and offset are changed
-//! by `level.tie`, as any element's; its top level is the one it is made with.
+//! by `level.tie`, as any element's; its top is changed by `stair.top`, which checks that it is above the base and that the stair still lays out.
 //!
 //! Refused, in words: an element of that ID; a base or top level not in the model, or a top that
 //! is not above the base; a blank name; a direction or turn not among its names; text that is no
@@ -42,7 +44,7 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::levels;
-use construct_levels::{Length, Tie, parse_length, show};
+use construct_levels::{Length, Tie, parse_length, show, write_top};
 use construct_model::element::Element;
 use construct_params::{Units, Value};
 use construct_regen::parameters::{self as records, At};
@@ -57,11 +59,13 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 5] = [
+pub const COMMANDS: [&str; 7] = [
     "stair.create",
     "stair.width",
     "stair.direction",
     "stair.runs",
+    "stair.category",
+    "stair.top",
     "stair.delete",
 ];
 
@@ -327,6 +331,8 @@ pub async fn apply<T: Txn>(
         "stair.width" => width(&mut run, args).await,
         "stair.direction" => turn(&mut run, args).await,
         "stair.runs" => runs(&mut run, args).await,
+        "stair.category" => retype(&mut run, args).await,
+        "stair.top" => retop(&mut run, args).await,
         "stair.delete" => delete(&mut run, args).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
@@ -511,6 +517,43 @@ async fn runs<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     rewrite(run, record, settings).await
 }
 
+async fn retype<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (_, record, stair) = match target(run, args.element.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let mut settings = stair.settings();
+    settings.category = match need(args.category, "a category, `category`") {
+        Ok(category) => category,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    rewrite(run, record, settings).await
+}
+
+async fn retop<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (_, mut record, _) = match target(run, args.element.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let level = match need(args.top, "a top level, `top`") {
+        Ok(level) => level,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    if let Err(refusal) = levels::level_now(run.txn, run.project, run.document, &level).await? {
+        return Ok(Err(refusal));
+    }
+    let offset = match args
+        .top_offset
+        .as_deref()
+        .map_or(Ok(Length::from_steps(0)), length)
+    {
+        Ok(offset) => offset,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    write_top(&mut record.props, Some(&Tie { level, offset }));
+    run.checked(&record).await
+}
+
 async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     let (hash, record, _) = match target(run, args.element).await? {
         Ok(found) => found,
@@ -593,7 +636,7 @@ pub async fn generic_rules<T: Txn>(
                     use_instead(&format!("{} is moved", record.name), "stair.direction")
                 }
                 _ => format!(
-                    "{} is changed with stair.width, stair.direction or stair.runs, which check it as a stair.",
+                    "{} is changed with stair.width, stair.direction, stair.runs, stair.category or stair.top, which check it as a stair.",
                     record.name
                 ),
             }),
@@ -684,6 +727,8 @@ pub struct StairView {
     pub direction: &'static str,
     /// Its width.
     pub width: LengthView,
+    /// How high its base sits above the project's zero; none where its level cannot be read.
+    pub base: Option<LengthView>,
     /// Its layout as the document stands; none where it cannot be laid out.
     pub layout: Option<LayoutView>,
     /// Why it cannot be laid out, in construct-stairs' words; none where it can.
@@ -699,6 +744,17 @@ pub struct CategoryView {
     pub name: String,
 }
 
+/// Where a floor plan cuts, for drawing what a stair shows above and below it.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct PlanCutView {
+    /// The plan's permanent ID.
+    pub view: String,
+    /// The level the plan is of.
+    pub level: String,
+    /// The height of its cut plane above the project's zero.
+    pub cut: LengthView,
+}
+
 /// What the page asks of a document's stairs.
 #[derive(Serialize, Debug, PartialEq, Eq)]
 pub struct StairsView {
@@ -708,6 +764,9 @@ pub struct StairsView {
     pub rules_name: String,
     /// Its categories of stairway.
     pub categories: Vec<CategoryView>,
+    /// Every floor plan's cut plane, by the plan's name, so the page can draw a stair cut where
+    /// the plan cuts it.
+    pub plans: Vec<PlanCutView>,
     /// Every stair of the document, by ID.
     pub stairs: Vec<StairView>,
 }
@@ -755,6 +814,13 @@ pub async fn read_stairs<R: Reader>(
     let all = records::read_document(reader, project, document).await?;
     let mut stairs = Vec::new();
     for (_, record) in all.into_values().filter(|(_, record)| is_stair(record)) {
+        let base =
+            match construct_regen::levels::placed(reader, project, document, &record, At::Now)
+                .await?
+            {
+                Ok(placed) => placed.elevation.map(LengthView::of),
+                Err(_) => None,
+            };
         let laid =
             construct_regen::stairs::layout_at(reader, project, document, &record, At::Now).await?;
         let (layout, refusal) = match laid.and_then(|(_, l)| layout_view(&l)) {
@@ -782,6 +848,7 @@ pub async fn read_stairs<R: Reader>(
             category,
             direction,
             width,
+            base,
             layout,
             refusal,
         });
@@ -803,6 +870,33 @@ pub async fn read_stairs<R: Reader>(
         rules: NZ_D1_AS1.to_owned(),
         rules_name,
         categories,
+        plans: plan_cuts(reader, project, document).await?,
         stairs,
     })
+}
+
+/// Every floor plan's cut plane, by the plans' names; a plan whose range does not resolve against
+/// the levels is left out (the views list says why).
+async fn plan_cuts<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+) -> Result<Vec<PlanCutView>, StoreError> {
+    let Ok(world) = crate::cloud::views::read_world(reader, project, document).await? else {
+        return Ok(Vec::new());
+    };
+    let mut plans = Vec::new();
+    for view in world.views().ordered() {
+        let Some(setup) = view.kind().plan() else {
+            continue;
+        };
+        if let Ok(Some(cut)) = crate::cloud::views::plan_cut(&world, view.id()) {
+            plans.push(PlanCutView {
+                view: view.id().to_string(),
+                level: setup.level.to_string(),
+                cut: LengthView::of(cut.cut),
+            });
+        }
+    }
+    Ok(plans)
 }

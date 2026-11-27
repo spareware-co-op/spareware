@@ -554,6 +554,8 @@ async fn undone_and_redone(stack: &Stack, cmd: &str, args: Value) {
 #[tokio::test]
 async fn every_stair_command_is_undone_and_redone() {
     let stack = Stack::new().await;
+    let level = json!({ "level": "L-2", "name": "Second", "elevation": "3400 mm" });
+    stack.edit("level.create", level).await.unwrap();
     for (cmd, args) in [
         (
             "stair.create",
@@ -575,11 +577,89 @@ async fn every_stair_command_is_undone_and_redone() {
             json!({ "element": "S-1", "runs": [{}, {}],
                     "landings": [{ "length": "1100 mm", "turn": "right" }] }),
         ),
+        (
+            "stair.category",
+            json!({ "element": "S-1", "category": "main-private" }),
+        ),
+        ("stair.top", json!({ "element": "S-1", "top": "L-2" })),
         ("stair.delete", json!({ "element": "S-1" })),
     ] {
         undone_and_redone(&stack, cmd, args).await;
     }
     assert!(stack.record("S-1").await.is_none());
+}
+
+/// How many risers the first stair of the view is laid out in.
+async fn risers_of(stack: &Stack) -> usize {
+    stack.view().await.stairs[0].layout.as_ref().unwrap().risers
+}
+
+/// A stair's category and its top level are changed by their own commands, and each is checked as
+/// a stair: from First (2700 mm) to Second (3400 mm) a main private stairway takes 18 risers and a
+/// secondary private one 17 (its riser is at most 200 mm); an accessible one cannot rise 3400 mm in
+/// one run; a top at or below its base, a level that is not there and a category the rule set does
+/// not have are refused in words, and change nothing.
+#[tokio::test]
+async fn a_stair_changes_its_category_and_its_top_level() {
+    let stack = Stack::new().await;
+    let level = json!({ "level": "L-2", "name": "Second", "elevation": "3400 mm" });
+    stack.edit("level.create", level).await.unwrap();
+    let args = create("S-1", &json!({ "category": "main-private" }));
+    stack.edit("stair.create", args).await.unwrap();
+    assert_eq!(risers_of(&stack).await, 15);
+    stack
+        .edit("stair.top", json!({ "element": "S-1", "top": "L-2" }))
+        .await
+        .unwrap();
+    assert_eq!(risers_of(&stack).await, 18);
+    let record = stack.record("S-1").await.unwrap();
+    assert_eq!(record.props["@top.level"], "L-2");
+    stack
+        .edit(
+            "stair.category",
+            json!({ "element": "S-1", "category": "secondary-private" }),
+        )
+        .await
+        .unwrap();
+    let view = stack.view().await;
+    assert_eq!(view.stairs[0].category, "secondary-private");
+    assert_eq!(view.stairs[0].layout.as_ref().unwrap().risers, 17);
+    let before = stack.rows("piece").await;
+    let refusals = [
+        (
+            "stair.category",
+            json!({ "element": "S-1", "category": "accessible" }),
+            "Run 1 rises 3400 mm on a accessible stairway: the most a stair may rise between landings is 2500 mm (D1/AS1 4.3.2 and Table 7). Add a landing.",
+        ),
+        (
+            "stair.top",
+            json!({ "element": "S-1", "top": "L-g" }),
+            "Stair's top would be 0 mm from its base: a top is above its base.",
+        ),
+        (
+            "stair.category",
+            json!({ "element": "S-1", "category": "grand" }),
+            "The rule set nz-d1-as1 has no stairway category \"grand\"; it has accessible, common, main-private, secondary-private, minor-private, service.",
+        ),
+        (
+            "stair.category",
+            json!({ "element": "S-1" }),
+            "This command needs a category, `category`.",
+        ),
+        (
+            "stair.top",
+            json!({ "element": "S-1" }),
+            "This command needs a top level, `top`.",
+        ),
+    ];
+    for (cmd, args, words) in refusals {
+        assert_eq!(stack.edit(cmd, args).await.unwrap_err(), words, "{cmd}");
+    }
+    let missing = stack
+        .edit("stair.top", json!({ "element": "S-1", "top": "L-nowhere" }))
+        .await;
+    assert!(missing.is_err(), "a level that is not there");
+    assert_eq!(stack.rows("piece").await, before, "nothing changed");
 }
 
 /// The page's view lists the rule set's categories, and each stair with its layout.
@@ -604,13 +684,26 @@ async fn the_view_lists_the_categories_and_every_stair() {
         ]
     );
     assert_eq!(view.stairs.len(), 0);
+    assert_eq!(view.plans.len(), 0);
     let args = create(
         "S-1",
         &json!({ "category": "main-private", "name": "Back stair" }),
     );
     stack.edit("stair.create", args).await.unwrap();
+    // A floor plan's cut plane is read for the page to draw a stair by: a new plan cuts 1200 mm
+    // above its level, and the stair's base is the level's height.
+    let plan =
+        json!({ "view": "V-1", "kind": "floor_plan", "name": "Ground plan", "level": "L-g" });
+    stack.edit("view.create", plan).await.unwrap();
     let view = stack.view().await;
+    assert_eq!(view.plans.len(), 1);
+    assert_eq!(
+        (view.plans[0].view.as_str(), view.plans[0].level.as_str()),
+        ("V-1", "L-g")
+    );
+    assert_eq!(view.plans[0].cut.shown, "1200 mm");
     let stair = &view.stairs[0];
+    assert_eq!(stair.base.as_ref().unwrap().shown, "0 mm");
     assert_eq!(
         (stair.id.as_str(), stair.name.as_str()),
         ("S-1", "Back stair")
