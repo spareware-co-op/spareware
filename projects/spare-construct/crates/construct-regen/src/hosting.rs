@@ -39,6 +39,14 @@
 //! hosts on a face, only on its two sides, only a wall along x or y when it is layered, and a box
 //! door sits flush with its side.
 //!
+//! A curtain wall embedded in a wall (construct-curtain's embedded recipe, job 14.1) is hosted as
+//! a plain opening is, on a side of a layered wall along x or y, `along` its line from its start to
+//! the curtain wall's start and `up` from its base: it stands on its host's reference line from
+//! there for its own length ([`seat`] writes that line into the recipe its own builder is handed,
+//! derived and never stored), and its host is handed it as the plain opening it cuts, its length
+//! by its height through the wall's whole thickness ([`cut_of`]), so the opening's rules are the
+//! ones it is cut by.
+//!
 //! A placed family (`family.instance`, [`crate::families`], job 6.4) is hosted the same way, on a
 //! layered wall along x or y, and is seated in it by [`seat`]: its insertion point (the middle of
 //! its opening) `along` the wall's line from its start, on the wall's centre plane (the frames of
@@ -291,12 +299,14 @@ pub fn at(
     seat(edition, host, host_recipe, hosted, hosted_recipe, hosting).map(|(at, _)| at)
 }
 
-/// What a hosted element is called in a refusal: a placed family, a plain or floor opening, or a
-/// door.
+/// What a hosted element is called in a refusal: a placed family, a curtain wall, a plain or
+/// floor opening, or a door.
 #[must_use]
 pub fn noun(recipe: &Recipe) -> &'static str {
     if families::is_instance(recipe) {
         "family"
+    } else if construct_curtain::is_curtain(recipe) {
+        "curtain wall"
     } else if construct_openings::is_void(recipe) {
         "opening"
     } else {
@@ -367,6 +377,9 @@ pub fn seat(
         ));
     }
     let role = side(edition, host_recipe, face).map_err(|why| refuse("NotASide", why))?;
+    if construct_curtain::is_embedded(hosted_recipe) {
+        return curtain_on_layered(host, host_recipe, hosted_recipe, along, up, &refuse);
+    }
     if families::is_instance(hosted_recipe) {
         if !wall_plan::is_layered(host_recipe) {
             return Err(refuse(
@@ -451,6 +464,135 @@ pub fn seat(
         }
     };
     Ok((at, hosted_recipe.clone()))
+}
+
+/// Where an embedded curtain wall stands in its layered host (its filled recipe), `along` the
+/// host's reference line from its start and `up` from its base: its frame's origin `up` above the
+/// host's base, and its recipe with the line it stands on, from the point `along` the host's line
+/// for its own length the way the host runs, in grid steps of the host's frame.
+fn curtain_on_layered(
+    host: &Element,
+    host_recipe: &Recipe,
+    hosted_recipe: &Recipe,
+    along: Length,
+    up: Length,
+    refuse: &impl Fn(&str, String) -> GeometryError,
+) -> Result<(Placement, Recipe), GeometryError> {
+    if !wall_plan::is_layered(host_recipe) {
+        return Err(refuse(
+            "NotAHost",
+            format!(
+                "{} is a {}: a curtain wall is embedded only in a {}",
+                host.name,
+                host_recipe.op,
+                wall_plan::OP
+            ),
+        ));
+    }
+    let wall = Layered::of(host_recipe).map_err(|e| refuse(&e.code, e.message))?;
+    let axis = wall.plan.axis().ok_or_else(|| {
+        refuse(
+            "NotAHost",
+            format!(
+                "{} runs at an angle: a curtain wall is embedded only in a wall along x or y, as \
+                 a plain opening is",
+                host.name
+            ),
+        )
+    })?;
+    let z = up.whole_mm().ok_or_else(|| {
+        refuse(
+            "NotWholeMillimetres",
+            format!(
+                "its offset up its host's face, {up}, is not a whole number of millimetres, as \
+                 every placement is"
+            ),
+        )
+    })?;
+    let own = construct_curtain::embedded_length(hosted_recipe)
+        .map_err(|e| refuse("BadCurtain", e.to_string()))?;
+    let too_big = || refuse("TooBig", "it is too far from its host".to_owned());
+    let [ux, uy] = axis.unit();
+    let [sx, sy] = wall.plan.start();
+    let at = |distance: i64| -> Result<[Length; 2], GeometryError> {
+        let x = distance
+            .checked_mul(ux)
+            .and_then(|d| d.checked_add(sx))
+            .ok_or_else(too_big)?;
+        let y = distance
+            .checked_mul(uy)
+            .and_then(|d| d.checked_add(sy))
+            .ok_or_else(too_big)?;
+        Ok([Length::from_steps(x), Length::from_steps(y)])
+    };
+    let end = along.checked_add(own).ok_or_else(too_big)?;
+    let seated = construct_curtain::with_line(hosted_recipe, at(along.steps())?, at(end.steps())?)
+        .map_err(|e| refuse("BadCurtain", e.to_string()))?;
+    Ok((Placement { x: 0, y: 0, z }, seated))
+}
+
+/// What an embedded curtain wall cuts in its host, as its host's builder is handed it: the plain
+/// opening (construct-openings' `opening.wall`) of its own length by its height, along its host's
+/// axis, and where that sits in the host's frame ([`seat`] of that opening, so it sits as a plain
+/// opening hosted the same way does). `None` for anything else hosted, which is handed as
+/// [`seat`] seats it.
+///
+/// # Errors
+///
+/// As [`seat`]; `NotAHost` for a host that is not a layered wall along x or y; `BadCurtain` for a
+/// curtain wall whose length or height does not read, or is no size.
+pub fn cut_of(
+    edition: &Edition,
+    host: &Element,
+    host_recipe: &Recipe,
+    hosted: &Element,
+    hosted_recipe: &Recipe,
+    hosting: &Hosting,
+) -> Result<Option<(Placement, Recipe)>, GeometryError> {
+    if !construct_curtain::is_embedded(hosted_recipe) {
+        return Ok(None);
+    }
+    let key = hosted.id.as_str();
+    let refuse = |code: &str, why: String| GeometryError {
+        code: code.to_owned(),
+        message: format!("curtain wall {key}: {why}"),
+    };
+    let along_y = if wall_plan::is_layered(host_recipe) {
+        Layered::of(host_recipe)
+            .map_err(|e| refuse(&e.code, e.message))?
+            .plan
+            .axis()
+            .map(|axis| axis.index() == 1)
+    } else {
+        None
+    }
+    .ok_or_else(|| {
+        refuse(
+            "NotAHost",
+            format!(
+                "{} is not a layered wall along x or y, which is all a curtain wall is \
+                 embedded in",
+                host.name
+            ),
+        )
+    })?;
+    let size = (|| {
+        Ok::<_, construct_curtain::CurtainError>((
+            construct_curtain::embedded_length(hosted_recipe)?,
+            construct_curtain::height_of(hosted_recipe)?,
+        ))
+    })();
+    let (width, height) = size.map_err(|e| refuse("BadCurtain", e.to_string()))?;
+    let opening = construct_openings::WallOpening::new(
+        &construct_openings::Named::opening(key),
+        width,
+        height,
+        along_y,
+    )
+    .map_err(|e| refuse("BadCurtain", e.to_string()))?;
+    let recipe = opening.recipe();
+    let (at, recipe) = seat(edition, host, host_recipe, hosted, &recipe, hosting)?;
+    Ok(Some((at, recipe)))
 }
 
 /// Where a placed family sits on the side `role` of a layered wall (its filled recipe), `along`

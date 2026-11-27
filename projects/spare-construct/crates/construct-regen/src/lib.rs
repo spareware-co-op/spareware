@@ -51,6 +51,14 @@
 //!   (job 5.1): the walls are found from the stored walls of its level, the rule is
 //!   construct-walls', and the regenerator and the server's `/filled` both fill through it.
 //!
+//! - [`curtain_plan`]: a curtain wall (`wall.curtain`, job 14.1) in plan: every panel and mullion
+//!   a quadrilateral on the kernel's grid rising between two heights, and every door panel where
+//!   its family stands, read from its filled recipe. The kernel builds one solid per panel and
+//!   mullion, the stand-in one box with each drawn as a part.
+//! - [`curtains`]: how a curtain wall's recipe reads its grid and parts from its curtain wall
+//!   type, filled with the parameters by [`parameters::recipe_at`], its read-only quantities, and
+//!   [`curtains::CurtainView`], the grid a page edits by (every line and panel as laid out).
+//!
 //! - [`voids`]: the display shape of an opening and a shaft (job 4.2), which have no solid; both
 //!   builders hand a void's recipe to it first, as a datum's. What one cuts is its host's builder's.
 //!
@@ -71,6 +79,9 @@
 
 #[cfg(feature = "server")]
 pub mod catalog;
+pub mod curtain_plan;
+#[cfg(feature = "server")]
+pub mod curtains;
 pub mod datum;
 pub mod families;
 pub mod floor_plan;

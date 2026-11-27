@@ -540,13 +540,19 @@ pub struct ParameterView {
     pub reason: Option<String>,
 }
 
-/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`] and its level
-/// ties (construct-levels), which are the element record's own and not the type format's.
+/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`], its level ties
+/// (construct-levels) and its hosting's offsets ([`crate::hosting`], an embedded curtain wall's),
+/// which are the element record's own and not the type format's.
 #[must_use]
 pub fn instance_props(props: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let hosting = [crate::hosting::ALONG_KEY, crate::hosting::UP_KEY];
     props
         .iter()
-        .filter(|(key, _)| key.as_str() != CATEGORY_KEY && !construct_levels::is_tie_key(key))
+        .filter(|(key, _)| {
+            key.as_str() != CATEGORY_KEY
+                && !construct_levels::is_tie_key(key)
+                && !hosting.contains(&key.as_str())
+        })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
 }
@@ -819,8 +825,9 @@ pub async fn read_document<R: Reader>(
 /// The recipe `element` is built from, as the document is `at` that state: its own, with every
 /// argument that names a parameter filled ([`filled`]), every argument that reads its wall type's
 /// layers ([`crate::walls::filled`]), a floor's layers and loops from its floor type
-/// ([`crate::slabs::filled`]), and a roof's layers and shape from its roof type
-/// ([`crate::roofs::filled`]). A recipe that reads none of them needs no read. The regenerator
+/// ([`crate::slabs::filled`]), a roof's layers and shape from its roof type
+/// ([`crate::roofs::filled`]), and a curtain wall's grid and parts from its curtain wall type
+/// ([`crate::curtains::filled`]). A recipe that reads none of them needs no read. The regenerator
 /// builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
 ///
 /// # Errors
@@ -856,7 +863,8 @@ pub async fn recipe_at<R: Reader>(
     })
     .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
     .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref()))
-    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref())))
+    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref()))
+    .and_then(|recipe| crate::curtains::filled(&recipe, ty.as_ref())))
 }
 
 /// Whether a recipe reads the document's parameter table and the element's type: it names a
@@ -870,4 +878,5 @@ pub fn reads_records(recipe: &Recipe) -> bool {
         || crate::walls::reads_type(recipe)
         || crate::slabs::reads_type(recipe)
         || crate::roofs::reads_type(recipe)
+        || crate::curtains::reads_type(recipe)
 }
