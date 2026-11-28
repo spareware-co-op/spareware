@@ -523,6 +523,7 @@ dependencies = [
  "construct-levels",
  "construct-materials",
  "construct-model",
+ "construct-modify",
  "construct-openings",
  "construct-params",
  "construct-phases",
@@ -737,6 +738,30 @@ dependencies = [
  "kit-ops",
  "kit-store",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-modify"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-grids",
+ "construct-levels",
+ "construct-model",
+ "construct-openings",
+ "construct-params",
+ "construct-regen",
+ "construct-roofs",
+ "construct-rooms",
+ "construct-slabs",
+ "construct-solver",
+ "construct-walls",
+ "kit-core",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "proptest",
  "serde_json",
 ]
 

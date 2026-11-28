@@ -4277,5 +4277,324 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+console.log('\n   Move, copy, rotate, mirror and array');
+// Anna draws a wall in clear ground at the right of the plan and puts a door in it. She turns the wall
+// by 30 degrees about its start, typing the angle, and the door turns with it: Ben's page holds the
+// turned wall and the door still hosted on it, and every body, the door's included, is the server's.
+// She arrays it round a centre, three in all, and the copies each carry a door; one undo takes the
+// whole array away and one redo puts it back. She copies the turned wall, with its door, by picking
+// a base point and a target, and tries to turn the copy's door alone: refused in words. She mirrors
+// the copy about the first wall (picking its line), then about an axis she draws without keeping the
+// original; moves it by a typed distance and angle; and arrays it in a row. Ben sees every one, with
+// the bodies the server's. Nobody changes what the other touched in the last 30 s without the other
+// letting go first.
+// Waits for what a page shows, for as long as the slowest runner needs: 30 s.
+async function mdUntil(read, ok, label) {
+  for (let tries = 0; tries < 300; tries += 1) {
+    const found = await read();
+    if (ok(found)) return found;
+    await ben.waitForTimeout(100);
+  }
+  const walls = await ben.evaluate(() => {
+    const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+    return [...window.spare.elements.values()]
+      .filter((p) => p.el.recipe.op === 'wall.layered' && p.fill?.recipe?.args?.start && p.el.placement.x + steps(p.fill.recipe.args.start[0]) > 11000)
+      .map((p) => `${p.el.id}: ${[...p.fill.recipe.args.start, ...p.fill.recipe.args.end].map((v) => steps(v) + p.el.placement.x * 0).join(', ')}`);
+  });
+  console.log(`      walls at the right of the plan: ${walls.join(' | ')}`);
+  const said = await anna.evaluate(() => ({ tool: S.tool, toast: document.getElementById('toast-m')?.textContent, problem: document.querySelector('#pv-side [data-problem]')?.textContent, pend: S.pend, side: document.querySelector('#pv-side')?.textContent.slice(0, 300) }));
+  console.log(`      Anna's page: ${JSON.stringify(said)}`);
+  throw new Error(`FAILED: ${label}`);
+}
+await cwHome(anna);
+await cwHome(ben);
+// The crop section left a model view open, which shows less of the ground: go back to the floor plan.
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+await anna.waitForSelector('#pv-canvas g.element[data-id="D-101"]');
+await ben.waitForSelector('#pv-canvas g.element[data-id="D-101"]');
+const mdCanvas = await boxOf(anna.locator('#pv-canvas svg'), 'the plan');
+const mdEdge = await onPlan(anna, 14000, 2000);
+check(mdEdge.x < mdCanvas.x + mdCanvas.width - 20 && mdEdge.x > mdCanvas.x, "the ground the section draws on is on Anna's plan");
+const mdKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
+const mdFrom = await onPlan(anna, 12600, 2000);
+const mdTo = await onPlan(anna, 14400, 2000);
+await anna.mouse.click(mdFrom.x, mdFrom.y);
+await anna.mouse.click(mdTo.x, mdTo.y);
+await anna.keyboard.press('Escape');
+
+// A wall's line in the model, in millimetres, from the recipe the server filled for it.
+const mdLine = (page, id) =>
+  page.evaluate((i) => {
+    const piece = window.spare.elements.get(i);
+    const args = piece?.fill?.recipe?.args;
+    if (!args?.start) return null;
+    const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+    const [sx, sy] = args.start.map(steps);
+    const [ex, ey] = args.end.map(steps);
+    const { x, y } = piece.el.placement;
+    return [sx + x, sy + y, ex + x, ey + y];
+  }, id);
+const mdSame = (got, want) => got !== null && want.every((value, i) => Math.abs(value - got[i]) < 0.5);
+const mdShow = (list) => (list === null ? 'not filled' : list.map((n) => n.toFixed(1)).join(', '));
+// Both browsers hold a wall at the line asked for, once the server has filled it.
+const mdLineIs = async (id, want, what) => {
+  for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+    await mdUntil(() => mdLine(page, id), (got) => mdSame(got, want), `${name}'s page holds ${what} at ${want.map((n) => n.toFixed(1)).join(', ')}`);
+  }
+};
+// The id of the wall (not one known) that runs along `want` in this page, once there is one.
+const mdWallAt = (page, known, want) =>
+  mdUntil(
+    () =>
+      page.evaluate(
+        ([known, want]) => {
+          const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+          for (const piece of window.spare.elements.values()) {
+            const args = piece.fill?.recipe?.args;
+            if (piece.el.recipe.op !== 'wall.layered' || known.includes(piece.el.id) || !args?.start) continue;
+            const { x, y } = piece.el.placement;
+            const [sx, sy] = args.start.map(steps);
+            const [ex, ey] = args.end.map(steps);
+            const got = [sx + x, sy + y, ex + x, ey + y];
+            if (want.every((value, i) => Math.abs(value - got[i]) < 0.5)) return piece.el.id;
+          }
+          return null;
+        },
+        [known, want],
+      ),
+    (id) => id !== null,
+    `a wall along ${want.map((n) => n.toFixed(1)).join(', ')}`,
+  );
+// The wall Anna drew, found by where it runs, in Ben's page.
+const [mdWall] = [await mdWallAt(ben, [], [12600, 2000, 14400, 2000])];
+const mdDoorOn = (page, wall) =>
+  mdUntil(
+    () => page.evaluate((w) => [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'door.single' && p.el.references?.[0]?.element === w)?.el.id ?? null, wall),
+    (id) => id !== null,
+    `a door on ${wall}`,
+  );
+// The body each page built for each is the server's.
+const mdBodiesMatch = async (ids, label) => {
+  for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+    for (const id of ids) {
+      await mdUntil(
+        async () => [(await asAnna(`shape/${id}`)).built?.result?.shape?.body, await page.evaluate((i) => window.spare.elements.get(i)?.shape?.body, id)],
+        ([server, here]) => Boolean(server) && server === here,
+        `${name}'s page builds ${id} as the server does ${label}`,
+      );
+    }
+  }
+  pass(`${ids.length} bodies are the server's in both browsers ${label}`);
+};
+// Picks an element by a point along a wall (or the middle of anything else), and waits for it to be chosen.
+const mdPick = async (page, id, along = 0.85) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  let at;
+  if (along === null) {
+    const found = await box(page, id);
+    at = { x: found.x + found.width / 2, y: found.y + found.height / 2 };
+  } else {
+    const line = await mdLine(page, id);
+    at = await onPlan(page, line[0] + (line[2] - line[0]) * along, line[1] + (line[3] - line[1]) * along);
+  }
+  await page.mouse.click(at.x, at.y);
+  await page.waitForFunction((i) => S.sel === i, id);
+};
+// Starts a Modify tool from the ribbon, wherever its button is shown.
+const mdTool = async (page, tool) => {
+  const button = () => page.locator(`#ribbon [data-act="dtool"][data-a="architecture:${tool}"]`).filter({ visible: true }).first();
+  if (!(await button().count())) await page.locator('#ribbon [role="tab"]', { hasText: /^Modify$/ }).first().click();
+  await button().click();
+  await page.waitForSelector(`#pv-side [data-modify-tool="${tool}"]`);
+};
+const mdClick = async (page, x, y) => {
+  const at = await onPlan(page, x, y);
+  await page.mouse.click(at.x, at.y);
+};
+const mdField = (key) => `#pv-side [data-key="modify-${key}"]`;
+const mdTyped = async (page, key, text) => {
+  await page.locator(mdField(key)).fill(text);
+  await page.locator(mdField(key)).press('Enter');
+};
+const mdGone = (id) => !window.spare.elements.has(id);
+const mdThere = (id) => window.spare.elements.has(id);
+
+// The door: the door tool, a click a quarter of the way along the wall.
+await mdLineIs(mdWall, [12600, 2000, 14400, 2000], 'the wall');
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:door"]');
+await anna.waitForFunction(() => S.tool === 'door');
+await mdClick(anna, 13400, 2000);
+let mdDoor;
+try {
+  mdDoor = await mdDoorOn(ben, mdWall);
+} catch (error) {
+  const said = await anna.evaluate(() => ({ tool: S.tool, toast: document.getElementById('toast-m')?.textContent, hint: document.getElementById('hint')?.textContent }));
+  console.log(`      no door on the wall: ${JSON.stringify(said)}`);
+  await shot(anna, 'anna-modify-no-door');
+  throw error;
+}
+await anna.keyboard.press('Escape');
+const mdDrawn = (id) => Boolean(document.querySelector(`g.element[data-id="${id}"] polygon.body`));
+await anna.waitForFunction(mdDrawn, mdDoor);
+await ben.waitForFunction(mdDrawn, mdDoor);
+const mdAlong = (page, id) => page.evaluate((i) => window.spare.elements.get(i).el.props['@host.along'], id);
+const mdAlongBefore = await mdAlong(ben, mdDoor);
+await mdLineIs(mdWall, [12600, 2000, 14400, 2000], 'the wall');
+await mdBodiesMatch([mdWall, mdDoor], 'where they were placed');
+
+// Rotate: the centre is the wall's start, the angle is typed, 30 degrees counter-clockwise on the plan.
+await mdPick(anna, mdWall);
+await mdTool(anna, 'rotate');
+await mdClick(anna, 12600, 2000);
+await mdTyped(anna, 'rotation', '30');
+const mdTurned = [12600, 2000, 12600 + 1800 * Math.cos(Math.PI / 6), 2000 - 1800 * Math.sin(Math.PI / 6)];
+await mdLineIs(mdWall, mdTurned, 'the turned wall');
+check((await mdAlong(ben, mdDoor)) === mdAlongBefore, "the door is still hosted on the turned wall at the same place along it, in Ben's browser");
+check(await anna.evaluate(() => S.tool === 'select'), 'the tool ends once it has turned the wall');
+await mdBodiesMatch([mdWall, mdDoor], 'after the 30 degree turn');
+await shot(anna, 'anna-modify-turned');
+pass("Anna turns a wall with a door by 30 degrees; the door goes with it, and its body is the server's in both browsers");
+
+// Array round a centre: three in all, 120 degrees apart; each copy has a door; one undo, one redo.
+await mdPick(anna, mdWall);
+await mdTool(anna, 'array');
+await anna.locator(mdField('mode')).selectOption('radial');
+await anna.waitForSelector(mdField('step'));
+await anna.locator(mdField('count')).fill('3');
+await anna.locator(mdField('step')).fill('120');
+const mdKnownTurn = [...mdKnown, mdWall, mdDoor];
+const mdAbout = [13500, 2000];
+const mdSpin = (degrees, [x, y]) => {
+  const t = (-degrees * Math.PI) / 180;
+  const [dx, dy] = [x - mdAbout[0], y - mdAbout[1]];
+  return [mdAbout[0] + dx * Math.cos(t) - dy * Math.sin(t), mdAbout[1] + dx * Math.sin(t) + dy * Math.cos(t)];
+};
+const mdRing = [120, 240].map((degrees) => [...mdSpin(degrees, [mdTurned[0], mdTurned[1]]), ...mdSpin(degrees, [mdTurned[2], mdTurned[3]])]);
+await mdClick(anna, mdAbout[0], mdAbout[1]);
+const mdRingWalls = [];
+for (const want of mdRing) mdRingWalls.push(await mdWallAt(ben, mdKnownTurn, want));
+const mdRingDoors = [];
+for (const wall of mdRingWalls) mdRingDoors.push(await mdDoorOn(ben, wall));
+check(new Set([mdWall, ...mdRingWalls]).size === 3 && mdRingDoors.every((id) => id !== mdDoor), 'a radial array of three makes two walls, each with its own door, in Ben\'s browser');
+for (const wall of mdRingWalls) await mdLineIs(wall, mdRing[mdRingWalls.indexOf(wall)], 'a wall of the ring');
+await mdLineIs(mdWall, mdTurned, 'the first wall, which the array leaves where it was');
+await mdBodiesMatch([...mdRingWalls, ...mdRingDoors], 'in the ring, doors included');
+await shot(ben, 'ben-modify-ring');
+await anna.click('#qat [data-act="stackundo"]');
+for (const page of [anna, ben]) {
+  for (const id of [...mdRingWalls, ...mdRingDoors]) await page.waitForFunction(mdGone, id);
+}
+pass('one undo takes the whole ring away, walls and doors, in both browsers');
+await anna.click('#qat [data-act="stackredo"]');
+for (const page of [anna, ben]) {
+  for (const id of [...mdRingWalls, ...mdRingDoors]) await page.waitForFunction(mdThere, id);
+}
+await mdBodiesMatch([...mdRingWalls, ...mdRingDoors], 'after the redo');
+await anna.click('#qat [data-act="stackundo"]');
+for (const page of [anna, ben]) {
+  for (const id of [...mdRingWalls, ...mdRingDoors]) await page.waitForFunction(mdGone, id);
+}
+pass('one redo puts the whole ring back, and a second undo takes it away again, in both browsers');
+
+// Copy: a base point and a target, 3 m down the plan; the copy brings its own door.
+await mdPick(anna, mdWall);
+await mdTool(anna, 'copy');
+await mdClick(anna, 12000, 2600);
+await mdClick(anna, 12000, 5600);
+const mdCopyLine = [mdTurned[0], mdTurned[1] + 3000, mdTurned[2], mdTurned[3] + 3000];
+const mdCopy = await mdWallAt(ben, mdKnownTurn, mdCopyLine);
+const mdCopyDoor = await mdDoorOn(ben, mdCopy);
+check(mdCopy !== mdWall && mdCopyDoor !== mdDoor, 'Anna copies the wall with its door: Ben has both walls and both doors');
+await mdLineIs(mdWall, mdTurned, 'the first wall, which the copy leaves where it was');
+await mdLineIs(mdCopy, mdCopyLine, 'the copy');
+check((await mdAlong(ben, mdCopyDoor)) === mdAlongBefore, "the copy's door is hosted on the copy at the same place along it");
+await mdBodiesMatch([mdWall, mdDoor, mdCopy, mdCopyDoor], 'after the copy');
+await shot(ben, 'ben-modify-copy');
+
+// A hosted element turned alone is refused in words, and nothing changes.
+await mdPick(anna, mdCopyDoor, null);
+await mdTool(anna, 'rotate');
+await mdClick(anna, 12000, 5600);
+await mdTyped(anna, 'rotation', '20');
+try {
+  await anna.waitForSelector('#pv-side [data-problem="modify"]');
+} catch (error) {
+  const said = await anna.evaluate(() => ({ tool: S.tool, sel: S.sel, pend: S.pend, toast: document.getElementById('toast-m')?.textContent, side: document.querySelector('#pv-side')?.textContent.slice(0, 400) }));
+  console.log(`      Anna's page after turning the door: ${JSON.stringify(said)}`);
+  throw error;
+}
+const mdRefusal = await anna.locator('#pv-side [data-problem="modify"]').textContent();
+check(mdRefusal.length > 10 && /host|wall/i.test(mdRefusal), `a door turned alone is refused in words: "${mdRefusal}"`);
+check(await anna.evaluate(() => S.tool === 'rotate'), 'the tool stays, with the reason, after a refusal');
+await anna.keyboard.press('Escape');
+await mdLineIs(mdCopy, mdCopyLine, 'the copy, unchanged by the refusal');
+
+// Mirror, picking a line: the copy about the first wall, keeping the original.
+const mdReflect = ([x, y]) => {
+  const [dx, dy] = [mdTurned[2] - mdTurned[0], mdTurned[3] - mdTurned[1]];
+  const t = ((x - mdTurned[0]) * dx + (y - mdTurned[1]) * dy) / (dx * dx + dy * dy);
+  return [2 * (mdTurned[0] + t * dx) - x, 2 * (mdTurned[1] + t * dy) - y];
+};
+const mdMirroredLine = [...mdReflect([mdCopyLine[0], mdCopyLine[1]]), ...mdReflect([mdCopyLine[2], mdCopyLine[3]])];
+await mdPick(anna, mdCopy, 0.9);
+await mdTool(anna, 'mirror');
+await anna.waitForSelector(mdField('axis'));
+await mdClick(anna, mdTurned[0] + (mdTurned[2] - mdTurned[0]) * 0.85, mdTurned[1] + (mdTurned[3] - mdTurned[1]) * 0.85);
+const mdKnownCopy = [...mdKnownTurn, mdCopy, mdCopyDoor];
+const mdMirror = await mdWallAt(ben, mdKnownCopy, mdMirroredLine);
+const mdMirrorDoor = await mdDoorOn(ben, mdMirror);
+await mdLineIs(mdCopy, mdCopyLine, 'the wall mirrored, which stays where it was');
+await mdBodiesMatch([mdMirror, mdMirrorDoor], 'after the mirror, the door too');
+pass('Anna mirrors a wall with its door about a wall she picks, keeping the original; Ben has the mirrored wall and door, bodies matching');
+
+// Mirror again, drawing the axis and not keeping the original: the mirrored wall takes the original's place.
+await mdPick(anna, mdMirror, 0.9);
+await mdTool(anna, 'mirror');
+await anna.locator(mdField('axis')).selectOption('draw');
+await anna.locator(mdField('keep')).uncheck();
+const mdCount = await ben.evaluate(() => window.spare.elements.size);
+await mdClick(anna, 12100, 3000);
+await mdClick(anna, 12100, 4000);
+const mdFlip = ([x, y]) => [24200 - x, y];
+const mdFlippedLine = [...mdFlip([mdMirroredLine[0], mdMirroredLine[1]]), ...mdFlip([mdMirroredLine[2], mdMirroredLine[3]])];
+await mdLineIs(mdMirror, mdFlippedLine, 'the wall mirrored in place');
+check((await ben.evaluate(() => window.spare.elements.size)) === mdCount, 'a mirror that does not keep the original makes nothing new');
+await mdBodiesMatch([mdMirror, mdMirrorDoor], 'after the mirror in place');
+
+// Move, by a typed distance and angle: 500 mm straight up the plan.
+await mdPick(anna, mdMirror, 0.92);
+await mdTool(anna, 'move');
+await anna.locator(mdField('distance')).fill('500 mm');
+await anna.locator(mdField('angle')).fill('90');
+await anna.click('#pv-side [data-act="stackmodifyapply"]');
+const mdMovedLine = [mdFlippedLine[0], mdFlippedLine[1] - 500, mdFlippedLine[2], mdFlippedLine[3] - 500];
+await mdLineIs(mdMirror, mdMovedLine, 'the wall moved by a typed distance and angle');
+await mdBodiesMatch([mdMirror, mdMirrorDoor], 'after the move');
+
+// Array in a row, 600 mm apart, picked with two clicks: two more walls, each with its door.
+await mdPick(anna, mdMirror, 0.92);
+await mdTool(anna, 'array');
+await anna.locator(mdField('mode')).selectOption('linear');
+await anna.locator(mdField('count')).fill('3');
+await mdClick(anna, 12000, 8800);
+await mdClick(anna, 12000, 8200);
+const mdRowLines = [1, 2].map((k) => [mdMovedLine[0], mdMovedLine[1] - 600 * k, mdMovedLine[2], mdMovedLine[3] - 600 * k]);
+const mdKnownAll = [...mdKnownCopy, mdMirror, mdMirrorDoor];
+const mdRowWalls = [];
+for (const want of mdRowLines) mdRowWalls.push(await mdWallAt(ben, mdKnownAll, want));
+const mdRowDoors = [];
+for (const wall of mdRowWalls) mdRowDoors.push(await mdDoorOn(ben, wall));
+check(new Set(mdRowWalls).size === 2, 'an array of three in a row makes two copies, each with its door, in Ben\'s browser');
+await mdBodiesMatch([...mdRowWalls, ...mdRowDoors], 'in the row');
+await anna.waitForTimeout(500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length > 0) console.log(`      bodies that differ: ${JSON.stringify(mismatched).slice(0, 2000)}`);
+  check(mismatched.length === 0, `every body ${name}'s page built, the moved, copied, turned, mirrored and arrayed walls' and doors' included, matches the server's`);
+}
+await shot(ben, 'ben-modify-done');
 await browser.close();
 console.log('\nThe browser checks passed.');

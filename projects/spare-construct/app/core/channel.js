@@ -203,7 +203,7 @@ function apply(entry, sent, got) {
 }
 
 /** The commands that can change where walls meet: a wall made, moved, retyped, changed or deleted. */
-const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
+const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw|modify\.(move|copy|rotate|mirror|array))$/;
 
 /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
 const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|curtain\.type|opening|shaft)\.|^(floor|roof|curtain)\.defaults$/;

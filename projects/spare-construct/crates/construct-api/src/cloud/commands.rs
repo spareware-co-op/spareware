@@ -7,8 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params,
-    roofs, rooms, schedules, sheets, stairs, undo, views, walls,
+    curtains, dimensions, elements, families, floors, grids, hosting, levels, modify, openings,
+    params, roofs, rooms, schedules, sheets, stairs, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -204,6 +204,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || views::is_command(cmd)
                 || schedules::is_command(cmd)
                 || sheets::is_command(cmd)
+                || modify::is_command(cmd)
                 || dimensions::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
@@ -273,6 +274,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || views::is_command(&edit.cmd)
             || schedules::is_command(&edit.cmd)
             || sheets::is_command(&edit.cmd)
+            || modify::is_command(&edit.cmd)
             || dimensions::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
@@ -360,6 +362,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             dimensions::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if sheets::is_command(&edit.cmd) {
             sheets::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if modify::is_command(&edit.cmd) {
+            modify::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
             self.element(&mut staged, project, context, edit).await?
         } else if edit.cmd == "document.checkpoint" {

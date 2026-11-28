@@ -30,6 +30,7 @@ cloud = [
     "dep:construct-doorgen",
     "dep:construct-schedules",
     "dep:construct-styles",
+    "dep:construct-modify",
     "dep:construct-dimensions",
     "dep:construct-curtain",
 ]
@@ -80,6 +81,9 @@ construct-doorgen = { path = "../construct-doorgen", optional = true }
 construct-schedules = { path = "../construct-schedules", optional = true }
 # The view graphics commands: the pens, line patterns and object styles a rule is checked against.
 construct-styles = { path = "../construct-styles", optional = true }
+# The modify commands: construct-modify works out every record a move, copy, turn, mirror or array
+# writes, exactly.
+construct-modify = { path = "../construct-modify", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }

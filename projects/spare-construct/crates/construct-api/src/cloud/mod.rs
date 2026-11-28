@@ -34,6 +34,8 @@
 //! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
 //!   read of their rows, through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
+//! - [`modify`]: moving, copying, turning, mirroring and arraying a selection, hosted elements
+//!   with their hosts, through the same log.
 //! - [`dimensions`]: linear dimensions bound to references, and the listing of a view's dimensions
 //!   with their values worked out, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
@@ -54,6 +56,7 @@ pub mod grids;
 pub mod hosting;
 pub mod levels;
 pub mod loading;
+pub mod modify;
 pub mod openings;
 pub mod params;
 pub mod roofs;

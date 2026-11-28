@@ -20,3 +20,8 @@ import './architecture/family.js';
 import './project/families.js';
 import './architecture/opening.js';
 import './architecture/stair.js';
+import './modify/move.js';
+import './modify/copy.js';
+import './modify/rotate.js';
+import './modify/mirror.js';
+import './modify/array.js';
