@@ -84,6 +84,16 @@ impl Tool for RoomTool {
     const NAME: &'static str = "room";
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const RULES: &'static [construct_warnings::Rule] = &[
+        construct_warnings::ROOM_NOT_ENCLOSED,
+        construct_warnings::ROOM_REDUNDANT,
+    ];
+    const FIELDS: &'static [construct_schedules::Quantity] = &[
+        construct_schedules::ROOM_STATE,
+        construct_schedules::ROOM_AREA,
+        construct_schedules::ROOM_PERIMETER,
+        construct_schedules::ROOM_VOLUME,
+    ];
 
     async fn apply<T: Txn>(
         txn: &mut T,
