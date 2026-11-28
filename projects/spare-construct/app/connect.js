@@ -1896,7 +1896,7 @@
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
     else if (m.which === 'families') html = familiesHtml(m);
-    else html = ({ types: typesHtml, levels: levelsHtml, graphics: graphicsHtml, crop: cropHtml, templates: templatesHtml, filters: filtersHtml, overrides: overridesHtml }[m.which] ?? parametersHtml)(m);
+    else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : m.which === 'graphics' ? graphicsHtml(m) : m.which === 'crop' ? cropHtml(m) : parametersHtml(m);
     redraw(root, html);
     if (!m.shown) {
       m.shown = true;
@@ -6293,8 +6293,6 @@
       html += wallToolHtml();
     } else if (S.tool === 'family' && canEdit()) {
       html += familyToolHtml();
-    } else if (S.tool === 'component' && canEdit()) {
-      html += componentToolHtml();
     } else if ((S.tool === 'opening' || RECT_TOOLS.includes(S.tool)) && canEdit()) {
       html += openingToolHtml();
     } else if (S.tool === 'dim' && canEdit()) {
