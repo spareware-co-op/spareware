@@ -4468,7 +4468,7 @@ await shot(anna, 'anna-railings');
 // A fresh load draws the same railings, and every body built matches the server's.
 await ben.reload();
 await ben.waitForSelector('html[data-stack="ready"]');
-await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await roofHome(ben);
 await ben.waitForFunction(rlParts, [rlOnStair, 'baluster', rlLonger.laid.balusters]);
 await ben.waitForFunction(rlParts, [rlSketched, 'baluster', rlEdited.laid.balusters]);
 pass("a fresh load of Ben's page draws both railings as the open pages do");
