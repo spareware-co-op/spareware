@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
+use tracing::Instrument;
 use tokio::sync::mpsc;
 
 /// How often a connection re-asks Cedar whether its person may still read what it's watching.
@@ -36,6 +37,14 @@ pub async fn upgrade(
     }
     let project = id(&project)?;
     app.service.may_open_project(&person, &project).await?;
+    // The connection's lines carry its upgrade request's ID, which the page is told in the welcome
+    // so a report can ask for them (crate::recent).
+    let request = headers
+        .get(crate::recent::HEADER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_owned();
+    let span = tracing::info_span!("live", request = request.as_str(), person = person.as_str());
     Ok(socket.on_upgrade(move |socket| async move {
         let orderer = app.service.orderer(&project).await;
         let live = Live {
@@ -44,11 +53,12 @@ pub async fn upgrade(
             project,
             orderer,
             watcher: Watcher::new(),
+            request,
         };
         if let Err(e) = live.run(socket).await {
             tracing::debug!("connection closed: {e}");
         }
-    }))
+    }.instrument(span)))
 }
 
 struct Live {
@@ -57,6 +67,8 @@ struct Live {
     project: Id,
     orderer: Arc<Orderer>,
     watcher: Watcher,
+    /// The upgrade request's ID.
+    request: String,
 }
 
 fn gone<E: std::fmt::Display>(e: E) -> StoreError {
@@ -107,6 +119,10 @@ impl Live {
                 },
                 done = replies.recv() => {
                     let Some(done) = done else { return Ok(()) };
+                    // By its counter only: a refusal's words may name who holds a claim.
+                    if let kit_sync::Reply::Rejected { counter, .. } = &done {
+                        tracing::info!(counter, "an edit was turned back");
+                    }
                     out.push(reply_message(&done));
                 }
                 _ = recheck.tick() => self.recheck(&mut out).await?,
@@ -155,6 +171,7 @@ impl Live {
                     "head": head,
                     "person": self.person.as_str(),
                     "last_counter": last_counter,
+                    "request": self.request,
                 }));
                 self.watcher.set_cursor(head);
                 self.send_log(since, head, None, out).await?;
