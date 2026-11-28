@@ -678,3 +678,88 @@ fn a_field_that_has_gone_leaves_the_schedule_readable_and_its_rows_empty() {
     assert_eq!(found[0].cells[1].value, None);
     assert_eq!(columns(&list, &gone)[1].kind, None);
 }
+
+#[test]
+fn a_wall_schedule_lists_length_area_and_volume_and_filters_and_sorts_on_them() {
+    // The refusal "Walls have no field quantity:Length" is gone: a wall has a length, an area and
+    // a volume, exact, in the kinds the product's own rows carry.
+    let categories = CategoryTable::new();
+    let table = params(&categories);
+    let basis = Basis {
+        categories: &categories,
+        params: &table,
+    };
+    let fields = [
+        Field::Quantity("Length".to_owned()),
+        Field::Quantity("Area".to_owned()),
+        Field::Quantity("Volume".to_owned()),
+    ];
+    let list = schedule("Walls", WALLS).with_fields(fields.to_vec());
+    list.check(&basis).unwrap();
+    let kinds: Vec<Kind> = columns(&list, &basis)
+        .iter()
+        .map(|column| column.kind.unwrap())
+        .collect();
+    assert_eq!(kinds, [Kind::Length, Kind::Area, Kind::Volume]);
+    assert_eq!(
+        basis
+            .fields_of(WALLS)
+            .iter()
+            .filter(|(field, _)| matches!(field, Field::Quantity(_)))
+            .count(),
+        3
+    );
+    // A door has none of them.
+    let doors = schedule("Doors", DOORS).with_fields(vec![Field::Quantity("Length".to_owned())]);
+    assert_eq!(
+        doors.check(&basis).unwrap_err().to_string(),
+        "Doors have no field quantity:Length."
+    );
+    // Two walls: 8000 mm long with 20,670,000 mm2 of face, and 3000 mm long with 8,100,000 mm2.
+    let wall = |id: &str, length_mm: i32, mm2: i64| {
+        let mut readings = BTreeMap::new();
+        readings.insert(
+            "quantity:Length".to_owned(),
+            reading(
+                &Value::Length(Length::from_mm(length_mm)),
+                &format!("{length_mm} mm"),
+            ),
+        );
+        readings.insert(
+            "quantity:Area".to_owned(),
+            reading(&Value::Area(Area::from_mm2(mm2)), &format!("{mm2} mm2")),
+        );
+        Subject {
+            id: i(id),
+            category: WALLS,
+            name: id.to_owned(),
+            type_name: None,
+            readings,
+        }
+    };
+    let walls = [
+        wall("w-long", 8000, 20_670_000),
+        wall("w-short", 3000, 8_100_000),
+    ];
+    let long_first = list.clone().with_sorting(vec![Sort {
+        field: Field::Quantity("Length".to_owned()),
+        descending: true,
+        header: false,
+        footer: false,
+    }]);
+    assert_eq!(
+        ids(&rows(&long_first, &basis, &walls)),
+        ["w-long", "w-short"]
+    );
+    let short_first = list.with_sorting(vec![Sort {
+        field: Field::Quantity("Area".to_owned()),
+        descending: false,
+        header: false,
+        footer: false,
+    }]);
+    let found = rows(&short_first, &basis, &walls);
+    assert_eq!(ids(&found), ["w-short", "w-long"]);
+    // A wall with no reading (one that does not build) has an empty cell, not a made-up number.
+    assert_eq!(found[0].cells[2].shown, None);
+    assert_eq!(found[1].cells[1].shown.as_deref(), Some("20670000 mm2"));
+}

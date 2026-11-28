@@ -15,7 +15,7 @@
 
 use construct_api::cloud::schedules::{ItemView, ScheduleTable, placed_on, read_table};
 use construct_api::cloud::{Access, ProjectCommands};
-use construct_categories::{DOORS, SHEETS, VIEWS};
+use construct_categories::{DOORS, SHEETS, VIEWS, WALLS};
 use construct_model::element::Element;
 use construct_model::geometry::{Geometry, Recipe};
 use construct_model::keys::Place;
@@ -513,6 +513,58 @@ async fn a_quantity_cell_is_read_only_in_words() {
             && why.contains("worked out from the element"),
         "{why}"
     );
+}
+
+/// Walls are a category a schedule can total: their Length, Area and Volume are the quantities the
+/// product works out of the document (openings taken out, joints made), and the footer adds them
+/// exactly. Two house walls (8000 and 6000 mm long) give 14000 mm.
+#[tokio::test]
+async fn a_schedule_of_walls_totals_their_length_area_and_volume() {
+    let stack = Stack::new().await;
+    let script: Value = serde_json::from_str(include_str!("house/house.json")).unwrap();
+    for step in script["steps"].as_array().unwrap() {
+        let cmd = step["cmd"].as_str().unwrap();
+        let args = step["args"].clone();
+        let element = args["element"].as_str().unwrap_or_default().to_owned();
+        if cmd == "level.create"
+            || cmd == "wall.type.create"
+            || matches!(element.as_str(), "W-s" | "W-i")
+        {
+            stack.edit(cmd, args).await.unwrap();
+        }
+    }
+    let args = json!({
+        "schedule": "S-W", "name": "Walls", "category": WALLS.0,
+        "fields": ["name", "quantity:Length", "quantity:Area", "quantity:Volume"],
+    });
+    stack.edit("schedule.create", args).await.unwrap();
+    let totals = json!({ "schedule": "S-W", "grand": true, "totals": [
+        { "field": "quantity:Length", "do": ["sum", "count"] },
+        { "field": "quantity:Area", "do": ["sum"] },
+        { "field": "quantity:Volume", "do": ["sum"] },
+    ] });
+    stack.edit("schedule.totals", totals).await.unwrap();
+    let table = stack.table("S-W").await;
+    assert_eq!(table.rows.len(), 2);
+    for row in &table.rows {
+        for cell in &row.cells[1..] {
+            assert!(cell.value.is_some(), "a wall's quantity has a value");
+        }
+    }
+    let grand = table.grand.unwrap();
+    assert_eq!(grand.elements, 2);
+    let total = |column: usize, kind: &str| {
+        grand
+            .totals
+            .iter()
+            .find(|t| t.column == column && t.total == kind)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(total(1, "sum").value, Some(mm(14_000)));
+    assert_eq!(total(1, "count").shown.as_deref(), Some("2"));
+    assert!(total(2, "sum").value.is_some());
+    assert!(total(3, "sum").value.is_some());
 }
 
 fn sheet_listing_rows(table: &ScheduleTable) -> Vec<Vec<String>> {

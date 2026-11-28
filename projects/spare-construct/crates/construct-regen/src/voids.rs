@@ -13,7 +13,10 @@
 //!   browser.
 //! - A wall opening is drawn as the rectangle it opens, standing in its wall's plane at its place
 //!   (its width along its wall's axis, its height up), with no thickness: its outline in plan is
-//!   the line along its wall. A floor opening is its outline in plan, with no mesh. A shaft is its
+//!   the line along its wall. In a wall at an angle it comes seated (construct-regen's `hosting`,
+//!   piece A83): the rectangle runs from its seat's origin along the seat's way by its width, each
+//!   end put through the seat (the nearest grid step to its true place) and then to the nearest
+//!   millimetre; its body holds its seat too, as its arguments do. A floor opening is its outline in plan, with no mesh. A shaft is its
 //!   outline in plan and a ribbon standing on it from its base up to its top, with no thickness.
 //!   Each point is the nearest whole millimetre, and a display that rounded anything says it
 //!   strays by 1 mm; the bounds are rounded outward.
@@ -25,6 +28,7 @@
 //! Depends on construct-openings (the recipes) and the rounding of [`crate::wall_plan`]. Nothing
 //! here is interim but what construct-openings refuses (a curved outline).
 
+use crate::seating;
 use crate::wall_plan::nearest_mm;
 use construct_model::geometry::{Bounds, Built, Display, GeometryError, Mesh, Recipe};
 use construct_openings::{OpeningError, Shaft, WallOpening, is_void, outline_of};
@@ -126,21 +130,31 @@ fn made(recipe: &Recipe) -> Result<Built, GeometryError> {
     .unwrap_or_default();
     let mut round = Rounder { rounded: false };
     let (mesh, outline, bounds) = if recipe.op == construct_openings::WALL_OP {
-        let opening = WallOpening::of(UNNAMED, recipe).map_err(|e| refusal(&e))?;
+        let (stored, seat) = seating::unseated(recipe)?;
+        let opening = WallOpening::of(UNNAMED, &stored).map_err(|e| refusal(&e))?;
         let (w, h) = (
             round.mm(opening.width.steps()),
             round.mm(opening.height.steps()),
         );
-        let (end, positions) = if opening.along_y {
-            ([0, w], vec![0, 0, 0, 0, w, 0, 0, w, h, 0, 0, h])
-        } else {
-            ([w, 0], vec![0, 0, 0, w, 0, 0, w, 0, h, 0, 0, h])
+        let (start, end) = match &seat {
+            Some(seat) => {
+                let too_big = || GeometryError {
+                    code: "TooBig".to_owned(),
+                    message: "this opening is beyond the kernel's grid".to_owned(),
+                };
+                let end = |along: i64| seat.plan([along, 0]).ok_or_else(too_big);
+                let ([x0, y0], [x1, y1]) = (end(0)?, end(opening.width.steps())?);
+                ([round.mm(x0), round.mm(y0)], [round.mm(x1), round.mm(y1)])
+            }
+            None if opening.along_y => ([0, 0], [0, w]),
+            None => ([0, 0], [w, 0]),
         };
+        let ([x0, y0], [x1, y1]) = (start, end);
         let mesh = Mesh {
-            positions,
+            positions: vec![x0, y0, 0, x1, y1, 0, x1, y1, h, x0, y0, h],
             indices: vec![0, 1, 2, 0, 2, 3],
         };
-        let outline = vec![[0, 0], end];
+        let outline = vec![start, end];
         let bounds = bounds_of(&outline, 0, h);
         (mesh, outline, bounds)
     } else {

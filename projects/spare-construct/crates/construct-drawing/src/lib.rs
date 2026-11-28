@@ -29,6 +29,8 @@
 //!   of a picture.
 //! - [`look`]: [`look::Looks`], what answers for a view how a category looks on each edge (the
 //!   server asks construct-views' `resolve`); with none the drawing is as it was.
+//! - [`crop`]: [`crop::clip`], a picture cut exactly to a view's crop outline: every stroke and hatch
+//!   line keeps the pieces inside it.
 //! - [`svg`]: [`svg::Svg`], the SVG output, and [`svg::to_svg`], so a person can see a drawing.
 //!
 //! Promises: everything is exact (whole grid steps of the kernel, `Q0`, and exact fractions of
@@ -55,6 +57,7 @@
 //! the decisions of this crate are note CON-A8-F2-P1
 //! (`projects/spare-construct/notes/CON-A8-F2-P1-drawing-types.md`).
 
+pub mod crop;
 pub mod drawing;
 pub mod error;
 pub mod hatch;

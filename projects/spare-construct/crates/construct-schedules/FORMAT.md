@@ -31,6 +31,7 @@ The quantities, by the top-level category that has them (the table is [`QUANTITI
 
 | Category | Quantities, with their kind |
 | --- | --- |
+| Walls | `Length` (length), `Area` (area), `Volume` (volume): the wall's reference line, one face and its layers, openings taken out and joints made |
 | Floors | `Area` (area), `Perimeter` (length), `Thickness` (length), `Volume` (volume), `Mass (kg)` (number) |
 | Roofs | `Area`, `Slope area` (area), `Thickness`, `Volume`, `Mass (kg)`, `Ridge height` (length) |
 | Rooms | `State` (text: `enclosed`, `not enclosed`, `redundant`, `refused`), `Area`, `Perimeter`, `Volume`; the last three only when the room is enclosed |

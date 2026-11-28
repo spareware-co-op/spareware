@@ -4,7 +4,7 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, Skipped, ToDraw, ViewLooks};
+use crate::plan::{Drawer, HostedOn, PlanCrop, Skipped, ToDraw, ViewLooks};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -17,6 +17,7 @@ use construct_model::rows::{
 };
 use construct_params::{Length, Units, Value as StoredValue};
 use construct_regen::catalog::{self, Catalog, TableView, TypesView};
+use construct_regen::hosting::{self, Hosting};
 use construct_regen::levels::{self as levels, LevelView};
 use construct_regen::parameters::{self as records, ElementView};
 use construct_regen::regenerator::{Regenerator, cells_between};
@@ -112,6 +113,27 @@ pub struct FilledView {
     /// For a room, what became of it and what it measures, in the document's units.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room: Option<construct_regen::rooms::RoomView>,
+    /// For a curtain wall, its grid as it is laid out now (every line and panel, for the page to edit
+    /// by), in the document's units.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curtain: Option<construct_regen::curtains::CurtainView>,
+    /// For a curtain wall embedded in a wall, where its record stands in the model: its host's
+    /// place and its own height above it. Its `recipe` is then its recipe as seated, with its line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<construct_model::element::Placement>,
+    /// For a curtain wall embedded in a wall, what it cuts in its host: the opening's place in the
+    /// host's frame and its recipe, as the host's builder is handed it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut: Option<FilledCut>,
+}
+
+/// What an embedded curtain wall cuts in its host ([`cloud::curtains::Seat`]).
+#[derive(Serialize, Debug)]
+pub struct FilledCut {
+    /// Where the opening is, in the host's frame, in whole millimetres.
+    pub placement: construct_model::element::Placement,
+    /// The opening's recipe.
+    pub recipe: construct_model::geometry::Recipe,
 }
 
 const NO_DRAWER: &str =
@@ -168,6 +190,7 @@ async fn to_draw<R: Reader>(
     project: &Id,
     model: &Id,
     one: &cloud::views::Shaped,
+    shaped: &[cloud::views::Shaped],
 ) -> Result<Result<ToDraw, String>, StoreError> {
     let record = &one.record;
     let Some(category) =
@@ -175,10 +198,24 @@ async fn to_draw<R: Reader>(
     else {
         return Ok(Err("it has no category".to_owned()));
     };
-    let recipe = match levels::recipe_at(reader, project, model, record, records::At::Now).await? {
-        Ok(recipe) => recipe,
-        Err(failed) => return Ok(Err(failed.message)),
-    };
+    let mut recipe =
+        match levels::recipe_at(reader, project, model, record, records::At::Now).await? {
+            Ok(recipe) => recipe,
+            Err(failed) => return Ok(Err(failed.message)),
+        };
+    // A curtain wall embedded in a wall is drawn where it is seated there.
+    let mut placement = record.placement;
+    let mut curtain_seated = false;
+    if let Some(seat) =
+        match cloud::curtains::read_seat(reader, project, model, record, &recipe).await? {
+            Ok(seat) => seat,
+            Err(why) => return Ok(Err(why)),
+        }
+    {
+        recipe = seat.recipe;
+        placement = seat.placement;
+        curtain_seated = true;
+    }
     let base = match one.elevation.as_deref().map(StoredValue::from_stored) {
         None => 0,
         Some(Some(StoredValue::Length(length)))
@@ -192,17 +229,91 @@ async fn to_draw<R: Reader>(
             ));
         }
     };
-    let mut placement = record.placement;
     let Some(z) = placement.z.checked_add(base) else {
         return Ok(Err("it stands too high to be drawn".to_owned()));
     };
     placement.z = z;
+    // An embedded curtain wall is seated by its own commands' rule above: the plan's seat in an
+    // angled wall (piece A83) is for doors, windows and openings.
+    let hosted_on = if curtain_seated {
+        None
+    } else {
+        match hosted_on(reader, project, model, record, shaped).await? {
+            Ok(hosted_on) => hosted_on,
+            Err(why) => return Ok(Err(why)),
+        }
+    };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
         category,
         placement,
         recipe,
+        hosted_on,
     }))
+}
+
+/// A curtain wall's part of its filled view: its grid as it is laid out, and, embedded in a wall,
+/// where it stands there (its recipe as seated, its place, and the opening it cuts), so the page
+/// builds what the regenerator builds. Nothing for any other element.
+async fn add_curtain<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    view: &mut FilledView,
+) -> Result<(), StoreError> {
+    let Some(filled) = view
+        .recipe
+        .clone()
+        .filter(construct_regen::curtain_plan::is_curtain)
+    else {
+        return Ok(());
+    };
+    view.curtain = construct_regen::curtains::CurtainView::of(&filled, &Units::default());
+    match cloud::curtains::read_seat(reader, project, model, record, &filled).await? {
+        Ok(None) => {}
+        Ok(Some(seat)) => {
+            view.recipe = Some(seat.recipe);
+            view.placement = Some(seat.placement);
+            view.cut = Some(FilledCut {
+                placement: seat.cut.0,
+                recipe: seat.cut.1,
+            });
+        }
+        Err(message) => {
+            view.recipe = None;
+            view.failed = Some(json!({ "code": "BadCurtain", "message": message }));
+        }
+    }
+    Ok(())
+}
+
+/// What a plan needs to seat `record` in its wall, if it is hosted on a face of one that is on
+/// the page (piece A83): the wall as the regenerator builds it. `None` for anything else.
+async fn hosted_on<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    shaped: &[cloud::views::Shaped],
+) -> Result<Result<Option<HostedOn>, String>, StoreError> {
+    let Ok(Some(hosting @ Hosting::OnFace { .. })) = hosting::read(record) else {
+        return Ok(Ok(None));
+    };
+    let Some(host) = shaped.iter().find(|s| s.record.id == *hosting.host()) else {
+        return Ok(Ok(None));
+    };
+    let host_recipe =
+        match levels::recipe_at(reader, project, model, &host.record, records::At::Now).await? {
+            Ok(recipe) => recipe,
+            Err(failed) => return Ok(Err(failed.message)),
+        };
+    Ok(Ok(Some(HostedOn {
+        record: record.clone(),
+        host: host.record.clone(),
+        host_recipe,
+        hosting,
+    })))
 }
 
 /// An area of a level.
@@ -584,7 +695,8 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     /// values it reads and where each came from, shown in units. The same reader the commands
     /// check against and the regenerator builds from (`construct_regen::parameters`). A floor's
     /// area, volume and mass are those after the openings and shafts that cut it
-    /// ([`cloud::openings::floor_cuts`]).
+    /// ([`cloud::openings::floor_cuts`]); a stair's quantities are its layout's as its levels
+    /// stand ([`construct_regen::stairs::read_only_at`]).
     ///
     /// # Errors
     ///
@@ -624,6 +736,36 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         let mut view = context
             .view_cut(&record, ty.as_ref(), &cuts)
             .map_err(Refusal::Bad)?;
+        // A wall's length, area and volume, openings taken out and joints made, and each layer's
+        // volume, worked out of the document as it stands and never stored.
+        view.parameters.extend(
+            construct_regen::wall_measure::read_only_view(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+            )
+            .await?,
+        );
+        // A curtain wall's quantities, from its recipe as it is built now: its type's grid read in
+        // and its top tie read.
+        if construct_regen::curtain_plan::is_curtain(&record.recipe)
+            && let Ok(filled) = construct_regen::levels::recipe_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                records::At::Now,
+            )
+            .await?
+        {
+            view.parameters
+                .extend(construct_regen::curtains::read_only_view(
+                    &filled,
+                    &context.units,
+                ));
+        }
         if construct_regen::rooms::is_room(&record) {
             let worked = construct_regen::rooms::worked_at(
                 &mut snapshot,
@@ -638,7 +780,39 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 view.parameters.extend(room.rows());
             }
         }
+        // A stair's rise, risers, riser height, treads, going, total run, pitch and width, read
+        // only, from its layout as its levels stand.
+        view.parameters.extend(
+            construct_regen::stairs::read_only_at(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+                records::At::Now,
+            )
+            .await?,
+        );
         Ok(view)
+    }
+
+    /// A model's stairs as the page's stair tool needs them: the rule set's categories, and each
+    /// stair with its layout as its levels stand, or why it has none
+    /// ([`cloud::stairs::read_stairs`]).
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn stairs(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::stairs::StairsView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::stairs::read_stairs(&mut snapshot, project, model).await?)
     }
 
     /// The kinds of parameter and the categories of a model, for the page's lists: read from the
@@ -745,13 +919,14 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
-    /// The library's families with their types and the values each placed one holds, for the
-    /// page's family tool ([`cloud::families::read_library`]). Interim: the library is baked in
-    /// (job 7.6 stores families in the document).
+    /// A model's families with their types, the values each placed one holds, where each came
+    /// from and how many are placed, then the library's families it does not hold, for the page's
+    /// family tool ([`cloud::loading::read_families`]).
     ///
     /// # Errors
     ///
-    /// A [`Refusal`] when this person may not read the model or the store fails.
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a family's record cannot be read, saying why.
     pub async fn families(
         &self,
         person: &Id,
@@ -760,7 +935,10 @@ impl<K: Kv, F: FileStore> Service<K, F> {
     ) -> Result<Vec<cloud::families::FamilyView>, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;
-        Ok(cloud::families::read_library())
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::loading::read_families(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
     }
 
     /// A model's floor types with their layers and the materials those are drawn in, for the
@@ -803,6 +981,29 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await?;
         let mut snapshot = self.kv.snapshot().await?;
         cloud::roofs::read_roof_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
+    /// A model's curtain wall types with their grid and parts, the materials those are drawn in
+    /// and the default types, for the page's curtain wall tool
+    /// ([`cloud::curtains::read_curtain_types`]); where it has none, the page sends
+    /// `curtain.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn curtain_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::curtains::CurtainTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::curtains::read_curtain_types(&mut snapshot, project, model)
             .await?
             .map_err(Refusal::Bad)
     }
@@ -888,6 +1089,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                             failed: None,
                             cut_by: None,
                             room: Some(room),
+                            curtain: None,
+                            placement: None,
+                            cut: None,
                         },
                         Err(failed) => FilledView {
                             head,
@@ -895,6 +1099,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                             failed: Some(json!({ "code": failed.code, "message": failed.message })),
                             cut_by: None,
                             room: Some(room),
+                            curtain: None,
+                            placement: None,
+                            cut: None,
                         },
                     }
                 }
@@ -904,6 +1111,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
                     cut_by: None,
                     room: None,
+                    curtain: None,
+                    placement: None,
+                    cut: None,
                 },
             });
         }
@@ -920,13 +1130,18 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     } else {
                         None
                     };
-                    FilledView {
+                    let mut view = FilledView {
                         head,
                         recipe: Some(recipe),
                         failed: None,
                         cut_by,
                         room: None,
-                    }
+                        curtain: None,
+                        placement: None,
+                        cut: None,
+                    };
+                    add_curtain(&mut snapshot, project, model, &record, &mut view).await?;
+                    view
                 }
                 Err(failed) => FilledView {
                     head,
@@ -934,6 +1149,9 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     failed: Some(json!({ "code": failed.code, "message": failed.message })),
                     cut_by: None,
                     room: None,
+                    curtain: None,
+                    placement: None,
+                    cut: None,
                 },
             },
         )
@@ -1110,6 +1328,32 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .ok_or(Refusal::NotFound)
     }
 
+    /// The dimensions of one view, each with its value worked out now from the references it is
+    /// bound to (a layered wall's faces, a grid line, a door's or window's centre or edges), its
+    /// witness lines, its stored equalities and its warnings: a reference that was deleted is
+    /// named, and the segments it ends have no value. Read as of the log's head; nothing is
+    /// stored but the dimension's references and its line.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn dimensions(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::dimensions::DimensionListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        cloud::dimensions::listing(&mut snapshot, project, model, view)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// A view's graphics rules: how each category or subcategory it says anything about looks in
     /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
     /// project's object styles say. Read as of the log's head.
@@ -1173,7 +1417,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&one.record.id.to_string()) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped {
                     element: one.record.id.to_string(),
@@ -1182,8 +1426,15 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             }
         }
         let looks = ViewLooks::new(&world, view);
+        let crop = world.views().get(view).and_then(|v| v.crop());
         let drawn = drawer
-            .draw(cut.cut, cut.scale, &elements, Some(&looks))
+            .draw(
+                cut.cut,
+                cut.scale,
+                &elements,
+                Some(&looks),
+                crop.map(|crop| PlanCrop { view, crop }),
+            )
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {

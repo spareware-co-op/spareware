@@ -92,7 +92,10 @@ async fn create<T: Txn>(
     if txn.get(&pointer.key()).await?.is_some() {
         return Ok(Err("That element already exists.".to_owned()));
     }
-    if kind == records::TYPE_KIND || kind == records::TABLE_KIND || id.as_str() == records::TABLE_ID
+    if kind == records::TYPE_KIND
+        || kind == records::TABLE_KIND
+        || kind == construct_regen::families::RECORD_KIND
+        || id.as_str() == records::TABLE_ID
     {
         return Ok(Err(NOT_AN_ELEMENT.to_owned()));
     }

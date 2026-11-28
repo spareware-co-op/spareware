@@ -52,10 +52,13 @@
     log: [],
     three: null,
     builders: new Map(), // package -> its shape builder once loaded, or null if this browser can't
+    builder: null, // the open model's shape builder, for the seats the page asks of it
     viewing: false, // this browser can't build the open model, so it draws what's stored
     cuts: false, // the open model's package cuts what is hosted in a wall, as the server builds it
     checked: 0, // bodies compared with the server's
     mismatches: [], // and any that differed
+    applying: new Map(), // document -> the entries (by seq) this page is still applying: loads, hosts built again
+    waitingCheckpoints: [], // checkpoints that wait for those entries, in the order they came
     steps: { undo: null, redo: null }, // what this person can undo and redo in the open model
     views: null, // the open model's views as the server lists them, by name; null until they come
     openView: null, // the ID of the model's view whose plan the server draws in the plan pane
@@ -249,6 +252,8 @@
     ]);
     floorRibbon(config); // the floor tool beside the wall tool
     roofRibbon(config); // and the roof tool beside the floor tool
+    stairRibbon(config); // and the stair tool beside the roof tool
+    curtainRibbon(config); // the curtain wall tool beside the roof tool
     familyRibbon(config); // the family tool beside the door tool
     openingRibbon(config); // the opening and shaft tools beside the family tool
     set('ins', 'Link', [
@@ -276,6 +281,7 @@
       items: [
         { label: 'Types', icon: 'family', act: 'stacktypes', tip: 'The types of a category: make, rename, copy and delete them, and edit their values.', disabled: !C.model },
         { label: 'Project parameters', icon: 'props', act: 'stackparams', tip: 'The parameters of this project: define one and choose the categories that have it.', disabled: !C.model },
+        { label: 'Families', icon: 'family', act: 'stackfamilies', tip: 'The families of this model: load one from the library, make a door or window type from a spec, reload a family, or remove one that is not placed.', disabled: !C.model },
         { label: 'Levels', icon: 'elev', act: 'stacklevels', tip: 'The levels of this model: make, rename, move and delete them, and choose the one the plan shows.', disabled: !C.model },
       ],
     });
@@ -295,6 +301,7 @@
       });
     }
     datumRibbon(config); // the grid tool, and Delete for a selected grid or plane
+    dimRibbon(config); // and Delete for a selected dimension
     return config;
   }
 
@@ -354,8 +361,8 @@
       C.socket.close();
     }
     Object.assign(C, { socket: null, connected: false, project: null, data: null, model: null });
-    Object.assign(C, { pending: [], links: [], log: [], readOnly: false });
-    for (const map of [C.elements, C.claims, C.linked, C.fixed]) map.clear();
+    Object.assign(C, { pending: [], links: [], log: [], readOnly: false, owedFrom: undefined, waitingCheckpoints: [] });
+    for (const map of [C.elements, C.claims, C.linked, C.fixed, C.applying]) map.clear();
     C.watching.clear();
     S.sel = null;
     S.tool = 'select';
@@ -613,8 +620,11 @@
     clearTimeout(C.schedulesTimer);
     C.problems.clear();
     C.asked.clear();
+    C.cropHold = 0;
     C.cuts = false;
+    C.builder = null;
     forgetDatums();
+    forgetDimensions();
     S.sel = null;
     WS.elements.clear();
     WS.loaded = false;
@@ -627,6 +637,7 @@
     C.model = model;
     C.team = team;
     C.viewing = !builder;
+    C.builder = builder;
     C.cuts = Boolean(builder) && typeof builder.shapes.build_hosting === 'function';
     C.readOnly = C.viewing;
     C.watching.add(model.id);
@@ -687,8 +698,8 @@
       const shapes = await import(path);
       await shapes.default();
       // built: recipe text -> what it builds to, which never changes; hosting: the same for a host
-      // and what is hosted in it
-      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map() };
+      // and what is hosted in it; seats: the same for where an element sits on a wall at an angle
+      return { shapes, edition: JSON.parse(shapes.edition()), built: new Map(), hosting: new Map(), seats: new Map() };
     } catch (error) {
       console.warn(`This browser can’t build shapes: ${error.message}`);
       return null;
@@ -743,7 +754,7 @@
    */
   function buildOn(builder, record, into, fill) {
     const recipe = fill?.recipe ?? record.recipe;
-    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill) : [];
+    const guests = typeof builder.shapes.build_hosting === 'function' && into ? guestsOf(record, into, fill, builder) : [];
     if (!guests.length) return buildShape(builder, recipe);
     // Each guest by its place in the host's frame, so a host that moves builds to the same text.
     const host = JSON.stringify({ recipe, placement: { x: 0, y: 0, z: 0 } });
@@ -768,7 +779,10 @@
   // may change what such a recipe reads has it filled and built again (`fillAgain`).
 
   /** Whether a recipe reads records: an argument that is an object, such as `{"wall":"type"}`. */
+  // A placed family reads the document's record of its family: the server hands back the recipe with
+  // the family's text in it, which is how a family no library holds is built here.
   const readsRecords = (recipe) =>
+    (recipe?.op === 'family.instance' && recipe?.owner === 'construct') ||
     Object.values(recipe?.args || {}).some((arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg));
 
   /** The server's filling of `record`'s recipe in `model`: `{head, recipe}` or `{head, failed}`; null when it reads nothing. */
@@ -779,6 +793,12 @@
     } catch (error) {
       return { head: 0, failed: { code: 'NotFilled', message: error.message } };
     }
+  }
+
+  /** Notes where the server seats an embedded curtain wall: its filled answer says. */
+  function seatNote(id, fill) {
+    if (fill?.placement) SEATED.set(id, fill.placement);
+    else SEATED.delete(id);
   }
 
   /** Every element of `into` whose recipe reads records, filled and built again. */
@@ -797,6 +817,12 @@
     const answer = await shapeFor(model, piece.el, into, fill);
     if (into.get(id) !== piece || piece.asked !== asked) return;
     Object.assign(piece, { shape: undefined, failed: undefined }, answer, { fill, stale: false, settled: asked });
+    seatNote(id, fill);
+    if ((isFamily(piece.el) || hostIdOf(piece.el) !== null) && seatOfPiece(piece)) {
+      // Built as it is stored: it is not compared until it is built again as its wall seats it.
+      Object.assign(piece, { stale: true, seatedKey: undefined });
+      seatFamilies();
+    }
     queueDraw();
     if (id === S.sel) refreshSide();
   }
@@ -832,17 +858,24 @@
    * its ID, its recipe and its place in the host's frame (in whole millimetres), as the server's
    * regenerator hands them to its builder.
    */
-  function guestsOf(host, into, fill) {
+  function guestsOf(host, into, fill, builder = C.builder) {
     const drawn = { el: host, shape: into.get(host.id)?.shape, fill: fill ?? into.get(host.id)?.fill };
     const guests = [];
     for (const [id, piece] of into) {
       if (id === host.id || hostIdOf(piece.el) !== host.id) continue;
+      // An embedded curtain wall is handed to its host as the opening it cuts, as the server hands it.
+      if (isCurtain(piece.el) && piece.fill?.cut) {
+        guests.push({ key: id, recipe: piece.fill.cut.recipe, placement: piece.fill.cut.placement });
+        continue;
+      }
       const face = (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
-      const at = placedOn(piece.el, face, drawn);
+      const at = placedOn(piece.el, face, drawn, builder);
       const placement = { x: at.x - host.placement.x, y: at.y - host.placement.y, z: at.z - host.placement.z };
-      // A placed family is handed to the builder turned to stand in its wall, as the server hands it.
-      const seat = isFamily(piece.el) ? seatOfPiece(piece, drawn) : null;
-      guests.push({ key: id, recipe: seat ? turnedRecipe(piece.el.recipe, seat.turn) : piece.el.recipe, placement });
+      // An element is handed to the builder as its wall seats it, as the server hands it: a placed
+      // family turned to stand in its wall, anything in a wall at an angle with its seat.
+      const seat = seatOfPiece(piece, drawn, builder);
+      const own = piece.fill?.recipe ?? piece.el.recipe; // a family copy's filled recipe holds its family's text
+      guests.push({ key: id, recipe: seat ? seat.recipe : own, placement });
     }
     // A shaft is hosted on nothing: the server says which pass through a floor, as it hands its builder.
     for (const shaft of drawn.fill?.cut_by?.shafts ?? []) guests.push({ key: shaft.key, recipe: shaft.recipe, placement: shaft.placement });
@@ -856,16 +889,21 @@
    * changes. Anything else, or a door whose wall is not here, sits at its own placement.
    */
   function placementOf(el) {
+    // A curtain wall embedded in a wall stands where the server seats it.
+    if (SEATED.has(el.id) && isCurtain(el)) return SEATED.get(el.id);
     const hosted = hostOf(el);
     return hosted ? placedOn(el, hosted.face, hosted.host) : el.placement;
   }
 
   /** Where `el` sits hosted on `face` of `host` (`{el, shape, fill}`): `placementOf`'s rule. */
-  function placedOn(el, face, host) {
+  function placedOn(el, face, host, builder = C.builder) {
     const along = el.props?.['@host.along'];
     const up = el.props?.['@host.up'];
     if (along === undefined || up === undefined) return el.placement;
     const role = host.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
+    // A wall at an angle seats what is hosted in it as the package works it out (`seatAtAngle`).
+    const angled = seatAtAngle(builder, el, role, host, along, up);
+    if (angled) return angled.at;
     if (el.recipe.op === FAMILY_OP) return onFamily(role, host, along, up)?.at ?? el.placement;
     if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
     const thickness = host.el.recipe.args.thickness;
@@ -901,7 +939,7 @@
    */
   function lineOf(host) {
     const args = host.fill?.recipe?.args;
-    if (!args || !Array.isArray(args.layers) || !args.layers.length) return null;
+    if (!args || !Array.isArray(args.layers) || !args.layers.length || !args.start || !args.end) return null;
     const start = args.start.map(steps);
     const end = args.end.map(steps);
     const d = [end[0] - start[0], end[1] - start[1]];
@@ -913,9 +951,33 @@
   }
 
   /**
+   * Where `el` sits on side `role` of the layered wall `host` (`{el, shape, fill}`) when that wall
+   * runs at an angle, and the recipe its builder is handed with its seat: asked of the package
+   * (`seat`), which works it out as construct-regen's `hosting::seat` does for the server, in the
+   * wall's own frame with every point rounded once, so this page builds what the server builds.
+   * `{at, recipe}` with `at` in the model, or null: the wall runs along an axis (`onLayered` and
+   * `onFamily` seat that), it is not filled yet, or the package does not answer.
+   */
+  function seatAtAngle(builder, el, role, host, along, up) {
+    if (!builder || typeof builder.shapes.seat !== 'function' || host.el.recipe.op !== LAYERED || !role) return null;
+    const line = lineOf(host);
+    if (!line || line.axis !== null) return null;
+    const wall = JSON.stringify(host.fill.recipe);
+    const text = JSON.stringify([wall, el.recipe, el.id, role, along, up]);
+    if (!builder.seats.has(text)) {
+      builder.seats.set(text, JSON.parse(builder.shapes.seat(wall, JSON.stringify(el.recipe), el.id, role, along, up)));
+    }
+    const seat = builder.seats.get(text).seat;
+    if (!seat) return null;
+    const base = host.el.placement;
+    return { at: { x: base.x + seat.placement.x, y: base.y + seat.placement.y, z: base.z + seat.placement.z }, recipe: seat.recipe };
+  }
+
+  /**
    * Where `el` sits on side `role` of a layered wall, as construct-regen's `hosting` puts it: along
    * the wall's line from its start the way the wall runs, flush with that side and reaching toward
-   * the other, each to the nearest millimetre, and up from its base. Only a wall along an axis hosts.
+   * the other, each to the nearest millimetre, and up from its base. A wall along an axis; one at an
+   * angle seats through `seatAtAngle`.
    */
   function onLayered(el, role, host, along, up) {
     const line = lineOf(host);
@@ -948,7 +1010,14 @@
     const wall = host.el;
     if (wall.recipe.op !== LAYERED) return wall.recipe.args.axis === 'y' ? y - wall.placement.y : x - wall.placement.x;
     const line = lineOf(host);
-    if (!line || line.axis === null) return null;
+    if (!line) return null;
+    if (line.axis === null) {
+      // At an angle a hosted element's origin is `along` the line from its start: the pointer's place
+      // projected onto the line, to the nearest millimetre.
+      const [sx, sy] = line.start.map((v) => v / STEPS_PER_MM);
+      const length = Math.hypot(line.d[0], line.d[1]);
+      return Math.round(((x - wall.placement.x - sx) * line.d[0] + (y - wall.placement.y - sy) * line.d[1]) / length);
+    }
     const a = line.axis;
     const at = [x - wall.placement.x, y - wall.placement.y][a];
     const start = Math.round(line.start[a] / STEPS_PER_MM);
@@ -982,15 +1051,51 @@
       .join('');
   }
 
+  // A checkpoint is compared only with what this page built from the same entries: while an entry it
+  // covers is still being applied here (a record on its way, a host being built again with what it
+  // hosts), the checkpoint waits for it. A body built before such an entry landed would otherwise be
+  // compared with the server's built after it: an undo that puts a window back did that to its wall.
+
+  /** Marks entry `seq` of `document` as being applied here; the function returned marks it done. */
+  function applying(document, seq) {
+    const seqs = C.applying.get(document) ?? new Map();
+    C.applying.set(document, seqs);
+    seqs.set(seq, (seqs.get(seq) ?? 0) + 1);
+    return () => {
+      const left = seqs.get(seq) - 1;
+      if (left > 0) seqs.set(seq, left);
+      else seqs.delete(seq);
+      compareWaiting();
+    };
+  }
+
+  /** Whether every entry of `document` through `through` has been applied here. */
+  const appliedThrough = (document, through) => ![...(C.applying.get(document)?.keys() ?? [])].some((seq) => seq <= through);
+
+  /** The checkpoints that waited, compared now if they need wait no longer, in the order they came. */
+  function compareWaiting() {
+    const waiting = C.waitingCheckpoints;
+    C.waitingCheckpoints = [];
+    for (const entry of waiting) compareCheckpoint(entry);
+  }
+
   /** Compares what the server built with what this page holds (note A05). */
   function compareCheckpoint(entry) {
     const { through, bodies } = entry.args;
+    // Behind a checkpoint that waits, so the two are compared in the order they came.
+    if (C.waitingCheckpoints.length || !appliedThrough(entry.target, through)) {
+      C.waitingCheckpoints.push(entry);
+      return;
+    }
     const into = entry.target === C.model?.id ? C.elements : C.linked.get(entry.target);
     if (!into) return;
     for (const [id, body] of Object.entries(bodies)) {
       const piece = into.get(id);
       // Built from a recipe filled later in the log than this checkpoint: the next one covers it.
-      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through)) continue;
+      if (!piece || piece.seq > through || piece.stale || (piece.fill && piece.fill.head > through) || piece.ahead || seatChanged(piece)) continue;
+      // What is hosted in it changed after the last entry this checkpoint covers: it is built with that change, so
+      // the next checkpoint compares it. (Every entry through `through` has been applied here: see `applying`.)
+      if ((piece.touched ?? 0) > through) continue;
       if (piece.shape?.body === body) {
         C.checked += 1;
       } else if (C.viewing || !piece.shape) {
@@ -1020,7 +1125,7 @@
     const area = `level=${encodeURIComponent(C.level)}&x0=${x}&y0=${y}&x1=${x + w}&y1=${y + h}`;
     const seen = await api(`${modelUrl(model)}/area?${area}`);
     // Regeneration can be behind the log, so ask for what came after what this shows.
-    if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+    if (seen.through < C.head) watchSince(model, seen.through);
     const ids = new Set(Object.keys(seen.pieces));
     await Promise.all(
       [...ids].map(async (id) => {
@@ -1043,10 +1148,16 @@
       return;
     }
     if (isDatum(record)) return keepDatum(model, id, record, hash, seq, mine); // grids and planes: their own block
+    // Its host is known only now when this page did not hold it (an undo or a redo puts it back): from
+    // here the host is built with it, so a checkpoint from before this entry is not compared with that.
+    const host = cutsIn(model, into) && into.get(hostIdOf(record));
+    if (host) Object.assign(host, { stale: true, touched: Math.max(host.touched ?? 0, seq) });
     const fill = await fillOf(model, record);
     const answer = await shapeFor(model, record, into, fill);
-    // A placed family is built turned to stand in its wall once the wall is here (`seatFamilies`).
-    const unseated = isFamily(record) && into === C.elements;
+    seatNote(id, fill);
+    // A hosted element is built as its wall seats it once the wall is here (`seatFamilies`): a
+    // placed family turned to stand in it, anything in a wall at an angle with its seat.
+    const unseated = into === C.elements && (isFamily(record) || hostIdOf(record) !== null);
     if (levelIdOf(record) === levelOf()) into.set(id, { el: record, ...answer, hash, seq, fill, ...(unseated ? { stale: true } : {}) });
     // What it is hosted in is built again with it, as the server builds a host with its guests.
     if (cutsIn(model, into)) await buildHostAgain(model, into, hostIdOf(record));
@@ -1103,6 +1214,16 @@
 
   // --- The live channel ---
 
+  /**
+   * Asks for what the log holds after `through`, the point regeneration had reached when a read was
+   * made. The socket may not be open yet, and `send` drops what it cannot send, so the point is
+   * kept for the hello that opens it: otherwise a page that read a lagging view would stay on it.
+   */
+  function watchSince(model, through) {
+    C.owedFrom = Math.min(C.owedFrom ?? through, through);
+    send({ t: 'watch', document: model, since: through });
+  }
+
   function send(message) {
     if (C.connected) C.socket.send(JSON.stringify(message));
   }
@@ -1114,7 +1235,8 @@
     setStatus('Connecting', false);
     socket.onopen = () => {
       C.connected = true;
-      send({ t: 'hello', client: C.client, documents: [...C.watching], since: C.head });
+      send({ t: 'hello', client: C.client, documents: [...C.watching], since: Math.min(C.head, C.owedFrom ?? C.head) });
+      C.owedFrom = undefined;
     };
     socket.onmessage = (event) => {
       const got = Date.now();
@@ -1174,6 +1296,7 @@
     const piece = edit && C.elements.get(edit.args.element);
     if (piece?.hash && C.model) {
       piece.el = await api(`${modelUrl(C.model.id)}/record/${piece.hash}`);
+      piece.ahead = false;
       drawPlan();
     }
   }
@@ -1218,13 +1341,16 @@
       // A host is built with what is hosted in it: while what it hosts changes here, it is not
       // compared with the server's, and once that is in hand it is built again.
       const cuts = cutsIn(entry.target, into);
-      const placing = ['hosted.place', 'family.place', 'family.move', 'opening.place', 'opening.draw', 'opening.move'].includes(entry.cmd);
+      const placing = ['hosted.place', 'family.place', 'family.move', 'opening.place', 'opening.draw', 'opening.move', 'curtain.embed'].includes(entry.cmd);
       const hosts = new Set([piece && hostIdOf(piece.el), placing && entry.args.host]);
-      if (cuts) for (const id of hosts) if (id && into.get(id)) into.get(id).stale = true;
+      if (cuts) {
+        // A host is built with what is hosted in it: until a checkpoint after this entry, it is not compared.
+        for (const id of hosts) if (id && into.get(id)) Object.assign(into.get(id), { stale: true, touched: entry.seq });
+      }
       const again = () => Promise.all([...hosts].map((id) => buildHostAgain(entry.target, into, id)));
       if (!change.after) {
         into.delete(change.piece);
-        if (cuts) again().then(queueDraw);
+        if (cuts) again().then(queueDraw).finally(applying(entry.target, entry.seq));
       } else if (piece && entry.cmd === 'element.move') {
         piece.hash = change.after;
         piece.seq = entry.seq;
@@ -1233,7 +1359,7 @@
         // moves it in that frame.
         if (cuts) {
           hosts.add(change.piece);
-          again().then(queueDraw);
+          again().then(queueDraw).finally(applying(entry.target, entry.seq));
         }
       } else {
         if (piece) piece.stale = true;
@@ -1242,7 +1368,8 @@
           .then(() => {
             queueDraw();
             if (change.piece === S.sel) refreshSide();
-          });
+          })
+          .finally(applying(entry.target, entry.seq));
       }
     }
     roomsAgain(entry.target, into, entry);
@@ -1258,9 +1385,12 @@
       C.paramsEpoch += 1;
       refreshSide();
     }
-    if (reads || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$|^view\.graphics\./.test(entry.cmd)) {
+    const families = /^family\./.test(entry.cmd) || UNDOING.has(entry.cmd);
+    if (reads || families || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$|^view\.graphics\./.test(entry.cmd)) {
       if (entry.target === C.model?.id) loadManage();
     }
+    // The document's families, as the server lists them, may have changed: what is held, placed or made.
+    if (families && entry.target === C.model?.id) reloadLibrary();
     if (entry.target === C.model?.id) {
       for (const change of entry.claims) {
         if (change.claim) C.claims.set(change.piece, change.claim);
@@ -1269,6 +1399,7 @@
       viewsChanged(entry);
       warningsChanged(entry);
       schedulesChanged(entry);
+      stairsChanged(entry);
     }
     queueDraw();
   }
@@ -1277,7 +1408,7 @@
   const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
 
   /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
-  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|opening|shaft)\.|^(floor|roof)\.defaults$/;
+  const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|curtain\.type|opening|shaft)\.|^(floor|roof|curtain)\.defaults$/;
 
   const WORDS = {
     'element.create': 'added',
@@ -1304,6 +1435,11 @@
     'family.flip': 'flipped to the other side of its wall:',
     'family.set': 'set a value of',
     'family.delete': 'deleted',
+    'family.load': 'loaded a family',
+    'family.reload': 'reloaded a family',
+    'family.swap': 'swapped a family for another type',
+    'family.generate': 'made a door or window type',
+    'family.remove': 'removed a family',
     'level.create': 'made a level',
     'level.rename': 'renamed a level',
     'level.elevation': 'moved a level',
@@ -1381,6 +1517,11 @@
     'family.flip': 'flipping a family',
     'family.set': 'a value of a family',
     'family.delete': 'deleting a family',
+    'family.load': 'loading a family',
+    'family.reload': 'reloading a family',
+    'family.swap': 'swapping a family',
+    'family.generate': 'making a door or window type',
+    'family.remove': 'removing a family',
     'level.create': 'making a level',
     'level.rename': 'renaming a level',
     'level.elevation': 'moving a level',
@@ -1452,8 +1593,8 @@
     return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
   }
   function hasShape(record) {
-    // A schedule, a sheet and a viewport are records with no shape too: the plan draws none of them.
-    return !['type', 'parameters', 'level', 'view', 'schedule', 'schedule-placement', 'sheet', 'viewport'].includes(record.kind);
+    // A schedule, a sheet, a viewport and a dimension are records with no shape too: the plan draws none of them.
+    return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'schedule-placement', 'sheet', 'viewport', 'dimension'].includes(record.kind);
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1507,7 +1648,8 @@
 
   ACT.stackdelete = () => {
     if (S.sel && !C.readOnly && C.elements.has(S.sel)) {
-      edit(C.elements.get(S.sel)?.el.kind === 'roof' ? 'roof.delete' : 'element.delete', { element: S.sel });
+      const kind = C.elements.get(S.sel)?.el.kind;
+      edit(kind === 'roof' ? 'roof.delete' : kind === 'curtain' ? 'curtain.delete' : 'element.delete', { element: S.sel });
       S.sel = null;
       refresh();
     }
@@ -1525,7 +1667,12 @@
   C.typeList = null; // { key, view }: the types of the selected element's category
   C.manage = null; // the open dialog: { which, category, open, data, error }
   C.problems = new Map(); // where -> the server's reason, until that is tried again
-  C.asked = new Map(); // edit counter -> { where, after }
+  C.asked = new Map(); // edit counter -> { where, after, hold }
+  // Edits of the crop and range panel sent and not yet answered. While there are any, the panel is not
+  // drawn again from the page's older record of the view: a person's click on one of its controls
+  // (the crop's checkboxes, a field) stays as it was set until the server's answer for that command
+  // arrives, and the panel is then drawn from the view as it is after it.
+  C.cropHold = 0;
 
   const canEdit = () => Boolean(C.model) && !C.readOnly && !C.viewing;
   const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -1552,8 +1699,10 @@
       return;
     }
     C.problems.delete(where);
+    const hold = where === 'crop' || where === 'range';
+    if (hold) C.cropHold += 1;
     const counter = edit(cmd, args);
-    C.asked.set(counter, { where, after });
+    C.asked.set(counter, { where, after, hold });
     showProblems();
   }
 
@@ -1562,7 +1711,9 @@
     const ask = C.asked.get(counter);
     C.asked.delete(counter);
     if (!ask) return;
+    if (ask.hold) C.cropHold = Math.max(0, C.cropHold - 1);
     C.problems.set(ask.where, reason);
+    dimsRefused(ask.where);
     showProblems();
   }
 
@@ -1570,6 +1721,11 @@
   function done(counter) {
     const ask = C.asked.get(counter);
     C.asked.delete(counter);
+    if (ask?.hold) {
+      C.cropHold = Math.max(0, C.cropHold - 1);
+      // The views read while it was held were not drawn: read them again, and draw them.
+      if (C.cropHold === 0) loadViews();
+    }
     if (ask?.after) ask.after();
   }
 
@@ -1627,15 +1783,20 @@
     const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
     C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
     if (which === 'graphics') Object.assign(C.manage, { view: C.openView, edge: 'cut' });
-    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels', graphics: 'View graphics' }[which];
+    if (which === 'crop') Object.assign(C.manage, { view: C.openView });
+    const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels', families: 'Families', graphics: 'View graphics', crop: 'Crop and range' }[which];
     openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
     loadManage();
   }
   ACT.stacktypes = () => openManage('types');
   ACT.stackparams = () => openManage('parameters');
   ACT.stacklevels = () => openManage('levels');
+  ACT.stackfamilies = () => openManage('families');
   ACT.stackviewgraphics = () => {
     if (C.openView) openManage('graphics');
+  };
+  ACT.stackviewcrop = () => {
+    if (C.openView) openManage('crop');
   };
 
   /** Reads what the open dialog shows from the server, then draws it. Does nothing when no dialog is open. */
@@ -1646,13 +1807,18 @@
     m.seq += 1;
     const seq = m.seq;
     try {
-      if (C.catalog?.model !== model) C.catalog = { model, ...(await api(`${modelUrl(model)}/catalog`)) };
-      if (m.which === 'types') {
+      if (m.which !== 'families' && C.catalog?.model !== model) C.catalog = { model, ...(await api(`${modelUrl(model)}/catalog`)) };
+      if (m.which === 'families') {
+        m.data = { families: await api(`${modelUrl(model)}/families`) };
+      } else if (m.which === 'types') {
         if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
         m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
       } else if (m.which === 'graphics') {
         m.data = await api(`${modelUrl(model)}/views/${encodeURIComponent(m.view)}/graphics`);
         if (m.category === null) m.category = m.data.looks[0]?.category ?? null;
+      } else if (m.which === 'crop') {
+        m.data = {}; // read from the list of views, which this page keeps live
+        modelLevels();
       } else if (m.which === 'levels') {
         m.data = { levels: await api(`${modelUrl(model)}/levels`) };
         knowLevels(`${model}/${C.paramsEpoch}`, m.data.levels);
@@ -1670,9 +1836,11 @@
     const m = C.manage;
     const root = $('#stack-manage');
     if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
+    if (m.which === 'crop' && C.cropHold > 0) return;
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
-    else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : m.which === 'graphics' ? graphicsHtml(m) : parametersHtml(m);
+    else if (m.which === 'families') html = familiesHtml(m);
+    else html = m.which === 'types' ? typesHtml(m) : m.which === 'levels' ? levelsHtml(m) : m.which === 'graphics' ? graphicsHtml(m) : m.which === 'crop' ? cropHtml(m) : parametersHtml(m);
     redraw(root, html);
     if (!m.shown) {
       m.shown = true;
@@ -2087,6 +2255,7 @@
     }
     if (C.model?.id !== model || seq !== C.viewsSeq) return;
     C.views = list;
+    if (C.manage?.which === 'crop') renderManage();
     const open = list.find((view) => view.id === C.openView);
     if (C.openView && !open) leaveView();
     else if (open) {
@@ -2114,6 +2283,7 @@
   function viewsChanged(entry) {
     if (/^view\.|^level\.|^edit\.(undo|redo)$/.test(entry.cmd)) loadViews();
     else if (!/^element\.(claim|release)$/.test(entry.cmd)) planChanged();
+    if (!/^element[.](claim|release)$/.test(entry.cmd)) dimsChanged();
   }
 
   /** Asks for the open view's plan again, once the edits arriving together have all come. */
@@ -2222,6 +2392,7 @@
         const id = esc(view.id);
         html += `<div class="stack-line pad"><input class="inp" data-chg="stackviewrename" data-view="${id}" data-key="view-name:${id}" value="${esc(view.name)}" aria-label="Name of ${esc(view.name)}"${off}>`;
         html += `<button class="btn sm" data-act="stackviewgraphics" data-a="${id}" data-key="view-graphics:${id}" aria-label="Graphics of ${esc(view.name)}">Graphics</button>`;
+        html += `<button class="btn sm" data-act="stackviewcrop" data-a="${id}" data-key="view-crop:${id}" aria-label="Crop and range of ${esc(view.name)}">Crop and range</button>`;
         html += `<button class="btn sm" data-act="stackviewdelete" data-a="${id}" data-key="view-delete:${id}" aria-label="Delete ${esc(view.name)}"${off}>Delete</button></div>`;
         html += problem(`view:${view.id}`);
       }
@@ -2978,6 +3149,88 @@
     });
   };
 
+  // --- A view's crop and range ---
+  // The part of the model a view draws, and how high a plan cuts (construct-views' FORMAT.md,
+  // "Crop regions" and "View range"). The dialog is reached from the open view's line in the
+  // browser and reads the view as the server lists it (`/views`), which this page keeps live through
+  // the log, so a change by anyone shows here and in the plan at once. A control sends only what it
+  // holds: a height as `view.set` with that one part of `range`, the region as `view.crop.set`, the
+  // switches as `view.crop.set` (on) and `view.crop.show` (shown), and Remove as `view.crop.clear`.
+  // What is typed is the person's own text (`6 m`, `-500`): the server reads it, refuses what it
+  // cannot in words beside the controls, and the drawing, clipped to the crop and with its outline,
+  // is the server's.
+
+  const RANGE_ROWS = [['top', 'Top'], ['cut', 'Cut plane'], ['bottom', 'Bottom'], ['depth', 'View depth']];
+
+  function cropHtml(m) {
+    const view = C.views?.find((v) => v.id === m.view);
+    if (!view) return '<p class="small faint">This view has gone.</p>';
+    const off = canEdit() ? '' : ' disabled';
+    let html = '<p class="small muted">The part of the model this view draws, and how high a plan cuts. Heights are an offset from a level; the crop is in the plan’s own x and y.</p>';
+    if (view.range) {
+      const levels = modelLevels() || [];
+      html += '<h3>View range</h3><table class="props" data-view-range>';
+      for (const [key, label] of RANGE_ROWS) {
+        const tie = view.range[key];
+        const known = levels.some((level) => level.id === tie.level) ? levels : [...levels, { id: tie.level, name: tie.level }];
+        const options = known.map((level) => `<option value="${esc(level.id)}"${level.id === tie.level ? ' selected' : ''}>${esc(level.name)}</option>`).join('');
+        const control = `<select class="inp" data-chg="stackrangelevel" data-range="${key}" data-key="range-level:${key}" aria-label="${label}, level"${off}>${options}</select>`
+          + `<input class="inp" data-chg="stackrangeoffset" data-range="${key}" data-key="range-offset:${key}" value="${esc(tie.offset)}" aria-label="${label}, offset from the level"${off}>`;
+        const height = view.range.heights?.[key];
+        html += prow(label, control, height ? `at ${esc(height)}` : 'does not resolve');
+      }
+      html += `</table>${problem('range')}`;
+    }
+    html += '<h3>Crop region</h3>';
+    const crop = view.crop;
+    const field = (key, label, value) => `<input class="inp" data-chg="stackcropedit" data-crop="${key}" data-key="crop-${key}" value="${esc(value)}" aria-label="${label}"${off}>`;
+    if (!crop) {
+      const draft = (key, label) => `<input class="inp" data-draft data-enter="stackcropmake" data-key="crop-new-${key}" placeholder="0 mm" aria-label="${label}"${off}>`;
+      html += '<p class="small faint" data-crop-none>This view has no crop: it draws all of the model.</p><table class="props">';
+      html += prow('Lower left', `${draft('minx', 'Lower left, x')}${draft('miny', 'Lower left, y')}`, '');
+      html += prow('Upper right', `${draft('maxx', 'Upper right, x')}${draft('maxy', 'Upper right, y')}`, '');
+      html += `</table><div class="stack-line"><button class="btn pri sm" data-act="stackcropmake" data-key="crop-make"${off}>Make crop</button></div>`;
+    } else {
+      html += `<div class="stack-line" data-crop-state="${crop.on ? 'on' : 'off'}-${crop.shown ? 'shown' : 'hidden'}">`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stackcropon" data-key="crop-on"${crop.on ? ' checked' : ''}${off}>Crop the view to the region</label>`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stackcropshown" data-key="crop-shown"${crop.shown ? ' checked' : ''}${off}>Show the crop outline</label></div>`;
+      html += '<table class="props" data-crop-region>';
+      const corners = crop.region.corners;
+      if (crop.region.shape === 'rectangle') {
+        html += prow('Lower left', `${field('minx', 'Lower left, x', corners[0].x)}${field('miny', 'Lower left, y', corners[0].y)}`, '');
+        html += prow('Upper right', `${field('maxx', 'Upper right, x', corners[2].x)}${field('maxy', 'Upper right, y', corners[2].y)}`, '');
+      } else {
+        corners.forEach((corner, at) => {
+          html += prow(`Corner ${at + 1}`, `${field(`c${at}x`, `Corner ${at + 1}, x`, corner.x)}${field(`c${at}y`, `Corner ${at + 1}, y`, corner.y)}`, '');
+        });
+      }
+      html += '</table>';
+      html += `<div class="stack-line"><button class="btn sm" data-act="stackcropclear" data-key="crop-clear"${off}>Remove crop</button></div>`;
+    }
+    return `${html}${problem('crop')}`;
+  }
+
+  const cropView = () => C.views?.find((v) => v.id === C.manage?.view);
+  CHG.stackrangelevel = (select) => manage('view.set', { view: C.manage.view, range: { [select.dataset.range]: { level: select.value } } }, 'range');
+  CHG.stackrangeoffset = (input) => manage('view.set', { view: C.manage.view, range: { [input.dataset.range]: { offset: input.value } } }, 'range');
+  CHG.stackcropon = (box) => manage('view.crop.set', { view: C.manage.view, on: box.checked }, 'crop');
+  CHG.stackcropshown = (box) => manage('view.crop.show', { view: C.manage.view, shown: box.checked }, 'crop');
+  CHG.stackcropedit = () => {
+    const view = cropView();
+    if (!view?.crop) return;
+    const read = (key) => $(`#stack-manage [data-crop="${key}"]`).value;
+    const region = view.crop.region.shape === 'rectangle'
+      ? { rectangle: { min: { x: read('minx'), y: read('miny') }, max: { x: read('maxx'), y: read('maxy') } } }
+      : { outline: view.crop.region.corners.map((_, at) => ({ x: read(`c${at}x`), y: read(`c${at}y`) })) };
+    manage('view.crop.set', { view: view.id, region }, 'crop');
+  };
+  ACT.stackcropmake = () => {
+    const read = (key) => $(`#stack-manage [data-key="crop-new-${key}"]`).value;
+    const region = { rectangle: { min: { x: read('minx'), y: read('miny') }, max: { x: read('maxx'), y: read('maxy') } } };
+    manage('view.crop.set', { view: C.manage.view, region }, 'crop');
+  };
+  ACT.stackcropclear = () => manage('view.crop.clear', { view: C.manage.view }, 'crop');
+
   // --- The wall tool ---
   // A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
   // palette, its base on the plan's level and its top on the level chosen there or a height typed
@@ -3069,7 +3322,7 @@
       html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
     }
     html += '</table>';
-    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right. Hold Shift on the second for any angle.</p>';
     return html + problem('wall-draw');
   }
 
@@ -4260,7 +4513,7 @@
     if (model) {
       for (const kind of WORKSHOP_KINDS) {
         const seen = await api(`${modelUrl(model)}/kind/${kind}`);
-        if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+        if (seen.through < C.head) watchSince(model, seen.through);
         await Promise.all(
           Object.entries(seen.pieces).map(async ([id, hash]) => {
             const el = await api(`${modelUrl(model)}/record/${hash}`);
@@ -4392,7 +4645,7 @@
       for (const model of models.filter(Boolean)) {
         for (const kind of DATUM_KINDS) {
           const seen = await api(`${modelUrl(model)}/kind/${kind}`);
-          if (seen.through < C.head) send({ t: 'watch', document: model, since: seen.through });
+          if (seen.through < C.head) watchSince(model, seen.through);
           await Promise.all(
             Object.entries(seen.pieces).map(async ([id, hash]) =>
               keepDatum(model, id, await api(`${modelUrl(model)}/record/${hash}`), hash, seen.through),
@@ -4594,7 +4847,7 @@
         else placeGrid(toModel(event));
         return;
       }
-      const hit = S.tool === 'select' && event.target.closest('g.datum.own');
+      const hit = S.tool === 'select' && !DM.adding && event.target.closest('g.datum.own');
       if (!hit) return;
       event.stopPropagation();
       pickDatum(hit.dataset.datum, event.target.closest('[data-grid-end]'));
@@ -4685,6 +4938,885 @@
     }
   }
 
+  // --- Linear dimensions ---
+  // A dimension (construct-dimensions' FORMAT.md) belongs to one view and is bound to references:
+  // a wall's face or reference line, a grid line, a door's, window's or opening's centre or edge. It
+  // is made and changed only by its own commands through the same log: `dimension.create`,
+  // `dimension.reference.add`, `dimension.reference.remove`, `dimension.move`, `dimension.equal`,
+  // `dimension.delete`. Its value is never stored and never worked out here: the server works every
+  // segment out, exactly, from where the references are now, and this page asks for the open view's
+  // dimensions again whenever the log changes (`GET .../views/<view>/dimensions`) and draws what
+  // comes back: the offset line, a witness line to each reference, a tick at each, and each segment's
+  // text, in the size the server gave it (the plain default behind construct-dimensions' `TextSize`),
+  // scaled to the plan's scale as every other text is. A reference that was deleted or cannot be
+  // used is the server's warning, in its words, in the palette. The dimension tool picks references
+  // as a person does, by clicking them in the plan, then the offset line's place; a picked dimension
+  // has its line dragged, references added and removed, and its segments held equal (stored, not yet
+  // enforced) in the properties palette. Nothing is checked here: a refusal is the server's reason.
+
+  const FEATURE_WORDS = {
+    'wall.face.exterior': 'the exterior face of',
+    'wall.face.interior': 'the interior face of',
+    'wall.line': 'the reference line of',
+    'grid.line': 'the grid line',
+    centre: 'the centre of',
+    'edge.start': 'the start edge of',
+    'edge.end': 'the end edge of',
+  };
+  // wanted: the view this holds the dimensions of; picks: what the tool has picked so far; adding: the
+  // dimension whose next reference is being picked; drag: its line being dragged; held: a moved line,
+  // drawn where it was put until a fetch that started after the server's answer comes back
+  const DM = { wanted: null, list: [], applied: 0, fetches: 0, timer: null, picks: [], layout: 'horizontal', adding: null, drag: null, held: null };
+  C.dimensions = DM; // the browser test reads this
+  Object.assign(WORDS, {
+    'dimension.create': 'made a dimension',
+    'dimension.reference.add': 'added a reference to a dimension',
+    'dimension.reference.remove': 'took a reference from a dimension',
+    'dimension.move': 'moved a dimension',
+    'dimension.equal': 'set segments of a dimension equal',
+    'dimension.delete': 'deleted a dimension',
+  });
+  Object.assign(STEP_WORDS, {
+    'dimension.create': 'making a dimension',
+    'dimension.reference.add': 'adding a reference to a dimension',
+    'dimension.reference.remove': 'taking a reference from a dimension',
+    'dimension.move': 'moving a dimension',
+    'dimension.equal': 'setting segments equal',
+    'dimension.delete': 'deleting a dimension',
+  });
+
+  const dimsKey = () => (C.model && C.openView ? `${C.model.id}/${C.openView}` : null);
+  /** A dimension of the open view, by its ID. */
+  const ownDimension = (id) => (id && DM.wanted === dimsKey() ? DM.list.find((d) => d.id === id) : undefined);
+  const mmOfStored = (text) => steps(text) / STEPS_PER_MM;
+
+  function forgetDimensions() {
+    Object.assign(DM, { wanted: null, list: [], picks: [], adding: null, drag: null, held: null });
+    clearTimeout(DM.timer);
+  }
+
+  /** An entry of the log arrived: what a dimension reads may have changed, so the view's are asked for again. */
+  function dimsChanged() {
+    if (!dimsKey()) return;
+    clearTimeout(DM.timer);
+    DM.timer = setTimeout(loadDims, 120);
+  }
+
+  /** Asks the server for the open view's dimensions, worked out at the log's head. */
+  async function loadDims() {
+    const key = dimsKey();
+    if (!key) return;
+    DM.fetches += 1;
+    const started = DM.fetches;
+    let answer;
+    try {
+      answer = await api(`${modelUrl(C.model.id)}/views/${encodeURIComponent(C.openView)}/dimensions`);
+    } catch (error) {
+      if (error.status !== 404) console.warn(`The dimensions couldn’t be read: ${error.message}`);
+      answer = error.status === 404 ? { dimensions: [] } : null;
+    }
+    if (!answer || dimsKey() !== key || started < DM.applied) return;
+    DM.applied = started;
+    if (DM.held?.settled && started > DM.held.after) DM.held = null;
+    const known = new Set(DM.list.map((d) => d.id));
+    DM.list = answer.dimensions;
+    if (S.sel && known.has(S.sel) && !DM.list.some((d) => d.id === S.sel)) {
+      S.sel = null;
+      renderRibbon();
+    }
+    refreshSide();
+    queueDraw();
+  }
+
+  /** A refusal of one of the page's own dimension edits: what was drawn ahead of it goes back. */
+  function dimsRefused(where) {
+    if (!where.startsWith('dim:')) return;
+    DM.held = null;
+    DM.drag = null;
+    queueDraw();
+  }
+
+  /** Every dimension of the open view, and what the tool has picked; the plan's drawing calls this. */
+  function dimensionsSvg(s) {
+    const key = dimsKey();
+    if (DM.wanted !== key) {
+      Object.assign(DM, { wanted: key, list: [], held: null, drag: null, picks: [], adding: null });
+      if (key) loadDims();
+    }
+    if (S.tool !== 'dim' && !DM.adding && DM.picks.length) DM.picks = [];
+    if (!key) return '';
+    const slot = { lost: 0 };
+    let svg = '';
+    for (const d of DM.list) svg += dimSvg(d, s, slot);
+    for (const [i, pick] of DM.picks.entries()) {
+      const [x, y] = pick.at;
+      svg += `<g class="dim-pick" data-pick="${i}" data-element="${esc(pick.element)}" data-feature="${esc(pick.feature)}"><circle class="bub" cx="${n0(x)}" cy="${n0(y)}" r="${n0(110 * s)}"/>${TX(x, y + 45 * s, s, String(i + 1), 'tn', 150)}</g>`;
+    }
+    return svg;
+  }
+
+  /** One dimension in the plan: its offset line, witness lines, ticks and the text of each segment. */
+  function dimSvg(d, s, slot) {
+    const picked = S.sel === d.id;
+    const pin = DM.drag?.id === d.id ? DM.drag : DM.held?.id === d.id ? DM.held : null;
+    const horizontal = d.layout.kind === 'horizontal';
+    const vertical = d.layout.kind === 'vertical';
+    const raw = (p) => [mmOfStored(p.x), mmOfStored(p.y)];
+    // A line being dragged, or put and not yet answered, is drawn where it is, not where it was.
+    const onLine = (p) => {
+      const [x, y] = raw(p);
+      return pin && horizontal ? [x, pin.value] : pin && vertical ? [pin.value, y] : [x, y];
+    };
+    const claim = claimedByOther(d.id);
+    const marks =
+      `data-dim="${esc(d.id)}" data-kind="dimension" data-layout="${esc(d.layout.kind)}" ` +
+      `data-line="${horizontal ? mmOfStored(d.layout.y) : vertical ? mmOfStored(d.layout.x) : ''}" ` +
+      `data-values="${esc(d.segments.map((x) => x.text ?? '').join('|'))}" data-warnings="${d.warnings.length}"` +
+      (picked ? ' data-picked="yes"' : '');
+    const witnesses = d.witnesses.map((w) => ({ from: raw(w.from), to: onLine(w.to) }));
+    if (!witnesses.length) {
+      // Nothing of it can be drawn in place: it is listed in the corner, in the server's words, so it can still be picked.
+      const [vx, vy] = VB[S.view];
+      const at = [vx + 300 * s, vy + (500 + slot.lost * 380) * s];
+      slot.lost += 1;
+      const why = d.warnings[0]?.words ?? 'It has nothing to measure.';
+      return `<g class="dim own lost${d.warnings.length ? ' bad' : ''}" ${marks}>${TX(at[0], at[1], s, esc(`Dimension: ${why}`), 'dimt bad', 220, 'start')}</g>`;
+    }
+    // The direction the line runs, as a unit vector that reads left to right, or bottom to top.
+    let [ux, uy] = horizontal ? [1, 0] : vertical ? [0, 1] : [mmOfStored(d.layout.direction.x), mmOfStored(d.layout.direction.y)];
+    const length = Math.hypot(ux, uy) || 1;
+    [ux, uy] = [ux / length, uy / length];
+    if (ux < 0 || (ux === 0 && uy > 0)) [ux, uy] = [-ux, -uy];
+    const along = (p) => p[0] * ux + p[1] * uy;
+    const ends = witnesses.map((w) => w.to).sort((a, b) => along(a) - along(b));
+    const [first, last] = [ends[0], ends.at(-1)];
+    let g = L(first, last, 'ln hv dim-line');
+    const tick = 110 * s;
+    for (const w of witnesses) {
+      g += L(w.from, w.to, 'ln fn dim-w');
+      g += L([w.to[0] - tick, w.to[1] + tick], [w.to[0] + tick, w.to[1] - tick], 'ln hv dim-tick');
+    }
+    // The text sits on the line's upper side, turned to run along it.
+    const [nx, ny] = [uy, -ux];
+    const angle = (Math.atan2(uy, ux) * 180) / Math.PI;
+    for (const segment of d.segments) {
+      if (!segment.text || !segment.middle) continue;
+      const [mx, my] = onLine(segment.middle);
+      const size = segment.text_height ? mmOfStored(segment.text_height) : 250;
+      const [tx, ty] = [mx + nx * 60 * s, my + ny * 60 * s];
+      const turn = ` transform="rotate(${n0(angle)} ${n0(tx)} ${n0(ty)})"`;
+      g += TX(tx, ty, s, esc(segment.text), 'dimt', size, 'middle', ` data-segment="${segment.from}" data-exact="${segment.exact}"${turn}`);
+    }
+    if (d.warnings.length) {
+      g += TX(last[0] + 120 * s, last[1], s, '!', 'dimt bad', 250, 'start', ' data-dim-warning="yes"');
+    }
+    if (claim) g += TX(last[0], last[1] + 330 * s, s, `${esc(claim.name)} editing`, 'claimt', 260);
+    g += PL([first, last], 'dim-hit');
+    return `<g class="dim own${d.warnings.length ? ' bad' : ''}" ${marks}>${g}</g>`;
+  }
+
+  /**
+   * The reference a click means, or null with the reason said: the grid line, the side of a wall
+   * the click is nearest (its two finish faces and its reference line), a hosted element's centre or
+   * the edge the click is nearer. `hit` is the group clicked.
+   */
+  function referenceAt(hit, at) {
+    if (hit.classList.contains('datum')) {
+      if (hit.dataset.kind !== 'grid') {
+        say('A reference plane can’t be dimensioned: pick a grid, a wall, a door or a window.');
+        return null;
+      }
+      return { element: hit.dataset.datum, feature: 'grid.line', name: hit.dataset.name };
+    }
+    const piece = C.elements.get(hit.dataset.id);
+    if (!piece) return null;
+    const name = piece.el.name || piece.el.id;
+    if (piece.el.kind === 'wall') {
+      const feature = wallFeature(piece, at);
+      if (!feature) say('That wall isn’t ready to be dimensioned yet.');
+      return feature && { element: piece.el.id, feature, name };
+    }
+    const hosted = hostOf(piece.el);
+    if (hosted && piece.shape) return { element: piece.el.id, feature: hostedFeature(piece, hosted.host, at), name };
+    say('Pick a wall, a grid, a door or a window to dimension.');
+    return null;
+  }
+
+  /** Which of a wall's two finish faces and its reference line a click at `at` is nearest, across the wall. */
+  function wallFeature(piece, at) {
+    const line = piece.el.recipe.op === LAYERED ? lineOf(piece) : null;
+    let across;
+    let near;
+    if (line) {
+      const { x, y } = piece.el.placement;
+      const p = [at.x - x - line.start[0] / STEPS_PER_MM, at.y - y - line.start[1] / STEPS_PER_MM];
+      across = (p[0] * line.d[1] - p[1] * line.d[0]) / (Math.hypot(line.d[0], line.d[1]) || 1);
+      near = { 'wall.face.exterior': line.exterior / STEPS_PER_MM, 'wall.face.interior': line.interior / STEPS_PER_MM, 'wall.line': 0 };
+    } else if (piece.el.recipe.op !== LAYERED && piece.shape) {
+      // The old box wall: along x its exterior is at its low y, along y at its high x.
+      const box = around(piece);
+      const alongX = box.w >= box.d;
+      across = alongX ? at.y : at.x;
+      const [low, high] = alongX ? [box.y, box.y + box.d] : [box.x, box.x + box.w];
+      near = { 'wall.face.exterior': alongX ? low : high, 'wall.face.interior': alongX ? high : low, 'wall.line': (low + high) / 2 };
+    } else {
+      return null;
+    }
+    return Object.entries(near).sort((a, b) => Math.abs(a[1] - across) - Math.abs(b[1] - across))[0][0];
+  }
+
+  /** The centre of a hosted element, or the edge nearer the wall's start or end, by where along it a click is. */
+  function hostedFeature(piece, host, at) {
+    const box = around(piece);
+    const line = host.el.recipe.op === LAYERED ? lineOf(host) : null;
+    const axis = line ? line.axis : host.el.recipe.args.axis === 'y' ? 1 : host.el.recipe.args.axis === 'x' ? 0 : null;
+    const a = axis ?? (box.w >= box.d ? 0 : 1);
+    const [low, size, here] = a === 0 ? [box.x, box.w, at.x] : [box.y, box.d, at.y];
+    const t = size > 0 ? (here - low) / size : 0.5;
+    if (t > 1 / 3 && t < 2 / 3) return 'centre';
+    const startIsLow = line ? line.unit[a] > 0 : true;
+    return t <= 1 / 3 === startIsLow ? 'edge.start' : 'edge.end';
+  }
+
+  /** The words for a reference the page picked, as the server words a reference. */
+  const pickWords = (pick) => `${FEATURE_WORDS[pick.feature]} ${pick.name}`;
+
+  function dimHint() {
+    if (!C.openView) return '<b>Dimension:</b> open a plan view in the project browser first: a dimension belongs to one view.';
+    if (DM.adding) return '<b>Dimension:</b> pick a wall, grid, door or window to add to it. Esc to stop.';
+    const count = DM.picks.length;
+    if (count < 2) return `<b>Dimension:</b> pick walls, grids, doors or windows, by the side or edge you mean${count ? ` (${count} picked)` : ''}. Esc to stop.`;
+    return `<b>Dimension:</b> ${count} picked. Pick another, or click an empty place to put the line there. Esc to stop.`;
+  }
+
+  function dimClick(event) {
+    if (!canEdit()) {
+      say('Open a model in your team’s WIP to add to it.');
+      return;
+    }
+    if (!C.openView) {
+      say('Open a plan view in the project browser first: a dimension belongs to one view.');
+      return;
+    }
+    const at = toModel(event);
+    const hit = event.target.closest('g.element[data-id], g.datum.own');
+    const found = hit ? referenceAt(hit, at) : null;
+    if (DM.adding) {
+      if (!found) return;
+      const dimension = DM.adding;
+      DM.adding = null;
+      manage('dimension.reference.add', { dimension, reference: { element: found.element, feature: found.feature } }, `dim:${dimension}`);
+    } else if (hit) {
+      if (found && !DM.picks.some((p) => p.element === found.element && p.feature === found.feature)) {
+        DM.picks.push({ ...found, at: [at.x, at.y] });
+      }
+    } else if (DM.picks.length < 2) {
+      say('Pick at least two references first.');
+      return;
+    } else {
+      const horizontal = DM.layout === 'horizontal';
+      const axis = horizontal ? 0 : 1;
+      // In order along the dimension, so each segment is the stretch between neighbours.
+      const picks = DM.picks.slice().sort((a, b) => a.at[axis] - b.at[axis]);
+      const layout = horizontal ? { kind: 'horizontal', y: `${snap(at.y)} mm` } : { kind: 'vertical', x: `${snap(at.x)} mm` };
+      const args = { dimension: newId('DIM'), view: C.openView, layout, references: picks.map(({ element, feature }) => ({ element, feature })) };
+      DM.picks = [];
+      manage('dimension.create', args, 'dim-create');
+    }
+    $('#hint').innerHTML = hint();
+    refreshSide();
+    queueDraw();
+  }
+
+  /** A dimension was picked in the plan: selected, and its line taken up to be dragged. */
+  function pickDimension(id) {
+    if (S.sel !== id) select(id);
+    const d = ownDimension(id);
+    if (!canEdit() || !d || d.layout.kind === 'aligned' || !d.witnesses.length) return;
+    const value = mmOfStored(d.layout.kind === 'horizontal' ? d.layout.y : d.layout.x);
+    DM.held = null;
+    DM.drag = { id, kind: d.layout.kind, start: value, value };
+  }
+
+  /** The line let go: where it is goes to the server once, and it is drawn there until the server answers. */
+  function letGoOfALine() {
+    const drag = DM.drag;
+    if (!drag) return;
+    DM.drag = null;
+    if (drag.value === drag.start) {
+      queueDraw();
+      return;
+    }
+    DM.held = { id: drag.id, value: drag.value, settled: false, after: 0 };
+    manage('dimension.move', { dimension: drag.id, line: `${drag.value} mm` }, `dim:${drag.id}`, () => {
+      if (DM.held?.id !== drag.id) return;
+      DM.held.settled = true;
+      DM.held.after = DM.fetches;
+      dimsChanged();
+    });
+    queueDraw();
+  }
+
+  // In the plan, before the elements' own handlers: the dimension tool's picks, a reference being added,
+  // and a pick of a dimension.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      if (S.tool === 'dim' || (DM.adding && S.tool === 'select')) {
+        event.stopPropagation();
+        dimClick(event);
+        return;
+      }
+      const hit = S.tool === 'select' && event.target.closest('g.dim.own');
+      if (!hit) return;
+      event.stopPropagation();
+      pickDimension(hit.dataset.dim);
+    },
+    true,
+  );
+  window.addEventListener('pointermove', (event) => {
+    if (!DM.drag || !$('#pv-canvas svg')) return;
+    const at = toModel(event);
+    DM.drag.value = snap(DM.drag.kind === 'horizontal' ? at.y : at.x);
+    queueDraw();
+  });
+  window.addEventListener('pointerup', letGoOfALine);
+  window.addEventListener('pointercancel', letGoOfALine);
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || (!DM.adding && !DM.picks.length)) return;
+    DM.adding = null;
+    DM.picks = [];
+    queueDraw();
+    refreshSide();
+  });
+
+  /** What the properties palette shows while the dimension tool is in hand. */
+  function dimToolHtml() {
+    let html = typeSel('dim', 'Dimension', '<b>New dimension</b>');
+    if (!C.openView) return `${html}<p class="pad small faint" data-dim-tool="no-view">Open a plan view in the project browser first: a dimension belongs to one view.</p>`;
+    const option = (value, text) => `<option value="${value}"${DM.layout === value ? ' selected' : ''}>${text}</option>`;
+    html += '<table class="props">';
+    html += prow('Direction', `<select class="inp" data-chg="stackdimlayout" data-key="dim-layout" aria-label="Direction of the dimension">${option('horizontal', 'Horizontal')}${option('vertical', 'Vertical')}</select>`);
+    const picked = DM.picks.map((pick) => `<li>${esc(pickWords(pick))}</li>`).join('');
+    html += prow('Picked', picked ? `<ol class="pad" data-dim-picks>${picked}</ol>` : 'Nothing yet');
+    html += '</table>';
+    if (DM.picks.length) html += '<div class="pad"><button class="btn sm" data-act="stackdimclear">Clear the picks</button></div>';
+    html += '<p class="pad small muted">Pick two or more walls (the face or the reference line nearer your click), grids, doors or windows (the centre, or the edge nearer your click), then click where the line goes.</p>';
+    return html + problem('dim-create');
+  }
+
+  CHG.stackdimlayout = (select) => {
+    DM.layout = select.value;
+    refreshSide();
+  };
+  ACT.stackdimclear = () => {
+    DM.picks = [];
+    $('#hint').innerHTML = hint();
+    refreshSide();
+    queueDraw();
+  };
+
+  /** What the properties palette shows of a selected dimension. */
+  function dimProperties(d) {
+    const claim = heldClaim(d.id);
+    const kinds = { horizontal: 'Horizontal', vertical: 'Vertical', aligned: 'Aligned' };
+    const where = d.layout.kind === 'horizontal' ? `y ${typedLength(d.layout.y)}` : d.layout.kind === 'vertical' ? `x ${typedLength(d.layout.x)}` : 'Along its direction';
+    let html = typeSel('dim', 'Dimension', `<b>${esc(d.overall_text ?? 'No value')}</b>`);
+    html += `<table class="props">${prow('Direction', esc(kinds[d.layout.kind] ?? d.layout.kind))}${prow('Line', `<span class="mono">${esc(where)}</span>`)}`;
+    for (const [i, segment] of d.segments.entries()) {
+      html += prow(`Segment ${i + 1}`, `<span data-dim-segment="${i}">${esc(segment.text ?? 'No value')}</span>${segment.value && !segment.exact ? ' <span class="small faint">(nearest step)</span>' : ''}`);
+    }
+    if (d.segments.length > 1) html += prow('Overall', `<span data-dim-overall>${esc(d.overall_text ?? 'No value')}</span>`);
+    const items = d.references.map((reference, i) => {
+      const off = canEdit() && d.references.length > 2 ? '' : ' disabled';
+      const remove = canEdit() ? ` <button class="btn sm" data-act="stackdimremove" data-a="${i}" data-key="dim-remove:${i}" aria-label="Take out ${esc(reference.words)}"${off}>Remove</button>` : '';
+      return `<li data-dim-reference="${i}">${esc(reference.words)}${reference.usable ? '' : ' <span class="small faint">(not usable)</span>'}${remove}</li>`;
+    });
+    html += prow('References', `<ol class="pad" data-dim-references>${items.join('')}</ol>`);
+    for (const equal of d.equalities) {
+      const state = equal.equal === null ? 'not known' : equal.equal ? 'equal' : 'not equal now';
+      html += prow('Held equal', `segments ${esc(equal.segments.map((n) => n + 1).join(', '))}: ${state}`);
+    }
+    if (d.warnings.length) html += prow('Warnings', `<ul class="pad" data-dim-warnings>${d.warnings.map((w) => `<li class="note bad small" data-warning="${esc(w.kind)}">${esc(w.words)}</li>`).join('')}</ul>`);
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    if (canEdit()) {
+      html += '<div class="pad"><button class="btn sm" data-act="stackdimadd" data-key="dim-add">Add a reference</button>';
+      if (d.segments.length > 1) html += ' <button class="btn sm" data-act="stackdimequal" data-key="dim-equal">Hold the segments equal</button>';
+      if (d.equalities.length) html += ' <button class="btn sm" data-act="stackdimunequal" data-key="dim-unequal">Let them differ</button>';
+      html += '</div><p class="pad small faint">Drag its line to move it. Delete removes it.</p>';
+    }
+    return html + problem(`dim:${d.id}`);
+  }
+
+  ACT.stackdimadd = () => {
+    if (!canEdit() || !ownDimension(S.sel)) return;
+    DM.adding = S.sel;
+    $('#hint').innerHTML = hint();
+    refreshSide();
+  };
+  ACT.stackdimremove = (button) => {
+    if (!canEdit() || !ownDimension(S.sel)) return;
+    manage('dimension.reference.remove', { dimension: S.sel, at: Number(button.dataset.a) }, `dim:${S.sel}`);
+  };
+  ACT.stackdimequal = () => {
+    const d = ownDimension(S.sel);
+    if (!canEdit() || !d) return;
+    manage('dimension.equal', { dimension: d.id, groups: [d.segments.map((_, i) => i)] }, `dim:${d.id}`);
+  };
+  ACT.stackdimunequal = () => {
+    const d = ownDimension(S.sel);
+    if (!canEdit() || !d) return;
+    manage('dimension.equal', { dimension: d.id, groups: [] }, `dim:${d.id}`);
+  };
+
+  const deleteBelow = ACT.stackdelete;
+  ACT.stackdelete = () => {
+    const d = ownDimension(S.sel);
+    if (!d) {
+      deleteBelow();
+      return;
+    }
+    if (!canEdit()) return;
+    manage('dimension.delete', { dimension: d.id }, `dim:${d.id}`);
+    S.sel = null;
+    refresh();
+  };
+
+  /** The ribbon: Delete for a selected dimension. */
+  function dimRibbon(config) {
+    const d = ownDimension(S.sel);
+    if (!d || !canEdit() || S.screen !== 'plan') return;
+    config.contextual?.push({
+      id: 'sel',
+      key: `sel:${S.sel}`,
+      group: 'Modify',
+      label: 'Dimensions',
+      panels: [
+        { label: 'Dimensions', items: [{ label: 'Delete', icon: 'del', act: 'stackdelete', kbd: 'Delete' }] },
+        { label: 'Selection', items: [{ label: 'Deselect', icon: 'x', act: 'deselect' }] },
+      ],
+    });
+  }
+
+  // --- Curtain walls: the Curtain Wall tool, a curtain wall in the plan and its properties ---
+  // A curtain wall is drawn between two clicked points, as a wall is, from the plan's level to the
+  // level above it or a height (`curtain.draw`), or embedded in a wall by picking that wall
+  // (`curtain.embed`: the side clicked, how far along, its length and height typed in the palette,
+  // construct-model's FORMAT.md, "Curtain walls"). Its type is chosen in the palette from the
+  // model's curtain wall types (`/curtain-types`; where a model has none the page has the server
+  // make its default ones through the log, `curtain.defaults`). A selected curtain wall shows its
+  // type (`curtain.retype`), what the server works out of it read-only (length, height, area,
+  // panels and their area, glazed area, mullions and their length), its grid as the server laid it
+  // out (`/filled/<element>`: every line and every panel) and edits it a command at a time: a grid
+  // line added or removed (`curtain.grid.add`, `curtain.grid.remove`), a segment of a line left out
+  // or kept again (`curtain.segment.omit`, `curtain.segment.restore`), the panel of a cell swapped
+  // (`curtain.panel`: glazed, solid, empty, a door of the library, or its type's own), and Delete
+  // (`curtain.delete`). The page works out no grid and checks nothing: it names lines and cells by
+  // the exact text the server gave, and a refusal is the server's words under the controls. In the
+  // plan and in 3D a curtain wall is the panels and mullions its display lists, each in its
+  // material's colour; one embedded in a wall stands where the server seats it (the filled recipe
+  // and `placement` it answers with), and the wall is built with the opening it cuts.
+
+  const CURTAIN_OP = 'wall.curtain';
+  const isCurtain = (record) => record?.kind === 'curtain' && record?.recipe?.op === CURTAIN_OP && record?.recipe?.owner === 'construct';
+  const SEATED = new Map(); // an embedded curtain wall's ID -> where the server seats its record
+  C.curtainTypes = null; // { key, view } of the open model
+  C.curtainTool = { mode: 'draw', type: null, top: undefined, height: '3000 mm', length: '2400', embedHeight: '2100 mm', up: '0 mm', direction: 'vertical', glazing: null, solid: null };
+  C.madeCurtainDefaults = null; // the model the default curtain wall types were asked for
+
+  DTOOLS.architecture.push(['curtain', 'Curtain Wall', 'wall', 'Pick the two ends of a curtain wall, or choose to embed it and pick a wall.']);
+  TOOLNAME.curtain = 'curtain wall';
+  Object.assign(WORDS, {
+    'curtain.draw': 'drew a curtain wall',
+    'curtain.embed': 'embedded a curtain wall in a wall:',
+    'curtain.retype': 'changed the type of',
+    'curtain.grid.add': 'added a grid line to',
+    'curtain.grid.remove': 'removed a grid line from',
+    'curtain.segment.omit': 'left out a segment of',
+    'curtain.segment.restore': 'kept a segment of',
+    'curtain.panel': 'swapped a panel of',
+    'curtain.delete': 'deleted',
+    'curtain.defaults': 'made the default curtain wall types',
+    'curtain.type.create': 'made a curtain wall type',
+    'curtain.type.spec': 'changed a curtain wall type',
+    'curtain.type.rename': 'renamed a curtain wall type',
+    'curtain.type.duplicate': 'copied a curtain wall type',
+    'curtain.type.delete': 'deleted a curtain wall type',
+  });
+  Object.assign(STEP_WORDS, {
+    'curtain.draw': 'drawing a curtain wall',
+    'curtain.embed': 'embedding a curtain wall',
+    'curtain.retype': 'a change of a curtain wall’s type',
+    'curtain.grid.add': 'adding a grid line',
+    'curtain.grid.remove': 'removing a grid line',
+    'curtain.segment.omit': 'leaving out a segment',
+    'curtain.segment.restore': 'keeping a segment',
+    'curtain.panel': 'swapping a panel',
+    'curtain.delete': 'deleting a curtain wall',
+    'curtain.defaults': 'making the default curtain wall types',
+    'curtain.type.create': 'making a curtain wall type',
+    'curtain.type.spec': 'a curtain wall type’s grid',
+    'curtain.type.rename': 'renaming a curtain wall type',
+    'curtain.type.duplicate': 'copying a curtain wall type',
+    'curtain.type.delete': 'deleting a curtain wall type',
+  });
+
+  /** The ribbon: the curtain wall tool beside the roof tool, in the Build panel. */
+  function curtainRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:curtain')) return;
+    const after = build.items.findIndex((item) => item.a === 'architecture:roof');
+    const wall = build.items.findIndex((item) => item.a === 'architecture:wall');
+    build.items.splice((after >= 0 ? after : wall) + 1, 0, DT_('architecture', 'curtain'));
+  }
+
+  /** The open model's curtain wall types, their grids and parts, and the materials; null until they have come. */
+  function curtainTypes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}`;
+    if (C.curtainTypes?.key !== key && C.curtainTypesLoading !== key) {
+      C.curtainTypesLoading = key;
+      api(`${modelUrl(model)}/curtain-types`)
+        .then((view) => {
+          C.curtainTypes = { key, view };
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.curtainTypes?.key.startsWith(`${model}/`) ? C.curtainTypes.view : null;
+  }
+
+  /** The open model's curtain wall types, read now if they have not come yet. */
+  async function curtainTypesNow() {
+    const view = curtainTypes();
+    if (view) return view;
+    const model = C.model.id;
+    const fresh = await api(`${modelUrl(model)}/curtain-types`);
+    C.curtainTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+    return fresh;
+  }
+
+  const chosenCurtainType = (view) => view.types.find((t) => t.id === C.curtainTool.type) ?? view.types[0] ?? null;
+
+  /** Has the server make its default curtain wall types, once for a model, where it has none. */
+  function makeDefaultCurtains() {
+    if (!canEdit() || C.madeCurtainDefaults === C.model.id) return;
+    C.madeCurtainDefaults = C.model.id;
+    manage('curtain.defaults', {}, 'curtain-draw');
+  }
+
+  /** A layout as a sentence, from what the server listed. */
+  function layoutWords(layout) {
+    if (layout.layout === 'spacing') return `Every ${layout.spacing}, from the ${layout.justify}`;
+    if (layout.layout === 'count') return `${plural(layout.count, 'equal panel')}`;
+    if (layout.layout === 'most') return `Panels at most ${layout.spacing} wide`;
+    return 'None';
+  }
+
+  function curtainToolHtml() {
+    let html = typeSel('wall', 'Curtain wall', '<b>New curtain wall</b>');
+    const view = curtainTypes();
+    if (!view) return `${html}<p class="pad small faint">Loading the curtain wall types.</p>`;
+    if (!view.types.length) {
+      queueMicrotask(makeDefaultCurtains);
+      return `${html}<p class="pad small faint" data-curtain-tool="making">This model has no curtain wall types yet, so the default ones are being made.</p>${problem('curtain-draw')}`;
+    }
+    const chosen = chosenCurtainType(view);
+    const levels = modelLevels() || [];
+    const here = levelOf();
+    const embed = C.curtainTool.mode === 'embed';
+    const modes = [['draw', 'Draw on a line'], ['embed', 'Embed in a wall']]
+      .map(([id, name]) => `<option value="${id}"${id === C.curtainTool.mode ? ' selected' : ''}>${name}</option>`);
+    const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+    const field = (key, label, value) => `<input class="inp" data-chg="stackcurtaintool" data-a="${key}" data-key="curtain-${key}" value="${esc(value)}" aria-label="${esc(label)}">`;
+    html += '<table class="props" data-curtain-tool="options">';
+    html += prow('Place', `<select class="inp" data-chg="stackcurtainmode" data-key="curtain-mode" aria-label="How the curtain wall is placed">${modes.join('')}</select>`);
+    html += prow('Type', `<select class="inp" data-chg="stackcurtaintype" data-key="curtain-type" aria-label="Curtain wall type">${types.join('')}</select>`);
+    html += prow('Vertical lines', esc(layoutWords(chosen.spec.vertical)));
+    html += prow('Horizontal lines', esc(layoutWords(chosen.spec.horizontal)));
+    html += prow('Panel', esc(`${capital(chosen.spec.panel.kind)}${chosen.spec.panel.thickness ? `, ${chosen.spec.panel.thickness}` : ''}`));
+    if (embed) {
+      html += prow('Length (mm)', field('length', 'Length of the curtain wall in mm', C.curtainTool.length));
+      html += prow('Height', field('embedHeight', 'Height of the curtain wall', C.curtainTool.embedHeight));
+      html += prow('Up from its wall’s base', field('up', 'How far up its wall the curtain wall starts', C.curtainTool.up));
+    } else {
+      const top = wallTop(levels);
+      const tops = levels
+        .filter((level) => level.id !== here)
+        .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+      tops.push(`<option value=""${top === '' ? ' selected' : ''}>A height</option>`);
+      html += prow('Base', esc(levels.find((level) => level.id === here)?.name ?? here));
+      html += prow('Top', `<select class="inp" data-chg="stackwalltop" data-key="curtain-top" aria-label="Top of the curtain wall">${tops.join('')}</select>`);
+      if (top === '') html += prow('Height', field('height', 'Height of the curtain wall', C.curtainTool.height));
+    }
+    html += '</table>';
+    html += embed
+      ? '<p class="pad small muted">Click on a wall. The side you click is the side it goes on, and the click is the middle of the curtain wall.</p>'
+      : '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right.</p>';
+    return html + problem('curtain-draw');
+  }
+
+  CHG.stackcurtainmode = (select) => {
+    C.curtainTool.mode = select.value;
+    S.pend = null;
+    $('#hint').innerHTML = hint();
+    refreshSide();
+  };
+  CHG.stackcurtaintype = (select) => {
+    C.curtainTool.type = select.value;
+    refreshSide();
+  };
+  CHG.stackcurtaintool = (input) => {
+    C.curtainTool[input.dataset.a] = input.value;
+  };
+
+  function curtainHint() {
+    if (C.curtainTool.mode === 'embed') return '<b>Curtain wall:</b> click on a wall to embed one in it. Esc to stop.';
+    return S.pend ? '<b>Curtain wall:</b> pick the end point. Esc to stop.' : '<b>Curtain wall:</b> pick a start point. Choose its type in the properties palette.';
+  }
+
+  /** The tool's click: the second point of a curtain wall's line, or the wall it is embedded in. */
+  async function placeCurtain(at) {
+    if (C.curtainTool.mode === 'embed') {
+      await embedCurtain(at);
+      return;
+    }
+    const point = [snap(at.x), snap(at.y)];
+    if (!S.pend) {
+      S.pend = point;
+      $('#hint').innerHTML = hint();
+      return;
+    }
+    const [ax, ay] = S.pend;
+    S.pend = null;
+    $('#hint').innerHTML = hint();
+    const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
+    const end = along ? [point[0], ay] : [ax, point[1]];
+    let view;
+    try {
+      view = await curtainTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const args = { element: newId('CW'), start: [`${ax} mm`, `${ay} mm`], end: [`${end[0]} mm`, `${end[1]} mm`], level: levelOf() };
+    const type = chosenCurtainType(view);
+    if (type) args.type = type.id;
+    const top = wallTop(modelLevels());
+    if (top === '') args.height = C.curtainTool.height;
+    else args.top = top;
+    manage('curtain.draw', args, 'curtain-draw');
+  }
+
+  /** Embeds a curtain wall in the layered wall under the click: the side clicked, its middle at the click. */
+  async function embedCurtain(at) {
+    // The layered wall nearest the click among those it is on (within the margin the door tool
+    // gives): a wall is its line and its thickness, at any angle (piece A83), not the box round it,
+    // so a neighbour's box or margin never takes the click.
+    let wall = null;
+    let nearest = Infinity;
+    for (const piece of C.elements.values()) {
+      const line = piece.el.recipe.op === LAYERED && piece.shape ? lineOf(piece) : null;
+      if (!line) continue;
+      const { x, y } = piece.el.placement;
+      const p = [at.x - x - line.start[0] / STEPS_PER_MM, at.y - y - line.start[1] / STEPS_PER_MM];
+      const length = Math.hypot(line.d[0], line.d[1]);
+      const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+      const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+      const [low, high] = [line.exterior, line.interior].map((offset) => offset / STEPS_PER_MM).sort((m, n) => m - n);
+      if (alongIt < -300 || alongIt > length / STEPS_PER_MM + 300 || right < low - 300 || right > high + 300) continue;
+      const away = Math.abs(right - (low + high) / 2);
+      if (away < nearest) [wall, nearest] = [piece, away];
+    }
+    if (!wall) {
+      say('Click on a wall to embed a curtain wall in it.');
+      return;
+    }
+    const width = Number.parseFloat(C.curtainTool.length);
+    if (!Number.isFinite(width)) {
+      say('Type its length in millimetres in the palette first.');
+      return;
+    }
+    const spot = onWall(wall, at, width);
+    if (!spot) {
+      say('That wall has no side to embed a curtain wall in.');
+      return;
+    }
+    let view;
+    try {
+      view = await curtainTypesNow();
+    } catch (error) {
+      say(error.message);
+      return;
+    }
+    const args = {
+      element: newId('CW'),
+      host: wall.el.id,
+      side: spot.exterior ? 'exterior' : 'interior',
+      along: `${spot.offset} mm`,
+      up: C.curtainTool.up,
+      length: `${width} mm`,
+      height: C.curtainTool.embedHeight,
+    };
+    const type = chosenCurtainType(view);
+    if (type) args.type = type.id;
+    manage('curtain.embed', args, 'curtain-draw');
+  }
+
+  /** The door families of the library, with their types: what a panel can be swapped to. */
+  const doorFamilies = () => (library() || []).filter((family) => family.kind === 'door');
+
+  /** The panel a swap to `kind` sends: the wall's type's thickness, in the material chosen for it. */
+  function infillFor(kind, view, type) {
+    const spec = type?.spec.panel.thickness ? type.spec.panel : view.defaults[0]?.spec?.panel;
+    if (!spec) return null;
+    const glass = spec.kind === 'glazed' ? spec.material : view.materials.find((m) => m.id === 'glass-plate')?.id ?? view.materials[0]?.id;
+    const solid = view.materials.find((m) => m.id !== glass)?.id ?? glass;
+    const material = (kind === 'glazed' ? C.curtainTool.glazing ?? glass : C.curtainTool.solid ?? solid);
+    return { kind, thickness: spec.thickness, offset: spec.offset, material };
+  }
+
+  /** The value of a panel's swap list for a panel the server listed. */
+  function panelChoice(panel) {
+    if (!panel.swapped) return 'type';
+    if (panel.kind !== 'door') return panel.kind;
+    const family = doorFamilies().find((f) => f.content === panel.door[0]);
+    return family ? `door:${family.id}:${panel.door[1]}` : `door:${panel.door[0]}:${panel.door[1]}`;
+  }
+
+  /** What a swap list's value sends as the panel; null is the type's own. */
+  function panelFor(choice, view, type) {
+    if (choice === 'type') return null;
+    if (choice === 'empty') return { kind: 'empty' };
+    if (choice.startsWith('door:')) {
+      const [, family, ...key] = choice.split(':');
+      return { kind: 'door', family, type: key.join(':') };
+    }
+    return infillFor(choice, view, type);
+  }
+
+  /** The panels' swap lists and the grid's lines, for a selected curtain wall. */
+  function curtainGrid(piece, view, types) {
+    const grid = piece.fill?.curtain;
+    if (!grid) return '';
+    const own = view?.type?.id;
+    const type = types?.types.find((t) => t.id === own) ?? null;
+    let html = '<span class="lbl">Grid lines</span><table class="props" data-curtain-lines>';
+    for (const line of grid.lines.filter((l) => !l.border)) {
+      const remove = `<button class="btn sm" data-act="stackcurtainremove" data-d="${line.direction}" data-at="${esc(line.at)}" aria-label="Remove the ${line.direction} line at ${esc(line.shown)}">Remove</button>`;
+      html += prow(esc(capital(line.direction)), `<span class="mono" data-curtain-line="${line.direction}:${esc(line.at)}">${esc(line.shown)}</span>${line.added ? ' <span class="faint">added</span>' : ''} ${remove}`);
+    }
+    html += '</table>';
+    const directions = ['vertical', 'horizontal']
+      .map((d) => `<option value="${d}"${d === C.curtainTool.direction ? ' selected' : ''}>${capital(d)}</option>`);
+    html += '<table class="props">';
+    html += prow('Add a line', `<select class="inp" data-chg="stackcurtaindirection" data-key="curtain-line-direction" aria-label="Direction of the new line">${directions.join('')}</select>`);
+    html += prow('At', `<input class="inp" data-chg="stackcurtainadd" data-key="curtain-line-at" placeholder="1200 mm" aria-label="Where the new line stands: along the wall, or up it">`);
+    html += '</table>';
+    html += '<span class="lbl">Segments</span><table class="props" data-curtain-segments>';
+    for (const line of grid.lines.filter((l) => !l.border)) {
+      const chips = line.segments
+        .map((s) => `<button class="btn sm" data-act="stackcurtainsegment" data-d="${line.direction}" data-at="${esc(line.at)}" data-from="${esc(s.from)}" data-omitted="${s.omitted ? 1 : 0}" aria-pressed="${s.omitted}" aria-label="${s.omitted ? 'Keep' : 'Leave out'} the segment of the ${line.direction} line at ${esc(line.shown)} that ends at ${esc(s.to)}">${s.omitted ? 'Left out to ' : 'To '}${esc(s.to)}</button>`)
+        .join(' ');
+      html += prow(`${esc(capital(line.direction))} ${esc(line.shown)}`, chips);
+    }
+    html += '</table>';
+    if (types) {
+      const materials = types.materials.map((m) => m.id);
+      const pick = (chosen) => materials
+        .map((id) => `<option value="${esc(id)}"${id === chosen ? ' selected' : ''}>${esc(materialName(types, id))}</option>`)
+        .join('');
+      const glazing = infillFor('glazed', types, type)?.material;
+      const solid = infillFor('solid', types, type)?.material;
+      html += '<span class="lbl">Panels</span><table class="props">';
+      html += prow('Glazed with', `<select class="inp" data-chg="stackcurtainmaterial" data-a="glazing" data-key="curtain-glazing" aria-label="Material of a glazed panel">${pick(glazing)}</select>`);
+      html += prow('Solid with', `<select class="inp" data-chg="stackcurtainmaterial" data-a="solid" data-key="curtain-solid" aria-label="Material of a solid panel">${pick(solid)}</select>`);
+      html += '</table><table class="props" data-curtain-panels>';
+      const doors = doorFamilies().flatMap((family) => family.types.map((t) => [`door:${family.id}:${t.key}`, `Door: ${family.name}, ${t.name}`]));
+      const options = [['type', 'The type’s panel'], ['glazed', 'Glazed'], ['solid', 'Solid'], ['empty', 'Empty'], ...doors];
+      for (const panel of grid.panels) {
+        const chosen = panelChoice(panel);
+        const list = options.some(([id]) => id === chosen) ? options : [...options, [chosen, 'A door']];
+        const choices = list.map(([id, name]) => `<option value="${esc(id)}"${id === chosen ? ' selected' : ''}>${esc(name)}</option>`).join('');
+        const where = `${panel.shown[0]}, ${panel.shown[1]}`;
+        html += prow(`<span class="mono">${esc(where)}</span>`, `<select class="inp" data-chg="stackcurtainpanel" data-along="${esc(panel.at[0])}" data-up="${esc(panel.at[1])}" data-key="curtain-panel:${esc(panel.at[0])}:${esc(panel.at[1])}" aria-label="Panel at ${esc(where)}, ${esc(panel.width)} by ${esc(panel.height)}">${choices}</select>`, `${esc(panel.width)} × ${esc(panel.height)}`);
+      }
+      html += '</table>';
+    }
+    if (grid.unused.length) html += `<p class="pad small muted" data-curtain-unused>${esc(grid.unused.join(' '))}</p>`;
+    return html;
+  }
+
+  /** What the properties palette shows of a selected curtain wall. */
+  function curtainProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const types = curtainTypes();
+    const claim = heldClaim(e.id);
+    const editable = canEdit();
+    let html = typeSel('wall', 'Curtain wall', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-curtain-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None'));
+    if (types && editable) {
+      const options = types.types.map((t) => `<option value="${esc(t.id)}"${t.id === view?.type?.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+      html += prow('Type', `<select class="inp" data-chg="stackcurtainretype" data-key="curtain-own-type" aria-label="Curtain wall type">${options.join('')}</select>`);
+    } else if (view) {
+      html += prow('Type', esc(view.type?.name || 'None'));
+    }
+    html += prow('Level', esc(levelName(e)));
+    for (const host of e.references) html += prow('Embedded in', esc(host.element));
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    html += problem('curtain-edit');
+    if (view) html += readOnlyTable(view);
+    if (editable) html += curtainGrid(piece, view, types);
+    if (view) html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    if (editable) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="curtain-delete">Delete curtain wall</button></div>';
+    return html;
+  }
+
+  /** The properties palette's curtain wall part: the tool's options, or a selected curtain wall; '' for anything else. */
+  function curtainPalette(piece) {
+    if (S.tool === 'curtain' && canEdit()) return curtainToolHtml();
+    if (piece && isCurtain(piece.el) && !(S.tool === 'wall' && canEdit())) return curtainProperties(piece);
+    return '';
+  }
+
+  CHG.stackcurtainretype = (select) => {
+    if (S.sel) manage('curtain.retype', { element: S.sel, type: select.value }, 'curtain-edit');
+  };
+  CHG.stackcurtaindirection = (select) => {
+    C.curtainTool.direction = select.value;
+  };
+  CHG.stackcurtainadd = (input) => {
+    if (!S.sel || !input.value.trim()) return;
+    manage('curtain.grid.add', { element: S.sel, direction: C.curtainTool.direction, at: input.value }, 'curtain-edit');
+    input.value = '';
+    input.blur();
+  };
+  CHG.stackcurtainmaterial = (select) => {
+    C.curtainTool[select.dataset.a] = select.value;
+    refreshSide();
+  };
+  CHG.stackcurtainpanel = (select) => {
+    const types = curtainTypes();
+    const piece = C.elements.get(S.sel);
+    if (!types || !piece) return;
+    const own = paramsFor(piece)?.type?.id;
+    const type = types.types.find((t) => t.id === own) ?? null;
+    manage('curtain.panel', { element: S.sel, at: [select.dataset.along, select.dataset.up], panel: panelFor(select.value, types, type) }, 'curtain-edit');
+  };
+  ACT.stackcurtainremove = (button) => {
+    if (S.sel) manage('curtain.grid.remove', { element: S.sel, direction: button.dataset.d, at: button.dataset.at }, 'curtain-edit');
+  };
+  ACT.stackcurtainsegment = (button) => {
+    if (!S.sel) return;
+    const cmd = button.dataset.omitted === '1' ? 'curtain.segment.restore' : 'curtain.segment.omit';
+    manage(cmd, { element: S.sel, direction: button.dataset.d, at: button.dataset.at, from: button.dataset.from }, 'curtain-edit');
+  };
+
   // --- The plan viewport ---
 
   function plan() {
@@ -4708,8 +5840,11 @@
     if (C.readOnly) return 'A package is a fixed version: look, but it doesn’t change.';
     if (!C.model) return 'Pick a package from a Shared or Consumed folder to view it.';
     if (S.tool === 'grid') return gridHint();
+    if (S.tool === 'dim' || DM.adding) return dimHint();
     if (S.tool === 'floor' || S.tool === 'roof') return floorHint();
+    if (S.tool === 'stair') return stairHint();
     if (S.tool === 'room') return '<b>Room:</b> click inside a loop of walls. Choose its name, number and upper limit in the properties palette. Esc to stop.';
+    if (S.tool === 'curtain') return curtainHint();
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
     if (S.tool === 'family') return '<b>Family:</b> choose a family and a type in the properties palette, then click on a wall to place it.';
@@ -4730,7 +5865,7 @@
   function propertiesPalette() {
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
-    const floor = floorPalette(piece) || roofPalette(piece);
+    const floor = floorPalette(piece) || roofPalette(piece) || stairPalette(piece) || curtainPalette(piece);
     const room = roomPalette(piece);
     if (floor) {
       html += floor;
@@ -4742,6 +5877,8 @@
       html += familyToolHtml();
     } else if ((S.tool === 'opening' || RECT_TOOLS.includes(S.tool)) && canEdit()) {
       html += openingToolHtml();
+    } else if (S.tool === 'dim' && canEdit()) {
+      html += dimToolHtml();
     } else if (piece) {
       const { el: e, shape, failed } = piece;
       const claim = heldClaim(e.id);
@@ -4768,6 +5905,8 @@
       if (isVoid(e)) html += voidProperties(piece);
       if (view?.parameters.length) html += parametersTable(view);
       if (view) html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    } else if (ownDimension(S.sel)) {
+      html += dimProperties(ownDimension(S.sel));
     } else if (ownDatum(S.sel)) {
       html += datumProperties(ownDatum(S.sel));
     } else {
@@ -4848,6 +5987,10 @@
         shapes += roofInPlan(piece, data, scale);
         continue;
       }
+      if (isStair(e)) {
+        shapes += stairInPlan(piece, data, scale);
+        continue;
+      }
       const paint = e.kind === 'wall' ? 'wall' : e.kind === 'door' || e.kind === 'window' ? 'ln ap af' : 'ln sf';
       const box = around(piece);
       let group = S.sel === e.id ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
@@ -4866,6 +6009,7 @@
       }
       shapes += `<g ${data}>${group}</g>`;
     }
+    shapes += dimensionsSvg(scale); // dimensions, over the elements they measure
     shapes += floorSketch();
     shapes += rectSketch();
     const underDrawing = C.drawn?.svg && C.drawn.view === C.openView ? ' drawn' : '';
@@ -4919,7 +6063,7 @@
    * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
    * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
    */
-  async function placeWall(at) {
+  async function placeWall(at, anyAngle = false) {
     const point = [snap(at.x), snap(at.y)];
     if (!S.pend) {
       S.pend = point;
@@ -4929,8 +6073,9 @@
     const [ax, ay] = S.pend;
     S.pend = null;
     $('#hint').innerHTML = hint();
+    // A wall runs along x or y, whichever is nearer the pointer; with Shift held, to the point itself, at any angle.
     const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
-    const end = along ? [point[0], ay] : [ax, point[1]];
+    const end = anyAngle ? point : along ? [point[0], ay] : [ax, point[1]];
     const level = levelOf();
     let view;
     try {
@@ -4985,14 +6130,7 @@
   }
 
   function placeDoor(at) {
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.kind !== 'wall' || !piece.shape) return false;
-      const box = around(piece);
-      return (
-        at.x >= box.x - 300 && at.x <= box.x + box.w + 300 &&
-        at.y >= box.y - 300 && at.y <= box.y + box.d + 300
-      );
-    });
+    const wall = wallAt(at);
     if (!wall) {
       say('Click on a wall to place a door.');
       return;
@@ -5033,7 +6171,9 @@
       const at = toModel(event);
       if (S.tool !== 'select') {
         if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
-        else if (S.tool === 'wall') placeWall(at);
+        else if (S.tool === 'wall') placeWall(at, event.shiftKey);
+        else if (S.tool === 'stair') placeStair(at);
+        else if (S.tool === 'curtain') placeCurtain(at);
         else if (S.tool === 'door') placeDoor(at);
         else if (S.tool === 'family') placeFamily(at);
         else if (S.tool === 'opening') placeOpening(at);
@@ -5054,14 +6194,14 @@
         say(`${claim.name} is working on this.`);
         return;
       }
-      if (isRoom(C.elements.get(id)?.el)) return; // a room is picked, not dragged: its point moves by room.move
+      if (isRoom(C.elements.get(id)?.el) || isStair(C.elements.get(id)?.el)) return; // a room or a stair is picked, not dragged: a room's point moves by room.move, a stair by stair.direction
       const { el } = C.elements.get(id);
       const placement = placementOf(el);
       edit('element.claim', { element: id });
       // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
       const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
       // A floor opening and a shaft are moved by their outline in the palette, never dragged.
-      drag = isVoid(el) && !hosted ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
+      drag = (isVoid(el) && !hosted) || (isCurtain(el) && hosted) ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
     });
 
     window.addEventListener('pointermove', (event) => {
@@ -5077,7 +6217,10 @@
         const offset = alongOn(hosted.host, piece.el, x, y);
         if (offset === null || storedMm(piece.el.props['@host.along']) === offset) return;
         const props = { ...piece.el.props, '@host.along': `length:q0:${offset * 6400}` };
+        // The shape of what is hosted in a wall at an angle depends on where it is along it, so a
+        // piece moved ahead of the log is not compared with a checkpoint from before the move.
         piece.el = { ...piece.el, props };
+        piece.ahead = true;
         drag.along = offset;
         queueDraw();
         return;
@@ -5280,9 +6423,39 @@
     C.familyTool.type = select.value;
   };
 
-  /** The library's family a placed one's record names, by its recipe's content id. */
+  /** Reads the families again: what the document holds, placed or made has changed, or may have. */
+  function reloadLibrary() {
+    const model = C.model?.id;
+    if (!model) return;
+    C.libraryAsked = (C.libraryAsked ?? 0) + 1;
+    const asked = C.libraryAsked;
+    api(`${modelUrl(model)}/families`)
+      .then((list) => {
+        if (C.libraryAsked !== asked || C.model?.id !== model) return;
+        C.library = { model, list };
+        refreshSide();
+      })
+      .catch(() => {});
+  }
+
+  /** The family a placed one's record names: by the permanent id it carries, else by its recipe's content id. */
   function familyOf(record) {
-    return library()?.find((family) => family.content === record.recipe.args.family) ?? null;
+    const id = record.recipe.args.family_id;
+    const list = library();
+    return (id && list?.find((family) => family.id === id)) || list?.find((family) => family.content === record.recipe.args.family) || null;
+  }
+
+  /** Every other type a placed door or window of `family` may be swapped to: the same kind, any family of the list. */
+  function swapOptions(family, current) {
+    const options = [];
+    for (const other of library() ?? []) {
+      if (other.kind !== family.kind) continue;
+      for (const type of other.types) {
+        if (other.id === family.id && type.key === current) continue;
+        options.push(`<option value="${esc(other.id)}|${esc(type.key)}">${esc(other.name)}: ${esc(type.name)}</option>`);
+      }
+    }
+    return options;
   }
 
   /** What the properties palette shows of a selected family: its type, its values, its place, its side. */
@@ -5295,6 +6468,10 @@
     let html = '<table class="props" data-family-properties="' + esc(el.id) + '">';
     html += prow('Family', esc(family.name));
     html += prow('Family type', mine ? `<select class="inp" data-chg="stackfamilyretype" data-key="family-retype" aria-label="Type of the family">${types.join('')}</select>` : esc(family.types.find((t) => t.key === el.recipe.args.type)?.name ?? el.recipe.args.type));
+    if (mine) {
+      const swaps = swapOptions(family, el.recipe.args.type);
+      html += prow('Swap to', `<select class="inp" data-chg="stackfamilyswap" data-key="family-swap" aria-label="Swap to another type or family">${['<option value="" selected>Choose a type</option>', ...swaps].join('')}</select>`);
+    }
     for (const value of family.values) {
       const shown = shownValue(value, el.recipe.args[`value.${value.key}`]);
       html += prow(esc(value.name), mine ? valueInput(value, shown, `family-value:${value.key}`) : esc(shown));
@@ -5311,6 +6488,10 @@
 
   CHG.stackfamilyretype = (select) => {
     if (S.sel && canEdit()) manage('family.retype', { element: S.sel, type: select.value }, `family:${S.sel}`);
+  };
+  CHG.stackfamilyswap = (select) => {
+    const [to_family, to_type] = select.value.split('|');
+    if (S.sel && canEdit() && to_family) manage('family.swap', { element: S.sel, to_family, to_type }, `family:${S.sel}`);
   };
   CHG.stackfamilyvalue = (input) => {
     if (!S.sel || !canEdit()) return;
@@ -5342,11 +6523,7 @@
       say('The library has not come yet.');
       return;
     }
-    const wall = [...C.elements.values()].find((piece) => {
-      if (piece.el.kind !== 'wall' || !piece.shape) return false;
-      const box = around(piece);
-      return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
-    });
+    const wall = wallAt(at);
     if (!wall) {
       say('Click on a wall to place it.');
       return;
@@ -5376,7 +6553,8 @@
    * How a placed family sits on side `role` of a layered wall, as construct-regen's `hosting::seat`
    * works it out: its origin on the wall's centre plane, `along` the line from its start, `up` from
    * the wall's base, each to the nearest millimetre, and the turn (0 to 3 quarter turns about z) that
-   * points its front out of that side. Null until the wall is filled, and for a wall at an angle.
+   * points its front out of that side. Null until the wall is filled, and for a wall at an angle,
+   * which seats through `seatAtAngle`.
    */
   function onFamily(role, host, along, up) {
     const line = lineOf(host);
@@ -5396,8 +6574,17 @@
 
   const turnedRecipe = (recipe, turn) => ({ ...recipe, args: { ...recipe.args, turn } });
 
-  /** Where a placed family sits and how it is turned, on its wall (`host`, or the one it names, if it is here). */
-  function seatOfPiece(piece, host) {
+  /** The recipe a piece is built from before its wall seats it: a family copy's filled recipe holds its family's text. */
+  const ownRecipe = (piece) => (isFamily(piece.el) ? piece.fill?.recipe ?? piece.el.recipe : piece.el.recipe);
+
+  /**
+   * Where a hosted element sits and the recipe its builder is handed, on its wall (`host`, or the
+   * one it names, if it is here), as construct-regen's `hosting::seat` works them out: `{at, recipe}`.
+   * A placed family on a wall along an axis is handed its turn, anything in a wall at an angle its
+   * seat (`seatAtAngle`); null for anything else, which is built as it is stored, and until the
+   * wall is here and filled.
+   */
+  function seatOfPiece(piece, host, builder = C.builder) {
     const hosted = hostOf(piece.el);
     const wall = host ?? hosted?.host;
     const face = hosted?.face ?? (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -5405,32 +6592,158 @@
     const up = piece.el.props?.['@host.up'];
     if (!wall || !face || along === undefined || up === undefined) return null;
     const role = wall.shape?.names?.find((name) => name.name === face.name)?.role ?? face.signature;
-    return onFamily(role, wall, along, up);
+    const angled = seatAtAngle(builder, { ...piece.el, recipe: ownRecipe(piece) }, role, wall, along, up);
+    if (angled) return angled;
+    if (!isFamily(piece.el)) return null;
+    const turned = onFamily(role, wall, along, up);
+    return turned && { at: turned.at, recipe: turnedRecipe(ownRecipe(piece), turned.turn) };
   }
 
-  /** Builds each placed family again, turned as its wall seats it, where it is not built so yet. */
+  /**
+   * What a hosted piece is to be built from: `{seat}` with its seat (null: as stored), or null while
+   * its wall is not here and filled enough to say, as a piece that is hosted but not yet seated.
+   */
+  function seatWanted(piece) {
+    const hosted = hostOf(piece.el);
+    if (!hosted) return null;
+    const { host } = hosted;
+    if (host.el.recipe.op === LAYERED && !lineOf(host)) return null;
+    return { seat: seatOfPiece(piece) };
+  }
+
+  /** The text a seat is told apart by: the recipe the builder is handed, or none. */
+  const seatKey = (seat) => (seat ? JSON.stringify(seat.recipe) : null);
+
+  /** Whether `piece` is built from other than the recipe its wall now seats it with. */
+  const seatChanged = (piece) => {
+    const wanted = seatWanted(piece);
+    return Boolean(wanted) && seatKey(wanted.seat) !== (piece.seatedKey ?? null);
+  };
+
+  /**
+   * Builds each hosted piece again, as its wall seats it, where it is not built so yet (a placed
+   * family turned to stand in its wall; anything in a wall at an angle with its seat), and lets a
+   * hosted piece built as it is stored be compared once its wall has said so.
+   */
   function seatFamilies() {
     if (!C.model || C.viewing) return;
     for (const piece of C.elements.values()) {
-      if (!isFamily(piece.el) || piece.turning || piece.failed) continue;
-      const seat = seatOfPiece(piece);
-      if (seat && piece.seatedTurn !== seat.turn) reseat(piece, seat.turn);
+      if (piece.turning || piece.failed || hostIdOf(piece.el) === null) continue;
+      const wanted = seatWanted(piece);
+      if (!wanted) continue;
+      if (seatKey(wanted.seat) !== (piece.seatedKey ?? null)) reseat(piece, wanted.seat);
+      else if (piece.stale && !isFamily(piece.el)) piece.stale = false;
     }
   }
 
-  async function reseat(piece, turn) {
+  async function reseat(piece, seat) {
     piece.turning = true;
     try {
       const row = C.models.get(C.model.id);
       const builder = row && (await builderFor(row));
       if (!builder) return;
-      const answer = buildOn(builder, { ...piece.el, recipe: turnedRecipe(piece.el.recipe, turn) }, null, null);
-      Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedTurn: turn, stale: false });
+      const recipe = seat ? seat.recipe : ownRecipe(piece);
+      const answer = buildOn(builder, { ...piece.el, recipe }, null, null);
+      Object.assign(piece, { shape: undefined, failed: undefined }, answer, { seatedKey: seatKey(seat), stale: false });
       queueDraw();
     } finally {
       piece.turning = false;
     }
   }
+
+  // --- The families of the document, in a dialog (Manage, Families) ---
+  // The server lists them (`/families`): the document's own first, each with where it came from, its
+  // types and how many copies are placed, then the library's it does not hold yet. Load, reload,
+  // generate and remove are the commands `family.load`, `family.reload`, `family.generate` and
+  // `family.remove` through the log (undo and redo take them back), and a refusal is the server's
+  // words under what was asked. The page works out nothing: a spec is sent as typed.
+
+  const TEMPLATES = [
+    ['single-swing-door', 'Single swing door'],
+    ['fixed-window', 'Fixed window'],
+    ['sliding-window', 'Sliding window'],
+  ];
+  const SPEC_MORE = [
+    ['frame', 'Frame width'],
+    ['frame_depth', 'Frame depth'],
+    ['leaf', 'Leaf thickness'],
+    ['sash', 'Sash width'],
+    ['sash_depth', 'Sash depth'],
+    ['track_gap', 'Track gap'],
+    ['glass', 'Glass thickness'],
+    ['sill_height', 'Sill height'],
+    ['wall', 'Wall thickness'],
+  ];
+
+  function familiesHtml(m) {
+    const off = canEdit() ? '' : ' disabled';
+    const list = m.data.families;
+    const held = list.filter((family) => family.in_document);
+    let html = '<p class="small muted">A family is a door or a window with its types. The ones this model holds are listed first; a family of the library comes into the model when you load it or first place it.</p>';
+    html += '<h3>In this model</h3>';
+    if (!held.length) html += '<p class="small faint" data-families-none>This model holds no families yet.</p>';
+    for (const family of held) {
+      const label = esc(family.name);
+      html += `<section data-family="${esc(family.id)}"><div class="stack-line"><b>${label}</b><span class="badge n">${esc(capital(family.kind))}</span>`;
+      html += `<span class="small faint">${esc(family.source)}; ${family.placed === 1 ? '1 copy' : `${family.placed} copies`} placed</span>`;
+      if (family.source.startsWith('library:')) {
+        html += `<button class="btn sm" data-act="stackfamilyreload" data-a="${esc(family.id)}" data-key="family-reload:${esc(family.id)}" aria-label="Reload the family ${label}"${off}>Reload</button>`;
+      }
+      html += `<button class="btn sm" data-act="stackfamilyremove" data-a="${esc(family.id)}" data-key="family-remove:${esc(family.id)}" aria-label="Remove the family ${label}"${off}>Remove</button></div>`;
+      html += `<ul class="small" data-family-types="${esc(family.id)}">${family.types.map((type) => `<li data-family-type="${esc(type.key)}">${esc(type.name)}</li>`).join('')}</ul>`;
+      html += `${problem(`famdoc:${family.id}`)}</section>`;
+    }
+    const library = list.filter((family) => !family.in_document);
+    if (library.length) {
+      html += '<h3 class="mt2">In the library</h3>';
+      for (const family of library) {
+        const label = esc(family.name);
+        html += `<section data-library-family="${esc(family.id)}"><div class="stack-line"><b>${label}</b><span class="badge n">${esc(capital(family.kind))}</span>`;
+        html += `<span class="small faint">${plural(family.types.length, 'type')}</span>`;
+        html += `<button class="btn sm" data-act="stackfamilyload" data-a="${esc(family.id)}" data-key="family-load:${esc(family.id)}" aria-label="Load the family ${label}"${off}>Load</button></div>`;
+        html += `${problem(`famdoc:${family.id}`)}</section>`;
+      }
+    }
+    // A type made from a spec: a new family, or one more type of a family made so before.
+    const made = held.filter((family) => family.source.startsWith('generated:'));
+    const templates = TEMPLATES.map(([stem, name]) => `<option value="${stem}">${esc(name)}</option>`);
+    const into = ['<option value="">A new family</option>', ...made.map((family) => `<option value="${esc(family.id)}">${esc(family.name)}</option>`)];
+    html += '<h3 class="mt2">Make a door or window type</h3><div class="grid2">';
+    html += `<label class="fld"><span>Kind</span><select class="inp" data-draft data-key="gen-template"${off}>${templates.join('')}</select></label>`;
+    html += `<label class="fld"><span>Into</span><select class="inp" data-draft data-key="gen-family"${off}>${into.join('')}</select></label>`;
+    html += `<label class="fld"><span>Name of a new family</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-name"${off}></label>`;
+    html += `<label class="fld"><span>Mark of the type</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-mark"${off}></label>`;
+    html += `<label class="fld"><span>Width</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-width"${off}></label>`;
+    html += `<label class="fld"><span>Height</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-height"${off}></label>`;
+    html += '</div>';
+    html += `<label class="chk"><input type="checkbox" data-draft data-key="gen-clear"${off}>The width and height are the clear opening, not the overall size</label>`;
+    html += `<details data-open="gen-more"${m.open.has('gen-more') ? ' open' : ''}><summary>More of the spec</summary><div class="grid2">`;
+    for (const [key, name] of SPEC_MORE) {
+      html += `<label class="fld"><span>${esc(name)}</span><input class="inp" data-draft data-enter="stackfamilygenerate" data-key="gen-${key}"${off}></label>`;
+    }
+    html += `<label class="fld"><span>Hand of a door</span><select class="inp" data-draft data-key="gen-hand"${off}><option value="">As the template has it</option><option value="left">Left</option><option value="right">Right</option></select></label>`;
+    html += '</div></details>';
+    html += `<div class="stack-line mt"><button class="btn pri sm" data-act="stackfamilygenerate" data-key="gen-go"${off}>Make type</button></div>${problem('famgen')}`;
+    return html;
+  }
+
+  ACT.stackfamilyload = (button) => manage('family.load', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilyreload = (button) => manage('family.reload', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilyremove = (button) => manage('family.remove', { family: button.dataset.a }, `famdoc:${button.dataset.a}`);
+  ACT.stackfamilygenerate = () => {
+    const field = (key) => manageField(`gen-${key}`)?.value.trim() ?? '';
+    const spec = { template: field('template'), mark: field('mark'), width: field('width'), height: field('height') };
+    if (manageField('gen-clear')?.checked) spec.clear = true;
+    for (const [key] of SPEC_MORE) if (field(key) !== '') spec[key] = field(key);
+    if (field('hand') !== '') spec.hand = field('hand');
+    const into = field('family');
+    const args = { family: into || newId('FAM'), spec };
+    if (!into) args.name = field('name');
+    manage('family.generate', args, 'famgen', () => {
+      const mark = manageField('gen-mark');
+      if (mark) mark.value = '';
+    });
+  };
 
   const deleteOther = ACT.stackdelete;
   ACT.stackdelete = () => {
@@ -5582,6 +6895,17 @@
   function wallAt(at) {
     return [...C.elements.values()].find((piece) => {
       if (piece.el.kind !== 'wall' || !piece.shape) return false;
+      const line = piece.el.recipe.op === LAYERED ? lineOf(piece) : null;
+      if (line && line.axis === null) {
+        // A wall at an angle is its line and its thickness, not the box round it.
+        const { x, y } = piece.el.placement;
+        const p = [at.x - x - line.start[0] / STEPS_PER_MM, at.y - y - line.start[1] / STEPS_PER_MM];
+        const length = Math.hypot(line.d[0], line.d[1]);
+        const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+        const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+        const [low, high] = [line.exterior, line.interior].map((offset) => offset / STEPS_PER_MM).sort((a, b) => a - b);
+        return alongIt >= -300 && alongIt <= length / STEPS_PER_MM + 300 && right >= low - 300 && right <= high + 300;
+      }
       const box = around(piece);
       return at.x >= box.x - 300 && at.x <= box.x + box.w + 300 && at.y >= box.y - 300 && at.y <= box.y + box.d + 300;
     });
@@ -5702,9 +7026,23 @@
       const line = host && lineOf(host);
       const thickness = line ? Math.abs(line.exterior - line.interior) / STEPS_PER_MM : (host?.el.recipe.args.thickness ?? 200);
       const wide = storedMm(e.recipe.args.width);
-      const [w, d] = e.recipe.args.axis === 'y' ? [thickness, wide] : [wide, thickness];
-      box = { x, y, w, d };
-      drawn = RC(x, y, w, d, paint);
+      const seatLine = piece.shape.displays[0]?.outline;
+      if (line && line.axis === null && seatLine?.length === 2) {
+        // In a wall at an angle the opening is seated: its shape's outline is its line on its side
+        // of the wall, and it opens through the wall's thickness to the left of that line.
+        const length = Math.hypot(line.d[0], line.d[1]);
+        const across = [(-line.d[1] / length) * thickness, (line.d[0] / length) * thickness];
+        const corners = [seatLine[0], seatLine[1], [seatLine[1][0] + across[0], seatLine[1][1] + across[1]], [seatLine[0][0] + across[0], seatLine[0][1] + across[1]]]
+          .map(([px, py]) => [x + Math.round(px), y + Math.round(py)]);
+        const xs = corners.map((p) => p[0]);
+        const ys = corners.map((p) => p[1]);
+        box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), d: Math.max(...ys) - Math.min(...ys) };
+        drawn = `<path class="${paint}" d="${ringPath(corners)}"/>`;
+      } else {
+        const [w, d] = e.recipe.args.axis === 'y' ? [thickness, wide] : [wide, thickness];
+        box = { x, y, w, d };
+        drawn = RC(x, y, w, d, paint);
+      }
     } else {
       const ring = (e.recipe.args.outline || []).map(([px, py]) => [x + nearestMm(px), y + nearestMm(py)]);
       const xs = ring.map((p) => p[0]);
@@ -5837,6 +7175,407 @@
     }
     if (!canEdit()) return;
     manage(isShaft(piece.el) ? 'shaft.delete' : 'opening.delete', { element: S.sel }, openingWhere());
+    S.sel = null;
+    refresh();
+  };
+
+  // --- The stair tool, and a stair in the plan and the properties palette ---
+  // A stair is made between two levels by two clicks in the plan, as a wall is: the first is the foot
+  // of its first riser on its right-hand side going up, the second says which way it runs (the plan's
+  // axis the second point is further along). Its base is the plan's level, its top the level chosen
+  // in the properties palette; the category (the rule set's, from the server), its width and whether
+  // it is straight, with a landing, an L or a U are chosen there too. One `stair.create` edit
+  // (crates/construct-stairs' FORMAT.md). The page checks nothing and lays nothing out: how many
+  // risers, how high each is and how deep each tread is come from the server (the stair's read-only
+  // parameters, `/parameters/<element>`, and `/stairs` for its layout), and where the rules cannot
+  // lay a stair out, that is the server's refusal in its words, with the nearest heights that work,
+  // under the tool's options or the stair's. A selected stair's width, direction and runs are changed
+  // there (`stair.top`, `stair.category`, `stair.width`, `stair.direction`, `stair.runs`) and Delete removes it (`stair.delete`).
+  // In the plan a stair is its runs and landings from its recipe as the server filled it
+  // (`/filled/<element>`): each tread's line, solid where the stair is below the view's cut plane
+  // and dashed above it, the cut line where the plane crosses the stair, and the walking line from
+  // the bottom ending in an arrow. The cut plane is the open plan's, as the server read it
+  // (`/stairs`, `plans`); this page only draws. In 3D a stair is the shape the browser built from
+  // the same recipe: each run and landing, as the generic drawing shows any shape.
+
+  const STAIR_OP = 'stair';
+  const isStair = (record) => record?.kind === 'stair' && record?.recipe?.op === STAIR_OP;
+  /** Ways a stair's runs are laid: its ID, its label, how many runs, and the turn of its landing. */
+  const STAIR_LAYOUTS = [
+    ['straight', 'Straight', 1, null],
+    ['straight-landing', 'Straight, with a landing', 2, 'straight'],
+    ['left', 'L, turning left', 2, 'left'],
+    ['right', 'L, turning right', 2, 'right'],
+    ['back-left', 'U, back on the left', 2, 'back-left'],
+    ['back-right', 'U, back on the right', 2, 'back-right'],
+  ];
+  const STAIR_DIRECTIONS = [['+x', 'East (+x)'], ['-x', 'West (-x)'], ['+y', 'North (+y)'], ['-y', 'South (-y)']];
+
+  DTOOLS.architecture.push(['stair', 'Stair', 'family', 'Pick the foot of its first riser, then a point in the direction it runs up.']);
+  TOOLNAME.stair = 'stair';
+  Object.assign(WORDS, {
+    'stair.create': 'made a stair',
+    'stair.width': 'changed the width of',
+    'stair.direction': 'turned or moved',
+    'stair.runs': 'changed the runs of',
+    'stair.delete': 'deleted',
+  });
+  Object.assign(STEP_WORDS, {
+    'stair.create': 'making a stair',
+    'stair.width': 'a stair’s width',
+    'stair.direction': 'a stair’s direction',
+    'stair.runs': 'a stair’s runs',
+    'stair.delete': 'deleting a stair',
+  });
+
+  C.stairTool = { top: undefined, category: null, width: '1000 mm', layout: 'straight', landing: '1000 mm' }; // top: a level's ID, undefined for the level above
+  C.stairsView = null; // { key, view } of the open model
+  C.stairsEpoch = 0; // goes up when an entry may change what `/stairs` says
+
+  /** The open model's stairs as the server reads them (its categories, plan cuts and each stair's layout); null until they have come. */
+  function stairsView() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.paramsEpoch}/${C.stairsEpoch}`;
+    if (C.stairsView?.key !== key && C.stairsLoading !== key) {
+      C.stairsLoading = key;
+      api(`${modelUrl(model)}/stairs`)
+        .then((view) => {
+          C.stairsView = { key, view };
+          refreshSide();
+          queueDraw();
+        })
+        .catch(() => {});
+    }
+    return C.stairsView?.key.startsWith(`${model}/`) ? C.stairsView.view : null;
+  }
+
+  /** An entry arrived for the open model: what a stair's layout, or where a plan cuts it, may now be. */
+  function stairsChanged(entry) {
+    if (/^(stair|level|view)\.|^edit\.(undo|redo)$/.test(entry.cmd)) C.stairsEpoch += 1;
+  }
+
+  /** The level a stair's top is tied to: the tool's choice, else the level above the plan's. */
+  function stairTop(levels) {
+    const here = levelOf();
+    const chosen = C.stairTool.top;
+    if ((levels || []).some((level) => level.id === chosen && level.id !== here)) return chosen;
+    const at = (levels || []).findIndex((level) => level.id === here);
+    return (at >= 0 && levels[at + 1]?.id) || (levels || []).find((level) => level.id !== here)?.id || '';
+  }
+
+  /** The runs and landings a layout is sent as: `runs` (each left to share the risers) and `landings`. */
+  function stairRuns(layout, landing) {
+    const found = STAIR_LAYOUTS.find(([id]) => id === layout) ?? STAIR_LAYOUTS[0];
+    const [, , runs, turn] = found;
+    return {
+      runs: Array.from({ length: runs }, () => ({})),
+      landings: turn ? [{ length: landing, turn }] : [],
+    };
+  }
+
+  const layoutOptions = (chosen) =>
+    STAIR_LAYOUTS.map(([id, name]) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${name}</option>`).join('');
+
+  function stairToolHtml() {
+    let html = typeSel('family', 'Stair', '<b>New stair</b>');
+    const view = stairsView();
+    if (!view) return `${html}<p class="pad small faint">Loading the stair rules.</p>`;
+    const levels = modelLevels() || [];
+    const here = levelOf();
+    const top = stairTop(levels);
+    const tool = C.stairTool;
+    const category = view.categories.some((c) => c.id === tool.category)
+      ? tool.category
+      : view.categories.find((c) => c.id === 'common')?.id ?? view.categories[0]?.id;
+    const base = levels.find((level) => level.id === here)?.name ?? here;
+    const tops = levels
+      .filter((level) => level.id !== here)
+      .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+    const categories = view.categories.map((c) => `<option value="${esc(c.id)}"${c.id === category ? ' selected' : ''}>${esc(c.name)}</option>`);
+    const field = (key, label, value) => `<input class="inp" data-chg="stairtool${key}" data-key="stair-${key}" value="${esc(value)}" aria-label="${esc(label)}">`;
+    html += '<table class="props">';
+    html += prow('Base', esc(base));
+    html += prow('Top', `<select class="inp" data-chg="stairtooltop" data-key="stair-top" aria-label="Top of the stair">${tops.join('')}</select>`);
+    html += prow('Category', `<select class="inp" data-chg="stairtoolcategory" data-key="stair-category" aria-label="Category of stairway">${categories.join('')}</select>`);
+    html += prow('Width', field('width', 'Width of the stair', tool.width));
+    html += prow('Runs', `<select class="inp" data-chg="stairtoollayout" data-key="stair-layout" aria-label="How the runs are laid">${layoutOptions(tool.layout)}</select>`);
+    if (tool.layout !== 'straight') html += prow('Landing', field('landing', 'Length of the landing', tool.landing));
+    html += '</table>';
+    html += `<p class="pad small muted" data-stair-rules>${esc(view.rules_name)}. The server works out the risers.</p>`;
+    html += '<p class="pad small muted">Pick the foot of the first riser, on the stair’s right going up, then a point in the direction it runs.</p>';
+    return html + problem('stair-draw');
+  }
+
+  CHG.stairtooltop = (select) => {
+    C.stairTool.top = select.value;
+    refreshSide();
+  };
+  CHG.stairtoolcategory = (select) => {
+    C.stairTool.category = select.value;
+  };
+  CHG.stairtoollayout = (select) => {
+    C.stairTool.layout = select.value;
+    refreshSide();
+  };
+  CHG.stairtoolwidth = (input) => {
+    C.stairTool.width = input.value;
+  };
+  CHG.stairtoollanding = (input) => {
+    C.stairTool.landing = input.value;
+  };
+
+  function stairHint() {
+    return S.pend
+      ? '<b>Stair:</b> pick a point in the direction it runs up. Esc to stop.'
+      : '<b>Stair:</b> pick the foot of its first riser. Choose its levels, category and runs in the properties palette.';
+  }
+
+  /** The ribbon: the stair tool beside the roof tool, in the Build panel. */
+  function stairRibbon(config) {
+    const build = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((panel) => panel.label === 'Build');
+    if (!build || build.items.some((item) => item.a === 'architecture:stair')) return;
+    const roof = build.items.findIndex((item) => item.a === 'architecture:roof');
+    build.items.splice(roof + 1, 0, DT_('architecture', 'stair'));
+  }
+
+  /**
+   * The stair tool's second point makes the stair: it runs the way along x or y the second point
+   * is further from the first, which is the foot of its first riser. What the server makes of it,
+   * or its reason for refusing, comes back through the log, and the reason is shown under the options.
+   */
+  function placeStair(at) {
+    const point = [snap(at.x), snap(at.y)];
+    if (!S.pend) {
+      S.pend = point;
+      $('#hint').innerHTML = hint();
+      return;
+    }
+    const [ax, ay] = S.pend;
+    S.pend = null;
+    $('#hint').innerHTML = hint();
+    const dx = point[0] - ax;
+    const dy = point[1] - ay;
+    const direction = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? '+x' : '-x') : dy >= 0 ? '+y' : '-y';
+    const view = stairsView();
+    const tool = C.stairTool;
+    const args = {
+      element: newId('S'),
+      level: levelOf(),
+      top: stairTop(modelLevels()),
+      start: [`${ax} mm`, `${ay} mm`],
+      direction,
+      width: tool.width,
+      ...stairRuns(tool.layout, tool.landing),
+    };
+    if (view?.categories.some((c) => c.id === tool.category)) args.category = tool.category;
+    manage('stair.create', args, 'stair-draw');
+  }
+
+  /** The layout of a stair's runs as its record says it: one of STAIR_LAYOUTS' IDs, or null for any other. */
+  function stairLayoutOf(e) {
+    const { runs, landings } = e.recipe.args;
+    if (!Array.isArray(runs) || !Array.isArray(landings)) return null;
+    if (runs.length === 1 && landings.length === 0) return 'straight';
+    if (runs.length !== 2 || landings.length !== 1) return null;
+    return STAIR_LAYOUTS.find(([, , , turn]) => turn === landings[0].turn)?.[0] ?? null;
+  }
+
+  /** A stair's width as stored, in millimetres. */
+  const stairWidthMm = (e) => `${storedMm(e.recipe.args.width)} mm`;
+
+  /** What the properties palette shows of a selected stair. */
+  function stairProperties(piece) {
+    const { el: e, shape, failed } = piece;
+    const view = paramsFor(piece);
+    const stairs = stairsView();
+    const info = stairs?.stairs.find((s) => s.id === e.id);
+    const claim = heldClaim(e.id);
+    const editable = canEdit();
+    let html = typeSel('family', 'Stair', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-stair-element>';
+    if (view) html += prow('Category', esc(view.category?.name || 'None'));
+    html += prow('Base', esc(levelName(e)));
+    const topId = e.props?.['@top.level'];
+    const levels = modelLevels() || [];
+    const rule = stairs?.categories.find((c) => c.id === info?.category);
+    if (editable && stairs && info) {
+      const tops = levels
+        .filter((level) => level.id !== levelIdOf(e))
+        .map((level) => `<option value="${esc(level.id)}"${level.id === topId ? ' selected' : ''}>${esc(level.name)}</option>`);
+      const categories = stairs.categories.map((c) => `<option value="${esc(c.id)}"${c.id === info.category ? ' selected' : ''}>${esc(c.name)}</option>`);
+      html += prow('Top', `<select class="inp" data-chg="stairtop" data-key="stair-own-top" aria-label="Top of the stair">${tops.join('')}</select>`);
+      html += prow('Stairway', `<select class="inp" data-chg="stairrules" data-key="stair-own-category" aria-label="Category of stairway">${categories.join('')}</select>`);
+    } else {
+      html += prow('Top', `<span data-stair-top>${esc(levels.find((level) => level.id === topId)?.name ?? topId ?? 'None')}</span>`);
+      if (rule) html += prow('Stairway', esc(rule.name));
+    }
+    if (editable) {
+      const here = stairLayoutOf(e);
+      const directions = STAIR_DIRECTIONS.map(([id, name]) => `<option value="${id}"${id === e.recipe.args.direction ? ' selected' : ''}>${name}</option>`);
+      html += prow('Width', `<input class="inp" data-chg="stairwidth" data-key="stair-own-width" value="${esc(stairWidthMm(e))}" aria-label="Width of the stair">`);
+      html += prow('Direction', `<select class="inp" data-chg="stairdirection" data-key="stair-own-direction" aria-label="Which way the stair runs up">${directions.join('')}</select>`);
+      const layouts = here ? layoutOptions(here) : `<option value="" selected>${plural(e.recipe.args.runs.length, 'run')}</option>${layoutOptions('')}`;
+      html += prow('Runs', `<select class="inp" data-chg="stairlayout" data-key="stair-own-layout" aria-label="How the runs are laid">${layouts}</select>`);
+      const landing = e.recipe.args.landings?.[0]?.length;
+      if (landing !== undefined) {
+        html += prow('Landing', `<input class="inp" data-chg="stairlanding" data-key="stair-own-landing" value="${esc(`${storedMm(landing)} mm`)}" aria-label="Length of the landing">`);
+      }
+    } else {
+      html += prow('Width', esc(stairWidthMm(e))) + prow('Direction', esc(e.recipe.args.direction));
+    }
+    if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
+    html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
+    // The rules' refusal, in the server's words: the limit with its clause and the nearest heights that work.
+    if (info?.refusal) html += `<div class="note bad small" role="alert" data-stair-refusal>${esc(info.refusal)}</div>`;
+    html += problem('stair-edit');
+    if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
+    if (view) {
+      html += readOnlyTable(view);
+      html += '<div class="pad"><button class="btn sm" data-act="stacktypes">Types…</button> <button class="btn sm" data-act="stackparams">Project parameters…</button></div>';
+    }
+    if (editable) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="stair-delete">Delete stair</button></div>';
+    return html;
+  }
+
+  CHG.stairtop = (select) => {
+    if (S.sel) manage('stair.top', { element: S.sel, top: select.value }, 'stair-edit');
+  };
+  CHG.stairrules = (select) => {
+    if (S.sel) manage('stair.category', { element: S.sel, category: select.value }, 'stair-edit');
+  };
+  CHG.stairwidth = (input) => {
+    if (S.sel) manage('stair.width', { element: S.sel, width: input.value }, 'stair-edit');
+    input.blur();
+  };
+  CHG.stairdirection = (select) => {
+    if (S.sel) manage('stair.direction', { element: S.sel, direction: select.value }, 'stair-edit');
+  };
+  CHG.stairlayout = (select) => {
+    const piece = C.elements.get(S.sel);
+    if (!piece || !select.value) return;
+    const length = piece.el.recipe.args.landings?.[0]?.length ?? piece.el.recipe.args.width;
+    manage('stair.runs', { element: S.sel, ...stairRuns(select.value, `${storedMm(length)} mm`) }, 'stair-edit');
+  };
+  CHG.stairlanding = (input) => {
+    const piece = C.elements.get(S.sel);
+    if (!piece) return;
+    const here = stairLayoutOf(piece.el);
+    if (here && here !== 'straight') manage('stair.runs', { element: S.sel, ...stairRuns(here, input.value) }, 'stair-edit');
+    input.blur();
+  };
+
+  /** The properties palette's stair part: the stair tool's options, or a selected stair; '' for anything else. */
+  function stairPalette(piece) {
+    if (S.tool === 'stair' && canEdit()) return stairToolHtml();
+    if (piece && isStair(piece.el) && !(S.tool === 'wall' && canEdit())) return stairProperties(piece);
+    return '';
+  }
+
+  /** A point of a stair's piece, in grid steps, as millimetres in the plan: for drawing only. */
+  const stairMm = (p) => [p[0] / STEPS_PER_MM, p[1] / STEPS_PER_MM];
+
+  /**
+   * Where the open plan cuts a stair, in grid steps above the stair's base: the open view's cut
+   * plane as the server read it, else the cut plane of a plan of the plan's level; null where the
+   * server has not said (the stair is then drawn without a cut).
+   */
+  function stairCut(info) {
+    const view = stairsView();
+    if (!view || !info?.base) return null;
+    const plan = view.plans.find((p) => p.view === C.openView) ?? view.plans.find((p) => p.level === levelOf());
+    return plan ? steps(plan.cut.value) - steps(info.base.value) : null;
+  }
+
+  /** The line from `a` to `b` in the plan, in millimetres, with the classes and data given. */
+  const stairLine = (a, b, classes, data = '') =>
+    `<line class="${classes}" ${data} x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`;
+
+  /** The point halfway between two. */
+  const midway = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+  /** A closed path through `points`, each `[x, y]`. */
+  const stairRing = (points) => ringPath(points);
+
+  /** The walking line's arrow: a head at the last point of `line`, pointing the way the last piece of it goes. */
+  function stairArrow(line) {
+    const [from, to] = line.slice(-2);
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+    const unit = [(to[0] - from[0]) / length, (to[1] - from[1]) / length];
+    const side = [-unit[1], unit[0]];
+    const back = [to[0] - unit[0] * 250, to[1] - unit[1] * 250];
+    const wing = (sign) => `${back[0] + side[0] * 110 * sign},${back[1] + side[1] * 110 * sign}`;
+    return `<polygon class="stair-arrow" data-stair-arrow points="${to[0]},${to[1]} ${wing(1)} ${wing(-1)}"/>`;
+  }
+
+  /**
+   * A stair in the plan, from its recipe as the server filled it: each run's treads, each run and
+   * landing a polygon, the lines above the view's cut dashed, the cut line where the plane
+   * crosses a run, and the walking line from the bottom ending in an arrow. The runs' and
+   * landings' corners are the server's (`pieces`, in grid steps); nothing is laid out here.
+   */
+  function stairInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const pieces = piece.fill?.recipe?.args?.pieces;
+    const box = around(piece);
+    const chosen = S.sel === e.id;
+    let group = chosen ? RC(box.x - 100, box.y - 100, box.w + 200, box.d + 200, 'halo') : '';
+    if (!Array.isArray(pieces) || !pieces.length) {
+      group += outlineOf(piece, `body stair${chosen ? ' sel' : ''}`);
+      return `<g ${data}>${group}</g>`;
+    }
+    const cut = stairCut(stairsView()?.stairs.find((s) => s.id === e.id));
+    // One body to pick it by: every run and landing in one path.
+    group += `<path class="body stair${chosen ? ' sel' : ''}" d="${pieces.map((p) => stairRing(p.plan.map(stairMm))).join('')}"/>`;
+    const walk = [];
+    for (const p of pieces) {
+      if (p.loft) {
+        // A run's profile at each side: its first corner on the base, then each tread's nosing and
+        // inner corner. A tread is above the cut plane when its top is higher than it.
+        const [right, left] = p.loft;
+        const lastAt = 2 * p.treads;
+        let cutAt = null;
+        for (let i = 0; i <= p.treads; i += 1) {
+          const at = i === p.treads ? lastAt : 1 + 2 * i;
+          const above = cut !== null && right[at][2] > cut;
+          group += stairLine(stairMm(right[at]), stairMm(left[at]), `stair-tread${above ? ' stair-above' : ''}`, `data-stair-tread="${esc(p.id)}.${i}" data-above="${above}"`);
+          if (above && cutAt === null && cut >= 0 && i < p.treads) cutAt = at;
+        }
+        if (cutAt !== null) group += stairLine(stairMm(right[cutAt]), stairMm(left[cutAt]), 'stair-cut', `data-stair-cut="${esc(p.id)}"`);
+        walk.push(midway(stairMm(right[1]), stairMm(left[1])), midway(stairMm(right[lastAt]), stairMm(left[lastAt])));
+      } else {
+        const corners = p.plan.map(stairMm);
+        const under = p.extrude[0][2];
+        const state = cut === null || under + p.by[2] <= cut ? 'below' : under > cut ? 'above' : 'cut';
+        group += `<path class="stair-landing stair-${state}" data-stair-landing="${esc(p.id)}" data-above="${state === 'above'}" d="${stairRing(corners)}"/>`;
+        walk.push(midway(corners[0], corners[2])); // the walking line goes through its middle
+      }
+    }
+    // The walking line, from the bottom: a dot where it starts, an arrow where it ends.
+    const line = walk.filter((point, i) => i === 0 || point[0] !== walk[i - 1][0] || point[1] !== walk[i - 1][1]);
+    if (line.length >= 2) {
+      group += `<polyline class="stair-walk" data-stair-walk points="${line.map(([x, y]) => `${x},${y}`).join(' ')}"/>`;
+      group += `<circle class="stair-walk-start" cx="${line[0][0]}" cy="${line[0][1]}" r="80"/>`;
+      group += stairArrow(line);
+    }
+    const claim = heldClaim(e.id);
+    if (claim) {
+      const theirs = claim.person !== C.me.person.id;
+      group += RC(box.x - 120, box.y - 120, box.w + 240, box.d + 240, `claim ${theirs ? 'theirs' : 'mine'}`);
+      if (theirs) group += TX(box.x + box.w / 2, box.y - 300, scale, `${claim.name} editing`, 'claimt', 260);
+    }
+    return `<g ${data}>${group}</g>`;
+  }
+
+  const deleteBeforeStairs = ACT.stackdelete;
+  ACT.stackdelete = () => {
+    const piece = C.elements.get(S.sel);
+    if (!piece || !isStair(piece.el)) {
+      deleteBeforeStairs();
+      return;
+    }
+    if (!canEdit()) return;
+    manage('stair.delete', { element: S.sel }, 'stair-edit');
     S.sel = null;
     refresh();
   };

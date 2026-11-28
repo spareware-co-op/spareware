@@ -6,6 +6,9 @@
 //! built to by the evaluator's key, so a type is built once however many are placed and however
 //! often its wall moves), in the family's own frame turned by its turn: the family's origin is the
 //! element's placement, which the regenerator reads from its wall (construct-regen's `hosting`).
+//! In a wall at an angle it is evaluated seated instead (`construct_families::evaluate_seated`,
+//! piece A83): every corner put through its seat and rounded once, its origin where the seat puts
+//! it from the element's placement, and kept by the evaluator's key for that seat.
 //! Each solid is meshed by the engine and drawn as a part of both displays with its material and
 //! its step's key as its function, so a view colours the frame, the leaf and the glass apart.
 //!
@@ -15,8 +18,8 @@
 //!   view reads them there.
 //! - Bounds: the meshes' reach, rounded outward. Outline: the box of that reach in plan, and each
 //!   part the box of its own.
-//! - Body: what was asked, the family by its content id, the type, the turn and each solid's step
-//!   and material, so the same family in the same place gives the same bytes.
+//! - Body: what was asked, the family by its content id, the type, the turn (or the seat) and each
+//!   solid's step and material, so the same family in the same place gives the same bytes.
 //! - Names: none yet. A placed family hosts nothing, so none of its faces is named for a hosted
 //!   element; naming a family's faces for dimensions and tags is the views' and annotations'.
 //!
@@ -27,7 +30,7 @@
 use super::layered::{Extent, append, empty, millimetres};
 use super::{Units, fault, from_engine};
 use crate::families::{self, Instance, Resolved};
-use construct_families::{Limits, evaluate_turned};
+use construct_families::{Limits, evaluate_seated, evaluate_turned};
 use construct_model::geometry::{Bounds, Built, Display, GeometryError, Part};
 use engine_geometry::value::engine::Engine;
 use serde::Serialize;
@@ -39,6 +42,9 @@ struct Asked<'a> {
     #[serde(rename = "type")]
     ty: &'a str,
     turn: u8,
+    /// Where it stands in a wall at an angle: its seat's way, base and origin, in steps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seat: Option<[[i64; 2]; 3]>,
     solids: Vec<AskedSolid>,
 }
 
@@ -68,13 +74,22 @@ pub(super) fn build<E: Engine>(
     resolved: &Resolved,
     units: Units,
 ) -> Result<Built, GeometryError> {
-    let evaluated = evaluate_turned(
-        engine,
-        &resolved.recipe,
-        &resolved.values,
-        Limits::DEFAULT,
-        instance.turn,
-    )
+    let evaluated = match &instance.seat {
+        Some(seat) => evaluate_seated(
+            engine,
+            &resolved.recipe,
+            &resolved.values,
+            Limits::DEFAULT,
+            seat,
+        ),
+        None => evaluate_turned(
+            engine,
+            &resolved.recipe,
+            &resolved.values,
+            Limits::DEFAULT,
+            instance.turn,
+        ),
+    }
     .map_err(|e| families::evaluation_refused(&resolved.recipe, &e))?;
     let mut mesh = empty();
     let mut parts = Vec::with_capacity(evaluated.solids.len());
@@ -82,6 +97,10 @@ pub(super) fn build<E: Engine>(
         family: instance.family.as_str(),
         ty: instance.ty.as_str(),
         turn: instance.turn.quarters(),
+        seat: instance
+            .seat
+            .as_ref()
+            .map(|seat| [seat.way(), seat.base(), seat.at()]),
         solids: Vec::with_capacity(evaluated.solids.len()),
     };
     let (mut reach, mut rounded): (Extent, bool) = (None, false);

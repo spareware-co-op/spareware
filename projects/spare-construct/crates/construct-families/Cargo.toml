@@ -28,6 +28,10 @@ serde_json = "1.0.154"
 sha2 = { version = "0.11.0", default-features = false }
 # Hexadecimal text of a hash. MIT OR Apache-2.0.
 hex = "0.4.3"
+# Whole numbers of any size, so a family seated at any angle has each corner worked out exactly and
+# rounded once (src/evaluate/seat.rs): the products pass what an i128 holds. The version already in
+# the lock files. MIT OR Apache-2.0.
+num-bigint = { version = "0.4.8", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 # The published schema is checked with a JSON Schema validator (draft 2020-12), with no network

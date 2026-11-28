@@ -17,7 +17,7 @@
 
 use crate::error::ScheduleError;
 use construct_categories::{
-    CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, SHEETS, VIEWS,
+    CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, SHEETS, VIEWS, WALLS,
 };
 use construct_params::{Definition, Holder, Kind, ProjectParams};
 use kit_core::Id;
@@ -116,11 +116,14 @@ const fn quantity(
 
 /// Every read-only quantity a schedule can list, by category. The names and kinds are those the
 /// server's own read-only rows carry (construct-slabs, construct-roofs and construct-regen's
-/// rooms), pinned by a test in construct-api that reads each element kind and compares.
+/// rooms and walls), pinned by a test in construct-api that reads each element kind and compares.
+///
+/// A wall's are its reference line's length, its one-face area and its volume, openings taken out
+/// and joints made (construct-regen's `wall_measure`).
 ///
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
-/// field's kind cannot follow) and a floor's or roof's per-layer volumes and masses (their number
-/// follows the type's layers).
+/// field's kind cannot follow) and a floor's, roof's or wall's per-layer volumes and masses
+/// (their number follows the type's layers).
 ///
 /// The sheet list and the view list are schedules of the sheets and views categories: a sheet has
 /// its number, paper and how many views and schedules stand on it, and a view its kind, its scale
@@ -128,7 +131,10 @@ const fn quantity(
 /// on none). The sheet's and the view's own parameters are the category's parameters as for any
 /// element. There are no revisions in the model yet, so there is no revision list: it waits for
 /// the job that makes them.
-pub const QUANTITIES: [Quantity; 23] = [
+pub const QUANTITIES: [Quantity; 26] = [
+    quantity(WALLS, "wall.length", "Length", Kind::Length),
+    quantity(WALLS, "wall.area", "Area", Kind::Area),
+    quantity(WALLS, "wall.volume", "Volume", Kind::Volume),
     quantity(FLOORS, "floor.area", "Area", Kind::Area),
     quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length),
     quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),

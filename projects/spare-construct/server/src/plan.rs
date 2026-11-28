@@ -23,6 +23,13 @@
 //! does not answer, or whose lines the styles cannot pen, is left out and named in
 //! [`Drawn::skipped`] with the reason, so one element never blanks the plan.
 //!
+//! A view's crop reaches the drawing through [`PlanCrop`]: while the crop is on, every line and
+//! hatch line is cut exactly to its outline (construct-drawing's `crop::clip`, exact to a fraction
+//! of the grid step, nothing drawn along the cut); while it is shown, its outline is drawn as
+//! strokes with the role `crop` and the view's id as their element, so the page can tell them
+//! apart. A crop that is off but shown draws only its outline; one that is on but hidden clips
+//! and draws no outline. A view with no crop is drawn as it was, byte for byte.
+//!
 //! Not drawn yet, each a known fault of the plan rather than of this file: edges seen below the cut
 //! (job 7.2's next step), a door's opening in its wall (the wall is cut whole until doors are
 //! families, job 6.4), floors and datums (they are not cut by a plan's plane), and the styles are
@@ -34,20 +41,25 @@
 
 use construct_api::cloud::views::{World, look_in};
 use construct_categories::{CategoryId, CategoryTable};
-use construct_drawing::drawing::Drawing;
-use construct_drawing::drawing::LineKind;
+use construct_drawing::crop::clip;
+use construct_drawing::drawing::{Drawing, LineKind, Shape, ViewPoint};
 use construct_drawing::hatch::FillPatterns;
 use construct_drawing::look::{FillLook, Look, Looks};
 use construct_drawing::pens::{Styles, widths};
+use construct_drawing::picture::{Output, Stroke, picture};
 use construct_drawing::plan::{PlanElement, plan};
-use construct_drawing::svg::to_svg;
+use construct_drawing::svg::Svg;
 use construct_drawing::view::View;
 use construct_materials::{MaterialId, Materials};
-use construct_model::element::Placement;
-use construct_model::geometry::Recipe;
+use construct_model::element::{Element, Placement};
+use construct_model::geometry::{Geometry, Recipe};
 use construct_params::Length;
+use construct_regen::hosting::{self, Hosting};
 use construct_regen::kernel::Kernel;
-use construct_styles::{Edge, EdgeStyle, LineStyles, ObjectStyles, Scale};
+use construct_regen::seating;
+use construct_styles::patterns::SOLID;
+use construct_styles::{Colour, Edge, EdgeStyle, LineStyles, ObjectStyles, Scale};
+use construct_views::Crop;
 use engine_geometry::value::engine::Engine;
 use kit_core::Id;
 use serde::Serialize;
@@ -63,6 +75,41 @@ pub struct ToDraw {
     pub placement: Placement,
     /// Its recipe as the regenerator fills it.
     pub recipe: Recipe,
+    /// The wall it is hosted on, if it is hosted on a face of one: a plan draws it seated there
+    /// (piece A83), as the regenerator builds it.
+    pub hosted_on: Option<HostedOn>,
+}
+
+/// An element hosted on a face of its host, with what seats it there ([`hosting::seat`]).
+#[derive(Clone, Debug)]
+pub struct HostedOn {
+    /// The hosted element's record.
+    pub record: Element,
+    /// The host's record.
+    pub host: Element,
+    /// The host's recipe as the regenerator fills it.
+    pub host_recipe: Recipe,
+    /// How the hosted element's record says it is hosted.
+    pub hosting: Hosting,
+}
+
+/// The pen a crop's outline is drawn with when it is shown: model pen 2.
+const CROP_PEN: u16 = 2;
+
+/// The colour of a crop's outline.
+const CROP_COLOUR: Colour = Colour(90, 90, 90);
+
+/// The role a crop outline's strokes carry, which the page tells them apart by.
+pub const CROP_ROLE: &str = "crop";
+
+/// A view's crop, for the drawer: which view it is of (the element its outline strokes carry) and
+/// the crop itself.
+#[derive(Clone, Copy, Debug)]
+pub struct PlanCrop<'a> {
+    /// The view.
+    pub view: &'a Id,
+    /// Its crop.
+    pub crop: &'a Crop,
 }
 
 /// An element left out of the drawing, and why.
@@ -87,7 +134,7 @@ pub struct Drawn {
 pub trait Drawer: Send + Sync {
     /// The plan cut at the height `cut` above the project's zero, of `elements`, printed at
     /// `scale`, each category looking as `looks` says (`None`: as the project's object styles
-    /// say).
+    /// say), cropped as `crop` says (`None`: not cropped).
     ///
     /// # Errors
     ///
@@ -99,6 +146,7 @@ pub trait Drawer: Send + Sync {
         scale: Scale,
         elements: &[ToDraw],
         looks: Option<&dyn Looks>,
+        crop: Option<PlanCrop<'_>>,
     ) -> Result<Drawn, String>;
 }
 
@@ -182,6 +230,33 @@ impl Defaults {
     }
 }
 
+/// The recipe `element` is drawn from: as the regenerator builds it. An element hosted on a wall
+/// at an angle carries the seat its wall gives it (piece A83), so its drawing stands in the wall
+/// as its shape does; anything else is drawn from its recipe as it is.
+fn seated<E: Engine + Send + 'static>(
+    kernel: &Kernel<E>,
+    element: &ToDraw,
+) -> Result<Recipe, String> {
+    let Some(on) = &element.hosted_on else {
+        return Ok(element.recipe.clone());
+    };
+    let (_, seated) = hosting::seat(
+        &kernel.edition(),
+        &on.host,
+        &on.host_recipe,
+        &on.record,
+        &element.recipe,
+        &on.hosting,
+    )
+    .map_err(|e| e.message)?;
+    let at_an_angle = seating::seat_of(&seated).map_err(|e| e.message)?.is_some();
+    Ok(if at_an_angle {
+        seated
+    } else {
+        element.recipe.clone()
+    })
+}
+
 /// The drawing of what `view`'s plane cuts of one element: each layer of it is its own solid, with
 /// its material, and the element is checked to pen at `scale`.
 fn one<E: Engine + Send + 'static>(
@@ -192,7 +267,8 @@ fn one<E: Engine + Send + 'static>(
     looks: Option<&dyn Looks>,
     element: &ToDraw,
 ) -> Result<Drawing, String> {
-    let layers = kernel.layers(&element.recipe).map_err(|e| e.message)?;
+    let recipe = seated(kernel, element)?;
+    let layers = kernel.layers(&recipe).map_err(|e| e.message)?;
     let parts: Vec<PlanElement<'_, E::Solid>> = layers
         .iter()
         .map(|layer| PlanElement {
@@ -220,6 +296,7 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
         scale: Scale,
         elements: &[ToDraw],
         looks: Option<&dyn Looks>,
+        crop: Option<PlanCrop<'_>>,
     ) -> Result<Drawn, String> {
         let defaults = Defaults::new();
         let view = View::plan(cut);
@@ -237,7 +314,49 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
             }
         }
         let drawing = Drawing::new(view, lines, regions).map_err(|e| e.to_string())?;
-        let svg = to_svg(&drawing, defaults.styles(looks), scale).map_err(|e| e.to_string())?;
+        let styles = defaults.styles(looks);
+        let mut pic = picture(&drawing, styles, scale).map_err(|e| e.to_string())?;
+        if let Some(PlanCrop { view, crop }) = crop {
+            let outline = corners(crop);
+            if crop.is_on() {
+                pic = clip(&pic, &outline).map_err(|e| e.to_string())?;
+            }
+            if crop.is_shown() {
+                let width = defaults
+                    .lines
+                    .model_pens
+                    .width(CROP_PEN, scale)
+                    .map_err(|e| format!("{e:?}"))?;
+                for (i, start) in outline.iter().enumerate() {
+                    let end = outline
+                        .get(i.saturating_add(1))
+                        .or_else(|| outline.first())
+                        .copied()
+                        .unwrap_or(*start);
+                    pic.strokes.push(Stroke {
+                        shape: Shape::Segment { start: *start, end },
+                        kind: LineKind::Projected,
+                        width,
+                        colour: CROP_COLOUR,
+                        pattern: SOLID,
+                        opacity: 100,
+                        element: view.clone(),
+                        role: CROP_ROLE.to_owned(),
+                    });
+                }
+            }
+        }
+        let bytes = Svg.write(&pic).map_err(|e| e.to_string())?;
+        let svg = String::from_utf8(bytes).map_err(|e| e.to_string())?;
         Ok(Drawn { svg, skipped })
     }
+}
+
+/// A crop's corners as the drawing's points: the project's x and y in grid steps, y up the sheet.
+fn corners(crop: &Crop) -> Vec<ViewPoint> {
+    crop.region()
+        .corners()
+        .iter()
+        .map(|p| ViewPoint::grid(i128::from(p.x.steps()), i128::from(p.y.steps())))
+        .collect()
 }

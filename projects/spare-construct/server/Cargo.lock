@@ -658,6 +658,9 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-clash",
+ "construct-curtain",
+ "construct-dimensions",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -675,6 +678,7 @@ dependencies = [
  "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-styles",
  "construct-transport",
  "construct-types",
@@ -708,6 +712,44 @@ dependencies = [
  "construct-model",
  "engine-geometry",
  "kit-store",
+]
+
+[[package]]
+name = "construct-curtain"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-families",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-dimensions"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-model",
+ "construct-params",
+ "construct-warnings",
+ "kit-core",
+ "num-bigint",
+]
+
+[[package]]
+name = "construct-doorgen"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-params",
+ "engine-geometry",
+ "kit-core",
 ]
 
 [[package]]
@@ -755,6 +797,7 @@ dependencies = [
  "engine-geometry",
  "hex",
  "kit-core",
+ "num-bigint",
  "serde_json",
  "sha2 0.11.0",
 ]
@@ -867,6 +910,8 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-curtain",
+ "construct-dimensions",
  "construct-families",
  "construct-formulas",
  "construct-grids",
@@ -880,6 +925,7 @@ dependencies = [
  "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-types",
  "construct-views",
  "construct-walls",
@@ -987,6 +1033,21 @@ dependencies = [
  "construct-model",
  "kit-core",
  "rstar",
+]
+
+[[package]]
+name = "construct-stairs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-roofs",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4408,6 +4469,7 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-styles",
+ "construct-views",
  "engine-geometry",
  "flate2",
  "futures",
