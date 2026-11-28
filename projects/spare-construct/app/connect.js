@@ -2121,6 +2121,8 @@
     }
     headerView();
     drawBrowser();
+    // The templates dialog says which template the open view follows: it reads the views too.
+    if (C.manage?.which === 'templates') renderManage();
   }
 
   /** Stops showing a model view's plan; the plan pane draws only its live elements again. */
