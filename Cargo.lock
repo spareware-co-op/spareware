@@ -863,6 +863,7 @@ name = "construct-schedules"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-formulas",
  "construct-model",
  "construct-params",
  "construct-phases",

@@ -11,7 +11,7 @@
     reason = "test code; the rules are for the crate's own code"
 )]
 
-use construct_categories::{CategoryId, CategoryTable, DOORS, FLOORS, ROOMS, SHEETS, WALLS};
+use construct_categories::{CategoryId, CategoryTable, DOORS, FLOORS, ROOMS, VIEWPORTS, WALLS};
 use construct_params::{Area, Choice, Definition, Holder, Kind, Length, ProjectParams, Value};
 use construct_phases::{DesignOptions, ElementStaging, PhaseList};
 use construct_schedules::{
@@ -337,7 +337,7 @@ fn sorting_by_number_and_by_text_either_way_and_by_several_keys() {
         list.check(&basis).unwrap();
         ids(&rows(&list, &basis, &doors()))
     };
-    let by = |field: Field, descending: bool| Sort { field, descending };
+    let by = |field: Field, descending: bool| Sort::by(field, descending);
     // Numbers by value: 1, 1, 2 with ties in ID order; descending 2 first.
     assert_eq!(
         sorted(vec![by(Field::Parameter(i("leaves")), false)]),
@@ -436,6 +436,8 @@ fn every_refusal_is_named_with_its_reason() {
     let list = schedule("Doors", DOORS).with_sorting(vec![Sort {
         field: Field::Quantity("Volume".to_owned()),
         descending: false,
+        header: false,
+        footer: false,
     }]);
     assert!(matches!(
         list.check(&basis).unwrap_err(),
@@ -497,7 +499,7 @@ fn every_refusal_is_named_with_its_reason() {
         list.check(&basis).unwrap_err(),
         ScheduleError::UnknownCategory(CategoryId(123_456))
     );
-    let list = schedule("Sheets", SHEETS);
+    let list = schedule("Viewports", VIEWPORTS);
     assert!(matches!(
         list.check(&basis).unwrap_err(),
         ScheduleError::NotListable { .. }
@@ -512,10 +514,14 @@ fn every_refusal_is_named_with_its_reason() {
         Sort {
             field: Field::Name,
             descending: false,
+            header: false,
+            footer: false,
         },
         Sort {
             field: Field::Name,
             descending: true,
+            header: false,
+            footer: false,
         },
     ]);
     assert!(matches!(
@@ -604,6 +610,8 @@ fn a_schedule_round_trips_through_its_record_and_reads_strictly() {
         .with_sorting(vec![Sort {
             field: Field::Name,
             descending: true,
+            header: false,
+            footer: false,
         }]);
     let document = i("doc");
     let record = list.to_record(&document);
@@ -736,6 +744,8 @@ fn a_wall_schedule_lists_length_area_and_volume_and_filters_and_sorts_on_them() 
     let long_first = list.clone().with_sorting(vec![Sort {
         field: Field::Quantity("Length".to_owned()),
         descending: true,
+        header: false,
+        footer: false,
     }]);
     assert_eq!(
         ids(&rows(&long_first, &basis, &walls)),
@@ -744,6 +754,8 @@ fn a_wall_schedule_lists_length_area_and_volume_and_filters_and_sorts_on_them() 
     let short_first = list.with_sorting(vec![Sort {
         field: Field::Quantity("Area".to_owned()),
         descending: false,
+        header: false,
+        footer: false,
     }]);
     let found = rows(&short_first, &basis, &walls);
     assert_eq!(ids(&found), ["w-short", "w-long"]);

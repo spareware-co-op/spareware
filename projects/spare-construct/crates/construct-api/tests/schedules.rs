@@ -353,7 +353,7 @@ async fn every_refusal_is_in_words_and_changes_nothing() {
     // An unknown category, and one with nothing to list.
     let why = refused("schedule.create", make("S-3", "Nowhere", 424_242)).await;
     assert_eq!(why, "There is no category 424242.");
-    let why = refused("schedule.create", make("S-3", "Sheets", 7100)).await;
+    let why = refused("schedule.create", make("S-3", "Viewports", 7400)).await;
     assert!(why.starts_with("A schedule cannot list"), "{why}");
     // A field the category does not have.
     let mut args = make("S-3", "Doors", DOORS.0);

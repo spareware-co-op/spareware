@@ -15,11 +15,12 @@
 //! gives an empty cell, and a filter on it lists nothing: [`crate::Schedule::check`] is what says
 //! so in words, and a reader of rows is not stopped by it.
 
+use crate::calc;
 use crate::field::{Basis, Field};
 use crate::filter::order;
 use crate::schedule::Schedule;
 use construct_categories::CategoryId;
-use construct_params::{Kind, Value};
+use construct_params::{Kind, Units, Value};
 use kit_core::Id;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -63,7 +64,9 @@ impl Subject {
                 value: Value::Text(name.clone()),
                 shown: name.clone(),
             }),
-            Field::Parameter(_) | Field::Quantity(_) => self.readings.get(&field.key()).cloned(),
+            Field::Parameter(_) | Field::Quantity(_) | Field::Calculated(_) => {
+                self.readings.get(&field.key()).cloned()
+            }
         }
     }
 }
@@ -105,7 +108,7 @@ pub fn columns(schedule: &Schedule, basis: &Basis<'_>) -> Vec<Column> {
         .fields()
         .iter()
         .map(|field| {
-            let definition = basis.definition(schedule.lists(), field);
+            let definition = schedule.definition(basis, field);
             Column {
                 field: field.clone(),
                 name: definition
@@ -131,22 +134,52 @@ fn by_key(a: Option<&Reading>, b: Option<&Reading>, descending: bool) -> Orderin
     }
 }
 
-/// The rows of a schedule over these elements.
-#[must_use]
-pub fn rows(schedule: &Schedule, basis: &Basis<'_>, subjects: &[Subject]) -> Vec<Row> {
-    let mut listed: Vec<&Subject> = subjects
+/// A row with what produced it: the element's facts, calculated fields worked in.
+pub(crate) struct Listed {
+    /// The row.
+    pub(crate) row: Row,
+    /// The element's facts with the schedule's calculated fields among its readings.
+    pub(crate) subject: Subject,
+}
+
+/// The element's facts with each calculated field of the schedule worked out and added.
+fn with_calculated(
+    schedule: &Schedule,
+    basis: &Basis<'_>,
+    units: &Units,
+    subject: &Subject,
+) -> Subject {
+    let mut worked = subject.clone();
+    for (at, calculated) in schedule.calculated().iter().enumerate() {
+        let names = schedule.names_before(basis, at);
+        if let Some(reading) = calc::work(calculated, &names, &worked.readings, units) {
+            worked.readings.insert(calculated.field().key(), reading);
+        }
+    }
+    worked
+}
+
+/// Every row the schedule lists, filtered and sorted, with the facts each came from.
+pub(crate) fn listed(
+    schedule: &Schedule,
+    basis: &Basis<'_>,
+    units: &Units,
+    subjects: &[Subject],
+) -> Vec<Listed> {
+    let mut found: Vec<Subject> = subjects
         .iter()
         .filter(|subject| basis.lists(schedule.lists(), subject.category))
+        .map(|subject| with_calculated(schedule, basis, units, subject))
         .filter(|subject| {
             schedule.filters().iter().all(|filter| {
-                basis.definition(schedule.lists(), &filter.field).is_some()
+                schedule.definition(basis, &filter.field).is_some()
                     && subject
                         .reading(&filter.field)
                         .is_some_and(|reading| filter.holds(&reading.value))
             })
         })
         .collect();
-    listed.sort_by(|a, b| {
+    found.sort_by(|a, b| {
         for sort in schedule.sorting() {
             let found = by_key(
                 a.reading(&sort.field).as_ref(),
@@ -159,23 +192,37 @@ pub fn rows(schedule: &Schedule, basis: &Basis<'_>, subjects: &[Subject]) -> Vec
         }
         a.id.cmp(&b.id)
     });
-    listed
+    found
         .into_iter()
-        .map(|subject| Row {
-            element: subject.id.clone(),
-            cells: schedule
-                .fields()
-                .iter()
-                .map(|field| {
-                    let reading = basis
-                        .definition(schedule.lists(), field)
-                        .and_then(|_| subject.reading(field));
-                    Cell {
-                        value: reading.as_ref().map(|r| r.value.clone()),
-                        shown: reading.map(|r| r.shown),
-                    }
-                })
-                .collect(),
+        .map(|subject| Listed {
+            row: Row {
+                element: subject.id.clone(),
+                cells: schedule
+                    .fields()
+                    .iter()
+                    .map(|field| {
+                        let reading = schedule
+                            .definition(basis, field)
+                            .and_then(|_| subject.reading(field));
+                        Cell {
+                            value: reading.as_ref().map(|r| r.value.clone()),
+                            shown: reading.map(|r| r.shown),
+                        }
+                    })
+                    .collect(),
+            },
+            subject,
         })
+        .collect()
+}
+
+/// The rows of a schedule over these elements, one for each element, calculated fields worked out
+/// and shown in the metric display settings; [`crate::table`] is the same rows grouped, folded and
+/// totalled, shown in the document's own.
+#[must_use]
+pub fn rows(schedule: &Schedule, basis: &Basis<'_>, subjects: &[Subject]) -> Vec<Row> {
+    listed(schedule, basis, &Units::default(), subjects)
+        .into_iter()
+        .map(|found| found.row)
         .collect()
 }

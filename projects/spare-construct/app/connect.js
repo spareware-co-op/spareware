@@ -1594,7 +1594,7 @@
   }
   function hasShape(record) {
     // A schedule, a sheet, a viewport and a dimension are records with no shape too: the plan draws none of them.
-    return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'sheet', 'viewport', 'dimension'].includes(record.kind);
+    return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'schedule-placement', 'sheet', 'viewport', 'dimension'].includes(record.kind);
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1715,6 +1715,8 @@
     C.problems.set(ask.where, reason);
     dimsRefused(ask.where);
     showProblems();
+    // A schedule's box ticked ahead of the server's answer goes back to what the server holds.
+    if (ask.where.startsWith('sched-')) loadScheduleTable();
   }
 
   /** An edit of the page's own was applied. */
@@ -2538,6 +2540,13 @@
   // for a schedule. Opening one shows its table in a dialog with its fields, filters and sorting
   // to change, each a whole-list schedule command; a refusal is the server's words in the part
   // where the person made the change. Choosing a row selects that element in the model.
+  // A94 adds to the same dialog: a sort key with a header and a footer groups the table (the server
+  // gives the items in order: header, rows, footer), "Itemize every instance" off folds equal rows into
+  // one with a count, the totals of each column and the grand total are the server's exact sums,
+  // a calculated field is a formula the server checks, a double-click on a value changes it in the
+  // model (`schedule.cell`: the element's own command, so one undo step and a claim; a value that is
+  // worked out or held elsewhere is refused in the server's words), and a schedule placed on a sheet is
+  // drawn from the sheet's listing, which the server draws from the live table.
 
   C.schedules = null; // the model's schedules as the server lists them; null until they come
   C.scheduleCategories = null; // { model, list }: the categories a schedule may list
@@ -2613,12 +2622,26 @@
       if (C.sched !== open || C.model?.id !== model || seq !== open.seq) return;
       open.table = table;
       open.error = null;
+      await readScheduleSheets(open, model);
+      if (C.sched !== open || C.model?.id !== model || seq !== open.seq) return;
     } catch (error) {
       if (C.sched !== open || seq !== open.seq) return;
       // A schedule just made is not in the list until the log's entry for it comes.
       open.error = C.schedules?.some((schedule) => schedule.id === open.id) ? error.message : null;
     }
     spent('schedule-draw', renderSchedule);
+  }
+
+  /** The model's sheets and, for each sheet the open schedule stands on, that sheet with the schedule drawn from its live table. */
+  async function readScheduleSheets(open, model) {
+    try {
+      open.sheets = await api(`${modelUrl(model)}/sheets`);
+      const drawn = {};
+      for (const placed of open.table.schedule.placements) drawn[placed.sheet] = await api(`${modelUrl(model)}/sheets/${encodeURIComponent(placed.sheet)}`);
+      open.drawn = drawn;
+    } catch {
+      // The sheets are shown beside the table when they come; the table is not held back by them.
+    }
   }
 
   /** An entry of the log arrived for the open model: its schedules and the open table may differ. */
@@ -2679,7 +2702,7 @@
   /** Opens a schedule's table in a dialog. */
   function openSchedule(id) {
     const schedule = C.schedules?.find((s) => s.id === id);
-    C.sched = { id, table: null, error: null, seq: 0, gone: false, shown: false, draft: {} };
+    C.sched = { id, table: null, error: null, seq: 0, gone: false, shown: false, draft: {}, editing: null, sheets: [], drawn: {} };
     openDlg(schedule?.name ?? 'Schedule', `<div id="stack-sched" class="stack-manage stack-sched" data-schedule="${esc(id)}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
     drawBrowser();
     loadScheduleTable();
@@ -2702,26 +2725,190 @@
   /** The words for a field key, from what the category offers. */
   const fieldName = (table, key) => table.offered.find((field) => field.field === key)?.name ?? key;
 
+  /** One cell of a data row: its text as the server shows it, or the input a person is typing a new value in. */
+  function scheduleCell(open, column, row, cell) {
+    const editing = open.editing?.element === row.element && open.editing?.field === column.field;
+    const shown = cell.shown ?? '';
+    if (editing) {
+      return `<td data-cell="${esc(column.field)}" data-element="${esc(row.element)}" class="editing"><input class="inp" data-draft data-enter="stackschedcellset" data-key="sched-cell" value="${esc(shown)}" aria-label="New value of ${esc(column.name)}"></td>`;
+    }
+    // Only a row of one element is edited in place; a folded row stands for several.
+    const where = row.count === 1 ? ` data-cell="${esc(column.field)}" data-element="${esc(row.element)}"${column.editable ? ' class="cell-edit"' : ''}` : '';
+    return `<td${where}>${esc(shown)}</td>`;
+  }
+
+  /** The cells of a footer or the grand total: each column's totals as "sum: 12 m", the label where a column has none. */
+  function scheduleFooter(table, footer, grand) {
+    const count = table.columns.length + (table.schedule.itemize ? 0 : 1);
+    const cells = Array.from({ length: count }, () => []);
+    for (const total of footer.totals) {
+      if (total.shown !== null && cells[total.column]) cells[total.column].push(`${total.total}: ${total.shown}`);
+    }
+    const label = grand ? `Grand total (${footer.elements})` : `${footer.name}: ${footer.shown ?? 'none'} (${footer.elements})`;
+    cells[0]?.unshift(label);
+    const cls = grand ? 'sched-foot sched-grand' : 'sched-foot';
+    const at = grand ? ' data-grand="1"' : ` data-footer="${footer.level}"`;
+    return `<tr class="${cls}"${at}>${cells.map((words) => `<td>${esc(words.join('  '))}</td>`).join('')}</tr>`;
+  }
+
+  /** The table: a heading for each field, then each header, row and footer as the server gives them. */
+  function scheduleTable(open) {
+    const table = open.table;
+    const schedule = table.schedule;
+    const counted = !schedule.itemize;
+    const width = table.columns.length + (counted ? 1 : 0);
+    let html = `<div class="sched-scroll"><table class="sched-table" data-schedule-table="${esc(schedule.id)}"><thead><tr>`;
+    html += table.columns.map((column) => `<th data-field="${esc(column.field)}">${esc(column.name)}</th>`).join('');
+    html += `${counted ? '<th data-field="count">Count</th>' : ''}</tr></thead><tbody>`;
+    for (const item of table.items) {
+      if (item.kind === 'header') {
+        html += `<tr class="sched-head" data-header="${item.level}"><td colspan="${width}">${esc(item.name)}: ${esc(item.shown ?? 'none')}</td></tr>`;
+      } else if (item.kind === 'footer') {
+        html += scheduleFooter(table, item, false);
+      } else {
+        const chosen = S.sel === item.element;
+        html += `<tr class="click${chosen ? ' sel' : ''}" data-act="stackschedrow" data-a="${esc(item.element)}" data-row="${esc(item.element)}"${chosen ? ' aria-selected="true"' : ''}>`;
+        html += item.cells.map((cell, at) => scheduleCell(open, table.columns[at], item, cell)).join('');
+        html += `${counted ? `<td class="sched-count">${item.count}</td>` : ''}</tr>`;
+      }
+    }
+    if (table.grand) html += scheduleFooter(table, table.grand, true);
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  /** The sorting part: each key up or down, with a header and a footer for its groups. */
+  function scheduleSortingPart(table, off) {
+    const schedule = table.schedule;
+    const draft = C.sched.draft;
+    let html = '<section data-part="sorting"><h3>Sorting and grouping</h3>';
+    if (!schedule.sorting.length) html += '<p class="small faint">Not sorted: the rows come in the order of the elements.</p>';
+    schedule.sorting.forEach((sort, at) => {
+      const name = fieldName(table, sort.field);
+      const words = `${name}, ${sort.order === 'descending' ? 'down' : 'up'}`;
+      html += `<div class="stack-line" data-sort-row="${at}"><span class="grow">${esc(words)}</span>`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stackschedsortheader" data-a="${at}" data-key="sched-sort-header:${at}"${sort.header ? ' checked' : ''}${off}>Header</label>`;
+      html += `<label class="chk"><input type="checkbox" data-chg="stackschedsortfooter" data-a="${at}" data-key="sched-sort-footer:${at}"${sort.footer ? ' checked' : ''}${off}>Footer</label>`;
+      html += `<button class="btn sm" data-act="stackschedsortflip" data-a="${at}" aria-label="Turn ${esc(name)} the other way round"${off}>${sort.order === 'descending' ? 'Up instead' : 'Down instead'}</button>`;
+      html += `<button class="btn sm" data-act="stackschedsortoff" data-a="${at}" aria-label="Remove sorting by ${esc(name)}"${off}>Remove</button></div>`;
+    });
+    if (table.offered.length) {
+      const field = table.offered.find((f) => f.field === draft.sortField)?.field ?? table.offered[0].field;
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedsortfield" data-key="sched-sort-field" aria-label="Field to sort by"${off}>`;
+      html += table.offered.map((f) => `<option value="${esc(f.field)}"${f.field === field ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+      html += '</select>';
+      html += `<select class="inp" data-chg="stackschedsortorder" data-key="sched-sort-order" aria-label="Which way"${off}>`;
+      html += ['ascending', 'descending'].map((o) => `<option value="${o}"${o === (draft.sortOrder ?? 'ascending') ? ' selected' : ''}>${o === 'ascending' ? 'Up' : 'Down'}</option>`).join('');
+      html += '</select>';
+      html += `<button class="btn pri sm" data-act="stackschedsortadd" data-key="sched-sort-make"${off}>Add sorting</button></div>`;
+    }
+    return `${html}${problem(`sched-sorting:${schedule.id}`)}</section>`;
+  }
+
+  /** The totals part: whether every instance is listed, the grand total, and each column's totals. */
+  function scheduleTotalsPart(table, off) {
+    const schedule = table.schedule;
+    let html = '<section data-part="totals"><h3>Totals</h3>';
+    html += `<label class="chk"><input type="checkbox" data-chg="stackscheditemize" data-key="sched-itemize"${schedule.itemize ? ' checked' : ''}${off}>Itemize every instance</label>`;
+    html += `<label class="chk"><input type="checkbox" data-chg="stackschedgrand" data-key="sched-grand"${schedule.grand_totals ? ' checked' : ''}${off}>Grand total</label>`;
+    if (!schedule.itemize) html += '<p class="small faint">Rows that agree in every column are one row with a count; the totals still count every element.</p>';
+    for (const totals of schedule.totals) {
+      for (const kind of totals.do) {
+        const words = `${fieldName(table, totals.field)}: ${kind}`;
+        html += `<div class="stack-line" data-total-row="${esc(totals.field)}:${kind}"><span class="grow">${esc(words)}</span>`;
+        html += `<button class="btn sm" data-act="stackschedtotaloff" data-field="${esc(totals.field)}" data-kind="${kind}" aria-label="Remove the total ${esc(words)}"${off}>Remove</button></div>`;
+      }
+    }
+    if (schedule.fields.length) {
+      const field = schedule.fields.includes(C.sched.draft.totalField) ? C.sched.draft.totalField : schedule.fields[0];
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedtotalfield" data-key="sched-total-field" aria-label="Column to total"${off}>`;
+      html += schedule.fields.map((key) => `<option value="${esc(key)}"${key === field ? ' selected' : ''}>${esc(fieldName(table, key))}</option>`).join('');
+      html += '</select>';
+      html += `<select class="inp" data-chg="stackschedtotalkind" data-key="sched-total-kind" aria-label="Which total"${off}>`;
+      html += ['sum', 'count', 'min', 'max'].map((k) => `<option value="${k}"${k === (C.sched.draft.totalKind ?? 'sum') ? ' selected' : ''}>${k}</option>`).join('');
+      html += '</select>';
+      html += `<button class="btn pri sm" data-act="stackschedtotaladd" data-key="sched-total-make"${off}>Add total</button></div>`;
+    }
+    return `${html}${problem(`sched-totals:${schedule.id}`)}</section>`;
+  }
+
+  /** The calculated fields part: each with its formula, and a new one from a name, a formula and a kind. */
+  function scheduleCalculatedPart(table, off) {
+    const schedule = table.schedule;
+    let html = '<section data-part="calculated"><h3>Calculated fields</h3>';
+    if (!schedule.calculated.length) html += '<p class="small faint">None: a calculated field is a formula over other fields, such as Width * Height.</p>';
+    for (const calc of schedule.calculated) {
+      html += `<div class="stack-line" data-calc-row="${esc(calc.name)}"><span class="grow">${esc(`${calc.name} = ${calc.formula}`)}</span>`;
+      html += `<button class="btn sm" data-act="stackschedcalcoff" data-a="${esc(calc.name)}" aria-label="Remove the calculated field ${esc(calc.name)}"${off}>Remove</button></div>`;
+    }
+    const usable = table.offered.filter((f) => f.formula_name);
+    if (usable.length) html += `<p class="small faint">A formula names a field like this: ${esc(usable.map((f) => f.formula_name).join(', '))}.</p>`;
+    html += `<div class="stack-line"><input class="inp" data-draft data-enter="stackschedcalcadd" data-key="sched-calc-name" placeholder="Name" aria-label="Name of the calculated field"${off}>`;
+    html += `<input class="inp" data-draft data-enter="stackschedcalcadd" data-key="sched-calc-formula" placeholder="Formula" aria-label="Formula of the calculated field"${off}>`;
+    html += `<select class="inp" data-draft data-key="sched-calc-kind" aria-label="What the formula gives"${off}>`;
+    html += ['length', 'area', 'volume', 'angle', 'number', 'whole'].map((k) => `<option value="${k}">${k}</option>`).join('');
+    html += '</select>';
+    html += `<button class="btn pri sm" data-act="stackschedcalcadd" data-key="sched-calc-make"${off}>Add calculated field</button></div>`;
+    return `${html}${problem(`sched-calculated:${schedule.id}`)}</section>`;
+  }
+
+  const lengthMm = (stored) => Number(String(stored).split(':').pop()) / 6400;
+
+  /** The sheets part: where the schedule stands, a drawing of each sheet with it, and a new sheet to place it on. */
+  function scheduleSheetsPart(open, off) {
+    const schedule = open.table.schedule;
+    const sheets = open.sheets ?? [];
+    let html = '<section data-part="sheets"><h3>On sheets</h3>';
+    if (!schedule.placements.length) html += '<p class="small faint">Not on any sheet.</p>';
+    for (const placed of schedule.placements) {
+      const sheet = sheets.find((s) => s.id === placed.sheet);
+      const words = `${sheet ? `${sheet.number} ${sheet.name}` : placed.sheet}`;
+      html += `<div class="stack-line" data-placement="${esc(placed.id)}"><span class="grow">${esc(words)}</span>`;
+      html += `<button class="btn sm" data-act="stackschedunplace" data-a="${esc(placed.id)}" aria-label="Take the schedule off ${esc(words)}"${off}>Take off</button></div>`;
+      html += scheduleSheetDrawing(open.drawn?.[placed.sheet], placed.id);
+    }
+    const free = sheets.filter((s) => !schedule.placements.some((p) => p.sheet === s.id));
+    if (free.length) {
+      html += `<div class="stack-line"><select class="inp" data-chg="stackschedsheetchoice" data-key="sched-sheet" aria-label="Sheet to place the schedule on"${off}>`;
+      html += free.map((s) => `<option value="${esc(s.id)}"${s.id === open.draft.sheet ? ' selected' : ''}>${esc(`${s.number} ${s.name}`)}</option>`).join('');
+      html += `</select><button class="btn pri sm" data-act="stackschedplace" data-key="sched-place"${off}>Place on sheet</button></div>`;
+    }
+    return `${html}${problem(`sched-sheets:${schedule.id}`)}</section>`;
+  }
+
+  /** The sheet's paper with the schedule as the server drew it from its table, in millimetres, y up the paper. */
+  function scheduleSheetDrawing(listing, placement) {
+    const drawn = listing?.schedules.find((s) => s.placement === placement);
+    if (!listing || !drawn) return '<p class="small faint">Drawing…</p>';
+    if (drawn.problem) return `<div class="note bad small" role="alert">${esc(drawn.problem)}</div>`;
+    const wide = lengthMm(listing.sheet.width);
+    const tall = lengthMm(listing.sheet.height);
+    const x = lengthMm(drawn.x);
+    const y = lengthMm(drawn.y);
+    // The paper's y runs up; the drawing's runs down from the table's top left corner at (x, y).
+    const top = tall - y;
+    let svg = `<svg class="sched-sheet" data-sheet-preview="${esc(placement)}" viewBox="0 0 ${wide} ${tall}" role="img" aria-label="${esc(drawn.name)} on the sheet">`;
+    svg += `<rect x="0" y="0" width="${wide}" height="${tall}" fill="none" stroke="currentColor" stroke-width="1"/>`;
+    svg += `<g transform="translate(${x} ${top})" stroke="currentColor" stroke-width="0.25" fill="currentColor" font-size="2.5">`;
+    for (const rule of drawn.rules) {
+      svg += `<line x1="${lengthMm(rule.x1)}" y1="${lengthMm(rule.y1)}" x2="${lengthMm(rule.x2)}" y2="${lengthMm(rule.y2)}"/>`;
+    }
+    for (const text of drawn.texts) {
+      svg += `<text x="${lengthMm(text.x)}" y="${lengthMm(text.y) + 3.5}" stroke="none"${text.bold ? ' font-weight="700"' : ''}>${esc(text.text)}</text>`;
+    }
+    return `${svg}</g></svg>`;
+  }
+
   function scheduleHtml(open) {
     const table = open.table;
     const schedule = table.schedule;
-    const id = esc(schedule.id);
     const off = canEdit() ? '' : ' disabled';
     const draft = open.draft;
-    let html = `<p class="small muted">Lists ${esc(schedule.category_name)}: ${plural(table.rows.length, 'row')}, worked out from the model each time it changes. Choose a row to select that element.</p>`;
+    let html = `<p class="small muted">Lists ${esc(schedule.category_name)}: ${plural(table.rows.length, 'row')}, worked out from the model each time it changes. Choose a row to select that element; double-click a value to change it in the model.</p>`;
     if (schedule.problem) html += `<div class="note bad small" role="alert">${esc(schedule.problem)}</div>`;
 
-    // The table: a heading for each field, a row for each element, each value as the server shows it.
-    html += `<div class="sched-scroll"><table class="sched-table" data-schedule-table="${id}"><thead><tr>`;
-    html += table.columns.map((column) => `<th data-field="${esc(column.field)}">${esc(column.name)}</th>`).join('');
-    html += '</tr></thead><tbody>';
-    for (const row of table.rows) {
-      const chosen = S.sel === row.element;
-      html += `<tr class="click${chosen ? ' sel' : ''}" data-act="stackschedrow" data-a="${esc(row.element)}" data-row="${esc(row.element)}"${chosen ? ' aria-selected="true"' : ''}>`;
-      html += row.cells.map((cell) => `<td>${esc(cell.shown ?? '')}</td>`).join('');
-      html += '</tr>';
-    }
-    html += '</tbody></table></div>';
+    html += scheduleTable(open);
+    html += problem(`sched-cell:${schedule.id}`);
     if (!table.rows.length) html += '<p class="small faint">No element passes the filters.</p>';
 
     // Fields: in order, to move or take off; the category's other fields to add.
@@ -2763,26 +2950,10 @@
     }
     html += `${problem(`sched-filters:${schedule.id}`)}</section>`;
 
-    // Sorting: the first key first, each up or down.
-    html += '<section data-part="sorting"><h3>Sorting</h3>';
-    if (!schedule.sorting.length) html += '<p class="small faint">Not sorted: the rows come in the order of the elements.</p>';
-    schedule.sorting.forEach((sort, at) => {
-      const words = `${fieldName(table, sort.field)}, ${sort.order === 'descending' ? 'down' : 'up'}`;
-      html += `<div class="stack-line" data-sort-row="${at}"><span class="grow">${esc(words)}</span>`;
-      html += `<button class="btn sm" data-act="stackschedsortflip" data-a="${at}" aria-label="Turn ${esc(fieldName(table, sort.field))} the other way round"${off}>${sort.order === 'descending' ? 'Up instead' : 'Down instead'}</button>`;
-      html += `<button class="btn sm" data-act="stackschedsortoff" data-a="${at}" aria-label="Remove sorting by ${esc(fieldName(table, sort.field))}"${off}>Remove</button></div>`;
-    });
-    if (table.offered.length) {
-      const field = table.offered.find((f) => f.field === draft.sortField)?.field ?? table.offered[0].field;
-      html += `<div class="stack-line"><select class="inp" data-chg="stackschedsortfield" data-key="sched-sort-field" aria-label="Field to sort by"${off}>`;
-      html += table.offered.map((f) => `<option value="${esc(f.field)}"${f.field === field ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
-      html += '</select>';
-      html += `<select class="inp" data-chg="stackschedsortorder" data-key="sched-sort-order" aria-label="Which way"${off}>`;
-      html += ['ascending', 'descending'].map((o) => `<option value="${o}"${o === (draft.sortOrder ?? 'ascending') ? ' selected' : ''}>${o === 'ascending' ? 'Up' : 'Down'}</option>`).join('');
-      html += '</select>';
-      html += `<button class="btn pri sm" data-act="stackschedsortadd" data-key="sched-sort-make"${off}>Add sorting</button></div>`;
-    }
-    html += `${problem(`sched-sorting:${schedule.id}`)}</section>`;
+    html += scheduleSortingPart(table, off);
+    html += scheduleTotalsPart(table, off);
+    html += scheduleCalculatedPart(table, off);
+    html += scheduleSheetsPart(open, off);
     return html;
   }
 
@@ -2844,6 +3015,10 @@
     scheduleSet('schedule.filters', 'filters', filters.map(({ field, is, to }) => ({ field, is, to })), 'filters');
   };
 
+  /** The sorting as the open schedule holds it, to send back whole. */
+  const sortingList = () => scheduleOf().sorting.map(({ field, order, header, footer }) => ({ field, order, header, footer }));
+  const sortingSet = (list) => scheduleSet('schedule.sorting', 'sorting', list, 'sorting');
+
   CHG.stackschedsortfield = (select) => {
     C.sched.draft.sortField = select.value;
   };
@@ -2854,18 +3029,141 @@
     const root = $('#stack-sched');
     const field = $('[data-key="sched-sort-field"]', root)?.value;
     const order = $('[data-key="sched-sort-order"]', root)?.value;
-    if (field && order) scheduleSet('schedule.sorting', 'sorting', [...scheduleOf().sorting.map(({ field: f, order: o }) => ({ field: f, order: o })), { field, order }], 'sorting');
+    if (field && order) sortingSet([...sortingList(), { field, order, header: false, footer: false }]);
   };
-  ACT.stackschedsortoff = (button) => {
-    const sorting = scheduleOf().sorting.filter((_, at) => at !== Number(button.dataset.a));
-    scheduleSet('schedule.sorting', 'sorting', sorting.map(({ field, order }) => ({ field, order })), 'sorting');
+  ACT.stackschedsortoff = (button) => sortingSet(sortingList().filter((_, at) => at !== Number(button.dataset.a)));
+  ACT.stackschedsortflip = (button) =>
+    sortingSet(sortingList().map((sort, at) => (at === Number(button.dataset.a) ? { ...sort, order: sort.order === 'descending' ? 'ascending' : 'descending' } : sort)));
+  // A header or a footer on a key makes each group of its values one group of the table.
+  // A box ticked is held as ticked while the server answers (the dialog is drawn again at once from
+  // the table it last read, which would put the box back); a refusal reads the table again.
+  const tickSort = (box, part) => {
+    const at = Number(box.dataset.a);
+    const list = sortingList().map((sort, i) => (i === at ? { ...sort, [part]: box.checked } : sort));
+    const held = scheduleOf().sorting[at];
+    if (held) held[part] = box.checked;
+    sortingSet(list);
   };
-  ACT.stackschedsortflip = (button) => {
-    const sorting = scheduleOf().sorting.map(({ field, order }, at) => ({
-      field,
-      order: at === Number(button.dataset.a) ? (order === 'descending' ? 'ascending' : 'descending') : order,
-    }));
-    scheduleSet('schedule.sorting', 'sorting', sorting, 'sorting');
+  CHG.stackschedsortheader = (box) => tickSort(box, 'header');
+  CHG.stackschedsortfooter = (box) => tickSort(box, 'footer');
+
+  // Totals: every instance on or off, the grand total, and each column's totals.
+  CHG.stackscheditemize = (box) => {
+    scheduleOf().itemize = box.checked;
+    manage('schedule.itemize', { schedule: C.sched.id, itemize: box.checked }, `sched-totals:${C.sched.id}`);
+  };
+  CHG.stackschedgrand = (box) => {
+    scheduleOf().grand_totals = box.checked;
+    manage('schedule.totals', { schedule: C.sched.id, grand: box.checked }, `sched-totals:${C.sched.id}`);
+  };
+  CHG.stackschedtotalfield = (select) => {
+    C.sched.draft.totalField = select.value;
+  };
+  CHG.stackschedtotalkind = (select) => {
+    C.sched.draft.totalKind = select.value;
+  };
+  const totalsList = () => scheduleOf().totals.map(({ field, do: kinds }) => ({ field, do: [...kinds] }));
+  const totalsSet = (list) => scheduleSet('schedule.totals', 'totals', list, 'totals');
+  ACT.stackschedtotaladd = () => {
+    const root = $('#stack-sched');
+    const field = $('[data-key="sched-total-field"]', root)?.value;
+    const kind = $('[data-key="sched-total-kind"]', root)?.value;
+    if (!field || !kind) return;
+    const list = totalsList();
+    const held = list.find((totals) => totals.field === field);
+    if (held) {
+      if (!held.do.includes(kind)) held.do.push(kind);
+    } else list.push({ field, do: [kind] });
+    totalsSet(list);
+  };
+  ACT.stackschedtotaloff = (button) => {
+    const list = totalsList()
+      .map((totals) => (totals.field === button.dataset.field ? { ...totals, do: totals.do.filter((kind) => kind !== button.dataset.kind) } : totals))
+      .filter((totals) => totals.do.length);
+    totalsSet(list);
+  };
+
+  // Calculated fields: a name, a formula and what it gives; the server checks the units and the names.
+  const calculatedList = () => scheduleOf().calculated.map(({ name, formula, kind }) => ({ name, formula, kind }));
+  ACT.stackschedcalcadd = () => {
+    const root = $('#stack-sched');
+    const name = $('[data-key="sched-calc-name"]', root)?.value ?? '';
+    const formula = $('[data-key="sched-calc-formula"]', root)?.value ?? '';
+    const kind = $('[data-key="sched-calc-kind"]', root)?.value ?? 'length';
+    manage('schedule.calculated', { schedule: C.sched.id, calculated: [...calculatedList(), { name, formula, kind }] }, `sched-calculated:${C.sched.id}`, () => {
+      for (const key of ['sched-calc-name', 'sched-calc-formula']) {
+        const field = $(`#stack-sched [data-key="${key}"]`);
+        if (field) field.value = '';
+      }
+    });
+  };
+  ACT.stackschedcalcoff = (button) => {
+    const key = `calculated:${button.dataset.a}`;
+    const rest = calculatedList().filter((calc) => calc.name !== button.dataset.a);
+    const set = () => manage('schedule.calculated', { schedule: C.sched.id, calculated: rest }, `sched-calculated:${C.sched.id}`);
+    // A column that shows it goes first: the schedule must not list a field it no longer has.
+    if (scheduleOf().fields.includes(key)) manage('schedule.fields', { schedule: C.sched.id, fields: scheduleOf().fields.filter((f) => f !== key) }, `sched-fields:${C.sched.id}`, set);
+    else set();
+  };
+
+  // On sheets: the schedule placed on a sheet is its own element, drawn by the server from its table.
+  CHG.stackschedsheetchoice = (select) => {
+    C.sched.draft.sheet = select.value;
+  };
+  ACT.stackschedplace = () => {
+    const sheet = $('#stack-sched [data-key="sched-sheet"]')?.value;
+    if (sheet) manage('schedule.place', { placement: newId('PL'), schedule: C.sched.id, sheet }, `sched-sheets:${C.sched.id}`);
+  };
+  ACT.stackschedunplace = (button) => manage('schedule.unplace', { placement: button.dataset.a }, `sched-sheets:${C.sched.id}`);
+
+  // Editing a value in place: double-click a cell, type, press Enter. (The second click of a
+  // double-click is taken in the capture phase, before the row's own click redraws the table: a
+  // `dblclick` event would be sent to the cell that redraw has just taken out of the page.) The value goes back to the
+  // element by the server (`schedule.cell`), so it is one step to undo and the element is claimed
+  // like any edit. A value that is worked out or held elsewhere is not offered as an input: the
+  // server's words say why, where the person asked.
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (event.detail !== 2) return;
+      const cell = event.target.closest?.('#stack-sched td[data-cell]');
+      const open = C.sched;
+      if (!cell || !open?.table || !canEdit()) return;
+      const column = open.table.columns.find((c) => c.field === cell.dataset.cell);
+      if (!column) return;
+      const where = `sched-cell:${open.id}`;
+      if (!column.editable) {
+        manage('schedule.cell', { schedule: open.id, element: cell.dataset.element, field: column.field, value: cell.textContent }, where);
+        return;
+      }
+      C.problems.delete(where);
+      open.editing = { element: cell.dataset.element, field: column.field };
+      renderSchedule();
+      $('#stack-sched [data-key="sched-cell"]')?.focus();
+    },
+    true,
+  );
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Escape' && event.target.dataset?.key === 'sched-cell' && C.sched?.editing) {
+        // Escape leaves the value alone, not the dialog.
+        event.stopPropagation();
+        event.preventDefault();
+        C.sched.editing = null;
+        renderSchedule();
+      }
+    },
+    true,
+  );
+  ACT.stackschedcellset = (input) => {
+    const open = C.sched;
+    if (!open?.editing) return;
+    const { element, field } = open.editing;
+    manage('schedule.cell', { schedule: open.id, element, field, value: input.value }, `sched-cell:${open.id}`, () => {
+      if (C.sched === open) open.editing = null;
+      renderSchedule();
+    });
   };
 
   // --- A view's crop and range ---

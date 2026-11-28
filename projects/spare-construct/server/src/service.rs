@@ -1225,9 +1225,14 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .await?
             .map_err(Refusal::Bad)?;
         let shaped = shaped_of(&mut snapshot, project, model).await?;
-        cloud::sheets::listing_of_sheet(&world, &views, sheet, &shaped)
+        let mut listing = cloud::sheets::listing_of_sheet(&world, &views, sheet, &shaped)
             .map_err(Refusal::Bad)?
-            .ok_or(Refusal::NotFound)
+            .ok_or(Refusal::NotFound)?;
+        // The schedules placed on the sheet, drawn from their tables as the model is now.
+        listing.schedules = cloud::schedules::placed_on(&mut snapshot, project, model, sheet)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(listing)
     }
 
     /// What one view shows: the elements it cuts and the ones it sees, from construct-views' own

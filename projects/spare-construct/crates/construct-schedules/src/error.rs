@@ -69,6 +69,44 @@ pub enum ScheduleError {
     },
     /// A record that is not a schedule as written.
     Malformed(String),
+    /// A total that is not one of `sum`, `count`, `min`, `max`.
+    UnknownTotal(String),
+    /// A field totalled twice.
+    DuplicateTotal(String),
+    /// A field given in the totals with nothing to total.
+    NoTotals(String),
+    /// A total on a field the schedule does not list: a total is read from the column.
+    TotalNotListed(String),
+    /// A total that makes no sense for what the field holds (a sum of text).
+    TotalNotFor {
+        /// The field's name.
+        field: String,
+        /// The total, by its key.
+        total: String,
+        /// What the field holds.
+        holds: Kind,
+    },
+    /// A calculated field that cannot stand: a name taken, a formula that does not read, a unit
+    /// that does not fit or a field it names that is not there.
+    Calculated {
+        /// The calculated field's name.
+        name: String,
+        /// Why, in words.
+        why: String,
+    },
+    /// A cell that is not edited here.
+    ReadOnly {
+        /// The field's name.
+        field: String,
+        /// Why, in words.
+        why: String,
+    },
+    /// The schedule does not list this element.
+    NotListed(Id),
+    /// A schedule already stands on this sheet (or the placement's ID is taken).
+    DuplicatePlacement(Id, Id),
+    /// No placement has this ID.
+    UnknownPlacement(Id),
 }
 
 impl fmt::Display for ScheduleError {
@@ -127,6 +165,42 @@ impl fmt::Display for ScheduleError {
                 write!(f, "The filter on {field} has a value it cannot take: {why}")
             }
             Self::Malformed(why) => f.write_str(why),
+            Self::UnknownTotal(key) => {
+                write!(f, "{key:?} is not a total: sum, count, min or max.")
+            }
+            Self::DuplicateTotal(field) => write!(f, "The field {field} is totalled twice."),
+            Self::NoTotals(field) => write!(f, "The totals of {field} name no total."),
+            Self::TotalNotListed(field) => write!(
+                f,
+                "{field} is not a column of this schedule, so it has no totals: add the field first."
+            ),
+            Self::TotalNotFor {
+                field,
+                total,
+                holds,
+            } => write!(
+                f,
+                "{field} holds {holds}, so its {total} cannot be worked out{}.",
+                if total == "count" {
+                    ""
+                } else {
+                    " (count works on any field)"
+                }
+            ),
+            Self::Calculated { name, why } => {
+                write!(f, "The calculated field {name}: {why}")
+            }
+            Self::ReadOnly { field, why } => write!(f, "{field} cannot be edited here: {why}"),
+            Self::NotListed(id) => {
+                write!(f, "The schedule does not list the element {id}.")
+            }
+            Self::DuplicatePlacement(schedule, sheet) => write!(
+                f,
+                "The schedule {schedule} already stands on the sheet {sheet}; move it instead."
+            ),
+            Self::UnknownPlacement(id) => {
+                write!(f, "No schedule is placed as {id}.")
+            }
         }
     }
 }
