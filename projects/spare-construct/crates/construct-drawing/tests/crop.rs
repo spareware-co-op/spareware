@@ -241,7 +241,10 @@ fn an_arc_is_kept_dropped_or_refused_by_name() {
     let inside = clip(&pic, &rect(0, 0, 1000, 1000)).unwrap();
     assert_eq!(inside.strokes, pic.strokes);
     let outside = clip(&pic, &rect(2000, 2000, 3000, 3000)).unwrap();
-    assert!(outside.strokes.is_empty());
+    assert_eq!(
+        outside.strokes,
+        [] as [construct_drawing::picture::Stroke; 0]
+    );
     // An edge through the circle: no exact answer, so none is given.
     let meets = clip(&pic, &rect(550, 0, 1000, 1000));
     assert!(matches!(meets, Err(DrawingError::Crop(_))), "{meets:?}");

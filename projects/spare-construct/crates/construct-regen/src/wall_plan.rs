@@ -28,7 +28,11 @@
 //! top tie the old box way); `layers`, from the exterior face to the interior face, each with its
 //! `function`, `material`, and its two faces' offsets from the reference line, `exterior` and
 //! `interior`, as stored lengths, positive toward the exterior side. The regenerator fills them
-//! from the wall's type (construct-regen's `walls`).
+//! from the wall's type (construct-regen's `walls`). When the wall meets others, `joins` too
+//! ([`Joints`], derived from construct-walls' join rule by construct-regen's `joins`, job 5.1):
+//! each layer's pieces once its joints are made, which the kernel builder extrudes in place of the
+//! layer's strip, and the whole wall's outline. Every corner there is the crossing of two layer
+//! faces of walls along the plan's axes, so it is on the grid with no rounding.
 //!
 //! Depends on construct-model (recipes) and construct-params (the stored length). Nothing here is
 //! interim: the rounding rule is the kernel's grid's, and an exact kernel takes the same corners.
@@ -76,6 +80,20 @@ pub fn nearest_mm(steps: i64) -> (i64, bool) {
 #[must_use]
 pub fn is_layered(recipe: &Recipe) -> bool {
     recipe.owner == OWN && recipe.op == OP
+}
+
+/// A layered wall's line as its record holds it, `start` and `end` in grid steps of its frame,
+/// read without filling anything: how the walls that meet are found.
+#[must_use]
+pub fn line_of(recipe: &Recipe) -> Option<([i64; 2], [i64; 2])> {
+    if !is_layered(recipe) {
+        return None;
+    }
+    let args = &recipe.args;
+    Some((
+        point(args.get("start"), "start").ok()?,
+        point(args.get("end"), "end").ok()?,
+    ))
 }
 
 /// The 256-bit product of two 128-bit numbers, as its high and low halves.
@@ -374,6 +392,103 @@ pub struct Layered {
     pub height: i64,
     /// Its layers, from the exterior face to the interior face; one face of each is the next's.
     pub layers: Vec<Strip>,
+    /// Its layers' shapes once its joints with the walls it meets are made, when any is
+    /// ([`Joints`]); `None` builds each layer as its strip.
+    pub joined: Option<Joints>,
+}
+
+/// A layered wall's joints, as its filled recipe gives them (`joins`, which the regenerator fills
+/// from construct-walls' join rule, job 5.1): each layer's pieces in plan and the whole wall's
+/// outline, in grid steps of the element's frame. Each piece is strictly convex, counter-clockwise
+/// seen from above, its corners on the grid; a layer with no thickness has none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Joints {
+    /// Each layer's pieces, from the exterior.
+    pub layers: Vec<Vec<Vec<[i64; 2]>>>,
+    /// The whole wall's outline, counter-clockwise.
+    pub outline: Vec<[i64; 2]>,
+}
+
+/// The argument a regenerator fills with a layered wall's joints. Derived, never stored.
+pub const JOINS: &str = "joins";
+
+/// Whether every corner of `corners` turns left: a strictly convex polygon, counter-clockwise.
+fn convex(corners: &[[i64; 2]]) -> bool {
+    let n = corners.len();
+    n >= 3
+        && (0..n).all(|at| {
+            let pick = |k: usize| {
+                at.checked_add(k)
+                    .and_then(|i| i.checked_rem(n))
+                    .and_then(|i| corners.get(i))
+                    .copied()
+            };
+            match (pick(0), pick(1), pick(2)) {
+                (Some(a), Some(b), Some(c)) => match (less2(b, a), less2(c, b)) {
+                    (Ok(ab), Ok(bc)) => cross(ab, bc) > 0,
+                    _ => false,
+                },
+                _ => false,
+            }
+        })
+}
+
+/// A polygon, a list of `[x, y]` points as stored lengths.
+fn polygon(value: &Json, what: &str) -> Result<Vec<[i64; 2]>, GeometryError> {
+    let listed = value.as_array().ok_or_else(|| {
+        fault(
+            "MissingArgument",
+            format!("{what} must list its corners, each [x, y] as two stored lengths"),
+        )
+    })?;
+    listed.iter().map(|p| point(Some(p), what)).collect()
+}
+
+/// The joints a filled `joins` argument gives, checked: one list of pieces per layer, none for a
+/// layer with no thickness, each piece strictly convex and counter-clockwise; `None` for a wall
+/// whose joins only say why it is not joined.
+fn joints(value: Option<&Json>, layers: &[Strip]) -> Result<Option<Joints>, GeometryError> {
+    let Some(listed) = value.and_then(|v| v.get("layers")) else {
+        return Ok(None);
+    };
+    let bad = |why: String| fault("BadJoins", why);
+    let listed = listed
+        .as_array()
+        .ok_or_else(|| bad("its joined layers must be a list".to_owned()))?;
+    if listed.len() != layers.len() {
+        return Err(bad(format!(
+            "it has {} layers and {} joined",
+            layers.len(),
+            listed.len()
+        )));
+    }
+    let mut out = Vec::with_capacity(listed.len());
+    for (at, (pieces, layer)) in listed.iter().zip(layers).enumerate() {
+        let pieces = pieces
+            .as_array()
+            .ok_or_else(|| bad(format!("layer {at}'s pieces must be a list")))?;
+        let pieces = pieces
+            .iter()
+            .map(|p| polygon(p, "a joined layer's piece"))
+            .collect::<Result<Vec<_>, _>>()?;
+        if (layer.thickness() == 0) != pieces.is_empty() || !pieces.iter().all(|p| convex(p)) {
+            return Err(bad(format!(
+                "layer {at}'s pieces are not strictly convex polygons of a layer with a thickness"
+            )));
+        }
+        out.push(pieces);
+    }
+    let outline = value
+        .and_then(|v| v.get("outline"))
+        .ok_or_else(|| bad("its joins have no outline".to_owned()))
+        .and_then(|v| polygon(v, "a joined wall's outline"))?;
+    if outline.len() < 3 {
+        return Err(bad("its outline has fewer than three corners".to_owned()));
+    }
+    Ok(Some(Joints {
+        layers: out,
+        outline,
+    }))
 }
 
 /// A stored length's steps.
@@ -511,10 +626,12 @@ impl Layered {
                 )));
             }
         }
+        let joined = joints(args.get(JOINS), &layers)?;
         Ok(Layered {
             plan,
             height,
             layers,
+            joined,
         })
     }
 

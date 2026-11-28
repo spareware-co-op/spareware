@@ -954,13 +954,42 @@ async fn cuts_hold<R: Reader>(
             Ok(None) => continue,
             Err(why) => return Ok(Err(why)),
         };
-        if let Err(e) = fit_in_floor(
+        let cutting = match fit_in_floor(
             &format!("floor {}", floor.id),
             &found.outer,
             &found.holes,
             &found.cutters,
         ) {
-            return Ok(Err(e.to_string()));
+            Ok(cutting) => cutting,
+            Err(e) => return Ok(Err(e.to_string())),
+        };
+        // Job 5.2: a sloped floor and one with slab edges are not cut yet, and are refused by name
+        // here as the builders refuse them.
+        let shaped = construct_slabs::shape_of(&floor.recipe)
+            .ok()
+            .and_then(|shape| {
+                if shape.slope().is_some() {
+                    Some("a slope")
+                } else if !shape.edges().is_empty() {
+                    Some("slab edges")
+                } else {
+                    None
+                }
+            });
+        if let (Some(shaped), Some(cutter)) = (
+            shaped,
+            cutting.first().and_then(|at| found.cutters.get(*at)),
+        ) {
+            return Ok(Err(format!(
+                "{}: it would be cut through floor {}, which has {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: put it elsewhere, or take {} off the floor",
+                cutter.element,
+                floor.id,
+                if shaped == "a slope" {
+                    "the slope"
+                } else {
+                    "the slab edges"
+                },
+            )));
         }
     }
     Ok(Ok(()))

@@ -16,7 +16,7 @@
 //! | `view.rename` | `view`, `name` | The view. A name is unique among the document's views, case aside |
 //! | `view.set` | `view`, and any of `scale`, `detail`, `level` and `range` (a plan), `from`, `to`, `look` and `depth` (a section or an elevation), `staging`, `phasing` (`null` for none) | The view; nothing at all when it already is so |
 //! | `view.duplicate` | `view`, `new` (the new ID), optional `name` | A view like the first, named `<name> copy` (then `copy 2`...) unless a name is given |
-//! | `view.delete` | `view` | Its pointer goes; refused while the view is placed on a sheet |
+//! | `view.delete` | `view` | Its pointer goes; refused while the view is placed on a sheet or holds dimensions |
 //! | `view.graphics.set` | `view`, `category`, `edge` (`cut` or `projection`), `style` | One graphics rule of the view |
 //! | `view.graphics.clear` | `view`, `category`, optional `edge` | The rule, or both of the category's rules; nothing at all when there is none |
 //! | `view.crop.set` | `view`, and any of `region`, `annotation` (`null` for none), `on` | The view's crop: made from `region` when the view has none, else the named parts change |
@@ -1237,6 +1237,12 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     // A view that is placed on a sheet is not deleted from under its viewport.
     if let Some(refusal) =
         crate::cloud::sheets::placed_refusal(run.txn, run.project, run.document, &id).await?
+    {
+        return Ok(Err(refusal));
+    }
+    // Nor one that holds dimensions.
+    if let Some(refusal) =
+        crate::cloud::dimensions::held_refusal(run.txn, run.project, run.document, &id).await?
     {
         return Ok(Err(refusal));
     }

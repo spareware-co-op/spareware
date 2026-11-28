@@ -22,10 +22,18 @@
 //! - **Per layer** ([`layer_read_only`]): each layer's volume and mass the same way, layer `k`
 //!   (from 1 at the top) under the fixed IDs `floor.layer-<k>.volume` and `floor.layer-<k>.mass`,
 //!   named with the layer's function and material.
+//! - **A shaped floor's** ([`shape_quantities`], [`shape_read_only`], job 5.2): a sloped floor's
+//!   top face area ([`TOP_AREA`], to the nearest square step: [`crate::shape`] says when it is
+//!   exact), and its highest and lowest points ([`HIGHEST`], [`LOWEST`], from its tied height);
+//!   each slab edge's length and volume (`floor.edge-<edge ID>.length` and `.volume`). The area,
+//!   thickness and volume above are the slab's: a sloped floor's layers are plumb, so its volume
+//!   is its plan area times its thickness exactly, and slab edges are counted apart. A flat floor
+//!   with no slab edges has none of these rows, so its parameters are as before.
 
 use crate::boundary::{Boundary, twice_signed_area};
 use crate::error::SlabError;
 use crate::layers::Layers;
+use crate::shape::{Shape, TopArea};
 use construct_materials::Materials;
 use construct_params::{Area, Decimal, Definition, Holder, Kind, Length, Value, Volume};
 use construct_solver::Point;
@@ -226,6 +234,113 @@ pub fn read_only(q: &Quantities) -> Result<Vec<(Definition, Option<Value>)>, Sla
         ),
         (define(MASS, "Mass (kg)", Kind::Number)?, kilograms),
     ])
+}
+
+/// The read-only parameter of a sloped floor's top face area.
+pub const TOP_AREA: &str = "floor.top-area";
+/// The read-only parameter of a sloped floor's highest point, from its tied height.
+pub const HIGHEST: &str = "floor.highest";
+/// The read-only parameter of a sloped floor's lowest point, from its tied height.
+pub const LOWEST: &str = "floor.lowest";
+
+/// One slab edge's share of a floor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EdgeQuantity {
+    /// The edge it runs along.
+    pub edge: Id,
+    /// Its stored kind.
+    pub kind: &'static str,
+    /// Its length: its edge's.
+    pub length: Length,
+    /// Its volume.
+    pub volume: Volume,
+}
+
+/// What a shaped floor reads back beyond [`Quantities`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShapeQuantities {
+    /// Whether it slopes.
+    pub sloped: bool,
+    /// Its top face's area.
+    pub top_area: TopArea,
+    /// Its lowest point, from its tied height.
+    pub lowest: Length,
+    /// Its highest point, from its tied height.
+    pub highest: Length,
+    /// Each slab edge, in order.
+    pub edges: Vec<EdgeQuantity>,
+}
+
+/// What a floor of this shape with these layers reads back beyond [`quantities`].
+///
+/// # Errors
+/// [`SlabError::AreaNotExact`]; [`SlabError::OutOfRange`].
+pub fn shape_quantities(shape: &Shape, layers: &Layers) -> Result<ShapeQuantities, SlabError> {
+    let (lowest, highest) = shape.lowest_and_highest(layers)?;
+    Ok(ShapeQuantities {
+        sloped: shape.slope().is_some(),
+        top_area: shape.top_area()?,
+        lowest,
+        highest,
+        edges: shape
+            .pieces()
+            .iter()
+            .map(|p| EdgeQuantity {
+                edge: p.edge.clone(),
+                kind: p.profile.kind(),
+                length: p.length,
+                volume: p.volume,
+            })
+            .collect(),
+    })
+}
+
+/// A shaped floor's read-only parameters, as the module header says: a sloped floor's top area,
+/// highest and lowest points, then each slab edge's length and volume. None for a flat floor
+/// without slab edges.
+///
+/// # Errors
+/// [`SlabError::Malformed`] for an edge ID that makes no parameter ID.
+pub fn shape_read_only(q: &ShapeQuantities) -> Result<Vec<(Definition, Option<Value>)>, SlabError> {
+    let define = |id: &str, name: &str, kind: Kind| {
+        Definition::new(fixed(id)?, name, kind, Holder::Instance)
+            .map_err(|e| SlabError::Malformed(e.to_string()))
+    };
+    let mut rows = Vec::new();
+    if q.sloped {
+        rows.push((
+            define(TOP_AREA, "Top face area", Kind::Area)?,
+            Some(Value::Area(q.top_area.area)),
+        ));
+        rows.push((
+            define(HIGHEST, "Highest point", Kind::Length)?,
+            Some(Value::Length(q.highest)),
+        ));
+        rows.push((
+            define(LOWEST, "Lowest point", Kind::Length)?,
+            Some(Value::Length(q.lowest)),
+        ));
+    }
+    for edge in &q.edges {
+        let what = format!("Slab edge {} ({})", edge.edge, edge.kind);
+        rows.push((
+            define(
+                &format!("floor.edge-{}.length", edge.edge),
+                &format!("{what} length"),
+                Kind::Length,
+            )?,
+            Some(Value::Length(edge.length)),
+        ));
+        rows.push((
+            define(
+                &format!("floor.edge-{}.volume", edge.edge),
+                &format!("{what} volume"),
+                Kind::Volume,
+            )?,
+            Some(Value::Volume(edge.volume)),
+        ));
+    }
+    Ok(rows)
 }
 
 /// Each layer's read-only parameters, top first: its volume and its mass, layer `k` (from 1 at

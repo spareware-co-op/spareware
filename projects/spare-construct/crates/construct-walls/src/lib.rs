@@ -22,6 +22,10 @@
 //!   walls category ([`new_wall_type`], [`with_assembly`], [`assembly_of`]); the instance
 //!   parameters [`LOCATION_LINE`] and [`FLIPPED`] ([`parameter_definitions`],
 //!   [`add_parameters`], [`placement`], [`offsets_of`]).
+//! - [`joins`]: wall joins in plan, L and T, by layer priority (job 5.1): [`PlanWall`] and
+//!   [`PlanLayer`] as the rule reads a wall, [`joins::join`] giving each layer's [`Joined`]
+//!   outlines (or why a wall meeting it is left unjoined), and [`lines_meet`], how the walls that
+//!   meet are found. Pure and exact; note CON-A4-F2-P2-wall-joins.
 //! - [`defaults`]: a small default metric set ([`default_walls`], [`default_wall_types`]).
 //! - [`error`]: [`WallError`], every refusal as a value, naming the layer where there is one.
 //!
@@ -42,14 +46,17 @@
 //!   geometry.
 //! - The commands that make and change wall types and draw walls through the edit log are
 //!   construct-api's (`cloud::walls`): they check every edit with the functions here.
-//! - Joins (jobs 5.1 and 6.1): solved in plan from the location lines and [`Offsets`], each pair
-//!   of meeting layers settled by [`join`].
+//! - Joins: L and T joins are [`joins`] (job 5.1), each pair of meeting layers settled by the
+//!   priority [`join`] gives; construct-regen finds the walls that meet, fills each layered
+//!   wall's recipe with its joined outlines, and builds them. X joins, mitres at any angle and
+//!   joins of more than two walls at a point are job 6.1's.
 //! - Wrapping geometry (job 6.1): which layers wrap is [`Layer::wraps`], with the rule written on
 //!   [`Layer`]; separate answers for ends and for openings would be a new stored version.
 
 pub mod assembly;
 pub mod defaults;
 pub mod error;
+pub mod joins;
 pub mod layer;
 mod length;
 pub mod offsets;
@@ -59,6 +66,7 @@ pub mod wall_type;
 pub use assembly::{Assembly, MOST_TOTAL, Side, Zone};
 pub use defaults::{DefaultWall, default_wall_types, default_walls};
 pub use error::WallError;
+pub use joins::{Joined, Outline, PlanLayer, PlanWall, TOLERANCE, lines_meet};
 pub use layer::{Function, Join, Layer, join};
 pub use offsets::{LocationLine, Offsets};
 pub use stored::{FORMAT_VERSION, OWNER};

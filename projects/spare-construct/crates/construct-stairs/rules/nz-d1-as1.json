@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "id": "nz-d1-as1",
+  "name": "New Zealand Building Code clause D1 Access routes, Acceptable Solution D1/AS1",
+  "edition": "D1/AS1 second edition, amendment 6, effective 1 January 2017",
+  "source": "https://www.building.govt.nz/building-code-compliance/d-access/d1-access-routes/",
+  "pitch_least": { "degrees": 23, "clause": "D1/AS1 1.2.1 and Figure 2, and 4.1.1 Comment 2" },
+  "riser_least": { "length": "150 mm", "clause": "D1/AS1 4.1.1 and Figure 11 (the least riser height it charts)" },
+  "going_most": { "length": "400 mm", "clause": "D1/AS1 4.1.1 and Figure 11 (the deepest tread it charts)" },
+  "uniform_within": { "length": "5 mm", "clause": "D1/AS1 4.1.3" },
+  "landing_least": { "length": "900 mm", "clause": "D1/AS1 4.3.4" },
+  "headroom_least": { "length": "2000 mm", "clause": "D1/AS1 1.4.1, Table 1 and Figure 3" },
+  "categories": [
+    {
+      "id": "accessible",
+      "name": "Accessible stairway",
+      "pitch_most": { "degrees": 32, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "180 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "310 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "2500 mm", "clause": "D1/AS1 4.3.2 and Table 7" },
+      "width_least": { "length": "900 mm", "clause": "D1/AS1 4.2.1" }
+    },
+    {
+      "id": "common",
+      "name": "Common stairway",
+      "pitch_most": { "degrees": 37, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "190 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "280 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "2500 mm", "clause": "D1/AS1 4.3.2 and Table 7" },
+      "width_least": { "length": "900 mm", "clause": "D1/AS1 4.2.1" }
+    },
+    {
+      "id": "main-private",
+      "name": "Main private stairway",
+      "pitch_most": { "degrees": 37, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "190 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "280 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "4000 mm", "clause": "D1/AS1 4.3.2 and Table 7" }
+    },
+    {
+      "id": "secondary-private",
+      "name": "Secondary private stairway",
+      "pitch_most": { "degrees": 41, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "200 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "250 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "4000 mm", "clause": "D1/AS1 4.3.2 and Table 7" }
+    },
+    {
+      "id": "minor-private",
+      "name": "Minor private stairway",
+      "pitch_most": { "degrees": 47, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "220 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "220 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "4000 mm", "clause": "D1/AS1 4.3.2 and Table 7" }
+    },
+    {
+      "id": "service",
+      "name": "Service stairway",
+      "pitch_most": { "degrees": 47, "clause": "D1/AS1 4.1.1 and Table 6" },
+      "riser_most": { "length": "220 mm", "clause": "D1/AS1 4.1.1 and Table 6" },
+      "going_least": { "length": "220 mm", "clause": "D1/AS1 4.1.4 a) and Table 6" },
+      "rise_between_landings_most": { "length": "4000 mm", "clause": "D1/AS1 4.3.2 and Table 7" }
+    }
+  ]
+}

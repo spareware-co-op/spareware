@@ -13,6 +13,7 @@ use axum::{Json, Router};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use construct_model::rows::LinkKind;
+use include_dir::{Dir, include_dir};
 use kit_accounts::SignInError;
 use kit_core::Id;
 use kit_store_tikv::{Files, Tikv};
@@ -101,6 +102,10 @@ fn type_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/roof-types",
             get(roof_types),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/curtain-types",
+            get(curtain_types),
+        )
 }
 
 /// Every page and API route, each a handler over the app.
@@ -109,6 +114,8 @@ pub fn routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
         .route("/connect.js", get(connect_script))
+        .route("/core/{*file}", get(core_module))
+        .route("/tools/{*file}", get(tool_module))
         .route("/view3d.js", get(view_script))
         .route("/connect.css", get(connect_style))
         .route("/shapes/construct_shapes.js", get(shapes_script))
@@ -160,11 +167,17 @@ pub fn routes(app: Shared) -> Router {
         .route("/api/projects/{project}/models/{model}/types", get(types))
         .route("/api/projects/{project}/models/{model}/levels", get(levels))
         .merge(view_routes())
+        .merge(schedule_routes())
         .route(
             "/api/projects/{project}/models/{model}/families",
             get(families),
         )
         .route("/api/projects/{project}/models/{model}/rooms", get(rooms))
+        .route("/api/projects/{project}/models/{model}/stairs", get(stairs))
+        .route(
+            "/api/projects/{project}/models/{model}/warnings",
+            get(warnings),
+        )
         .route(
             "/api/projects/{project}/models/{model}/filled/{element}",
             get(filled),
@@ -201,8 +214,8 @@ pub fn routes(app: Shared) -> Router {
         .with_state(app)
 }
 
-/// A model's views: the list, what one shows, and its plan, section or elevation as the server
-/// draws it; and its sheets.
+/// A model's views: the list, what one shows, its plan, section or elevation as the server
+/// draws it, its graphics rules and its dimensions; and its sheets.
 fn view_routes() -> Router<Shared> {
     Router::new()
         .route("/api/projects/{project}/models/{model}/views", get(views))
@@ -222,11 +235,68 @@ fn view_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/views/{view}/graphics",
             get(graphics),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/dimensions",
+            get(dimensions),
+        )
         .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
         .route(
             "/api/projects/{project}/models/{model}/sheets/{sheet}",
             get(sheet),
         )
+}
+
+/// A model's schedules: the list, and one with its rows (read only).
+fn schedule_routes() -> Router<Shared> {
+    Router::new()
+        .route(
+            "/api/projects/{project}/models/{model}/schedules",
+            get(schedules),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/schedules/{schedule}",
+            get(schedule),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/schedule-categories",
+            get(schedule_categories),
+        )
+}
+
+async fn schedule_categories(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedule_categories(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn schedules(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedules(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn schedule(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, schedule)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .schedule(&person, &id(&project)?, &id(&model)?, &id(&schedule)?)
+            .await?,
+    ))
 }
 
 /// The Spare Construct demo's own page, unchanged, with the connector added. The page is the
@@ -257,8 +327,32 @@ const FOREVER: (header::HeaderName, &str) = (
     "private, max-age=31536000, immutable",
 );
 
+/// The page's entry module: it loads the core and the tools (note A96-tool-architecture.md).
 async fn connect_script() -> impl IntoResponse {
     ([JAVASCRIPT], include_str!("../../app/connect.js"))
+}
+
+/// The page's core and its tools, each a module the entry imports by its path: embedded as two
+/// trees, so adding a tool's file adds no route here (build.rs rebuilds the server when one is added).
+static CORE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../app/core");
+static TOOLS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../app/tools");
+
+/// A module of one of the trees, by its path in it; only `.js` files are served.
+fn module(tree: &'static Dir<'static>, file: &str) -> Response {
+    match tree.get_file(file) {
+        Some(found) if found.path().extension().is_some_and(|e| e == "js") => {
+            ([JAVASCRIPT], found.contents()).into_response()
+        }
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn core_module(Path(file): Path<String>) -> Response {
+    module(&CORE, &file)
+}
+
+async fn tool_module(Path(file): Path<String>) -> Response {
+    module(&TOOLS, &file)
 }
 
 /// What the 3D view draws, as a module connect.js loads when the view opens.
@@ -633,6 +727,18 @@ async fn graphics(
     ))
 }
 
+async fn dimensions(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .dimensions(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
 async fn sheets(
     State(app): State<Shared>,
     Me(person): Me,
@@ -705,6 +811,30 @@ async fn roof_types(
     ))
 }
 
+async fn stairs(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .stairs(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn curtain_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .curtain_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
 async fn rooms(
     State(app): State<Shared>,
     Me(person): Me,
@@ -713,6 +843,18 @@ async fn rooms(
     Ok(Json(
         app.service
             .rooms(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn warnings(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .warnings(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

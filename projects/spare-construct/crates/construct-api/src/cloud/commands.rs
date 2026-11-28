@@ -7,8 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    elements, families, floors, grids, hosting, levels, openings, params, roofs, rooms, sheets,
-    undo, views, walls,
+    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params,
+    roofs, rooms, schedules, sheets, stairs, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -116,8 +116,8 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
 }
 
 impl<K: Kv, D: Decider> ProjectCommands<K, D> {
-    /// An `element.*` command, after the view, hosting, floor and wall rules of the generic
-    /// commands.
+    /// An `element.*` command, after the view, hosting, floor, wall, roof and stair rules of the
+    /// generic commands.
     async fn element<T: kit_store::Txn>(
         &self,
         staged: &mut T,
@@ -126,6 +126,12 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         edit: &Edit,
     ) -> Result<Outcome, StoreError> {
         if let Err(refused) = views::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = schedules::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = dimensions::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
         if let Err(refused) = sheets::generic_rules(staged, project, edit).await? {
@@ -150,6 +156,12 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
             return Ok(Err(refused));
         }
         if let Err(refused) = roofs::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = stairs::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
+        if let Err(refused) = curtains::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
         elements::apply(staged, project, context, edit, self.claim_ms).await
@@ -186,9 +198,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || walls::is_command(cmd)
                 || floors::is_command(cmd)
                 || roofs::is_command(cmd)
+                || curtains::is_command(cmd)
                 || rooms::is_command(cmd)
+                || stairs::is_command(cmd)
                 || views::is_command(cmd)
-                || sheets::is_command(cmd) =>
+                || schedules::is_command(cmd)
+                || sheets::is_command(cmd)
+                || dimensions::is_command(cmd) =>
             {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
@@ -251,9 +267,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
             || roofs::is_command(&edit.cmd)
+            || curtains::is_command(&edit.cmd)
             || rooms::is_command(&edit.cmd)
+            || stairs::is_command(&edit.cmd)
             || views::is_command(&edit.cmd)
+            || schedules::is_command(&edit.cmd)
             || sheets::is_command(&edit.cmd)
+            || dimensions::is_command(&edit.cmd)
         {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
@@ -276,8 +296,19 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
                     Ok(()) => match roofs::generic_rules(&mut staged, project, edit).await? {
                         Ok(()) => {
-                            params::apply(&mut staged, project, context, edit, self.claim_ms)
-                                .await?
+                            match curtains::generic_rules(&mut staged, project, edit).await? {
+                                Ok(()) => {
+                                    params::apply(
+                                        &mut staged,
+                                        project,
+                                        context,
+                                        edit,
+                                        self.claim_ms,
+                                    )
+                                    .await?
+                                }
+                                Err(refused) => Err(refused),
+                            }
                         }
                         Err(refused) => Err(refused),
                     },
@@ -290,9 +321,13 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         } else if hosting::is_command(&edit.cmd) {
             match families::generic_rules(&mut staged, project, edit).await? {
                 Ok(()) => match openings::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => {
-                        hosting::apply(&mut staged, project, context, edit, self.claim_ms).await?
-                    }
+                    Ok(()) => match curtains::generic_rules(&mut staged, project, edit).await? {
+                        Ok(()) => {
+                            hosting::apply(&mut staged, project, context, edit, self.claim_ms)
+                                .await?
+                        }
+                        Err(refused) => Err(refused),
+                    },
                     Err(refused) => Err(refused),
                 },
                 Err(refused) => Err(refused),
@@ -313,8 +348,16 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if roofs::is_command(&edit.cmd) {
             roofs::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if stairs::is_command(&edit.cmd) {
+            stairs::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if curtains::is_command(&edit.cmd) {
+            curtains::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if views::is_command(&edit.cmd) {
             views::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if schedules::is_command(&edit.cmd) {
+            schedules::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if dimensions::is_command(&edit.cmd) {
+            dimensions::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if sheets::is_command(&edit.cmd) {
             sheets::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd.starts_with("element.") {
