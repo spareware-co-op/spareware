@@ -8,6 +8,9 @@ license.workspace = true
 [dependencies]
 # A schedule lists the elements of a category, and a category's subcategories count as it.
 construct-categories = { path = "../construct-categories" }
+# A calculated field is a formula in the project's one formula language, read, type-checked and
+# worked out exactly by that crate; nothing here works a number out of a formula by itself.
+construct-formulas = { path = "../construct-formulas" }
 # A schedule's record is construct-model's element record, unchanged.
 construct-model = { path = "../construct-model" }
 # Values, kinds, definitions, units and the document's parameter table: a field is a parameter by

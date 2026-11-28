@@ -338,6 +338,9 @@ pub struct SheetListing {
     pub sheet: SheetSummary,
     /// Its viewports, by ID.
     pub viewports: Vec<ViewportView>,
+    /// The schedules placed on it, each drawn from its live table; the listing of a sheet from
+    /// the sheets alone has none, the server adds them ([`crate::cloud::schedules::placed_on`]).
+    pub schedules: Vec<crate::cloud::schedules::PlacedSchedule>,
 }
 
 /// The extent of a view as far as it is known: a plan's is the box of what it cuts and sees, in
@@ -447,6 +450,7 @@ pub fn listing_of_sheet(
     Ok(Some(SheetListing {
         sheet: summary(sheet, &world.sheets),
         viewports: shown,
+        schedules: Vec::new(),
     }))
 }
 
@@ -737,6 +741,15 @@ async fn delete_sheet<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -
     for viewport in world.sheets.viewports_of(sheet.id()) {
         if let Some((viewport_hash, _)) = world.record(viewport.id()) {
             writes.push(Write::Remove(viewport.id().clone(), viewport_hash.clone()));
+        }
+    }
+    // The schedules placed on the sheet go with it.
+    let found: Vec<&Element> = world.all.values().map(|(_, record)| record).collect();
+    if let Ok(placed) = construct_schedules::Placements::from_records(found) {
+        for placement in placed.of_sheet(sheet.id()) {
+            if let Some((placed_hash, _)) = world.record(placement.id()) {
+                writes.push(Write::Remove(placement.id().clone(), placed_hash.clone()));
+            }
         }
     }
     writes.push(Write::Remove(sheet.id().clone(), hash.clone()));

@@ -113,3 +113,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
 .sched-table tr.click { cursor: pointer; }
 .sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }
+.sched-table tr.sched-head td { font-weight: 600; background: var(--hover, rgba(127, 127, 127, 0.12)); }
+.sched-table tr.sched-foot td { font-weight: 600; font-style: italic; }
+.sched-table tr.sched-grand td { border-top: 2px solid var(--hairline); }
+.sched-table td.cell-edit { cursor: text; }
+.sched-table td.editing { padding: 0 4px; }
+.sched-table td.editing input { width: 100%; min-width: 80px; }
+.sched-table td.sched-count { text-align: right; }
+.stack-sched svg.sched-sheet { width: 100%; max-height: 260px; margin: 4px 0 8px; border: 1px solid var(--hairline); color: var(--ink, currentColor); }

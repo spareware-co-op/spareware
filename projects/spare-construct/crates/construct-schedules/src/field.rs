@@ -1,11 +1,14 @@
 //! A field: one column a schedule can show, filter on or sort by, and what a category has of them.
 //!
-//! A field is one of four things, each with one stored spelling ([`Field::key`]):
+//! A field is one of five things, each with one stored spelling ([`Field::key`]):
 //! - `name`: the element's own name, text;
 //! - `type`: the name of the element's type, text, empty when it has none;
 //! - `parameter:<id>`: a parameter by its definition's permanent ID, of any kind;
 //! - `quantity:<name>`: a read-only quantity the product works out of an element and never
-//!   stores, by the name it shows it under (`Area`, `Volume`...). [`QUANTITIES`] lists them.
+//!   stores, by the name it shows it under (`Area`, `Volume`...). [`QUANTITIES`] lists them;
+//! - `calculated:<name>`: a formula over the schedule's other fields, kept in the schedule
+//!   ([`crate::Calculated`]) and worked out for each row; only a schedule knows what it is, so
+//!   [`Basis::definition`] has none for it and [`crate::Schedule::definition`] has.
 //!
 //! What a category has ([`Basis::definition`]) is decided by the document: a parameter is there
 //! when its binding gives it to the category (construct-params' `parameters_of`), a quantity when
@@ -13,7 +16,9 @@
 //! there for every category.
 
 use crate::error::ScheduleError;
-use construct_categories::{CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS};
+use construct_categories::{
+    CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, SHEETS, VIEWS,
+};
 use construct_params::{Definition, Holder, Kind, ProjectParams};
 use kit_core::Id;
 
@@ -33,6 +38,8 @@ pub enum Field {
     Parameter(Id),
     /// A read-only quantity, by its name.
     Quantity(String),
+    /// A calculated field of the schedule, by its name.
+    Calculated(String),
 }
 
 impl Field {
@@ -44,6 +51,7 @@ impl Field {
             Self::Type => "type".to_owned(),
             Self::Parameter(id) => format!("parameter:{id}"),
             Self::Quantity(name) => format!("quantity:{name}"),
+            Self::Calculated(name) => format!("calculated:{name}"),
         }
     }
 
@@ -61,12 +69,16 @@ impl Field {
                     Self::Parameter(Id::parse(id).map_err(|_| bad())?)
                 } else if let Some(name) = key.strip_prefix("quantity:") {
                     Self::Quantity(name.to_owned())
+                } else if let Some(name) = key.strip_prefix("calculated:") {
+                    Self::Calculated(name.to_owned())
                 } else {
                     return Err(bad());
                 }
             }
         };
-        if field.key() == key && !matches!(&field, Self::Quantity(name) if name.is_empty()) {
+        if field.key() == key
+            && !matches!(&field, Self::Quantity(name) | Self::Calculated(name) if name.is_empty())
+        {
             Ok(field)
         } else {
             Err(bad())
@@ -109,7 +121,14 @@ const fn quantity(
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
 /// field's kind cannot follow) and a floor's or roof's per-layer volumes and masses (their number
 /// follows the type's layers).
-pub const QUANTITIES: [Quantity; 15] = [
+///
+/// The sheet list and the view list are schedules of the sheets and views categories: a sheet has
+/// its number, paper and how many views and schedules stand on it, and a view its kind, its scale
+/// as the `n` of 1:n, its detail level and the number of the sheet it stands on (empty when it is
+/// on none). The sheet's and the view's own parameters are the category's parameters as for any
+/// element. There are no revisions in the model yet, so there is no revision list: it waits for
+/// the job that makes them.
+pub const QUANTITIES: [Quantity; 23] = [
     quantity(FLOORS, "floor.area", "Area", Kind::Area),
     quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length),
     quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),
@@ -125,6 +144,14 @@ pub const QUANTITIES: [Quantity; 15] = [
     quantity(ROOMS, "room.area", "Area", Kind::Area),
     quantity(ROOMS, "room.perimeter", "Perimeter", Kind::Length),
     quantity(ROOMS, "room.volume", "Volume", Kind::Volume),
+    quantity(SHEETS, "sheet.number", "Number", Kind::Text),
+    quantity(SHEETS, "sheet.paper", "Paper", Kind::Text),
+    quantity(SHEETS, "sheet.views", "Views placed", Kind::Whole),
+    quantity(SHEETS, "sheet.schedules", "Schedules placed", Kind::Whole),
+    quantity(VIEWS, "view.kind", "Kind", Kind::Text),
+    quantity(VIEWS, "view.scale", "Scale", Kind::Whole),
+    quantity(VIEWS, "view.detail", "Detail level", Kind::Text),
+    quantity(VIEWS, "view.sheet", "On sheet", Kind::Text),
 ];
 
 /// What a document gives a schedule to read its fields against: its categories and its
@@ -151,7 +178,8 @@ impl Basis<'_> {
         Some(found.parent.unwrap_or(found.id))
     }
 
-    /// Whether a schedule may list this category: it exists and holds model elements or datums.
+    /// Whether a schedule may list this category: it exists and holds model elements or datums,
+    /// or it is the sheets or the views (the sheet list and the view list).
     ///
     /// # Errors
     /// [`ScheduleError::UnknownCategory`] or [`ScheduleError::NotListable`].
@@ -161,6 +189,7 @@ impl Basis<'_> {
             .get(category)
             .ok_or(ScheduleError::UnknownCategory(category))?;
         match found.kind {
+            _ if found.id == SHEETS || found.id == VIEWS => Ok(()),
             CategoryKind::Model | CategoryKind::Datum => Ok(()),
             _ => Err(ScheduleError::NotListable {
                 category: found.name,
@@ -200,6 +229,8 @@ impl Basis<'_> {
                 .into_iter()
                 .find(|applicable| applicable.definition.id() == id)
                 .map(|applicable| applicable.definition.clone()),
+            // A schedule's own calculated field: the schedule holds it, not the document.
+            Field::Calculated(_) => None,
             Field::Quantity(name) => {
                 let top = self.top(category)?;
                 let found = QUANTITIES

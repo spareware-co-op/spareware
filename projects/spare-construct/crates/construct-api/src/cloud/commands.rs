@@ -276,6 +276,19 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             return Ok(Err("These commands act on a project.".to_owned()));
         };
         let mut staged = Staged::new(txn);
+        // A schedule's cell is the element's own command: it is turned into it here, and run as it.
+        let translated;
+        let edit = if schedules::is_cell(&edit.cmd) {
+            match schedules::cell_edit(&mut staged, project, edit).await? {
+                Ok(own) => {
+                    translated = own;
+                    &translated
+                }
+                Err(refused) => return Ok(Err(refused)),
+            }
+        } else {
+            edit
+        };
         let outcome = if params::is_command(&edit.cmd) {
             match floors::generic_rules(&mut staged, project, edit).await? {
                 Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {

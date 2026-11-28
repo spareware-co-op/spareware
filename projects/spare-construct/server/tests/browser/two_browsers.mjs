@@ -2927,5 +2927,304 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
 }
 
+console.log('\n   Schedules: grouping, totals, formulas, edits in a cell, and a schedule on a sheet');
+// Ben makes a door schedule. Anna sets every door's sill height, so she holds the doors and Ben
+// touches only the schedule. Ben groups the doors by sill height with a header and a footer, totals
+// the sills (sum and greatest) and the grand total, adds a calculated field (twice the sill, a
+// formula with a unit) and is refused a formula with a wrong unit in the server's words, then turns
+// off "itemize every instance" and equal rows fold into one with a count. Anna double-clicks a sill
+// in the table and types a new value: it goes back to the door, and Ben's table, his totals and his
+// model show it. Ben, straight after, is told Anna is working on that door; a calculated value is
+// refused in words when Anna tries to type into it; Anna's undo puts the sill back in both. Ben
+// places the schedule on a sheet and its drawing follows the doors.
+const dlDoors = await anna.evaluate(() =>
+  [...window.spare.elements.values()].filter((p) => p.el.kind === 'door').map((p) => ({ id: p.el.id, name: p.el.name })).sort((a, b) => (a.id < b.id ? -1 : 1)),
+);
+check(dlDoors.length >= 3, `the model has ${dlDoors.length} doors`);
+const dlPattern = [900, 100, 900, 1200, 900];
+const dlSill = new Map(dlDoors.map((d, n) => [d.id, dlPattern[n % dlPattern.length]]));
+await anna.evaluate(
+  ({ ids, values }) => {
+    ids.forEach((id, n) => window.spare.edit('element.param', { element: id, parameter: 'P-sill', value: `${values[n % values.length]} mm` }));
+  },
+  { ids: dlDoors.map((d) => d.id), values: dlPattern },
+);
+await anna.waitForFunction(() => window.spare.pending.length === 0);
+for (const [id, sill] of dlSill) {
+  await ben.waitForFunction(([door, mm]) => window.spare.elements.get(door)?.el.props['P-sill'] === `length:q0:${mm * 6400}`, [id, sill]);
+}
+pass("Anna sets every door's sill height; Ben's page has them");
+
+await ben.locator('#browser [data-key="new-schedule-name"]').fill('Door list');
+await ben.locator('#browser [data-key="new-schedule-category"]').selectOption({ label: 'Doors' });
+await ben.locator('#browser [data-act="stacknewschedule"]').click();
+await anna.waitForSelector(scheduleLeaf('Door list'));
+await ben.waitForSelector(table);
+const dlId = (await asAnna('schedules')).find((s) => s.name === 'Door list').id;
+await addField('Sill height');
+await headings(ben, 'Name|Sill height');
+// The model also holds doors placed from families, with no sill of their own: the table lists the
+// doors that have one.
+await ben.locator('#stack-sched [data-key="sched-filter-field"]').selectOption({ label: 'Sill height' });
+await ben.locator('#stack-sched [data-key="sched-filter-is"]').selectOption({ value: 'greater' });
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').fill('0 mm');
+await ben.locator('#stack-sched [data-key="sched-filter-value"]').press('Enter');
+await ben.waitForSelector('#stack-sched [data-filter-row]');
+
+// What the open table is, item by item: a header, a row (with its count), a footer.
+const dlShape = (page) =>
+  page
+    .locator(`${table} tbody tr`)
+    .evaluateAll((trs) =>
+      trs.map((tr) =>
+        tr.classList.contains('sched-head')
+          ? `H ${tr.textContent}`
+          : tr.classList.contains('sched-foot')
+            ? `F ${[...tr.children].map((td) => td.textContent).join('|')}`
+            : `R ${tr.dataset.row} x${tr.querySelector('.sched-count')?.textContent ?? 1}`,
+      ),
+    )
+    .catch(() => null);
+const dlShapeIs = async (page, want, label) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = await dlShape(page);
+    if (found && JSON.stringify(found) === JSON.stringify(want)) {
+      pass(label);
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the table was ${JSON.stringify(await dlShape(page))}, wanted ${JSON.stringify(want)}`);
+};
+// The groups of doors by sill, each with its doors in ID order, as the table should show them.
+const dlGroups = () => {
+  const by = new Map();
+  for (const d of dlDoors) by.set(dlSill.get(d.id), [...(by.get(dlSill.get(d.id)) ?? []), d.id]);
+  return [...by.entries()].sort((a, b) => a[0] - b[0]);
+};
+const dlSum = (ids) => ids.reduce((total, id) => total + dlSill.get(id), 0);
+
+// Group by sill height, up, with a header and a footer.
+await sortBy('Sill height', 'ascending');
+await ben.waitForSelector('#stack-sched [data-key="sched-sort-header:0"]');
+await ben.locator('#stack-sched [data-key="sched-sort-header:0"]').check();
+await ben.waitForSelector('#stack-sched [data-key="sched-sort-footer:0"]');
+await ben.locator('#stack-sched [data-key="sched-sort-footer:0"]').check();
+const dlGrouped = () =>
+  dlGroups().flatMap(([sill, ids]) => [`H Sill height: ${sill} mm`, ...ids.map((id) => `R ${id} x1`), `F Sill height: ${sill} mm (${ids.length})|`]);
+await dlShapeIs(ben, dlGrouped(), 'Ben groups the doors by sill height: a header, the doors and a footer for each group');
+await anna.click(scheduleLeaf('Door list'));
+await anna.waitForSelector(table);
+await dlShapeIs(anna, dlGrouped(), "Anna's table is grouped the same way");
+const dlHeld = (await asAnna(`schedules/${dlId}`)).schedule.sorting;
+check(dlHeld.length === 1 && dlHeld[0].header && dlHeld[0].footer, 'the server holds the grouping as a header and a footer on the sort key');
+
+// Totals: the sum and the greatest of the sills for each group, and a grand total, worked by hand.
+const dlTotal = async (kind) => {
+  await ben.locator('#stack-sched [data-key="sched-total-field"]').selectOption({ label: 'Sill height' });
+  await ben.locator('#stack-sched [data-key="sched-total-kind"]').selectOption({ value: kind });
+  await ben.locator('#stack-sched [data-act="stackschedtotaladd"]').click();
+};
+await dlTotal('sum');
+await ben.waitForSelector('#stack-sched [data-total-row$=":sum"]');
+await dlTotal('max');
+await ben.waitForSelector('#stack-sched [data-total-row$=":max"]');
+await ben.locator('#stack-sched [data-key="sched-grand"]').check();
+const dlTotalled = () => [
+  ...dlGroups().flatMap(([sill, ids]) => [
+    `H Sill height: ${sill} mm`,
+    ...ids.map((id) => `R ${id} x1`),
+    `F Sill height: ${sill} mm (${ids.length})|sum: ${sill * ids.length} mm  max: ${sill} mm`,
+  ]),
+  `F Grand total (${dlDoors.length})|sum: ${dlSum(dlDoors.map((d) => d.id))} mm  max: ${Math.max(...dlSill.values())} mm`,
+];
+await dlShapeIs(ben, dlTotalled(), `each footer and the grand total hold the sum and greatest sill (${dlSum(dlDoors.map((d) => d.id))} mm in all)`);
+await dlShapeIs(anna, dlTotalled(), "Anna's table has the same totals");
+const dlGrand = (await asAnna(`schedules/${dlId}`)).grand;
+check(
+  dlGrand.elements === dlDoors.length && dlGrand.totals.find((t) => t.total === 'sum').value === `length:q0:${dlSum(dlDoors.map((d) => d.id)) * 6400}`,
+  "the server's grand total is the exact sum, in grid steps",
+);
+await shot(ben, 'ben-door-totals');
+
+// A sum of text is refused in the server's words, in the Totals part.
+await ben.locator('#stack-sched [data-key="sched-total-field"]').selectOption({ label: 'Name' });
+await ben.locator('#stack-sched [data-key="sched-total-kind"]').selectOption({ value: 'sum' });
+await ben.locator('#stack-sched [data-act="stackschedtotaladd"]').click();
+const dlTotalsWhere = `#stack-sched [data-problem="sched-totals:${dlId}"]`;
+await ben.waitForSelector(dlTotalsWhere);
+check(/Name holds text/.test(await ben.locator(dlTotalsWhere).textContent()), 'a sum of names is refused in words');
+
+// A calculated field: twice the sill. A wrong unit is refused in words.
+await ben.locator('#stack-sched [data-key="sched-calc-name"]').fill('Bad');
+await ben.locator('#stack-sched [data-key="sched-calc-formula"]').fill('Sill_height + 2');
+await ben.locator('#stack-sched [data-act="stackschedcalcadd"]').click();
+const dlCalcWhere = `#stack-sched [data-problem="sched-calculated:${dlId}"]`;
+await ben.waitForSelector(dlCalcWhere);
+const dlCalcWords = await ben.locator(dlCalcWhere).textContent();
+check(/Bad/.test(dlCalcWords) && /unit/.test(dlCalcWords), `a formula with a wrong unit is refused in words: "${dlCalcWords}"`);
+await ben.locator('#stack-sched [data-key="sched-calc-name"]').fill('Bad');
+await ben.locator('#stack-sched [data-key="sched-calc-formula"]').fill('Sill_height * Depth');
+await ben.locator('#stack-sched [data-act="stackschedcalcadd"]').click();
+await ben.waitForFunction((where) => /no field called Depth/.test(document.querySelector(where)?.textContent ?? ''), dlCalcWhere);
+pass('and a field that is not there is named');
+check((await asAnna(`schedules/${dlId}`)).schedule.calculated.length === 0, 'the refused formulas changed nothing');
+await ben.locator('#stack-sched [data-key="sched-calc-name"]').fill('Double sill');
+await ben.locator('#stack-sched [data-key="sched-calc-formula"]').fill('Sill_height * 2');
+await ben.locator('#stack-sched [data-act="stackschedcalcadd"]').click();
+await ben.waitForSelector('#stack-sched [data-calc-row="Double sill"]');
+await ben.locator('#stack-sched [data-key="sched-add-field"]').selectOption({ label: 'Double sill' });
+await ben.locator('#stack-sched [data-act="stackschedfieldadd"]').click();
+await headings(ben, 'Name|Sill height|Double sill');
+const dlCells = (page, id) => page.locator(`${table} tr[data-row="${id}"] td`).allTextContents();
+const dlFirst = dlDoors[0].id;
+await ben.waitForFunction(
+  ([id, want]) => [...document.querySelectorAll(`#stack-sched tr[data-row="${id}"] td`)].map((td) => td.textContent).join('|') === want,
+  [dlFirst, `${dlDoors[0].name}|${dlSill.get(dlFirst)} mm|${dlSill.get(dlFirst) * 2} mm`],
+);
+pass('the calculated field is the sill times two, with its unit, for every door');
+check((await asAnna(`schedules/${dlId}`)).schedule.calculated[0].formula === 'Sill_height * 2', "the server holds the formula in the formula language's one spelling");
+
+// Itemize every instance off: no names, so doors with the same sill fold into one row with a count.
+await ben.locator('#stack-sched [data-field-row="name"] [data-act="stackschedfieldoff"]').click();
+await headings(ben, 'Sill height|Double sill');
+await ben.locator('#stack-sched [data-key="sched-itemize"]').uncheck();
+await ben.waitForSelector(`${table} th[data-field="count"]`);
+// With the name gone, the first column is the sill: its totals share the footer's first cell with
+// the label, and the folded table has a count column after the two.
+const dlFootTotals = (sill, n) => `sum: ${sill * n} mm  max: ${sill} mm`;
+const dlGrandTotals = () => `sum: ${dlSum(dlDoors.map((d) => d.id))} mm  max: ${Math.max(...dlSill.values())} mm`;
+const dlFolded = () => [
+  ...dlGroups().flatMap(([sill, ids]) => [
+    `H Sill height: ${sill} mm`,
+    `R ${ids[0]} x${ids.length}`,
+    `F Sill height: ${sill} mm (${ids.length})  ${dlFootTotals(sill, ids.length)}||`,
+  ]),
+  `F Grand total (${dlDoors.length})  ${dlGrandTotals()}||`,
+];
+await dlShapeIs(ben, dlFolded(), 'with every instance off, doors with the same sill are one row with a count, and the totals still count every door');
+await dlShapeIs(anna, dlFolded(), "Anna's table folds the same way");
+await ben.locator('#stack-sched [data-key="sched-itemize"]').check();
+await ben.waitForFunction(() => !document.querySelector('#stack-sched th[data-field="count"]'));
+const dlItemized = () => [
+  ...dlGroups().flatMap(([sill, ids]) => [
+    `H Sill height: ${sill} mm`,
+    ...ids.map((id) => `R ${id} x1`),
+    `F Sill height: ${sill} mm (${ids.length})  ${dlFootTotals(sill, ids.length)}|`,
+  ]),
+  `F Grand total (${dlDoors.length})  ${dlGrandTotals()}|`,
+];
+await dlShapeIs(ben, dlItemized(), 'itemizing again gives a row for every door');
+
+// Anna types a new sill into the table: double-click, type, Enter. It goes back to the door.
+const dlTarget = dlDoors.find((d) => dlSill.get(d.id) === 100).id;
+const dlCell = (page, id, field) => page.locator(`${table} td[data-cell="${field}"][data-element="${id}"]`);
+await dlCell(anna, dlTarget, 'parameter:P-sill').dblclick();
+await anna.waitForSelector('#stack-sched [data-key="sched-cell"]');
+await anna.locator('#stack-sched [data-key="sched-cell"]').fill('250 mm');
+await anna.locator('#stack-sched [data-key="sched-cell"]').press('Enter');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.props['P-sill'] === 'length:q0:1600000', dlTarget);
+check(
+  (await asAnna(`parameters/${dlTarget}`)).parameters.find((p) => p.id === 'P-sill').shown === '250 mm',
+  "the sill went back to the door: the server's own record of it reads 250 mm",
+);
+pass("Ben's model has the door's new sill");
+dlSill.set(dlTarget, 250);
+await dlShapeIs(ben, dlGroupedWith(), "Ben's table shows the new sill, the doors regrouped and the totals worked again");
+await dlShapeIs(anna, dlGroupedWith(), "Anna's table shows the same");
+function dlGroupedWith() {
+  return dlItemized();
+}
+await ben.waitForFunction(
+  ([id, want]) => [...document.querySelectorAll(`#stack-sched tr[data-row="${id}"] td`)].map((td) => td.textContent).join('|') === want,
+  [dlTarget, '250 mm|500 mm'],
+);
+pass('and the calculated field follows: 500 mm');
+
+// Ben, straight after, is turned away: Anna is working on that door.
+await dlCell(ben, dlTarget, 'parameter:P-sill').dblclick();
+await ben.waitForSelector('#stack-sched [data-key="sched-cell"]');
+await ben.locator('#stack-sched [data-key="sched-cell"]').fill('300 mm');
+await ben.locator('#stack-sched [data-key="sched-cell"]').press('Enter');
+const dlCellWhere = `#stack-sched [data-problem="sched-cell:${dlId}"]`;
+await ben.waitForSelector(dlCellWhere);
+check(/Anna is working on this/.test(await ben.locator(dlCellWhere).textContent()), "Ben typing into the door Anna just changed is told Anna is working on it, where he typed");
+check((await asAnna(`parameters/${dlTarget}`)).parameters.find((p) => p.id === 'P-sill').shown === '250 mm', 'and nothing changed');
+await ben.locator('#stack-sched [data-key="sched-cell"]').press('Escape');
+await ben.waitForFunction(() => !document.querySelector('#stack-sched [data-key="sched-cell"]'));
+
+// A calculated value is read-only: Anna's double-click is refused in words and offers no input.
+await dlCell(anna, dlTarget, 'calculated:Double sill').dblclick();
+const dlAnnaWhere = `#stack-sched [data-problem="sched-cell:${dlId}"]`;
+await anna.waitForSelector(dlAnnaWhere);
+const dlWords = await anna.locator(dlAnnaWhere).textContent();
+check(/Double sill cannot be edited here/.test(dlWords) && /worked out from other fields/.test(dlWords), `a calculated value is refused in words: "${dlWords}"`);
+check((await anna.locator('#stack-sched [data-key="sched-cell"]').count()) === 0, 'and no input is offered');
+
+// Anna's undo puts the sill back, in both browsers; the dialog's scrim covers the quick buttons.
+await anna.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'schedule.cell');
+await closeScheduleOf(anna);
+await anna.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.props['P-sill'] === 'length:q0:640000', dlTarget);
+dlSill.set(dlTarget, 100);
+await dlShapeIs(ben, dlGroupedWith(), "Anna's one undo puts the door's sill back: Ben's table is as it was");
+check((await asAnna(`parameters/${dlTarget}`)).parameters.find((p) => p.id === 'P-sill').shown === '100 mm', 'and the door reads 100 mm');
+await anna.click(scheduleLeaf('Door list'));
+await anna.waitForSelector(table);
+
+// The schedule on a sheet: Ben makes a sheet and places the schedule; the drawing is the live table.
+await ben.evaluate(() => window.spare.edit('sheet.create', { sheet: 'SH-DL', number: 'A-901', name: 'Door sheet' }));
+await ben.waitForFunction(() => window.spare.pending.length === 0);
+await ben.waitForSelector('#stack-sched [data-key="sched-sheet"]');
+await ben.locator('#stack-sched [data-key="sched-sheet"]').selectOption({ label: 'A-901 Door sheet' });
+await ben.locator('#stack-sched [data-act="stackschedplace"]').click();
+const dlDrawing = (page) => page.locator('#stack-sched svg[data-sheet-preview] text').allTextContents().catch(() => []);
+const dlDrawn = async (page, want, label) => {
+  for (let tries = 0; tries < 100; tries += 1) {
+    const found = await dlDrawing(page);
+    if (want.every((text) => found.includes(text))) {
+      pass(label);
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the drawing had ${JSON.stringify(await dlDrawing(page))}, wanted ${JSON.stringify(want)}`);
+};
+await dlDrawn(ben, ['Door list', 'Sill height', 'Double sill', '100 mm', '200 mm'], 'Ben places the schedule on the sheet: its drawing is the table, with the sills');
+check(
+  (await dlDrawing(ben)).some((text) => text.startsWith(`Grand total (${dlDoors.length})  sum: ${dlSum(dlDoors.map((d) => d.id))} mm`)),
+  "and the grand total, worked out from every door's sill",
+);
+await dlDrawn(anna, ['Door list', '100 mm', '200 mm'], "Anna's dialog shows the schedule on the sheet too");
+check(
+  (await asAnna(`sheets/SH-DL`)).schedules.length === 1 && (await asAnna('schedules')).find((s) => s.id === dlId).placements.length === 1,
+  "the server's sheet lists the placed schedule, drawn from its live table",
+);
+await shot(ben, 'ben-schedule-on-sheet');
+// A door changes: the drawing on the sheet follows, with no one asking for it.
+await dlCell(anna, dlTarget, 'parameter:P-sill').dblclick();
+await anna.locator('#stack-sched [data-key="sched-cell"]').fill('400 mm');
+await anna.locator('#stack-sched [data-key="sched-cell"]').press('Enter');
+await dlDrawn(ben, ['400 mm', '800 mm'], "Anna changes a sill and the drawing on Ben's sheet shows 400 mm and 800 mm");
+await dlDrawn(anna, ['400 mm', '800 mm'], 'and on her own');
+// Ben takes it off the sheet.
+await ben.locator('#stack-sched [data-act="stackschedunplace"]').click();
+await ben.waitForFunction(() => !document.querySelector('#stack-sched svg[data-sheet-preview]'));
+await anna.waitForFunction(() => !document.querySelector('#stack-sched svg[data-sheet-preview]'));
+check((await asAnna('sheets/SH-DL')).schedules.length === 0, 'Ben takes the schedule off the sheet: it is gone for both');
+
+// A fresh load agrees: the same schedule, the same grouped table.
+dlSill.set(dlTarget, 400);
+const dlFresh = await signIn('anna');
+await dlFresh.waitForSelector(scheduleLeaf('Door list'));
+await dlFresh.click(scheduleLeaf('Door list'));
+await dlFresh.waitForSelector(table);
+await dlShapeIs(dlFresh, dlGroupedWith(), 'a fresh load gives the same grouped table, with the totals');
+await dlFresh.context().close();
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, after the door schedule, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

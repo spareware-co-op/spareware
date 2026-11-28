@@ -2379,7 +2379,9 @@ async fn the_page_lists_schedules_and_their_live_rows() {
         serde_json::to_value(&listed).unwrap(),
         json!([{ "id": "SC-1", "name": "Doors", "category": 300, "category_name": "Doors",
                  "fields": ["name", "type"], "filters": [],
-                 "sorting": [{ "field": "name", "order": "descending" }], "problem": null }])
+                 "sorting": [{ "field": "name", "order": "descending", "header": false, "footer": false }],
+                 "itemize": true, "grand_totals": false, "totals": [], "calculated": [],
+                 "placements": [], "problem": null }])
     );
 
     let table = s
@@ -2393,7 +2395,8 @@ async fn the_page_lists_schedules_and_their_live_rows() {
     assert_eq!((name.name.as_str(), name.kind), ("Name", "text"));
     assert!(name.comparisons.contains(&"contains"));
     assert!(offered("type").is_some());
-    // The categories a schedule may list include the doors, and leave out the views.
+    // The categories a schedule may list include the doors, and the sheets and views (the sheet
+    // list and the view list), but not the viewports or the schedules themselves.
     let listable = s
         .schedule_categories(&anna, &project, &model)
         .await
@@ -2403,7 +2406,14 @@ async fn the_page_lists_schedules_and_their_live_rows() {
             .iter()
             .any(|c| (c.id, c.name.as_str()) == (300, "Doors"))
     );
-    assert!(listable.iter().all(|c| c.name != "Views"));
+    for name in ["Sheets", "Views"] {
+        assert!(listable.iter().any(|c| c.name == name), "{name}");
+    }
+    assert!(
+        listable
+            .iter()
+            .all(|c| c.name != "Viewports" && c.name != "Schedules")
+    );
     assert!(refused(s.schedule_categories(&dan, &project, &model).await));
     let names: Vec<String> = table
         .rows
@@ -2578,4 +2588,78 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         s.sheet(&anna, &project, &model, &i("VP-1")).await,
         Err(Refusal::NotFound)
     ));
+}
+
+/// A schedule placed on a sheet is drawn by the server from its live table: the sheet's listing
+/// carries the text and lines, a door deleted through the log leaves the drawing, and the sheet
+/// list is a schedule of the sheets, read behind the same access.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_schedule_placed_on_a_sheet_is_drawn_from_its_live_table() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    edit(
+        "sheet.create",
+        json!({ "sheet": "SH-1", "number": "A101", "name": "Doors" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "schedule.create",
+        json!({ "schedule": "SC-1", "name": "Door list", "category": 300,
+                "fields": ["name"], "grand": true,
+                "totals": [{ "field": "name", "do": ["count"] }] }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "schedule.place",
+        json!({ "placement": "PL-1", "schedule": "SC-1", "sheet": "SH-1",
+                "x": "20 mm", "y": "400 mm" }),
+    )
+    .await
+    .unwrap();
+    let listing = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+    assert_eq!(listing.schedules.len(), 1);
+    let drawn = &listing.schedules[0];
+    assert_eq!(
+        (drawn.placement.as_str(), drawn.name.as_str()),
+        ("PL-1", "Door list")
+    );
+    assert_eq!(drawn.x, "length:q0:128000");
+    let texts = |drawn: &construct_api::cloud::schedules::PlacedSchedule| {
+        drawn
+            .texts
+            .iter()
+            .map(|t| t.text.clone())
+            .collect::<Vec<_>>()
+    };
+    // The seeded building's seven doors, and the grand total counting them.
+    assert!(texts(drawn).iter().any(|t| t == "Door list"));
+    assert!(
+        texts(drawn)
+            .iter()
+            .any(|t| t.starts_with("Grand total (7)"))
+    );
+    // The same read after a door is deleted draws one door fewer: nothing was stored.
+    edit("element.delete", json!({ "element": "D-101" }))
+        .await
+        .unwrap();
+    let after = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+    assert!(
+        texts(&after.schedules[0])
+            .iter()
+            .any(|t| t.starts_with("Grand total (6)"))
+    );
+    assert!(after.schedules[0].problem.is_none());
+    // The schedule's own listing says where it stands, and the sheet list counts it.
+    let summary = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(summary[0].placements.len(), 1);
+    assert_eq!(summary[0].placements[0].sheet, "SH-1");
+    // Read behind the model's read access.
+    assert!(refused(s.sheet(&dan, &project, &model, &i("SH-1")).await));
 }
