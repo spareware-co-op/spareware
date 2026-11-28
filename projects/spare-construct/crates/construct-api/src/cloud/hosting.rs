@@ -68,6 +68,8 @@ impl Tool for HostingTool {
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
     const UNDO_ORDER: u16 = 10;
+    const RULES: &'static [construct_warnings::Rule] =
+        &[construct_warnings::INSERT_CROSSES_JOINED_WALL];
 
     async fn apply<T: Txn>(
         txn: &mut T,
