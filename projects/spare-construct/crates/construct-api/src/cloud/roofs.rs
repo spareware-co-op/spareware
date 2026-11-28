@@ -82,9 +82,12 @@
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::floors::{
     Answer, BoundaryArgs, LayerArgs, Run, layers, length, need, plain_boundary, units, why,
 };
+use crate::cloud::params::ParamTool;
+use crate::cloud::tool::Tool;
 use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{elements, levels, params};
 use construct_categories::ROOFS;
@@ -130,6 +133,33 @@ pub const COMMANDS: [&str; 14] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The roof tool ([`Tool`]): roof types and roofs on a rectangle.
+pub struct RoofTool;
+
+impl Tool for RoofTool {
+    const NAME: &'static str = "roof";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.
