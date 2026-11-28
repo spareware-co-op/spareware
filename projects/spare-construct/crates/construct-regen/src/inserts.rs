@@ -20,11 +20,12 @@
 
 use crate::families;
 use crate::hosting::{self, Hosting};
-use crate::joins;
+use crate::joins::{self, Fills};
 use crate::kernel::{self, Opened};
 use crate::levels;
 use crate::parameters::{self, At};
 use crate::rooms::{WALL_KIND, level_of};
+use crate::wall_index::WallIndex;
 use construct_categories::{DOORS, WINDOWS};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Edition, Hosted as HostedAt, Recipe};
@@ -103,10 +104,18 @@ pub async fn in_document<R: Reader>(
         return Ok(Vec::new());
     };
     let records = parameters::read_document(reader, project, document).await?;
+    // The document's walls as they are now, read once for every wall's joints.
+    let mut walls = WallIndex::default();
+    for (_, record) in records.values() {
+        walls.put(record.clone());
+    }
+    let mut fills = Fills::default();
     let mut found = Vec::new();
     for (_, wall) in records.values() {
         if wall.kind == WALL_KIND {
-            found.extend(on_wall(reader, project, document, &edition, &records, wall).await?);
+            let among = (&walls, &mut fills);
+            found
+                .extend(on_wall(reader, project, document, &edition, &records, wall, among).await?);
         }
     }
     Ok(found)
@@ -126,7 +135,12 @@ pub async fn of_wall<R: Reader>(
         return Ok(Vec::new());
     };
     let records = parameters::read_document(reader, project, document).await?;
-    on_wall(reader, project, document, &edition, &records, wall).await
+    let mut walls = WallIndex::default();
+    for (_, record) in records.values() {
+        walls.put(record.clone());
+    }
+    let among = (&walls, &mut Fills::default());
+    on_wall(reader, project, document, &edition, &records, wall, among).await
 }
 
 async fn on_wall<R: Reader>(
@@ -136,9 +150,12 @@ async fn on_wall<R: Reader>(
     edition: &Edition,
     records: &BTreeMap<Id, (Id, Element)>,
     wall: &Element,
+    (walls, fills): (&WallIndex, &mut Fills),
 ) -> Result<Vec<Insert>, StoreError> {
     let at = At::Now;
-    let Ok(host_recipe) = joins::recipe_at(reader, project, document, wall, at).await? else {
+    let Ok(host_recipe) =
+        joins::recipe_among(reader, project, document, wall, at, walls, fills).await?
+    else {
         return Ok(Vec::new());
     };
     // What is hosted on this wall: each element's recipe filled, and where the wall's builder

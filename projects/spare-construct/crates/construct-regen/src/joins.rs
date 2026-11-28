@@ -20,35 +20,36 @@
 //!   builds it again.
 //! - [`on_level`] fills every wall of a level at once, each recipe the one [`fill`] gives it: a
 //!   room's walls are read so (construct-regen's `rooms`), each by its outline as its joints
-//!   shape it, so a room's faces are the walls' faces as they are built.
+//!   shape it, so a room's faces are the walls' faces as they are built. Each wall's joints are
+//!   made among the walls within two meetings of it there too, found through a grid of their
+//!   lines, so filling a level reads each wall's neighbours and not the whole level for each.
 //!
-//! The search reads the level's walls in full: the regenerator's area index is made from built
-//! shapes, which joints change, so a search through it would depend on what was built first. A
-//! spatial filter over the walls' lines is the improvement for large documents.
+//! The walls a wall meets are found through [`WallIndex`], the document's walls by where their
+//! lines run, which tests exactly the walls a full read would and gives the same set: the
+//! regenerator keeps one in step with the kind index ([`fill_among`]), so building a wall reads
+//! its neighbours and not every wall of the document; [`fill`] and [`recipe_at`] read one first.
+//! It is made from the walls' records, never from built shapes: the regenerator's area index is
+//! made from built shapes, which joints change, so a search through it would depend on what was
+//! built first.
 //!
 //! Depends on construct-model (records), construct-params (lengths), construct-levels (an
 //! element's base level), construct-walls (the join rule) and this crate's readers. Nothing here
 //! is interim.
 
 use crate::levels;
-use crate::parameters::{self, At, read_document};
+use crate::parameters::{self, At};
+use crate::read_memo::{Memo, Recording, Written};
+use crate::wall_index::{Grid, WallIndex, line_in_model};
 use crate::wall_plan::{self, JOINS, Layered};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{GeometryError, Recipe};
-use construct_model::keys::{Place, list};
 use construct_params::{Length, Value};
 use construct_walls::joins::join;
-use construct_walls::{Function, Joined, PlanLayer, PlanWall, lines_meet};
+use construct_walls::{Function, Joined, PlanLayer, PlanWall};
 use kit_core::Id;
-use kit_store::{Reader, StoreError, from_row, read_row};
+use kit_store::{Reader, StoreError};
 use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, BTreeSet};
-
-/// The kind layered walls are listed under.
-const WALL_KIND: &str = "wall";
-
-/// A wall's line in the model's plan, in steps.
-type Line = [[Length; 2]; 2];
 
 /// A placement's plan corner in steps.
 fn placed_at(placement: &Placement) -> Option<[i64; 2]> {
@@ -65,59 +66,6 @@ fn in_model(point: [i64; 2], at: [i64; 2]) -> Option<[Length; 2]> {
         Length::from_steps(x.checked_add(ax)?),
         Length::from_steps(y.checked_add(ay)?),
     ])
-}
-
-/// The line of a layered wall's record in the model's plan, read without filling anything.
-fn line_in_model(element: &Element) -> Option<Line> {
-    let (start, end) = wall_plan::line_of(&element.recipe)?;
-    let at = placed_at(&element.placement)?;
-    Some([in_model(start, at)?, in_model(end, at)?])
-}
-
-/// The level an element's base stands on, as its record says.
-fn base_level(element: &Element) -> Option<Id> {
-    construct_levels::base_of(element)
-        .ok()
-        .flatten()
-        .map(|tie| tie.level)
-}
-
-/// The layered walls of a document, as `at` that state, by ID.
-async fn walls_of<R: Reader>(
-    reader: &mut R,
-    project: &Id,
-    document: &Id,
-    at: At,
-) -> Result<BTreeMap<Id, Element>, StoreError> {
-    let mut found = BTreeMap::new();
-    if at == At::Now {
-        for (id, (_, record)) in read_document(reader, project, document).await? {
-            if record.kind == WALL_KIND && wall_plan::is_layered(&record.recipe) {
-                found.insert(id, record);
-            }
-        }
-        return Ok(found);
-    }
-    let Ok(kind) = Id::parse(WALL_KIND) else {
-        return Ok(found);
-    };
-    for (key, row) in reader.scan(&list::kind(project, document, &kind)).await? {
-        let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
-            continue;
-        };
-        let hash: String = from_row(&row)?;
-        let hash = Id::parse(&hash).map_err(|e| StoreError::Damaged(e.to_string()))?;
-        let record = kit_store::Place::Record {
-            project: project.clone(),
-            hash,
-        };
-        let record: Option<Element> = read_row(reader, &record.key()).await?;
-        let record = record.ok_or_else(|| StoreError::Damaged("record missing".into()))?;
-        if wall_plan::is_layered(&record.recipe) {
-            found.insert(element, record);
-        }
-    }
-    Ok(found)
 }
 
 /// The recipe without a `joins` argument: a stored one is never read.
@@ -190,23 +138,28 @@ async fn neighbour<R: Reader>(
     Ok(plan_wall(element, &recipe, placed.elevation))
 }
 
-/// The IDs of the walls of `walls` within two meetings of the wall on `line`: the walls it meets,
-/// and the walls they meet.
-fn within_two(line: Line, me: &Id, walls: &BTreeMap<Id, (Element, Line)>) -> BTreeSet<Id> {
-    let meets = |a: Line| {
-        walls
-            .iter()
-            .filter(move |(id, (_, b))| *id != me && lines_meet(a, *b))
-            .map(|(id, _)| id.clone())
-    };
-    let first: BTreeSet<Id> = meets(line).collect();
-    let mut all = first.clone();
-    for id in &first {
-        if let Some((_, b)) = walls.get(id) {
-            all.extend(meets(*b));
-        }
+/// The neighbours a pass has filled ([`neighbour`]), each kept with the rows it read
+/// ([`crate::read_memo`]): a wall near many that are built in one pass is filled once.
+pub type Fills = Memo<Option<PlanWall>>;
+
+/// [`neighbour`], or what `fills` kept of it while every row it read reads the same.
+async fn neighbour_kept<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    at: At,
+    fills: &mut Fills,
+    written: Option<&Written>,
+) -> Result<Option<PlanWall>, StoreError> {
+    if let Some(kept) = fills.kept(reader, element, written).await? {
+        return Ok(kept);
     }
-    all
+    let mut recording = Recording::new(reader);
+    let made = neighbour(&mut recording, project, document, element, at).await?;
+    let noted = recording.noted();
+    fills.keep(element, noted, made.clone(), written);
+    Ok(made)
 }
 
 /// A length in its stored spelling.
@@ -253,7 +206,9 @@ fn joins_arg(joined: &Joined, at: [i64; 2]) -> Option<Json> {
 /// `recipe`, the filled recipe of `element` (its layers and its height filled, `elevation` its
 /// base's height), with its `joins` argument filled from the walls it meets as the document is
 /// `at` that state; and the IDs of every wall read for it. A recipe that is not a layered wall's,
-/// or does not read as one, is returned as it is, without `joins`.
+/// or does not read as one, is returned as it is, without `joins`. It reads the document's walls
+/// first ([`WallIndex::read`]); a reader that fills many walls keeps one and calls
+/// [`fill_among`].
 ///
 /// # Errors
 /// A [`StoreError`] when the store fails.
@@ -266,6 +221,42 @@ pub async fn fill<R: Reader>(
     elevation: Option<Length>,
     at: At,
 ) -> Result<(Recipe, BTreeSet<String>), StoreError> {
+    if plan_wall(element, &without_joins(recipe), elevation).is_none()
+        || line_in_model(element).is_none()
+    {
+        return Ok((without_joins(recipe), BTreeSet::new()));
+    }
+    let walls = WallIndex::read(reader, project, document, at).await?;
+    let mut fills = Fills::default();
+    fill_among(
+        reader, project, document, element, recipe, elevation, at, &walls, &mut fills, None,
+    )
+    .await
+}
+
+/// [`fill`] with the document's walls as `at` that state already read, in `walls`: the walls it
+/// meets are found through it, and nothing else of the document is read but each of those walls'
+/// type, parameters and levels, each neighbour filled once while what it read stands (`fills`;
+/// `written`, the rows a pass of the regenerator wrote, when this is one).
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "fill's arguments and the walls it reads them among"
+)]
+pub async fn fill_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    recipe: &Recipe,
+    elevation: Option<Length>,
+    at: At,
+    walls: &WallIndex,
+    fills: &mut Fills,
+    written: Option<&Written>,
+) -> Result<(Recipe, BTreeSet<String>), StoreError> {
     let mut recipe = without_joins(recipe);
     let (Some(me), Some(origin)) = (
         plan_wall(element, &recipe, elevation),
@@ -273,28 +264,20 @@ pub async fn fill<R: Reader>(
     ) else {
         return Ok((recipe, BTreeSet::new()));
     };
-    let Some(line) = line_in_model(element) else {
+    if line_in_model(element).is_none() {
         return Ok((recipe, BTreeSet::new()));
-    };
-    let level = base_level(element);
-    let mut lines = BTreeMap::new();
-    for (id, record) in walls_of(reader, project, document, at).await? {
-        if id != element.id
-            && base_level(&record) == level
-            && let Some(other) = line_in_model(&record)
-        {
-            lines.insert(id, (record, other));
-        }
     }
-    let near = within_two(line, &element.id, &lines);
-    let mut walls: BTreeMap<String, PlanWall> = BTreeMap::new();
+    let near = walls.within_two(element);
+    let mut met: BTreeMap<String, PlanWall> = BTreeMap::new();
     for id in &near {
-        if let Some((record, _)) = lines.get(id)
-            && let Some(wall) = neighbour(reader, project, document, record, at).await?
+        if let Some(record) = walls.get(id)
+            && let Some(wall) =
+                neighbour_kept(reader, project, document, record, at, fills, written).await?
         {
-            walls.insert(id.to_string(), wall);
+            met.insert(id.to_string(), wall);
         }
     }
+    let mut walls = met;
     let read: BTreeSet<String> = near.iter().map(ToString::to_string).collect();
     walls.insert(me.id.clone(), me);
     let at_me = walls.keys().position(|id| *id == element.id.to_string());
@@ -336,6 +319,39 @@ pub async fn recipe_at<R: Reader>(
     Ok(Ok(recipe))
 }
 
+/// [`recipe_at`] with the document's walls as `at` that state already read, in `walls`, and the
+/// neighbours filled among them kept in `fills`: what a reader that fills many walls of one state
+/// calls.
+///
+/// # Errors
+/// As [`recipe_at`].
+pub async fn recipe_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    at: At,
+    walls: &WallIndex,
+    fills: &mut Fills,
+) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    let recipe = match levels::recipe_at(reader, project, document, element, at).await? {
+        Ok(recipe) => recipe,
+        Err(e) => return Ok(Err(e)),
+    };
+    if !wall_plan::is_layered(&recipe) {
+        return Ok(Ok(recipe));
+    }
+    let elevation = match levels::placed(reader, project, document, element, at).await? {
+        Ok(placed) => placed.elevation,
+        Err(e) => return Ok(Err(e)),
+    };
+    let (recipe, _) = fill_among(
+        reader, project, document, element, &recipe, elevation, at, walls, fills, None,
+    )
+    .await?;
+    Ok(Ok(recipe))
+}
+
 /// Each of `walls`, an ID and a filled layered wall's recipe placed at the model's origin with its
 /// base at zero, all on one level, with its `joins` filled among the others as [`fill`] fills it
 /// from a store: for tests and tools that hold their walls in hand. A recipe that does not read
@@ -368,33 +384,43 @@ pub struct OnLevel<'a> {
     pub elevation: Option<Length>,
 }
 
-/// Each of `walls`, the walls of one level, with its `joins` filled among all the others: the
-/// recipe [`fill`] gives each from a store. [`fill`] hands the join rule the walls within two
-/// meetings of the wall; this hands it every wall of the level, and more do no harm
-/// (construct-walls' [`join`]); both in the order of their IDs. What a reader of a whole level
-/// takes (a room reads every wall of its level), so it reads each wall once and not once for each
-/// wall it meets. A recipe that does not read as a layered wall is returned as it is, without
-/// `joins`.
+/// Each of `walls`, the walls of one level, with its `joins` filled among the others: the recipe
+/// [`fill`] gives each from a store. Like [`fill`], it hands the join rule the walls within two
+/// meetings of each wall (construct-walls' [`join`] reads no other), in the order of their IDs,
+/// found through a [`Grid`] of their lines, so a level of many walls costs each wall its
+/// neighbours and not the whole level. What a reader of a whole level takes (a room reads every
+/// wall of its level), so it reads each wall once and not once for each wall it meets. A recipe
+/// that does not read as a layered wall is returned as it is, without `joins`.
 #[must_use]
 pub fn on_level(walls: &[OnLevel<'_>]) -> Vec<Recipe> {
     let mut plans: BTreeMap<String, PlanWall> = BTreeMap::new();
+    let mut grid: Grid<String> = Grid::default();
     for wall in walls {
         let recipe = without_joins(wall.recipe);
         if let Some(plan) =
             plan_wall_at(wall.id.to_owned(), wall.placement, &recipe, wall.elevation)
         {
+            grid.insert(wall.id.to_owned(), None, Some([plan.start, plan.end]));
             plans.insert(wall.id.to_owned(), plan);
         }
     }
-    let ids: Vec<String> = plans.keys().cloned().collect();
-    let plans: Vec<PlanWall> = plans.into_values().collect();
     walls
         .iter()
         .map(|wall| {
             let mut out = without_joins(wall.recipe);
-            if let Some(me) = ids.iter().position(|known| known == wall.id)
+            let Some(plan) = plans.get(wall.id) else {
+                return out;
+            };
+            let me = wall.id.to_owned();
+            let mut near = grid.within_two(None, [plan.start, plan.end], &me);
+            near.insert(me);
+            let given: Vec<PlanWall> = near
+                .iter()
+                .filter_map(|id| plans.get(id).cloned())
+                .collect();
+            if let Some(at) = near.iter().position(|id| id == wall.id)
                 && let Some(origin) = placed_at(wall.placement)
-                && let Some(arg) = joins_arg(&join(&plans, me), origin)
+                && let Some(arg) = joins_arg(&join(&given, at), origin)
             {
                 out.args.insert(JOINS.to_owned(), arg);
             }

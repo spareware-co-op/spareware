@@ -17,9 +17,11 @@
 //! builder places them ([`construct_regen::inserts`]), each with the stretch of its host its
 //! opening takes, so an opening that crosses a wall joined to its host is a warning.
 
+use construct_model::element::Element;
 use construct_regen::parameters::At;
-use construct_regen::rooms::{WALL_KIND, level_of, of_kind, wall_plan_of};
-use construct_rooms::{Outcome, ROOM_KIND};
+use construct_regen::pass_plan::Plan;
+use construct_regen::rooms::{found_among, level_of, wall_plan_among};
+use construct_rooms::Outcome;
 use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings};
 use kit_core::Id;
 use kit_store::{Reader, StoreError};
@@ -58,11 +60,17 @@ pub async fn read_warnings<R: Reader>(
 ) -> Result<WarningsView, StoreError> {
     let at = At::Now;
     let mut model = Model::default();
-    for wall in of_kind(reader, project, document, WALL_KIND, at).await? {
+    // The document read once: every wall's plan and every room's loop are worked out from it.
+    let mut read = Plan::read(reader, project, document, at).await?;
+    let mut walls: Vec<Element> = read.walls.all().chain(read.boxes.all()).cloned().collect();
+    walls.sort_by(|a, b| a.id.cmp(&b.id));
+    for wall in walls {
         let Some(level) = level_of(&wall) else {
             continue;
         };
-        let Some(plan) = wall_plan_of(reader, project, document, &wall, at).await? else {
+        let recipes = &mut read.recipes;
+        let Some(plan) = wall_plan_among(reader, project, document, &wall, at, recipes).await?
+        else {
             continue;
         };
         if let Ok(wall) = Wall::new(wall.id.clone(), level, plan.direction, &plan.corners) {
@@ -81,14 +89,14 @@ pub async fn read_warnings<R: Reader>(
             model.inserts.push(insert);
         }
     }
-    for room in of_kind(reader, project, document, ROOM_KIND, at).await? {
-        let state =
-            match construct_regen::rooms::found_at(reader, project, document, &room, at).await? {
-                Ok(Outcome::Enclosed { .. }) => RoomState::Enclosed,
-                Ok(Outcome::NotEnclosed) => RoomState::NotEnclosed,
-                Ok(Outcome::Redundant { first }) => RoomState::Redundant(first),
-                Err(refusal) => RoomState::Refused(refusal.message),
-            };
+    let rooms: Vec<Element> = read.rooms.all().cloned().collect();
+    for room in rooms {
+        let state = match found_among(reader, project, document, &room, at, &mut read).await? {
+            Ok(Outcome::Enclosed { .. }) => RoomState::Enclosed,
+            Ok(Outcome::NotEnclosed) => RoomState::NotEnclosed,
+            Ok(Outcome::Redundant { first }) => RoomState::Redundant(first),
+            Err(refusal) => RoomState::Refused(refusal.message),
+        };
         let who = match construct_rooms::number_of(&room) {
             Some(number) if !number.is_empty() => format!("room {number} {}", room.name),
             _ => format!("room {}", room.name),

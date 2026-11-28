@@ -59,15 +59,31 @@
 //!
 //! A room is found from the walls of its level ([`crate::rooms`]): its recipe is filled with its
 //! loop as regeneration has reached those walls, and its `reads` row lists the walls the loop runs
-//! along. A wall that changes, is made or is deleted builds again every room on the levels it was
-//! and is on and every room whose row lists it; a room that changes builds again the other rooms
-//! of its levels (which of two in one loop comes first). One step deep, as above. A room that is
-//! not enclosed, or redundant, keeps its record and its built row says so.
+//! along. A wall that changes, is made or is deleted builds again the rooms on the levels it was
+//! and is on that it can reach: every room whose loop the pass does not hold or that has none, and
+//! every room whose loop's box meets where the outlines of the walls built again for it were or
+//! are (a loop changes only where an outline enters, leaves or crosses its box); every room of the
+//! level when one of those outlines was not held, or the room search refuses one. A room that
+//! changes builds again the rooms of its levels after it in key order that it can reach: those
+//! whose loop's box holds where its point was or is, and those with no loop (only a room before
+//! another in one loop makes the other redundant). Every room of the levels of the walls and rooms
+//! built again for a record with no shape (a wall type made thicker, a level moved) is built again
+//! after them all, so no room keeps a wall's old outline. One step deep, as above. A room that is
+//! not enclosed, or redundant, keeps its record and its built row says so. What each room is built
+//! to is the same as building every room of the level would give: construct-api's
+//! `tests/replay_work.rs` holds each to its loop found among every wall after a run of edits.
+//!
+//! The walls a wall's joints and a room's loop are found among are read from the kind index once
+//! for a pass and kept in step with every kind row the pass writes ([`Documents`]), so a build
+//! reads the walls near it and not every wall of the document; when a pass commits, they are kept
+//! for the next pass, which takes them only where regeneration still stands where this one left
+//! it ([`Kept`]). So the work of an entry follows what it touches, not the size of the model.
 
 use crate::hosting::{self, Hosting};
 use crate::joins;
 use crate::levels;
 use crate::parameters::{self, At};
+use crate::pass_plan::{Box2, Documents, Kept, Loop, Shape, boxes_meet};
 use crate::rooms;
 use crate::wall_plan;
 use construct_model::element::{Element, Placement};
@@ -82,7 +98,7 @@ use kit_store::key::list as kit_list;
 use kit_store::{FileStore, Kv, Reader, Scope, StoreError, Txn, from_row, read_row, to_row};
 use kit_sync::read_log;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 /// Entries taken in one transaction.
 const BATCH: u64 = 256;
@@ -130,6 +146,8 @@ pub struct Regenerator<K: Kv, F: FileStore> {
     kv: K,
     files: F,
     geometry: Arc<dyn Geometry>,
+    /// The walls each project's last pass left, for the next ([`Kept`]).
+    kept: Mutex<Kept>,
 }
 
 impl<K: Kv, F: FileStore> Regenerator<K, F> {
@@ -139,7 +157,24 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             kv,
             files,
             geometry,
+            kept: Mutex::new(Kept::default()),
         }
+    }
+
+    /// The walls kept for `project` at log number `through`, or none.
+    fn take_walls(&self, project: &Id, through: u64) -> Documents {
+        self.kept
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take(project, through)
+    }
+
+    /// Keeps `documents` as `project`'s walls at log number `through`, for the next pass.
+    fn keep_walls(&self, project: &Id, through: u64, documents: Documents) {
+        self.kept
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .keep(project, through, documents);
     }
 
     /// Brings a project's shapes up to the end of its log. Safe to run on any server, any number
@@ -209,6 +244,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             .await
             .map_err(fault)?;
         let mut checked = 0_usize;
+        let mut walls = Documents::default();
         for (key, row) in &pairs {
             let Some(kit_store::Place::Piece {
                 document, piece, ..
@@ -257,6 +293,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 &wanted,
                 &element,
                 &hosted,
+                &mut walls,
             )
             .await
             .map_err(fault)?;
@@ -385,7 +422,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     async fn step(&self, project: &Id, pass: &mut Pass) -> Result<bool, StoreError> {
         let mut txn = self.kv.begin().await?;
         let mut built = Vec::new();
-        let moved = self.step_in(&mut txn, project, pass, &mut built).await;
+        let mut walls = Documents::default();
+        let moved = self
+            .step_in(&mut txn, project, pass, &mut built, &mut walls)
+            .await;
         let (to, head) = match moved {
             Ok(Some(moved)) => moved,
             Ok(None) => {
@@ -399,6 +439,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         };
         match txn.commit().await {
             Ok(()) => {
+                self.keep_walls(project, to, walls);
                 pass.through = to;
                 for (document, element, body) in built {
                     let bodies = pass.bodies.entry(document).or_default();
@@ -417,12 +458,15 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
 
     /// Reads where regeneration stands and regenerates the next batch in `txn`, moving the cursor
     /// on: how far it moved it, and the head it read. Nothing when the log is all regenerated.
+    /// `walls` are the walls the last pass kept when regeneration stands where it left it, else
+    /// read afresh as builds need them ([`Kept`]).
     async fn step_in(
         &self,
         txn: &mut K::Txn,
         project: &Id,
         pass: &mut Pass,
         built: &mut Vec<(Id, Id, Option<Id>)>,
+        walls: &mut Documents,
     ) -> Result<Option<(u64, u64)>, StoreError> {
         let scope = Scope::Project(project.clone());
         let cursor = Place::Regenerated {
@@ -431,15 +475,17 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         .key();
         let through: u64 = read_row(txn, &cursor).await?.unwrap_or(0);
         pass.through = through;
+        *walls = self.take_walls(project, through);
         let head: u64 = read_row(txn, &scope.head()).await?.unwrap_or(0);
         if through >= head {
+            self.keep_walls(project, through, std::mem::take(walls));
             return Ok(None);
         }
         let to = head.min(through.saturating_add(BATCH));
         let entries = read_log(txn, &scope, through, to).await?;
         for entry in &entries {
             for change in &entry.changes {
-                self.regenerate_with_readers(txn, project, &entry.target, change, built)
+                self.regenerate_with_readers(txn, project, &entry.target, change, built, walls)
                     .await?;
             }
         }
@@ -458,6 +504,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         document: &Id,
         change: &kit_ops::Change,
         built: &mut Vec<(Id, Id, Option<Id>)>,
+        walls: &mut Documents,
     ) -> Result<(), StoreError> {
         let (body, fed) = self
             .regenerate(
@@ -467,6 +514,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 &change.piece,
                 change.before.as_ref(),
                 change.after.as_ref(),
+                walls,
             )
             .await?;
         built.push((document.clone(), change.piece.clone(), body));
@@ -477,15 +525,34 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 hosted,
                 joined,
                 spaces,
+                reach,
             }) => {
                 let fed = hosts.iter().chain(&hosted).chain(&joined);
-                self.dependents(txn, project, document, fed, built).await?;
+                let touched = self
+                    .dependents(txn, project, document, fed, built, walls)
+                    .await?;
+                let reach = match reach {
+                    RoomReach::Walls(own) => RoomReach::Walls(own.and(touched)),
+                    other => other,
+                };
                 return self
-                    .rooms_around(txn, project, document, &change.piece, &spaces, built)
+                    .rooms_around(
+                        txn,
+                        project,
+                        document,
+                        &change.piece,
+                        &spaces,
+                        &reach,
+                        built,
+                        walls,
+                    )
                     .await;
             }
             Some(Fed::Read(read)) => read,
         };
+        // The rooms of every level a wall or room built again here stands on are found again
+        // after them all, so a room is never left round a wall's old outline.
+        let mut levels: BTreeSet<Id> = BTreeSet::new();
         for (key, row) in txn.scan(&list::reads(project, document)).await? {
             let Some(Place::Reads { element, .. }) = Place::parse(&key) else {
                 continue;
@@ -494,7 +561,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             if !reads.reads(read.as_str()) {
                 continue;
             }
-            let Some((body, fed)) = self.again(txn, project, document, &element).await? else {
+            let Some((body, fed)) = self.again(txn, project, document, &element, walls).await?
+            else {
                 continue;
             };
             built.push((document.clone(), element, body));
@@ -502,19 +570,29 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 hosts,
                 hosted,
                 joined,
+                spaces,
                 ..
             }) = fed
             {
+                levels.extend(spaces);
                 let fed = hosts.iter().chain(&hosted).chain(&joined);
-                self.dependents(txn, project, document, fed, built).await?;
+                self.dependents(txn, project, document, fed, built, walls)
+                    .await?;
             }
         }
-        Ok(())
+        let levels: Vec<Id> = levels.into_iter().collect();
+        let every = RoomReach::Walls(Touched::All);
+        self.rooms_around(txn, project, document, &read, &levels, &every, built, walls)
+            .await
     }
 
-    /// Builds again, one step deep, every room other than `changed` that stands on one of
-    /// `spaces` (the levels a changed wall or room was and is on) or whose `reads` row lists
-    /// `changed` (a wall its loop runs along), in key order ([`rooms`]).
+    /// Builds again, one step deep, in key order, every room other than `changed` that stands on
+    /// one of `spaces` (the levels a changed wall or room was and is on) and that the change can
+    /// reach ([`RoomReach::takes`]): what it would come to is then what it is ([`rooms`]).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the change, the rooms it reaches, and the pass's walls and bodies"
+    )]
     async fn rooms_around(
         &self,
         txn: &mut K::Txn,
@@ -522,40 +600,25 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         document: &Id,
         changed: &Id,
         spaces: &[Id],
+        reach: &RoomReach,
         built: &mut Vec<(Id, Id, Option<Id>)>,
+        walls: &mut Documents,
     ) -> Result<(), StoreError> {
-        let Ok(kind) = Id::parse(construct_rooms::ROOM_KIND) else {
+        if spaces.is_empty() {
             return Ok(());
-        };
-        let mut again = Vec::new();
-        for (key, _) in txn.scan(&list::kind(project, document, &kind)).await? {
-            let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
-                continue;
-            };
-            if element == *changed {
-                continue;
-            }
-            let place = Place::Built {
-                project: project.clone(),
-                document: document.clone(),
-                element: element.clone(),
-            };
-            let row: Option<BuiltElement> = read_row(txn, &place.key()).await?;
-            let on = row
-                .and_then(|row| row.level)
-                .is_some_and(|level| spaces.contains(&level));
-            let reads = Place::Reads {
-                project: project.clone(),
-                document: document.clone(),
-                element: element.clone(),
-            };
-            let listed: Option<Reads> = read_row(txn, &reads.key()).await?;
-            if on || listed.is_some_and(|r| r.reads(changed.as_str())) {
-                again.push(element);
+        }
+        let plan = walls.plan(txn, project, document).await?;
+        let mut again: BTreeSet<Id> = BTreeSet::new();
+        for level in spaces {
+            for room in plan.rooms.on_level(Some(level)) {
+                if room.id != *changed && reach.takes(&room.id, changed, plan.loops.get(&room.id)) {
+                    again.insert(room.id.clone());
+                }
             }
         }
-        self.dependents(txn, project, document, again.iter(), built)
+        self.dependents(txn, project, document, again.iter(), built, walls)
             .await
+            .map(|_| ())
     }
 
     /// Builds an element again from the record it had at this point in the log, which its built
@@ -566,6 +629,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         project: &Id,
         document: &Id,
         element: &Id,
+        walls: &mut Documents,
     ) -> Result<Option<(Option<Id>, Option<Fed>)>, StoreError> {
         let place = Place::Built {
             project: project.clone(),
@@ -576,13 +640,22 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let Some(row) = row else { return Ok(None) };
         let hash = row.input;
         let again = self
-            .regenerate(txn, project, document, element, Some(&hash), Some(&hash))
+            .regenerate(
+                txn,
+                project,
+                document,
+                element,
+                Some(&hash),
+                Some(&hash),
+                walls,
+            )
             .await?;
         Ok(Some(again))
     }
 
     /// Builds each of `elements` again ([`Regenerator::again`]), one step deep: what they feed in
-    /// turn is not built again for this.
+    /// turn is not built again for this. Where the outlines of the walls among them were and are
+    /// now ([`Touched`]).
     async fn dependents<'a>(
         &self,
         txn: &mut K::Txn,
@@ -590,20 +663,30 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         document: &Id,
         elements: impl Iterator<Item = &'a Id>,
         built: &mut Vec<(Id, Id, Option<Id>)>,
-    ) -> Result<(), StoreError> {
+        walls: &mut Documents,
+    ) -> Result<Touched, StoreError> {
+        let mut touched = Touched::Nothing;
         for element in elements {
-            if let Some((body, _)) = self.again(txn, project, document, element).await? {
+            if let Some((body, fed)) = self.again(txn, project, document, element, walls).await? {
                 built.push((document.clone(), element.clone(), body));
+                if let Some(Fed::Shape {
+                    reach: RoomReach::Walls(more),
+                    ..
+                }) = fed
+                {
+                    touched = touched.and(more);
+                }
             }
         }
-        Ok(())
+        Ok(touched)
     }
 
     /// Rebuilds one element, returning its body if it has one, and what it feeds: for a record
     /// with no shape, its readers; for an element with a shape, its hosts and what it hosts.
     #[allow(
         clippy::too_many_lines,
-        reason = "one element's derived rows, written in the order a reader of them needs"
+        clippy::too_many_arguments,
+        reason = "one element's derived rows, in the order a reader of them needs, and its plans"
     )]
     async fn regenerate(
         &self,
@@ -613,7 +696,12 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         element_id: &Id,
         before: Option<&Id>,
         after: Option<&Id>,
+        walls: &mut Documents,
     ) -> Result<(Option<Id>, Option<Fed>), StoreError> {
+        // A wall's outline as a room read it before, if the pass holds it.
+        let held = walls
+            .read_plan(document)
+            .and_then(|plan| plan.outlines.get(element_id).cloned());
         let reads = Place::Reads {
             project: project.clone(),
             document: document.clone(),
@@ -644,6 +732,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let mut was_read = None;
         let mut was_shaft = false;
         let mut spaces: Vec<Id> = Vec::new();
+        // Nothing stood here before: no outline, no point.
+        let mut was = Was::Nothing;
         if let Some(hash) = old.as_ref().map(|old| &old.input).or(before) {
             let record = kit_store::Place::Record {
                 project: project.clone(),
@@ -652,10 +742,13 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             let before: Option<Element> = read_row(txn, &record.key()).await?;
             let before = before.ok_or_else(|| damaged("an element's old record is missing"))?;
             if let Some(kind) = kind_row(project, document, &before) {
-                txn.delete(kind.key()).await?;
+                let key = kind.key();
+                txn.delete(key.clone()).await?;
+                walls.unlisted(document, &before.id, &key);
             }
             old_host = hosting::host_of(&before);
             was_shaft = is_shaft_record(&before);
+            was = Was::of(&before, held);
             if rooms::is_spatial(&before.kind)
                 && let Some(level) = old.as_ref().and_then(|old| old.level.clone())
             {
@@ -693,6 +786,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                     hosted: ids(&hosted)?,
                     spaces,
                     joined: ids(&joined_before.into_iter().collect::<Vec<_>>())?,
+                    reach: was.gone(),
                 }),
             ));
         };
@@ -704,7 +798,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let element: Option<Element> = read_row(txn, &record.key()).await?;
         let element = element.ok_or_else(|| damaged("an element's record is missing"))?;
         if let Some(kind) = kind_row(project, document, &element) {
-            txn.put(kind.key(), to_row(&after.as_str())?).await?;
+            let key = kind.key();
+            txn.put(key.clone(), to_row(&after.as_str())?).await?;
+            walls.listed(document, &element, &key);
         }
         if !parameters::has_shape(&element) {
             txn.delete(place.key()).await?;
@@ -720,7 +816,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             list_hosted(txn, project, document, host, element_id, true).await?;
         }
         let edition = edition_of(txn, project, document).await?;
-        let mut inputs = inputs(txn, project, document, &edition, &element, &hosted).await?;
+        let mut inputs = inputs(txn, project, document, &edition, &element, &hosted, walls).await?;
+        let (now, point) = held_now(walls, document, &element, &inputs.recipe);
         let mut records = reads_of(&element);
         // A room reads the walls its loop runs along, as its filled recipe names them.
         if let Ok(recipe) = &inputs.recipe {
@@ -736,7 +833,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             txn.put(reads.key(), to_row(&row)?).await?;
         }
         if crate::floor_plan::is_floor(&element.recipe) {
-            let shafts = shafts_through(txn, project, document, &element, &inputs).await?;
+            let shafts = shafts_through(txn, project, document, &element, &inputs, walls).await?;
             inputs.hosted = match (inputs.hosted, shafts) {
                 (Ok(mut found), Ok(shafts)) => {
                     found.extend(shafts);
@@ -800,6 +897,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 hosted: ids(&hosted)?,
                 spaces,
                 joined: ids(&joined)?,
+                reach: was.reach(&element, now.as_ref(), point),
             }),
         ))
     }
@@ -900,7 +998,192 @@ enum Fed {
         /// The walls its joints read, before and now, in key order: a wall it meets, or met, is
         /// built again with it.
         joined: Vec<Id>,
+        /// Which rooms round it its change can reach.
+        reach: RoomReach,
     },
+}
+
+/// What stood in an element's place before it was built again, as far as rooms read it.
+enum Was {
+    /// Nothing that bounds or is a room: no record, or one of another kind.
+    Nothing,
+    /// A wall, and its outline as a room read it, when the pass held it.
+    Wall(Option<Shape>),
+    /// A room, and its point.
+    Room(Option<[i64; 2]>),
+}
+
+impl Was {
+    /// What `before`, an element's old record, was; `held`, the outline the pass held of it.
+    fn of(before: &Element, held: Option<Shape>) -> Self {
+        if before.kind == rooms::WALL_KIND {
+            Was::Wall(held)
+        } else if before.kind == construct_rooms::ROOM_KIND {
+            Was::Room(construct_rooms::at_of(&before.recipe).ok())
+        } else {
+            Was::Nothing
+        }
+    }
+
+    /// Which rooms its going reaches: where its outline was, or where its point was.
+    fn gone(&self) -> RoomReach {
+        match self {
+            Was::Nothing => RoomReach::Other,
+            Was::Wall(None) => RoomReach::Walls(Touched::All),
+            Was::Wall(Some(before)) => RoomReach::Walls(Touched::of(before)),
+            Was::Room(before) => RoomReach::Room(before.iter().copied().collect()),
+        }
+    }
+
+    /// Which rooms the change from this to `element`, built now, reaches: `now`, its outline as
+    /// the pass holds it now when it is a wall (none: not held), and `point`, its point now when
+    /// it is a room.
+    fn reach(&self, element: &Element, now: Option<&Shape>, point: Option<[i64; 2]>) -> RoomReach {
+        let wall = element.kind == rooms::WALL_KIND;
+        let room = element.kind == construct_rooms::ROOM_KIND;
+        match self {
+            // A wall become a room, or a room become a wall: every room of its levels.
+            Was::Wall(_) if room => RoomReach::Other,
+            Was::Room(_) if wall => RoomReach::Other,
+            Was::Room(before) => RoomReach::Room(before.iter().copied().chain(point).collect()),
+            Was::Nothing if room => RoomReach::Room(point.into_iter().collect()),
+            Was::Nothing if wall => now.map_or(RoomReach::Walls(Touched::All), |now| {
+                RoomReach::Walls(Touched::of(now))
+            }),
+            // Was a wall and is one: where it was and where it is, every room when either is not
+            // held.
+            Was::Wall(before) if wall => match (before, now) {
+                (Some(before), Some(now)) => {
+                    RoomReach::Walls(Touched::of(before).and(Touched::of(now)))
+                }
+                _ => RoomReach::Walls(Touched::All),
+            },
+            // Was a wall and is now no wall or room: as if it had gone.
+            Was::Wall(_) => self.gone(),
+            Was::Nothing => RoomReach::Other,
+        }
+    }
+}
+
+/// Where the outlines of walls built again were and are now, as rooms read them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Touched {
+    /// No outline: nothing a room reads changed.
+    Nothing,
+    /// Within this box.
+    Within(Box2),
+    /// Anywhere on the level: an outline the pass did not hold, or one the room search refuses.
+    All,
+}
+
+impl Touched {
+    /// Where `shape` lies.
+    fn of(shape: &Shape) -> Self {
+        if shape.bad {
+            return Touched::All;
+        }
+        shape.bounds().map_or(Touched::Nothing, Touched::Within)
+    }
+
+    /// Both.
+    fn and(self, other: Touched) -> Self {
+        match (self, other) {
+            (Touched::All, _) | (_, Touched::All) => Touched::All,
+            (Touched::Nothing, any) | (any, Touched::Nothing) => any,
+            (Touched::Within((a0, a1)), Touched::Within((b0, b1))) => Touched::Within((
+                [a0[0].min(b0[0]), a0[1].min(b0[1])],
+                [a1[0].max(b1[0]), a1[1].max(b1[1])],
+            )),
+        }
+    }
+}
+
+/// Which rooms of a changed element's levels its change can reach.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RoomReach {
+    /// It is not a wall or a room: every room of its levels (it has none).
+    Other,
+    /// A wall, or walls: where their outlines were and are.
+    Walls(Touched),
+    /// A room, at these points (where it was, where it is).
+    Room(Vec<[i64; 2]>),
+}
+
+/// How far past a box a room is taken as reached: a millimetre.
+const REACHED: i64 = Length::STEPS_PER_MM;
+
+impl RoomReach {
+    /// Whether the change can change room `room` of its levels, which the pass holds as `held`
+    /// (none: not held): a room whose loop is not held, or that has none, always; else a room
+    /// whose loop's box meets where the walls' outlines were or are (a loop changes only where an
+    /// outline enters, leaves or moves across its box, or the room's point falls in a wall), and,
+    /// for a room changed at `changed`, a room after it in key order whose loop's box holds one of
+    /// its points (only a room before another in the same loop makes the other redundant).
+    fn takes(&self, room: &Id, changed: &Id, held: Option<&Loop>) -> bool {
+        let Some(held) = held else {
+            return true;
+        };
+        match (self, held) {
+            (RoomReach::Other | RoomReach::Walls(Touched::All), _)
+            | (RoomReach::Walls(_), Loop::Failed(_)) => true,
+            (RoomReach::Walls(Touched::Nothing), Loop::Around(_)) => false,
+            (RoomReach::Walls(Touched::Within((low, high))), Loop::Around(around)) => {
+                let grown = (
+                    [
+                        low[0].saturating_sub(REACHED),
+                        low[1].saturating_sub(REACHED),
+                    ],
+                    [
+                        high[0].saturating_add(REACHED),
+                        high[1].saturating_add(REACHED),
+                    ],
+                );
+                boxes_meet(grown, *around)
+            }
+            (RoomReach::Room(_), Loop::Failed(_)) => room > changed,
+            (RoomReach::Room(points), Loop::Around(around)) => {
+                room > changed
+                    && points
+                        .iter()
+                        .any(|&point| boxes_meet((point, point), *around))
+            }
+        }
+    }
+}
+
+/// What the pass holds now of `element`, just built from `recipe`: a layered wall's outline as a
+/// room reads it (set in the plan; a wall hosted on a face, seated where its host puts it, is left
+/// unheld), an old box wall's as listed, and a room's loop (set in the plan) and point.
+fn held_now(
+    walls: &mut Documents,
+    document: &Id,
+    element: &Element,
+    recipe: &Result<Recipe, GeometryError>,
+) -> (Option<Shape>, Option<[i64; 2]>) {
+    let Some(plan) = walls.read_plan(document) else {
+        return (None, None);
+    };
+    if element.kind == rooms::WALL_KIND {
+        let seated = matches!(
+            hosting::read(element),
+            Ok(Some(Hosting::OnFace { .. } | Hosting::InPlan { .. }))
+        );
+        if wall_plan::is_layered(&element.recipe) && !seated {
+            let outline = recipe
+                .as_ref()
+                .ok()
+                .and_then(|recipe| rooms::joined_outline(recipe, &element.placement));
+            plan.outlines
+                .set(&element.id, rooms::level_of(element), outline);
+        }
+        return (plan.outlines.get(&element.id).cloned(), None);
+    }
+    if element.kind == construct_rooms::ROOM_KIND {
+        plan.loops
+            .insert(element.id.clone(), rooms::loop_of(recipe));
+        return (None, construct_rooms::at_of(&element.recipe).ok());
+    }
+    (None, None)
 }
 
 /// Deletes every derived row of a project, and its cursor, in `txn`, reading them there. Every
@@ -976,7 +1259,7 @@ struct Inputs {
 }
 
 /// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`])
-/// with its joints with the walls it meets ([`joins::fill`]),
+/// with its joints with the walls it meets ([`joins::fill_among`], among the pass's `walls`),
 /// where it sits (its own placement, or for an element hosted on a face, read from its host),
 /// each element `hosted` lists as hosted on it, and its level. A failure of any is the element's
 /// build failure.
@@ -987,22 +1270,38 @@ async fn inputs<R: Reader>(
     edition: &Edition,
     element: &Element,
     hosted: &[String],
+    walls: &mut Documents,
 ) -> Result<Inputs, StoreError> {
-    let (recipe, placed) = input_of(reader, project, document, element).await?;
+    let (recipe, placed) = input_of(reader, project, document, element, walls).await?;
     let (mut recipe, joins) = match recipe {
         Ok(recipe) if wall_plan::is_layered(&recipe) => {
             let elevation = stored_length(placed.elevation.as_ref());
             let at = At::Regenerated;
-            let (recipe, read) =
-                joins::fill(reader, project, document, element, &recipe, elevation, at).await?;
+            let plan = walls.plan(reader, project, document).await?;
+            let (recipe, read) = joins::fill_among(
+                reader,
+                project,
+                document,
+                element,
+                &recipe,
+                elevation,
+                at,
+                &plan.walls,
+                &mut plan.fills,
+                Some(&plan.written),
+            )
+            .await?;
             (Ok(recipe), read)
         }
         other => (other, BTreeSet::new()),
     };
     let (placement, hosted) = match &recipe {
         Ok(own) => (
-            placement_of(reader, project, document, edition, element, own).await?,
-            hosted_in(reader, project, document, edition, element, own, hosted).await?,
+            placement_of(reader, project, document, edition, element, own, walls).await?,
+            hosted_in(
+                reader, project, document, edition, element, own, hosted, walls,
+            )
+            .await?,
         ),
         Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
     };
@@ -1061,6 +1360,7 @@ async fn placement_of<R: Reader>(
     edition: &Edition,
     element: &Element,
     own: &Recipe,
+    walls: &mut Documents,
 ) -> Result<Result<(Placement, Option<Recipe>), GeometryError>, StoreError> {
     let what = hosting::noun(own);
     let hosting = match hosting::read(element) {
@@ -1083,7 +1383,7 @@ async fn placement_of<R: Reader>(
             ),
         }));
     };
-    let host_recipe = match input_of(reader, project, document, &host).await?.0 {
+    let host_recipe = match input_of(reader, project, document, &host, walls).await?.0 {
         Ok(recipe) => recipe,
         Err(e) => {
             return Ok(Err(GeometryError {
@@ -1108,6 +1408,10 @@ async fn placement_of<R: Reader>(
 /// The elements `listed` as hosted on `host`, of the filled recipe `own`, each with its filled
 /// recipe and where it sits in the host's frame, in key order. One that no longer names `host`
 /// is passed over; one that cannot be placed is the host's build failure, naming it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the host, what is listed on it, and the pass's plans"
+)]
 async fn hosted_in<R: Reader>(
     reader: &mut R,
     project: &Id,
@@ -1116,6 +1420,7 @@ async fn hosted_in<R: Reader>(
     host: &Element,
     own: &Recipe,
     listed: &[String],
+    walls: &mut Documents,
 ) -> Result<Result<Vec<HostedInput>, GeometryError>, StoreError> {
     let mut found = Vec::new();
     for key in listed {
@@ -1126,7 +1431,7 @@ async fn hosted_in<R: Reader>(
             Ok(Some(hosting)) if *hosting.host() == host.id => hosting,
             _ => continue,
         };
-        let recipe = match input_of(reader, project, document, &record).await?.0 {
+        let recipe = match input_of(reader, project, document, &record, walls).await?.0 {
             Ok(recipe) => recipe,
             Err(e) => {
                 return Ok(Err(GeometryError {
@@ -1191,6 +1496,7 @@ async fn shafts_through<R: Reader>(
     document: &Id,
     floor: &Element,
     inputs: &Inputs,
+    walls: &mut Documents,
 ) -> Result<Result<Vec<HostedInput>, GeometryError>, StoreError> {
     let (Ok(recipe), Ok(at)) = (&inputs.recipe, &inputs.placement) else {
         return Ok(Ok(Vec::new()));
@@ -1210,7 +1516,7 @@ async fn shafts_through<R: Reader>(
         let Some(record) = built_record(reader, project, document, &id).await? else {
             continue;
         };
-        let (Ok(own), placed) = input_of(reader, project, document, &record).await? else {
+        let (Ok(own), placed) = input_of(reader, project, document, &record, walls).await? else {
             continue;
         };
         let (Ok(shaft), Some(base)) = (
@@ -1298,6 +1604,7 @@ async fn input_of<R: Reader>(
     project: &Id,
     document: &Id,
     element: &Element,
+    walls: &mut Documents,
 ) -> Result<(Result<Recipe, GeometryError>, Placed), StoreError> {
     let at = parameters::At::Regenerated;
     let placed = levels::placed(reader, project, document, element, at).await?;
@@ -1310,6 +1617,19 @@ async fn input_of<R: Reader>(
                 .and_then(|recipe| crate::stairs::filled(&recipe));
             // A room's loop is found from the walls of its level once its height is read.
             let recipe = match recipe {
+                Ok(recipe) if construct_rooms::reads_walls(&recipe) => {
+                    let plan = walls.plan(reader, project, document).await?;
+                    rooms::filled_among(
+                        reader,
+                        project,
+                        document,
+                        element,
+                        recipe,
+                        placed.level.as_ref(),
+                        plan,
+                    )
+                    .await?
+                }
                 Ok(recipe) => {
                     rooms::filled(
                         reader,

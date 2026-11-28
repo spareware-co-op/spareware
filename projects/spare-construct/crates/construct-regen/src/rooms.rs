@@ -29,6 +29,14 @@
 //!   ([`is_spatial`] says which kinds do this), one step deep; a room that changes builds again the
 //!   other rooms of its levels, since which of two rooms in one loop comes first may change.
 //!
+//! - A room is found among the walls near it when the plan of its level holds every wall's
+//!   outline and none the search refuses ([`crate::pass_plan::Plan::knows`]): the walls whose
+//!   outline's box meets a square round its point, the square doubled until the loop found lies
+//!   strictly inside it or the walls are all the level's, which gives what every wall of the level
+//!   gives (`found_near` says why). Else the level is read whole, as before, and each wall's
+//!   outline is held for the next. Either way the walls come from a plan read once
+//!   ([`crate::pass_plan`]), each layered wall's recipe filled once while what it read stands.
+//!
 //! Depends on construct-rooms (the search and the record), construct-levels (ties),
 //! construct-model, construct-params and kit-store, and on [`crate::parameters`] and
 //! [`crate::levels`] for a wall's filled recipe and [`crate::joins`] for its joints. Interim: none
@@ -39,6 +47,8 @@ use crate::joins::{self, OnLevel};
 use crate::levels;
 use crate::parameters::ParameterView;
 use crate::parameters::{self, At};
+use crate::pass_plan::{Box2, Loop, Plan, box_of};
+use crate::read_memo::{Memo, Recording, Written};
 use crate::wall_plan::{self, Layered};
 use construct_levels::base_of;
 use construct_model::element::{Element, Placement};
@@ -46,8 +56,8 @@ use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::list;
 use construct_params::{Definition, Holder, Kind, Length, Units, Value};
 use construct_rooms::{
-    Bound, HEIGHT_ARG, LOOPS_ARG, Measures, Neighbour, Outcome, Outline, ROOM_KIND, RoomError,
-    assess, at_of, reads_walls,
+    Bound, Found, HEIGHT_ARG, LIMIT, LOOPS_ARG, Measures, Neighbour, Outcome, Outline, ROOM_KIND,
+    RoomError, assess, at_of, find, reads_walls,
 };
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
@@ -187,6 +197,12 @@ fn straight_outline(wall: &Element) -> Option<WallPlan> {
     })
 }
 
+/// An old box wall's outline as a room reads it ([`straight_outline`]).
+#[must_use]
+pub fn box_outline(wall: &Element) -> Option<Vec<[i64; 2]>> {
+    straight_outline(wall).map(|plan| plan.corners)
+}
+
 /// A layered wall's filled recipe, its layers and height read as the builders read them but its
 /// joints not yet made, and the height of its base; `None` for a wall that does not build, or a
 /// record of another operation.
@@ -212,6 +228,34 @@ async fn layered_recipe<R: Reader>(
     Ok(Some((recipe, placed.elevation)))
 }
 
+/// Each layered wall's recipe as a room reads it ([`layered_recipe`]), kept with the rows it read
+/// ([`crate::read_memo`]): a wall of a level that many rooms are found on is filled once while
+/// what it read stands.
+pub type Recipes = Memo<Option<(Recipe, Option<Length>)>>;
+
+/// [`layered_recipe`], or what `recipes` kept of it while every row it read reads the same.
+async fn layered_recipe_kept<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    wall: &Element,
+    at: At,
+    recipes: &mut Recipes,
+    written: Option<&Written>,
+) -> Result<Option<(Recipe, Option<Length>)>, StoreError> {
+    if !wall_plan::is_layered(&wall.recipe) {
+        return Ok(None);
+    }
+    if let Some(kept) = recipes.kept(reader, wall, written).await? {
+        return Ok(kept);
+    }
+    let mut recording = Recording::new(reader);
+    let made = layered_recipe(&mut recording, project, document, wall, at).await?;
+    let noted = recording.noted();
+    recipes.keep(wall, noted, made.clone(), written);
+    Ok(made)
+}
+
 /// `corners` of an element's frame moved by its placement into the model's plan.
 fn moved(corners: &[[i64; 2]], placement: &Placement) -> Option<Vec<[i64; 2]>> {
     let (dx, dy) = (mm(placement.x)?, mm(placement.y)?);
@@ -233,7 +277,8 @@ fn strip(layered: &Layered) -> Option<Vec<[i64; 2]>> {
 /// ([`joins::on_level`]), in the model's plan: the whole wall's outline as its joints shape it
 /// when any does, else its strip; `None` for a recipe the builders refuse. Whatever way the wall
 /// runs: the outline is the join rule's polygon, read as it is.
-fn joined_outline(recipe: &Recipe, placement: &Placement) -> Option<Vec<[i64; 2]>> {
+#[must_use]
+pub fn joined_outline(recipe: &Recipe, placement: &Placement) -> Option<Vec<[i64; 2]>> {
     let layered = Layered::of(recipe).ok()?;
     let corners = match &layered.joined {
         Some(joints) => joints.outline.clone(),
@@ -247,7 +292,9 @@ fn joined_outline(recipe: &Recipe, placement: &Placement) -> Option<Vec<[i64; 2]
 /// wall's outline as its joints with the walls it meets shape it ([`joins::on_level`], the
 /// recipe the regenerator builds it from), so a room's faces are the walls' faces as joined and
 /// meet where the joint puts them; a layered wall no joint changes by its strip; the old box
-/// wall's (`wall.straight`) by its box. A wall that does not build is passed over.
+/// wall's (`wall.straight`) by its box. A wall that does not build is passed over. It reads the
+/// document's walls first ([`Plan::read`]); a reader that finds many rooms keeps a plan and calls
+/// [`bounds_among`].
 ///
 /// # Errors
 /// A [`StoreError`] when the store fails.
@@ -258,26 +305,58 @@ pub async fn bounds_on<R: Reader>(
     level: &Id,
     at: At,
 ) -> Result<Vec<Bound>, StoreError> {
+    let mut plan = Plan::read(reader, project, document, at).await?;
+    bounds_among(reader, project, document, level, at, &mut plan).await
+}
+
+/// [`bounds_on`] with the document's walls as `at` that state already read, in `plan`: the walls
+/// of the level are taken from it in the order of their IDs, as a full read lists them, and each
+/// layered wall's recipe is filled once while what it read stands.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn bounds_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    level: &Id,
+    at: At,
+    plan: &mut Plan,
+) -> Result<Vec<Bound>, StoreError> {
     /// A wall of the level as it is read: the old box's outline, or a layered wall's filled
     /// recipe and the height of its base, for the join rule.
     enum Read {
         Boxed(Vec<[i64; 2]>),
         Layered(Recipe, Option<Length>),
     }
+    let Plan {
+        walls: layered,
+        boxes,
+        recipes,
+        outlines,
+        written,
+        ..
+    } = plan;
+    // A regeneration pass logs what it writes to the kind index; another reader's plan is its own.
+    let written = (at == At::Regenerated).then_some(&*written);
+    let mut on: Vec<&Element> = layered
+        .on_level(Some(level))
+        .chain(boxes.on_level(Some(level)))
+        .collect();
+    on.sort_by(|a, b| a.id.cmp(&b.id));
     let mut walls = Vec::new();
-    for wall in of_kind(reader, project, document, WALL_KIND, at).await? {
-        if level_of(&wall).as_ref() != Some(level) {
-            continue;
-        }
+    for wall in on {
         let read = if wall.recipe.op == "wall.straight" {
-            straight_outline(&wall).map(|plan| Read::Boxed(plan.corners))
+            straight_outline(wall).map(|plan| Read::Boxed(plan.corners))
         } else {
-            layered_recipe(reader, project, document, &wall, at)
+            layered_recipe_kept(reader, project, document, wall, at, recipes, written)
                 .await?
                 .map(|(recipe, elevation)| Read::Layered(recipe, elevation))
         };
-        if let Some(read) = read {
-            walls.push((wall, read));
+        match read {
+            Some(read) => walls.push((wall, read)),
+            // A wall that does not build bounds no room: what is held of it says so.
+            None => outlines.set(&wall.id, Some(level.clone()), None),
         }
     }
     let level_walls: Vec<OnLevel<'_>> = walls
@@ -301,6 +380,8 @@ pub async fn bounds_on<R: Reader>(
                 .next()
                 .and_then(|recipe| joined_outline(&recipe, &wall.placement)),
         };
+        // Worked out whole from the level as it stands: what the plan holds of the wall now.
+        outlines.set(&wall.id, Some(level.clone()), corners.clone());
         if let Some(corners) = corners {
             bounds.push(Bound {
                 wall: wall.id.clone(),
@@ -309,6 +390,107 @@ pub async fn bounds_on<R: Reader>(
         }
     }
     Ok(bounds)
+}
+
+/// The half side of the first square round a room's point that it is looked for in: 10 m.
+const NEAR: Length = Length::from_mm(10_000);
+
+/// Whether every corner of `found`'s outer boundary is strictly inside `area`.
+fn strictly_inside(found: &Found, (low, high): Box2) -> bool {
+    found.outer.iter().all(|corner| {
+        let [x, y] = corner.at;
+        low[0] < x && x < high[0] && low[1] < y && y < high[1]
+    })
+}
+
+/// What becomes of room `room` at `point` on `level` among the walls whose outlines `plan` holds,
+/// as [`assess`] gives it among every wall of the level, reading only the walls near it.
+///
+/// It needs every wall of the level held, and none the search refuses ([`Plan::knows`]). The
+/// walls are those whose outline's box meets a square round the point, 10 m from it each way and
+/// doubled until the answer is the whole level's: a loop found strictly inside the square is the
+/// one every wall gives, since every wall left out lies wholly outside the square, so adding it
+/// changes no edge round the room nor inside it (construct-rooms' search keeps the pieces of each
+/// outline's edges that bound the walls taken together, and joins them into loops; the smallest
+/// loop round the point is the room). A point inside a wall is refused naming the first wall in
+/// order whose outline holds it, and every such wall's box holds the point, so it is among those
+/// read. Anything else (not enclosed, a loop reaching the square's edge, a corner off the grid)
+/// looks again in a square twice the size, until the walls read are all the level's: that answer
+/// is the whole level's by definition.
+fn found_near(
+    plan: &Plan,
+    room: &Id,
+    point: [i64; 2],
+    height: Length,
+    level: &Id,
+    others: &[Neighbour],
+) -> Result<Outcome, GeometryError> {
+    let on = Some(level);
+    let all: Vec<Id> = plan.outlines.outlined_on(on).cloned().collect();
+    let bound_of = |id: &Id| {
+        let corners = plan.outlines.get(id)?.outline.clone()?;
+        Some(Bound {
+            wall: id.clone(),
+            outline: Outline::Polygon(corners),
+        })
+    };
+    let mut half = Some(NEAR.steps());
+    loop {
+        let area = half.and_then(|h| {
+            let [x, y] = point;
+            Some((
+                [x.checked_sub(h)?, y.checked_sub(h)?],
+                [x.checked_add(h)?, y.checked_add(h)?],
+            ))
+        });
+        let (ids, whole) = match area {
+            Some(area) => {
+                let near = plan.outlines.near(on, area);
+                let whole = near.len() >= all.len();
+                (near.into_iter().collect::<Vec<_>>(), whole)
+            }
+            None => (all.clone(), true),
+        };
+        let bounds: Vec<Bound> = ids.iter().filter_map(bound_of).collect();
+        let trusted = whole
+            || match (find(&bounds, point), area) {
+                (Err(RoomError::PointInWall { .. } | RoomError::TooBig), _) => true,
+                (Ok(Some(found)), Some(area)) => strictly_inside(&found, area),
+                _ => false,
+            };
+        if trusted {
+            return assess(room, point, height, &bounds, others).map_err(|e| refused(&e));
+        }
+        half = half.and_then(|h| h.checked_mul(2)).filter(|h| *h <= LIMIT);
+    }
+}
+
+/// What a room's filled recipe, or its build failure, says of its loop, as a [`Plan`] keeps it.
+#[must_use]
+pub fn loop_of(filled: &Result<Recipe, GeometryError>) -> Loop {
+    let recipe = match filled {
+        Ok(recipe) => recipe,
+        Err(failed) => return Loop::Failed(failed.code.clone()),
+    };
+    let corners: Option<Vec<[i64; 2]>> = recipe
+        .args
+        .get(LOOPS_ARG)
+        .and_then(Json::as_array)
+        .and_then(|loops| loops.first())
+        .and_then(Json::as_array)
+        .and_then(|outer| {
+            outer
+                .iter()
+                .map(|corner| {
+                    let at = corner.get("at")?.as_array()?;
+                    Some([at.first()?.as_i64()?, at.get(1)?.as_i64()?])
+                })
+                .collect()
+        });
+    match corners.as_deref().and_then(box_of) {
+        Some(area) => Loop::Around(area),
+        None => Loop::Failed("Unread".to_owned()),
+    }
 }
 
 /// A wall's plan as drawn: its strip between its finish faces before any joint shapes its ends,
@@ -325,10 +507,28 @@ pub async fn wall_plan_of<R: Reader>(
     wall: &Element,
     at: At,
 ) -> Result<Option<WallPlan>, StoreError> {
+    wall_plan_among(reader, project, document, wall, at, &mut Recipes::default()).await
+}
+
+/// [`wall_plan_of`], each layered wall's recipe kept in `recipes` while what it read stands: what
+/// a reader of many walls of one state calls.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn wall_plan_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    wall: &Element,
+    at: At,
+    recipes: &mut Recipes,
+) -> Result<Option<WallPlan>, StoreError> {
     if wall.recipe.op == "wall.straight" {
         return Ok(straight_outline(wall));
     }
-    let Some((recipe, _)) = layered_recipe(reader, project, document, wall, at).await? else {
+    let Some((recipe, _)) =
+        layered_recipe_kept(reader, project, document, wall, at, recipes, None).await?
+    else {
         return Ok(None);
     };
     let Ok(layered) = Layered::of(&recipe) else {
@@ -355,6 +555,44 @@ pub async fn outcome<R: Reader>(
     recipe: &Recipe,
     level: Option<&Id>,
     at: At,
+) -> Result<Result<Outcome, GeometryError>, StoreError> {
+    if level.is_none() {
+        return outcome_among(
+            reader,
+            project,
+            document,
+            room,
+            recipe,
+            level,
+            at,
+            &mut Plan::default(),
+        )
+        .await;
+    }
+    let mut plan = Plan::read(reader, project, document, at).await?;
+    outcome_among(
+        reader, project, document, room, recipe, level, at, &mut plan,
+    )
+    .await
+}
+
+/// [`outcome`] with the document's walls and rooms as `at` that state already read, in `plan`.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "outcome's arguments and the plan it reads them among"
+)]
+pub async fn outcome_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    recipe: &Recipe,
+    level: Option<&Id>,
+    at: At,
+    plan: &mut Plan,
 ) -> Result<Result<Outcome, GeometryError>, StoreError> {
     let Some(level) = level else {
         return Ok(Err(failure(
@@ -384,10 +622,16 @@ pub async fn outcome<R: Reader>(
             ))));
         }
     };
-    let bounds = bounds_on(reader, project, document, level, at).await?;
+    // Every wall of the level held as this state stands: the room is found among those near it.
+    let near = plan.knows(level);
+    let bounds = if near {
+        Vec::new()
+    } else {
+        bounds_among(reader, project, document, level, at, plan).await?
+    };
     let mut others = Vec::new();
-    for other in of_kind(reader, project, document, ROOM_KIND, at).await? {
-        if other.id == room.id || level_of(&other).as_ref() != Some(level) {
+    for other in plan.rooms.on_level(Some(level)) {
+        if other.id == room.id {
             continue;
         }
         if let Ok(at) = at_of(&other.recipe) {
@@ -396,6 +640,9 @@ pub async fn outcome<R: Reader>(
                 at,
             });
         }
+    }
+    if near {
+        return Ok(found_near(plan, &room.id, point, height, level, &others));
     }
     Ok(assess(&room.id, point, height, &bounds, &others).map_err(|e| refused(&e)))
 }
@@ -434,6 +681,31 @@ pub async fn found_at<R: Reader>(
     .await
 }
 
+/// [`found_at`] with the document's walls and rooms as `at` that state already read, in `plan`:
+/// what a reader of many rooms, or of one room more than once, of one state calls.
+///
+/// # Errors
+/// As [`found_at`].
+pub async fn found_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    at: At,
+    plan: &mut Plan,
+) -> Result<Result<Outcome, GeometryError>, StoreError> {
+    let placed = match levels::placed(reader, project, document, room, at).await? {
+        Ok(placed) => placed,
+        Err(e) => return Ok(Err(e)),
+    };
+    let recipe = match levels::filled(&room.recipe, &placed) {
+        Ok(recipe) => recipe,
+        Err(e) => return Ok(Err(e)),
+    };
+    let level = placed.level.as_ref();
+    outcome_among(reader, project, document, room, &recipe, level, at, plan).await
+}
+
 /// The recipe a room is built from: `{"room":"walls"}` filled with its loop ([`outcome`], at the
 /// state regeneration has reached). A recipe that reads no walls is returned as it is.
 ///
@@ -461,6 +733,26 @@ pub async fn filled<R: Reader>(
     Ok(filled)
 }
 
+/// [`filled`] with the document's walls and rooms as regeneration has reached them already read,
+/// in `plan`: what the regenerator builds a room from.
+///
+/// # Errors
+/// As [`filled`].
+pub async fn filled_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    recipe: Recipe,
+    level: Option<&Id>,
+    plan: &mut Plan,
+) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    let at = At::Regenerated;
+    let (filled, _) =
+        filled_at_among(reader, project, document, room, recipe, level, at, plan).await?;
+    Ok(filled)
+}
+
 /// A room's loop worked out at the state asked, with what it measures: the recipe the builders
 /// take (or the build failure, in words), and the measures when it is enclosed.
 pub type Worked = (Result<Recipe, GeometryError>, Option<Measures>);
@@ -479,10 +771,42 @@ pub async fn filled_at<R: Reader>(
     level: Option<&Id>,
     at: At,
 ) -> Result<Worked, StoreError> {
+    if !reads_walls(&recipe) || level.is_none() {
+        let mut plan = Plan::default();
+        return filled_at_among(
+            reader, project, document, room, recipe, level, at, &mut plan,
+        )
+        .await;
+    }
+    let mut plan = Plan::read(reader, project, document, at).await?;
+    filled_at_among(
+        reader, project, document, room, recipe, level, at, &mut plan,
+    )
+    .await
+}
+
+/// [`filled_at`] with the document's walls and rooms as `at` that state already read, in `plan`.
+///
+/// # Errors
+/// As [`filled`].
+#[allow(
+    clippy::too_many_arguments,
+    reason = "filled_at's arguments and the plan it reads them among"
+)]
+pub async fn filled_at_among<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    recipe: Recipe,
+    level: Option<&Id>,
+    at: At,
+    plan: &mut Plan,
+) -> Result<Worked, StoreError> {
     if !reads_walls(&recipe) {
         return Ok((Ok(recipe), None));
     }
-    let outcome = outcome(reader, project, document, room, &recipe, level, at).await?;
+    let outcome = outcome_among(reader, project, document, room, &recipe, level, at, plan).await?;
     let who = match construct_rooms::number_of(room) {
         Some(number) if !number.is_empty() => format!("room {number} {}", room.name),
         _ => format!("room {}", room.name),

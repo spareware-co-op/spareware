@@ -10,8 +10,8 @@
 //! notes/CON-A4-F7-P1-rooms.md and the stored form in FORMAT.md beside this crate.
 //!
 //! - [`plane`]: [`Bound`] and [`Outline`] (a wall's outline in plan), [`find`] (the loop round a
-//!   point, exactly), [`Found`] and [`Corner`], [`LIMIT`]. The search is our own exact geometry;
-//!   its header says why.
+//!   point, exactly), [`check`] (whether it takes an outline), [`Found`] and [`Corner`],
+//!   [`LIMIT`]. The search is our own exact geometry; its header says why.
 //! - [`measure`]: [`Measures`] and [`measure`](measure::measure); [`Outcome`] and [`assess`],
 //!   with [`Neighbour`] for the other rooms of a level.
 //! - [`room`]: the element record and its recipe ([`room_record`], [`room_recipe`], [`Limit`],
@@ -45,7 +45,7 @@ pub mod room;
 
 pub use error::RoomError;
 pub use measure::{Measures, Neighbour, Outcome, assess, measure};
-pub use plane::{Bound, Corner, Found, LIMIT, Outline, find};
+pub use plane::{Bound, Corner, Found, LIMIT, Outline, check, find};
 pub use room::{
     AT_ARG, HEIGHT_ARG, LOOPS_ARG, Limit, NUMBER_KEY, OP_VERSION, ROOM_KIND, ROOM_OP, WALLS_ARG,
     at_of, filled, is_room, is_room_recipe, limit_of, next_number, number_of, reads_walls,
