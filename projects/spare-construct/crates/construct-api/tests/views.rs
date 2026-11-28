@@ -14,7 +14,7 @@
 )]
 
 use construct_api::cloud::undo::{self, CANNOT, State};
-use construct_api::cloud::views::{options, read_world, section_cut};
+use construct_api::cloud::views::{options, read_world, section_cut, summaries};
 use construct_api::cloud::{Access, ProjectCommands};
 use construct_categories::{CategoryId, CategoryTable};
 use construct_model::element::Element;
@@ -2119,6 +2119,18 @@ async fn an_elevation_is_made_by_the_face_it_shows() {
         "Ground floor is a floor plan view; only a section or an elevation is drawn here."
     );
     assert_eq!(section_cut(&world, &i("V-none")), Ok(None));
+    // The page lists a section's or an elevation's line, to draw its mark in a plan: the two ends,
+    // the side it looks to and how far it sees, as text; a plan has none.
+    let listed = summaries(&world);
+    let line = listed
+        .iter()
+        .find(|v| v.id == "V-south")
+        .and_then(|v| v.line.clone())
+        .unwrap();
+    assert_eq!((line.from.x.as_str(), line.from.y.as_str()), ("0 mm", "-5000 mm"));
+    assert_eq!((line.to.x.as_str(), line.to.y.as_str()), ("12000 mm", "-5000 mm"));
+    assert_eq!((line.look.as_str(), line.depth.as_str()), ("left", "20000 mm"));
+    assert!(listed.iter().all(|v| v.line.is_some() == (v.kind != "floor_plan")));
 }
 
 /// The arguments of the elevation of the south face from (0, -5 m), 12 m wide and 20 m deep, with

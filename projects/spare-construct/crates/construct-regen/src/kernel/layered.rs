@@ -1281,10 +1281,9 @@ pub(super) fn side(from: [i64; 2], to: [i64; 2]) -> Result<GridPlane, GeometryEr
 
 /// One solid for each layer with a thickness, with the plane of each named face, for a drawing to
 /// cut: the strip of the layer extruded from the wall's base to its top, with no opening cut in
-/// it (a door's opening is [`build`]'s; a drawing of the wall's cut shows the wall whole until
-/// doors are families, job 6.4). A face is named as [`build`] names it: the wall's `base` and
-/// `top`, its `end0` and `end1`, and the layer's two sides, `exterior` or `face.<k>` and
-/// `interior` or `face.<k + 1>`, so two layers that meet name their shared face alike.
+/// it. A face is named as [`build`] names it: the wall's `base` and `top`, its `end0` and `end1`,
+/// and the layer's two sides, `exterior` or `face.<k>` and `interior` or `face.<k + 1>`, so two
+/// layers that meet name their shared face alike.
 ///
 /// # Errors
 ///
@@ -1294,6 +1293,57 @@ pub(super) fn solids<E: Engine>(
     recipe: &Recipe,
     wall: &Layered,
     units: Units,
+) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+    solids_cut(engine, recipe, wall, units, &[])
+}
+
+/// [`solids`] with the openings of the doors and placed families `hosted` in the wall cut through
+/// every layer they reach, as [`build`] cuts them (job 8.1: a section through a wall with a door
+/// shows the opening). A wall at an angle is given whole: its openings are united cells in
+/// [`build`], which a layer's solid does not take yet (a known gap of the drawing, as a plan's).
+///
+/// # Errors
+///
+/// As [`solids`], and the openings' refusals, each naming the hosted element and why.
+pub(super) fn solids_hosting<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    wall: &Layered,
+    hosted: &[Hosted<'_>],
+    units: Units,
+    band: i64,
+    families: &dyn FamilySource,
+) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
+        None => return solids(engine, recipe, wall, units),
+        Some((frame, _)) if frame.line.is_some() => return solids(engine, recipe, wall, units),
+        Some((frame, cuts)) => {
+            let tools = cuts
+                .iter()
+                .map(|cut| frame.cutter(cut))
+                .collect::<Result<Vec<_>, _>>()?;
+            (cuts, tools)
+        }
+    };
+    let mut cutters = Vec::with_capacity(tools.len());
+    for (cut, (tool, up)) in cut_list.iter().zip(&tools) {
+        let named = |e: EngineError| cut.engine_error(from_engine(e));
+        cutters.push(Cutter {
+            cut,
+            solid: engine.extrude(tool, *up).map_err(named)?,
+            reach: plan_box(&tool.outer),
+        });
+    }
+    solids_cut(engine, recipe, wall, units, &cutters)
+}
+
+/// [`solids`], with `cutters` subtracted from each layer whose strip they reach.
+fn solids_cut<E: Engine>(
+    engine: &mut E,
+    recipe: &Recipe,
+    wall: &Layered,
+    units: Units,
+    cutters: &[Cutter<'_, E::Solid>],
 ) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
     let op = op_id(recipe)?;
     let height = units.from_q0(wall.height)?;
@@ -1312,7 +1362,8 @@ pub(super) fn solids<E: Engine>(
             .iter()
             .map(|&xy| point(xy, 0))
             .collect::<Result<Vec<P3>, _>>()?;
-        let solid = engine
+        let reach = plan_box(&outer);
+        let mut solid = engine
             .extrude(
                 &Profile {
                     outer,
@@ -1321,6 +1372,10 @@ pub(super) fn solids<E: Engine>(
                 [0, 0, height],
             )
             .map_err(from_engine)?;
+        for cutter in cutters.iter().filter(|c| overlap(c.reach, reach)) {
+            let named = |e: EngineError| cutter.cut.engine_error(from_engine(e));
+            solid = engine.subtract(&solid, &cutter.solid).map_err(named)?;
+        }
         let outside = if k == 0 {
             "exterior".to_owned()
         } else {

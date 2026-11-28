@@ -1277,19 +1277,43 @@ impl<E: Engine> Kernel<E> {
     /// of no thickness has none), one for each panel with a slab and each mullion of a curtain wall
     /// ([`curtain::solids`]), each with its material and the plane of each named face, and
     /// for any other recipe the one [`Kernel::solid`] makes, with no material. A wall's openings
-    /// are not cut in them.
+    /// are not cut in them ([`Kernel::layers_hosting`] cuts them).
     ///
     /// # Errors
     ///
     /// As [`Kernel::solid`], and the plan's refusals for a layered wall.
     pub fn layers(&self, recipe: &Recipe) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
+        self.layers_hosting(recipe, &[])
+    }
+
+    /// [`Kernel::layers`], with the openings of the doors and placed families `hosted` in a layered
+    /// wall cut through each layer they reach, as [`Geometry::build_hosting`] cuts them. Anything
+    /// but a layered wall along an axis has the solids [`Kernel::layers`] gives: a wall at an angle
+    /// is whole here until a layer's solid takes its united cells (job 8.1's known gap).
+    ///
+    /// # Errors
+    ///
+    /// As [`Kernel::layers`], and the openings' refusals, each naming the hosted element and why.
+    pub fn layers_hosting(
+        &self,
+        recipe: &Recipe,
+        hosted: &[Hosted<'_>],
+    ) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
         if wall_plan::is_layered(recipe) {
             let wall = Layered::of(recipe)?;
             let mut engine = self
                 .engine
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
-            return layered::solids(&mut *engine, recipe, &wall, self.units);
+            return layered::solids_hosting(
+                &mut *engine,
+                recipe,
+                &wall,
+                hosted,
+                self.units,
+                self.band,
+                &*self.families,
+            );
         }
         if crate::curtain_plan::is_curtain(recipe) {
             let plan = crate::curtain_plan::CurtainPlan::of(recipe)?;

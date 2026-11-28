@@ -28,9 +28,11 @@
 //!
 //! Not drawn yet, each a known fault of the drawing rather than of this file: the edges inside an
 //! element's outline (job 8.2); hidden lines between elements whose depths overlap (job 9.1); a
-//! wall's openings in its layers (the kernel builder's drawing solids are the layers whole, as in
-//! a plan); floors, roofs and placed families, whose drawing solids the kernel builder does not
-//! give yet (named in `skipped` by the builder's own words).
+//! the openings in the layers of a wall at an angle (a wall along an axis has the openings of the
+//! doors and placed families hosted in it cut through every layer it reaches, as the regenerator
+//! builds it: `Kernel::layers_hosting`; a plan still draws its walls whole); floors, roofs and
+//! placed families, whose drawing solids the kernel builder does not give yet (named in `skipped`
+//! by the builder's own words).
 //!
 //! Depends on construct-drawing, construct-regen's kernel builder and construct-api's view
 //! reading. Interim: as the plan's.
@@ -46,7 +48,10 @@ use construct_drawing::plan::PlanElement;
 use construct_drawing::section::{Look, Part, SectionView, part, section};
 use construct_drawing::svg::Svg;
 use construct_materials::MaterialId;
+use construct_model::geometry::Hosted;
+use construct_regen::hosting;
 use construct_regen::kernel::Kernel;
+use construct_regen::kernel::LayerSolid;
 use construct_styles::Scale;
 use construct_views::{CutLine, Side};
 use engine_geometry::value::engine::Engine;
@@ -92,7 +97,7 @@ fn one<E: Engine + Send + 'static>(
     ask: &SectionAsk<'_>,
     element: &ToDraw,
 ) -> Result<Part, String> {
-    let layers = kernel.layers(&element.recipe).map_err(|e| e.message)?;
+    let layers = layers_of(kernel, element)?;
     let solids: Vec<PlanElement<'_, E::Solid>> = layers
         .iter()
         .map(|layer| PlanElement {
@@ -115,6 +120,54 @@ fn one<E: Engine + Send + 'static>(
         Drawing::new(view.view(), lines, found.regions().to_vec()).map_err(|e| e.to_string())?;
     widths(&alone, defaults.styles(ask.looks), ask.scale).map_err(|e| e.to_string())?;
     Ok(found)
+}
+
+/// The solids `element` is drawn from. A wall with doors or placed families hosted in it has their
+/// openings cut through its layers, seated as the regenerator seats them (an embedded curtain wall
+/// as the plain opening it cuts); anything else is [`Kernel::layers`].
+fn layers_of<E: Engine + Send + 'static>(
+    kernel: &Kernel<E>,
+    element: &ToDraw,
+) -> Result<Vec<LayerSolid<E::Solid>>, String> {
+    let Some(opened) = &element.opened else {
+        return kernel.layers(&element.recipe).map_err(|e| e.message);
+    };
+    let edition = kernel.edition();
+    let mut seated = Vec::with_capacity(opened.held.len());
+    for held in &opened.held {
+        let at = match hosting::cut_of(
+            &edition,
+            &opened.host,
+            &element.recipe,
+            &held.record,
+            &held.recipe,
+            &held.hosting,
+        ) {
+            Ok(Some(cut)) => Ok(cut),
+            Ok(None) => hosting::seat(
+                &edition,
+                &opened.host,
+                &element.recipe,
+                &held.record,
+                &held.recipe,
+                &held.hosting,
+            ),
+            Err(e) => Err(e),
+        }
+        .map_err(|e| e.message)?;
+        seated.push((held.record.id.as_str(), at));
+    }
+    let hosted: Vec<Hosted<'_>> = seated
+        .iter()
+        .map(|(key, (at, recipe))| Hosted {
+            key,
+            recipe,
+            at: *at,
+        })
+        .collect();
+    kernel
+        .layers_hosting(&element.recipe, &hosted)
+        .map_err(|e| e.message)
 }
 
 fn datum_of(line: &DatumLine) -> Datum {

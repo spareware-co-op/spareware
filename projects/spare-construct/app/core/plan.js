@@ -157,14 +157,16 @@ function drawPlanNow() {
   let shapes = '';
   // Under the elements (register.layers): the server's picture of the open view, then grids and planes.
   for (const layer of entries('layers')) if (layer.under) shapes += layer.under(scale);
+  // A layer that shows something in place of the plan (register.layers, `replaces`) leaves the elements out.
+  const replaced = entries('layers').some((layer) => layer.replaces?.());
   const ghost = (piece) => {
-    if (piece.shape && levelIdOf(piece.el) === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
+    if (!replaced && piece.shape && levelIdOf(piece.el) === levelOf()) shapes += outlineOf(piece, 'ln fn dsh stack-ghost');
   };
   for (const pieces of C.linked.values()) for (const piece of pieces.values()) ghost(piece);
   for (const pieces of C.fixed.values()) for (const piece of pieces) ghost(packaged(piece));
 
   // Floors first, then walls, so a door in a wall stays on top and can be picked.
-  const inOrder = [...C.elements.values()].sort((a, b) => drawOrder(a.el) - drawOrder(b.el));
+  const inOrder = replaced ? [] : [...C.elements.values()].sort((a, b) => drawOrder(a.el) - drawOrder(b.el));
   for (const piece of inOrder) {
     const { el: e } = piece;
     const { x, y } = placementOf(e);

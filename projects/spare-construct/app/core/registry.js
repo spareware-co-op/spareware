@@ -41,8 +41,9 @@ const KINDS = {
   // How the plan stacks the elements: the first answer for an element, else walls over the rest.
   drawOrders: { req: { id: 's', drawOrder: 'f' }, opt: { order: 'n' } },
   // The plan's layers: `before` runs before anything is drawn; `under(scale)` is drawn under the
-  // elements, `over(scale)` over them, and `note()` above the drawing.
-  layers: { req: { id: 's' }, opt: { order: 'n', before: 'f', under: 'f', over: 'f', note: 'f' } },
+  // elements, `over(scale)` over them, and `note()` above the drawing. `replaces()` true: the pane shows
+  // something in place of the plan (a section opened in it), so the live elements are not drawn.
+  layers: { req: { id: 's' }, opt: { order: 'n', before: 'f', under: 'f', over: 'f', note: 'f', replaces: 'f' } },
   // The open model: `forget()` when it closes, `open(model)` (awaited, in order) when it opens.
   models: { req: { id: 's' }, opt: { order: 'n', open: 'f', forget: 'f' } },
   // An entry of the log for the open model, after the elements have taken it.

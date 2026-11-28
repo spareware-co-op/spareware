@@ -80,6 +80,29 @@ pub struct ToDraw {
     /// The wall it is hosted on, if it is hosted on a face of one: a plan draws it seated there
     /// (piece A83), as the regenerator builds it.
     pub hosted_on: Option<HostedOn>,
+    /// For a wall, what is hosted in it that cuts it; a section cuts those openings in its layers
+    /// (job 8.1). `None` for anything else, and a plan does not read it.
+    pub opened: Option<Opened>,
+}
+
+/// A wall and the elements hosted in it, as the regenerator builds the wall with them.
+#[derive(Clone, Debug)]
+pub struct Opened {
+    /// The wall's record.
+    pub host: Element,
+    /// What is hosted in it, by the hosted element's ID.
+    pub held: Vec<Held>,
+}
+
+/// One element hosted in a wall: a door or a placed family.
+#[derive(Clone, Debug)]
+pub struct Held {
+    /// The hosted element's record.
+    pub record: Element,
+    /// Its recipe as the regenerator fills it.
+    pub recipe: Recipe,
+    /// How its record says it is hosted.
+    pub hosting: Hosting,
 }
 
 /// An element hosted on a face of its host, with what seats it there ([`hosting::seat`]).

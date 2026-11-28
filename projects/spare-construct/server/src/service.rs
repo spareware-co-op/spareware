@@ -4,7 +4,9 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, HostedOn, PlanCrop, SectionAsk, Skipped, ToDraw, ViewLooks};
+use crate::plan::{
+    Drawer, Held, HostedOn, Opened, PlanCrop, SectionAsk, Skipped, ToDraw, ViewLooks,
+};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -246,13 +248,56 @@ async fn to_draw<R: Reader>(
             Err(why) => return Ok(Err(why)),
         }
     };
+    let opened = match opened_in(reader, project, model, record, &recipe, shaped).await? {
+        Ok(opened) => opened,
+        Err(why) => return Ok(Err(why)),
+    };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
         category,
         placement,
         recipe,
         hosted_on,
+        opened,
     }))
+}
+
+/// What is hosted in `record`, a layered wall of the filled recipe `recipe`, as the regenerator
+/// builds the wall with it, in the order of their IDs: each hosted element's record, filled recipe
+/// and hosting. `None` for any other element, or a wall nothing is hosted in.
+async fn opened_in<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    recipe: &construct_model::geometry::Recipe,
+    shaped: &[cloud::views::Shaped],
+) -> Result<Result<Option<Opened>, String>, StoreError> {
+    if !construct_regen::wall_plan::is_layered(recipe) {
+        return Ok(Ok(None));
+    }
+    let mut held = Vec::new();
+    for one in shaped {
+        let hosting = match hosting::read(&one.record) {
+            Ok(Some(hosting)) if *hosting.host() == record.id => hosting,
+            _ => continue,
+        };
+        let filled =
+            match levels::recipe_at(reader, project, model, &one.record, records::At::Now).await? {
+                Ok(filled) => filled,
+                Err(failed) => return Ok(Err(format!("{}: {}", one.record.id, failed.message))),
+            };
+        held.push(Held {
+            record: one.record.clone(),
+            recipe: filled,
+            hosting,
+        });
+    }
+    held.sort_by(|a, b| a.record.id.as_str().cmp(b.record.id.as_str()));
+    Ok(Ok((!held.is_empty()).then(|| Opened {
+        host: record.clone(),
+        held,
+    })))
 }
 
 /// A curtain wall's part of its filled view: its grid as it is laid out, and, embedded in a wall,

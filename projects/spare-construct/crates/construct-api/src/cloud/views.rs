@@ -415,6 +415,8 @@ pub struct ViewSummary {
     pub detail: String,
     /// A plan's view range, or `None` for any other view.
     pub range: Option<RangeSummary>,
+    /// A section's or an elevation's line, or `None` for any other view.
+    pub line: Option<LineSummary>,
     /// The view's crop, or `None` when it has none.
     pub crop: Option<CropSummary>,
 }
@@ -476,6 +478,20 @@ pub struct RegionSummary {
     pub corners: Vec<CornerSummary>,
 }
 
+/// A section's or an elevation's line as a page lists it, to draw its mark in a plan: the two ends
+/// in the plan's own x and y, the side it looks to and how far it sees.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct LineSummary {
+    /// The first end.
+    pub from: CornerSummary,
+    /// The second end.
+    pub to: CornerSummary,
+    /// `left` or `right`: the side of the line, walking from its first end, the view looks to.
+    pub look: String,
+    /// How far it sees, square to the line.
+    pub depth: String,
+}
+
 /// A view's crop as a page lists it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CropSummary {
@@ -530,6 +546,18 @@ pub fn summary(view: &View, levels: &Levels) -> ViewSummary {
                     bottom: heights.bottom.to_string(),
                     depth: heights.depth.to_string(),
                 }),
+        }),
+        line: view.kind().cut_line().map(|line| LineSummary {
+            from: CornerSummary {
+                x: line.from().x.to_string(),
+                y: line.from().y.to_string(),
+            },
+            to: CornerSummary {
+                x: line.to().x.to_string(),
+                y: line.to().y.to_string(),
+            },
+            look: line.look().key().to_owned(),
+            depth: line.far().to_string(),
         }),
         crop: view.crop().map(|crop| CropSummary {
             region: region_summary(crop.region()),
