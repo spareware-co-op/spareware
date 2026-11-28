@@ -952,7 +952,9 @@ await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
 await ben.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"] .body`), cornerId);
 await bothTake(layeredId, cornered, 'her undo brings the corner wall back, and both pages take the first wall as it was at the corner');
 
-// Moved away: the walls no longer meet.
+// Moved away: the walls no longer meet. The drag sends a move every few milliseconds; where the
+// corner wall stands before it is kept for the undo below, which takes the whole drag back.
+const cornerBeforeDrag = await position(anna, cornerId);
 await drag(anna, cornerId, 150, 0);
 await anna.mouse.up();
 await bothTake(layeredId, freeEnd, 'the corner wall moved away: both pages put the first wall right again');
@@ -980,6 +982,22 @@ console.log('\n   Wall joins and wrapping');
 await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.move');
 await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
 await bothTake(layeredId, cornered, 'her undo puts the corner wall back, and both pages take the first wall at the corner again');
+// One drag is one step, however many moves it sent: both pages draw the corner wall where it stood
+// before the drag, and her next undo is the drawing of that wall, not another part of the drag.
+for (const page of [anna, ben]) {
+  await page.waitForFunction(
+    ([id, x, y]) => {
+      const g = document.querySelector(`g.element[data-id="${id}"]`);
+      return g && Number(g.dataset.x) === x && Number(g.dataset.y) === y;
+    },
+    [cornerId, ...cornerBeforeDrag],
+  );
+}
+await anna.waitForFunction(() => window.spare.steps.redo?.cmd === 'edit.undo');
+check(
+  (await anna.evaluate(() => window.spare.steps.undo?.cmd)) === 'wall.draw',
+  'one undo takes the whole drag back: both pages draw the corner wall where it stood, and her next undo is the drawing of it',
+);
 const keeperWall = layeredId < cornerId ? layeredId : cornerId;
 const otherWall = keeperWall === layeredId ? cornerId : layeredId;
 const jointOn = (page, [id, other]) =>
@@ -993,16 +1011,29 @@ const bothHold = async (want, label) => {
   }
   pass(label);
 };
+// A person picks a wall on the wall itself, clear of what it hosts and of the wall it meets: the
+// middle of the first wall is where Ben's door stands (he placed it there by its middle), so the
+// click goes to the first point along the wall's line where the wall is what the plan shows on top.
+// The keeper is the wall of the lower ID, and IDs are random, so it is either wall.
 const pickWall = async (page, id) => {
   const at = await box(page, id);
-  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  const across = at.width >= at.height;
+  const along = [0.25, 0.75, 0.4, 0.6].map((share) =>
+    across ? [at.x + at.width * share, at.y + at.height / 2] : [at.x + at.width / 2, at.y + at.height * share],
+  );
+  const onIt = await page.evaluate(
+    ([w, points]) => points.find(([x, y]) => document.elementFromPoint(x, y)?.closest('[data-id]')?.dataset.id === w),
+    [id, along],
+  );
+  if (!onIt) throw new Error(`FAILED: no point along ${id} shows the wall itself`);
+  await page.mouse.click(onIt[0], onIt[1]);
   await page.waitForSelector(`#pv-side [data-joins="${id}"] [data-joint]`);
 };
 await anna.keyboard.press('Escape');
 await pickWall(anna, keeperWall);
 check(
   (await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).inputValue()) === 'mitre',
-  "Anna's palette lists the joint with the other wall, a mitre as the rule makes it",
+  `Anna's palette lists the joint with the other wall, a mitre as the rule makes it (the ${keeperWall === layeredId ? 'first' : 'corner'} wall keeps it)`,
 );
 await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).selectOption('butt');
 await bothHold(JSON.stringify({ first: keeperWall, kind: 'butt' }), 'Anna makes the joint a butt, and both pages hold it on the wall that keeps it');
