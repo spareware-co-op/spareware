@@ -4314,9 +4314,9 @@ await anna.click('#pv-side [data-key="floor-top-point"]');
 await anna.waitForSelector('#pv-side [data-floor-pick="point"]');
 const fsWaste = await onPlan(anna, 8500, -1400);
 await anna.mouse.click(fsWaste.x, fsWaste.y);
-const fsPoint = (id) => `g.element[data-id="${id}"] [data-floor-top-point="p0"]`;
+const fsPoint = (id) => `[data-floor-top="${id}"] [data-floor-top-point="p0"]`;
 const fsBody = ([id, low]) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === low && window.spare.elements.get(id).shape.bounds.max[2] === 0;
-const fsCreases = (id) => document.querySelectorAll(`g.element[data-id="${id}"] line.floor-top-crease`).length === 8;
+const fsCreases = (id) => document.querySelectorAll(`[data-floor-top="${id}"] line.floor-top-crease`).length === 8;
 for (const [who, page] of [['Anna', anna], ['Ben', ben]]) {
   await page.waitForSelector(fsPoint(fsId), { state: 'attached' });
   await page.waitForFunction(fsBody, [fsId, -220]);
@@ -4379,7 +4379,7 @@ for (const page of [anna, ben]) await page.waitForFunction(fsBody, [fsId, -220])
 // Reset shape, and its undo.
 await anna.click('#pv-side [data-key="floor-top-reset"]');
 for (const page of [anna, ben]) {
-  await page.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-floor-top]`) && !window.spare.elements.get(id)?.el.recipe.args.top, fsId);
+  await page.waitForFunction((id) => !document.querySelector(`[data-floor-top="${id}"]`) && !window.spare.elements.get(id)?.el.recipe.args.top, fsId);
 }
 pass("Anna's reset takes the shape off, in both browsers");
 await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.shape.reset');
